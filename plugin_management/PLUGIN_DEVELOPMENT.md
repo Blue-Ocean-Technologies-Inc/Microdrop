@@ -12,15 +12,15 @@ contributed to the app as a single self-contained plugin (`PluginManagementPlugi
 
 ## Part 1 — How it works
 
-### 1.1 Two concepts: *plugin groups* and *plugin archives*
+### 1.1 Two concepts: *plugin groups* and *conda packages*
 
 - A **plugin group** is a named, ordered set of Envisage `Plugin` classes that load and
   unload **together** (e.g. the magnet UI = the protocol-column plugin + the dock-pane
   plugin). A group is the unit you enable/disable.
-- A **plugin archive** (`*.microdrop_plugin`, a renamed zip) carries one or more Python
-  **packages** plus a **`microdrop_plugin.json` manifest** that declares the groups those
-  packages form. Installing an archive makes its packages importable and registers its
-  groups.
+- A **conda package** (built as a `pixi-build-python` package and shipped as a `.conda`
+  artifact) carries one or more Python **packages** plus a **`microdrop_plugin.toml` manifest**
+  as package data that declares the groups those packages form. Installing a conda package
+  lets `pixi` resolve all its dependencies and makes its groups discoverable.
 
 The manifest — *data, not code* — is the source of truth. It names plugin classes as dotted
 `"module:Class"` strings that are imported **lazily, only when a group is enabled**, so a
@@ -30,10 +30,11 @@ broken or never-enabled plugin can never break startup or discovery.
 
 | Module | Responsibility |
 |---|---|
-| `manifest.py` | `load_manifest()` parses/validates `microdrop_plugin.json` into `PluginManifest`/`PluginGroupSpec` dataclasses. |
-| `paths.py` | Locations: bundled `default_plugins/` (in the repo) and per-user `installed_plugins/` (under `ETSConfig.application_home`, on `sys.path`); `iter_manifest_dirs()` discovery. |
-| `installer.py` | `install_from_zip()` (validate → consent → extract) and `uninstall_plugin()` (auto-disable → purge → deregister → delete). |
-| `group_manager.py` | `PluginGroupManager` — discovers groups from manifests, and `enable`/`disable`/`apply` them against the live app. The orchestrator. |
+| `manifest.py` | `manifest_from_dict()` parses/validates a TOML dict into `PluginManifest`/`PluginGroupSpec` dataclasses. |
+| `paths.py` | Locations: `plugin_channel_dir()` — the per-user local conda channel under `ETSConfig.application_home/plugin_channel/`. |
+| `package_installer.py` | `install_conda_file()` (validate → consent → copy/index/register → `pixi add`) and `uninstall_package()` (`pixi remove` + channel cleanup). |
+| `entry_point_discovery.py` | `discover_entry_point_manifests()` — reads every `microdrop.plugins` entry point, loads its `microdrop_plugin.toml`, and returns `[(PluginManifest, dist_name)]`. |
+| `group_manager.py` | `PluginGroupManager` — discovers groups from entry points, and `enable`/`disable`/`apply` them against the live app. The orchestrator. |
 | `manage_dialog.py` / `uninstall_dialog.py` | TraitsUI dialog models (checkbox list / dropdown). |
 | `menus.py` | The three `TaskAction`s: Install, Uninstall, Manage. |
 | `plugin.py` | `PluginManagementPlugin` — offers the manager service, contributes the Tools actions, restores enabled groups on launch. |
@@ -42,35 +43,38 @@ broken or never-enabled plugin can never break startup or discovery.
 
 ### 1.3 Discovery (every launch)
 
-`PluginGroupManager.groups` is lazily built (`_groups_default → _discover_groups`) by reading
-**every** `microdrop_plugin.json` under `default_plugins/` then `installed_plugins/`
-(`paths.iter_manifest_dirs()`). Discovery reads **JSON only** — it never imports plugin code,
-so an invalid manifest is logged and skipped, and a broken installed plugin is inert until
-someone tries to enable it. Each group records its `source_dir` so the manager can later tell
-**installed** plugins (under `installed_plugins/`, uninstallable) from **bundled** ones (under
-`default_plugins/`, disable-only).
+`PluginGroupManager.groups` is lazily built (`_groups_default → _discover_groups`) by calling
+`entry_point_discovery.discover_entry_point_manifests()`, which iterates
+`importlib.metadata.entry_points(group="microdrop.plugins")`. For each entry point it reads the
+package's `microdrop_plugin.toml` resource **without importing the plugin code** — so a broken
+or never-enabled plugin is inert until someone tries to enable it.
+
+Each resulting `PluginGroup` carries a `dist_name` (the owning Python distribution). The
+manager uses this to classify **installed** plugins (distribution is NOT the app's own
+`microdrop_py`) from **bundled** ones (distribution IS `microdrop_py`, disable-only). The
+magnet peripheral is bundled this way: its entry point is declared on `microdrop_py` and its
+`microdrop_plugin.toml` lives in `peripheral_controller/`.
 
 ### 1.4 Install (`Tools → Install Plugin…`)
 
-`InstallPluginAction` → file picker (`*.microdrop_plugin`) → `installer.install_from_zip`:
+`InstallPluginAction` → file picker (`*.conda`) → `package_installer.install_conda_file`:
 
-1. `zipfile.is_zipfile` sanity check.
-2. Read + `load_manifest` the root `microdrop_plugin.json` **in memory** (no extraction yet).
-3. **Validate every entry** (`_validate_entries`): reject absolute paths, any `..` segment,
-   symlink entries (zip-slip); allow only entries whose top-level component is the manifest
-   or one of the **declared `packages`** (allowlist). Returns the safe member list.
-4. **Informed consent**: a dialog lists the name/version/packages/plugin classes + a
-   "this runs third-party code" warning (manifest fields HTML-escaped). Decline ⇒ abort.
-5. Refuse if any of the manifest's groups is currently **loaded** (reinstall guard).
-6. **Atomic, restorable extract**: extract the allowlisted members into a staging dir, rename
-   any prior install aside as a backup, swap staging in, delete the backup on success / restore
-   it on failure (Windows-safe — `replace()` can fail on a locked file).
-7. `ensure_on_sys_path()` + `manager.register_manifest(manifest, source_dir)` so the new
-   groups appear immediately.
+1. Validate the file is a `.conda`; read the package name from `info/index.json` inside the
+   archive (never parse the filename — the build string is unreliable).
+2. **Informed consent**: a dialog names the package + a "this runs third-party code" warning.
+   Decline ⇒ abort (`InstallCancelled`).
+3. Copy the `.conda` into `plugin_channel_dir()/noarch/`.
+4. **Index the channel** — `pixi exec rattler-index fs <channel_dir>` regenerates
+   `repodata.json`.
+5. **Register the channel** (idempotent) — `pixi workspace channel add <file-uri>`.
+6. **`pixi add <name>`** — the conda solver resolves the plugin + all its `run-dependencies`
+   and installs them into the default env.
+7. On any failure: restore the `pyproject.toml` + `pixi.lock` snapshot, remove the copied
+   `.conda`, re-raise.
+8. Offer a relaunch dialog (a running interpreter can't import newly-installed packages).
 
 Security is **hardening only, no cryptographic trust** (deliberate for an internal tool):
-extension gate + zip-slip + allowlist + consent. A malicious *declared* package can still run
-code on install — the consent gate is the backstop.
+the consent gate is the backstop — installing a conda package runs third-party code.
 
 ### 1.5 Enable = hot load (`PluginGroupManager.enable(task, group_name)`)
 
@@ -94,19 +98,22 @@ the same reactive controller to unmount its panes and rebuild the menu.
 
 ### 1.6 Uninstall (`Tools → Uninstall Plugin…`)
 
-`installer.uninstall_plugin(task, manager, name)`: not-installed guard → **auto-disable** any
-loaded group → `_purge_package_modules` (drop the packages from `sys.modules` so a reinstall
-gets fresh code, and to release `.pyd` handles before deletion) → `deregister_plugin` (drop
-the groups + clear their flags via an `in`-guarded `del` on the app-globals proxy, which has
-no `pop`) → `shutil.rmtree` the install dir. Bundled plugins are never offered for uninstall.
+`UninstallPluginAction`: only installed (non-bundled) plugins are listed. For the selected
+package: **auto-disable** any loaded groups → `manager.deregister_plugin(name)` (drop groups +
+clear flags) → `package_installer.uninstall_package(name)`:
+
+1. `pixi remove <name>` removes the package from the default env.
+2. Delete the package's `.conda`(s) from `plugin_channel_dir()/noarch/` and re-index the
+   channel.
+
+A relaunch dialog is offered; the package is no longer importable after the relaunch.
 
 ### 1.7 Launch restore
 
-`PluginManagementPlugin._on_application_initialized` (observing the
-`application:application_initialized` event, with an `active_window` fallback) runs once the
-GUI window exists: `ensure_on_sys_path()`, then `manager.enable(task, group)` for every group
-whose persisted flag is set — so the Manage Plugins checkboxes match what's actually loaded
-after a relaunch.
+`PluginManagementPlugin._on_application_initialized` (observing
+`application:active_window`, null-guarded) runs once the GUI window exists:
+`manager.enable(task, group)` for every group whose persisted flag is set — so the Manage
+Plugins checkboxes match what's actually loaded after a relaunch.
 
 ### 1.8 The three things Envisage/Pyface don't self-heal
 
@@ -143,39 +150,37 @@ my_plugin/
   __init__.py
   consts.py        # PKG = '.'.join(__name__.split('.')[:-1]); ACTOR_TOPIC_DICT; topics
   plugin.py        # the Plugin subclass
+  microdrop_plugin.toml   # group manifest — shipped as package data
   services/ …      # optional service implementations
 ```
 
-### 2.2 The manifest — `microdrop_plugin.json`
+### 2.2 The package manifest — `microdrop_plugin.toml`
 
-Validated by `manifest.load_manifest`. Schema (`schema_version` must be `1`):
+Parsed by `manifest.manifest_from_dict`. Ship it as **package data** (in the importable
+package directory, not at the repo root). Schema (`schema_version` must be `1`):
 
-```json
-{
-  "schema_version": 1,
-  "name": "magnet_peripherals",
-  "label": "Magnet Peripherals",
-  "version": "1.0.0",
-  "packages": ["peripheral_controller", "peripheral_protocol_controls", "peripherals_ui"],
-  "groups": [
-    {
-      "name": "magnet_backend",
-      "label": "Magnet Backend (controller + connection search)",
-      "plugins": ["peripheral_controller.plugin:PeripheralControllerPlugin"],
-      "enabled_key": "microdrop.peripheral_backend_enabled",
-      "post_enable_publish_topic": "ZStage/requests/start_device_monitoring"
-    },
-    {
-      "name": "magnet_ui",
-      "label": "Magnet UI (dock pane, status icon, protocol column)",
-      "plugins": [
-        "peripheral_protocol_controls.plugin:PeripheralProtocolControlsPlugin",
-        "peripherals_ui.plugin:PeripheralUiPlugin"
-      ],
-      "enabled_key": "microdrop.peripheral_ui_enabled"
-    }
-  ]
-}
+```toml
+schema_version = 1
+name = "magnet_peripherals"
+label = "Magnet Peripherals"
+version = "1.0.0"
+packages = ["peripheral_controller", "peripheral_protocol_controls", "peripherals_ui"]
+
+[[groups]]
+name = "magnet_backend"
+label = "Magnet Backend (controller + connection search)"
+plugins = ["peripheral_controller.plugin:PeripheralControllerPlugin"]
+enabled_key = "microdrop.peripheral_backend_enabled"
+post_enable_publish_topic = "ZStage/requests/start_device_monitoring"
+
+[[groups]]
+name = "magnet_ui"
+label = "Magnet UI (dock pane, status icon, protocol column)"
+plugins = [
+    "peripheral_protocol_controls.plugin:PeripheralProtocolControlsPlugin",
+    "peripherals_ui.plugin:PeripheralUiPlugin",
+]
+enabled_key = "microdrop.peripheral_ui_enabled"
 ```
 
 Field reference:
@@ -183,11 +188,11 @@ Field reference:
 | Field | Req | Meaning |
 |---|---|---|
 | `schema_version` | yes | Must be `1`. |
-| `name` | yes | Unique id; also the install dir name (`installed_plugins/<name>/`). |
+| `name` | yes | Unique manifest id (used in dialogs and deregistration). |
 | `label` | no | Human name shown in dialogs (defaults to `name`). |
 | `version` | no | Free-form string. |
-| `packages` | yes | Non-empty list of the **top-level package directories** the archive carries. The installer's allowlist extracts only these (+ the manifest). |
-| `groups` | yes | Non-empty list of groups (below). |
+| `packages` | yes | Non-empty list of importable top-level packages this manifest covers. |
+| `groups` | yes | Non-empty list of `[[groups]]` tables (below). |
 | `groups[].name` | yes | Unique group id (the enable/disable unit). |
 | `groups[].label` | no | Shown in Manage Plugins (defaults to `name`). |
 | `groups[].plugins` | yes | Ordered `"module:Class"` strings — the Envisage `Plugin` classes, imported lazily on enable, started in this order (stopped in reverse). |
@@ -198,41 +203,96 @@ Field reference:
 topics exist before consumers). Put plugins that must come up together in one group; split
 independently-toggleable concerns (UI vs backend) into separate groups.
 
-### 2.3 Build the archive
+### 2.3 The `pyproject.toml` — packaging as a conda package
 
-A `*.microdrop_plugin` is just a zip with `microdrop_plugin.json` at its root and the declared
-packages as top-level dirs. See `examples/build_plugin_zip.py` for the canonical builder
-(it excludes `__pycache__`, `tests`, and `.pyc` so the archive matches the allowlist):
+A MicroDrop plugin is a **`pixi-build-python` conda package**. The `pyproject.toml` at your
+package root needs four sections:
+
+```toml
+[project]
+name = "my_widget"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []            # pip/wheel deps (conda deps go in run-dependencies below)
+
+[project.entry-points."microdrop.plugins"]
+my_widget = "my_widget"      # value = the importable package containing microdrop_plugin.toml
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["my_widget"]
+
+# --- pixi build sections (required for pixi-build-python) ---
+
+[tool.pixi.package]
+name = "my_widget"
+version = "0.1.0"
+
+[tool.pixi.package.build.backend]
+name = "pixi-build-python"
+version = "0.*"
+channels = ["https://prefix.dev/conda-forge"]
+
+[tool.pixi.package.host-dependencies]
+hatchling = "*"
+
+[tool.pixi.package.run-dependencies]
+# third-party conda dependencies your plugin needs, e.g.:
+# scipy = ">=1.10"
+```
+
+Key points:
+- `[tool.pixi.package]` (not bare `[package]`) is required by pixi 0.63+.
+- Third-party dependencies go in `[tool.pixi.package.run-dependencies]` — the conda solver
+  resolves them at install time. Do NOT expect them to be present in the base MicroDrop env.
+- The entry-point value (`"my_widget"`) is the importable package name; discovery uses
+  `ep.module` to find and load `microdrop_plugin.toml` from that package.
+
+### 2.4 Build the conda package
+
+```bash
+pixi build --path <plugin_pkg_dir> --output-dir <out_dir>
+```
+
+This produces a `<name>-<version>-<build>.conda` artifact. See
+`examples/build_plugin_conda.py` for a one-command builder for the demo plugin:
 
 ```python
-import zipfile
+import subprocess
 from pathlib import Path
-SRC = Path(__file__).resolve().parents[1]   # src/
-with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as zf:
-    zf.write(MANIFEST, "microdrop_plugin.json")
-    for pkg in PACKAGES:
-        for p in sorted((SRC / pkg).rglob("*")):
-            if p.is_dir() or "__pycache__" in p.parts or "tests" in p.parts or p.suffix == ".pyc":
-                continue
-            zf.write(p, str(p.relative_to(SRC)))
+
+PKG = Path(__file__).resolve().parent / "demo_plugins" / "scipy_analysis_pkg"
+subprocess.run(
+    ["pixi", "build", "--path", str(PKG), "--output-dir", "dist_plugins"],
+    check=True,
+)
 ```
-Ship the resulting file; a user installs it via **Tools → Install Plugin…**.
 
-### 2.4 Bundled vs installed
+Run it as: `pixi run python examples/build_plugin_conda.py [output_dir]`
 
-- **Bundled:** drop a `default_plugins/<name>/microdrop_plugin.json` in the repo (the code
-  stays in `src/`, already importable). It's discovered at startup and shows in Manage Plugins
-  with no install — and can be **disabled but not uninstalled**. This is how magnet ships.
-- **Installed:** built into an archive and installed at runtime into `installed_plugins/<name>/`
-  (on `sys.path`); fully uninstallable.
+Ship the resulting `.conda` file to users; they install it via **Tools → Install Plugin…**.
 
-### 2.5 What your plugin should implement
+### 2.5 Bundled vs installed
+
+- **Bundled:** the plugin's packages are part of the main `microdrop_py` distribution (code
+  lives in `src/`). Add a `[project.entry-points."microdrop.plugins"]` entry to the **main**
+  `microdrop-py/pyproject.toml` and ship `microdrop_plugin.toml` inside the importable
+  package. Discovered at startup, shown in Manage Plugins — can be **disabled but not
+  uninstalled**. This is how magnet ships (`microdrop_plugin.toml` in `peripheral_controller/`,
+  entry point on `microdrop_py`).
+- **Installed:** built into a `.conda` artifact and installed at runtime via `pixi add`;
+  `dist_name` is NOT `microdrop_py`, so it is fully uninstallable via Uninstall Plugin….
+
+### 2.6 What your plugin should implement
 
 - **`start(self)` / `stop(self)`** — acquire/release runtime resources. Because your plugin can
   be **hot-unloaded**, `stop()` must fully tear down: stop background schedulers/threads, drop
   Dramatiq actor references, remove any app-globals you own, disconnect Qt signals. (See
   `peripheral_controller`'s `stop()` → `shutdown_monitoring()` + `cleanup()`.)
-- **Dock pane?** Contribute it via `TaskExtension(dock_pane_factories=[...])` (§2.6). For
+- **Dock pane?** Contribute it via `TaskExtension(dock_pane_factories=[...])` (§2.7). For
   hot-load to mount it cleanly, give the pane a `destroy()` that undoes anything it wired into
   longer-lived objects (status bar, the global theme signal) — and an optional
   `on_live_mounted(self)` hook, which `add_dock_pane_live` calls after mounting (used by the
@@ -240,42 +300,68 @@ Ship the resulting file; a user installs it via **Tools → Install Plugin…**.
   `task:window:status_bar_manager` observer never fires on a hot-mount).
 - **Contributing to an extension point that's consumed live?** (e.g. a protocol column.) Just
   declare `List(contributes_to=THE_ID)` — the consumer reacts if it opted into live events
-  (§ Part 3 §1). You don't need to do anything special on the contributing side.
+  (Part 3 §1). You don't need to do anything special on the contributing side.
 - **`enabled_key`** is owned by the manifest, not your plugin code. Your plugin doesn't read
   it; the manager sets/clears it.
 
-### 2.6 Minimal worked example
+### 2.7 Minimal worked example — `scipy_analysis_pkg`
 
-`my_widget/plugin.py`:
+The canonical demo is `examples/demo_plugins/scipy_analysis_pkg/`. It adds a dock pane that
+uses `scipy` (not in MicroDrop's base env) to plot random distributions.
+
+**File layout:**
+```
+scipy_analysis_pkg/
+  pyproject.toml
+  scipy_analysis/
+    __init__.py
+    consts.py
+    microdrop_plugin.toml    ← package data, discovered via entry point
+    plugin.py
+    dock_pane.py
+```
+
+**`scipy_analysis/microdrop_plugin.toml`:**
+```toml
+schema_version = 1
+name = "scipy_analysis"
+label = "Scipy Random Analysis (conda-package spike)"
+version = "0.1.0"
+packages = ["scipy_analysis"]
+
+[[groups]]
+name = "scipy_analysis"
+label = "Scipy Random Analysis (dock pane)"
+plugins = ["scipy_analysis.plugin:ScipyAnalysisPlugin"]
+enabled_key = "microdrop.scipy_analysis_enabled"
+```
+
+**`scipy_analysis/plugin.py`:**
 ```python
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from traits.api import List, Str
+
 from microdrop_application.consts import PKG as APP_PKG
 
-class MyWidgetPlugin(Plugin):
-    id = "my_widget.plugin"
-    name = "My Widget Plugin"
+
+class ScipyAnalysisPlugin(Plugin):
+    id = "scipy_analysis.plugin"
+    name = "Scipy Analysis Plugin"
+
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
     task_id = Str(f"{APP_PKG}.task")
 
     def _contributed_task_extensions_default(self):
-        from .dock_pane import MyWidgetDockPane
-        return [TaskExtension(task_id=self.task_id, dock_pane_factories=[MyWidgetDockPane])]
+        from .dock_pane import ScipyAnalysisDockPane    # lazy — scipy imported here
+        return [TaskExtension(task_id=self.task_id,
+                              dock_pane_factories=[ScipyAnalysisDockPane])]
+```
 
-    def start(self):  ...   # acquire resources
-    def stop(self):   ...   # release EVERYTHING (hot-unload safe)
-```
-`my_widget/microdrop_plugin.json`:
-```json
-{ "schema_version": 1, "name": "my_widget", "label": "My Widget", "version": "0.1.0",
-  "packages": ["my_widget"],
-  "groups": [ { "name": "my_widget", "label": "My Widget",
-                "plugins": ["my_widget.plugin:MyWidgetPlugin"],
-                "enabled_key": "microdrop.my_widget_enabled" } ] }
-```
-Zip `my_widget/` + the manifest into `my_widget.microdrop_plugin`, install, enable — the dock
-pane mounts live.
+Build → install → relaunch → enable in Manage Plugins → the dock pane mounts live. The
+`scipy` dependency is declared in `[tool.pixi.package.run-dependencies]` and is resolved by
+the conda solver at install time; it is NOT imported at plugin resolution (only inside
+`_contributed_task_extensions_default`, so enabling fails cleanly until `scipy` is available).
 
 ---
 
@@ -399,8 +485,9 @@ earlier `application_initialized` + manual `on_trait_change("active_window")` re
 | Lifecycle hooks | `@observe("application:active_window")` over the manual rewire | **Applied** |
 | Traits tricks | n/a | Adopt `dispatch="ui"`, `Property`+`@cached_property`, `@provides` where useful |
 
-The architecture deliberately favors a **data manifest + lazy `module:Class` imports** over a
+The architecture deliberately favors a **TOML manifest + lazy `module:Class` imports** over a
 scan-and-import discovery (the deprecated `PackagePluginManager` pattern) — it gives
-installability without importing untrusted code at discovery, and it sidesteps the pip/wheel +
-entry-points path that fights a pixi-managed env. See
-`docs/superpowers/specs/2026-06-24-plugin-install-from-zip-design.md` for that rationale.
+installability without importing untrusted code at discovery, and dependency resolution is
+delegated to the conda solver via `pixi add`, not custom `sys.path` wiring. See
+`docs/superpowers/specs/2026-06-26-plugin-conda-package-migration-design.md` for that
+rationale.
