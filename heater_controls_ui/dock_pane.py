@@ -1,4 +1,4 @@
-from traits.api import observe
+from traits.api import observe, Instance
 from pyface.qt.QtGui import QApplication, QLabel, QFont
 
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
@@ -8,6 +8,9 @@ from microdrop_style.icons.icons import ICON_MODE_HEAT
 from microdrop_style.colors import WHITE, GREY
 from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
+from microdrop_application.dialogs.pyface_wrapper import information
+
+from peripheral_controller.preferences import PeripheralPreferences
 
 from .consts import PKG, PKG_name, listener_name
 from .model import HeaterStatusModel
@@ -28,11 +31,38 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     controller = HeaterControlsController(model)
     view.handler = controller
 
+    # Shared "Peripheral Settings" preferences (holds heater_show_pid_off_warning).
+    heater_preferences = Instance(PeripheralPreferences)
+
+    def traits_init(self):
+        super().traits_init()
+        self.heater_preferences = PeripheralPreferences(
+            preferences=self.task.window.application.preferences_helper.preferences
+        )
+
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factory hooks                                     #
     # ------------------------------------------------------------------ #
     def _create_message_handler(self) -> HeaterMessageHandler:
         return HeaterMessageHandler(model=self.model, name=listener_name)
+
+    # ------------------------------------------------------------------ #
+    # "Applies when PID starts" warning (setpoint edited while PID off)     #
+    # ------------------------------------------------------------------ #
+    @observe("model:pid_off_setpoint_warning", dispatch="ui")
+    def _warn_setpoint_pid_off(self, event):
+        if self.heater_preferences is None or not self.heater_preferences.heater_show_pid_off_warning:
+            return
+        result = information(
+            parent=None,
+            title="PID is off",
+            message="The temperature change will apply when PID is started.",
+            cancel=False,
+            checkbox_text="Don't show this again",
+        )
+        # With checkbox_text, information() returns (result, checked).
+        if isinstance(result, tuple) and result[1]:
+            self.heater_preferences.heater_show_pid_off_warning = False
 
     def _setup_extras(self):
         """Status-bar icon is set up via the overridden _setup_statusbar_icon."""

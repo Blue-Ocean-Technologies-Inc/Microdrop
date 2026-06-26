@@ -1,4 +1,4 @@
-from traits.api import Str, List, Bool
+from traits.api import Str, List, Bool, Event
 
 from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
@@ -56,6 +56,11 @@ class HeaterStatusModel(BaseStatusModel):
     # ---- Optional per-sensor temperature snapshot (hidden by default) ----
     show_all_temps = Bool(False, desc="Reveal the per-sensor temperature snapshot")
     all_temps_display = Str("-")
+
+    # Fired by the controller when the user edits the setpoint while PID is off
+    # (the change is not sent to hardware until PID starts). The dock pane shows
+    # a one-time warning in response.
+    pid_off_setpoint_warning = Event()
 
     # ------------------------------------------------------------------ #
     # Neutralize dropbot realtime-mode coupling                            #

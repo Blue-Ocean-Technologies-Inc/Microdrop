@@ -54,8 +54,15 @@ class HeaterControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     @observe("model:temperature")
     def _on_temperature_changed(self, event):
-        self._publish(SET_TEMPERATURE, self._heater_payload(temperature=event.new))
-        logger.debug(f"Temperature → {event.new} °C")
+        # The setpoint command (pid_<heater>_<temp>) is a live PID command, so
+        # only send it while PID is on. Otherwise just note it; it gets pushed
+        # when PID is enabled (see _on_pid_active_changed).
+        if self.model.pid_active:
+            self._publish(SET_TEMPERATURE, self._heater_payload(temperature=event.new))
+            logger.debug(f"Temperature → {event.new} °C")
+        else:
+            logger.debug(f"Temperature setpoint {event.new} °C staged (PID off)")
+            self.model.pid_off_setpoint_warning = True
 
     @observe("model:pwm")
     def _on_pwm_changed(self, event):
