@@ -111,17 +111,10 @@ class PluginManagementPlugin(Plugin):
         ]
 
     def _tools_actions_group(self):
-        """Install / Uninstall / Manage as one ordered group in Tools."""
+        """Single Manage Plugins action in Tools."""
         from pyface.tasks.action.api import SGroup
-        from .menus import (
-            InstallPluginAction, UninstallPluginAction, ManagePluginsAction,
-        )
-        return SGroup(
-            InstallPluginAction(),
-            UninstallPluginAction(),
-            ManagePluginsAction(),
-            id="plugin_management_actions",
-        )
+        from plugin_management.menus import ManagePluginsAction
+        return SGroup(ManagePluginsAction(), id="plugin_management_actions")
 
     # --- launch restore ----------------------------------------------
 
