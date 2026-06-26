@@ -87,6 +87,10 @@ class PluginGroupManager(HasTraits):
                 continue
             self._add_manifest_groups(
                 manifest, source_dir=str(manifest_dir), into=groups)
+        from plugin_management import entry_point_discovery
+        if entry_point_discovery.enabled():
+            for manifest, source in entry_point_discovery.discover_entry_point_manifests():
+                self._add_manifest_groups(manifest, source_dir=source, into=groups)
         return groups
 
     def _add_manifest_groups(self, manifest, source_dir="", into=None):
