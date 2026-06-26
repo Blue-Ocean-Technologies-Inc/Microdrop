@@ -1,101 +1,88 @@
-import json
+from traits.api import observe
+from pyface.qt.QtGui import QApplication, QLabel, QFont
 
-from traits.api import Instance, observe
-from pyface.tasks.api import TraitsDockPane
+from template_status_and_controls.base_dock_pane import BaseStatusDockPane
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
+from microdrop_style.icons.icons import ICON_MODE_HEAT
+from microdrop_style.colors import WHITE, GREY
+from microdrop_style.helpers import is_dark_mode
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
-
-from heater_controller.consts import (
-    SET_TEMPERATURE,
-    SET_PWM,
-    SET_PID_MODE,
-    SET_STREAM,
-    SET_FAN,
-    ALL_OFF,
-    START_DEVICE_MONITORING,
-)
-
-from .model import HeaterControlModel
-from .view import heater_view
-from .listener import HeaterControlListener
-from .consts import PKG, PKG_name
-
-logger = get_logger(__name__)
+from .consts import PKG, PKG_name, listener_name
+from .model import HeaterStatusModel
+from .controller import HeaterControlsController
+from .view import UnifiedView
+from .message_handler import HeaterMessageHandler
 
 
-class HeaterControlDockPane(TraitsDockPane):
-    """Controller: owns the model + connection/telemetry listener, and turns model
-    button presses into published command topics."""
+class HeaterStatusDockPane(BaseStatusDockPane):
+    """Dock pane for heater status display and controls."""
 
-    id = PKG + ".pane"
-    name = "Heater Controls"
+    id = PKG + ".dock_pane"
+    name = f"{PKG_name} Dock Pane"
 
-    model = Instance(HeaterControlModel, ())
-    traits_view = heater_view
+    # TraitsDockPane wires these together; view.handler must be set at class level.
+    model = HeaterStatusModel()
+    view = UnifiedView
+    controller = HeaterControlsController(model)
+    view.handler = controller
 
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        # The listener writes connection/telemetry state into the same model.
-        self._listener = HeaterControlListener(model=self.model)
+    # ------------------------------------------------------------------ #
+    # BaseStatusDockPane factory hooks                                     #
+    # ------------------------------------------------------------------ #
+    def _create_message_handler(self) -> HeaterMessageHandler:
+        return HeaterMessageHandler(model=self.model, name=listener_name)
 
-    # -- helpers -------------------------------------------------------------
-    @staticmethod
-    def _publish(topic, payload):
-        msg = json.dumps(payload)
-        logger.info(f"Publishing to {topic}: {msg}")
-        publish_message(message=msg, topic=topic)
+    def _setup_extras(self):
+        """Status-bar icon is set up via the overridden _setup_statusbar_icon."""
 
-    def _heater_payload(self, **extra):
-        """Payload including the selected heater (omitted when none selected, so
-        the backend applies its tec1 default)."""
-        payload = dict(extra)
-        if self.model.selected_heater:
-            payload["heater"] = self.model.selected_heater
-        return payload
+    # ------------------------------------------------------------------ #
+    # Status-bar icon — heater symbol only (no realtime toggle icon)       #
+    # ------------------------------------------------------------------ #
+    @observe("task:window:status_bar_manager")
+    def _setup_statusbar_icon(self, event):
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
 
-    # -- command observers ---------------------------------------------------
-    @observe("model:apply_temperature")
-    def _apply_temperature(self, event):
-        self._publish(SET_TEMPERATURE, self._heater_payload(temperature=self.model.temperature))
+        icon = QLabel(ICON_MODE_HEAT)
+        icon.setFont(font)
+        icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
+        self.status_bar_icon = icon  # inherited _sync_model_icon_color recolors this
 
-    @observe("model:apply_pwm")
-    def _apply_pwm(self, event):
-        self._publish(SET_PWM, self._heater_payload(pwm=self.model.pwm))
+        def _apply_tooltip():
+            icon.setToolTip(_build_heater_status_tooltip(
+                self.model.DISCONNECTED_COLOR,
+                self.model.CONNECTED_COLOR,
+                self.model.HALTED_COLOR,
+            ))
 
-    @observe("model:pid_enable")
-    def _pid_enable(self, event):
-        self._publish(SET_PID_MODE, self._heater_payload(mode="enable"))
+        _apply_tooltip()
+        QApplication.styleHints().colorSchemeChanged.connect(_apply_tooltip)
 
-    @observe("model:pid_disable")
-    def _pid_disable(self, event):
-        self._publish(SET_PID_MODE, self._heater_payload(mode="disable"))
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, icon)
+        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(
+            2, horizontal_spacer_widget(10))
 
-    @observe("model:pid_stop")
-    def _pid_stop(self, event):
-        self._publish(SET_PID_MODE, self._heater_payload(mode="stop"))
+    # The base wires a realtime-mode status-bar icon; the heater has none, so
+    # override those observers to no-ops (the base bodies reference an icon we
+    # never create).
+    def _enable_realtime_icon_based_on_modes(self, event=None):
+        pass
 
-    @observe("model:stream_start")
-    def _stream_start(self, event):
-        self._publish(SET_STREAM, {"group": self.model.stream_group})
+    def _sync_realtime_icon(self, event=None):
+        pass
 
-    @observe("model:stream_stop")
-    def _stream_stop(self, event):
-        self._publish(SET_STREAM, {"group": "stop"})
 
-    @observe("model:fan_on")
-    def _fan_on(self, event):
-        self._publish(SET_FAN, {"on": True})
-
-    @observe("model:fan_off")
-    def _fan_off(self, event):
-        self._publish(SET_FAN, {"on": False})
-
-    @observe("model:all_off")
-    def _all_off(self, event):
-        publish_message(message="", topic=ALL_OFF)
-
-    @observe("model:connect")
-    def _connect(self, event):
-        logger.info("Requesting heater connection monitoring")
-        publish_message(message="", topic=START_DEVICE_MONITORING)
+def _build_heater_status_tooltip(disconnected_color, connected_color, halted_color) -> str:
+    title_color = WHITE if is_dark_mode() else GREY["dark"]
+    return f"""
+    <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
+      <strong style="font-size: 1.1em; color: {title_color}">Heater Status:</strong>
+      <ul style="margin-top: 1px; margin-bottom: 1px; padding-left: 20px;">
+        <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
+        <li><strong style="color: {connected_color};">Connected</strong></li>
+        <li><strong style="color: {halted_color};">Halted (Fault)</strong></li>
+      </ul>
+    </div>
+    """

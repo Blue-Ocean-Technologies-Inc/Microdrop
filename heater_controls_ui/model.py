@@ -1,42 +1,67 @@
-from traits.api import HasTraits, Bool, List, Str, Float, Range, Button
+from traits.api import Str, List, Bool, Button
+
+from template_status_and_controls.base_model import BaseStatusModel
+from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
+
+from .consts import (
+    disconnected_color, connected_color, halted_color,
+    TEMPERATURE_MIN, TEMPERATURE_MAX, TEMPERATURE_DEFAULT,
+    PWM_MIN, PWM_MAX, PWM_DEFAULT,
+)
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 
-class HeaterControlModel(HasTraits):
-    """Qt-free state for the heater controls dock pane.
+class HeaterStatusModel(BaseStatusModel):
+    """Model for heater status display and controls.
 
-    The connection/telemetry listener writes the status fields and the available
-    heater channels; the dock-pane controller reads the inputs and reacts to the
-    command buttons. Nothing here touches Qt or dramatiq.
+    Extends BaseStatusModel. The heater has no device picture and no chip / "no
+    device" sub-state (connected maps straight to green), and no hardware
+    realtime mode — so the inherited realtime-mode app-globals push is neutralized.
     """
 
-    # -- Connection ----------------------------------------------------------
-    connected = Bool(False, desc="True when the heater backend reports connected")
+    # ---- Class-level constants ----------------------------------------
+    DEFAULT_ICON_PATH = ""          # no device picture for the heater pane
+    CHIP_INSERTED_ICON_PATH = ""
+    DISCONNECTED_COLOR = disconnected_color
+    # No "connected but no chip" state — connected is green outright.
+    CONNECTED_NO_DEVICE_COLOR = connected_color
+    CONNECTED_COLOR = connected_color
+    HALTED_COLOR = halted_color
 
-    # -- Heater channel selection (dropdown is populated from the board) ------
+    # ---- Heater channel selection (dropdown populated from the board) ---
     available_heaters = List(Str, desc="Channels reported by the board")
     selected_heater = Str(desc="Channel that commands target")
 
-    # -- Command inputs ------------------------------------------------------
-    temperature = Float(40.0, desc="PID setpoint to apply (C)")
-    pwm = Range(value=0, low=0, high=100, desc="Open-loop duty to apply (%)")
-    stream_group = Str("all", desc="Sensor group to stream")
+    # ---- Setpoint controls (range + units, like voltage/frequency) ------
+    temperature = RangeWithSteppedSpinViewHint(
+        TEMPERATURE_MIN, TEMPERATURE_MAX, value=TEMPERATURE_DEFAULT, suffix=" °C",
+        desc="PID setpoint to apply (°C)",
+    )
+    pwm = RangeWithSteppedSpinViewHint(
+        PWM_MIN, PWM_MAX, value=PWM_DEFAULT, suffix=" %",
+        desc="Open-loop duty to apply (%)",
+    )
 
-    # -- Command buttons -----------------------------------------------------
-    apply_temperature = Button("Set Temp")
-    apply_pwm = Button("Set PWM")
-    pid_enable = Button("Enable")
-    pid_disable = Button("Disable")
-    pid_stop = Button("Stop")
-    stream_start = Button("Start Stream")
-    stream_stop = Button("Stop Stream")
-    fan_on = Button("Fan On")
-    fan_off = Button("Fan Off")
+    # ---- Toggle controls (realtime-style buttons) -----------------------
+    pid_active = Bool(False, desc="PID control enabled")
+    stream_active = Bool(False, desc="Telemetry streaming active")
+    fan_active = Bool(False, desc="Fan on")
+
+    # ---- Momentary buttons ---------------------------------------------
+    pid_stop = Button("PID Stop")
     all_off = Button("All Off")
-    connect = Button("Search Connection")
 
-    # -- Status readouts (written by the listener) ---------------------------
-    status_text = Str("Disconnected")
-    board_id_text = Str("Board: —")
-    pid_temp_text = Str("PID temp: —")
-    pwm_text = Str("PWM: —")
-    temps_text = Str("Temps: —")
+    # ---- Readback displays (written by the message handler) -------------
+    temperature_display = Str("-")
+    pwm_display = Str("-")
+    board_id_text = Str("-")
+
+    # ------------------------------------------------------------------ #
+    # Neutralize dropbot realtime-mode coupling                            #
+    # ------------------------------------------------------------------ #
+    def _realtime_mode_updated(self, event=None):
+        """The heater has no hardware realtime mode; don't touch the dropbot
+        REALTIME_MODE_KEY app global that BaseStatusModel would otherwise write."""
+        pass
