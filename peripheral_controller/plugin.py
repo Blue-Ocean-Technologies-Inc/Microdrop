@@ -61,5 +61,10 @@ class PeripheralControllerPlugin(Plugin):
     def stop(self):
         """Cleanup when the plugin is stopped."""
         if hasattr(self, 'device_controller'):
+            # Stop the background port-monitoring scheduler before tearing down
+            # the proxy/actor (resolves via the composed mixin MRO).
+            if hasattr(self.device_controller, 'shutdown_monitoring'):
+                self.device_controller.shutdown_monitoring()
             self.device_controller.cleanup()
             logger.info(f"{self.device_controller._device_name.title()} Controller plugin stopped")
+            del self.device_controller

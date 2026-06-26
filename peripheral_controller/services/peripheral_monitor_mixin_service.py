@@ -101,6 +101,19 @@ class PeripheralMonitorMixinService(HasTraits):
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
 
+    def shutdown_monitoring(self):
+        """Stop the background connection-monitoring scheduler if running.
+
+        Called on plugin stop / hot-unload so the 2s interval job does not
+        keep polling for ports after the controller has been torn down."""
+        scheduler = getattr(self, "monitor_scheduler", None)
+        if isinstance(scheduler, BackgroundScheduler) and scheduler.state != STATE_STOPPED:
+            try:
+                scheduler.shutdown(wait=False)
+                logger.info(f"{self._device_name} connection monitoring stopped.")
+            except Exception as e:
+                logger.warning(f"Error shutting down {self._device_name} monitor scheduler: {e}")
+
     def on_retry_connection_request(self, message):
         if self.connection_active:
             logger.info(f"Retry connection request rejected: {self._device_name} already connected")

@@ -3,6 +3,7 @@ from microdrop_application.menus import is_advanced_mode
 from traits.api import Bool, List, observe
 from traitsui.api import Item, ListEditor, View
 from envisage.ui.tasks.api import PreferencesDialog as _PreferencesDialog, PreferencesTab, PreferencesCategory
+from envisage.api import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 
 advanced_mode_tab = PreferencesCategory(
     id="microdrop.advanced_mode.preferences",
@@ -47,8 +48,30 @@ class PreferencesDialog(_PreferencesDialog):
     # 'HasTraits' interface.
     ###########################################################################
 
+    def _refresh_from_application(self):
+        """Re-pull contributed categories/panes from the LIVE extension points
+        so plugin-contributed tabs (e.g. the magnet peripheral tab) show only
+        while that plugin is loaded. The base class rebuilds ``_tabs`` reactively
+        from ``categories``/``panes``, so reassigning them here refreshes the
+        dialog on each open. ``advanced_mode_tab`` is appended explicitly (and
+        deduped) so it is present before the reactive rebuild reads categories."""
+        if self.application is None:
+            return
+        self.panes = [
+            factory(dialog=self)
+            for factory in self.application.get_extensions(PREFERENCES_PANES)
+        ]
+        categories = list(self.application.get_extensions(PREFERENCES_CATEGORIES))
+        if advanced_mode_tab not in categories:
+            categories.append(advanced_mode_tab)
+        self.categories = categories
+
     def traits_view(self):
         """Build the dynamic dialog view."""
+        # Refresh tabs from the currently-loaded plugins each time the dialog
+        # opens, so hot-loaded/unloaded plugin tabs appear/disappear live.
+        self._refresh_from_application()
+
         buttons = ["Apply", "Revert", "OK", "Cancel"]
 
         # Only show advanced mode tab if in advanced mode
@@ -143,7 +166,10 @@ class PreferencesDialog(_PreferencesDialog):
 
     @observe("categories")
     def _category_changed(self, event=None):
-        self.categories.append(advanced_mode_tab)
+        # Idempotent: re-pulling categories on each open (see
+        # _refresh_from_application) must not accumulate duplicate tabs.
+        if advanced_mode_tab not in self.categories:
+            self.categories.append(advanced_mode_tab)
 
     @observe("_tabs")
     def _tabs_changed(self, event=None):

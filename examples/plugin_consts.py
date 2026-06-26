@@ -7,6 +7,7 @@ from manual_controls.plugin import ManualControlsPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
+from plugin_management.plugin import PluginManagementPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
@@ -59,17 +60,29 @@ from user_help_plugin.plugin import UserHelpPlugin
 # for any run script that launches the GUI.
 # ---------------------------------------------------------------------------
 
+# The optional magnet peripheral is intentionally NOT in the default lists
+# below. Its two groups (magnet_backend, magnet_ui) are declared by the bundled
+# manifest default_plugins/magnet_peripherals/microdrop_plugin.json and hot
+# loaded/unloaded at runtime via the Tools -> Manage Plugins dialog
+# (PluginGroupManager). The lists below mirror that manifest for documentation.
+MAGNET_UI_PLUGINS = [
+    PeripheralProtocolControlsPlugin,  # magnet protocol column
+    PeripheralUiPlugin,                # dock pane + status icon + tools submenu
+]
+MAGNET_BACKEND_PLUGINS = [
+    PeripheralControllerPlugin,        # controller (services + topics + search)
+]
+
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
+    PluginManagementPlugin,
     TasksPlugin,
     LoggerUIPlugin,
     DeviceViewerPlugin,
-    PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
-    PeripheralProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
@@ -96,7 +109,6 @@ OPENDROP_BACKEND_PLUGINS = [
 ]
 
 DROPBOT_BACKEND_PLUGINS = [
-    PeripheralControllerPlugin,
     DropbotControllerPlugin
 ]
 
