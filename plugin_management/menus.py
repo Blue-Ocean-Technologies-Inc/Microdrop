@@ -47,9 +47,9 @@ class ManagePluginsAction(TaskAction):
 
 
 class InstallPluginAction(TaskAction):
-    """Pick a .microdrop_plugin archive and install it. Shows an
-    informed-consent dialog (what will be installed + a third-party code
-    warning) before extracting, then registers its groups live."""
+    """Pick a built plugin package (.conda) and install it via pixi. Shows an
+    informed-consent dialog, then `pixi add`s the package (the solver resolves
+    its dependencies) and offers a relaunch."""
 
     id = "install_plugin_action"
     name = "&Install Plugin…"
@@ -63,79 +63,52 @@ class InstallPluginAction(TaskAction):
             file_dialog, confirm, information, error as error_dialog, YES,
             escape_html_multiline,
         )
-        from plugin_management.i_plugin_group_manager import IPluginGroupManager
-        from plugin_management import installer
+        from plugin_management import package_installer
 
         path = file_dialog(
             parent=None, action="open",
-            wildcard="MicroDrop plugin (*.microdrop_plugin)|*.microdrop_plugin",
+            wildcard="MicroDrop plugin package (*.conda)|*.conda",
         )
         if not path:
             return
 
-        manager = task.window.application.get_service(IPluginGroupManager)
-        if manager is None:
-            logger.error("Install Plugin: PluginGroupManager service not found")
-            return
-
-        def _consent(manifest):
-            classes = "<br>".join(
-                f"&nbsp;&nbsp;{escape_html_multiline(p)}"
-                for g in manifest.groups for p in g.plugins
-            )
-            pkgs = ", ".join(escape_html_multiline(p) for p in manifest.packages)
-            label = escape_html_multiline(manifest.label)
-            version = escape_html_multiline(manifest.version or "?")
+        def _consent(name):
+            safe = escape_html_multiline(name)
             body = (
-                f"<b>{label}</b> (v{version})<br><br>"
-                f"Packages: {pkgs}<br>"
-                f"Plugin classes that will become importable:<br>{classes}<br><br>"
+                f"Install the plugin package <b>{safe}</b>?<br><br>"
+                f"pixi will install it and resolve its dependencies into the "
+                f"environment.<br><br>"
                 f"<b>Warning:</b> installing runs third-party code that has not "
-                f"been verified. Only install plugins you trust.<br><br>"
-                f"Install this plugin?"
+                f"been verified. Only install plugins you trust."
             )
             return confirm(parent=None, message=body,
                            title="Install Plugin?", cancel=False) == YES
 
         try:
-            result = installer.install_from_zip(path, manager, confirm=_consent)
-        except installer.InstallCancelled:
+            result = package_installer.install_conda_file(path, confirm=_consent)
+        except package_installer.InstallCancelled:
             return
         except Exception as e:
             error_dialog(parent=None, title="Install failed", message=str(e))
             return
 
-        label = escape_html_multiline(result.manifest.label)
-        if not result.requires_relaunch:
-            information(
-                parent=None, title="Plugin installed",
-                message=f"Installed <b>{label}</b>.<br><br>"
-                        f"Enable it from Tools → Manage Plugins.",
-            )
-            return
-
-        # The plugin pulled in dependencies that were just added to the
-        # environment; they only become importable after a relaunch.
+        safe = escape_html_multiline(result.name)
         if confirm(parent=None, title="Relaunch required",
-                   message=f"Installed <b>{label}</b>.<br><br>It needs additional "
-                           f"packages that were added to the environment — they "
-                           f"become available after a relaunch.<br><br>"
+                   message=f"Installed <b>{safe}</b>.<br><br>Its packages become "
+                           f"available after a relaunch.<br><br>"
                            f"Relaunch MicroDrop now?",
                    cancel=False) == YES:
             from plugin_management.relaunch import relaunch_into_plugins_env
             relaunch_into_plugins_env(task.window.application)
         else:
-            information(
-                parent=None, title="Relaunch later",
-                message=f"<b>{label}</b> will be available the next time you "
-                        f"launch MicroDrop.",
-            )
+            information(parent=None, title="Relaunch later",
+                       message=f"<b>{safe}</b> will be available the next time "
+                               f"you launch MicroDrop.")
 
 
 class UninstallPluginAction(TaskAction):
-    """Remove a user-installed plugin (its files, groups, modules, and enabled
-    flags), auto-disabling any loaded group first. Bundled plugins are not
-    listed."""
+    """Uninstall a user-installed plugin package (auto-disable its loaded
+    groups, then `pixi remove`). Bundled plugins are not listed."""
 
     id = "uninstall_plugin_action"
     name = "&Uninstall Plugin…"
@@ -149,7 +122,7 @@ class UninstallPluginAction(TaskAction):
             confirm, information, error as error_dialog, YES, escape_html_multiline,
         )
         from plugin_management.i_plugin_group_manager import IPluginGroupManager
-        from plugin_management import installer
+        from plugin_management import package_installer
         from plugin_management.uninstall_dialog import UninstallPluginModel
 
         manager = task.window.application.get_service(IPluginGroupManager)
@@ -160,7 +133,7 @@ class UninstallPluginAction(TaskAction):
         installed = manager.installed_plugins()
         if not installed:
             information(parent=None, title="Uninstall Plugin",
-                       message="No user-installed plugins to uninstall.")
+                       message="No installed plugin packages to uninstall.")
             return
 
         model = UninstallPluginModel(installed)
@@ -169,16 +142,25 @@ class UninstallPluginAction(TaskAction):
             return
         name = model.selected
         label = {n: l for n, l, _d, _g in installed}.get(name, name)
+        groups = {n: g for n, _l, _d, g in installed}.get(name, [])
         safe_label = escape_html_multiline(label)
         if confirm(parent=None,
                    message=f"Uninstall <b>{safe_label}</b>?<br><br>"
-                           f"This deletes its installed files.",
+                           f"This removes its package from the environment.",
                    title="Uninstall Plugin?", cancel=False) != YES:
             return
         try:
-            installer.uninstall_plugin(task, manager, name)
+            for group_name in groups:
+                if manager.is_loaded(group_name):
+                    manager.disable(task, group_name)
+            manager.deregister_plugin(name)
+            package_installer.uninstall_package(name)
         except Exception as e:
             error_dialog(parent=None, title="Uninstall failed", message=str(e))
             return
-        information(parent=None, title="Plugin uninstalled",
-                   message=f"Uninstalled <b>{safe_label}</b>.")
+        if confirm(parent=None, title="Relaunch required",
+                   message=f"Uninstalled <b>{safe_label}</b>.<br><br>Relaunch "
+                           f"MicroDrop now to finish removing it?",
+                   cancel=False) == YES:
+            from plugin_management.relaunch import relaunch_into_plugins_env
+            relaunch_into_plugins_env(task.window.application)
