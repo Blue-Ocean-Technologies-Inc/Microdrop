@@ -1,27 +1,15 @@
-from traits.api import Interface, Str, Instance
+from traits.api import Instance
 
 from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_device_controller_base.interfaces.i_peripheral_device_control_mixin_service import (
+    IPeripheralDeviceControlMixinService,
+)
 
 
-class IPeripheralControlMixinService(Interface):
+class IPeripheralControlMixinService(IPeripheralDeviceControlMixinService):
+    """Interface for the z-stage magnet control mixins. Narrows ``proxy`` to the
+    mr-box serial proxy. This subclass is the magnet's OWN service protocol so the
+    plugin only composes magnet mixins.
     """
-    An interface for a dropbot control mixin that provides certain methods for a dropbot controller
-    """
 
-    id = Str
-    name = Str
     proxy = Instance(DramatiqPeripheralSerialProxy)
-
-    ################################### Exposed Methods ###############################
-
-    def on_topic_request(self, message):
-        """
-        A method that is called when a dropbot topic request is received. This naming convention is to be followed
-        for methods to be exposed. While calling it one would send a message to a topic that is
-        something/dropbot/topic
-        """
-        pass
-
-    ####################################################################################
-
-

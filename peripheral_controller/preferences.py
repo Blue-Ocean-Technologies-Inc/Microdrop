@@ -1,5 +1,5 @@
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Dict, Property
+from traits.api import Dict, Property, Bool
 from pyface.api import warning
 
 from logger.logger_service import get_logger
@@ -47,6 +47,14 @@ class PeripheralPreferences(PreferencesHelper):
         low=MIN_ZSTAGE_HEIGHT_MM,
         high="_max_down_height",
         desc="Height of stage when down command sent"
+    )
+
+    # Heater UI: whether to warn ("will apply when PID starts") when the user
+    # changes the temperature setpoint while PID is off. Lives on this shared
+    # "Peripheral Settings" node so it shows in the same preferences tab.
+    heater_show_pid_off_warning = Bool(
+        True, desc="Show the 'applies when PID starts' warning when setting "
+                   "the heater temperature while PID is off"
     )
 
     #### Preferences ##########################################################
