@@ -1,10 +1,10 @@
 """Runtime hot load/unload of *named groups* of Envisage plugins.
 
-Groups are discovered from microdrop_plugin.json manifests — bundled ones in
-the repo's default_plugins/ and user-installed ones under the app-data
-installed_plugins/ dir (see plugin_management). Each group names
-its plugin classes as dotted "module:Class" specs, resolved lazily at enable
-time so a broken/installed plugin never breaks startup or discovery.
+Groups are discovered exclusively from ``microdrop.plugins`` entry points —
+each installed package ships a ``microdrop_plugin.toml`` as package data and
+the entry point value is its importable package name. Each group names its
+plugin classes as dotted "module:Class" specs, resolved lazily at enable time
+so a broken/installed plugin never breaks startup or discovery.
 
 Envisage supports adding/removing plugins at runtime, but three layers don't
 self-heal: runtime ServiceOffers leak (CorePlugin discards their ids), Pyface
@@ -16,13 +16,10 @@ enable/disable so plugin-contributed submenus appear/disappear live.
 """
 
 import importlib
-from pathlib import Path
 
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-from plugin_management import paths
-from plugin_management.manifest import load_manifest, ManifestError
 from plugin_management.i_plugin_group_manager import IPluginGroupManager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
@@ -52,12 +49,11 @@ class PluginGroup(HasTraits):
     #: Optional topic published (empty message) right after a successful
     #: enable — e.g. the backend group kicks off the magnet search.
     post_enable_publish_topic = Str()
-    #: The owning manifest's name + label, and the directory the manifest was
-    #: discovered/installed from. Used to list and uninstall user-installed
-    #: plugins (those whose source_dir is under installed_plugins/).
+    #: The owning manifest's name + label, and the distribution the manifest
+    #: was shipped by. Used to classify bundled vs. installed plugins.
     manifest_name = Str()
     manifest_label = Str()
-    source_dir = Str()
+    dist_name = Str()
 
 
 @provides(IPluginGroupManager)
@@ -74,29 +70,19 @@ class PluginGroupManager(HasTraits):
     # --- discovery ---------------------------------------------------
 
     def _discover_groups(self):
-        """Build the group map from every manifest in default_plugins/ and
-        installed_plugins/. Reads JSON only (no plugin imports), so a broken
-        installed plugin can't break discovery."""
-        groups = {}
-        for manifest_dir in paths.iter_manifest_dirs():
-            manifest_path = manifest_dir / paths.MANIFEST_FILENAME
-            try:
-                manifest = load_manifest(manifest_path)
-            except ManifestError:
-                logger.exception(f"skipping invalid manifest at {manifest_path}")
-                continue
-            self._add_manifest_groups(
-                manifest, source_dir=str(manifest_dir), into=groups)
+        """Build the group map from every microdrop.plugins entry point.
+        Reads package-data TOML only (no plugin imports), so a broken installed
+        plugin can't break discovery."""
         from plugin_management import entry_point_discovery
-        if entry_point_discovery.enabled():
-            for manifest, source in entry_point_discovery.discover_entry_point_manifests():
-                self._add_manifest_groups(manifest, source_dir=source, into=groups)
+        groups = {}
+        for manifest, dist_name in entry_point_discovery.discover_entry_point_manifests():
+            self._add_manifest_groups(manifest, dist_name=dist_name, into=groups)
         return groups
 
-    def _add_manifest_groups(self, manifest, source_dir="", into=None):
+    def _add_manifest_groups(self, manifest, dist_name="", into=None):
         """Create a PluginGroup per spec in ``manifest`` and put it in ``into``
-        (defaults to self.groups). ``source_dir`` is the dir the manifest came
-        from (recorded for uninstall). Last writer wins on a name collision."""
+        (defaults to self.groups). ``dist_name`` is the owning distribution (for
+        bundled-vs-installed classification). Last writer wins on a collision."""
         target = self.groups if into is None else into
         for spec in manifest.groups:
             target[spec.name] = PluginGroup(
@@ -107,46 +93,41 @@ class PluginGroupManager(HasTraits):
                 post_enable_publish_topic=spec.post_enable_publish_topic,
                 manifest_name=manifest.name,
                 manifest_label=manifest.label,
-                source_dir=source_dir,
+                dist_name=dist_name,
             )
 
-    def register_manifest(self, manifest, source_dir=""):
+    def register_manifest(self, manifest, dist_name=""):
         """Register a freshly-installed manifest's groups at runtime. Refuses
-        (raises) if a colliding group name is currently loaded — the caller
-        should ask the user to disable it first."""
+        (raises) if a colliding group name is currently loaded."""
         for spec in manifest.groups:
             existing = self.groups.get(spec.name)
             if existing is not None and existing.loaded:
                 raise RuntimeError(
                     f"group '{spec.name}' is currently enabled; disable it "
-                    f"before reinstalling"
-                )
-        self._add_manifest_groups(manifest, source_dir=source_dir)
+                    f"before reinstalling")
+        self._add_manifest_groups(manifest, dist_name=dist_name)
+
+    #: The app's own distribution — its plugins are bundled (disable-only).
+    APP_DIST_NAMES = frozenset({"microdrop-py", "microdrop_py"})
+
+    @staticmethod
+    def _norm_dist(name):
+        return (name or "").strip().lower().replace("_", "-")
 
     def installed_plugins(self):
-        """User-installed plugins (whose source_dir sits directly under
-        installed_plugins/), one entry per distinct owning manifest, as
-        (name, label, source_dir, [group_names]) in discovery order. Bundled
-        (default_plugins/) plugins are excluded — they can't be uninstalled."""
-        try:
-            base = paths.installed_plugins_dir().resolve()
-        except OSError:
-            return []
+        """User-installed plugins (whose owning distribution is NOT the app's
+        own), one entry per distinct manifest, as (name, label, dist_name,
+        [group_names]) in discovery order. Bundled plugins are excluded."""
+        app = {self._norm_dist(n) for n in self.APP_DIST_NAMES}
         out = {}
         for group in self.groups.values():
-            if not group.source_dir:
-                continue
-            try:
-                under = Path(group.source_dir).resolve().parent == base
-            except OSError:
-                under = False
-            if not under:
+            if self._norm_dist(group.dist_name) in app or not group.dist_name:
                 continue
             entry = out.get(group.manifest_name)
             if entry is None:
                 entry = (group.manifest_name,
                          group.manifest_label or group.manifest_name,
-                         group.source_dir, [])
+                         group.dist_name, [])
                 out[group.manifest_name] = entry
             entry[3].append(group.name)
         return list(out.values())
