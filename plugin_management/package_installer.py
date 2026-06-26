@@ -56,7 +56,7 @@ def package_name_from_conda(conda_path) -> str:
     p = Path(conda_path)
     try:
         with zipfile.ZipFile(p) as z:
-            info_member = next(n for n in z.namelist() if n.startswith("info-"))
+            info_member = next(n for n in z.namelist() if n.startswith("info-") and n.endswith(".tar.zst"))
             decompressed = zstd.decompress(z.read(info_member))
             with tarfile.open(fileobj=io.BytesIO(decompressed)) as tar:
                 idx = json.loads(tar.extractfile("info/index.json").read().decode("utf-8"))
