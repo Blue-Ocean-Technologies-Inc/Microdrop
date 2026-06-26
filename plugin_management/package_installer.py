@@ -65,6 +65,60 @@ def package_name_from_conda(conda_path) -> str:
         raise InstallError(f"could not read package name from {p.name}: {e}") from e
 
 
+@dataclass
+class PluginPreview:
+    name: str
+    version: str
+    depends: list          # conda dependency match-specs (what pixi will install)
+    manifest: object = None  # PluginManifest | None (groups + plugin classes)
+
+
+def _zst_tar(z, member):
+    """Open a .conda zip member (a *.tar.zst) as a tarfile."""
+    return tarfile.open(fileobj=io.BytesIO(zstd.decompress(z.read(member))))
+
+
+def _conda_manifest(z):
+    """Best-effort: parse the bundled microdrop_plugin.toml from the pkg payload.
+    Returns a PluginManifest or None (preview degrades gracefully)."""
+    import tomllib
+    from plugin_management.manifest import manifest_from_dict, ManifestError
+    try:
+        pkg_member = next(n for n in z.namelist()
+                          if n.startswith("pkg-") and n.endswith(".tar.zst"))
+        with _zst_tar(z, pkg_member) as tar:
+            toml_name = next((m for m in tar.getnames()
+                              if m.rsplit("/", 1)[-1] == "microdrop_plugin.toml"), None)
+            if toml_name is None:
+                return None
+            data = tomllib.loads(tar.extractfile(toml_name).read().decode("utf-8"))
+            return manifest_from_dict(data)
+    except (StopIteration, OSError, ValueError, ManifestError) as e:
+        logger.debug(f"could not read bundled manifest: {e}")
+        return None
+
+
+def read_conda_preview(conda_path) -> PluginPreview:
+    """Read a .conda's package name/version, conda dependencies, and (best-effort)
+    its plugin manifest — for the pre-install consent dialog. Raises InstallError
+    if the archive's index can't be read."""
+    p = Path(conda_path)
+    try:
+        with zipfile.ZipFile(p) as z:
+            info_member = next(n for n in z.namelist()
+                               if n.startswith("info-") and n.endswith(".tar.zst"))
+            with _zst_tar(z, info_member) as tar:
+                idx = json.loads(tar.extractfile("info/index.json").read().decode("utf-8"))
+            return PluginPreview(
+                name=idx["name"],
+                version=str(idx.get("version", "")),
+                depends=list(idx.get("depends", [])),
+                manifest=_conda_manifest(z),
+            )
+    except (StopIteration, KeyError, OSError, ValueError) as e:
+        raise InstallError(f"could not read plugin info from {p.name}: {e}") from e
+
+
 def _snapshot(cwd):
     files = {}
     for name in ("pyproject.toml", "pixi.lock"):
