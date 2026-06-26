@@ -28,13 +28,13 @@ class IPluginGroupManager(Interface):
         """Reconcile group load state to ``desired`` ({group_name: bool})."""
 
     def installed_plugins(self):
-        """List ``(name, label, source_dir, [group_names])`` for each
+        """List ``(name, label, dist_name, [group_names])`` for each
         user-installed plugin (bundled ones excluded)."""
 
     def installed_plugin(self, manifest_name):
         """The ``installed_plugins()`` entry for ``manifest_name``, or None."""
 
-    def register_manifest(self, manifest, source_dir=""):
+    def register_manifest(self, manifest, dist_name=""):
         """Register a freshly-installed manifest's groups at runtime."""
 
     def deregister_plugin(self, manifest_name):

@@ -15,7 +15,7 @@ class UninstallPluginModel(HasTraits):
 
     def __init__(self, installed, **traits):
         super().__init__(**traits)
-        # installed: list of (name, label, source_dir, group_names)
+        # installed: list of (name, label, dist_name, group_names)
         self._installed = list(installed)
         if self._installed:
             self.selected = self._installed[0][0]
@@ -23,7 +23,7 @@ class UninstallPluginModel(HasTraits):
     def traits_view(self):
         # EnumEditor `values` maps each stored value (manifest_name) -> label.
         values = {name: f"{label} ({name})"
-                  for name, label, _dir, _groups in self._installed}
+                  for name, label, _dist, _groups in self._installed}
         return View(
             Item("selected", editor=EnumEditor(values=values), show_label=False),
             buttons=["OK", "Cancel"],

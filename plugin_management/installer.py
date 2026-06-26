@@ -143,7 +143,7 @@ def install_from_zip(zip_path, manager, *, confirm=None, dest_root=None):
 
     _purge_package_modules(manifest.packages)
     paths.ensure_on_sys_path()
-    manager.register_manifest(manifest, str(target))
+    manager.register_manifest(manifest, dist_name="")  # installer.py is removed in the conda-package migration teardown
     logger.info(f"installed plugin '{manifest.name}' to {target}")
 
     # Dependency resolution: if the archive declared deps not already importable,
