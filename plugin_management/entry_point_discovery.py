@@ -34,7 +34,7 @@ def discover_entry_point_manifests():
     never raised."""
     found = []
     for ep in importlib_metadata.entry_points(group=ENTRY_POINT_GROUP):
-        pkg = ep.value
+        pkg = ep.module
         try:
             resource = importlib_resources.files(pkg) / MANIFEST_RESOURCE
             data = tomllib.loads(resource.read_text(encoding="utf-8"))
