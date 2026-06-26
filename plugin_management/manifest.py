@@ -51,9 +51,14 @@ def load_manifest(source: Union[str, bytes, Path]) -> PluginManifest:
         data = json.loads(text)
     except (OSError, ValueError, UnicodeDecodeError) as e:
         raise ManifestError(f"could not read manifest JSON: {e}") from e
+    return manifest_from_dict(data)
 
+
+def manifest_from_dict(data) -> PluginManifest:
+    """Validate an already-parsed manifest mapping (from JSON or TOML) into a
+    PluginManifest. Raises ManifestError on any problem."""
     if not isinstance(data, dict):
-        raise ManifestError("manifest must be a JSON object")
+        raise ManifestError("manifest must be a mapping")
 
     schema = data.get("schema_version")
     if schema != SCHEMA_VERSION:
@@ -77,7 +82,7 @@ def load_manifest(source: Union[str, bytes, Path]) -> PluginManifest:
     groups = []
     for i, g in enumerate(raw_groups):
         if not isinstance(g, dict):
-            raise ManifestError(f"group #{i} must be a JSON object")
+            raise ManifestError(f"group #{i} must be a mapping")
         gname = g.get("name")
         if not gname or not isinstance(gname, str):
             raise ManifestError(f"group #{i} 'name' is required")
