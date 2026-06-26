@@ -1,7 +1,7 @@
 import functools
 
 import dramatiq
-from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict
+from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict, Str
 from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
 from traitsui.qt.editor import Editor as QtEditor
 from PySide6.QtWidgets import QPushButton
@@ -113,11 +113,11 @@ class ToggleEditor(QtEditor):
         '''
         if self.value:
             self.control.setChecked(True)
-            self.control.setText("Realtime On")
+            self.control.setText(self.factory.on_label)
         else:
             self.control.setChecked(False)
-            self.control.setText("Realtime Off")
-        
+            self.control.setText(self.factory.off_label)
+
         # Update styling after changing the state
         self._apply_toggle_styling()
 
@@ -125,6 +125,11 @@ class ToggleEditor(QtEditor):
 class ToggleEditorFactory(BasicEditorFactory):
     # Editor is the class that actually implements your editor
     klass = ToggleEditor
+
+    # On/off button labels. Default to the original realtime-mode wording so
+    # existing usages are unchanged; other panes pass their own (e.g. PID On/Off).
+    on_label = Str("Realtime On")
+    off_label = Str("Realtime Off")
 
 
 def _make_manual_control_model():
