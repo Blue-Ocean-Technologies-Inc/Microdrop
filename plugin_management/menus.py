@@ -164,3 +164,7 @@ class UninstallPluginAction(TaskAction):
                    cancel=False) == YES:
             from plugin_management.relaunch import relaunch_into_plugins_env
             relaunch_into_plugins_env(task.window.application)
+        else:
+            information(parent=None, title="Relaunch later",
+                       message=f"<b>{safe_label}</b> has been uninstalled and will "
+                               f"be fully removed after a relaunch.")

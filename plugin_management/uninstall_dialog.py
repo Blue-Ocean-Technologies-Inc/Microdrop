@@ -1,7 +1,7 @@
 """Uninstall Plugin dialog model: pick one user-installed plugin to remove.
 
 Built from the manager's installed_plugins() list. Qt-free TraitsUI; the action
-owns the orchestration (confirm + installer.uninstall_plugin)."""
+owns the orchestration (confirm + package_installer.uninstall_package)."""
 
 from traits.api import HasTraits, Str
 from traitsui.api import EnumEditor, Item, View
