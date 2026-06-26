@@ -779,9 +779,9 @@ git rm -r examples/demo_plugins/scipy_analysis
 rmdir default_plugins/magnet_peripherals default_plugins 2>/dev/null || true
 ```
 
-- [ ] **Step 4: Resolve any remaining import breakage**
+- [ ] **Step 4: Resolve any remaining import breakage + drop the legacy `paths.py` symbols**
 
-Re-run the Step 1 grep; for each remaining reference (e.g. `plugin.py` importing `paths.ensure_on_sys_path`, or a restore hook calling removed code), edit it to the new API or delete the dead call. The launch-restore in `plugin.py` should no longer call `ensure_on_sys_path` (packages are installed in the env, already importable). Then verify the package imports clean:
+Re-run the Step 1 grep; for each remaining reference (e.g. `plugin.py` importing `paths.ensure_on_sys_path`, or a restore hook calling removed code), edit it to the new API or delete the dead call. The launch-restore in `plugin.py` should no longer call `ensure_on_sys_path` (packages are installed in the env, already importable). **Then, once no caller references them, delete the now-unused legacy functions from `plugin_management/paths.py`** — `default_plugins_dir`, `installed_plugins_dir`, `ensure_on_sys_path`, `iter_manifest_dirs`, `MANIFEST_FILENAME`, and the `sys`/`Iterator`/`_PROJECT_ROOT` they used — leaving only `plugin_channel_dir()` (these were kept additively in Task 2 so intermediate commits stayed working). Then verify the package imports clean:
 ```bash
 cd C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py && QT_QPA_PLATFORM=offscreen pixi run bash -c "cd src && python -c '
 import plugin_management.manifest, plugin_management.paths, plugin_management.entry_point_discovery, plugin_management.group_manager, plugin_management.menus, plugin_management.package_installer, plugin_management.plugin
