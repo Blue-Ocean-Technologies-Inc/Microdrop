@@ -38,4 +38,14 @@ def format_telemetry(data):
     if isinstance(pwm, (int, float)):
         updates["pwm_display"] = f"{pwm} %"
 
+    temps = data.get("temperatures") or {}
+    if isinstance(temps, dict):
+        parts = [
+            f"{name}: {value:.1f} °C"
+            for name, value in temps.items()
+            if isinstance(value, (int, float))
+        ]
+        if parts:
+            updates["all_temps_display"] = ", ".join(parts)
+
     return updates

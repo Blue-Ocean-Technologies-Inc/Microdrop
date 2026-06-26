@@ -38,6 +38,7 @@ def test_format_telemetry_pid_frame():
     out = format_telemetry(data)
     assert out["temperature_display"] == "41.2 °C"
     assert out["pwm_display"] == "30 %"
+    assert out["all_temps_display"] == "top: 41.2 °C, bottom: 40.9 °C"
 
 
 def test_format_telemetry_open_loop_uses_pwm_tec1():

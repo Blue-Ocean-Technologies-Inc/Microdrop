@@ -8,7 +8,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 from heater_controller.consts import (
-    SET_TEMPERATURE, SET_PWM, SET_PID_MODE, SET_STREAM, SET_FAN, ALL_OFF,
+    SET_TEMPERATURE, SET_PWM, SET_PID_MODE, SET_STREAM,
 )
 
 logger = get_logger(__name__)
@@ -70,15 +70,3 @@ class HeaterControlsController(BaseStatusController):
     @observe("model:stream_active")
     def _on_stream_active_changed(self, event):
         self._publish(SET_STREAM, {"group": "all" if event.new else "stop"})
-
-    @observe("model:fan_active")
-    def _on_fan_active_changed(self, event):
-        self._publish(SET_FAN, {"on": bool(event.new)})
-
-    @observe("model:pid_stop")
-    def _on_pid_stop_fired(self, event):
-        self._publish(SET_PID_MODE, self._heater_payload(mode="stop"))
-
-    @observe("model:all_off")
-    def _on_all_off_fired(self, event):
-        publish_message(message="", topic=ALL_OFF)

@@ -1,4 +1,4 @@
-from traits.api import Str, List, Bool, Button
+from traits.api import Str, List, Bool
 
 from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
@@ -47,16 +47,15 @@ class HeaterStatusModel(BaseStatusModel):
     # ---- Toggle controls (realtime-style buttons) -----------------------
     pid_active = Bool(False, desc="PID control enabled")
     stream_active = Bool(False, desc="Telemetry streaming active")
-    fan_active = Bool(False, desc="Fan on")
-
-    # ---- Momentary buttons ---------------------------------------------
-    pid_stop = Button("PID Stop")
-    all_off = Button("All Off")
 
     # ---- Readback displays (written by the message handler) -------------
     temperature_display = Str("-")
     pwm_display = Str("-")
     board_id_text = Str("-")
+
+    # ---- Optional per-sensor temperature snapshot (hidden by default) ----
+    show_all_temps = Bool(False, desc="Reveal the per-sensor temperature snapshot")
+    all_temps_display = Str("-")
 
     # ------------------------------------------------------------------ #
     # Neutralize dropbot realtime-mode coupling                            #
