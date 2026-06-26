@@ -93,7 +93,7 @@ def _conda_manifest(z):
                 return None
             data = tomllib.loads(tar.extractfile(toml_name).read().decode("utf-8"))
             return manifest_from_dict(data)
-    except (StopIteration, OSError, ValueError, ManifestError) as e:
+    except (StopIteration, OSError, ValueError, AttributeError, ManifestError) as e:
         logger.debug(f"could not read bundled manifest: {e}")
         return None
 
@@ -115,7 +115,7 @@ def read_conda_preview(conda_path) -> PluginPreview:
                 depends=list(idx.get("depends", [])),
                 manifest=_conda_manifest(z),
             )
-    except (StopIteration, KeyError, OSError, ValueError) as e:
+    except (StopIteration, KeyError, OSError, ValueError, AttributeError) as e:
         raise InstallError(f"could not read plugin info from {p.name}: {e}") from e
 
 

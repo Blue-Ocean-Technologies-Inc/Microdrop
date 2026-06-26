@@ -21,6 +21,7 @@ class PluginRow(HasTraits):
     manifest_name = Str()
     label = Str()
     version = Str()
+    dist_name = Str()                           # conda dist name (for pixi remove)
     bundled = Bool(False)                       # app's own dist -> not uninstallable
     core_groups = List(Str)                     # enabled whenever 'enabled' is on
     optionals = List(Instance(OptionalGroupToggle))
@@ -75,6 +76,7 @@ class PluginManagerModel(HasTraits):
                 manifest_name=key,
                 label=first.manifest_label or key,
                 version=first.manifest_version,
+                dist_name=first.dist_name,
                 bundled=key not in installed,
                 core_groups=core,
                 optionals=optionals,
@@ -97,6 +99,17 @@ class PluginManagerModel(HasTraits):
         """Rows the user can uninstall (non-bundled)."""
         return [r for r in self.rows if not r.bundled]
 
+    def pre_uninstall(self, task, manifest_name):
+        """Hot-unload + deregister a plugin's groups BEFORE its package is
+        removed (GUI thread). Mirrors the old uninstall sequence so declining the
+        relaunch doesn't leave dead groups loaded/registered."""
+        group_names = [n for n, g in self.manager.groups.items()
+                       if g.manifest_name == manifest_name]
+        for gn in group_names:
+            if self.manager.is_loaded(gn):
+                self.manager.disable(task, gn)
+        self.manager.deregister_plugin(manifest_name)
+
     # --- operations the controller runs on a worker thread -------------
     def preview(self, conda_path):
         return package_installer.read_conda_preview(conda_path)
@@ -104,5 +117,5 @@ class PluginManagerModel(HasTraits):
     def do_install(self, conda_path):
         return package_installer.install_conda_file(conda_path)
 
-    def do_uninstall(self, name):
-        package_installer.uninstall_package(name)
+    def do_uninstall(self, dist_name):
+        package_installer.uninstall_package(dist_name)

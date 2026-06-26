@@ -4,7 +4,6 @@ relaunch). The model holds the state/business logic; this holds the flow."""
 from traitsui.api import Controller
 
 from microdrop_utils.threaded_progress import run_with_wait
-from plugin_management import package_installer
 from plugin_management.manager_view import manager_view
 from logger.logger_service import get_logger
 
@@ -62,7 +61,7 @@ class PluginManagerController(Controller):
                   done=lambda r: self._after_change(
                       f"Installed <b>{_esc(preview.name)}</b>."))
 
-    # --- Uninstall: pick installed -> confirm -> threaded remove -> relaunch
+    # --- Uninstall: pick installed -> confirm -> pre_uninstall -> threaded remove -> relaunch
     def uninstall_plugin(self, info):
         from microdrop_application.dialogs.pyface_wrapper import (
             confirm, information, error as error_dialog, YES)
@@ -71,18 +70,20 @@ class PluginManagerController(Controller):
             information(parent=None, title="Uninstall Plugin",
                        message="No installed plugin packages to uninstall.")
             return
-        name = self._pick_installed(rows)
-        if name is None:
+        row = self._pick_installed(rows)
+        if row is None:
             return
-        label = {r.manifest_name: r.label for r in rows}.get(name, name)
+        label = row.label
         if confirm(parent=None, title="Uninstall Plugin?",
                    message=f"Uninstall <b>{_esc(label)}</b>? This removes its "
                            f"package from the environment.", cancel=False) != YES:
             return
-        self._run(lambda: self.model.do_uninstall(name),
+        self.model.pre_uninstall(self.task, row.manifest_name)
+        self._run(lambda: self.model.do_uninstall(row.dist_name),
                   title="Uninstalling plugin", message=f"Removing {label}…",
-                  done=lambda r: self._after_change(
-                      f"Uninstalled <b>{_esc(label)}</b>."))
+                  done=lambda r: (self.model.refresh(),
+                                  self._after_change(
+                                      f"Uninstalled <b>{_esc(label)}</b>.")))
 
     # --- helpers -----------------------------------------------------
     def _run(self, work, *, title, message, done):
@@ -123,17 +124,18 @@ class PluginManagerController(Controller):
         )
 
     def _pick_installed(self, rows):
-        """Small single-select picker; returns the chosen manifest_name or None."""
+        """Small single-select picker; returns the chosen PluginRow or None."""
         from traits.api import Enum, HasTraits
         from traitsui.api import EnumEditor, Item, View
-        choices = {f"{r.label}  (v{r.version})": r.manifest_name for r in rows}
+        by_label = {f"{r.label}  (v{r.version})": r for r in rows}
+        choices = list(by_label)
 
         class _Pick(HasTraits):
-            choice = Enum(list(choices))
+            choice = Enum(choices)
         picker = _Pick()
         ui = picker.edit_traits(view=View(
-            Item("choice", editor=EnumEditor(values=list(choices)),
+            Item("choice", editor=EnumEditor(values=choices),
                  label="Plugin"),
             buttons=["OK", "Cancel"], kind="livemodal",
             title="Uninstall which plugin?"))
-        return choices[picker.choice] if ui.result else None
+        return by_label[picker.choice] if ui.result else None
