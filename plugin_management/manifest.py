@@ -21,6 +21,8 @@ class PluginGroupSpec:
     plugins: List[str]                       # dotted "module:Class" specs
     enabled_key: str
     post_enable_publish_topic: str = ""
+    optional: bool = False
+    toggle_label: str = ""
 
 
 @dataclass
@@ -81,6 +83,8 @@ def manifest_from_dict(data) -> PluginManifest:
             plugins=list(plugins),
             enabled_key=enabled_key,
             post_enable_publish_topic=g.get("post_enable_publish_topic", "") or "",
+            optional=bool(g.get("optional", False)),
+            toggle_label=str(g.get("toggle_label", "") or ""),
         ))
 
     return PluginManifest(

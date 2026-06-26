@@ -10,6 +10,8 @@ label = "Magnet Backend (controller + connection search)"
 plugins = ["peripheral_controller.plugin:PeripheralControllerPlugin"]
 enabled_key = "microdrop.peripheral_backend_enabled"
 post_enable_publish_topic = "ZStage/requests/start_device_monitoring"
+optional = true
+toggle_label = "Backend"
 
 [[groups]]
 name = "magnet_ui"

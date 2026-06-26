@@ -54,6 +54,13 @@ class PluginGroup(HasTraits):
     manifest_name = Str()
     manifest_label = Str()
     dist_name = Str()
+    #: True if this group is independently toggleable (its own checkbox in the
+    #: Manage Plugins window); core groups (optional=False) load with "Enable".
+    optional = Bool(False)
+    #: Short label for the optional checkbox column (falls back to label).
+    toggle_label = Str()
+    #: Owning manifest's version (shown next to the plugin name).
+    manifest_version = Str()
 
 
 @provides(IPluginGroupManager)
@@ -94,6 +101,9 @@ class PluginGroupManager(HasTraits):
                 manifest_name=manifest.name,
                 manifest_label=manifest.label,
                 dist_name=dist_name,
+                optional=spec.optional,
+                toggle_label=spec.toggle_label or spec.label,
+                manifest_version=manifest.version,
             )
 
     def register_manifest(self, manifest, dist_name=""):
