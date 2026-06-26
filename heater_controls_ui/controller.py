@@ -66,6 +66,9 @@ class HeaterControlsController(BaseStatusController):
     def _on_pid_active_changed(self, event):
         mode = "enable" if event.new else "disable"
         self._publish(SET_PID_MODE, self._heater_payload(mode=mode))
+        # On enable, push the current setpoint so PID has a target to regulate to.
+        if event.new:
+            self._publish(SET_TEMPERATURE, self._heater_payload(temperature=self.model.temperature))
 
     @observe("model:stream_active")
     def _on_stream_active_changed(self, event):
