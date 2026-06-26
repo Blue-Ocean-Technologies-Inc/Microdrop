@@ -14,17 +14,17 @@ requires = ["hatchling"]
 [tool.hatch.build.targets.wheel]
 packages = ["scipy_analysis"]
 
-[package]
+[tool.pixi.package]
 name = "scipy_analysis"
 version = "0.1.0"
 
-[package.build.backend]
+[tool.pixi.package.build.backend]
 name = "pixi-build-python"
 version = "0.*"
 channels = ["https://prefix.dev/conda-forge"]
 
-[package.host-dependencies]
+[tool.pixi.package.host-dependencies]
 hatchling = "*"
 
-[package.run-dependencies]
+[tool.pixi.package.run-dependencies]
 scipy = ">=1.10"
