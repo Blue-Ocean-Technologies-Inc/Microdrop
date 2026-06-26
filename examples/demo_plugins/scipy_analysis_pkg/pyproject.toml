@@ -1,0 +1,30 @@
+[project]
+name = "scipy_analysis"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["scipy>=1.10"]
+
+[project.entry-points."microdrop.plugins"]
+scipy_analysis = "scipy_analysis"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["scipy_analysis"]
+
+[package]
+name = "scipy_analysis"
+version = "0.1.0"
+
+[package.build.backend]
+name = "pixi-build-python"
+version = "0.*"
+channels = ["https://prefix.dev/conda-forge"]
+
+[package.host-dependencies]
+hatchling = "*"
+
+[package.run-dependencies]
+scipy = ">=1.10"
