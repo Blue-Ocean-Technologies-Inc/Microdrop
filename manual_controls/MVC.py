@@ -43,11 +43,21 @@ class ToggleEditor(QtEditor):
         # Set max-width to 100px
         self.control.setMaximumWidth(100)
         
-        # Apply initial styling based on current state
+        # Apply initial label + styling based on current state
+        self._refresh_label()
         self._apply_toggle_styling()
-        
-        # Connect to button state changes to update styling
+
+        # Keep label + styling in sync on every toggle (click included; the
+        # trait-driven update_editor() does not fire on a user click).
+        self.control.toggled.connect(self._refresh_label)
         self.control.toggled.connect(self._apply_toggle_styling)
+
+    def _refresh_label(self):
+        """Set the button text from the factory's on/off labels for the current
+        checked state."""
+        self.control.setText(
+            self.factory.on_label if self.control.isChecked() else self.factory.off_label
+        )
 
     def _apply_toggle_styling(self):
         """Apply styling based on the button's checked state"""
@@ -111,12 +121,8 @@ class ToggleEditor(QtEditor):
         ATTENTION: For some reason, update_editor is called when the button is debounced, 
         but it's not called when the button is clicked.
         '''
-        if self.value:
-            self.control.setChecked(True)
-            self.control.setText(self.factory.on_label)
-        else:
-            self.control.setChecked(False)
-            self.control.setText(self.factory.off_label)
+        self.control.setChecked(self.value)
+        self._refresh_label()
 
         # Update styling after changing the state
         self._apply_toggle_styling()
