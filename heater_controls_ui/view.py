@@ -18,15 +18,17 @@ control_group = VGroup(
              editor=EnumEditor(name="object.available_heaters")),
         UItem(""),
         Item("temperature_display", style="readonly", label="Temperature"),
-        UItem("temperature", enabled_when="connected and not halted"),
+        UItem("temperature", enabled_when="connected and not halted and mode == 'Temp'"),
         Item("pwm_display", style="readonly", label="PWM"),
-        UItem("pwm", enabled_when="connected and not halted"),
+        UItem("pwm", enabled_when="connected and not halted and mode == 'PWM'"),
         columns=2,
     ),
     HGroup(
-        UItem(
-            "pid_active", style="custom",
-            editor=ToggleEditorFactory(on_label="PID On", off_label="PID Off"),
+        # Radio: PWM (open-loop duty) vs Temp (closed-loop PID). Replaces the
+        # old PID on/off toggle — the backend enables PID iff Temp is selected.
+        Item(
+            "mode", style="custom", label="Mode",
+            editor=EnumEditor(cols=2),
             enabled_when="connected and not halted",
         ),
         UItem(
