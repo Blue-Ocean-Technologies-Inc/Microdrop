@@ -48,8 +48,8 @@ class PeripheralPreferencesPane(PreferencesPane):
 
     # Heater settings group (shares this Peripheral Settings tab).
     heater_group = create_item_label_group(
-        "heater_show_pid_off_warning",
-        label_text="Warn when setting temperature while PID is off",
+        "heater_show_stream_off_warning",
+        label_text="Warn when setting a heater setpoint while streaming is off",
         orientation="horizontal",
         label_position="last",
         group_label="Heater",

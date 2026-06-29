@@ -49,12 +49,12 @@ class PeripheralPreferences(PreferencesHelper):
         desc="Height of stage when down command sent"
     )
 
-    # Heater UI: whether to warn ("will apply when PID starts") when the user
-    # changes the temperature setpoint while PID is off. Lives on this shared
+    # Heater UI: whether to warn ("will apply when streaming starts") when the
+    # user changes a setpoint while streaming is off. Lives on this shared
     # "Peripheral Settings" node so it shows in the same preferences tab.
-    heater_show_pid_off_warning = Bool(
-        True, desc="Show the 'applies when PID starts' warning when setting "
-                   "the heater temperature while PID is off"
+    heater_show_stream_off_warning = Bool(
+        True, desc="Show the 'applies when streaming starts' warning when setting "
+                   "a heater setpoint while streaming is off"
     )
 
     #### Preferences ##########################################################

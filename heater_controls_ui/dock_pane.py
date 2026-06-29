@@ -31,7 +31,7 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     controller = HeaterControlsController(model)
     view.handler = controller
 
-    # Shared "Peripheral Settings" preferences (holds heater_show_pid_off_warning).
+    # Shared "Peripheral Settings" preferences (holds heater_show_stream_off_warning).
     heater_preferences = Instance(PeripheralPreferences)
 
     def traits_init(self):
@@ -47,22 +47,22 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         return HeaterMessageHandler(model=self.model, name=listener_name)
 
     # ------------------------------------------------------------------ #
-    # "Applies when PID starts" warning (setpoint edited while PID off)     #
+    # "Applies when streaming starts" warning (setpoint edited, stream off) #
     # ------------------------------------------------------------------ #
-    @observe("model:pid_off_setpoint_warning", dispatch="ui")
-    def _warn_setpoint_pid_off(self, event):
-        if self.heater_preferences is None or not self.heater_preferences.heater_show_pid_off_warning:
+    @observe("model:stream_off_edit_warning", dispatch="ui")
+    def _warn_edit_stream_off(self, event):
+        if self.heater_preferences is None or not self.heater_preferences.heater_show_stream_off_warning:
             return
         result = information(
             parent=None,
-            title="PID is off",
-            message="The temperature change will apply when PID is started.",
+            title="Streaming is off",
+            message="The change will apply when you start streaming.",
             cancel=False,
             checkbox_text="Don't show this again",
         )
         # With checkbox_text, information() returns (result, checked).
         if isinstance(result, tuple) and result[1]:
-            self.heater_preferences.heater_show_pid_off_warning = False
+            self.heater_preferences.heater_show_stream_off_warning = False
 
     def _setup_extras(self):
         """Status-bar icon is set up via the overridden _setup_statusbar_icon."""
