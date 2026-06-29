@@ -102,10 +102,20 @@ def test_missing_manifest_returns_none():
 
 
 def test_step1_reads_package_data_manifest():
-    # peripheral_controller ships microdrop_plugin.toml as package data; step 1
-    # reads it straight from the package (no entry-point registration needed).
-    # This is the path package-data plugins use.
-    ep = types.SimpleNamespace(name="magnet", module="peripheral_controller",
-                               dist=None)
-    text = d._read_manifest_text(ep)
-    assert text is not None and "magnet_peripherals" in text
+    # step 1 reads microdrop_plugin.toml from the entry-point module's package
+    # data: importlib.resources.files(module) / microdrop_plugin.toml.
+    class FakeResource:
+        def __truediv__(self, other):
+            return self
+        def is_file(self):
+            return True
+        def read_text(self, encoding=None):
+            return MANIFEST
+
+    ep = types.SimpleNamespace(name="demo", module="plugin_management", dist=None)
+    original = d.importlib_resources.files
+    d.importlib_resources.files = lambda _pkg: FakeResource()
+    try:
+        assert d._read_manifest_text(ep) == MANIFEST
+    finally:
+        d.importlib_resources.files = original
