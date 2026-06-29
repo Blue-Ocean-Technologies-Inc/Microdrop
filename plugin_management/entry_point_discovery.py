@@ -39,12 +39,14 @@ def _read_manifest_text(ep):
 
     Tries package data (the entry-point module), then the distribution's
     dist-info, then any same-named file the distribution installed."""
-    # 1. package data of the entry-point's module
+    # 1. package data of the entry-point's module. The anchor is only a hint:
+    # if it is missing or fails to import (ImportError), fall through to the
+    # dist-based steps, which read metadata without importing any plugin code.
     try:
         resource = importlib_resources.files(ep.module) / MANIFEST_RESOURCE
         if resource.is_file():
             return resource.read_text(encoding="utf-8")
-    except (ModuleNotFoundError, OSError, TypeError):
+    except (ImportError, OSError, TypeError):
         pass
 
     dist = getattr(ep, "dist", None)
