@@ -46,9 +46,21 @@ def test_format_telemetry_open_loop_uses_pwm_tec1():
     assert out["pwm_display"] == "12 %"
 
 
-def test_format_telemetry_ignores_invalid_temp_sentinel():
+def test_format_telemetry_open_loop_ignores_pwm_percentage():
+    # An open-loop TEMP frame still carries pwm_percentage (often 0); the main
+    # PWM readout must follow pwm_tec1, not stick at the closed-loop field.
+    out = format_telemetry({"_frame": "TEMP", "pwm_percentage": 0, "pwm_tec1": 100})
+    assert out["pwm_display"] == "100 %"
+
+
+def test_format_telemetry_closed_loop_uses_pwm_percentage():
+    out = format_telemetry({"_frame": "PID_TEC1", "pwm_percentage": 45, "pwm_tec1": 0})
+    assert out["pwm_display"] == "45 %"
+
+
+def test_format_telemetry_invalid_temp_sentinel_resets_display():
     out = format_telemetry({"_frame": "PID_TEC1", "pid_temperature": -50})
-    assert "temperature_display" not in out
+    assert out["temperature_display"] == "-"
 
 
 def test_format_telemetry_whoami():

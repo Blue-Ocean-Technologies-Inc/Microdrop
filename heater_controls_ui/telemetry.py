@@ -28,13 +28,22 @@ def format_telemetry(data):
     if frame in ("ERR", "INFO"):
         return {}
 
-    # TEMP / PID_<HEATER> telemetry
+    # TEMP / PID_<HEATER> telemetry. The main readouts mirror the old heater UI,
+    # which picks the source by mode rather than by key-presence: a closed-loop
+    # PID_<HEATER> frame reports the regulated duty as ``pwm_percentage``, while
+    # an open-loop TEMP frame reports it as ``pwm_tec1``. Open-loop frames still
+    # carry ``pwm_percentage`` (often 0), so keying off the frame tag avoids the
+    # main PWM readout sticking at 0 in PWM mode.
     updates = {}
     pid_temp = data.get("pid_temperature")
-    if isinstance(pid_temp, (int, float)) and pid_temp > INVALID_TEMP_THRESHOLD:
-        updates["temperature_display"] = f"{pid_temp:.1f} °C"
+    if isinstance(pid_temp, (int, float)):
+        # Like the old UI: show the reading when valid, else reset to placeholder
+        # (the board sends a sub-threshold sentinel when there's no PID reading).
+        updates["temperature_display"] = (
+            f"{pid_temp:.1f} °C" if pid_temp > INVALID_TEMP_THRESHOLD else "-"
+        )
 
-    pwm = data.get("pwm_percentage", data.get("pwm_tec1"))
+    pwm = data.get("pwm_percentage") if frame.startswith("PID") else data.get("pwm_tec1")
     if isinstance(pwm, (int, float)):
         updates["pwm_display"] = f"{pwm} %"
 
