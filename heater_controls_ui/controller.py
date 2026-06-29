@@ -49,6 +49,14 @@ class HeaterControlsController(BaseStatusController):
     def _publish(topic, payload):
         publish_message(message=json.dumps(payload), topic=topic)
 
+    def _echo_commanded_pwm(self, value):
+        """Reflect the commanded open-loop duty into the selected heater's readout
+        (the board doesn't report open-loop duty in telemetry)."""
+        for readout in self.model.heater_readouts:
+            if readout.name == self.model.selected_heater:
+                readout.pwm_display = f"{value} %"
+                return
+
     def _apply_mode(self):
         """Drive the board to the current mode's state. Called only while
         streaming is on (the master gate). Temp runs closed-loop PID toward the
@@ -59,9 +67,7 @@ class HeaterControlsController(BaseStatusController):
         else:
             self._publish(SET_PID_MODE, self._heater_payload(mode="disable"))
             self._publish(SET_PWM, self._heater_payload(pwm=self.model.pwm))
-            # The board doesn't report the open-loop duty in telemetry, so echo
-            # the commanded value into the readout ourselves.
-            self.model.pwm_display = f"{self.model.pwm} %"
+            self._echo_commanded_pwm(self.model.pwm)
 
     # ------------------------------------------------------------------ #
     # Observers → published commands                                       #
@@ -86,8 +92,7 @@ class HeaterControlsController(BaseStatusController):
             return
         if self.model.stream_active:
             self._publish(SET_PWM, self._heater_payload(pwm=event.new))
-            # Board doesn't echo open-loop duty; reflect the commanded value.
-            self.model.pwm_display = f"{event.new} %"
+            self._echo_commanded_pwm(event.new)
             logger.debug(f"PWM → {event.new} %")
         else:
             logger.debug(f"PWM duty {event.new} % staged (stream off)")

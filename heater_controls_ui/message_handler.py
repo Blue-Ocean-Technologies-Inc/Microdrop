@@ -41,9 +41,22 @@ class HeaterMessageHandler(BaseMessageHandler):
         if not isinstance(data, dict):
             return
 
-        updates = format_telemetry(data, pid_mode=self.model.mode == "Temp")
+        heater, updates = format_telemetry(data, pid_mode=self.model.mode == "Temp")
         if updates:
-            self.model.trait_set(**updates)
+            if heater is None:
+                self.model.trait_set(**updates)        # global readouts
+            else:
+                readout = self._readout_for(heater)    # per-heater row
+                if readout is not None:
+                    readout.trait_set(**updates)
 
         if data.get("_frame") == "ERR" and data.get("kind") in HALTING_ERR_KINDS:
             self.model.halted = True
+
+    def _readout_for(self, name):
+        """The HeaterReadout row for ``name``, or None if not yet known (the
+        heaters_available signal that creates the rows may lag the first frame)."""
+        for readout in self.model.heater_readouts:
+            if readout.name == name:
+                return readout
+        return None

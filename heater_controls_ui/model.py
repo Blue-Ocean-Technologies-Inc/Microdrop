@@ -1,4 +1,4 @@
-from traits.api import Str, List, Bool, Event, Enum
+from traits.api import Str, List, Bool, Event, Enum, HasTraits, Instance, observe
 
 from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
@@ -8,9 +8,20 @@ from .consts import (
     TEMPERATURE_MIN, TEMPERATURE_MAX, TEMPERATURE_DEFAULT,
     PWM_MIN, PWM_MAX, PWM_DEFAULT,
 )
+from .telemetry import reconcile_readouts
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
+
+
+class HeaterReadout(HasTraits):
+    """Per-heater status row (one per board channel). Temperature is the PID
+    sensor reading; pwm is the regulated duty in Temp mode or the commanded duty
+    in PWM mode. Both display strings carry their own units, so the view shows
+    them label-free."""
+    name = Str()
+    temperature_display = Str("-")
+    pwm_display = Str("-")
 
 
 class HeaterStatusModel(BaseStatusModel):
@@ -34,6 +45,9 @@ class HeaterStatusModel(BaseStatusModel):
     available_heaters = List(Str, desc="Channels reported by the board")
     selected_heater = Str(desc="Channel that commands target")
 
+    # One status readout per available heater, kept in sync with available_heaters.
+    heater_readouts = List(Instance(HeaterReadout))
+
     # ---- Setpoint controls (range + units, like voltage/frequency) ------
     temperature = RangeWithSteppedSpinViewHint(
         TEMPERATURE_MIN, TEMPERATURE_MAX, value=TEMPERATURE_DEFAULT, suffix=" °C",
@@ -53,8 +67,6 @@ class HeaterStatusModel(BaseStatusModel):
     stream_active = Bool(False, desc="Telemetry streaming active")
 
     # ---- Readback displays (written by the message handler) -------------
-    temperature_display = Str("-")
-    pwm_display = Str("-")
     board_id_text = Str("-")
 
     # ---- Optional per-sensor temperature snapshot (hidden by default) ----
@@ -65,6 +77,16 @@ class HeaterStatusModel(BaseStatusModel):
     # off (the change is not sent to hardware until streaming starts). The dock
     # pane shows a one-time warning in response.
     stream_off_edit_warning = Event()
+
+    # ------------------------------------------------------------------ #
+    # Keep one readout row per available heater                            #
+    # ------------------------------------------------------------------ #
+    @observe("available_heaters")
+    def _sync_heater_readouts(self, event):
+        self.heater_readouts = reconcile_readouts(
+            self.heater_readouts, self.available_heaters,
+            lambda name: HeaterReadout(name=name),
+        )
 
     # ------------------------------------------------------------------ #
     # Neutralize dropbot realtime-mode coupling                            #

@@ -14,44 +14,62 @@ def resolve_selection(current, heaters):
     return {}
 
 
-def format_telemetry(data, pid_mode=False):
-    """Map a telemetry dict to the model display-field updates it should drive.
+def reconcile_readouts(existing, names, factory):
+    """Return the readout list for ``names``, reusing existing instances by name
+    (so their last values survive) and building missing ones via ``factory(name)``.
+    Readouts for vanished heaters are dropped."""
+    by_name = {r.name: r for r in existing}
+    return [by_name.get(name) or factory(name) for name in names]
 
-    Returns only the fields the frame carries, so unrelated readouts keep their
-    last value. ERR/INFO frames are handled elsewhere (halt state / logging).
+
+def heater_from_frame(frame):
+    """The heater a ``PID_<HEATER>`` telemetry frame belongs to (e.g.
+    ``PID_HEATER1`` -> ``heater1``), or None for frames that aren't per-heater."""
+    if frame.startswith("PID_"):
+        return frame[len("PID_"):].lower()
+    return None
+
+
+def format_telemetry(data, pid_mode=False):
+    """Map a telemetry frame to ``(heater, updates)``.
+
+    ``heater`` is the channel name the per-heater ``updates`` (temperature_display
+    / pwm_display) belong to, or None when the updates are global (board_id_text,
+    all_temps_display). ERR/INFO frames are handled elsewhere (halt / logging).
 
     The board streams two frame kinds at once regardless of mode: ``TEMP`` frames
-    carry only the per-sensor ``temperatures`` dict, and ``PID_<HEATER>`` frames
-    carry ``pid_temperature`` plus ``pwm_percentage`` (the PID loop's duty, which
-    is 0 whenever PID is disabled). The open-loop duty the user commands is *not*
-    echoed anywhere, so the main PWM readout is only driven from telemetry in
-    closed-loop (``pid_mode``); in open-loop the controller echoes the commanded
-    value instead. ``pid_mode`` says whether the UI's Temp mode is selected.
+    carry only the per-sensor ``temperatures`` dict (global snapshot), and
+    ``PID_<HEATER>`` frames carry that heater's ``pid_temperature`` plus
+    ``pwm_percentage`` (the PID loop's duty, which is 0 whenever PID is disabled).
+    The open-loop duty the user commands is *not* echoed anywhere, so the PWM
+    readout is only driven from telemetry in closed-loop (``pid_mode``); in
+    open-loop the controller echoes the commanded value instead.
     """
     frame = data.get("_frame", "")
 
     if frame == "WHOAMI":
         ident = data.get("device_id") or data.get("uid") or "unknown"
-        return {"board_id_text": str(ident)}
+        return None, {"board_id_text": str(ident)}
     if frame in ("ERR", "INFO"):
-        return {}
+        return None, {}
 
-    updates = {}
-    pid_temp = data.get("pid_temperature")
-    if isinstance(pid_temp, (int, float)):
-        # Show the reading when valid, else reset to placeholder (the board sends
-        # a sub-threshold sentinel when there's no PID reading).
-        updates["temperature_display"] = (
-            f"{pid_temp:.1f} °C" if pid_temp > INVALID_TEMP_THRESHOLD else "-"
-        )
+    heater = heater_from_frame(frame)
+    if heater is not None:
+        updates = {}
+        pid_temp = data.get("pid_temperature")
+        if isinstance(pid_temp, (int, float)):
+            # Show the reading when valid, else reset to placeholder (the board
+            # sends a sub-threshold sentinel when there's no PID reading).
+            updates["temperature_display"] = (
+                f"{pid_temp:.1f} °C" if pid_temp > INVALID_TEMP_THRESHOLD else "-"
+            )
+        if pid_mode:
+            pwm = data.get("pwm_percentage")
+            if isinstance(pwm, (int, float)):
+                updates["pwm_display"] = f"{pwm} %"
+        return heater, updates
 
-    # Only the closed-loop PID duty is reported; open-loop duty is echoed by the
-    # controller from the commanded value (see HeaterControlsController).
-    if pid_mode:
-        pwm = data.get("pwm_percentage")
-        if isinstance(pwm, (int, float)):
-            updates["pwm_display"] = f"{pwm} %"
-
+    # TEMP (and any other non-per-heater frame): the all-sensor snapshot.
     temps = data.get("temperatures") or {}
     if isinstance(temps, dict):
         parts = [
@@ -60,6 +78,6 @@ def format_telemetry(data, pid_mode=False):
             if isinstance(value, (int, float))
         ]
         if parts:
-            updates["all_temps_display"] = ", ".join(parts)
+            return None, {"all_temps_display": ", ".join(parts)}
 
-    return updates
+    return None, {}
