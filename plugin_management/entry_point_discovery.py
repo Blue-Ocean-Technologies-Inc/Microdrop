@@ -10,13 +10,11 @@ import importlib.metadata as importlib_metadata
 import importlib.resources as importlib_resources
 import tomllib
 
+from plugin_management.consts import ENTRY_POINT_GROUP, MANIFEST_RESOURCE
 from plugin_management.manifest import manifest_from_dict, ManifestError
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-ENTRY_POINT_GROUP = "microdrop.plugins"
-MANIFEST_RESOURCE = "microdrop_plugin.toml"
 
 
 def _dist_name(ep) -> str:

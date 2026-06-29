@@ -20,7 +20,8 @@ import importlib
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-from plugin_management.i_plugin_group_manager import IPluginGroupManager
+from . import entry_point_discovery
+from .i_plugin_group_manager import IPluginGroupManager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
@@ -80,7 +81,6 @@ class PluginGroupManager(HasTraits):
         """Build the group map from every microdrop.plugins entry point.
         Reads package-data TOML only (no plugin imports), so a broken installed
         plugin can't break discovery."""
-        from plugin_management import entry_point_discovery
         groups = {}
         for manifest, dist_name in entry_point_discovery.discover_entry_point_manifests():
             self._add_manifest_groups(manifest, dist_name=dist_name, into=groups)
