@@ -27,21 +27,32 @@ def test_format_timestamp_utc():
     assert browse_model._format_timestamp(None) == ""
 
 
-def test_format_details_full():
-    text = browse_model.format_details(RAW)
+def test_format_details_html_full():
+    text = browse_model.format_details_html(RAW)
     assert "scipy_analysis-0.1.0-pyh4616a5c_0" in text   # header (fn w/o .conda)
     assert "scipy_analysis" in text
     assert "0.1.0" in text
     assert "5.36 KiB" in text
     assert "2026-06-26 21:01:08 UTC" in text
-    assert "Dependencies:" in text
-    assert " - scipy >=1.10" in text
+    assert "<h3>Dependencies</h3>" in text
+    assert "<li>scipy &gt;=1.10</li>" in text          # dep HTML-escaped
     assert "f4aa51f8f1d696e91c5d8155f3f75985b7d24d1eac8bbeef910884f04365e7c2" in text
+    # the URL is a clickable link
+    assert f'<a href="{RAW["url"]}">' in text
 
 
-def test_format_details_missing_fields_no_crash():
-    text = browse_model.format_details({"name": "x"})
-    assert "x" in text  # does not raise; blank size/timestamp
+def test_format_details_html_escapes_values():
+    text = browse_model.format_details_html(
+        {"name": "x", "build": "<script>&", "depends": ["a<b"]})
+    assert "&lt;script&gt;&amp;" in text
+    assert "<script>&" not in text      # raw markup never leaks through
+    assert "<li>a&lt;b</li>" in text
+
+
+def test_format_details_html_missing_fields_no_crash():
+    text = browse_model.format_details_html({"name": "x"})
+    assert "<h2>x</h2>" in text  # does not raise; blank size/timestamp/deps
+    assert "Dependencies" not in text
 
 
 def test_version_key_orders():

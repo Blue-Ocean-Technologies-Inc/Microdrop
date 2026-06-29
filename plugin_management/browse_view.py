@@ -3,7 +3,7 @@
 selected row + action buttons. Pure presentation — the controller (a Handler)
 handles the buttons; the model supplies ``packages``.
 """
-from traitsui.api import Action, Item, TableEditor, View, HGroup, TextEditor
+from traitsui.api import Action, Item, TableEditor, View, HGroup, HTMLEditor
 
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
@@ -24,7 +24,7 @@ browse_view = View(
     HGroup(
         Item("packages", show_label=False, editor=_packages_table),
         Item("details_text", show_label=False, style="custom",
-             editor=TextEditor(read_only=True)),
+             editor=HTMLEditor(open_externally=True)),
     ),
     buttons=[install_action, close_action],
     title="Browse Plugins",
