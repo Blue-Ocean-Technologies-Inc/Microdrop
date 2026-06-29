@@ -31,8 +31,8 @@ broken or never-enabled plugin can never break startup or discovery.
 | Module | Responsibility |
 |---|---|
 | `manifest.py` | `manifest_from_dict()` parses/validates a TOML dict into `PluginManifest`/`PluginGroupSpec` dataclasses. |
-| `paths.py` | Locations: `plugin_channel_dir()` — the per-user local conda channel under `ETSConfig.application_home/plugin_channel/`. |
-| `package_installer.py` | `install_conda_file()` (validate → consent → copy/index/register → `pixi add`) and `uninstall_package()` (`pixi remove` + channel cleanup). |
+| `paths.py` | Locations: `plugin_index_file()` — the app-data cache file (JSON) for the last-fetched channel package list, under `ETSConfig.application_home`. |
+| `package_installer.py` | `search_channel()` / `read_cached_index()` (channel discovery + cache), `install_from_channel()` (register channel + `pixi add` + rollback), `uninstall_package()` (`pixi remove`). |
 | `entry_point_discovery.py` | `discover_entry_point_manifests()` — reads every `microdrop.plugins` entry point, loads its `microdrop_plugin.toml`, and returns `[(PluginManifest, dist_name)]`. |
 | `group_manager.py` | `PluginGroupManager` — discovers groups from entry points, and `enable`/`disable`/`apply` them against the live app. The orchestrator. |
 | `manage_dialog.py` / `uninstall_dialog.py` | TraitsUI dialog models (checkbox list / dropdown). |
@@ -57,21 +57,28 @@ magnet peripheral is bundled this way: its entry point is declared on `microdrop
 
 ### 1.4 Install (`Tools → Install Plugin…`)
 
-`InstallPluginAction` → file picker (`*.conda`) → `package_installer.install_conda_file`:
+`InstallPluginAction` opens the **Browse Plugins** dialog (`browse_view.py` /
+`BrowsePluginsHandler` / `BrowsePluginsModel`). On open, `model.fetch_data` runs on a
+worker thread:
 
-1. Validate the file is a `.conda`; read the package name from `info/index.json` inside the
-   archive (never parse the filename — the build string is unreliable).
-2. **Informed consent**: a dialog names the package + a "this runs third-party code" warning.
-   Decline ⇒ abort (`InstallCancelled`).
-3. Copy the `.conda` into `plugin_channel_dir()/noarch/`.
-4. **Index the channel** — `pixi exec rattler-index fs <channel_dir>` regenerates
-   `repodata.json`.
-5. **Register the channel** (idempotent) — `pixi workspace channel add <file-uri>`.
-6. **`pixi add <name>`** — the conda solver resolves the plugin + all its `run-dependencies`
-   and installs them into the default env.
-7. On any failure: restore the `pyproject.toml` + `pixi.lock` snapshot, remove the copied
-   `.conda`, re-raise.
-8. Offer a relaunch dialog (a running interpreter can't import newly-installed packages).
+1. **Discover**: `package_installer.search_channel(channel_url=PLUGIN_CHANNEL_URL)` (where
+   `PLUGIN_CHANNEL_URL = "https://prefix.dev/microdrop-plugins"`) runs
+   `pixi search "*" -c <url> --json`, flattens the per-subdir lists, writes the result to
+   `paths.plugin_index_file()` (app-data JSON cache), and returns `list[dict]`. On network
+   failure the dialog falls back to `package_installer.read_cached_index()` (returns `[]`
+   if absent/malformed) and shows an "Offline" notice.
+2. The dialog shows a table of name/version. Selecting a row and clicking **More details**
+   fills the details panel. Clicking **Install** shows a consent dialog naming the package,
+   version, and dependencies, with a third-party-code warning.
+3. **Install**: `package_installer.install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL)`:
+   1. Snapshot `pyproject.toml` + `pixi.lock`.
+   2. Register the channel (idempotent) — `pixi workspace channel add <url>`.
+   3. `pixi add <name>` — the conda solver resolves the plugin + all its `run-dependencies`
+      and installs them into the default env.
+   4. On any failure: restore the snapshot and re-raise.
+   5. Returns `InstallResult(name, requires_relaunch=True)`.
+4. A relaunch dialog is offered (a running interpreter can't import newly-installed
+   packages).
 
 Security is **hardening only, no cryptographic trust** (deliberate for an internal tool):
 the consent gate is the backstop — installing a conda package runs third-party code.
@@ -103,8 +110,6 @@ package: **auto-disable** any loaded groups → `manager.deregister_plugin(name)
 clear flags) → `package_installer.uninstall_package(name)`:
 
 1. `pixi remove <name>` removes the package from the default env.
-2. Delete the package's `.conda`(s) from `plugin_channel_dir()/noarch/` and re-index the
-   channel.
 
 A relaunch dialog is offered; the package is no longer importable after the relaunch.
 
@@ -273,7 +278,8 @@ subprocess.run(
 
 Run it as: `pixi run python examples/build_plugin_conda.py [output_dir]`
 
-Ship the resulting `.conda` file to users; they install it via **Tools → Install Plugin…**.
+Publish the resulting `.conda` artifact to `PLUGIN_CHANNEL_URL`; users discover and install
+it via **Tools → Install Plugin… → Browse Plugins** dialog.
 
 ### 2.5 Bundled vs installed
 

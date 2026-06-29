@@ -15,9 +15,6 @@ from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 
 from plugin_management.browse_model import format_details
 from plugin_management.relaunch import confirm_and_relaunch
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
 
 
 def _consent_html(pkg):
