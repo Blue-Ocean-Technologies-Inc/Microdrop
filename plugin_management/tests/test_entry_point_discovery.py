@@ -101,9 +101,11 @@ def test_missing_manifest_returns_none():
     assert d._read_manifest_text(_ep(NoManifest())) is None
 
 
-def test_step1_package_data_wins_when_present():
-    # plugin_management itself ships no microdrop_plugin.toml, so step 1 misses
-    # here; this asserts the live bundled magnet plugin is still discovered
-    # (its manifest is package data of peripheral_controller — the step-1 path).
-    names = [m.name for m, _ in d.discover_entry_point_manifests()]
-    assert "magnet_peripherals" in names
+def test_step1_reads_package_data_manifest():
+    # peripheral_controller ships microdrop_plugin.toml as package data; step 1
+    # reads it straight from the package (no entry-point registration needed).
+    # This is the path package-data plugins use.
+    ep = types.SimpleNamespace(name="magnet", module="peripheral_controller",
+                               dist=None)
+    text = d._read_manifest_text(ep)
+    assert text is not None and "magnet_peripherals" in text

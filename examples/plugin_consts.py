@@ -10,7 +10,6 @@ from microdrop_application.plugin import MicrodropPlugin
 from plugin_management.plugin import PluginManagementPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
-from peripheral_controller.plugin import PeripheralControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
@@ -19,8 +18,6 @@ from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
-from peripherals_ui.plugin import PeripheralUiPlugin
-from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
@@ -59,19 +56,6 @@ from user_help_plugin.plugin import UserHelpPlugin
 # Keep service plugins in this list and include it in the plugin sets
 # for any run script that launches the GUI.
 # ---------------------------------------------------------------------------
-
-# The optional magnet peripheral is intentionally NOT in the default lists
-# below. Its two groups (magnet_backend, magnet_ui) are declared by the bundled
-# manifest default_plugins/magnet_peripherals/microdrop_plugin.json and hot
-# loaded/unloaded at runtime via the Tools -> Manage Plugins dialog
-# (PluginGroupManager). The lists below mirror that manifest for documentation.
-MAGNET_UI_PLUGINS = [
-    PeripheralProtocolControlsPlugin,  # magnet protocol column
-    PeripheralUiPlugin,                # dock pane + status icon + tools submenu
-]
-MAGNET_BACKEND_PLUGINS = [
-    PeripheralControllerPlugin,        # controller (services + topics + search)
-]
 
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
