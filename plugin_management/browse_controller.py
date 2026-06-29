@@ -33,14 +33,22 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
 
     def init(self, info):
         super().init(info)            # Escape deselects instead of closing
-        model = info.object
+        self._load(info.object, message="Fetching available plugins…")
+        return True
+
+    def refresh(self, info):
+        """Re-fetch the available-plugins list from the channel (the repo)."""
+        self._load(info.object, message="Refreshing plugin list…")
+
+    def _load(self, model, *, message):
+        """Run the channel fetch on a worker, applying the result on the GUI
+        thread. Shared by the initial open and the Refresh button."""
         run_with_wait(
             model.fetch_data,
-            title="Loading plugins", message="Fetching available plugins…",
+            title="Loading plugins", message=message,
             on_success=lambda result: self._after_fetch(model, result),
             on_error=lambda e: error_dialog(
                 parent=None, title="Could not load plugins", message=str(e)))
-        return True
 
     def _after_fetch(self, model, result):
         data, stale = result

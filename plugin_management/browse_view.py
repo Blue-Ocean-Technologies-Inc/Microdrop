@@ -7,6 +7,7 @@ from traitsui.api import Action, Item, TableEditor, View, HSplit, HTMLEditor
 
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
+refresh_action = Action(name="Refresh", action="refresh")
 install_action = Action(name="Install", action="install_selected")
 close_action = Action(name="Close", action="do_close")
 
@@ -26,7 +27,7 @@ browse_view = View(
         Item("details_text", show_label=False, style="custom",
              editor=HTMLEditor(open_externally=True)),
     ),
-    buttons=[install_action, close_action],
+    buttons=[refresh_action, install_action, close_action],
     title="Browse Plugins",
     kind="livemodal",
 )
