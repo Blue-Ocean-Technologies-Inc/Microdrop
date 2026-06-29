@@ -41,7 +41,7 @@ class HeaterMessageHandler(BaseMessageHandler):
         if not isinstance(data, dict):
             return
 
-        updates = format_telemetry(data)
+        updates = format_telemetry(data, pid_mode=self.model.mode == "Temp")
         if updates:
             self.model.trait_set(**updates)
 

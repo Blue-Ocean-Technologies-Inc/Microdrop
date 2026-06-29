@@ -14,11 +14,19 @@ def resolve_selection(current, heaters):
     return {}
 
 
-def format_telemetry(data):
+def format_telemetry(data, pid_mode=False):
     """Map a telemetry dict to the model display-field updates it should drive.
 
     Returns only the fields the frame carries, so unrelated readouts keep their
     last value. ERR/INFO frames are handled elsewhere (halt state / logging).
+
+    The board streams two frame kinds at once regardless of mode: ``TEMP`` frames
+    carry only the per-sensor ``temperatures`` dict, and ``PID_<HEATER>`` frames
+    carry ``pid_temperature`` plus ``pwm_percentage`` (the PID loop's duty, which
+    is 0 whenever PID is disabled). The open-loop duty the user commands is *not*
+    echoed anywhere, so the main PWM readout is only driven from telemetry in
+    closed-loop (``pid_mode``); in open-loop the controller echoes the commanded
+    value instead. ``pid_mode`` says whether the UI's Temp mode is selected.
     """
     frame = data.get("_frame", "")
 
@@ -28,24 +36,21 @@ def format_telemetry(data):
     if frame in ("ERR", "INFO"):
         return {}
 
-    # TEMP / PID_<HEATER> telemetry. The main readouts mirror the old heater UI,
-    # which picks the source by mode rather than by key-presence: a closed-loop
-    # PID_<HEATER> frame reports the regulated duty as ``pwm_percentage``, while
-    # an open-loop TEMP frame reports it as ``pwm_tec1``. Open-loop frames still
-    # carry ``pwm_percentage`` (often 0), so keying off the frame tag avoids the
-    # main PWM readout sticking at 0 in PWM mode.
     updates = {}
     pid_temp = data.get("pid_temperature")
     if isinstance(pid_temp, (int, float)):
-        # Like the old UI: show the reading when valid, else reset to placeholder
-        # (the board sends a sub-threshold sentinel when there's no PID reading).
+        # Show the reading when valid, else reset to placeholder (the board sends
+        # a sub-threshold sentinel when there's no PID reading).
         updates["temperature_display"] = (
             f"{pid_temp:.1f} °C" if pid_temp > INVALID_TEMP_THRESHOLD else "-"
         )
 
-    pwm = data.get("pwm_percentage") if frame.startswith("PID") else data.get("pwm_tec1")
-    if isinstance(pwm, (int, float)):
-        updates["pwm_display"] = f"{pwm} %"
+    # Only the closed-loop PID duty is reported; open-loop duty is echoed by the
+    # controller from the commanded value (see HeaterControlsController).
+    if pid_mode:
+        pwm = data.get("pwm_percentage")
+        if isinstance(pwm, (int, float)):
+            updates["pwm_display"] = f"{pwm} %"
 
     temps = data.get("temperatures") or {}
     if isinstance(temps, dict):

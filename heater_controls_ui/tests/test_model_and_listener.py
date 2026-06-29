@@ -28,38 +28,47 @@ def test_resolve_selection_empty_list_no_change():
 
 # --- telemetry formatting ---------------------------------------------------
 
-def test_format_telemetry_pid_frame():
+def test_format_telemetry_pid_frame_temp_mode():
+    # PID_<HEATER> frame in Temp mode drives both temperature and the main PWM.
     data = {
-        "_frame": "PID_TEC1",
+        "_frame": "PID_HEATER1",
         "pid_temperature": 41.234,
         "pwm_percentage": 30,
-        "temperatures": {"top": 41.2, "bottom": 40.9},
     }
-    out = format_telemetry(data)
+    out = format_telemetry(data, pid_mode=True)
     assert out["temperature_display"] == "41.2 °C"
     assert out["pwm_display"] == "30 %"
-    assert out["all_temps_display"] == "top: 41.2 °C, bottom: 40.9 °C"
 
 
-def test_format_telemetry_open_loop_uses_pwm_tec1():
-    out = format_telemetry({"_frame": "TEMP", "pwm_tec1": 12})
-    assert out["pwm_display"] == "12 %"
+def test_format_telemetry_temp_frame_only_drives_all_temps():
+    # A TEMP frame carries only the per-sensor dict; it must not touch the main
+    # temperature or PWM readouts.
+    out = format_telemetry(
+        {"_frame": "TEMP", "temperatures": {"B1": 27.77, "C1": 27.73}}, pid_mode=False
+    )
+    assert out == {"all_temps_display": "B1: 27.8 °C, C1: 27.7 °C"}
 
 
-def test_format_telemetry_open_loop_ignores_pwm_percentage():
-    # An open-loop TEMP frame still carries pwm_percentage (often 0); the main
-    # PWM readout must follow pwm_tec1, not stick at the closed-loop field.
-    out = format_telemetry({"_frame": "TEMP", "pwm_percentage": 0, "pwm_tec1": 100})
-    assert out["pwm_display"] == "100 %"
+def test_format_telemetry_pwm_mode_ignores_pid_loop_duty():
+    # In PWM mode the PID loop's pwm_percentage is 0 (PID disabled); the main PWM
+    # readout is echoed from the commanded value by the controller, not telemetry.
+    out = format_telemetry(
+        {"_frame": "PID_HEATER1", "pid_temperature": 33.0, "pwm_percentage": 0.0},
+        pid_mode=False,
+    )
+    assert "pwm_display" not in out
+    assert out["temperature_display"] == "33.0 °C"
 
 
 def test_format_telemetry_closed_loop_uses_pwm_percentage():
-    out = format_telemetry({"_frame": "PID_TEC1", "pwm_percentage": 45, "pwm_tec1": 0})
-    assert out["pwm_display"] == "45 %"
+    out = format_telemetry(
+        {"_frame": "PID_HEATER1", "pwm_percentage": 64.7}, pid_mode=True
+    )
+    assert out["pwm_display"] == "64.7 %"
 
 
 def test_format_telemetry_invalid_temp_sentinel_resets_display():
-    out = format_telemetry({"_frame": "PID_TEC1", "pid_temperature": -50})
+    out = format_telemetry({"_frame": "PID_HEATER1", "pid_temperature": -50})
     assert out["temperature_display"] == "-"
 
 

@@ -59,6 +59,9 @@ class HeaterControlsController(BaseStatusController):
         else:
             self._publish(SET_PID_MODE, self._heater_payload(mode="disable"))
             self._publish(SET_PWM, self._heater_payload(pwm=self.model.pwm))
+            # The board doesn't report the open-loop duty in telemetry, so echo
+            # the commanded value into the readout ourselves.
+            self.model.pwm_display = f"{self.model.pwm} %"
 
     # ------------------------------------------------------------------ #
     # Observers → published commands                                       #
@@ -83,6 +86,8 @@ class HeaterControlsController(BaseStatusController):
             return
         if self.model.stream_active:
             self._publish(SET_PWM, self._heater_payload(pwm=event.new))
+            # Board doesn't echo open-loop duty; reflect the commanded value.
+            self.model.pwm_display = f"{event.new} %"
             logger.debug(f"PWM → {event.new} %")
         else:
             logger.debug(f"PWM duty {event.new} % staged (stream off)")
