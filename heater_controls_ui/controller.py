@@ -8,7 +8,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 from heater_controller.consts import (
-    SET_TEMPERATURE, SET_PWM, SET_PID_MODE, SET_STREAM,
+    SET_TEMPERATURE, SET_PWM, SET_PID_MODE, SET_STREAM, ALL_OFF,
 )
 
 logger = get_logger(__name__)
@@ -49,37 +49,62 @@ class HeaterControlsController(BaseStatusController):
     def _publish(topic, payload):
         publish_message(message=json.dumps(payload), topic=topic)
 
+    def _apply_mode(self):
+        """Drive the board to the current mode's state. Called only while
+        streaming is on (the master gate). Temp runs closed-loop PID toward the
+        temperature setpoint; PWM disables PID and drives the open-loop duty."""
+        if self.model.mode == "Temp":
+            self._publish(SET_PID_MODE, self._heater_payload(mode="enable"))
+            self._publish(SET_TEMPERATURE, self._heater_payload(temperature=self.model.temperature))
+        else:
+            self._publish(SET_PID_MODE, self._heater_payload(mode="disable"))
+            self._publish(SET_PWM, self._heater_payload(pwm=self.model.pwm))
+
     # ------------------------------------------------------------------ #
     # Observers → published commands                                       #
     # ------------------------------------------------------------------ #
+    # Setpoint edits only reach the board while streaming (the master gate) and
+    # only for the active mode; otherwise they are staged and pushed by
+    # _apply_mode when streaming starts.
     @observe("model:temperature")
     def _on_temperature_changed(self, event):
-        # The setpoint command (pid_<heater>_<temp>) is a live PID command, so
-        # only send it while PID is on. Otherwise just note it; it gets pushed
-        # when PID is enabled (see _on_pid_active_changed).
-        if self.model.pid_active:
+        if self.model.mode != "Temp":
+            return
+        if self.model.stream_active:
             self._publish(SET_TEMPERATURE, self._heater_payload(temperature=event.new))
             logger.debug(f"Temperature → {event.new} °C")
         else:
-            logger.debug(f"Temperature setpoint {event.new} °C staged (PID off)")
-            self.model.pid_off_setpoint_warning = True
+            logger.debug(f"Temperature setpoint {event.new} °C staged (stream off)")
+            self.model.stream_off_edit_warning = True
 
     @observe("model:pwm")
     def _on_pwm_changed(self, event):
-        self._publish(SET_PWM, self._heater_payload(pwm=event.new))
-        logger.debug(f"PWM → {event.new} %")
+        if self.model.mode != "PWM":
+            return
+        if self.model.stream_active:
+            self._publish(SET_PWM, self._heater_payload(pwm=event.new))
+            logger.debug(f"PWM → {event.new} %")
+        else:
+            logger.debug(f"PWM duty {event.new} % staged (stream off)")
+            self.model.stream_off_edit_warning = True
 
-    @observe("model:pid_active")
-    def _on_pid_active_changed(self, event):
-        mode = "enable" if event.new else "disable"
-        self._publish(SET_PID_MODE, self._heater_payload(mode=mode))
-        if event.new:
-            # Push the current setpoint so PID has a target to regulate to, and
-            # auto-start streaming so the PID temperature is reported. Setting the
-            # trait drives the stream toggle + its publish (no-op if already on).
-            self._publish(SET_TEMPERATURE, self._heater_payload(temperature=self.model.temperature))
-            self.model.stream_active = True
+    @observe("model:mode")
+    def _on_mode_changed(self, event):
+        # Switching mode re-applies the board state for the new mode, but only
+        # while streaming. While stream is off the mode is staged (applied by
+        # _apply_mode when streaming starts).
+        if self.model.stream_active:
+            self._apply_mode()
+            logger.debug(f"Mode → {event.new}")
 
     @observe("model:stream_active")
     def _on_stream_active_changed(self, event):
-        self._publish(SET_STREAM, {"group": "all" if event.new else "stop"})
+        if event.new:
+            # Start telemetry, then drive the board to the UI's current state.
+            self._publish(SET_STREAM, {"group": "all"})
+            self._apply_mode()
+        else:
+            # Master-gate off: idle the board and stop telemetry, so nothing is
+            # driven and no data flows while streaming is off.
+            self._publish(ALL_OFF, {})
+            self._publish(SET_STREAM, {"group": "stop"})
