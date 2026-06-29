@@ -22,7 +22,7 @@ manager_view = View(
     Group(
         Item("groups", show_label=False, editor=_groups_table),
     ),
-    buttons=[install_action, uninstall_action, apply_action],
+    buttons=[apply_action, install_action, uninstall_action],
     title="Manage Plugins",
     resizable=True,
     kind="livemodal"

@@ -27,7 +27,7 @@ def _consent_html(pkg):
     name = escape_html_multiline(pkg.name)
     deps = ", ".join(escape_html_multiline(d) for d in pkg.raw.get("depends", [])) or "none"
     return (f"<b>{name}</b> (v{escape_html_multiline(pkg.version)})<br><br>"
-            f"Dependencies pixi will install: {deps}<br><br>"
+            f"Dependencies: {deps}<br><br>"
             f"<b>Warning:</b> installing runs third-party code that has not been "
             f"verified. Only install plugins you trust.<br><br>Install this plugin?")
 
