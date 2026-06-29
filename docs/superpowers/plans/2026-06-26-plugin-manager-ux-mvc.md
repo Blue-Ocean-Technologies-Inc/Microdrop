@@ -737,6 +737,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: Collapse `menus.py` to one action**
 
 Replace the entire body of `plugin_management/menus.py` with:
+
 ```python
 """Tools-menu action for plugin management — a single Manage Plugins window.
 
@@ -762,7 +763,7 @@ class ManagePluginsAction(TaskAction):
             return
         from plugin_management.i_plugin_group_manager import IPluginGroupManager
         from plugin_management.manager_model import PluginManagerModel
-        from plugin_management.manager_controller import PluginManagerController
+        from plugin_management.manager_controller import PluginManagerHandler
         from plugin_management.manager_view import manager_view
 
         manager = task.window.application.get_service(IPluginGroupManager)
@@ -770,7 +771,7 @@ class ManagePluginsAction(TaskAction):
             logger.error("Manage Plugins: PluginGroupManager service not found")
             return
         model = PluginManagerModel(manager=manager)
-        controller = PluginManagerController(model=model, task=task)
+        controller = PluginManagerHandler(model=model, task=task)
         # Controller edits its `model` (the view's Items resolve against the model)
         # with the controller as the handler for the action buttons.
         controller.edit_traits(view=manager_view(), kind="livemodal")

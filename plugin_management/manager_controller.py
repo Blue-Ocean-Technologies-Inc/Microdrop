@@ -1,29 +1,33 @@
 """Handler for the Manage Plugins window: the action-button handlers + the UI
 glue (dialogs, worker-thread progress, relaunch). The model holds state/logic;
 this holds the flow. In each handler, ``info.object`` is the model."""
-from traits.api import Instance
-from traitsui.api import Handler
+from traits.api import Instance, Enum, HasTraits
+from traitsui.api import EnumEditor, Item, View
 from pyface.tasks.api import Task
 
+from microdrop_application.dialogs.pyface_wrapper import (
+    file_dialog, confirm, error as error_dialog, YES, information)
+
 from microdrop_utils.threaded_progress import run_with_wait
+
 from logger.logger_service import get_logger
+from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 
 logger = get_logger(__name__)
 
+from microdrop_application.dialogs.pyface_wrapper import escape_html_multiline
 
 def _esc(s):
-    from microdrop_application.dialogs.pyface_wrapper import escape_html_multiline
     return escape_html_multiline(str(s))
 
 
-class PluginManagerController(Handler):
+class PluginManagerHandler(SafeCancelTableHandler):
     """Handles the Manage Plugins view's actions over the model (info.object)."""
 
     task = Instance(Task)
 
     # --- Apply: live hot-load, no relaunch ---
     def apply_changes(self, info):
-        from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
         try:
             info.object.apply(self.task)
             info.object.refresh()
@@ -31,13 +35,8 @@ class PluginManagerController(Handler):
             logger.exception("apply enable/disable failed")
             error_dialog(parent=None, title="Apply failed", message=str(e))
 
-    def do_close(self, info):
-        info.ui.dispose()
-
     # --- Install: pick .conda -> preview -> threaded install -> relaunch ---
     def install_plugin(self, info):
-        from microdrop_application.dialogs.pyface_wrapper import (
-            file_dialog, confirm, error as error_dialog, YES)
         model = info.object
         path = file_dialog(parent=None, action="open",
                            wildcard="MicroDrop plugin package (*.conda)|*.conda")
@@ -58,8 +57,6 @@ class PluginManagerController(Handler):
 
     # --- Uninstall: pick installed -> confirm -> pre_uninstall -> threaded remove ---
     def uninstall_plugin(self, info):
-        from microdrop_application.dialogs.pyface_wrapper import (
-            confirm, information, YES)
         model = info.object
         installed = model.installed_plugins()
         if not installed:
@@ -83,13 +80,11 @@ class PluginManagerController(Handler):
 
     # --- helpers ---
     def _run(self, work, *, title, message, done):
-        from microdrop_application.dialogs.pyface_wrapper import error as error_dialog
         run_with_wait(work, title=title, message=message, on_success=done,
                       on_error=lambda e: error_dialog(
                           parent=None, title=title, message=str(e)))
 
     def _after_change(self, msg_html):
-        from microdrop_application.dialogs.pyface_wrapper import confirm, information, YES
         if confirm(parent=None, title="Relaunch required",
                    message=f"{msg_html}<br><br>Relaunch MicroDrop now to apply?",
                    cancel=False) == YES:
@@ -117,8 +112,6 @@ class PluginManagerController(Handler):
 
     def _pick_installed(self, installed):
         """Single-select picker; returns the chosen installed-plugin tuple or None."""
-        from traits.api import Enum, HasTraits
-        from traitsui.api import EnumEditor, Item, View
         by_label = {label: (m, label, d, g) for (m, label, d, g) in installed}
         choices = list(by_label)
 
