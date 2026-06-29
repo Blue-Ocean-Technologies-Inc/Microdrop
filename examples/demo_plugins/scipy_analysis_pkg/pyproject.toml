@@ -14,6 +14,11 @@ requires = ["hatchling"]
 [tool.hatch.build.targets.wheel]
 packages = ["scipy_analysis"]
 
+# The manifest lives at the package top level (next to this file). Ship it into
+# the wheel as scipy_analysis package data so discovery finds it.
+[tool.hatch.build.targets.wheel.force-include]
+"microdrop_plugin.toml" = "scipy_analysis/microdrop_plugin.toml"
+
 [tool.pixi.package]
 name = "scipy_analysis"
 version = "0.1.0"
