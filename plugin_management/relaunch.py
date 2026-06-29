@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 
+from microdrop_application.dialogs.pyface_wrapper import confirm, information, YES
 from logger.logger_service import get_logger
 
 #: The pixi workspace root (microdrop-py/, parent of src/) — has pyproject.toml.
@@ -28,6 +29,19 @@ def _relaunch_argv(script: str):
         "pixi", "run",
         "python", script, *sys.argv[1:],
     ]
+
+
+def confirm_and_relaunch(task, msg_html):
+    """Offer to relaunch now (applies the change) or later. Shared by the
+    Manage-Plugins and Browse-Plugins controllers."""
+    if confirm(parent=None, title="Relaunch required",
+               message=f"{msg_html}<br><br>Relaunch MicroDrop now to apply?",
+               cancel=False) == YES:
+        relaunch_app(task.window.application)
+    else:
+        information(parent=None, title="Relaunch later",
+                    message="The change takes effect the next time you launch "
+                            "MicroDrop.")
 
 
 def relaunch_app(application=None):

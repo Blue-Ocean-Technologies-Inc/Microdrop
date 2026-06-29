@@ -57,12 +57,5 @@ class PluginManagerModel(HasTraits):
                 self.manager.disable(task, name)
         self.manager.deregister_plugin(manifest_name)
 
-    # --- delegate to package_installer (the controller runs these on a worker) ---
-    def preview(self, conda_path):
-        return package_installer.read_conda_preview(conda_path)
-
-    def do_install(self, conda_path):
-        return package_installer.install_conda_file(conda_path)
-
     def do_uninstall(self, dist_name):
         package_installer.uninstall_package(dist_name)
