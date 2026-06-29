@@ -18,6 +18,7 @@ from pathlib import Path
 import backports.zstd as zstd
 
 from plugin_management import paths
+from plugin_management.consts import PLUGIN_CHANNEL_URL
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -184,6 +185,45 @@ def _index_channel_safe(channel_dir):
         _index_channel(channel_dir)
     except Exception as e:
         logger.debug(f"re-index after rollback failed: {e}")
+
+
+def _parse_search_json(stdout: str) -> list:
+    """Parse `pixi search --json` stdout (which may be preceded by warning
+    lines) into a flat list of package dicts across all subdirs."""
+    start = stdout.find("{")
+    if start == -1:
+        raise InstallError("no JSON object in pixi search output")
+    try:
+        data = json.loads(stdout[start:])
+    except ValueError as e:
+        raise InstallError(f"could not parse pixi search JSON: {e}") from e
+    packages = []
+    for subdir_packages in data.values():
+        if isinstance(subdir_packages, list):
+            packages.extend(subdir_packages)
+    return packages
+
+
+def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list:
+    """Run `pixi search "*" -c <channel_url> --json`, parse + flatten the
+    result, write it to the app-data cache, and return the package list.
+    Raises InstallError on subprocess or parse failure."""
+    proc = _run(["search", "*", "-c", channel_url, "--json"], cwd=cwd)
+    packages = _parse_search_json(proc.stdout)
+    paths.plugin_index_file().write_text(json.dumps(packages), encoding="utf-8")
+    return packages
+
+
+def read_cached_index() -> list:
+    """Return the last cached channel package list, or [] if absent/unreadable."""
+    fp = paths.plugin_index_file()
+    if not fp.exists():
+        return []
+    try:
+        return json.loads(fp.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        logger.warning(f"could not read cached plugin index: {e}")
+        return []
 
 
 def uninstall_package(name, *, cwd=None) -> None:
