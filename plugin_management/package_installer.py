@@ -1,21 +1,13 @@
-"""Install/uninstall a plugin distributed as a built conda package (.conda).
+"""Install/uninstall plugins from the hosted conda channel.
 
-The .conda is copied into a local conda channel under app-data, the channel is
-indexed + registered with the workspace, and ``pixi add <name>`` installs the
-package — letting the conda solver resolve the plugin's run-dependencies. No
-custom dependency wiring. Qt-free; snapshots pyproject.toml + pixi.lock for
-rollback.
+Uses `pixi add <name>` (channel registered on demand) so the conda solver
+resolves the package + its run-dependencies. Qt-free; snapshots pyproject.toml
++ pixi.lock for rollback.
 """
-import io
 import json
-import shutil
 import subprocess
-import tarfile
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-
-import backports.zstd as zstd
 
 from plugin_management import paths
 from plugin_management.consts import PLUGIN_CHANNEL_URL
@@ -28,11 +20,7 @@ WORKSPACE_DIR = Path(__file__).resolve().parents[2]
 
 
 class InstallError(Exception):
-    """A .conda is malformed/unsafe, or pixi could not install it."""
-
-
-class InstallCancelled(Exception):
-    """The user declined at the consent prompt."""
+    """A pixi command failed or a channel package could not be installed."""
 
 
 @dataclass
@@ -51,75 +39,6 @@ def _run(args, *, cwd=None):
     return proc
 
 
-def package_name_from_conda(conda_path) -> str:
-    """The conda package name read from the .conda's info/index.json (a .conda is
-    a zip containing an info-*.tar.zst; we read the embedded index.json)."""
-    p = Path(conda_path)
-    try:
-        with zipfile.ZipFile(p) as z:
-            info_member = next(n for n in z.namelist() if n.startswith("info-") and n.endswith(".tar.zst"))
-            decompressed = zstd.decompress(z.read(info_member))
-            with tarfile.open(fileobj=io.BytesIO(decompressed)) as tar:
-                idx = json.loads(tar.extractfile("info/index.json").read().decode("utf-8"))
-                return idx["name"]
-    except Exception as e:
-        raise InstallError(f"could not read package name from {p.name}: {e}") from e
-
-
-@dataclass
-class PluginPreview:
-    name: str
-    version: str
-    depends: list          # conda dependency match-specs (what pixi will install)
-    manifest: object = None  # PluginManifest | None (groups + plugin classes)
-
-
-def _zst_tar(z, member):
-    """Open a .conda zip member (a *.tar.zst) as a tarfile."""
-    return tarfile.open(fileobj=io.BytesIO(zstd.decompress(z.read(member))))
-
-
-def _conda_manifest(z):
-    """Best-effort: parse the bundled microdrop_plugin.toml from the pkg payload.
-    Returns a PluginManifest or None (preview degrades gracefully)."""
-    import tomllib
-    from plugin_management.manifest import manifest_from_dict, ManifestError
-    try:
-        pkg_member = next(n for n in z.namelist()
-                          if n.startswith("pkg-") and n.endswith(".tar.zst"))
-        with _zst_tar(z, pkg_member) as tar:
-            toml_name = next((m for m in tar.getnames()
-                              if m.rsplit("/", 1)[-1] == "microdrop_plugin.toml"), None)
-            if toml_name is None:
-                return None
-            data = tomllib.loads(tar.extractfile(toml_name).read().decode("utf-8"))
-            return manifest_from_dict(data)
-    except (StopIteration, OSError, ValueError, AttributeError, ManifestError) as e:
-        logger.debug(f"could not read bundled manifest: {e}")
-        return None
-
-
-def read_conda_preview(conda_path) -> PluginPreview:
-    """Read a .conda's package name/version, conda dependencies, and (best-effort)
-    its plugin manifest — for the pre-install consent dialog. Raises InstallError
-    if the archive's index can't be read."""
-    p = Path(conda_path)
-    try:
-        with zipfile.ZipFile(p) as z:
-            info_member = next(n for n in z.namelist()
-                               if n.startswith("info-") and n.endswith(".tar.zst"))
-            with _zst_tar(z, info_member) as tar:
-                idx = json.loads(tar.extractfile("info/index.json").read().decode("utf-8"))
-            return PluginPreview(
-                name=idx["name"],
-                version=str(idx.get("version", "")),
-                depends=list(idx.get("depends", [])),
-                manifest=_conda_manifest(z),
-            )
-    except (StopIteration, KeyError, OSError, ValueError, AttributeError) as e:
-        raise InstallError(f"could not read plugin info from {p.name}: {e}") from e
-
-
 def _snapshot(cwd):
     files = {}
     for name in ("pyproject.toml", "pixi.lock"):
@@ -134,60 +53,32 @@ def _restore(cwd, snapshot):
         (Path(cwd) / name).write_bytes(data)
 
 
-def _index_channel(channel_dir):
-    _run(["exec", "rattler-index", "fs", str(channel_dir)])
-
-
-def _ensure_channel_registered(channel_dir, cwd):
-    url = Path(channel_dir).as_uri()
+def _ensure_channel_registered(channel_url, cwd):
+    """`pixi workspace channel add <url>`; tolerate an already-registered channel."""
     try:
-        _run(["workspace", "channel", "add", url], cwd=cwd)
+        _run(["workspace", "channel", "add", channel_url], cwd=cwd)
     except InstallError as e:
         if "already" not in str(e).lower():
             raise
 
 
-def install_conda_file(conda_path, *, confirm=None, cwd=None) -> InstallResult:
-    """Copy a built .conda into the local channel, index+register it, and
-    ``pixi add`` the package (resolving its deps). Snapshot/restore pyproject +
-    lock on any failure. Returns InstallResult(name, requires_relaunch=True)."""
+def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> InstallResult:
+    """Register the channel and `pixi add <name>` so the solver resolves the
+    package + its deps. Snapshot/restore pyproject + lock on any failure.
+    Returns InstallResult(name, requires_relaunch=True)."""
     cwd = Path(cwd or WORKSPACE_DIR)
-    src = Path(conda_path)
-    if src.suffix != ".conda" or not src.is_file():
-        raise InstallError(f"{src.name} is not a .conda file")
-    name = package_name_from_conda(src)
-
-    if confirm is not None and not confirm(name):
-        raise InstallCancelled(f"install of '{name}' declined")
-
-    channel = paths.plugin_channel_dir()
-    dest = channel / "noarch" / src.name
     snapshot = _snapshot(cwd)
-    copied = False
     try:
-        shutil.copy2(src, dest)
-        copied = True
-        _index_channel(channel)
-        _ensure_channel_registered(channel, cwd)
-        _run(["add", name], cwd=cwd)          # solver resolves name + deps
+        _ensure_channel_registered(channel_url, cwd)
+        _run(["add", name], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
-        if copied:
-            dest.unlink(missing_ok=True)
-            _index_channel_safe(channel)
         raise
-    logger.info(f"installed plugin package '{name}' from {src.name}")
+    logger.info(f"installed plugin '{name}' from {channel_url}")
     return InstallResult(name=name, requires_relaunch=True)
 
 
-def _index_channel_safe(channel_dir):
-    try:
-        _index_channel(channel_dir)
-    except Exception as e:
-        logger.debug(f"re-index after rollback failed: {e}")
-
-
-def _parse_search_json(stdout: str) -> list:
+def _parse_search_json(stdout: str) -> list[dict]:
     """Parse `pixi search --json` stdout (which may be preceded by warning
     lines) into a flat list of package dicts across all subdirs."""
     start = stdout.find("{")
@@ -204,7 +95,7 @@ def _parse_search_json(stdout: str) -> list:
     return packages
 
 
-def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list:
+def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list[dict]:
     """Run `pixi search "*" -c <channel_url> --json`, parse + flatten the
     result, write it to the app-data cache, and return the package list.
     Raises InstallError on subprocess or parse failure."""
@@ -214,7 +105,7 @@ def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list:
     return packages
 
 
-def read_cached_index() -> list:
+def read_cached_index() -> list[dict]:
     """Return the last cached channel package list, or [] if absent/unreadable."""
     fp = paths.plugin_index_file()
     if not fp.exists():
@@ -227,17 +118,9 @@ def read_cached_index() -> list:
 
 
 def uninstall_package(name, *, cwd=None) -> None:
-    """`pixi remove <name>` then drop its .conda(s) from the local channel.
-    Best-effort; logs on per-step failure."""
+    """`pixi remove <name>`. Best-effort; logs on failure."""
     cwd = Path(cwd or WORKSPACE_DIR)
     try:
         _run(["remove", name], cwd=cwd)
     except InstallError as e:
         logger.warning(f"`pixi remove {name}` failed: {e}")
-    channel = paths.plugin_channel_dir()
-    for conda in (channel / "noarch").glob(f"{name}-*.conda"):
-        try:
-            conda.unlink()
-        except OSError as e:
-            logger.debug(f"could not delete {conda.name}: {e}")
-    _index_channel_safe(channel)
