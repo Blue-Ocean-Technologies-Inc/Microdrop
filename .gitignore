@@ -23,3 +23,6 @@ demo*.dot
 **/dist
 **/build
 examples/plugins/
+
+# built plugin .conda packages (output of build_plugin_conda.py)
+dist_plugins/
