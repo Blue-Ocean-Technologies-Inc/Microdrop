@@ -33,15 +33,19 @@ def _relaunch_argv(script: str):
 
 def confirm_and_relaunch(task, msg_html):
     """Offer to relaunch now (applies the change) or later. Shared by the
-    Manage-Plugins and Browse-Plugins controllers."""
-    if confirm(parent=None, title="Relaunch required",
-               message=f"{msg_html}<br><br>Relaunch MicroDrop now to apply?",
-               cancel=False) == YES:
-        relaunch_app(task.window.application)
-    else:
-        information(parent=None, title="Relaunch later",
-                    message="The change takes effect the next time you launch "
-                            "MicroDrop.")
+    Manage-Plugins and Browse-Plugins controllers. Degrades gracefully when
+    there is no running application (e.g. the standalone installer demo, where
+    ``task`` is None): it just reports that the change applies next launch."""
+    application = getattr(getattr(task, "window", None), "application", None)
+    if application is not None and confirm(
+            parent=None, title="Relaunch required",
+            message=f"{msg_html}<br><br>Relaunch MicroDrop now to apply?",
+            cancel=False) == YES:
+        relaunch_app(application)
+        return
+    information(parent=None, title="Relaunch later",
+                message="The change takes effect the next time you launch "
+                        "MicroDrop.")
 
 
 def relaunch_app(application=None):
