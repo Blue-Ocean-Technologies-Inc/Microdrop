@@ -7,6 +7,7 @@ on the GUI thread) may."""
 import threading
 
 from pyface.api import GUI, ProgressDialog
+from pyface.qt.QtCore import Qt
 
 from logger.logger_service import get_logger
 
@@ -21,6 +22,19 @@ def run_with_wait(work, *, title="Please wait", message="Working…",
     dialog = ProgressDialog(title=title, message=message, can_cancel=False)
     dialog.open()
     dialog.change_message(message)
+
+    # Raise the dialog to the front so it isn't hidden behind the app window
+    # (it has no parent, so Qt won't stack it above the main window for us),
+    # and make it application-modal so the rest of the UI is blocked while the
+    # worker runs. The event loop keeps running, so the worker callback and the
+    # dialog still update — only user input to other windows is blocked.
+    control = dialog.control
+    if control is not None:
+        control.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        control.setWindowModality(Qt.ApplicationModal)
+        control.show()
+        control.raise_()
+        control.activateWindow()
 
     def _finish(success, payload):
         try:
