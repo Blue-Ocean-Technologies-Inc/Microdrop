@@ -64,3 +64,52 @@ def format_details(raw: dict) -> str:
     if depends:
         lines += ["", "Dependencies:"] + [f" - {d}" for d in depends]
     return "\n".join(lines)
+
+
+class AvailablePackage(HasTraits):
+    """One package available in the channel: name/version + its full metadata."""
+    name = Str()
+    version = Str()
+    raw = Dict()
+
+
+class BrowsePluginsModel(HasTraits):
+    """The packages available in the remote channel + fetch/install operations."""
+
+    channel_url = Str(PLUGIN_CHANNEL_URL)
+    packages = List(Instance(AvailablePackage))
+    selected = Instance(AvailablePackage)
+    details_text = Str()
+    stale = Bool(False)
+
+    def fetch_data(self):
+        """Worker-thread safe: return (packages, stale). Does NOT touch traits.
+        Tries the channel; on failure falls back to the app-data cache."""
+        try:
+            return package_installer.search_channel(self.channel_url), False
+        except package_installer.InstallError as e:
+            logger.warning(f"channel search failed, using cached list: {e}")
+            return package_installer.read_cached_index(), True
+
+    def set_packages(self, data, stale):
+        """GUI thread: build one row per package (latest version) + flags."""
+        self.stale = stale
+        self.packages = self._rows_from(data)
+
+    def _rows_from(self, data):
+        latest = {}
+        for pkg in data:
+            name = pkg.get("name")
+            if not name:
+                continue
+            current = latest.get(name)
+            if current is None or _version_key(pkg.get("version", "")) >= _version_key(
+                    current.get("version", "")):
+                latest[name] = pkg
+        return [AvailablePackage(name=p["name"], version=str(p.get("version", "")),
+                                 raw=p)
+                for p in sorted(latest.values(), key=lambda p: p["name"])]
+
+    def do_install(self, name):
+        """Worker-thread safe: install via package_installer (no trait mutation)."""
+        return package_installer.install_from_channel(name, self.channel_url)
