@@ -8,7 +8,7 @@ threading — the controller (a Handler) owns those.
 import re
 from datetime import datetime, timezone
 
-from traits.api import Dict, HasTraits, Instance, List, Str, Bool
+from traits.api import Dict, HasTraits, Instance, List, Str, Bool, observe
 
 from plugin_management import package_installer
 from plugin_management.consts import PLUGIN_CHANNEL_URL
@@ -90,6 +90,12 @@ class BrowsePluginsModel(HasTraits):
         except package_installer.InstallError as e:
             logger.warning(f"channel search failed, using cached list: {e}")
             return package_installer.read_cached_index(), True
+
+    @observe("selected")
+    def _update_details(self, event):
+        """Auto-fill the details panel for the selected row (selection happens
+        on the GUI thread). Blank when nothing is selected."""
+        self.details_text = format_details(self.selected.raw) if self.selected else ""
 
     def set_packages(self, data, stale):
         """GUI thread: build one row per package (latest version) + flags."""

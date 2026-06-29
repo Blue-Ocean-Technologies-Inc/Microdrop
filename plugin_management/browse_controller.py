@@ -1,6 +1,7 @@
-"""Handler for the Browse Plugins window: fetch the channel list on open,
-show a selected package's details, and install the selected package. The model
-holds state/logic; this holds the flow (dialogs, worker-thread progress).
+"""Handler for the Browse Plugins window: fetch the channel list on open and
+install the selected package. The selected row's details fill automatically
+(the model observes ``selected``). The model holds state/logic; this holds the
+flow (dialogs, worker-thread progress).
 
 Worker callables (fetch_data / do_install) must not touch model traits — they
 return data and the GUI-thread callbacks apply it (model is mutated on the GUI
@@ -13,7 +14,6 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_utils.threaded_progress import run_with_wait
 from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 
-from plugin_management.browse_model import format_details
 from plugin_management.relaunch import confirm_and_relaunch
 
 
@@ -49,14 +49,6 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
             information(parent=None, title="Offline",
                         message="Could not reach the plugin channel — showing the "
                                 "last cached list.")
-
-    def show_details(self, info):
-        model = info.object
-        if model.selected is None:
-            information(parent=None, title="No selection",
-                        message="Select a plugin first.")
-            return
-        model.details_text = format_details(model.selected.raw)
 
     def install_selected(self, info):
         model = info.object
