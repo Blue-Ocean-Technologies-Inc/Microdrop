@@ -1,4 +1,4 @@
-from traits.api import Str, List, Bool, Event
+from traits.api import Str, List, Bool, Event, Enum
 
 from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
@@ -44,8 +44,12 @@ class HeaterStatusModel(BaseStatusModel):
         desc="Open-loop duty to apply (%)",
     )
 
-    # ---- Toggle controls (realtime-style buttons) -----------------------
-    pid_active = Bool(False, desc="PID control enabled")
+    # ---- Control mode + streaming gate ----------------------------------
+    # "PWM": open-loop — the duty is driven directly. "Temp": closed-loop —
+    # the backend's PID auto-drives the duty toward the temperature setpoint.
+    mode = Enum("PWM", "Temp", desc="Open-loop PWM duty vs closed-loop temperature (PID)")
+    # Master gate: while off, nothing streams from the board and we send it no
+    # setpoint commands (edits are staged and applied when streaming starts).
     stream_active = Bool(False, desc="Telemetry streaming active")
 
     # ---- Readback displays (written by the message handler) -------------
@@ -57,10 +61,10 @@ class HeaterStatusModel(BaseStatusModel):
     show_all_temps = Bool(False, desc="Reveal the per-sensor temperature snapshot")
     all_temps_display = Str("-")
 
-    # Fired by the controller when the user edits the setpoint while PID is off
-    # (the change is not sent to hardware until PID starts). The dock pane shows
-    # a one-time warning in response.
-    pid_off_setpoint_warning = Event()
+    # Fired by the controller when the user edits a setpoint while streaming is
+    # off (the change is not sent to hardware until streaming starts). The dock
+    # pane shows a one-time warning in response.
+    stream_off_edit_warning = Event()
 
     # ------------------------------------------------------------------ #
     # Neutralize dropbot realtime-mode coupling                            #
