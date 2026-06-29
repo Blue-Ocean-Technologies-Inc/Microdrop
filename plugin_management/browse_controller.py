@@ -8,13 +8,19 @@ return data and the GUI-thread callbacks apply it (model is mutated on the GUI
 thread only)."""
 from traits.api import Instance
 from pyface.tasks.api import Task
+from pyface.qt.QtWidgets import QToolBar
+from pyface.qt.QtGui import QFont
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, information, error as error_dialog, YES, escape_html_multiline)
+from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_utils.threaded_progress import run_with_wait
 from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 
 from plugin_management.relaunch import confirm_and_relaunch
+
+#: Point size of the Material Symbols glyph rendered on the Refresh toolbar button.
+REFRESH_ICON_POINT_SIZE = 16
 
 
 def _consent_html(pkg):
@@ -33,8 +39,18 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
 
     def init(self, info):
         super().init(info)            # Escape deselects instead of closing
+        self._style_toolbar(info)
         self._load(info.object, message="Fetching available plugins…")
         return True
+
+    def _style_toolbar(self, info):
+        """Render the Refresh toolbar action as a Material Symbols glyph by
+        giving the toolbar the icon font (its only action's label is the glyph)."""
+        control = getattr(info.ui, "control", None)
+        if control is None:
+            return
+        for toolbar in control.findChildren(QToolBar):
+            toolbar.setFont(QFont(ICON_FONT_FAMILY, REFRESH_ICON_POINT_SIZE))
 
     def refresh(self, info):
         """Re-fetch the available-plugins list from the channel (the repo)."""

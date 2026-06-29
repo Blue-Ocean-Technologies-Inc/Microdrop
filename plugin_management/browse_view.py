@@ -5,9 +5,13 @@ handles the buttons; the model supplies ``packages``.
 """
 from traitsui.api import Action, Item, TableEditor, View, HSplit, HTMLEditor, ToolBar
 
+from microdrop_style.icons.icons import ICON_REFRESH
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
-refresh_action = Action(name="Refresh", action="refresh")
+# The Refresh action's label is the Material Symbols refresh glyph; the handler
+# renders it by applying the icon font to the toolbar (see BrowsePluginsHandler).
+refresh_action = Action(name=ICON_REFRESH, action="refresh",
+                        tooltip="Refresh the plugin list from the channel")
 install_action = Action(name="Install", action="install_selected")
 close_action = Action(name="Close", action="do_close")
 
