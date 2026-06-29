@@ -1,56 +1,34 @@
-"""TraitsUI layout for the Manage Plugins window. Pure presentation — the
-Controller (manager_controller) supplies the action handlers; the model
-(manager_model) supplies the state."""
-from traitsui.api import (Action, HGroup, Item, Label, ListEditor, Spring,
-                          UReadonly, VGroup, View)
+"""TraitsUI layout for the Manage Plugins window: a checkbox per plugin group +
+the action buttons. Pure presentation — the controller (a Handler) handles the
+buttons; the model supplies ``groups``."""
+from traitsui.api import Action, Item, TableEditor, View
+from traitsui.extras.checkbox_column import CheckboxColumn
+from traitsui.table_column import ObjectColumn
 
-# Action buttons -> Controller methods of the same name.
+# Buttons -> Handler methods of the same `action` name.
 install_action = Action(name="Install Plugin…", action="install_plugin")
-uninstall_action = Action(name="Uninstall…", action="uninstall_plugin",
-                          enabled_when="len(handler.model.installed_rows()) > 0")
+uninstall_action = Action(name="Uninstall Plugin…", action="uninstall_plugin")
 apply_action = Action(name="Apply", action="apply_changes")
-close_action = Action(name="Close", action="close")
+close_action = Action(name="Close", action="do_close")
 
+_groups_table = TableEditor(
+    columns=[
+        CheckboxColumn(name="enabled", label="Enabled"),
+        ObjectColumn(name="label", label="Plugin group", editable=False),
+    ],
+    sortable=False,
+    configurable=False,
+    deletable=False,
+    show_toolbar=False,
+    editable=True,
+)
 
-def optional_toggle_view():
-    return View(HGroup(Item("on", show_label=False), UReadonly("toggle_label")))
-
-
-def plugin_row_view():
-    return View(HGroup(
-        UReadonly("label", width=-240),
-        UReadonly("version", width=-70),
-        Spring(),
-        Item("enabled", label="Enable"),
-        # ListEditor(style="custom") renders each optional with its default view
-        # (OptionalGroupToggle.traits_view, attached at the bottom of this module).
-        Item("optionals", show_label=False, style="custom",
-             editor=ListEditor(style="custom")),
-    ))
-
-
-def manager_view():
-    return View(
-        VGroup(
-            Label("Installed plugins:"),
-            # each PluginRow renders with its default view (PluginRow.traits_view).
-            Item("rows", show_label=False, style="custom",
-                 editor=ListEditor(style="custom")),
-            show_border=True,
-        ),
-        buttons=[install_action, uninstall_action, apply_action, close_action],
-        title="Manage Plugins",
-        kind="livemodal",
-        resizable=True,
-        width=560,
-        height=360,
-    )
-
-
-# Attach the per-item default views to the model classes from the VIEW module, so
-# all layout lives here (the model stays view-free) while ListEditor(style="custom")
-# above picks them up as each item's default view.
-from plugin_management.manager_model import OptionalGroupToggle, PluginRow  # noqa: E402
-
-PluginRow.traits_view = plugin_row_view()
-OptionalGroupToggle.traits_view = optional_toggle_view()
+manager_view = View(
+    Item("groups", show_label=False, editor=_groups_table),
+    buttons=[install_action, uninstall_action, apply_action, close_action],
+    title="Manage Plugins",
+    kind="livemodal",
+    resizable=True,
+    width=460,
+    height=320,
+)

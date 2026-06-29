@@ -16,7 +16,7 @@ class ManagePluginsAction(TaskAction):
     name = "&Manage Plugins…"
 
     def perform(self, event):
-        task = self.task
+        task = event.task
         if task is None:
             logger.error("Manage Plugins: no task available")
             return
@@ -29,8 +29,10 @@ class ManagePluginsAction(TaskAction):
         if manager is None:
             logger.error("Manage Plugins: PluginGroupManager service not found")
             return
+
         model = PluginManagerModel(manager=manager)
-        controller = PluginManagerController(model=model, task=task)
-        # Controller edits its `model` (the view's Items resolve against the model)
-        # with the controller as the handler for the action buttons.
-        controller.edit_traits(view=manager_view(), kind="livemodal")
+        controller = PluginManagerController(task=task)
+        # Edit the model with the controller as the Handler; the view's Items
+        # resolve against the model, the buttons dispatch to controller methods.
+        model.edit_traits(view=manager_view, handler=controller, kind="livemodal")
+
