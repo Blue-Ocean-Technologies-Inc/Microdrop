@@ -1,7 +1,7 @@
 import json
 
 from traits.api import provides, HasTraits, Bool, Instance, Str, List, observe
-from apscheduler.events import EVENT_JOB_EXECUTED
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_SHUTDOWN
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUSED
@@ -108,6 +108,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
             trigger=IntervalTrigger(seconds=2),
         )
         scheduler.add_listener(self._on_port_found, EVENT_JOB_EXECUTED)
+        scheduler.add_listener(self._on_monitor_shutdown, EVENT_SCHEDULER_SHUTDOWN)
         self.monitor_scheduler = scheduler
 
         logger.info(f"{self._device_name} monitor created and started")
@@ -149,7 +150,27 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
             self.connection_active = True
         # Connected → the scan is over (the monitor pauses on a found port)
 
+    def cleanup(self):
+        """Stop the monitor thread (which announces the search has stopped via the
+        shutdown listener) before the base cleanup terminates the proxy. Lets a
+        frontend in another process re-enable its search control when this backend
+        shuts down."""
+        scheduler = self.monitor_scheduler
+        if isinstance(scheduler, BackgroundScheduler) and scheduler.state != STATE_STOPPED:
+            try:
+                scheduler.shutdown(wait=False)
+            except Exception as e:
+                logger.debug(f"Error stopping {self._device_name} monitor: {e}")
+        super().cleanup()
+
     ################################# Protected methods ######################################
+    def _on_monitor_shutdown(self, event=None):
+        """The monitor thread stopped — announce that the search is no longer
+        running (one-shot, mirrors the start flip) so a frontend re-enables its
+        'search connection' control. A hard process kill can't reach here."""
+        if self._searching:
+            self._searching = False
+
     def _on_port_found(self, event):
         """What to do when the device has been found on a port."""
         # if the port finder returned nothing => still disconnected
