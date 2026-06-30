@@ -8,16 +8,20 @@ from manual_controls.MVC import ToggleEditorFactory
 from microdrop_style.colors import INFO_COLOR
 from microdrop_utils.traitsui_qt_helpers import ToggleEditor
 
+# Every section is collapsible: a checkbox acts as the section header and the
+# bordered group below it is shown only while its `show_*` trait is ticked, so
+# an unticked section collapses to just its checkbox.
+
 # Connection / board identity.
 status_group = VGroup(
     Item("connection_status_text", style="readonly", label="Connection"),
     Item("board_id_text", style="readonly", label="Board"),
+    visible_when="show_status",
     show_border=True,
-    label="Status",
 )
 
-# Control: channel selector (only meaningful with >1 heater), setpoint spinboxes
-# for the selected heater, the PWM/Temp mode switch, and the streaming master gate.
+# Control: the PWM/Temp mode switch + streaming master gate, the channel
+# selector, and the setpoint spinboxes for the selected heater.
 control_group = VGroup(
     HGroup(
         # Toggle: PWM (open-loop duty, off) vs Temp (closed-loop PID, on).
@@ -56,8 +60,8 @@ control_group = VGroup(
         label="Set PWM",
         enabled_when="connected and not halted and mode == 'PWM'",
     ),
+    visible_when="show_control",
     show_border=True,
-    label="Control",
 )
 
 # One status row per heater. The display strings carry their own units (°C / %),
@@ -79,19 +83,27 @@ readouts_group = VGroup(
             mutable=False,
         ),
     ),
+    visible_when="show_heater_status",
     show_border=True,
-    label="Heater status",
 )
 
-# Per-sensor temperature snapshot — hidden until the checkbox is ticked.
+# Per-sensor temperature snapshot.
 all_temps_group = VGroup(
-    Item("show_all_temps", label="Show all temperatures"),
-    Item("all_temps_display", style="readonly", show_label=False,
-         visible_when="show_all_temps"),
+    Item("all_temps_display", style="readonly", show_label=False),
+    visible_when="show_all_temps",
     show_border=True,
 )
 
 UnifiedView = View(
-    VGroup(status_group, control_group, readouts_group, all_temps_group),
+    VGroup(
+        Item("show_status", label="Status"),
+        status_group,
+        Item("show_control", label="Control"),
+        control_group,
+        Item("show_heater_status", label="Heater status"),
+        readouts_group,
+        Item("show_all_temps", label="Show all temperatures"),
+        all_temps_group,
+    ),
     resizable=True,
 )
