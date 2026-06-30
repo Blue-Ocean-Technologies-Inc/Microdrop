@@ -516,10 +516,12 @@ class Toggle(QCheckBox):
         self._light_grey_pen = QPen(Qt.lightGray)
 
         # Brushes for the bar + handle in each state; the checked bar is a
-        # lightened tint of the handle's checked colour.
-        self._bar_brush = QBrush(bar_color)
+        # lightened tint of the handle's checked colour. Every colour is wrapped
+        # in QColor() so callers can pass a hex string, a Qt.GlobalColor, or a
+        # QColor interchangeably (QBrush won't accept a raw hex string).
+        self._bar_brush = QBrush(QColor(bar_color))
         self._bar_checked_brush = QBrush(QColor(checked_color).lighter())
-        self._handle_brush = QBrush(handle_color)
+        self._handle_brush = QBrush(QColor(handle_color))
         self._handle_checked_brush = QBrush(QColor(checked_color))
 
         self.setContentsMargins(8, 0, 8, 0)
