@@ -5,6 +5,7 @@ from traits.api import Instance
 from template_status_and_controls.base_message_handler import BaseMessageHandler
 from logger.logger_service import get_logger
 
+from .consts import PWM_MIN, PWM_MAX
 from .model import HeaterStatusModel
 from .telemetry import resolve_selection, format_telemetry
 
@@ -49,6 +50,16 @@ class HeaterMessageHandler(BaseMessageHandler):
                 readout = self._readout_for(heater)    # per-heater row
                 if readout is not None:
                     readout.trait_set(**updates)
+
+        # In Temp mode the PID regulates the duty; mirror the selected heater's
+        # live duty into the open-loop `pwm` setpoint so the "Set PWM" field
+        # tracks the real value (and switching back to PWM mode resumes from it,
+        # not a stale value). The pwm observer ignores writes while mode != "PWM",
+        # so this publishes no command.
+        if self.model.mode == "Temp" and heater == self.model.selected_heater:
+            live_pwm = data.get("pwm_percentage")
+            if isinstance(live_pwm, (int, float)):
+                self.model.pwm = max(PWM_MIN, min(PWM_MAX, round(live_pwm)))
 
         if data.get("_frame") == "ERR" and data.get("kind") in HALTING_ERR_KINDS:
             self.model.halted = True
