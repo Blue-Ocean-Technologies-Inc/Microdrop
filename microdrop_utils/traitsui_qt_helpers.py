@@ -12,7 +12,7 @@ from pyface.qt.QtGui import (
 )
 from pyface.qt.QtWidgets import (
     QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
-    QGroupBox, QLabel,
+    QGroupBox, QLabel, QSizePolicy,
 )
 from pyface.qt import QtWidgets
 
@@ -513,6 +513,15 @@ class _HtmlLabelEditor(QtEditor):
         self.control.setTextFormat(Qt.TextFormat.RichText)
         self.control.setWordWrap(self.factory.word_wrap)
         self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.control.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        if self.factory.word_wrap:
+            # A word-wrapped QLabel needs the layout to honour heightForWidth, or
+            # it gets one line's height and clips the rest. Ask for that and let
+            # it grow vertically to fit.
+            policy = self.control.sizePolicy()
+            policy.setHeightForWidth(True)
+            policy.setVerticalPolicy(QSizePolicy.Policy.Minimum)
+            self.control.setSizePolicy(policy)
         self.update_editor()
 
     def update_editor(self):

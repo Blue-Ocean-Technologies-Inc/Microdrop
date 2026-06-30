@@ -11,6 +11,7 @@ from traitsui.api import Controller
 from pydantic import ValidationError
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontally
 from microdrop_application.dialogs.pyface_wrapper import error, information, file_dialog
 from heater_controller.consts import SCAN_SENSORS, DUMP_CONFIG
 from heater_controller.datamodels import HeaterConfigEdit, SensorNaming
@@ -23,6 +24,13 @@ logger = get_logger(__name__)
 
 class SensorConfigController(Controller):
     """TraitsUI handler: maps the dialog's buttons to board requests + file save."""
+
+    def init(self, info):
+        """Stretch the top labels/tables to the full dialog width (TraitsUI
+        otherwise left-hugs them, which starves the word-wrapped help text and
+        makes it wrap to a sliver)."""
+        stretch_group_layouts_horizontally(info.ui.control)
+        return super().init(info)
 
     def scan_sensors(self, info=None):
         logger.info("Configurator: requesting a 1-Wire sensor scan")
