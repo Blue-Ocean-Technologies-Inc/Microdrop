@@ -1,4 +1,11 @@
+from heater_controller.consts import HEATER_HWID, START_DEVICE_MONITORING
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.hardware_device_monitoring_helpers import check_connected_ports_hwid
 from template_status_and_controls.base_plugin import BaseStatusPlugin
+from traits.api import observe
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
 
 from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT
 
@@ -22,10 +29,25 @@ class HeaterControlsUiPlugin(BaseStatusPlugin):
 
     def _get_menu_additions(self) -> list:
         from pyface.action.schema.schema_addition import SchemaAddition
-        from .menus import heater_tools_menu_factory
+        from .menus import tools_menu_factory
         return [
             SchemaAddition(
-                factory=heater_tools_menu_factory,
+                factory=tools_menu_factory,
                 path="MenuBar/Tools",
             )
         ]
+
+    @observe("application.application_initialized")
+    def _on_app_initialized(self, event):
+
+        # check if peripheral board connected
+        if check_connected_ports_hwid(HEATER_HWID):
+            logger.critical(
+                "Peripheral Board Maybe Connected: Requesting Peripheral Board Search"
+            )
+            publish_message(message="", topic=START_DEVICE_MONITORING)
+        else:
+            logger.info(
+                "Peripheral Board not connected. To start search, goto tools menu:"
+                "Tools -> Peripherals -> Z-Stage -> Search Connection or use the peripheral UI Dock Pane button."
+            )
