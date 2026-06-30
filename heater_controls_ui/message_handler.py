@@ -38,8 +38,10 @@ class HeaterMessageHandler(BaseMessageHandler):
         try:
             data = json.loads(body)
         except Exception:
+            logger.error("Failed to parse telemetry", exc_info=True)
             return
         if not isinstance(data, dict):
+            logger.debug("Failed to parse telemetry")
             return
 
         heater, updates = format_telemetry(data, pid_mode=self.model.mode == "Temp")
