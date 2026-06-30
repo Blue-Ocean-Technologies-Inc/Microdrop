@@ -1,12 +1,13 @@
 from PySide6.QtGui import QColor
 from traitsui.api import (
     View, Item, UItem, HGroup, VGroup, EnumEditor, ListEditor, InstanceEditor,
+    Readonly, Label,
 )
 from traitsui.item import UReadonly
 
 from manual_controls.MVC import ToggleEditorFactory
 from microdrop_style.colors import INFO_COLOR
-from microdrop_utils.traitsui_qt_helpers import ToggleEditor
+from microdrop_utils.traitsui_qt_helpers import ToggleEditor, IconToggleEditor
 
 # Every section is collapsible: a checkbox acts as the section header and the
 # bordered group below it is shown only while its `show_*` trait is ticked, so
@@ -14,8 +15,8 @@ from microdrop_utils.traitsui_qt_helpers import ToggleEditor
 
 # Connection / board identity.
 status_group = VGroup(
-    Item("connection_status_text", style="readonly", label="Connection"),
-    Item("board_id_text", style="readonly", label="Board"),
+    Readonly("connection_status_text", label="Connection"),
+    Readonly("board_id_text", label="Board"),
     visible_when="show_status",
     show_border=True,
 )
@@ -89,21 +90,32 @@ readouts_group = VGroup(
 
 # Per-sensor temperature snapshot.
 all_temps_group = VGroup(
-    Item("all_temps_display", style="readonly", show_label=False),
+    Readonly("all_temps_display", show_label=False),
     visible_when="show_all_temps",
     show_border=True,
 )
 
+def _collapse_header(trait, label):
+    """A section header row: a Material arrow glyph that expands (▾) / collapses
+    (▸) the section by toggling ``trait``, followed by the section's label."""
+    return HGroup(
+        UItem(trait, editor=IconToggleEditor()),
+        Label(label),
+    )
+
+
 UnifiedView = View(
     VGroup(
-        Item("show_status", label="Status"),
+        _collapse_header("show_status", "Status"),
         status_group,
-        Item("show_control", label="Control"),
+
+        _collapse_header("show_control", "Control"),
         control_group,
-        Item("show_heater_status", label="Heater status"),
+
+        _collapse_header("show_heater_status", "Heater status"),
         readouts_group,
-        Item("show_all_temps", label="Show all temperatures"),
+
+        _collapse_header("show_all_temps", "Show all temperatures"),
         all_temps_group,
     ),
-    resizable=True,
 )
