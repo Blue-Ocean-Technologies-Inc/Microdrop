@@ -86,6 +86,10 @@ class SensorConfigModel(HasTraits):
             return False
         self.config = config
         self.source = "Live from board (dump_config)."
+        # A fresh config from the board invalidates the previous scan: like the
+        # old UI, every sensor reverts to "In config" until the bus is rescanned.
+        self.scanned_roms = []
+        self.scan_done = False
         self._rebuild_rows(update_names=True)
         return True
 

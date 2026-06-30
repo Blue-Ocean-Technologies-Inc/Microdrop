@@ -113,6 +113,18 @@ def test_refresh_updates_rows_in_place():
     assert tec.sensors == "probe"                                # heater row updated in place
 
 
+def test_refresh_resets_scan_status_to_in_config():
+    # After a scan some sensors are "On bus..."; a refresh from the board clears
+    # the scan so everything reverts to "In config" (matches the old UI).
+    m = SensorConfigModel()
+    m.load_config_text(json.dumps(CONFIG))
+    m.set_scanned_roms(["28ff1111111111aa"])
+    assert any(r.status == "On bus + in config" for r in m.sensors)
+    m.load_config_text(json.dumps(CONFIG))           # refresh from board
+    assert m.scan_done is False and m.scanned_roms == []
+    assert all(r.status == "In config" for r in m.sensors)
+
+
 def test_scan_preserves_name_edits():
     m = SensorConfigModel()
     m.load_config_text(json.dumps(CONFIG))
