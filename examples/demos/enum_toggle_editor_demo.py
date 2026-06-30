@@ -1,21 +1,28 @@
-"""Standalone visual demo for EnumToggleEditor (microdrop_utils.
-traitsui_qt_helpers): a two-value Enum/Str trait rendered as a single
-checkable button instead of a radio group. Checked maps to ``on_value``,
-unchecked to ``off_value``, and each state carries its own label + accent
-colour (so it reads as "which of two modes is active", not "on vs off").
+"""Standalone visual demo for the two-value Enum toggle editors in
+microdrop_utils.traitsui_qt_helpers: a two-value Enum/Str trait rendered as a
+single control instead of a radio group. Checked maps to ``on_value``,
+unchecked to ``off_value``.
+
+Two renderings are shown:
+  * EnumToggleEditor          - a flat checkable button with a label + accent
+                                colour per state.
+  * AnimatedEnumToggleEditor  - an iOS-style sliding switch (animated handle
+                                + pulse halo on switch).
 
 Run:
     pixi run python examples/demos/enum_toggle_editor_demo.py
 
-Click the buttons and the trait values print to the console, so the
+Click the controls and the trait values print to the console, so the
 write-back path is visible too. The plain EnumEditor radio for the same
-trait is shown alongside each toggle to compare the two renderings.
+trait is shown alongside each toggle to compare the renderings.
 """
 
 from traits.api import Enum, HasTraits, observe
 from traitsui.api import EnumEditor, HGroup, Item, VGroup, View
 
-from microdrop_utils.traitsui_qt_helpers import EnumToggleEditor
+from microdrop_utils.traitsui_qt_helpers import (
+    EnumToggleEditor, AnimatedEnumToggleEditor,
+)
 from microdrop_style.colors import INFO_COLOR, WARNING_COLOR
 
 
@@ -28,10 +35,14 @@ class EnumToggleDemo(HasTraits):
     view = View(
         VGroup(
             HGroup(
-                Item("mode", label="Mode",
+                Item("mode", label="Button",
                      editor=EnumToggleEditor(on_value="Temp", off_value="PWM")),
+                Item("mode", label="Slider",
+                     editor=AnimatedEnumToggleEditor(on_value="Temp",
+                                                     off_value="PWM")),
                 Item("mode", label="(radio)", style="custom",
-                     editor=EnumEditor(cols=2)),
+                     # editor=EnumEditor(cols=2)
+                     ),
             ),
             HGroup(
                 # Custom labels + accent colours per state.
@@ -42,7 +53,8 @@ class EnumToggleDemo(HasTraits):
                          on_color=WARNING_COLOR, off_color=INFO_COLOR,
                      )),
                 Item("direction", label="(radio)", style="custom",
-                     editor=EnumEditor(cols=2)),
+                     # editor=EnumEditor(cols=2)
+                     ),
             ),
             show_border=True,
             label="Toggle button vs radio for the same Enum trait",
