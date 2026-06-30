@@ -84,6 +84,19 @@ def test_model_load_bad_config_returns_false():
     assert m.load_config_text("nope") is False
 
 
+def test_model_available_sensor_names_live_updates():
+    m = SensorConfigModel()
+    m.load_config_text(json.dumps(CONFIG))
+    assert set(m.available_sensor_names.split(", ")) == {"inlet", "outlet", "therm1"}
+    # Editing a sensor name updates the reference list live.
+    next(r for r in m.sensors if r.name == "inlet").name = "in2"
+    names = set(m.available_sensor_names.split(", "))
+    assert "in2" in names and "inlet" not in names
+    # Clearing a name drops it.
+    next(r for r in m.sensors if r.name == "outlet").name = ""
+    assert "outlet" not in m.available_sensor_names
+
+
 def test_model_scan_updates_status():
     m = SensorConfigModel()
     m.load_config_text(json.dumps(CONFIG))

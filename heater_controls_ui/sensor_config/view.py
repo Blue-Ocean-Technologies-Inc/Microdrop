@@ -8,7 +8,15 @@ from traitsui.api import (
     View, UItem, VGroup, Tabbed, Label, TableEditor, Action, OKButton,
 )
 
-from microdrop_utils.traitsui_qt_helpers import ObjectColumn
+from microdrop_utils.traitsui_qt_helpers import ObjectColumn, HtmlLabelEditor
+
+# Muted, italic styling for secondary/reference text, rendered as rich text so
+# the appearance is fully controllable via inline CSS. ``{}`` is the value.
+_MUTED = "color:#888; font-style:italic;"
+source_label = HtmlLabelEditor(
+    template=f'<span style="{_MUTED}">Config source: {{}}</span>')
+available_label = HtmlLabelEditor(
+    template=f'<span style="{_MUTED}">Available sensors: {{}}</span>')
 
 HELP_TEXT = (
     "Scan the 1-Wire bus, name sensors, and assign them to heaters. The config "
@@ -47,10 +55,14 @@ save_action = Action(name="Save to file", action="save_to_file")
 SensorConfigView = View(
     VGroup(
         Label(HELP_TEXT),
-        UItem("source", style="readonly"),
+        UItem("source", editor=source_label),
         Tabbed(
             UItem("sensors", editor=sensors_table, label="Sensors"),
-            UItem("heater_assignments", editor=heaters_table, label="Heater Assignments"),
+            VGroup(
+                UItem("heater_assignments", editor=heaters_table),
+                UItem("available_sensor_names", editor=available_label),
+                label="Heater Assignments",
+            ),
         ),
     ),
     title="Configure Sensors && Heaters",

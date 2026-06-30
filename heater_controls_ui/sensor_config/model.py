@@ -5,7 +5,7 @@ results (via :mod:`.parsing`); the view renders the two row lists as tables.
 """
 from traits.api import Str, Bool, List, HasTraits, Instance, Dict, observe
 
-from .parsing import parse_board_config, sensor_rows, heater_rows
+from .parsing import parse_board_config, sensor_rows, heater_rows, thermistor_names
 
 
 class SensorRow(HasTraits):
@@ -40,6 +40,11 @@ class SensorConfigModel(HasTraits):
     # Where the displayed config came from, shown under the help text.
     source = Str("No config loaded yet.")
 
+    # Reference list (shown under the Heater Assignments table): every name that
+    # can be typed into a heater's Sensors cell — the current 1-Wire sensor names
+    # plus the thermistor names. Updates live as sensor names are edited.
+    available_sensor_names = Str("(none)")
+
     def load_config_text(self, config_text):
         """Replace the config from a ``dump_config`` JSON document, then rebuild
         the rows. Returns True if the text parsed."""
@@ -61,6 +66,12 @@ class SensorConfigModel(HasTraits):
     @observe("config")
     def _on_config_changed(self, event):
         self._rebuild_rows()
+
+    @observe("sensors:items:name, sensors, config")
+    def _update_available_names(self, event=None):
+        names = [r.name.strip() for r in self.sensors if r.name.strip()]
+        names += thermistor_names(self.config)
+        self.available_sensor_names = ", ".join(names) if names else "(none)"
 
     def _rebuild_rows(self):
         self.sensors = [SensorRow(**r) for r in
