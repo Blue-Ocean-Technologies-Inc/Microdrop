@@ -1,8 +1,7 @@
 """TraitsUI view for the Configure Sensors & Heaters dialog.
 
-Phase 1: read-only display of the two tables (Sensors / Heater Assignments)
-plus "Scan for sensors" and "Refresh from board" actions. Editing, validation,
-saving, and push-to-board come in later phases.
+Scan the bus / refresh from board, edit sensor names + heater assignments, then
+Save to file or Save & push to board.
 """
 from traitsui.api import (
     View, UItem, VGroup, Tabbed, TableEditor, Action, OKButton,
@@ -19,6 +18,7 @@ source_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Config source: {{}}</span>')
 available_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Available sensors: {{}}</span>')
+push_status_label = HtmlLabelEditor(template=f'<span style="{_MUTED}">{{}}</span>')
 
 # The Name (sensors) and Sensors (heater assignments) columns are editable; the
 # ROM / Status / Heater / Type columns are read-only.
@@ -47,6 +47,7 @@ heaters_table = TableEditor(
 scan_action = Action(name="Scan for sensors", action="scan_sensors")
 refresh_action = Action(name="Refresh from board", action="refresh_from_board")
 save_action = Action(name="Save to file", action="save_to_file")
+push_action = Action(name="Save && push to board", action="save_and_push")
 
 SensorConfigView = View(
     VGroup(
@@ -60,11 +61,13 @@ SensorConfigView = View(
                 label="Heater Assignments",
             ),
         ),
+        UItem("push_status", editor=push_status_label,
+              visible_when="push_status"),
     ),
     title="Configure Sensors && Heaters",
     width=640,
     height=480,
     resizable=True,
-    buttons=[scan_action, refresh_action, save_action, OKButton],
+    buttons=[scan_action, refresh_action, save_action, push_action, OKButton],
     kind="live",
 )

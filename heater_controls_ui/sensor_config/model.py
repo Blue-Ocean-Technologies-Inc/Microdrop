@@ -54,6 +54,10 @@ class SensorConfigModel(HasTraits):
     # plus the thermistor names. Updates live as sensor names are edited.
     available_sensor_names = Str("(none)")
 
+    # Result of the last "Save & push to board" (set by the message handler from
+    # the CONFIG_PUSHED signal); shown at the bottom of the dialog.
+    push_status = Str("")
+
     def load_config_text(self, config_text):
         """Replace the config from a ``dump_config`` JSON document, then rebuild
         the rows. Returns True if the text parsed."""

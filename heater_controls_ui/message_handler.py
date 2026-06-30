@@ -44,6 +44,19 @@ class HeaterMessageHandler(BaseMessageHandler):
         if isinstance(roms, list):
             self.config_model.set_scanned_roms(roms)
 
+    def _on_config_pushed_triggered(self, body):
+        """Result of a save-config-to-board push (JSON {ok, message}) → shown at
+        the bottom of the configurator dialog."""
+        if self.config_model is None:
+            return
+        try:
+            result = json.loads(body)
+        except Exception:
+            logger.error("Failed to parse config_pushed signal", exc_info=True)
+            return
+        prefix = "✓" if result.get("ok") else "✗"
+        self.config_model.push_status = f"{prefix} {result.get('message', '')}"
+
     def _on_searching_triggered(self, body):
         """Backend connection-scan state (JSON bool). Mirrored to the model so the
         dock pane can disable the status-icon 'search connection' click while a
