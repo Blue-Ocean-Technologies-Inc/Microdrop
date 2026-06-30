@@ -11,19 +11,20 @@ from traitsui.api import (
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
 HELP_TEXT = (
-    "Scan the 1-Wire bus, name sensors, and assign them to heaters. "
-    "The config is pulled live from the connected board."
+    "Scan the 1-Wire bus, name sensors, and assign them to heaters. The config "
+    "is pulled live from the connected board. Edit the Name and Sensors columns, "
+    "then Save to file."
 )
 
-# Read-only tables (Phase 1). The Name / Sensors columns become editable in a
-# later phase.
+# The Name (sensors) and Sensors (heater assignments) columns are editable; the
+# ROM / Status / Heater / Type columns are read-only.
 sensors_table = TableEditor(
     columns=[
         ObjectColumn(name="rom", label="ROM (hex)", editable=False),
-        ObjectColumn(name="name", label="Name", editable=False),
+        ObjectColumn(name="name", label="Name", editable=True),
         ObjectColumn(name="status", label="Status", editable=False),
     ],
-    editable=False,
+    editable=True,
     sortable=False,
     auto_size=False,
 )
@@ -32,15 +33,16 @@ heaters_table = TableEditor(
     columns=[
         ObjectColumn(name="heater", label="Heater", editable=False),
         ObjectColumn(name="type", label="Type", editable=False),
-        ObjectColumn(name="sensors", label="Sensors (comma-separated)", editable=False),
+        ObjectColumn(name="sensors", label="Sensors (comma-separated)", editable=True),
     ],
-    editable=False,
+    editable=True,
     sortable=False,
     auto_size=False,
 )
 
 scan_action = Action(name="Scan for sensors", action="scan_sensors")
 refresh_action = Action(name="Refresh from board", action="refresh_from_board")
+save_action = Action(name="Save to file", action="save_to_file")
 
 SensorConfigView = View(
     VGroup(
@@ -55,6 +57,6 @@ SensorConfigView = View(
     width=640,
     height=480,
     resizable=True,
-    buttons=[scan_action, refresh_action, OKButton],
+    buttons=[scan_action, refresh_action, save_action, OKButton],
     kind="live",
 )

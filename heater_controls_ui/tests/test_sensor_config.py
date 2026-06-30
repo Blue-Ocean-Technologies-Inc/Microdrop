@@ -1,10 +1,15 @@
 """Hardware-free tests for the Configure Sensors & Heaters parsing + model."""
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from heater_controls_ui.sensor_config.parsing import (
     sensor_rows, heater_rows, thermistor_names, parse_board_config, RESERVED_OW_KEYS,
+    split_sensor_names, build_board_config,
 )
 from heater_controls_ui.sensor_config.model import SensorConfigModel
+from heater_controller.datamodels import HeaterConfigEdit, SensorNaming
 
 
 CONFIG = {
@@ -87,3 +92,51 @@ def test_model_scan_updates_status():
     status = {r.name: r.status for r in m.sensors}
     assert status["inlet"] == "On bus + in config"
     assert status["outlet"] == "Missing from bus"
+
+
+# --- edit validation (Phase 2) ----------------------------------------------
+
+def _edit(sensors, assignments, therms=("therm1",)):
+    return HeaterConfigEdit(
+        sensors=[SensorNaming(rom=r, name=n) for r, n in sensors],
+        assignments=assignments, thermistor_names=list(therms))
+
+
+def test_valid_edit_passes():
+    _edit([("28aa", "inlet")], {"tec1": ["inlet", "therm1"]})
+
+
+def test_duplicate_names_rejected():
+    with pytest.raises(ValidationError, match="Duplicate"):
+        _edit([("28aa", "x"), ("28bb", "x")], {})
+
+
+def test_reserved_name_rejected():
+    with pytest.raises(ValidationError, match="reserved"):
+        _edit([("28aa", "pin")], {})
+
+
+def test_unknown_reference_rejected():
+    with pytest.raises(ValidationError, match="undefined"):
+        _edit([("28aa", "inlet")], {"tec1": ["ghost"]})
+
+
+# --- config build (Phase 2) -------------------------------------------------
+
+def test_split_sensor_names():
+    assert split_sensor_names("a, b ,, c ") == ["a", "b", "c"]
+    assert split_sensor_names("") == []
+
+
+def test_build_board_config_renames_drops_and_preserves():
+    named = [("28ff1111111111aa", "in1")]            # 'outlet' omitted -> removed
+    assignments = {"tec1": ["in1", "therm1"], "res1": ["outlet"]}
+    new = build_board_config(CONFIG, named, assignments)
+    ow = new["temperature_sensors"]["1-wire-sensors"]
+    assert ow["pin"] == 13 and ow["resolution"] == 16      # reserved keys kept
+    assert "in1" in ow and "inlet" not in ow and "outlet" not in ow
+    assert new["temperature_sensors"]["thermistors"] == {"therm1": {"beta": 3950}}
+    assert new["heaters"]["tec1"]["type"] == "tec"         # type preserved
+    assert new["heaters"]["tec1"]["sensors"] == ["in1", "therm1"]
+    # original config object is not mutated
+    assert "inlet" in CONFIG["temperature_sensors"]["1-wire-sensors"]

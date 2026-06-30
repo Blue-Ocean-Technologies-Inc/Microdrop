@@ -13,10 +13,13 @@ Config document shape (from the firmware ``dump_config``)::
       "heaters": {"<heater>": {"type": "...", "sensors": ["<name>", ...]}, ...}
     }
 """
+import copy
 import json
 
+from heater_controller.consts import OW_RESERVED_KEYS
+
 # Bus-level keys inside ``1-wire-sensors`` that are NOT sensor name->ROM entries.
-RESERVED_OW_KEYS = {"pin", "conv_mode", "resolution"}
+RESERVED_OW_KEYS = set(OW_RESERVED_KEYS)
 
 
 def parse_board_config(config_text):
@@ -86,3 +89,41 @@ def heater_rows(config):
             joined = ", ".join(s for s in sensors if isinstance(s, str))
             rows.append({"heater": name, "type": str(cfg.get("type", "")), "sensors": joined})
     return rows
+
+
+def split_sensor_names(text):
+    """Parse a comma-separated heater-assignment cell into a clean name list."""
+    return [name.strip() for name in (text or "").split(",") if name.strip()]
+
+
+def build_board_config(original, named_sensors, assignments):
+    """Return a new config dict: a deep copy of ``original`` with the 1-Wire
+    sensor names and heater sensor-assignments replaced by the edited values.
+
+    ``named_sensors``: iterable of ``(rom, name)`` (only non-empty names persist).
+    ``assignments``: ``{heater: [sensor_name, ...]}``.
+
+    Everything not edited here is preserved: the reserved bus keys
+    (pin/conv_mode/resolution), thermistor definitions, heater types, and any
+    other keys the firmware emitted.
+    """
+    config = copy.deepcopy(original) if isinstance(original, dict) else {}
+
+    temperature_sensors = config.setdefault("temperature_sensors", {})
+    old_ow = temperature_sensors.get("1-wire-sensors") or {}
+    # Keep only the reserved bus keys from the old section, then add the edited
+    # name->ROM entries (this drops sensors whose name was cleared).
+    new_ow = {k: v for k, v in old_ow.items() if k in OW_RESERVED_KEYS}
+    for rom, name in named_sensors:
+        if name:
+            new_ow[name] = rom
+    temperature_sensors["1-wire-sensors"] = new_ow
+
+    heaters = config.get("heaters")
+    if isinstance(heaters, dict):
+        for heater, sensors in assignments.items():
+            entry = heaters.get(heater)
+            if isinstance(entry, dict):
+                entry["sensors"] = list(sensors)
+
+    return config
