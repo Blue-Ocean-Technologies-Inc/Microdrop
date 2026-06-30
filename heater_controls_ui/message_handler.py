@@ -24,6 +24,15 @@ class HeaterMessageHandler(BaseMessageHandler):
 
     model = Instance(HeaterStatusModel)
 
+    def _on_searching_triggered(self, body):
+        """Backend connection-scan state (JSON bool). Mirrored to the model so the
+        dock pane can disable the status-icon 'search connection' click while a
+        scan is already running."""
+        try:
+            self.model.searching = bool(json.loads(body))
+        except Exception:
+            logger.error("Failed to parse searching signal", exc_info=True)
+
     def _on_heaters_available_triggered(self, body):
         try:
             heaters = json.loads(body)

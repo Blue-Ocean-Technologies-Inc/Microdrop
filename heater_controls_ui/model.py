@@ -70,6 +70,11 @@ class HeaterStatusModel(BaseStatusModel):
     # ---- Readback displays (written by the message handler) -------------
     board_id_text = Str("-")
 
+    # True while the backend's monitor thread is actively scanning for the board
+    # (driven by the Heater/signals/searching signal). Used to disable the
+    # "search connection" status-icon click while a scan is already running.
+    searching = Bool(False, desc="Backend is scanning for a heater connection")
+
     # ---- Per-section collapse toggles -----------------------------------
     # Each view section has a checkbox header; while unticked the section body
     # collapses to just the checkbox. The main sections start expanded.

@@ -1,6 +1,5 @@
-from functools import partial
-
 from traits.api import observe, Instance
+from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QApplication, QFont
 
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
@@ -12,6 +11,7 @@ from microdrop_style.helpers import is_dark_mode
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget, ClickableLabel
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_application.dialogs.pyface_wrapper import information
+from logger.logger_service import get_logger
 
 from peripheral_controller.preferences import PeripheralPreferences
 
@@ -20,6 +20,8 @@ from .model import HeaterStatusModel
 from .controller import HeaterControlsController
 from .view import UnifiedView
 from .message_handler import HeaterMessageHandler
+
+logger = get_logger(__name__)
 
 
 class HeaterStatusDockPane(BaseStatusDockPane):
@@ -80,12 +82,13 @@ class HeaterStatusDockPane(BaseStatusDockPane):
 
         # Clickable: triggers a heater connection scan (same as Tools ▸ Heater ▸
         # Search Connection), so the user can reconnect straight from the icon.
+        # The click is ignored while a scan is already active (see model.searching).
         icon = ClickableLabel(ICON_MODE_HEAT)
         icon.setFont(font)
         icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
-        icon.clicked.connect(
-            partial(publish_message, topic=START_DEVICE_MONITORING, message=""))
+        icon.clicked.connect(self._search_heater_connection)
         self.status_bar_icon = icon  # inherited _sync_model_icon_color recolors this
+        self._sync_search_affordance()  # initial cursor for the current search state
 
         def _apply_tooltip():
             icon.setToolTip(_build_heater_status_tooltip(
@@ -100,6 +103,25 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, icon)
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(
             2, horizontal_spacer_widget(10))
+
+    # ------------------------------------------------------------------ #
+    # Status-icon "search connection" click (gated on an active scan)      #
+    # ------------------------------------------------------------------ #
+    def _search_heater_connection(self):
+        """Trigger a connection scan from the icon, unless one is already running
+        (the backend would just reject a duplicate)."""
+        if self.model.searching:
+            logger.debug("Heater search already active; ignoring status-icon click")
+            return
+        publish_message(topic=START_DEVICE_MONITORING, message="")
+
+    @observe("model:searching", dispatch="ui")
+    def _sync_search_affordance(self, event=None):
+        """Show a pointing-hand cursor only while a click would do something —
+        i.e. when no scan is currently active."""
+        icon = getattr(self, "status_bar_icon", None)
+        if icon is not None:
+            icon.setCursor(Qt.ArrowCursor if self.model.searching else Qt.PointingHandCursor)
 
     # The base wires a realtime-mode status-bar icon; the heater has none, so
     # override those observers to no-ops (the base bodies reference an icon we
