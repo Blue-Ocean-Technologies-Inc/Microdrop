@@ -70,6 +70,13 @@ class HeaterStatusModel(BaseStatusModel):
     # ---- Readback displays (written by the message handler) -------------
     board_id_text = Str("-")
 
+    # ---- Per-section collapse toggles -----------------------------------
+    # Each view section has a checkbox header; while unticked the section body
+    # collapses to just the checkbox. The main sections start expanded.
+    show_status = Bool(True, desc="Expand the Status section")
+    show_control = Bool(True, desc="Expand the Control section")
+    show_heater_status = Bool(True, desc="Expand the Heater status section")
+
     # ---- Optional per-sensor temperature snapshot (hidden by default) ----
     show_all_temps = Bool(False, desc="Reveal the per-sensor temperature snapshot")
     all_temps_display = Str("-")
