@@ -88,17 +88,9 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
         icon.clicked.connect(self._search_heater_connection)
         self.status_bar_icon = icon  # inherited _sync_model_icon_color recolors this
-        self._sync_search_affordance()  # initial cursor for the current search state
+        self._sync_search_affordance()  # initial cursor + tooltip for the search state
 
-        def _apply_tooltip():
-            icon.setToolTip(_build_heater_status_tooltip(
-                self.model.DISCONNECTED_COLOR,
-                self.model.CONNECTED_COLOR,
-                self.model.HALTED_COLOR,
-            ))
-
-        _apply_tooltip()
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_tooltip)
+        QApplication.styleHints().colorSchemeChanged.connect(self._refresh_status_tooltip)
 
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(2, icon)
         self.task.window.status_bar_manager.status_bar.insertPermanentWidget(
@@ -119,11 +111,24 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     @observe("model:searching", dispatch="ui")
     def _sync_search_affordance(self, event=None):
         """Pointing-hand cursor only when a click would do something — i.e. when
-        no scan is currently active."""
+        no scan is currently active — and flip the tooltip to match."""
         icon = getattr(self, "status_bar_icon", None)
         if icon is not None:
             icon.setCursor(Qt.CursorShape.ArrowCursor if self.model.searching
                            else Qt.CursorShape.PointingHandCursor)
+        self._refresh_status_tooltip()
+
+    def _refresh_status_tooltip(self, *args):
+        """Set the status-icon tooltip from the current connection-search state
+        (``*args`` absorbs the colour-scheme arg when wired to colorSchemeChanged)."""
+        icon = getattr(self, "status_bar_icon", None)
+        if icon is not None:
+            icon.setToolTip(_build_heater_status_tooltip(
+                self.model.DISCONNECTED_COLOR,
+                self.model.CONNECTED_COLOR,
+                self.model.HALTED_COLOR,
+                searching=self.model.searching,
+            ))
 
     # The base wires a realtime-mode status-bar icon; the heater has none, so
     # override those observers to no-ops (the base bodies reference an icon we
@@ -135,8 +140,10 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         pass
 
 
-def _build_heater_status_tooltip(disconnected_color, connected_color, halted_color) -> str:
+def _build_heater_status_tooltip(disconnected_color, connected_color, halted_color,
+                                 searching=False) -> str:
     title_color = WHITE if is_dark_mode() else GREY["dark"]
+    hint = "Searching for device…" if searching else "Click to search for a connection."
     return f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
       <strong style="font-size: 1.1em; color: {title_color}">Heater Status:</strong>
@@ -145,6 +152,6 @@ def _build_heater_status_tooltip(disconnected_color, connected_color, halted_col
         <li><strong style="color: {connected_color};">Connected</strong></li>
         <li><strong style="color: {halted_color};">Halted (Fault)</strong></li>
       </ul>
-      <div style="margin-top: 3px;"><em>Click to search for a connection.</em></div>
+      <div style="margin-top: 3px;"><em>{hint}</em></div>
     </div>
     """

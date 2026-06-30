@@ -127,29 +127,30 @@ class PeripheralStatusDockPane(DockPane):
 
         device_status.clicked.connect(search_connection)
 
-        def sync_search_cursor(event=None):
+        self.status_bar_icon = device_status
+
+        def apply_tooltip(*args):
+            # Themed legend; the hint flips to "searching" while a scan is active.
+            device_status.setToolTip(get_status_icon_tooltip_themed(_model.searching))
+
+        def sync_search_affordance(event=None):
             # Pointing-hand only when a click would actually start a scan.
             device_status.setCursor(
                 Qt.CursorShape.ArrowCursor if _model.searching
                 else Qt.CursorShape.PointingHandCursor)
+            apply_tooltip()
 
-        sync_search_cursor()
-        _model.observe(sync_search_cursor, "searching")
+        sync_search_affordance()  # initial cursor + tooltip
+        _model.observe(sync_search_affordance, "searching")
+        QApplication.styleHints().colorSchemeChanged.connect(apply_tooltip)  # track theme changes
 
-        self.status_bar_icon = device_status
-
-        ### update tooltip based on dark / light mode
-        def _apply_theme_style():
-            self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
-
-        _apply_theme_style()  # initial setting
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)  # track theme changes
-
-def get_status_icon_tooltip_themed():
+def get_status_icon_tooltip_themed(searching=False):
     if is_dark_mode():
         title_color = WHITE
     else:
         title_color = GREY['dark']
+
+    hint = "Searching for device…" if searching else "Click to search for a connection."
 
     z_stage_status_icon_tooltip_html = f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
@@ -158,7 +159,7 @@ def get_status_icon_tooltip_themed():
         <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
         <li><strong style="color: {connected_color};">Connected</strong></li>
       </ul>
-      <div style="margin-top: 3px;"><em>Click to search for a connection.</em></div>
+      <div style="margin-top: 3px;"><em>{hint}</em></div>
     </div>
     """
     return z_stage_status_icon_tooltip_html
