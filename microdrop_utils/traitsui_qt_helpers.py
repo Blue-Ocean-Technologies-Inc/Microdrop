@@ -1,3 +1,4 @@
+import html
 import math
 
 from pyface.qt.QtCore import (
@@ -11,7 +12,7 @@ from pyface.qt.QtGui import (
 )
 from pyface.qt.QtWidgets import (
     QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
-    QGroupBox,
+    QGroupBox, QLabel,
 )
 from pyface.qt import QtWidgets
 
@@ -498,6 +499,43 @@ class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
     border_radius = Int(4)
+
+
+class _HtmlLabelEditor(QtEditor):
+    """Read-only editor that renders a Str trait as rich text in a QLabel.
+
+    The trait's value is HTML-escaped and substituted into the factory's
+    ``template`` (an HTML snippet with a single ``{}`` placeholder), so the view
+    controls colour/weight/style/size via inline CSS without a web engine."""
+
+    def init(self, parent):
+        self.control = QLabel()
+        self.control.setTextFormat(Qt.TextFormat.RichText)
+        self.control.setWordWrap(self.factory.word_wrap)
+        self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.update_editor()
+
+    def update_editor(self):
+        if self.control is not None:
+            value = "" if self.value is None else str(self.value)
+            self.control.setText(self.factory.template.format(html.escape(value)))
+
+
+class HtmlLabelEditor(BasicEditorFactory):
+    """Factory for a read-only HTML/rich-text label bound to a Str trait::
+
+        UItem("source", editor=HtmlLabelEditor(
+            template='<span style="color:#888; font-style:italic;">Source: {}</span>'))
+
+    ``{}`` is replaced by the escaped trait value. Inline CSS in ``template`` has
+    no braces, so ``str.format`` is safe.
+    """
+
+    klass = _HtmlLabelEditor
+
+    #: HTML wrapper; ``{}`` is the (escaped) trait value.
+    template = Str("{}")
+    word_wrap = Bool(True)
 
 
 class Toggle(QCheckBox):
