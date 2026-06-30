@@ -10,6 +10,8 @@ DEVICE_NAME = "ZStage"
 # Topics published by this plugin
 CONNECTED = f'{DEVICE_NAME}/signals/connected'
 DISCONNECTED = f'{DEVICE_NAME}/signals/disconnected'
+# JSON bool: True while scanning for the board, False once connected/stopped.
+SEARCHING = f'{DEVICE_NAME}/signals/searching'
 ZSTAGE_POSITION_UPDATED = f'{DEVICE_NAME}/signals/position_updated'
 
 # Service Request Topics
