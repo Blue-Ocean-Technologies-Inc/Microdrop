@@ -20,6 +20,10 @@ CONFIG_BEGIN = "<<<CONFIG_BEGIN>>>"
 CONFIG_END = "<<<CONFIG_END>>>"
 CONFIG_ERROR_PREFIX = "<<<CONFIG_ERROR"
 
+# Bus-level keys inside the config's `1-wire-sensors` section that are NOT
+# sensor name->ROM entries (so they can never be used as a sensor name).
+OW_RESERVED_KEYS = frozenset({"pin", "conv_mode", "resolution"})
+
 # Topics published by this plugin (signals)
 CONNECTED = connected_topic(DEVICE_NAME)
 DISCONNECTED = disconnected_topic(DEVICE_NAME)
