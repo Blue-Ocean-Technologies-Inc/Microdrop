@@ -7,6 +7,14 @@ from traits.api import Str, Bool, List, HasTraits, Instance, Dict, observe
 
 from .parsing import parse_board_config, sensor_rows, heater_rows, thermistor_names
 
+# Instructional copy shown at the top of the dialog (rendered word-wrapped so a
+# long sentence doesn't force the pane wide).
+HELP_TEXT = (
+    "Scan the 1-Wire bus, name sensors, and assign them to heaters. The config "
+    "is pulled live from the connected board. Edit the Name and Sensors columns, "
+    "then Save to file."
+)
+
 
 class SensorRow(HasTraits):
     """One 1-Wire sensor: its ROM id, the name it's given, and a status derived
@@ -37,7 +45,8 @@ class SensorConfigModel(HasTraits):
     sensors = List(Instance(SensorRow))
     heater_assignments = List(Instance(HeaterAssignmentRow))
 
-    # Where the displayed config came from, shown under the help text.
+    # Instructional text + where the displayed config came from (shown at top).
+    help_text = Str(HELP_TEXT)
     source = Str("No config loaded yet.")
 
     # Reference list (shown under the Heater Assignments table): every name that

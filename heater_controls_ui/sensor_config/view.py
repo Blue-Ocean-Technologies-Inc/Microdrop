@@ -5,24 +5,20 @@ plus "Scan for sensors" and "Refresh from board" actions. Editing, validation,
 saving, and push-to-board come in later phases.
 """
 from traitsui.api import (
-    View, UItem, VGroup, Tabbed, Label, TableEditor, Action, OKButton,
+    View, UItem, VGroup, Tabbed, TableEditor, Action, OKButton,
 )
 
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn, HtmlLabelEditor
 
-# Muted, italic styling for secondary/reference text, rendered as rich text so
-# the appearance is fully controllable via inline CSS. ``{}`` is the value.
+# All three top labels render as word-wrapped rich text (HtmlLabelEditor), so a
+# long help line wraps instead of forcing the pane wide.
+help_label = HtmlLabelEditor()  # plain, word-wrapped
+# Muted, italic styling for the secondary/reference labels. ``{}`` is the value.
 _MUTED = "color:#888; font-style:italic;"
 source_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Config source: {{}}</span>')
 available_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Available sensors: {{}}</span>')
-
-HELP_TEXT = (
-    "Scan the 1-Wire bus, name sensors, and assign them to heaters. The config "
-    "is pulled live from the connected board. Edit the Name and Sensors columns, "
-    "then Save to file."
-)
 
 # The Name (sensors) and Sensors (heater assignments) columns are editable; the
 # ROM / Status / Heater / Type columns are read-only.
@@ -54,7 +50,7 @@ save_action = Action(name="Save to file", action="save_to_file")
 
 SensorConfigView = View(
     VGroup(
-        Label(HELP_TEXT),
+        UItem("help_text", editor=help_label),
         UItem("source", editor=source_label),
         Tabbed(
             UItem("sensors", editor=sensors_table, label="Sensors"),
