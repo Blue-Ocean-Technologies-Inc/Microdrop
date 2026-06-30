@@ -61,7 +61,8 @@ class HeaterStatusModel(BaseStatusModel):
     # ---- Control mode + streaming gate ----------------------------------
     # "PWM": open-loop — the duty is driven directly. "Temp": closed-loop —
     # the backend's PID auto-drives the duty toward the temperature setpoint.
-    mode = Enum("PWM", "Temp", desc="Open-loop PWM duty vs closed-loop temperature (PID)")
+    # Temp first → the default (closed-loop PID) when the pane first opens.
+    mode = Enum("Temp", "PWM", desc="Open-loop PWM duty vs closed-loop temperature (PID)")
     # Master gate: while off, nothing streams from the board and we send it no
     # setpoint commands (edits are staged and applied when streaming starts).
     stream_active = Bool(False, desc="Telemetry streaming active")
