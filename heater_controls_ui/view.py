@@ -79,14 +79,15 @@ readouts_group = VGroup(
     UItem(
         "heater_readouts",
         id="heater_readouts",
-        # scrollable=False drops the QScrollArea (and its large default height);
-        # with at most a few heaters the list just sizes to its rows. The pane's
-        # vertical size policy is then capped in the controller's init (the list
-        # editor hard-codes Expanding, which otherwise leaves a big gap).
+        # scrollable=False drops the QScrollArea so the editor's control IS the
+        # row pane; the controller's init then caps that pane's vertical size
+        # policy to Maximum (the list editor hard-codes Expanding, which
+        # otherwise leaves a big gap below the 1-3 rows).
         editor=ListEditor(
             style="custom",
             editor=InstanceEditor(view=heater_readout_row),
             mutable=False,
+            scrollable=False,
         ),
     ),
     visible_when="show_heater_status",
