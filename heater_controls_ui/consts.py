@@ -1,6 +1,8 @@
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, GREY
 
-from heater_controller.consts import DEVICE_NAME, START_DEVICE_MONITORING  # noqa: F401 (re-export)
+from heater_controller.consts import (  # noqa: F401 (re-export)
+    DEVICE_NAME, START_DEVICE_MONITORING, DUMP_CONFIG,
+)
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])

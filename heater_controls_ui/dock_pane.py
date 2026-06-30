@@ -15,11 +15,14 @@ from logger.logger_service import get_logger
 
 from peripheral_controller.preferences import PeripheralPreferences
 
-from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
+from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING, DUMP_CONFIG
 from .model import HeaterStatusModel
 from .controller import HeaterControlsController
 from .view import UnifiedView
 from .message_handler import HeaterMessageHandler
+from .sensor_config.model import SensorConfigModel
+from .sensor_config.controller import SensorConfigController
+from .sensor_config.view import SensorConfigView
 
 logger = get_logger(__name__)
 
@@ -39,6 +42,10 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     # Shared "Peripheral Settings" preferences (holds heater_show_stream_off_warning).
     heater_preferences = Instance(PeripheralPreferences)
 
+    # Configure Sensors & Heaters editor state (the message handler fills it from
+    # the board's config/scan signals; the dialog below renders it).
+    sensor_config_model = Instance(SensorConfigModel, ())
+
     def traits_init(self):
         super().traits_init()
         self.heater_preferences = PeripheralPreferences(
@@ -49,7 +56,17 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     # BaseStatusDockPane factory hooks                                     #
     # ------------------------------------------------------------------ #
     def _create_message_handler(self) -> HeaterMessageHandler:
-        return HeaterMessageHandler(model=self.model, name=listener_name)
+        return HeaterMessageHandler(
+            model=self.model, config_model=self.sensor_config_model, name=listener_name)
+
+    # ------------------------------------------------------------------ #
+    # Tools ▸ Heater ▸ Configure Sensors & Heaters (opened via DockPaneAction) #
+    # ------------------------------------------------------------------ #
+    def open_sensor_config(self):
+        """Open the modal configure dialog and refresh its data from the board."""
+        publish_message(topic=DUMP_CONFIG, message="")
+        self.sensor_config_model.edit_traits(
+            view=SensorConfigView, handler=SensorConfigController())
 
     # ------------------------------------------------------------------ #
     # "Applies when streaming starts" warning (setpoint edited, stream off) #

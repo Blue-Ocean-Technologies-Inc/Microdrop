@@ -7,6 +7,7 @@ from logger.logger_service import get_logger
 
 from .consts import PWM_MIN, PWM_MAX
 from .model import HeaterStatusModel
+from .sensor_config.model import SensorConfigModel
 from .telemetry import resolve_selection, format_telemetry
 
 logger = get_logger(__name__)
@@ -23,6 +24,25 @@ class HeaterMessageHandler(BaseMessageHandler):
     """
 
     model = Instance(HeaterStatusModel)
+    # Shared with the Configure Sensors & Heaters dialog (owned by the dock pane).
+    config_model = Instance(SensorConfigModel)
+
+    def _on_config_dumped_triggered(self, body):
+        """Full dump_config JSON document → the configurator model."""
+        if self.config_model is not None and not self.config_model.load_config_text(body):
+            logger.error("Failed to parse dumped heater config")
+
+    def _on_sensors_scanned_triggered(self, body):
+        """JSON list of 1-Wire ROMs found on the bus → the configurator model."""
+        if self.config_model is None:
+            return
+        try:
+            roms = json.loads(body)
+        except Exception:
+            logger.error("Failed to parse sensors_scanned signal", exc_info=True)
+            return
+        if isinstance(roms, list):
+            self.config_model.set_scanned_roms(roms)
 
     def _on_searching_triggered(self, body):
         """Backend connection-scan state (JSON bool). Mirrored to the model so the
