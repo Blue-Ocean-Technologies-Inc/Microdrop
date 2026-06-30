@@ -19,6 +19,13 @@ def disconnected_topic(device_name: str) -> str:
     return f"{device_name}/signals/disconnected"
 
 
+def searching_topic(device_name: str) -> str:
+    """Signal carrying this device's connection-search state (JSON bool): True
+    while the monitor thread is actively scanning for the device, False once it
+    connects or stops."""
+    return f"{device_name}/signals/searching"
+
+
 def connection_state_key(device_name: str) -> str:
     """app_globals key mirroring this device's connection state, keyed by device
     name so distinct peripherals don't collide."""

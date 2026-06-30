@@ -1,4 +1,4 @@
-from peripheral_device_controller_base.consts import connected_topic, disconnected_topic
+from peripheral_device_controller_base.consts import connected_topic, disconnected_topic, searching_topic
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -23,6 +23,8 @@ CONFIG_ERROR_PREFIX = "<<<CONFIG_ERROR"
 # Topics published by this plugin (signals)
 CONNECTED = connected_topic(DEVICE_NAME)
 DISCONNECTED = disconnected_topic(DEVICE_NAME)
+# JSON bool: True while scanning for the board, False once connected/stopped.
+SEARCHING = searching_topic(DEVICE_NAME)
 HEATERS_AVAILABLE = f"{DEVICE_NAME}/signals/heaters_available"
 # Parsed §<FRAME>{json} telemetry packets (temperatures, PWM, board id, events).
 TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"

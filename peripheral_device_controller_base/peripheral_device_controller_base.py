@@ -13,6 +13,7 @@ from .consts import (
     DEFAULT_ALWAYS_ALLOWED_SUBTOPICS,
     connected_topic,
     disconnected_topic,
+    searching_topic,
     connection_state_key,
 )
 
@@ -57,6 +58,10 @@ class PeripheralDeviceControllerBase(HasTraits):
     @property
     def disconnected_topic(self):
         return disconnected_topic(self._device_name)
+
+    @property
+    def searching_topic(self):
+        return searching_topic(self._device_name)
 
     @property
     def connection_state_key(self):
