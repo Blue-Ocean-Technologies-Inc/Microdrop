@@ -118,4 +118,8 @@ UnifiedView = View(
         _collapse_header("show_all_temps", "Show all temperatures"),
         all_temps_group,
     ),
+    # Resizable so the pane can be dragged larger/smaller; scrollable so the
+    # contents stay reachable when the dock is shorter than the sections.
+    resizable=True,
+    scrollable=True,
 )
