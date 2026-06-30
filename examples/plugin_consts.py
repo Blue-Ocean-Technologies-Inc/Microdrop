@@ -22,6 +22,7 @@ from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redi
 from device_viewer.plugin import DeviceViewerPlugin
 from peripherals_ui.plugin import PeripheralUiPlugin
 from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
+from heater_protocol_controls.plugin import HeaterProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
@@ -72,6 +73,7 @@ FRONTEND_PLUGINS = [
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     PeripheralProtocolControlsPlugin,
+    HeaterProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
