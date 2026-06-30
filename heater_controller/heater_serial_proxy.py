@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import threading
 
@@ -12,6 +13,8 @@ from .consts import (
     DISCONNECTED,
     HEATERS_AVAILABLE,
     TELEMETRY,
+    CONFIG_DUMPED,
+    SENSORS_SCANNED,
     BOARD_BAUDRATE,
     CONFIG_BEGIN,
     CONFIG_END,
@@ -22,6 +25,9 @@ logger = get_logger(__name__)
 
 # Telemetry frames arrive as: §<FRAME>{json}\n  e.g.  §PID_TEC1{"temp": 41.2}
 TELEMETRY_MARKER = "§"
+
+# A `scan` response line: "Sensor 0: 28FF1234567890AB" (16-hex-digit 1-Wire ROM).
+SCAN_LINE_RE = re.compile(r"Sensor\s+\d+\s*:\s*([0-9a-fA-F]{16})")
 
 
 class HeaterSerialProxy:
@@ -57,6 +63,11 @@ class HeaterSerialProxy:
         # dump_config response capture state (CONFIG_BEGIN .. CONFIG_END)
         self._capturing_config = False
         self._config_buffer = []
+
+        # 1-Wire scan capture: collect "Sensor N: <rom>" lines for a short window
+        # after a `scan` command, then publish the batch on SENSORS_SCANNED.
+        self._scanning = False
+        self._scan_buffer = []
 
         # Opens the port (raises on failure so the monitor falls back to disconnect)
         self.serial_port = serial.Serial(
@@ -120,6 +131,8 @@ class HeaterSerialProxy:
                         publish_message(json.dumps(pkt), TELEMETRY)
                 elif self._route_config_line(line):
                     continue  # consumed by the dump_config capture state machine
+                elif self._route_scan_line(line):
+                    continue  # consumed by the scan capture
                 else:
                     logger.info(f"HEATER RX: {line}")
 
@@ -158,13 +171,49 @@ class HeaterSerialProxy:
         return False
 
     def _publish_available_heaters(self, config_text):
-        """Parse the captured config JSON and publish the heater channel names."""
+        """Publish the captured dump_config document (full JSON for the config
+        editor) and the heater channel names parsed out of it."""
+        publish_message(config_text, CONFIG_DUMPED)
+
         heaters = self.parse_heaters_from_config(config_text)
         if heaters is None:
             logger.warning("Could not parse heater config; available heaters not published")
             return
         logger.info(f"Heater channels available: {heaters}")
         publish_message(json.dumps(heaters), HEATERS_AVAILABLE)
+
+    # ------------------------------------------------------------------
+    # 1-Wire scan capture -> publish discovered ROMs
+    # ------------------------------------------------------------------
+    def scan_sensors(self, window_s=3.0):
+        """Send a ``scan`` command and collect the ``Sensor N: <rom>`` reply lines
+        for ``window_s`` seconds (the bus reports asynchronously with no end
+        marker), then publish the ROM batch on SENSORS_SCANNED."""
+        self._scan_buffer = []
+        self._scanning = True
+        with self.transaction_lock:
+            self.send_command("scan")
+        timer = threading.Timer(window_s, self._finish_scan)
+        timer.daemon = True
+        timer.start()
+
+    def _finish_scan(self):
+        self._scanning = False
+        roms = list(self._scan_buffer)
+        self._scan_buffer = []
+        logger.info(f"Heater 1-Wire scan found {len(roms)} sensor(s): {roms}")
+        publish_message(json.dumps(roms), SENSORS_SCANNED)
+
+    def _route_scan_line(self, line):
+        """Capture a ``Sensor N: <rom>`` line while a scan is in progress. Returns
+        True if the line was a scan result (and shouldn't be logged as RX)."""
+        if not self._scanning:
+            return False
+        match = SCAN_LINE_RE.search(line)
+        if match:
+            self._scan_buffer.append(match.group(1).lower())
+            return True
+        return False
 
     @staticmethod
     def parse_heaters_from_config(config_text):

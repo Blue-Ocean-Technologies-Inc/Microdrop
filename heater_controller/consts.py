@@ -28,11 +28,18 @@ SEARCHING = searching_topic(DEVICE_NAME)
 HEATERS_AVAILABLE = f"{DEVICE_NAME}/signals/heaters_available"
 # Parsed §<FRAME>{json} telemetry packets (temperatures, PWM, board id, events).
 TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"
+# Full dump_config JSON document (the board's current sensor/heater config).
+CONFIG_DUMPED = f"{DEVICE_NAME}/signals/config_dumped"
+# JSON list of 1-Wire ROM ids discovered on the bus by the last scan.
+SENSORS_SCANNED = f"{DEVICE_NAME}/signals/sensors_scanned"
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
 RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
 SEND_COMMAND = f"{DEVICE_NAME}/requests/send_command"
+# Configure-sensors-and-heaters requests (handled by HeaterConfigService).
+SCAN_SENSORS = f"{DEVICE_NAME}/requests/scan_sensors"
+DUMP_CONFIG = f"{DEVICE_NAME}/requests/dump_config"
 SET_TEMPERATURE = f"{DEVICE_NAME}/requests/set_temperature"
 SET_PWM = f"{DEVICE_NAME}/requests/set_pwm"
 SET_PID_MODE = f"{DEVICE_NAME}/requests/set_pid_mode"

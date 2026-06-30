@@ -28,6 +28,7 @@ class HeaterControllerPlugin(PeripheralDeviceControllerPlugin):
         return [
             ServiceOffer(protocol=IHeaterControlMixinService, factory=self._create_monitor_service),
             ServiceOffer(protocol=IHeaterControlMixinService, factory=self._create_command_setter_service),
+            ServiceOffer(protocol=IHeaterControlMixinService, factory=self._create_config_service),
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
@@ -39,3 +40,8 @@ class HeaterControllerPlugin(PeripheralDeviceControllerPlugin):
         """Returns the heater command-setter mixin service."""
         from .services.heater_command_setter_service import HeaterCommandSetterService
         return HeaterCommandSetterService
+
+    def _create_config_service(self, *args, **kwargs):
+        """Returns the heater configure-sensors-and-heaters mixin service."""
+        from .services.heater_config_service import HeaterConfigService
+        return HeaterConfigService
