@@ -1,6 +1,6 @@
 import json
 
-from traits.api import provides, HasTraits, Bool, Instance, Str, List
+from traits.api import provides, HasTraits, Bool, Instance, Str, List, observe
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -40,15 +40,10 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
     _searching = Bool(False)    # Is the monitor thread actively scanning right now?
 
-    def _set_searching(self, active, force=False):
-        """Publish the connection-search state so a frontend can, e.g., disable its
-        'search connection' control while a scan is already running. Publishes only
-        on change unless ``force`` (used when answering an explicit start request,
-        so a late-subscribing frontend learns the current state)."""
-        if force or self._searching != active:
-            self._searching = active
-            publish_message(message=json.dumps(active), topic=self.searching_topic)
-            logger.info(f"{self._device_name} searching: {active}")
+    @observe("_searching")
+    def _searching_changed(self, event):
+        logger.info(f"{self._device_name} connections monitoring thread active.")
+        publish_message(message=json.dumps(event.new), topic=self.searching_topic)
 
     # ---- device-specific hooks (override in subclasses) ---------------------
 
@@ -75,7 +70,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         # if device already connected, exit after publishing connection
         if self.connection_active:
             publish_message(f'{self._device_name}_connected', self.connected_topic)
-            self._set_searching(False, force=True)
+            self._searching = True
             return None
 
         ## handle cases where monitor scheduler object already exists
@@ -91,7 +86,9 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
             else:
                 logger.error(
                     f"Invalid {self._device_name} monitor scheduler state: it is {self.monitor_scheduler.state}")
-            self._set_searching(True, force=True)
+
+            self._searching = True
+
             return None
 
         ## monitor was never created, so we can make one now:
@@ -115,7 +112,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
 
         logger.info(f"{self._device_name} monitor created and started")
         self.monitor_scheduler.start()
-        self._set_searching(True, force=True)
+        self._searching = True
 
     def on_retry_connection_request(self, message):
         if self.connection_active:
@@ -123,7 +120,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
             return
         logger.info(f"Attempting to retry connecting with a {self._device_name}")
         self.monitor_scheduler.resume()
-        self._set_searching(True)
+        self._searching = True
 
     ############################################################
     # Connect / Disconnect signal handlers
@@ -150,8 +147,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         # set connection active in case it was not changed.
         if not self.connection_active:
             self.connection_active = True
-        # Connected → the scan is over (the monitor pauses on a found port).
-        self._set_searching(False)
+        # Connected → the scan is over (the monitor pauses on a found port)
 
     ################################# Protected methods ######################################
     def _on_port_found(self, event):

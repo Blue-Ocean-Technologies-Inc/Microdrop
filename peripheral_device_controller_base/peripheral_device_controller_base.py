@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import dramatiq
-from traits.api import HasTraits, Any, Bool, Str, Dict, List, Instance, observe
+from traits.api import HasTraits, Any, Bool, Str, Dict, List, Instance, observe, Property
 
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
@@ -51,20 +51,24 @@ class PeripheralDeviceControllerBase(HasTraits):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     # --- derived topics ------------------------------------------------------
-    @property
-    def connected_topic(self):
+    connected_topic = Property(Str, observe="_device_name")
+    disconnected_topic = Property(Str, observe="_device_name")
+    searching_topic = Property(Str, observe="_device_name")
+    connection_state_key = Property(Str, observe="_device_name")
+
+    def _get_connected_topic(self):
         return connected_topic(self._device_name)
 
-    @property
-    def disconnected_topic(self):
+
+    def _get_disconnected_topic(self):
         return disconnected_topic(self._device_name)
 
-    @property
-    def searching_topic(self):
+
+    def _get_searching_topic(self):
         return searching_topic(self._device_name)
 
-    @property
-    def connection_state_key(self):
+
+    def _get_connection_state_key(self):
         return connection_state_key(self._device_name)
 
     ##########################################################
