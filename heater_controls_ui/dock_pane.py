@@ -114,6 +114,9 @@ class HeaterStatusDockPane(BaseStatusDockPane):
             logger.debug("Heater search already active; ignoring status-icon click")
             return
         publish_message(topic=START_DEVICE_MONITORING, message="")
+        # Optimistically disable further clicks right away; the backend's
+        # searching signal then confirms this (or clears it if already connected).
+        self.model.searching = True
 
     @observe("model:searching", dispatch="ui")
     def _sync_search_affordance(self, event=None):
@@ -121,7 +124,8 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         i.e. when no scan is currently active."""
         icon = getattr(self, "status_bar_icon", None)
         if icon is not None:
-            icon.setCursor(Qt.ArrowCursor if self.model.searching else Qt.PointingHandCursor)
+            icon.setCursor(Qt.CursorShape.ArrowCursor if self.model.searching
+                           else Qt.CursorShape.PointingHandCursor)
 
     # The base wires a realtime-mode status-bar icon; the heater has none, so
     # override those observers to no-ops (the base bodies reference an icon we
