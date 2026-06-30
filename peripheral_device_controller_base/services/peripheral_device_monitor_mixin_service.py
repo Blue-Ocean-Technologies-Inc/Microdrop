@@ -42,7 +42,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
 
     @observe("_searching")
     def _searching_changed(self, event):
-        logger.info(f"{self._device_name} connections monitoring thread active.")
+        logger.info(f"{self._device_name} connections monitoring thread {"active" if event.new else "inactive"}.")
         publish_message(message=json.dumps(event.new), topic=self.searching_topic)
 
     # ---- device-specific hooks (override in subclasses) ---------------------
