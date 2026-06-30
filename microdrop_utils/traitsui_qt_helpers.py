@@ -10,7 +10,7 @@ from pyface.qt.QtGui import (
     QBrush, QPaintEvent, QPen, QPainter,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton,
+    QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
 )
 from pyface.qt import QtWidgets
 
@@ -797,6 +797,23 @@ class IconToggleEditor(BasicEditorFactory):
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
     point_size = Int(14)
+
+
+def stretch_group_layouts_horizontally(top_control):
+    """Make TraitsUI group boxes fill the full available width.
+
+    TraitsUI's Qt backend hard-codes ``layout.setAlignment(AlignLeft | AlignTop)``
+    on every group's box layout (``traitsui.qt.ui_panel``), so a section only
+    grows to its widest child's natural width and hugs the left — leaving a
+    gutter when the pane is wider (and collapsing entirely once the widest child,
+    e.g. a custom ListEditor, is hidden). This drops the AlignLeft (keeping
+    AlignTop so vertical layout is unchanged) on every box layout under
+    ``top_control`` so sections stretch to the pane width. Call once on a built
+    UI's top control, e.g. from a ``Handler.init``.
+    """
+    for layout in top_control.findChildren(QBoxLayout):
+        if layout.alignment() & Qt.AlignLeft:
+            layout.setAlignment(Qt.AlignTop)
 
 
 class _HoverScrollEnumEditor(QtEditor):
