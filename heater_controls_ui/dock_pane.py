@@ -1,5 +1,7 @@
+from functools import partial
+
 from traits.api import observe, Instance
-from pyface.qt.QtGui import QApplication, QLabel, QFont
+from pyface.qt.QtGui import QApplication, QFont
 
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -7,12 +9,13 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_MODE_HEAT
 from microdrop_style.colors import WHITE, GREY
 from microdrop_style.helpers import is_dark_mode
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget, ClickableLabel
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_application.dialogs.pyface_wrapper import information
 
 from peripheral_controller.preferences import PeripheralPreferences
 
-from .consts import PKG, PKG_name, listener_name
+from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
 from .model import HeaterStatusModel
 from .controller import HeaterControlsController
 from .view import UnifiedView
@@ -75,9 +78,13 @@ class HeaterStatusDockPane(BaseStatusDockPane):
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
 
-        icon = QLabel(ICON_MODE_HEAT)
+        # Clickable: triggers a heater connection scan (same as Tools ▸ Heater ▸
+        # Search Connection), so the user can reconnect straight from the icon.
+        icon = ClickableLabel(ICON_MODE_HEAT)
         icon.setFont(font)
         icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
+        icon.clicked.connect(
+            partial(publish_message, topic=START_DEVICE_MONITORING, message=""))
         self.status_bar_icon = icon  # inherited _sync_model_icon_color recolors this
 
         def _apply_tooltip():
@@ -114,5 +121,6 @@ def _build_heater_status_tooltip(disconnected_color, connected_color, halted_col
         <li><strong style="color: {connected_color};">Connected</strong></li>
         <li><strong style="color: {halted_color};">Halted (Fault)</strong></li>
       </ul>
+      <div style="margin-top: 3px;"><em>Click to search for a connection.</em></div>
     </div>
     """
