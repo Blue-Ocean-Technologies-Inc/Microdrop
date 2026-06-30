@@ -535,7 +535,7 @@ class Toggle(QCheckBox):
 
     def paintEvent(self, e: QPaintEvent):
         cont_rect = self.contentsRect()
-        handle_radius = round(0.24 * cont_rect.height())
+        handle_radius = round(0.2 * cont_rect.height())
 
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
