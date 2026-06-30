@@ -36,6 +36,8 @@ TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"
 CONFIG_DUMPED = f"{DEVICE_NAME}/signals/config_dumped"
 # JSON list of 1-Wire ROM ids discovered on the bus by the last scan.
 SENSORS_SCANNED = f"{DEVICE_NAME}/signals/sensors_scanned"
+# Result of a save-config-to-board push: JSON {"ok": bool, "message": str}.
+CONFIG_PUSHED = f"{DEVICE_NAME}/signals/config_pushed"
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
@@ -44,6 +46,8 @@ SEND_COMMAND = f"{DEVICE_NAME}/requests/send_command"
 # Configure-sensors-and-heaters requests (handled by HeaterConfigService).
 SCAN_SENSORS = f"{DEVICE_NAME}/requests/scan_sensors"
 DUMP_CONFIG = f"{DEVICE_NAME}/requests/dump_config"
+# Write a config (JSON payload) onto the board's filesystem + reboot it.
+SAVE_CONFIG_TO_BOARD = f"{DEVICE_NAME}/requests/save_config_to_board"
 SET_TEMPERATURE = f"{DEVICE_NAME}/requests/set_temperature"
 SET_PWM = f"{DEVICE_NAME}/requests/set_pwm"
 SET_PID_MODE = f"{DEVICE_NAME}/requests/set_pid_mode"
