@@ -812,8 +812,8 @@ def stretch_group_layouts_horizontally(top_control):
     UI's top control, e.g. from a ``Handler.init``.
     """
     for layout in top_control.findChildren(QBoxLayout):
-        if layout.alignment() & Qt.AlignLeft:
-            layout.setAlignment(Qt.AlignTop)
+        if layout.alignment() & Qt.AlignmentFlag.AlignLeft:
+            layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
 
 class _HoverScrollEnumEditor(QtEditor):
