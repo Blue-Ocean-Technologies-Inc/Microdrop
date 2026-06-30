@@ -11,6 +11,7 @@ from pyface.qt.QtGui import (
 )
 from pyface.qt.QtWidgets import (
     QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
+    QGroupBox,
 )
 from pyface.qt import QtWidgets
 
@@ -799,6 +800,17 @@ class IconToggleEditor(BasicEditorFactory):
     point_size = Int(14)
 
 
+def _has_group_box_ancestor(layout):
+    """True if ``layout`` lives inside a QGroupBox (i.e. it lays out a section's
+    contents rather than arranging the section boxes themselves)."""
+    widget = layout.parentWidget()
+    while widget is not None:
+        if isinstance(widget, QGroupBox):
+            return True
+        widget = widget.parentWidget()
+    return False
+
+
 def stretch_group_layouts_horizontally(top_control):
     """Make TraitsUI group boxes fill the full available width.
 
@@ -806,13 +818,18 @@ def stretch_group_layouts_horizontally(top_control):
     on every group's box layout (``traitsui.qt.ui_panel``), so a section only
     grows to its widest child's natural width and hugs the left — leaving a
     gutter when the pane is wider (and collapsing entirely once the widest child,
-    e.g. a custom ListEditor, is hidden). This drops the AlignLeft (keeping
-    AlignTop so vertical layout is unchanged) on every box layout under
-    ``top_control`` so sections stretch to the pane width. Call once on a built
-    UI's top control, e.g. from a ``Handler.init``.
+    e.g. a custom ListEditor, is hidden).
+
+    This drops the AlignLeft (keeping AlignTop) only on the layouts that *arrange
+    the section boxes* — those with no QGroupBox ancestor — so the boxes stretch
+    to the pane width. Layouts *inside* a group box keep their AlignLeft, so each
+    section's own contents stay pushed left at their natural size instead of
+    stretching into the new space. Call once on a built UI's top control, e.g.
+    from a ``Handler.init``.
     """
     for layout in top_control.findChildren(QBoxLayout):
-        if layout.alignment() & Qt.AlignmentFlag.AlignLeft:
+        if (layout.alignment() & Qt.AlignmentFlag.AlignLeft
+                and not _has_group_box_ancestor(layout)):
             layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
 
