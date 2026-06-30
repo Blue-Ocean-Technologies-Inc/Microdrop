@@ -14,7 +14,7 @@ status_group = VGroup(
 )
 
 # Control: channel selector (only meaningful with >1 heater), setpoint spinboxes
-# for the selected heater, the mode radio, and the streaming master gate.
+# for the selected heater, the PWM/Temp mode switch, and the streaming master gate.
 control_group = VGroup(
     Item("selected_heater", label="Heater",
          editor=EnumEditor(name="object.available_heaters"),
