@@ -1,65 +1,59 @@
-"""Standalone visual demo for the two-value Enum toggle editors in
+"""Standalone visual demo for the Toggle-switch editors in
 microdrop_utils.traitsui_qt_helpers: a two-value Enum/Str trait rendered as a
-single control instead of a radio group. Checked maps to ``on_value``,
+sliding switch instead of a radio group. Checked maps to ``on_value``,
 unchecked to ``off_value``.
 
-Two renderings are shown:
-  * EnumToggleEditor          - a flat checkable button with a label + accent
-                                colour per state.
-  * AnimatedEnumToggleEditor  - an iOS-style sliding switch (animated handle
-                                + pulse halo on switch).
+Two widgets are shown:
+  * ToggleEditor          - the static Toggle switch (sliding handle, no animation).
+  * AnimatedToggleEditor  - the AnimatedToggle switch (animated handle + pulse
+                            halo on switch). Accepts checked_color and
+                            pulse_checked_color.
 
 Run:
     pixi run python examples/demos/enum_toggle_editor_demo.py
 
-Click the controls and the trait values print to the console, so the
-write-back path is visible too. The plain EnumEditor radio for the same
-trait is shown alongside each toggle to compare the renderings.
+Click the switches and the trait values print to the console, so the
+write-back path is visible too. The same trait is bound to both switches,
+so flipping one updates the other.
 """
 
 from traits.api import Enum, HasTraits, observe
-from traitsui.api import EnumEditor, HGroup, Item, VGroup, View
+from traitsui.api import HGroup, Item, VGroup, View
 
-from microdrop_utils.traitsui_qt_helpers import (
-    EnumToggleEditor, AnimatedEnumToggleEditor,
-)
-from microdrop_style.colors import INFO_COLOR, WARNING_COLOR
+from microdrop_utils.traitsui_qt_helpers import ToggleEditor, AnimatedToggleEditor
+from microdrop_style.colors import WARNING_COLOR
 
 
 class EnumToggleDemo(HasTraits):
     # The heater-UI use case: open-loop PWM vs closed-loop Temp.
     mode = Enum("PWM", "Temp")
-    # A second trait with default labels/colours and the values used as text.
-    direction = Enum("Heat", "Cool")
+    # A second trait, switched with custom checked + pulse-halo colours.
+    direction = Enum("Cool", "Heat")
 
     view = View(
         VGroup(
+            # The same `mode` trait bound to both switches (default colours);
+            # flipping either updates the other.
             HGroup(
-                Item("mode", label="Button",
-                     editor=EnumToggleEditor(on_value="Temp", off_value="PWM")),
-                Item("mode", label="Slider",
-                     editor=AnimatedEnumToggleEditor(on_value="Temp",
-                                                     off_value="PWM")),
-                Item("mode", label="(radio)", style="custom",
-                     # editor=EnumEditor(cols=2)
-                     ),
+                Item("mode", label="Toggle",
+                     editor=ToggleEditor(on_value="Temp", off_value="PWM")),
+                Item("mode", label="Animated",
+                     editor=AnimatedToggleEditor(on_value="Temp",
+                                                 off_value="PWM")),
             ),
+            # AnimatedToggle with custom accent + pulse-halo colours.
             HGroup(
-                # Custom labels + accent colours per state.
                 Item("direction", label="Direction",
-                     editor=EnumToggleEditor(
+                     editor=AnimatedToggleEditor(
                          on_value="Heat", off_value="Cool",
-                         on_label="Heating", off_label="Cooling",
-                         on_color=WARNING_COLOR, off_color=INFO_COLOR,
+                         checked_color=WARNING_COLOR,
+                         pulse_checked_color="#44F5A623",
                      )),
-                Item("direction", label="(radio)", style="custom",
-                     # editor=EnumEditor(cols=2)
-                     ),
             ),
             show_border=True,
-            label="Toggle button vs radio for the same Enum trait",
+            label="Toggle vs AnimatedToggle switch for an Enum trait",
         ),
-        title="EnumToggleEditor demo",
+        title="Toggle editors demo",
         width=420,
         buttons=["OK", "Cancel"],
         resizable=True,
