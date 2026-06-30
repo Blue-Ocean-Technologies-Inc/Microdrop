@@ -2,7 +2,7 @@ import math
 
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
-from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
+from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox, QPushButton
 from pyface.qt import QtWidgets
 
 from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
@@ -11,7 +11,7 @@ from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as Tab
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, BLACK
+from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, SECONDARY_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
 from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
@@ -488,6 +488,89 @@ class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
     border_radius = Int(4)
+
+
+class _EnumToggleEditor(QtEditor):
+    """Checkable button bound to a two-value Enum/Str trait.
+
+    Checked maps to the factory's ``on_value`` and unchecked to ``off_value``;
+    the button text is that state's ``on_label`` / ``off_label`` (falling back to
+    the value itself). Unlike :class:`ToggleEditor` (a Bool on/off switch), both
+    states carry a distinct accent colour, so this reads as "which of two modes
+    is active" rather than "on vs off" — use it for a binary mode trait.
+    """
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setCheckable(True)
+        self.control.setMaximumWidth(self.factory.max_width)
+        self.control.clicked.connect(self._on_click)
+        self._sync_from_value()
+
+    def _on_click(self):
+        """User toggled the button → map the checked state back to the trait."""
+        self.value = (
+            self.factory.on_value if self.control.isChecked()
+            else self.factory.off_value
+        )
+        self._refresh()
+
+    def _sync_from_value(self):
+        """Drive the button's checked state from the current trait value."""
+        self.control.setChecked(self.value == self.factory.on_value)
+        self._refresh()
+
+    def _refresh(self):
+        """Sync label + accent colour to the button's checked state."""
+        on = self.control.isChecked()
+        self.control.setText(
+            (self.factory.on_label or self.factory.on_value) if on
+            else (self.factory.off_label or self.factory.off_value)
+        )
+        color = self.factory.on_color if on else self.factory.off_color
+        self.control.setStyleSheet(
+            f"""
+            QPushButton {{
+                background-color: {color};
+                color: {WHITE};
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+                max-width: {self.factory.max_width}px;
+            }}
+            QPushButton:hover {{ background-color: {color}; opacity: 0.9; }}
+            QPushButton:pressed {{ background-color: {color}; opacity: 0.8; }}
+            """
+        )
+
+    def update_editor(self):
+        """Trait changed externally → re-sync the button (setChecked emits
+        ``toggled`` only, which we don't connect, so no click feedback loop)."""
+        if self.control is not None:
+            self._sync_from_value()
+
+
+class EnumToggleEditor(BasicEditorFactory):
+    """Factory for a two-state toggle button over an Enum/Str trait.
+
+    Declare in a View::
+
+        Item("mode", editor=EnumToggleEditor(on_value="Temp", off_value="PWM"))
+    """
+
+    klass = _EnumToggleEditor
+
+    #: Trait values the checked / unchecked states map to.
+    on_value = Str()
+    off_value = Str()
+    #: Button text per state; defaults to the value itself when left blank.
+    on_label = Str()
+    off_label = Str()
+    #: Accent colour per state.
+    on_color = Str(PRIMARY_COLOR)
+    off_color = Str(SECONDARY_COLOR)
+    max_width = Int(100)
 
 
 class _HoverScrollEnumEditor(QtEditor):
