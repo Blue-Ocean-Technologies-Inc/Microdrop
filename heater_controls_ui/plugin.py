@@ -6,9 +6,8 @@ from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT
 class HeaterControlsUiPlugin(BaseStatusPlugin):
     """Envisage plugin for heater status display and controls.
 
-    The "Search Connection" tools-menu entry lives in peripherals_ui (listed
-    under Tools ▸ Peripherals ▸ Heater alongside the Z-Stage), so this plugin
-    contributes no menu of its own.
+    Contributes a Tools ▸ Heater ▸ Search Connection menu entry (the heater's
+    connection scan, also reachable by clicking the status-bar heater icon).
     """
 
     id = PKG + ".plugin"
@@ -20,3 +19,13 @@ class HeaterControlsUiPlugin(BaseStatusPlugin):
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
+
+    def _get_menu_additions(self) -> list:
+        from pyface.action.schema.schema_addition import SchemaAddition
+        from .menus import heater_tools_menu_factory
+        return [
+            SchemaAddition(
+                factory=heater_tools_menu_factory,
+                path="MenuBar/Tools",
+            )
+        ]
