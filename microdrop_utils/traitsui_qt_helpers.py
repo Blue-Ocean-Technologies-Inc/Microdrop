@@ -10,7 +10,7 @@ from pyface.qt.QtGui import (
     QBrush, QPaintEvent, QPen, QPainter,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate, QDoubleSpinBox, QCheckBox,
+    QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton,
 )
 from pyface.qt import QtWidgets
 
@@ -742,6 +742,61 @@ class AnimatedToggleEditor(ToggleEditor):
     #: Pulse halo colour when toggling off / on (ARGB hex).
     pulse_unchecked_color = Str("#44999999")
     pulse_checked_color = Str("#4400B0EE")
+
+
+class _IconToggleEditor(QtEditor):
+    """A flat, borderless checkable button rendering a Material Symbols glyph
+    (icon font) that switches between the factory's on/off ligatures with the
+    Bool value. Use as a collapse-header arrow: ``expand_more`` (down, expanded)
+    when checked, ``chevron_right`` (collapsed) when unchecked."""
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setCheckable(True)
+        self.control.setFlat(True)
+        self.control.setCursor(Qt.PointingHandCursor)
+        self.control.setMaximumWidth(self.factory.point_size + 12)
+        self.control.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(self.factory.point_size)
+        self.control.setFont(font)
+        self.control.setChecked(self.value)
+        self.control.clicked.connect(self._on_click)
+        self._refresh()
+
+    def _on_click(self):
+        self.value = self.control.isChecked()
+        self._refresh()
+
+    def _refresh(self):
+        self.control.setText(
+            self.factory.on_glyph if self.control.isChecked()
+            else self.factory.off_glyph)
+
+    def update_editor(self):
+        # Re-sync on external change. setChecked emits toggled (not connected),
+        # not clicked, so this can't re-enter _on_click.
+        if self.control is not None:
+            self.control.setChecked(self.value)
+            self._refresh()
+
+
+class IconToggleEditor(BasicEditorFactory):
+    """Factory for a Bool rendered as an icon-font glyph toggle button::
+
+        UItem("show_status", editor=IconToggleEditor())   # collapse arrow
+
+    Defaults to a collapse chevron (expand_more / chevron_right); pass other
+    Material Symbols ligatures for a different glyph pair.
+    """
+
+    klass = _IconToggleEditor
+
+    #: Material Symbols ligature shown when checked / unchecked.
+    on_glyph = Str("expand_more")
+    off_glyph = Str("chevron_right")
+    point_size = Int(14)
 
 
 class _HoverScrollEnumEditor(QtEditor):
