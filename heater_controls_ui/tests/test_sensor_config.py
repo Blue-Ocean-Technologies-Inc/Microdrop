@@ -97,6 +97,32 @@ def test_model_available_sensor_names_live_updates():
     assert "outlet" not in m.available_sensor_names
 
 
+def test_refresh_updates_rows_in_place():
+    m = SensorConfigModel()
+    m.load_config_text(json.dumps(CONFIG))
+    inlet = next(r for r in m.sensors if r.rom == "28ff1111111111aa")
+    tec = next(r for r in m.heater_assignments if r.heater == "tec1")
+    # Refresh with a changed config: same ROM/heater -> same row object, new value.
+    changed = json.loads(json.dumps(CONFIG))
+    changed["temperature_sensors"]["1-wire-sensors"].pop("inlet")
+    changed["temperature_sensors"]["1-wire-sensors"]["probe"] = "28FF1111111111AA"
+    changed["heaters"]["tec1"]["sensors"] = ["probe"]
+    m.load_config_text(json.dumps(changed))
+    assert m.sensors[0] is inlet or inlet in m.sensors          # reused, not replaced
+    assert next(r for r in m.sensors if r.rom == "28ff1111111111aa").name == "probe"
+    assert tec.sensors == "probe"                                # heater row updated in place
+
+
+def test_scan_preserves_name_edits():
+    m = SensorConfigModel()
+    m.load_config_text(json.dumps(CONFIG))
+    inlet = next(r for r in m.sensors if r.rom == "28ff1111111111aa")
+    inlet.name = "edited"                       # user is mid-edit
+    m.set_scanned_roms(["28ff1111111111aa"])    # a scan happens
+    assert inlet.name == "edited"               # name edit kept across the scan
+    assert inlet.status == "On bus + in config"  # status still refreshed
+
+
 def test_model_scan_updates_status():
     m = SensorConfigModel()
     m.load_config_text(json.dumps(CONFIG))

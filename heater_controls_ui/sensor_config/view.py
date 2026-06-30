@@ -30,7 +30,7 @@ sensors_table = TableEditor(
     ],
     editable=True,
     sortable=False,
-    auto_size=False,
+    auto_size=True,   # size columns to their contents so no cell text is clipped
 )
 
 heaters_table = TableEditor(
@@ -41,7 +41,7 @@ heaters_table = TableEditor(
     ],
     editable=True,
     sortable=False,
-    auto_size=False,
+    auto_size=True,   # size columns to their contents so no cell text is clipped
 )
 
 scan_action = Action(name="Scan for sensors", action="scan_sensors")

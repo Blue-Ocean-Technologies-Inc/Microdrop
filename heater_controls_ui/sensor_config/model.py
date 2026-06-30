@@ -16,6 +16,25 @@ HELP_TEXT = (
 )
 
 
+def _reconcile(existing, desired, key, factory, update):
+    """Return rows for ``desired`` (list of field dicts), reusing the matching
+    ``existing`` row object by ``key`` and updating its ``update`` traits in place
+    (so the table cells repaint), and building missing rows via ``factory(**d)``.
+    Rows for vanished keys are dropped."""
+    by_key = {getattr(row, key): row for row in existing}
+    rows = []
+    for fields in desired:
+        row = by_key.get(fields[key])
+        if row is None:
+            rows.append(factory(**fields))
+        else:
+            for trait in update:
+                if getattr(row, trait) != fields[trait]:
+                    setattr(row, trait, fields[trait])
+            rows.append(row)
+    return rows
+
+
 class SensorRow(HasTraits):
     """One 1-Wire sensor: its ROM id, the name it's given, and a status derived
     from whether it's in the config and/or seen on the last bus scan."""
@@ -59,35 +78,42 @@ class SensorConfigModel(HasTraits):
     push_status = Str("")
 
     def load_config_text(self, config_text):
-        """Replace the config from a ``dump_config`` JSON document, then rebuild
-        the rows. Returns True if the text parsed."""
+        """Reload from a ``dump_config`` JSON document (a "refresh from board"):
+        update the table values in place, overwriting any unsaved edits. Returns
+        True if the text parsed."""
         config = parse_board_config(config_text)
         if config is None:
             return False
         self.config = config
         self.source = "Live from board (dump_config)."
-        self._rebuild_rows()
+        self._rebuild_rows(update_names=True)
         return True
 
     def set_scanned_roms(self, roms):
-        """Record the ROMs found by the last bus scan and rebuild the rows."""
+        """Record the ROMs found by the last bus scan and refresh the rows' status
+        in place — sensor names being edited are preserved across a scan."""
         self.scanned_roms = [str(r) for r in (roms or [])]
         self.scan_done = True
-        self._rebuild_rows()
+        self._rebuild_rows(update_names=False)
 
     # ------------------------------------------------------------------ #
-    @observe("config")
-    def _on_config_changed(self, event):
-        self._rebuild_rows()
-
     @observe("sensors:items:name, sensors, config")
     def _update_available_names(self, event=None):
         names = [r.name.strip() for r in self.sensors if r.name.strip()]
         names += thermistor_names(self.config)
         self.available_sensor_names = ", ".join(names) if names else "(none)"
 
-    def _rebuild_rows(self):
-        self.sensors = [SensorRow(**r) for r in
-                        sensor_rows(self.config, self.scanned_roms, self.scan_done)]
-        self.heater_assignments = [HeaterAssignmentRow(**r) for r in
-                                   heater_rows(self.config)]
+    def _rebuild_rows(self, update_names=True):
+        """Reconcile the table rows against the current config/scan, reusing the
+        existing row objects (keyed by ROM / heater) and updating their traits in
+        place. In-place updates are what make a refresh/scan actually repaint the
+        table (replacing the whole list from a background thread did not), and
+        they let a scan keep in-progress name edits (``update_names=False``)."""
+        self.sensors = _reconcile(
+            self.sensors, sensor_rows(self.config, self.scanned_roms, self.scan_done),
+            key="rom", factory=SensorRow,
+            update=("name", "status") if update_names else ("status",))
+        self.heater_assignments = _reconcile(
+            self.heater_assignments, heater_rows(self.config),
+            key="heater", factory=HeaterAssignmentRow,
+            update=("type", "sensors") if update_names else ("type",))
