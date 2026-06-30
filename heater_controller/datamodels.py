@@ -28,6 +28,13 @@ class SetPidModeData(_HeaterCommand):
     mode: Literal["enable", "disable", "stop"]
 
 
+class ProtocolSetTemperatureData(_HeaterCommand):
+    """Protocol step: drive ``heater`` to ``temperature`` (closed-loop) and ack
+    once the PID temperature is within ``tolerance`` °C of it."""
+    temperature: float
+    tolerance: float = Field(ge=0)
+
+
 class SetStreamData(BaseModel):
     """Telemetry streaming control. ``group`` is a sensor-group name, ``all`` for
     every sensor, or ``stop`` to halt streaming."""

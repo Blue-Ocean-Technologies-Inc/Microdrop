@@ -8,6 +8,7 @@ from ..datamodels import (
     SetPidModeData,
     SetStreamData,
     SetFanData,
+    ProtocolSetTemperatureData,
 )
 
 from logger.logger_service import get_logger
@@ -87,6 +88,20 @@ class HeaterCommandSetterService(HasTraits):
 
     def on_all_off_request(self, message):
         self._send("all_off")
+
+    # ------------------------------------------------------------------
+    # Protocol step: set target + arm the "reached within tolerance" ack
+    # ------------------------------------------------------------------
+    def on_protocol_set_temperature_request(self, message):
+        data = self._parse(ProtocolSetTemperatureData, message)
+        if data is None:
+            return
+        # Closed-loop toward the target and make sure telemetry is streaming so
+        # the proxy can watch the PID temperature, then arm the ack watcher.
+        self._send(f"pid_{data.heater}_enable")
+        self._send(f"pid_{data.heater}_{data.temperature}")
+        self._send("stream_all")
+        self.proxy.set_temperature_target(data.heater, data.temperature, data.tolerance)
 
     # ------------------------------------------------------------------
     # Helpers

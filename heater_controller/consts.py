@@ -38,6 +38,9 @@ CONFIG_DUMPED = f"{DEVICE_NAME}/signals/config_dumped"
 SENSORS_SCANNED = f"{DEVICE_NAME}/signals/sensors_scanned"
 # Result of a save-config-to-board push: JSON {"ok": bool, "message": str}.
 CONFIG_PUSHED = f"{DEVICE_NAME}/signals/config_pushed"
+# Protocol ack: published when a watched heater's PID temperature reaches the
+# protocol target within tolerance. Payload {"heater": str, "temperature": float}.
+TEMPERATURE_REACHED = f"{DEVICE_NAME}/signals/temperature_reached"
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
@@ -48,6 +51,10 @@ SCAN_SENSORS = f"{DEVICE_NAME}/requests/scan_sensors"
 DUMP_CONFIG = f"{DEVICE_NAME}/requests/dump_config"
 # Write a config (JSON payload) onto the board's filesystem + reboot it.
 SAVE_CONFIG_TO_BOARD = f"{DEVICE_NAME}/requests/save_config_to_board"
+# Protocol step: set a PID target and block until the PID temperature is within
+# tolerance. Request payload {heater, temperature, tolerance}; the backend acks
+# on TEMPERATURE_REACHED once reached (so the protocol step can wait_for it).
+PROTOCOL_SET_TEMPERATURE = f"{DEVICE_NAME}/requests/protocol_set_temperature"
 SET_TEMPERATURE = f"{DEVICE_NAME}/requests/set_temperature"
 SET_PWM = f"{DEVICE_NAME}/requests/set_pwm"
 SET_PID_MODE = f"{DEVICE_NAME}/requests/set_pid_mode"

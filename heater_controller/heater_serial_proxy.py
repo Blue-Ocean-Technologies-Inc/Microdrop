@@ -15,6 +15,7 @@ from .consts import (
     TELEMETRY,
     CONFIG_DUMPED,
     SENSORS_SCANNED,
+    TEMPERATURE_REACHED,
     BOARD_BAUDRATE,
     CONFIG_BEGIN,
     CONFIG_END,
@@ -63,6 +64,11 @@ class HeaterSerialProxy:
         # dump_config response capture state (CONFIG_BEGIN .. CONFIG_END)
         self._capturing_config = False
         self._config_buffer = []
+
+        # Protocol temperature watch: {heater, target, tolerance} armed by a
+        # protocol step; the reader publishes TEMPERATURE_REACHED and disarms
+        # once a matching PID frame is within tolerance of the target.
+        self._temp_watch = None
 
         # 1-Wire scan capture: collect "Sensor N: <rom>" lines for a short window
         # after a `scan` command, then publish the batch on SENSORS_SCANNED.
@@ -129,6 +135,7 @@ class HeaterSerialProxy:
                     else:
                         logger.info(f"HEATER TELEMETRY [{frame}]: {pkt}")
                         publish_message(json.dumps(pkt), TELEMETRY)
+                        self._check_temperature_watch(frame, pkt)
                 elif self._route_config_line(line):
                     continue  # consumed by the dump_config capture state machine
                 elif self._route_scan_line(line):
@@ -214,6 +221,44 @@ class HeaterSerialProxy:
             self._scan_buffer.append(match.group(1).lower())
             return True
         return False
+
+    # ------------------------------------------------------------------
+    # Protocol temperature watch -> publish TEMPERATURE_REACHED
+    # ------------------------------------------------------------------
+    def set_temperature_target(self, heater, target, tolerance):
+        """Arm a protocol watch: the next PID frame for ``heater`` whose
+        temperature is within ``tolerance`` of ``target`` publishes the
+        TEMPERATURE_REACHED ack (so a protocol step can block until then)."""
+        self._temp_watch = {
+            "heater": heater.lower(),
+            "target": float(target),
+            "tolerance": float(tolerance),
+        }
+        logger.info(
+            f"Heater protocol watch armed: {heater} -> {target}±{tolerance} °C")
+
+    def clear_temperature_target(self):
+        self._temp_watch = None
+
+    def _check_temperature_watch(self, frame, pkt):
+        """Publish TEMPERATURE_REACHED + disarm if an armed PID frame is within
+        tolerance of its target."""
+        watch = self._temp_watch
+        if watch is None or not frame.startswith("PID_"):
+            return
+        if frame[len("PID_"):].lower() != watch["heater"]:
+            return
+        temp = pkt.get("pid_temperature")
+        if not isinstance(temp, (int, float)):
+            return
+        if abs(temp - watch["target"]) <= watch["tolerance"]:
+            self._temp_watch = None
+            logger.info(
+                f"Heater {watch['heater']} reached {temp} °C "
+                f"(target {watch['target']}±{watch['tolerance']})")
+            publish_message(
+                json.dumps({"heater": watch["heater"], "temperature": temp}),
+                TEMPERATURE_REACHED)
 
     @staticmethod
     def parse_heaters_from_config(config_text):
