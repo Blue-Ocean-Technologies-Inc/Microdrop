@@ -3,6 +3,7 @@ from traitsui.api import (
 )
 
 from manual_controls.MVC import ToggleEditorFactory
+from microdrop_utils.traitsui_qt_helpers import EnumToggleEditor
 
 # Connection / board identity.
 status_group = VGroup(
@@ -23,11 +24,11 @@ control_group = VGroup(
     Item("pwm", label="Set PWM",
          enabled_when="connected and not halted and mode == 'PWM'"),
     HGroup(
-        # Radio: PWM (open-loop duty) vs Temp (closed-loop PID). Replaces the
+        # Toggle: PWM (open-loop duty) vs Temp (closed-loop PID). Replaces the
         # old PID on/off toggle — the backend enables PID iff Temp is selected.
         Item(
-            "mode", style="custom", label="Mode",
-            # editor=EnumEditor(cols=2),
+            "mode", label="Mode",
+            editor=EnumToggleEditor(on_value="Temp", off_value="PWM"),
             enabled_when="connected and not halted",
         ),
         UItem(
