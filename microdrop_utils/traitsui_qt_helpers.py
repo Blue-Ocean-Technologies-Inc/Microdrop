@@ -685,13 +685,20 @@ class _TwoValueToggleEditor(QtEditor):
 
 class _ToggleEditor(_TwoValueToggleEditor):
     def _make_control(self):
-        return Toggle(checked_color=self.factory.checked_color)
+        return Toggle(
+            bar_color=self.factory.bar_color,
+            checked_color=self.factory.checked_color,
+            handle_color=self.factory.handle_color,
+        )
 
 
 class _AnimatedToggleEditor(_TwoValueToggleEditor):
     def _make_control(self):
         return AnimatedToggle(
+            bar_color=self.factory.bar_color,
             checked_color=self.factory.checked_color,
+            handle_color=self.factory.handle_color,
+            pulse_unchecked_color=self.factory.pulse_unchecked_color,
             pulse_checked_color=self.factory.pulse_checked_color,
         )
 
@@ -700,6 +707,9 @@ class ToggleEditor(BasicEditorFactory):
     """Factory for the static :class:`Toggle` switch over an Enum/Str trait::
 
         Item("mode", editor=ToggleEditor(on_value="Temp", off_value="PWM"))
+
+    The colour traits mirror the :class:`Toggle` constructor; they're ``Any``
+    so they accept a hex string or a Qt colour (the defaults Qt.gray / Qt.white).
     """
 
     klass = _ToggleEditor
@@ -707,26 +717,28 @@ class ToggleEditor(BasicEditorFactory):
     #: Trait values the checked / unchecked states map to.
     on_value = Str()
     off_value = Str()
-    #: Bar + handle accent colour for the checked state.
-    checked_color = Str(PRIMARY_COLOR)
+    #: Toggle widget colours (hex string or Qt colour).
+    bar_color = Any(Qt.gray)         # unchecked bar
+    checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
+    handle_color = Any(Qt.white)     # unchecked handle
 
 
-class AnimatedToggleEditor(BasicEditorFactory):
+class AnimatedToggleEditor(ToggleEditor):
     """Factory for the animated :class:`AnimatedToggle` sliding switch over an
     Enum/Str trait::
 
         Item("mode", editor=AnimatedToggleEditor(on_value="Temp",
                                                   off_value="PWM"))
+
+    Inherits the :class:`ToggleEditor` colour traits and adds the pulse-halo
+    colours specific to :class:`AnimatedToggle` (ARGB hex — the leading byte is
+    the glow's alpha).
     """
 
     klass = _AnimatedToggleEditor
 
-    #: Trait values the checked / unchecked states map to.
-    on_value = Str()
-    off_value = Str()
-    #: Bar + handle accent colour for the checked state.
-    checked_color = Str(PRIMARY_COLOR)
-    #: Colour of the pulse halo when toggling on (ARGB hex, alpha for the glow).
+    #: Pulse halo colour when toggling off / on (ARGB hex).
+    pulse_unchecked_color = Str("#44999999")
     pulse_checked_color = Str("#4400B0EE")
 
 
