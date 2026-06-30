@@ -2,6 +2,7 @@
 from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
+from pyface.qt.QtCore import QTimer
 from pyface.qt.QtGui import QFont, Qt
 from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QApplication
 
@@ -18,6 +19,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from .consts import PKG, PKG_name, DEVICE_NAME, START_DEVICE_MONITORING
 
 from dropbot_status_and_controls.consts import disconnected_color, connected_color
+
+# Re-enable the status-icon click if a scan runs this long without connecting.
+SEARCH_TIMEOUT_MS = 10000
 
 
 class PeripheralStatusDockPane(DockPane):
@@ -127,11 +131,27 @@ class PeripheralStatusDockPane(DockPane):
 
         device_status.clicked.connect(search_connection)
 
+        # Single-shot safety timer: re-enable the icon if a scan runs this long
+        # without connecting (the backend keeps retrying; this only frees the UI
+        # affordance). Parented to the icon so it stays alive with it.
+        search_timeout = QTimer(device_status)
+        search_timeout.setSingleShot(True)
+
+        def on_search_timeout():
+            if _model.searching:
+                _model.searching = False
+
+        search_timeout.timeout.connect(on_search_timeout)
+
         def sync_search_cursor(event=None):
             # Pointing-hand only when a click would actually start a scan.
             device_status.setCursor(
                 Qt.CursorShape.ArrowCursor if _model.searching
                 else Qt.CursorShape.PointingHandCursor)
+            if _model.searching:
+                search_timeout.start(SEARCH_TIMEOUT_MS)
+            else:
+                search_timeout.stop()
 
         sync_search_cursor()
         _model.observe(sync_search_cursor, "searching")
