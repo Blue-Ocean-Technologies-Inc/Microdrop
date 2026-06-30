@@ -64,6 +64,9 @@ class HeaterSerialProxy:
         # dump_config response capture state (CONFIG_BEGIN .. CONFIG_END)
         self._capturing_config = False
         self._config_buffer = []
+        # Heater channel names parsed from the board's config (e.g. ["heater1"]);
+        # used to resolve a protocol's target heater to a real channel.
+        self.available_heaters = []
 
         # Protocol temperature watch: {heater, target, tolerance} armed by a
         # protocol step; the reader publishes TEMPERATURE_REACHED and disarms
@@ -186,6 +189,7 @@ class HeaterSerialProxy:
         if heaters is None:
             logger.warning("Could not parse heater config; available heaters not published")
             return
+        self.available_heaters = heaters
         logger.info(f"Heater channels available: {heaters}")
         publish_message(json.dumps(heaters), HEATERS_AVAILABLE)
 

@@ -96,12 +96,20 @@ class HeaterCommandSetterService(HasTraits):
         data = self._parse(ProtocolSetTemperatureData, message)
         if data is None:
             return
+        # Resolve to a real board channel: the protocol's default ("tec1") often
+        # isn't what the board reports (e.g. "heater1"), which would make both the
+        # PID command and the reached-watch target the wrong channel.
+        heater = data.heater
+        available = self.proxy.available_heaters or []
+        if available and heater not in available:
+            heater = available[0]
+            logger.info(f"Protocol heater '{data.heater}' not on board; using '{heater}'")
         # Closed-loop toward the target and make sure telemetry is streaming so
         # the proxy can watch the PID temperature, then arm the ack watcher.
-        self._send(f"pid_{data.heater}_enable")
-        self._send(f"pid_{data.heater}_{data.temperature}")
+        self._send(f"pid_{heater}_enable")
+        self._send(f"pid_{heater}_{data.temperature}")
         self._send("stream_all")
-        self.proxy.set_temperature_target(data.heater, data.temperature, data.tolerance)
+        self.proxy.set_temperature_target(heater, data.temperature, data.tolerance)
 
     # ------------------------------------------------------------------
     # Helpers

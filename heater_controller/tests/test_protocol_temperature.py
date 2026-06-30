@@ -49,25 +49,52 @@ def test_watch_disarms_after_ack(monkeypatch):
     assert pub == []
 
 
-def test_protocol_handler_sets_target_and_arms_watch():
-    class FakeProxy(HeaterSerialProxy):
-        def __init__(self):
-            self.transaction_lock = threading.Lock()
-            self.sent = []
-            self.armed = None
+class _FakeProxy(HeaterSerialProxy):
+    def __init__(self, available_heaters=()):
+        self.transaction_lock = threading.Lock()
+        self.available_heaters = list(available_heaters)
+        self.sent = []
+        self.armed = None
 
-        def send_command(self, cmd):
-            self.sent.append(cmd)
+    def send_command(self, cmd):
+        self.sent.append(cmd)
 
-        def set_temperature_target(self, heater, target, tolerance):
-            self.armed = (heater, target, tolerance)
+    def set_temperature_target(self, heater, target, tolerance):
+        self.armed = (heater, target, tolerance)
 
+
+def _run_protocol_set(proxy, heater="tec1"):
     service = HeaterCommandSetterService()
-    service.proxy = FakeProxy()
+    service.proxy = proxy
     service.on_protocol_set_temperature_request(
-        _Msg(json.dumps({"heater": "tec1", "temperature": 60, "tolerance": 2})))
+        _Msg(json.dumps({"heater": heater, "temperature": 60, "tolerance": 2})))
+    return proxy
 
-    assert "pid_tec1_enable" in service.proxy.sent
-    assert "pid_tec1_60.0" in service.proxy.sent
-    assert "stream_all" in service.proxy.sent         # ensure telemetry flows
-    assert service.proxy.armed == ("tec1", 60.0, 2.0)
+
+def test_protocol_handler_sets_target_and_arms_watch():
+    proxy = _run_protocol_set(_FakeProxy())   # no available list -> heater unchanged
+    assert "pid_tec1_enable" in proxy.sent
+    assert "pid_tec1_60.0" in proxy.sent
+    assert "stream_all" in proxy.sent          # ensure telemetry flows
+    assert proxy.armed == ("tec1", 60.0, 2.0)
+
+
+def test_protocol_handler_resolves_default_heater_to_real_channel():
+    # The board reports "heater1"; the protocol's default "tec1" must be remapped
+    # so both the PID command and the watch target the real channel.
+    proxy = _run_protocol_set(_FakeProxy(available_heaters=["heater1"]), heater="tec1")
+    assert "pid_heater1_enable" in proxy.sent
+    assert "pid_heater1_60.0" in proxy.sent
+    assert proxy.armed == ("heater1", 60.0, 2.0)
+
+
+def test_watch_matches_resolved_heater_frame(monkeypatch):
+    # Regression: watch armed for "heater1" must match a PID_HEATER1 frame.
+    pub = []
+    monkeypatch.setattr(proxy_mod, "publish_message",
+                        lambda message, topic, **k: pub.append((topic, message)))
+    p = _proxy()
+    p.set_temperature_target("heater1", 50.0, 1.0)
+    p._check_temperature_watch("PID_HEATER1", {"pid_temperature": 50.2})
+    assert pub and pub[-1][0] == TEMPERATURE_REACHED
+    assert p._temp_watch is None
