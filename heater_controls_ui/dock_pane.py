@@ -1,5 +1,5 @@
 from traits.api import observe, Instance
-from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QApplication, QFont
 
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
@@ -39,17 +39,8 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     # Shared "Peripheral Settings" preferences (holds heater_show_stream_off_warning).
     heater_preferences = Instance(PeripheralPreferences)
 
-    # Single-shot safety timer: re-enables the status-icon click if a scan runs
-    # this long without connecting (the backend keeps retrying; this only frees
-    # the UI affordance so the user can re-trigger).
-    SEARCH_TIMEOUT_MS = 10000
-    _search_timeout = Instance(QTimer)
-
     def traits_init(self):
         super().traits_init()
-        self._search_timeout = QTimer()
-        self._search_timeout.setSingleShot(True)
-        self._search_timeout.timeout.connect(self._on_search_timeout)
         self.heater_preferences = PeripheralPreferences(
             preferences=self.task.window.application.preferences_helper.preferences
         )
@@ -117,37 +108,22 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     # Status-icon "search connection" click (gated on an active scan)      #
     # ------------------------------------------------------------------ #
     def _search_heater_connection(self):
-        """Trigger a connection scan from the icon, unless one is already running
-        (the backend would just reject a duplicate)."""
+        """Ask the backend to start a connection scan, unless one is already
+        running. The backend acknowledges by publishing its searching state,
+        which disables the icon (see _sync_search_affordance)."""
         if self.model.searching:
             logger.debug("Heater search already active; ignoring status-icon click")
             return
         publish_message(topic=START_DEVICE_MONITORING, message="")
-        # Optimistically disable further clicks right away; the backend's
-        # searching signal then confirms this (or clears it if already connected).
-        self.model.searching = True
 
     @observe("model:searching", dispatch="ui")
     def _sync_search_affordance(self, event=None):
-        """Show a pointing-hand cursor only while a click would do something —
-        i.e. when no scan is currently active — and (re)arm the safety timeout."""
-        searching = self.model.searching
+        """Pointing-hand cursor only when a click would do something — i.e. when
+        no scan is currently active."""
         icon = getattr(self, "status_bar_icon", None)
         if icon is not None:
-            icon.setCursor(Qt.CursorShape.ArrowCursor if searching
+            icon.setCursor(Qt.CursorShape.ArrowCursor if self.model.searching
                            else Qt.CursorShape.PointingHandCursor)
-        if self._search_timeout is not None:
-            if searching:
-                self._search_timeout.start(self.SEARCH_TIMEOUT_MS)
-            else:
-                self._search_timeout.stop()
-
-    def _on_search_timeout(self):
-        """Scan ran SEARCH_TIMEOUT_MS without connecting — clear the UI flag so the
-        icon is clickable again (the backend's monitor keeps retrying regardless)."""
-        if self.model.searching:
-            logger.debug("Heater search timed out; re-enabling the status-icon click")
-            self.model.searching = False
 
     # The base wires a realtime-mode status-bar icon; the heater has none, so
     # override those observers to no-ops (the base bodies reference an icon we
