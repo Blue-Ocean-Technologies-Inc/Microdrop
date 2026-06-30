@@ -1,9 +1,12 @@
+from PySide6.QtGui import QColor
 from traitsui.api import (
     View, Item, UItem, HGroup, VGroup, EnumEditor, ListEditor, InstanceEditor,
 )
+from traitsui.item import UReadonly
 
 from manual_controls.MVC import ToggleEditorFactory
-from microdrop_utils.traitsui_qt_helpers import AnimatedToggleEditor
+from microdrop_style.colors import INFO_COLOR
+from microdrop_utils.traitsui_qt_helpers import ToggleEditor
 
 # Connection / board identity.
 status_group = VGroup(
@@ -16,26 +19,42 @@ status_group = VGroup(
 # Control: channel selector (only meaningful with >1 heater), setpoint spinboxes
 # for the selected heater, the PWM/Temp mode switch, and the streaming master gate.
 control_group = VGroup(
-    Item("selected_heater", label="Heater",
-         editor=EnumEditor(name="object.available_heaters"),
-         visible_when="len(object.available_heaters) > 1"),
-    Item("temperature", label="Set temperature",
-         enabled_when="connected and not halted and mode == 'Temp'"),
-    Item("pwm", label="Set PWM",
-         enabled_when="connected and not halted and mode == 'PWM'"),
     HGroup(
         # Toggle: PWM (open-loop duty, off) vs Temp (closed-loop PID, on).
         # Replaces the old PID on/off toggle — the backend enables PID iff Temp.
-        Item(
-            "mode", label="Mode",
-            editor=AnimatedToggleEditor(on_value="Temp", off_value="PWM"),
+        UReadonly("mode"),
+        UItem(
+            "mode",
+            label="Mode",
+            editor=ToggleEditor(
+                on_value="Temp",
+                off_value="PWM",
+                bar_color=INFO_COLOR,
+                handle_color=QColor(INFO_COLOR).darker(),
+            ),
             enabled_when="connected and not halted",
         ),
         UItem(
-            "stream_active", style="custom",
+            "stream_active",
+            style="custom",
             editor=ToggleEditorFactory(on_label="Stream On", off_label="Stream Off"),
-            enabled_when="connected",
+            enabled_when="connected"
         ),
+    ),
+    Item(
+        "selected_heater",
+        label="Heater",
+        editor=EnumEditor(name="object.available_heaters"),
+    ),
+    Item(
+        "temperature",
+        label="Set temperature",
+        enabled_when="connected and not halted and mode == 'Temp'",
+    ),
+    Item(
+        "pwm",
+        label="Set PWM",
+        enabled_when="connected and not halted and mode == 'PWM'",
     ),
     show_border=True,
     label="Control",
