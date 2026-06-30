@@ -10,7 +10,7 @@ from pyface.qt.QtGui import (
     QBrush, QPaintEvent, QPen, QPainter,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate, QDoubleSpinBox, QPushButton, QCheckBox,
+    QStyledItemDelegate, QDoubleSpinBox, QCheckBox,
 )
 from pyface.qt import QtWidgets
 
@@ -20,7 +20,7 @@ from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as Tab
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, SECONDARY_COLOR
+from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
 from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
@@ -660,12 +660,16 @@ class AnimatedToggle(Toggle):
         p.end()
 
 
-class _AnimatedEnumToggleEditor(QtEditor):
-    """Binds a two-value Enum/Str trait to an :class:`AnimatedToggle` sliding
-    switch: checked maps to ``on_value``, unchecked to ``off_value``."""
+class _TwoValueToggleEditor(QtEditor):
+    """Binds a two-value Enum/Str trait to a :class:`Toggle`-family switch:
+    checked maps to ``on_value``, unchecked to ``off_value``. Subclasses build
+    the concrete widget in :meth:`_make_control`."""
+
+    def _make_control(self):
+        raise NotImplementedError
 
     def init(self, parent):
-        self.control = AnimatedToggle(checked_color=self.factory.checked_color)
+        self.control = self._make_control()
         self.control.setChecked(self.value == self.factory.on_value)
         self.control.stateChanged.connect(self._on_state)
 
@@ -679,14 +683,26 @@ class _AnimatedEnumToggleEditor(QtEditor):
             self.control.setChecked(self.value == self.factory.on_value)
 
 
-class AnimatedEnumToggleEditor(BasicEditorFactory):
-    """Factory for an animated sliding switch over an Enum/Str trait::
+class _ToggleEditor(_TwoValueToggleEditor):
+    def _make_control(self):
+        return Toggle(checked_color=self.factory.checked_color)
 
-        Item("mode", editor=AnimatedEnumToggleEditor(on_value="Temp",
-                                                      off_value="PWM"))
+
+class _AnimatedToggleEditor(_TwoValueToggleEditor):
+    def _make_control(self):
+        return AnimatedToggle(
+            checked_color=self.factory.checked_color,
+            pulse_checked_color=self.factory.pulse_checked_color,
+        )
+
+
+class ToggleEditor(BasicEditorFactory):
+    """Factory for the static :class:`Toggle` switch over an Enum/Str trait::
+
+        Item("mode", editor=ToggleEditor(on_value="Temp", off_value="PWM"))
     """
 
-    klass = _AnimatedEnumToggleEditor
+    klass = _ToggleEditor
 
     #: Trait values the checked / unchecked states map to.
     on_value = Str()
@@ -695,87 +711,23 @@ class AnimatedEnumToggleEditor(BasicEditorFactory):
     checked_color = Str(PRIMARY_COLOR)
 
 
-class _EnumToggleEditor(QtEditor):
-    """Checkable button bound to a two-value Enum/Str trait.
+class AnimatedToggleEditor(BasicEditorFactory):
+    """Factory for the animated :class:`AnimatedToggle` sliding switch over an
+    Enum/Str trait::
 
-    Checked maps to the factory's ``on_value`` and unchecked to ``off_value``;
-    the button text is that state's ``on_label`` / ``off_label`` (falling back to
-    the value itself). Unlike :class:`ToggleEditor` (a Bool on/off switch), both
-    states carry a distinct accent colour, so this reads as "which of two modes
-    is active" rather than "on vs off" — use it for a binary mode trait.
+        Item("mode", editor=AnimatedToggleEditor(on_value="Temp",
+                                                  off_value="PWM"))
     """
 
-    def init(self, parent):
-        self.control = QPushButton()
-        self.control.setCheckable(True)
-        self.control.setMaximumWidth(self.factory.max_width)
-        self.control.clicked.connect(self._on_click)
-        self._sync_from_value()
-
-    def _on_click(self):
-        """User toggled the button → map the checked state back to the trait."""
-        self.value = (
-            self.factory.on_value if self.control.isChecked()
-            else self.factory.off_value
-        )
-        self._refresh()
-
-    def _sync_from_value(self):
-        """Drive the button's checked state from the current trait value."""
-        self.control.setChecked(self.value == self.factory.on_value)
-        self._refresh()
-
-    def _refresh(self):
-        """Sync label + accent colour to the button's checked state."""
-        on = self.control.isChecked()
-        self.control.setText(
-            (self.factory.on_label or self.factory.on_value) if on
-            else (self.factory.off_label or self.factory.off_value)
-        )
-        color = self.factory.on_color if on else self.factory.off_color
-        self.control.setStyleSheet(
-            f"""
-            QPushButton {{
-                background-color: {color};
-                color: {WHITE};
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-                max-width: {self.factory.max_width}px;
-            }}
-            QPushButton:hover {{ background-color: {color}; opacity: 0.9; }}
-            QPushButton:pressed {{ background-color: {color}; opacity: 0.8; }}
-            """
-        )
-
-    def update_editor(self):
-        """Trait changed externally → re-sync the button (setChecked emits
-        ``toggled`` only, which we don't connect, so no click feedback loop)."""
-        if self.control is not None:
-            self._sync_from_value()
-
-
-class EnumToggleEditor(BasicEditorFactory):
-    """Factory for a two-state toggle button over an Enum/Str trait.
-
-    Declare in a View::
-
-        Item("mode", editor=EnumToggleEditor(on_value="Temp", off_value="PWM"))
-    """
-
-    klass = _EnumToggleEditor
+    klass = _AnimatedToggleEditor
 
     #: Trait values the checked / unchecked states map to.
     on_value = Str()
     off_value = Str()
-    #: Button text per state; defaults to the value itself when left blank.
-    on_label = Str()
-    off_label = Str()
-    #: Accent colour per state.
-    on_color = Str(PRIMARY_COLOR)
-    off_color = Str(SECONDARY_COLOR)
-    max_width = Int(100)
+    #: Bar + handle accent colour for the checked state.
+    checked_color = Str(PRIMARY_COLOR)
+    #: Colour of the pulse halo when toggling on (ARGB hex, alpha for the glow).
+    pulse_checked_color = Str("#4400B0EE")
 
 
 class _HoverScrollEnumEditor(QtEditor):
