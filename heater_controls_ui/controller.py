@@ -1,6 +1,7 @@
 import json
 
 from traits.api import observe
+from pyface.qt.QtWidgets import QSizePolicy
 
 from template_status_and_controls.base_controller import BaseStatusController
 from microdrop_utils.decorators import debounce
@@ -29,8 +30,16 @@ class HeaterControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     def init(self, info):
         """Stretch the collapsible sections to the full pane width once the UI
-        is built (TraitsUI otherwise left-hugs each group to its content)."""
+        is built (TraitsUI otherwise left-hugs each group to its content), and
+        stop the heater-readouts list from absorbing spare vertical height."""
         stretch_group_layouts_horizontally(info.ui.control)
+        readouts = getattr(info, "heater_readouts", None)
+        if readouts is not None and readouts.control is not None:
+            # The custom ListEditor pane is Expanding/Expanding; cap it so the
+            # group sizes to its 1-3 rows instead of leaving a big gap below them.
+            policy = readouts.control.sizePolicy()
+            policy.setVerticalPolicy(QSizePolicy.Policy.Maximum)
+            readouts.control.setSizePolicy(policy)
         return super().init(info)
 
     # ------------------------------------------------------------------ #
