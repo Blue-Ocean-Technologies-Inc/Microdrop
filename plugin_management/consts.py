@@ -2,6 +2,14 @@
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
+# Installed plugin packages advertise this entry-point group and ship this
+# TOML manifest (see PLUGIN_DEVELOPMENT.md).
+ENTRY_POINT_GROUP = "microdrop.plugins"
+MANIFEST_RESOURCE = "microdrop_plugin.toml"
+
+# The hosted conda channel Browse Plugins installs from.
+PLUGIN_CHANNEL_URL = "https://prefix.dev/microdrop-plugins"
+
 # Topic constants are the pub/sub contract — importing them cross-plugin is OK.
 # Module-qualified because both devices name their topic START_DEVICE_MONITORING.
 from peripheral_controller import consts as peripheral_controller_consts
