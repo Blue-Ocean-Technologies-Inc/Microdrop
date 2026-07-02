@@ -13,6 +13,7 @@ from heater_controls_ui.plugin import HeaterControlsUiPlugin
 from peripheral_controller.plugin import PeripheralControllerPlugin
 from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
+from plugin_management.plugin import PluginManagementPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
@@ -66,6 +67,7 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     LoggerUIPlugin,
+    PluginManagementPlugin,
     DeviceViewerPlugin,
     PeripheralUiPlugin,
     UserHelpPlugin,
