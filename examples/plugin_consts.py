@@ -67,12 +67,13 @@ FRONTEND_PLUGINS = [
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
-    # The Z-Stage / heater plugins (UI, protocol-controls, and backend) are
-    # NOT startup-loaded: they are owned by the plugin-group manager
-    # (BUILTIN_PLUGIN_GROUPS), which enables them at application_initialized
-    # and via Tools > Manage Plugins. Listing them here too double-loads them
-    # (duplicate service offers / panes). The protocol tree hot-swaps their
-    # protocol columns when PROTOCOL_COLUMNS contributions change at runtime.
+    # The Z-Stage/magnet and heater stacks are standalone installable plugin
+    # packages now (magnet-microdrop-plugin, heater-microdrop-plugin): their
+    # groups are discovered from the installed packages' manifests and
+    # enabled by the plugin-group manager at application_initialized / via
+    # Tools > Manage Plugins — never listed here (double-loading a plugin
+    # duplicates its service offers and panes). The protocol tree hot-swaps
+    # their protocol columns when PROTOCOL_COLUMNS contributions change.
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
