@@ -156,6 +156,7 @@ GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation thresho
 # ---------------------------------------------------------------------------
 # main view device layout
 MASTER_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "90_pin_array.svg"
+PIN_MAP_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "pin_map.svg"
 
 device_modified_tag = " (modified)"
 

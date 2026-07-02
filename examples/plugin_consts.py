@@ -7,9 +7,11 @@ from manual_controls.plugin import ManualControlsPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
-from plugin_management.plugin import PluginManagementPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
+from heater_controls_ui.plugin import HeaterControlsUiPlugin
+from peripheral_controller.plugin import PeripheralControllerPlugin
+from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
@@ -18,6 +20,9 @@ from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
+from peripherals_ui.plugin import PeripheralUiPlugin
+from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
+from heater_protocol_controls.plugin import HeaterProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
@@ -59,14 +64,16 @@ from user_help_plugin.plugin import UserHelpPlugin
 
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
-    PluginManagementPlugin,
     TasksPlugin,
     LoggerUIPlugin,
     DeviceViewerPlugin,
+    PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
+    PeripheralProtocolControlsPlugin,
+    HeaterProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
@@ -77,6 +84,7 @@ DROPBOT_FRONTEND_PLUGINS = [
     DropbotPreferencesPlugin,
     DropbotStatusAndControlsPlugin,
     DropbotToolsMenuPlugin,
+    HeaterControlsUiPlugin,
 ]
 
 OPENDROP_FRONTEND_PLUGINS = [
@@ -93,6 +101,8 @@ OPENDROP_BACKEND_PLUGINS = [
 ]
 
 DROPBOT_BACKEND_PLUGINS = [
+    PeripheralControllerPlugin,
+    HeaterControllerPlugin,
     DropbotControllerPlugin
 ]
 

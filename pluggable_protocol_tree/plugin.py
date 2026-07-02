@@ -9,7 +9,7 @@ from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
 from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from envisage.ui.tasks.task_extension import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import Instance, List, Str, Either, on_trait_change
+from traits.api import Instance, List, Str, Either
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -182,12 +182,6 @@ class PluggableProtocolTreePlugin(Plugin):
         routing extension point. Called by Envisage at plugin start, after
         extension points have resolved."""
         super().start()
-        # Wire the registry's extension-point listeners to this plugin's
-        # traits so the _items handler below fires when a column-contributing
-        # plugin is added/removed at runtime (magnet hot load/unload). Opt-in
-        # — Envisage never calls it for you — and only possible once the
-        # plugin is attached to the application.
-        self.connect_extension_point_traits()
         # Pull contributions from the Envisage extension point into the
         # plain contributed_columns list so _assemble_columns sees them.
         try:
@@ -208,15 +202,22 @@ class PluggableProtocolTreePlugin(Plugin):
             )
 
         try:
-            # The executor's wait topics depend on the assembled column set,
-            # so they can't sit in the static ACTOR_TOPIC_DICT contribution —
-            # publish them at start. Works in either start order: a router
-            # that starts later reads the full contribution list; one that
-            # started earlier picks the change up via its extension-point
-            # change handler.
-            self._resync_executor_topics()
+            # The executor's wait topics depend on the assembled column
+            # set, so they can't sit in the static ACTOR_TOPIC_DICT
+            # contribution — append them at start. Works in either start
+            # order: a router that starts later reads the full
+            # contribution list; one that started earlier picks the
+            # append up via its extension-point change handler.
+            executor_topics = sorted({
+                topic for col in self._assemble_columns()
+                for topic in (col.handler.wait_for_topics or [])
+            })
+            if not executor_topics:
+                return
+            self.actor_topic_routing.append(
+                {EXECUTOR_LISTENER_NAME: executor_topics})
         except Exception as e:
-            # If the router already started, the reassignment subscribes
+            # If the router already started, the append subscribes
             # synchronously through its change handler — Redis briefly
             # unreachable at startup shouldn't block the plugin from
             # contributing its dock pane. The protocol itself can't run
@@ -226,59 +227,3 @@ class PluggableProtocolTreePlugin(Plugin):
                 f"failed to contribute executor listener subscriptions "
                 f"(Redis unreachable?): {e}"
             )
-
-    # --- runtime column hot load/unload ------------------------------
-
-    @on_trait_change("_column_extension_point_items")
-    def _on_column_extension_point_changed(self, event):
-        """A plugin contributing PROTOCOL_COLUMNS was added or removed while
-        the app is running (magnet hot load/unload). Re-snapshot the
-        contributed columns, resync the executor's wait topics for the new
-        column set, and rebuild the live dock pane's columns in place so the
-        column appears/disappears without a restart.
-
-        The synthetic ``_items`` event needs ``on_trait_change`` (observe()
-        rejects the name — no real trait exists); ``event`` is the
-        ExtensionPointChangedEvent. Mirrors message_router/plugin.py."""
-        logger.info(f"PROTOCOL_COLUMNS changed: added={event.added}, "
-                    f"removed={event.removed}, index={event.index}")
-        try:
-            self.contributed_columns = list(self._column_extension_point)
-        except Exception as e:
-            logger.warning(f"failed to re-read PROTOCOL_COLUMNS: {e}")
-            return
-        self._resync_executor_topics()
-        self._refresh_live_dock_pane()
-
-    def _resync_executor_topics(self):
-        """Republish the full actor-topic routing contribution for the current
-        column set. The executor listener's wait topics depend on the assembled
-        columns (the magnet column adds ZStage ack topics); a wholesale
-        reassignment lets the message router diff old vs new and add/retract
-        subscriptions in a single change event."""
-        routing = [ACTOR_TOPIC_DICT]
-        executor_topics = sorted({
-            topic for col in self._assemble_columns()
-            for topic in (col.handler.wait_for_topics or [])
-        })
-        if executor_topics:
-            routing.append({EXECUTOR_LISTENER_NAME: executor_topics})
-        self.actor_topic_routing = routing
-
-    def _refresh_live_dock_pane(self):
-        """Rebuild this plugin's live dock-pane columns in place. No-op when
-        the app has no GUI window yet (headless/tests) or the pane hasn't been
-        mounted."""
-        application = self.application
-        window = getattr(application, "active_window", None)
-        if window is None:
-            windows = getattr(application, "windows", None) or []
-            window = windows[0] if windows else None
-        if window is None:
-            logger.debug("no task window; skipping live column refresh")
-            return
-        pane = window.get_dock_pane("pluggable_protocol_tree.dock_pane")
-        if pane is None:
-            logger.debug("protocol dock pane not mounted; skipping live refresh")
-            return
-        pane.rebuild_columns(self._assemble_columns())

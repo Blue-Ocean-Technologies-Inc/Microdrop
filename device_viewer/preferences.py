@@ -30,6 +30,7 @@ from .consts import (
     DEVICE_VIEWER_SIDEBAR_WIDTH,
     LAYERS_VIEW_MIN_HEIGHT,
     MASTER_SVG_FILE,
+    PIN_MAP_SVG_FILE,
     NUMBER_OF_CHANNELS,
     ZOOM_SENSITIVITY,
     GAMEPAD_CAPTURE_REQUEST,
@@ -129,6 +130,17 @@ class DeviceViewerPreferences(PreferencesHelper):
         default_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Default repo directory is: {default_dir}")
+
+        # Seed the repo with the bundled device files on first run. Only copy a
+        # file that is missing so user-modified copies are never clobbered.
+        for source_file in (MASTER_SVG_FILE, PIN_MAP_SVG_FILE):
+            destination = default_dir / source_file.name
+            if not destination.exists():
+                if source_file.exists():
+                    logger.info(f"Missing {source_file.name} in device repo.\nCopying {source_file} to {destination}")
+                    safe_copy_file(str(source_file), str(destination))
+                else:
+                    logger.error(f"Bundled device file not found: {source_file}")
 
         return default_dir
 

@@ -609,29 +609,3 @@ class RowManager(HasTraits):
 
         # 5. Notify the UI/observers that the structure has completely changed
         self.rows_changed = True
-
-    def set_columns(self, new_columns: list, data: dict = None) -> None:
-        """Swap the active column set in place, preserving current cell values.
-
-        Captures the current tree as JSON (or uses the supplied ``data``) and
-        re-hydrates it against ``new_columns`` — reusing the proven
-        ``set_state_from_json`` round-trip, which rebuilds the dynamic row
-        types and fires ``rows_changed`` so views refresh. Used for runtime
-        hot load/unload of a column-contributing plugin (the magnet column):
-        columns dropped from ``new_columns`` lose their values, newly-added
-        columns get their trait defaults."""
-        if data is None:
-            data = self.to_json()
-        self.set_state_from_json(data, list(new_columns), report_findings=False)
-
-    def iter_all_rows(self) -> Iterator[BaseRow]:
-        """Yield every row in the tree once (steps and groups, depth-first),
-        excluding the root. Unlike ``iter_execution_frames`` this does not
-        expand repetitions — it is a structural walk, e.g. to snapshot or
-        restore per-row column values across a live column swap."""
-        def walk(group):
-            for child in group.children:
-                yield child
-                if isinstance(child, GroupRow):
-                    yield from walk(child)
-        yield from walk(self.root)

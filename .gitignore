@@ -14,15 +14,9 @@
 **/plotly_*.html
 *.svg
 *.json
-# ...but plugin manifests are source, not artifacts — keep them tracked.
-!**/microdrop_plugin.json
 demo*.png
 demo*.dot
 
 # pyinstaller generated files
 **/dist
 **/build
-examples/plugins/
-
-# built plugin .conda packages (output of build_plugin_conda.py)
-dist_plugins/

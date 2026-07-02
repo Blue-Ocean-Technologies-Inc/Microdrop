@@ -1,9 +1,9 @@
 # enthought imports
-from traits.api import observe, List, Any
+from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
 from pyface.qt.QtGui import QFont, Qt
-from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QApplication
+from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QApplication
 
 from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.general_style import get_general_style
@@ -13,13 +13,11 @@ from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_STAIRS
 from microdrop_style.label_style import get_label_style
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
-from .consts import PKG, PKG_name,DEVICE_NAME
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget, ClickableLabel
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from .consts import PKG, PKG_name, DEVICE_NAME, START_DEVICE_MONITORING
 
 from dropbot_status_and_controls.consts import disconnected_color, connected_color
-
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
 
 
 class PeripheralStatusDockPane(DockPane):
@@ -30,16 +28,6 @@ class PeripheralStatusDockPane(DockPane):
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
-
-    # Handles captured at construction so destroy() can fully tear down on a
-    # runtime hot-unload (the pane connects to the global QApplication theme
-    # signal and adds widgets to the shared status bar — none of which the
-    # pyface DockPane base knows about).
-    status_bar_icon = Any()
-    _status_bar_spacer = Any()
-    _theme_callbacks = List()
-    _status_model = Any()
-    _set_status_color = Any()
 
     def create_contents(self, parent):
         # Import all the components from your module
@@ -99,116 +87,70 @@ class PeripheralStatusDockPane(DockPane):
         # Apply initial theme styling
         _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
 
-        # Call theme application method whenever global theme changes occur as
-        # well. Track the callback so destroy() can disconnect it on hot-unload.
+        # Call theme application method whenever global theme changes occur as well
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
-        self._theme_callbacks.append(_apply_theme_style)
 
         # Return the scroll area directly
         return scroll_area
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar_with_device_status_icon(self, event):
-        # Normal-startup path: the pane exists before the status bar, so this
-        # observer fires when the bar is set. Delegate to the idempotent
-        # installer (the hot-mount path calls the same installer via
-        # on_live_mounted, where this observer never fires).
-        self._install_status_bar_icon()
-
-    def on_live_mounted(self):
-        """Hook called by add_dock_pane_live after the pane is mounted on a live
-        window. On a hot-mount the status bar already exists, so the
-        task:window:status_bar_manager observer never fires — install the icon
-        explicitly here."""
-        self._install_status_bar_icon()
-
-    def _install_status_bar_icon(self):
-        """Add the Z-Stage status icon (+ spacer) to the window status bar and
-        wire its connection-state colour + themed tooltip. Idempotent: no-op if
-        the icon is already installed or the window has no status bar yet."""
-        if self.status_bar_icon is not None:
-            return
-        window = self.task.window if self.task is not None else None
-        status_bar_manager = (
-            getattr(window, "status_bar_manager", None)
-            if window is not None else None
-        )
-        if status_bar_manager is None:
-            return
 
         _model = self.dramatiq_controller.ui.model
 
-        device_status = QLabel(ICON_STAIRS)
+        # Clickable: triggers a Z-Stage connection scan (same as Tools ▸
+        # Peripherals ▸ Z-Stage ▸ Search Connection), ignored while one is
+        # already running (see model.searching).
+        device_status = ClickableLabel(ICON_STAIRS)
 
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         device_status.setFont(_font)
         device_status.setStyleSheet(f"color: {disconnected_color};")
 
-        spacer = horizontal_spacer_widget(10)
-        status_bar_manager.status_bar.addPermanentWidget(spacer)
-        status_bar_manager.status_bar.addPermanentWidget(device_status)
-        self._status_bar_spacer = spacer
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(horizontal_spacer_widget(10))
+        self.task.window.status_bar_manager.status_bar.addPermanentWidget(device_status)
 
         def set_status_color(event):
             color = connected_color if event.new else disconnected_color
             device_status.setStyleSheet(f"color: {color}")
 
         _model.observe(set_status_color, "status")
-        # Keep refs so destroy() can drop this model observer on hot-unload.
-        self._status_model = _model
-        self._set_status_color = set_status_color
+
+        def search_connection():
+            """Ask the backend to start a connection scan, unless one is already
+            running. The backend acknowledges via the searching signal, which
+            disables the icon."""
+            if _model.searching:
+                return
+            publish_message(message="", topic=START_DEVICE_MONITORING)
+
+        device_status.clicked.connect(search_connection)
 
         self.status_bar_icon = device_status
 
-        ### update tooltip based on dark / light mode
-        def _apply_theme_style():
-            self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+        def apply_tooltip(*args):
+            # Themed legend; the hint flips to "searching" while a scan is active.
+            device_status.setToolTip(get_status_icon_tooltip_themed(_model.searching))
 
-        _apply_theme_style()  # initial setting
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
-        self._theme_callbacks.append(_apply_theme_style)
+        def sync_search_affordance(event=None):
+            # Pointing-hand only when a click would actually start a scan.
+            device_status.setCursor(
+                Qt.CursorShape.ArrowCursor if _model.searching
+                else Qt.CursorShape.PointingHandCursor)
+            apply_tooltip()
 
-    def destroy(self):
-        """Tear down everything create_contents / the status-bar setup wired
-        into shared, longer-lived objects (the global QApplication theme
-        signal, the window status bar, the device model), so a runtime
-        hot-unload leaves no dangling connections or lingering widgets."""
-        style_hints = QApplication.styleHints()
-        for callback in self._theme_callbacks:
-            try:
-                style_hints.colorSchemeChanged.disconnect(callback)
-            except (RuntimeError, TypeError):
-                pass
-        self._theme_callbacks = []
+        sync_search_affordance()  # initial cursor + tooltip
+        _model.observe(sync_search_affordance, "searching")
+        QApplication.styleHints().colorSchemeChanged.connect(apply_tooltip)  # track theme changes
 
-        if self._status_model is not None and self._set_status_color is not None:
-            try:
-                self._status_model.observe(self._set_status_color, "status", remove=True)
-            except Exception as e:
-                logger.debug(f"Could not remove status-color observer: {e}")
-        self._status_model = None
-        self._set_status_color = None
-
-        window = self.task.window if self.task is not None else None
-        status_bar_manager = getattr(window, "status_bar_manager", None) if window is not None else None
-        status_bar = getattr(status_bar_manager, "status_bar", None)
-        if status_bar is not None:
-            for widget in (self.status_bar_icon, self._status_bar_spacer):
-                if widget is not None:
-                    status_bar.removeWidget(widget)
-                    widget.deleteLater()
-        self.status_bar_icon = None
-        self._status_bar_spacer = None
-
-        super().destroy()
-
-
-def get_status_icon_tooltip_themed():
+def get_status_icon_tooltip_themed(searching=False):
     if is_dark_mode():
         title_color = WHITE
     else:
         title_color = GREY['dark']
+
+    hint = "Searching for device…" if searching else "Click to search for a connection."
 
     z_stage_status_icon_tooltip_html = f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
@@ -217,6 +159,7 @@ def get_status_icon_tooltip_themed():
         <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
         <li><strong style="color: {connected_color};">Connected</strong></li>
       </ul>
+      <div style="margin-top: 3px;"><em>{hint}</em></div>
     </div>
     """
     return z_stage_status_icon_tooltip_html

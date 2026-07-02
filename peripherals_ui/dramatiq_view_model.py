@@ -1,3 +1,5 @@
+import json
+
 from traits.has_traits import HasTraits
 from traits.trait_types import Instance
 
@@ -53,3 +55,12 @@ class DramatiqStatusViewModel(HasTraits):
 
     def _on_start_device_monitoring_triggered(self, body):
         self.model.search_requested = True
+
+    def _on_searching_triggered(self, body):
+        """Backend connection-scan state (JSON bool). Mirrored to the model so the
+        dock pane can disable the status-icon 'search connection' click while a
+        scan is already running."""
+        try:
+            self.model.searching = bool(json.loads(body))
+        except Exception:
+            logger.error("Failed to parse searching signal", exc_info=True)

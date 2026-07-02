@@ -1,8 +1,19 @@
+import html
 import math
 
-from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QColor, QFont, QShortcut, QKeySequence, QPixmap
-from pyface.qt.QtWidgets import QStyledItemDelegate, QDoubleSpinBox
+from pyface.qt.QtCore import (
+    Qt, QSize, QPoint, QPointF, QRectF,
+    QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
+    Slot, Property as QtProperty,   # aliased: traits.api.Property (below) shadows it
+)
+from pyface.qt.QtGui import (
+    QColor, QFont, QShortcut, QKeySequence, QPixmap,
+    QBrush, QPaintEvent, QPen, QPainter,
+)
+from pyface.qt.QtWidgets import (
+    QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
+    QGroupBox, QLabel, QSizePolicy,
+)
 from pyface.qt import QtWidgets
 
 from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
@@ -11,7 +22,7 @@ from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as Tab
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, BLACK
+from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
 from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
@@ -488,6 +499,385 @@ class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
     border_radius = Int(4)
+
+
+class _HtmlLabelEditor(QtEditor):
+    """Read-only editor that renders a Str trait as rich text in a QLabel.
+
+    The trait's value is HTML-escaped and substituted into the factory's
+    ``template`` (an HTML snippet with a single ``{}`` placeholder), so the view
+    controls colour/weight/style/size via inline CSS without a web engine."""
+
+    def init(self, parent):
+        self.control = QLabel()
+        self.control.setTextFormat(Qt.TextFormat.RichText)
+        self.control.setWordWrap(self.factory.word_wrap)
+        self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.control.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        if self.factory.word_wrap:
+            # A word-wrapped QLabel needs the layout to honour heightForWidth, or
+            # it gets one line's height and clips the rest. Ask for that and let
+            # it grow vertically to fit.
+            policy = self.control.sizePolicy()
+            policy.setHeightForWidth(True)
+            policy.setVerticalPolicy(QSizePolicy.Policy.Minimum)
+            self.control.setSizePolicy(policy)
+        self.update_editor()
+
+    def update_editor(self):
+        if self.control is not None:
+            value = "" if self.value is None else str(self.value)
+            self.control.setText(self.factory.template.format(html.escape(value)))
+
+
+class HtmlLabelEditor(BasicEditorFactory):
+    """Factory for a read-only HTML/rich-text label bound to a Str trait::
+
+        UItem("source", editor=HtmlLabelEditor(
+            template='<span style="color:#888; font-style:italic;">Source: {}</span>'))
+
+    ``{}`` is replaced by the escaped trait value. Inline CSS in ``template`` has
+    no braces, so ``str.format`` is safe.
+    """
+
+    klass = _HtmlLabelEditor
+
+    #: HTML wrapper; ``{}`` is the (escaped) trait value.
+    template = Str("{}")
+    word_wrap = Bool(True)
+
+
+class Toggle(QCheckBox):
+    """An iOS-style sliding switch drawn as a QCheckBox (a sliding handle on a
+    rounded bar). The static, non-animated base; :class:`AnimatedToggle` adds the
+    slide + pulse animation. Adapted from the classic qtpy toggle recipe, ported
+    to ``pyface.qt``.
+    """
+
+    def __init__(self, parent=None, bar_color=Qt.gray,
+                 checked_color=PRIMARY_COLOR, handle_color=Qt.white):
+        super().__init__(parent)
+
+        # Pens/brushes are created per-instance (not at class scope): a QPen
+        # built at import time, before any QApplication exists, can segfault.
+        self._transparent_pen = QPen(Qt.transparent)
+        self._light_grey_pen = QPen(Qt.lightGray)
+
+        # Brushes for the bar + handle in each state; the checked bar is a
+        # lightened tint of the handle's checked colour. Every colour is wrapped
+        # in QColor() so callers can pass a hex string, a Qt.GlobalColor, or a
+        # QColor interchangeably (QBrush won't accept a raw hex string).
+        self._bar_brush = QBrush(QColor(bar_color))
+        self._bar_checked_brush = QBrush(QColor(checked_color).lighter())
+        self._handle_brush = QBrush(QColor(handle_color))
+        self._handle_checked_brush = QBrush(QColor(checked_color))
+
+        self.setContentsMargins(8, 0, 8, 0)
+        self._handle_position = 0
+
+        self.stateChanged.connect(self.handle_state_change)
+
+    def sizeHint(self):
+        return QSize(58, 45)
+
+    def hitButton(self, pos: QPoint):
+        return self.contentsRect().contains(pos)
+
+    def paintEvent(self, e: QPaintEvent):
+        cont_rect = self.contentsRect()
+        handle_radius = round(0.2 * cont_rect.height())
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(self._transparent_pen)
+
+        bar_rect = QRectF(
+            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
+        bar_rect.moveCenter(cont_rect.center())
+        rounding = bar_rect.height() / 2
+
+        # The handle slides along this line as _handle_position goes 0 -> 1.
+        trail_length = cont_rect.width() - 2 * handle_radius
+        x_pos = cont_rect.x() + handle_radius + trail_length * self._handle_position
+
+        if self.isChecked():
+            p.setBrush(self._bar_checked_brush)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
+            p.setBrush(self._handle_checked_brush)
+        else:
+            p.setBrush(self._bar_brush)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
+            p.setPen(self._light_grey_pen)
+            p.setBrush(self._handle_brush)
+
+        p.drawEllipse(
+            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius)
+        p.end()
+
+    @Slot(int)
+    def handle_state_change(self, value):
+        self._handle_position = 1 if value else 0
+
+    def _get_handle_position(self):
+        return self._handle_position
+
+    def _set_handle_position(self, pos):
+        """Animated property: assignment must repaint (the animation drives this
+        rather than stateChanged)."""
+        self._handle_position = pos
+        self.update()
+
+    # Functional Property form (getter, setter) — works across PyQt/PySide
+    # bindings, unlike the @prop.setter decorator which pyface.qt's Property
+    # doesn't support.
+    handle_position = QtProperty(float, _get_handle_position, _set_handle_position)
+
+    def _get_pulse_radius(self):
+        return self._pulse_radius
+
+    def _set_pulse_radius(self, pos):
+        self._pulse_radius = pos
+        self.update()
+
+    pulse_radius = QtProperty(float, _get_pulse_radius, _set_pulse_radius)
+
+
+class AnimatedToggle(Toggle):
+    """:class:`Toggle` with the handle sliding between states and a brief pulse
+    halo on switch."""
+
+    def __init__(self, *args, pulse_unchecked_color="#44999999",
+                 pulse_checked_color="#4400B0EE", **kwargs):
+        self._pulse_radius = 0
+        super().__init__(*args, **kwargs)
+
+        self.animation = QPropertyAnimation(self, b"handle_position", self)
+        self.animation.setEasingCurve(QEasingCurve.InOutCubic)
+        self.animation.setDuration(200)
+
+        self.pulse_anim = QPropertyAnimation(self, b"pulse_radius", self)
+        self.pulse_anim.setDuration(350)
+        self.pulse_anim.setStartValue(10)
+        self.pulse_anim.setEndValue(20)
+
+        self.animations_group = QSequentialAnimationGroup()
+        self.animations_group.addAnimation(self.animation)
+        self.animations_group.addAnimation(self.pulse_anim)
+
+        self._pulse_unchecked_animation = QBrush(QColor(pulse_unchecked_color))
+        self._pulse_checked_animation = QBrush(QColor(pulse_checked_color))
+
+    @Slot(int)
+    def handle_state_change(self, value):
+        self.animations_group.stop()
+        self.animation.setEndValue(1 if value else 0)
+        self.animations_group.start()
+
+    def paintEvent(self, e: QPaintEvent):
+        cont_rect = self.contentsRect()
+        handle_radius = round(0.24 * cont_rect.height())
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(self._transparent_pen)
+
+        bar_rect = QRectF(
+            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
+        bar_rect.moveCenter(cont_rect.center())
+        rounding = bar_rect.height() / 2
+
+        trail_length = cont_rect.width() - 2 * handle_radius
+        x_pos = cont_rect.x() + handle_radius + trail_length * self._handle_position
+
+        if self.pulse_anim.state() == QPropertyAnimation.Running:
+            p.setBrush(self._pulse_checked_animation if self.isChecked()
+                       else self._pulse_unchecked_animation)
+            p.drawEllipse(QPointF(x_pos, bar_rect.center().y()),
+                          self._pulse_radius, self._pulse_radius)
+
+        if self.isChecked():
+            p.setBrush(self._bar_checked_brush)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
+            p.setBrush(self._handle_checked_brush)
+        else:
+            p.setBrush(self._bar_brush)
+            p.drawRoundedRect(bar_rect, rounding, rounding)
+            p.setPen(self._light_grey_pen)
+            p.setBrush(self._handle_brush)
+
+        p.drawEllipse(
+            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius)
+        p.end()
+
+
+class _TwoValueToggleEditor(QtEditor):
+    """Binds a two-value Enum/Str trait to a :class:`Toggle`-family switch:
+    checked maps to ``on_value``, unchecked to ``off_value``. Subclasses build
+    the concrete widget in :meth:`_make_control`."""
+
+    def _make_control(self):
+        raise NotImplementedError
+
+    def init(self, parent):
+        self.control = self._make_control()
+        self.control.setChecked(self.value == self.factory.on_value)
+        self.control.stateChanged.connect(self._on_state)
+
+    def _on_state(self, state):
+        self.value = self.factory.on_value if state else self.factory.off_value
+
+    def update_editor(self):
+        # Re-sync from an external trait change. Setting the same value is a
+        # no-op for traits, so the stateChanged echo can't loop.
+        if self.control is not None:
+            self.control.setChecked(self.value == self.factory.on_value)
+
+
+class _ToggleEditor(_TwoValueToggleEditor):
+    def _make_control(self):
+        return Toggle(
+            bar_color=self.factory.bar_color,
+            checked_color=self.factory.checked_color,
+            handle_color=self.factory.handle_color,
+        )
+
+
+class _AnimatedToggleEditor(_TwoValueToggleEditor):
+    def _make_control(self):
+        return AnimatedToggle(
+            bar_color=self.factory.bar_color,
+            checked_color=self.factory.checked_color,
+            handle_color=self.factory.handle_color,
+            pulse_unchecked_color=self.factory.pulse_unchecked_color,
+            pulse_checked_color=self.factory.pulse_checked_color,
+        )
+
+
+class ToggleEditor(BasicEditorFactory):
+    """Factory for the static :class:`Toggle` switch over an Enum/Str trait::
+
+        Item("mode", editor=ToggleEditor(on_value="Temp", off_value="PWM"))
+
+    The colour traits mirror the :class:`Toggle` constructor; they're ``Any``
+    so they accept a hex string or a Qt colour (the defaults Qt.gray / Qt.white).
+    """
+
+    klass = _ToggleEditor
+
+    #: Trait values the checked / unchecked states map to.
+    on_value = Str()
+    off_value = Str()
+    #: Toggle widget colours (hex string or Qt colour).
+    bar_color = Any(Qt.gray)         # unchecked bar
+    checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
+    handle_color = Any(Qt.white)     # unchecked handle
+
+
+class AnimatedToggleEditor(ToggleEditor):
+    """Factory for the animated :class:`AnimatedToggle` sliding switch over an
+    Enum/Str trait::
+
+        Item("mode", editor=AnimatedToggleEditor(on_value="Temp",
+                                                  off_value="PWM"))
+
+    Inherits the :class:`ToggleEditor` colour traits and adds the pulse-halo
+    colours specific to :class:`AnimatedToggle` (ARGB hex — the leading byte is
+    the glow's alpha).
+    """
+
+    klass = _AnimatedToggleEditor
+
+    #: Pulse halo colour when toggling off / on (ARGB hex).
+    pulse_unchecked_color = Str("#44999999")
+    pulse_checked_color = Str("#4400B0EE")
+
+
+class _IconToggleEditor(QtEditor):
+    """A flat, borderless checkable button rendering a Material Symbols glyph
+    (icon font) that switches between the factory's on/off ligatures with the
+    Bool value. Use as a collapse-header arrow: ``expand_more`` (down, expanded)
+    when checked, ``chevron_right`` (collapsed) when unchecked."""
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setCheckable(True)
+        self.control.setFlat(True)
+        self.control.setCursor(Qt.PointingHandCursor)
+        self.control.setMaximumWidth(self.factory.point_size + 12)
+        self.control.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(self.factory.point_size)
+        self.control.setFont(font)
+        self.control.setChecked(self.value)
+        self.control.clicked.connect(self._on_click)
+        self._refresh()
+
+    def _on_click(self):
+        self.value = self.control.isChecked()
+        self._refresh()
+
+    def _refresh(self):
+        self.control.setText(
+            self.factory.on_glyph if self.control.isChecked()
+            else self.factory.off_glyph)
+
+    def update_editor(self):
+        # Re-sync on external change. setChecked emits toggled (not connected),
+        # not clicked, so this can't re-enter _on_click.
+        if self.control is not None:
+            self.control.setChecked(self.value)
+            self._refresh()
+
+
+class IconToggleEditor(BasicEditorFactory):
+    """Factory for a Bool rendered as an icon-font glyph toggle button::
+
+        UItem("show_status", editor=IconToggleEditor())   # collapse arrow
+
+    Defaults to a collapse chevron (expand_more / chevron_right); pass other
+    Material Symbols ligatures for a different glyph pair.
+    """
+
+    klass = _IconToggleEditor
+
+    #: Material Symbols ligature shown when checked / unchecked.
+    on_glyph = Str("expand_more")
+    off_glyph = Str("chevron_right")
+    point_size = Int(14)
+
+
+def _has_group_box_ancestor(layout):
+    """True if ``layout`` lives inside a QGroupBox (i.e. it lays out a section's
+    contents rather than arranging the section boxes themselves)."""
+    widget = layout.parentWidget()
+    while widget is not None:
+        if isinstance(widget, QGroupBox):
+            return True
+        widget = widget.parentWidget()
+    return False
+
+
+def stretch_group_layouts_horizontally(top_control):
+    """Make TraitsUI group boxes fill the full available width.
+
+    TraitsUI's Qt backend hard-codes ``layout.setAlignment(AlignLeft | AlignTop)``
+    on every group's box layout (``traitsui.qt.ui_panel``), so a section only
+    grows to its widest child's natural width and hugs the left — leaving a
+    gutter when the pane is wider (and collapsing entirely once the widest child,
+    e.g. a custom ListEditor, is hidden).
+
+    This drops the AlignLeft (keeping AlignTop) only on the layouts that *arrange
+    the section boxes* — those with no QGroupBox ancestor — so the boxes stretch
+    to the pane width. Layouts *inside* a group box keep their AlignLeft, so each
+    section's own contents stay pushed left at their natural size instead of
+    stretching into the new space. Call once on a built UI's top control, e.g.
+    from a ``Handler.init``.
+    """
+    for layout in top_control.findChildren(QBoxLayout):
+        if (layout.alignment() & Qt.AlignmentFlag.AlignLeft
+                and not _has_group_box_ancestor(layout)):
+            layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
 
 class _HoverScrollEnumEditor(QtEditor):

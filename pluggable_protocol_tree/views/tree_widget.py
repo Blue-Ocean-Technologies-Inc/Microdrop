@@ -84,16 +84,36 @@ class ProtocolTreeWidget(QWidget):
         self.model = MvcTreeModel(row_manager, parent=self.tree)
         self.tree.setModel(self.model)
 
+        # PPT-3: hide columns marked hidden_by_default at construction
+        for i, col in enumerate(self._manager.columns):
+            if getattr(col.view, "hidden_by_default", False):
+                self.tree.setColumnHidden(i, True)
+
+        # Restore the user's persisted column visibility, overriding the
+        # hidden_by_default defaults for any column they have toggled before.
+        # Columns absent from the saved map keep the default applied above.
+        # Keyed by col_id (stable across display renames — col_name keying
+        # orphaned saved entries when Routes became "Electrodes"); the
+        # col_name fallback reads maps persisted before that change, and
+        # the next persist rewrites them under col_id.
+        saved_visibility = self._load_column_visibility()
+        for i, col in enumerate(self._manager.columns):
+            visible = saved_visibility.get(
+                col.model.col_id, saved_visibility.get(col.model.col_name))
+            if visible is not None:
+                self.tree.setColumnHidden(i, not visible)
+
         # PPT-3: header right-click menu to toggle column visibility
         header = self.tree.header()
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self._on_header_context_menu)
 
-        # Let the user drag header sections to reorder columns. Make sections
-        # movable before applying the saved order (moveSection), and connect
-        # sectionMoved AFTER so the restore moves don't recursively re-persist.
+        # Let the user drag header sections to reorder columns, and persist
+        # that order (like visibility) so it survives a restart. Apply the
+        # saved order BEFORE connecting sectionMoved so the restore moves
+        # don't recursively re-persist.
         header.setSectionsMovable(True)
-        self._apply_column_headers()
+        self._apply_column_order()
         header.sectionMoved.connect(self._persist_column_order)
 
         self.delegate = ProtocolItemDelegate(row_manager, parent=self.tree)
@@ -121,46 +141,6 @@ class ProtocolTreeWidget(QWidget):
 
         # Mirror Qt selection --> RowManager selection
         self.tree.selectionModel().selectionChanged.connect(self._sync_selection)
-
-    def _apply_column_headers(self):
-        """Apply per-column header state (hidden-by-default, persisted
-        visibility, persisted order) for the current column set. Called at
-        construction and again after a runtime column swap (refresh_columns),
-        where the model reset drops the header's hidden/order state back to
-        defaults."""
-        # PPT-3: hide columns marked hidden_by_default.
-        for i, col in enumerate(self._manager.columns):
-            if getattr(col.view, "hidden_by_default", False):
-                self.tree.setColumnHidden(i, True)
-
-        # Restore the user's persisted column visibility, overriding the
-        # hidden_by_default defaults for any column they have toggled before.
-        # Columns absent from the saved map keep the default applied above.
-        # Keyed by col_id (stable across display renames — col_name keying
-        # orphaned saved entries when Routes became "Electrodes"); the
-        # col_name fallback reads maps persisted before that change, and
-        # the next persist rewrites them under col_id.
-        saved_visibility = self._load_column_visibility()
-        for i, col in enumerate(self._manager.columns):
-            visible = saved_visibility.get(
-                col.model.col_id, saved_visibility.get(col.model.col_name))
-            if visible is not None:
-                self.tree.setColumnHidden(i, not visible)
-
-        # Persisted drag-reordered column order (no-op when nothing saved).
-        self._apply_column_order()
-
-    def refresh_columns(self, mutate):
-        """Swap the model's column set — via ``mutate``, which mutates the
-        bound RowManager (e.g. RowManager.set_columns) — inside a full model
-        reset, then re-apply the per-column header state for the new set.
-
-        Used for runtime hot load/unload of a column-contributing plugin: the
-        reset is what makes the QTreeView pick up the changed column count (a
-        plain layoutChanged would not), and re-applying the headers restores
-        hidden/visibility/order which the reset cleared."""
-        self.model.reset_columns(mutate)
-        self._apply_column_headers()
 
     # --- active-row highlight + scroll (called by the executor wiring) ---
 

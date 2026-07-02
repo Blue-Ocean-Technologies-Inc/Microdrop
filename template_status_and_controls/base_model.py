@@ -78,6 +78,7 @@ class BaseStatusModel(HasTraits):
     connected = Bool(False, desc="True when the device is connected")
     chip_inserted = Bool(False, desc="True when a chip or sample is present")
     halted = Bool(False, desc="True when the device has halted due to a fault")
+    searching = Bool(False, desc="True while the backend's monitor thread is actively scanning for the board")
 
     # ------------------------------------------------------------------ #
     # Derived display traits (updated automatically by observers below)   #
@@ -124,6 +125,10 @@ class BaseStatusModel(HasTraits):
 
     @observe("connected")
     def _on_connected_changed(self, event):
+        # if connection status changed then we assume search is running
+        if not self.searching:
+            self.searching = True
+
         self.connection_status_text = "Active" if event.new else "Inactive"
         self.halted = False
         if self.connected:

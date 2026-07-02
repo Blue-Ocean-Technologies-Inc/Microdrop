@@ -41,11 +41,6 @@ class MvcTreeModel(QAbstractItemModel):
         super().__init__(parent)
         self._manager = row_manager
         self._active_node = None
-        # Set during reset_columns so the rows_changed handler (which fires
-        # mid-swap when the column set / tree is rebuilt) doesn't emit a
-        # layoutChanged with a stale column count — the surrounding
-        # begin/endResetModel already drives the full re-query.
-        self._suppress_rows_changed = False
         # Strong refs to every row this model has handed to Qt via
         # createIndex(). Qt stores the third arg as a raw void*; if
         # Python GCs the row before Qt drops the QModelIndex, the
@@ -182,33 +177,7 @@ class MvcTreeModel(QAbstractItemModel):
         self._active_node = node
         self.layoutChanged.emit()
 
-    def reset_columns(self, mutate):
-        """Run ``mutate`` (which swaps the bound RowManager's column set and
-        rebuilds its tree) inside a full model reset so the QTreeView and its
-        header re-query both column AND row counts.
-
-        A plain ``layoutChanged`` (what rows_changed emits) does not update the
-        header's section count, so an added/removed column would otherwise
-        leave the header stale and risk an out-of-range column access. The
-        rows_changed handler is suppressed during ``mutate`` so only the
-        bracketing begin/endResetModel drives the refresh. Per-column handler
-        signals and row observers are rewired against the new column set."""
-        self.beginResetModel()
-        self._suppress_rows_changed = True
-        try:
-            mutate()
-        finally:
-            self._suppress_rows_changed = False
-            # Drop pins to the old tree's rows; the reset invalidates every
-            # QModelIndex Qt held, so the stale refs are no longer needed.
-            self._owned_rows.clear()
-            self._wire_column_handlers_with_column_changed_signal()
-            self._wire_row_observers()
-            self.endResetModel()
-
     def _on_rows_changed(self, event):
-        if self._suppress_rows_changed:
-            return
         self.layoutChanged.emit()
         self.structure_changed.emit()
         # Row set may have changed structurally (add/remove/move); rewire

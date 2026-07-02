@@ -564,6 +564,25 @@ class PulsingLabel(QLabel):
             self.stop()
 
 
+class ClickableLabel(QLabel):
+    """A QLabel that emits ``clicked`` on a left mouse press.
+
+    For status icons that double as a shortcut to an action (e.g. clicking a
+    disconnected device icon to search for a connection). Shows a pointing-hand
+    cursor to advertise that it's clickable.
+    """
+    clicked = Signal()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class ClickableToggleIcon(QLabel):
     """A clickable icon that toggles between active/inactive states, with an optional disabled state.
 

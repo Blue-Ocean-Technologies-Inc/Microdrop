@@ -1,29 +1,29 @@
 from envisage.api import ServiceOffer
-from envisage.ids import SERVICE_OFFERS
-from envisage.plugin import Plugin
 from traits.api import List
 
 # local package imports
 from .peripheral_controller_base import PeripheralControllerBase
 from .interfaces.i_peripheral_control_mixin_service import IPeripheralControlMixinService
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, DEVICE_NAME
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 
 # microdrop imports
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from peripheral_device_controller_base.plugin import PeripheralDeviceControllerPlugin
 from logger.logger_service import get_logger
 # Initialize logger
 logger = get_logger(__name__)
 
 
-class PeripheralControllerPlugin(Plugin):
+class PeripheralControllerPlugin(PeripheralDeviceControllerPlugin):
     id = PKG + '.plugin'
     name = f'{PKG_name} Plugin'
 
-    # this plugin contributes some service offers
-    service_offers = List(contributes_to=SERVICE_OFFERS)
-
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    # Compose only the magnet's own mixins onto the magnet's controller base.
+    _mixin_protocol = IPeripheralControlMixinService
+    _controller_base_class = PeripheralControllerBase
 
     def _service_offers_default(self):
         """Return the service offers."""
@@ -33,7 +33,7 @@ class PeripheralControllerPlugin(Plugin):
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
-        """Returns a dropbot monitor mixin service with core functionality."""
+        """Returns a peripheral monitor mixin service with core functionality."""
         from .services.peripheral_monitor_mixin_service import PeripheralMonitorMixinService
         return PeripheralMonitorMixinService
 
@@ -41,30 +41,3 @@ class PeripheralControllerPlugin(Plugin):
         """Returns a zstage mixin service to set z-stage states"""
         from .services.zstage_state_setter_service import ZStageStatesSetterMixinService
         return ZStageStatesSetterMixinService
-
-    def start(self):
-        """ Initialize the dropbot on plugin start """
-
-        # Note that we always offer the service via its name, but look it up via the actual protocol.
-        from .interfaces.i_peripheral_control_mixin_service import IPeripheralControlMixinService
-
-        # Lookup the dropbot controller related mixin class services and add to base class.
-        services = self.application.get_services(IPeripheralControlMixinService) + [PeripheralControllerBase]
-        logger.debug(f"The following {DEVICE_NAME} services are going to be initialized: {services} ")
-
-        # Create a new class that inherits from all services
-        class Controller(*services):
-            pass
-
-        self.device_controller = Controller()
-
-    def stop(self):
-        """Cleanup when the plugin is stopped."""
-        if hasattr(self, 'device_controller'):
-            # Stop the background port-monitoring scheduler before tearing down
-            # the proxy/actor (resolves via the composed mixin MRO).
-            if hasattr(self.device_controller, 'shutdown_monitoring'):
-                self.device_controller.shutdown_monitoring()
-            self.device_controller.cleanup()
-            logger.info(f"{self.device_controller._device_name.title()} Controller plugin stopped")
-            del self.device_controller

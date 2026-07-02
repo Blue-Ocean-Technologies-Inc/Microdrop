@@ -69,6 +69,8 @@ class ProtocolStatusController(HasTraits):
             ("dyn_idle_entered", self._on_dyn_idle_entered),
             ("protocol_paused", self._on_paused),
             ("protocol_resumed", self._on_resumed),
+            ("ack_wait_started", self._on_ack_wait_started),
+            ("ack_wait_finished", self._on_ack_wait_finished),
             ("protocol_repetition_finished", self._on_repetition_finished),
             ("protocol_finished", self._on_stopped),
             ("protocol_aborted", self._on_stopped),
@@ -140,6 +142,12 @@ class ProtocolStatusController(HasTraits):
 
     def _on_resumed(self, event):
         self.model.resume(self.clock())
+
+    def _on_ack_wait_started(self, event):
+        self.model.enter_ack_wait(self.clock())
+
+    def _on_ack_wait_finished(self, event):
+        self.model.exit_ack_wait(self.clock())
 
     def _on_repetition_finished(self, event):
         completed, total = event.new
