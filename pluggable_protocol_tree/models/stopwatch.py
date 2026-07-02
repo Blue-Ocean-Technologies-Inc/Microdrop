@@ -50,6 +50,12 @@ class ScopeStopwatch:
             self._elapsed_accum += now - self._elapsed_anchor
             self._elapsed_anchor = None
 
+    def is_stopped_at_zero(self):
+        """True when the elapsed clock is not ticking and nothing has
+        accumulated -- the state a seek leaves behind (start + immediate
+        stop) and the state of a never-started stopwatch."""
+        return self._elapsed_anchor is None and self._elapsed_accum == 0.0
+
     def elapsed(self, now):
         """Wall-clock seconds since start (ignores pauses)."""
         running = 0.0 if self._elapsed_anchor is None else now - self._elapsed_anchor
