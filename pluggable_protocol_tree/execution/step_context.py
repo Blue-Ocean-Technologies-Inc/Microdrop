@@ -17,7 +17,13 @@ import time
 from typing import Callable, Optional
 
 from pyface.api import GUI
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
+from heater_controller.consts import TEMPERATURE_REACHED
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
+from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.models.row import BaseRow
 from pluggable_protocol_tree.execution.exceptions import AbortError
 
 
@@ -108,17 +114,6 @@ class Mailbox:
             if triggered is stop_event:
                 raise AbortError("stop_event fired while waiting")
             # else self._wake fired; loop back and try to drain.
-
-
-# --- contexts ---
-
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
-
-from pluggable_protocol_tree.execution.cursor import ExecutionCursor
-from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.interfaces.i_column import IColumn
-from pluggable_protocol_tree.models.row import BaseRow
-
 
 class ProtocolContext(HasTraits):
     """Spans one protocol run.
