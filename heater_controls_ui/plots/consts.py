@@ -3,11 +3,7 @@ from microdrop_style.colors import (
     INFO_COLOR, WARNING_COLOR, ERROR_COLOR, SUCCESS_COLOR,
     PRIMARY_SHADE, SECONDARY_SHADE, GREY, WHITE,
 )
-from heater_controls_ui.consts import PKG, plot_listener_name  # noqa: F401 (re-export)
-
-# ``plot_listener_name`` (the distinct telemetry listener for this pane) is
-# owned by heater_controls_ui.consts alongside ACTOR_TOPIC_DICT; re-exported
-# here so the plots package can import it locally.
+from heater_controls_ui.consts import PKG
 
 # The plot dock pane's identity.
 PLOT_DOCK_PANE_ID = f"{PKG}.plot_dock_pane"
@@ -18,6 +14,21 @@ PLOT_DOCK_PANE_NAME = "Heater Plots"
 MAX_PLOT_POINTS = 500
 PLOT_UPDATE_INTERVAL_MS = 500
 
+# Role prefixes namespacing the toggleable series keys (a heater's PID and PWM
+# series share the heater name, so bare names would collide in hidden_series).
+SENSOR_SERIES_PREFIX = "sensor:"
+PID_SERIES_PREFIX = "pid:"
+PWM_SERIES_PREFIX = "pwm:"
+
+# Legend entries for hidden series stay visible but dimmed to this alpha.
+HIDDEN_LEGEND_ENTRY_ALPHA = 0.25
+
+# Pause / Stop plot buttons (checkable, icon-font glyphs).
+PAUSE_PLOT_TOOLTIP = ("Pause the plot. Data keeps arriving in the background; "
+                      "resume to continue (a gap marks the pause).")
+STOP_PLOT_TOOLTIP = ("Stop plotting entirely and discard the history. "
+                     "Use this if the plot slows the application down.")
+
 # Categorical palette for per-sensor temperature lines — brand colours ordered
 # for high adjacent contrast, cycled when there are more sensors than colours.
 SENSOR_PALETTE = (
@@ -27,7 +38,6 @@ SENSOR_PALETTE = (
     SECONDARY_SHADE[500],   # indigo
     PRIMARY_SHADE[300],     # light green
     SECONDARY_SHADE[800],   # dark blue
-    WARNING_COLOR,          # (re-used with offset never matters — cycle guard)
     GREY["dark"],           # grey
 )
 
