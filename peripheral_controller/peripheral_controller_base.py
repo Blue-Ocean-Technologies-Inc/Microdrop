@@ -3,7 +3,7 @@ from traits.api import Instance, Str, provides
 from peripheral_device_controller_base.peripheral_device_controller_base import PeripheralDeviceControllerBase
 
 from .interfaces.i_peripheral_controller_base import IPeripheralControllerBase
-from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_controller.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from .preferences import PeripheralPreferences
 
 from .consts import DEVICE_NAME, PKG

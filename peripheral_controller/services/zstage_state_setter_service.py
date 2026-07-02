@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from traits.api import provides, HasTraits, Instance
 
-from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_controller.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..interfaces.i_peripheral_control_mixin_service import IPeripheralControlMixinService

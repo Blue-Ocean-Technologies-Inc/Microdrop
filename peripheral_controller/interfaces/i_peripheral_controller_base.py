@@ -1,6 +1,6 @@
 from traits.api import Instance, Bool, Str
 
-from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_controller.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
 from ..preferences import PeripheralPreferences

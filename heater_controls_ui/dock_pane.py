@@ -9,7 +9,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_application.dialogs.pyface_wrapper import information
 from logger.logger_service import get_logger
 
-from peripheral_controller.preferences import PeripheralPreferences
+from .preferences import HeaterPreferences
 
 from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING, DUMP_CONFIG
 from .model import HeaterStatusModel
@@ -35,8 +35,8 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     view = UnifiedView
     status_bar_icon_glyph = ICON_MODE_HEAT
 
-    # Shared "Peripheral Settings" preferences (holds heater_show_stream_off_warning).
-    heater_preferences = Instance(PeripheralPreferences)
+    # Heater-owned slice of the shared "Peripheral Settings" node.
+    heater_preferences = Instance(HeaterPreferences)
 
     # Configure Sensors & Heaters editor state (the message handler fills it from
     # the board's config/scan signals; the dialog below renders it).
@@ -44,7 +44,7 @@ class HeaterStatusDockPane(BaseStatusDockPane):
 
     def traits_init(self):
         super().traits_init()
-        self.heater_preferences = PeripheralPreferences(
+        self.heater_preferences = HeaterPreferences(
             preferences=self.task.window.application.preferences_helper.preferences
         )
 

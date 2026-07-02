@@ -19,7 +19,6 @@ from typing import Callable, Optional
 from pyface.api import GUI
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
-from heater_controller.consts import TEMPERATURE_REACHED
 from pluggable_protocol_tree.execution.cursor import ExecutionCursor
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.interfaces.i_column import IColumn

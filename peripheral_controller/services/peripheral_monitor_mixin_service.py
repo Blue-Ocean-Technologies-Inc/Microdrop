@@ -1,6 +1,6 @@
 from traits.api import provides, Str, List
 
-from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_controller.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from logger.logger_service import get_logger
 
 from peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service import (

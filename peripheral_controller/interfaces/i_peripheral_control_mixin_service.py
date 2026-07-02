@@ -1,6 +1,6 @@
 from traits.api import Instance
 
-from microdrop_utils.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
+from peripheral_controller.dramatiq_peripheral_serial_proxy import DramatiqPeripheralSerialProxy
 from peripheral_device_controller_base.interfaces.i_peripheral_device_control_mixin_service import (
     IPeripheralDeviceControlMixinService,
 )

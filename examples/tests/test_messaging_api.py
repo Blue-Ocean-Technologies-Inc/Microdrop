@@ -177,6 +177,8 @@ class TestApplicationTopicsMatchConsts:
         assert ApplicationTopics.PROTOCOL_RUNNING == PROTOCOL_RUNNING
 
 
+# The Z-Stage/magnet stack is an installable plugin now; skip when absent.
+@pytest.mark.skipif(ZStageTopics is None, reason="magnet plugin not installed")
 class TestZStageTopicsMatchConsts:
 
     def test_signals(self):
