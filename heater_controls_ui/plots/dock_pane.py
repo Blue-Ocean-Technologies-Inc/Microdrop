@@ -73,6 +73,11 @@ class HeaterPlotDockPane(DockPane):
         if self._canvas is not None:
             self._canvas.stop()
             self._canvas = None
+        # Release the plot listener's Dramatiq actor name so a re-mounted
+        # pane can register fresh (runtime hot unload/reload).
+        if self.message_handler is not None:
+            self.message_handler.teardown()
+            self.message_handler = None
         super().destroy()
 
     # ------------------------------------------------------------------ #
