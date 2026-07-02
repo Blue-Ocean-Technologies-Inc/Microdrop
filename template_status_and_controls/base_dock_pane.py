@@ -27,7 +27,7 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from pyface.tasks.api import TraitsDockPane
 from pyface.qt.QtGui import QApplication, QLabel, QFont
-from traits.api import Any, Instance, observe
+from traits.api import Any, Instance, List, observe
 from traitsui.api import Handler
 
 from logger.logger_service import get_logger
@@ -118,6 +118,11 @@ class BaseStatusDockPane(TraitsDockPane):
     #: Status-bar icon widget (built once the window's status bar appears).
     status_bar_icon = Any(None)
 
+    #: Every widget this pane inserted into the status bar (icons AND their
+    #: spacers), tracked so destroy() can remove exactly what was added —
+    #: required for runtime hot unload of the pane.
+    _status_bar_inserted_widgets = List()
+
     # ------------------------------------------------------------------ #
     # Lifecycle                                                             #
     # ------------------------------------------------------------------ #
@@ -143,6 +148,43 @@ class BaseStatusDockPane(TraitsDockPane):
             kind="subpanel", parent=parent, handler=self.controller
         )
         return self.ui.control
+
+    def destroy(self):
+        """Tear down everything this pane set up (inverse of traits_init +
+        _populate_status_bar), then destroy the pane control.
+
+        This is what makes the pane hot-unloadable at runtime: the status-bar
+        widgets come out, the theme-change signal is disconnected, and the
+        message handler releases its Dramatiq listener name so a re-mounted
+        pane can register fresh. Also runs on normal app shutdown, so every
+        step is guarded to be safe when only partially set up.
+        """
+        self._teardown_status_bar()
+        if self.message_handler is not None:
+            self.message_handler.teardown()
+            self.message_handler = None
+        super().destroy()
+
+    def _teardown_status_bar(self):
+        """Remove this pane's status-bar widgets and signal hookups."""
+        if self._status_bar_inserted_widgets:
+            try:
+                QApplication.styleHints().colorSchemeChanged.disconnect(
+                    self._refresh_status_bar_tooltip
+                )
+            except (RuntimeError, TypeError):
+                pass                    # never connected / already gone
+            try:
+                status_bar = self.task.window.status_bar_manager.status_bar
+            except Exception as e:      # window already torn down (app exit)
+                logger.debug(f"Status bar gone before pane teardown: {e}")
+                status_bar = None
+            for widget in self._status_bar_inserted_widgets:
+                if status_bar is not None:
+                    status_bar.removeWidget(widget)
+                widget.deleteLater()
+            self._status_bar_inserted_widgets = []
+        self.status_bar_icon = None
 
     # ------------------------------------------------------------------ #
     # Factory hooks — implement / override in subclass                     #
@@ -206,11 +248,11 @@ class BaseStatusDockPane(TraitsDockPane):
         )
         status_bar = self.task.window.status_bar_manager.status_bar
         for widget in self._create_status_bar_widgets():
+            spacer = horizontal_spacer_widget(STATUS_BAR_SPACER_WIDTH)
             status_bar.insertPermanentWidget(STATUS_BAR_INSERT_INDEX, widget)
-            status_bar.insertPermanentWidget(
-                STATUS_BAR_INSERT_INDEX,
-                horizontal_spacer_widget(STATUS_BAR_SPACER_WIDTH),
-            )
+            status_bar.insertPermanentWidget(STATUS_BAR_INSERT_INDEX, spacer)
+            # Track both so destroy() removes exactly what this pane added.
+            self._status_bar_inserted_widgets.extend([widget, spacer])
 
     def _create_status_bar_icon(self):
         """
