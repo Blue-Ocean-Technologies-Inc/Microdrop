@@ -43,6 +43,21 @@ def _resolve_plugin_class(spec):
     return getattr(module, class_name)
 
 
+def _find_registered_plugin(application, plugin_class):
+    """The already-registered plugin INSTANCE of ``plugin_class``, or None.
+
+    Matched by isinstance against the live plugin manager — a Plugin's ``id``
+    cannot be read off the CLASS (Traits swallows the class-level default), so
+    id-based lookup silently returns None and breaks adoption."""
+    try:
+        for plugin in application.plugin_manager:
+            if isinstance(plugin, plugin_class):
+                return plugin
+    except Exception as e:
+        logger.debug(f"plugin-manager scan failed: {e}")
+    return None
+
+
 class PluginGroup(HasTraits):
     """One named, ordered set of plugins that load/unload together."""
 
@@ -186,12 +201,11 @@ class PluginGroupManager(HasTraits):
             instances, active = [], []
             for spec in group.plugin_specs:
                 try:
-                    plugin_id = getattr(_resolve_plugin_class(spec), "id", None)
+                    plugin_class = _resolve_plugin_class(spec)
                 except Exception as e:
                     logger.warning(f"adopt: cannot resolve {spec!r}: {e}")
                     continue
-                plugin = (application.get_plugin(plugin_id)
-                          if plugin_id else None)
+                plugin = _find_registered_plugin(application, plugin_class)
                 if plugin is not None:
                     instances.append(plugin)
                     active.append(spec)
@@ -272,6 +286,16 @@ class PluginGroupManager(HasTraits):
 
         for factory in factories:
             try:
+                # Belt-and-braces: if this plugin class is already registered
+                # (startup composition raced ahead of adoption), ADOPT the
+                # live instance — adding a second one duplicates its service
+                # offers and crashes the mixin composition ("duplicate base
+                # class" at the device controller's start).
+                existing = _find_registered_plugin(application, factory)
+                if existing is not None:
+                    group.instances.append(existing)
+                    logger.info(f"enable: adopted already-registered {existing.id}")
+                    continue
                 plugin = factory()
                 application.add_plugin(plugin)
                 application.start_plugin(plugin)

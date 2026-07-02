@@ -10,7 +10,7 @@ persisted enabled state on launch.
 from envisage.api import Plugin, SERVICE_OFFERS, ServiceOffer, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import Any, List, Str, observe
+from traits.api import Any, Bool, List, Str, observe
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
@@ -115,11 +115,23 @@ class PluginManagementPlugin(Plugin):
 
     # --- launch restore ---------------------------------------------------
 
-    @observe("application.application_initialized")
+    #: True once the launch restore has run (it must run exactly once).
+    _groups_restored = Bool(False)
+
+    # COLON (not dot) observe: "application:application_initialized" fires only
+    # when the application_initialized event fires. The dot form ALSO fires when
+    # the intermediate `application` trait is assigned — i.e. at app
+    # CONSTRUCTION, before the startup plugins are adoptable, which made this
+    # restore enable() duplicate heater plugin instances and crash startup with
+    # "duplicate base class HeaterMonitorMixinService".
+    @observe("application:application_initialized")
     def _restore_groups_on_launch(self, event):
         """Adopt the startup-composed group plugins, then reconcile every
         group to its persisted enabled flag (default enabled) — so a group
-        toggled off in a previous session stays off."""
+        toggled off in a previous session stays off. Runs exactly once."""
+        if self._groups_restored:
+            return
+        self._groups_restored = True
         manager = self._create_plugin_group_manager()
         try:
             manager.adopt_running(self.application)
