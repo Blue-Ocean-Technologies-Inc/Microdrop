@@ -91,6 +91,9 @@ class HeaterStatusDockPane(BaseStatusDockPane):
     # ------------------------------------------------------------------ #
     # Status-bar icon — heat symbol, clickable to trigger a connection scan #
     # ------------------------------------------------------------------ #
+    # Overrides of @observe-decorated methods MUST re-apply the decorator:
+    # an undecorated override silently drops the base registration.
+    @observe("task:window:status_bar_manager")
     def _populate_status_bar(self, event):
         super()._populate_status_bar(event)
         self._sync_search_affordance()  # initial cursor for the search state

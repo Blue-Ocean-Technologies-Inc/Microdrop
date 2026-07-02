@@ -195,7 +195,10 @@ class BaseStatusDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _populate_status_bar(self, event):
-        """Build the status-bar widgets and insert each (plus a spacer)."""
+        """Build the status-bar widgets and insert each (plus a spacer).
+
+        Subclass overrides MUST re-apply the @observe decorator above —
+        an undecorated override silently drops the observer registration."""
         self.status_bar_icon = self._create_status_bar_icon()
         self._refresh_status_bar_tooltip()
         QApplication.styleHints().colorSchemeChanged.connect(
