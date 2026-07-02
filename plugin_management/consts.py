@@ -39,7 +39,7 @@ APP_GLOBALS_KEYS = [
 BUILTIN_PLUGIN_GROUPS = (
     {
         "name": "zstage_ui",
-        "label": "Z-Stage UI (pane + protocol column)",
+        "label": "Z-Stage UI (controls/status dock-pane + protocol column + statusbar icon)",
         "plugin_specs": [
             "peripherals_ui.plugin:PeripheralUiPlugin",
             "peripheral_protocol_controls.plugin:PeripheralProtocolControlsPlugin",
@@ -58,7 +58,7 @@ BUILTIN_PLUGIN_GROUPS = (
     },
     {
         "name": "heater_ui",
-        "label": "Heater UI (pane + protocol column)",
+        "label": "Heater UI (status/controls and plotting dock-pane + protocol column + statusbar icon)",
         "plugin_specs": [
             "heater_controls_ui.plugin:HeaterControlsUiPlugin",
             "heater_protocol_controls.plugin:HeaterProtocolControlsPlugin",
