@@ -466,6 +466,14 @@ class StepContext(HasTraits):
                 f"wait_for({topic!r}) called but topic not in any handler's "
                 f"wait_for_topics; declare it on the IColumnHandler."
             )
+        # An ack-wait is a pause in the protocol for TIMING purposes: freeze the
+        # status timers (step / phase / protocol) while blocked, then thaw. This
+        # runs on the executor's worker thread; setting the Traits event drives
+        # the status controller synchronously. Skipped headless (signals None).
+        # try/finally keeps the freeze balanced across TimeoutError / AbortError.
+        signals = self.protocol.signals
+        if signals is not None:
+            signals.ack_wait_started = True
         try:
             return box.drain_one(
                 predicate=predicate,
@@ -481,6 +489,9 @@ class StepContext(HasTraits):
                 f"backend responder for this topic may be disconnected, not "
                 f"running, or slower than the timeout."
             ) from None
+        finally:
+            if signals is not None:
+                signals.ack_wait_finished = True
 
     def wait(self, *args, **kwargs):
         return self.protocol.wait(*args, **kwargs)
