@@ -27,6 +27,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
+from . import entry_point_discovery
 from .consts import BUILTIN_PLUGIN_GROUPS
 from .i_plugin_group_manager import IPluginGroupManager
 
@@ -69,6 +70,18 @@ class PluginGroup(HasTraits):
     #: enable — re-kicks the device's connection search, since the plugin's
     #: own application_initialized probe never fires on a hot enable.
     post_enable_publish_topic = Str()
+    #: The owning manifest's name + label, and the distribution the manifest
+    #: was shipped by. Empty for built-in groups; used to classify bundled vs.
+    #: installed plugins (installed_plugins / uninstall).
+    manifest_name = Str()
+    manifest_label = Str()
+    dist_name = Str()
+    #: Owning manifest's version (shown next to the plugin name).
+    manifest_version = Str()
+    #: True if this group is independently toggleable; built-ins always are.
+    optional = Bool(True)
+    #: Short label for the toggle checkbox column (falls back to label).
+    toggle_label = Str()
 
 
 @provides(IPluginGroupManager)
@@ -80,9 +93,86 @@ class PluginGroupManager(HasTraits):
     groups = Dict(Str, Instance(PluginGroup))
 
     def _groups_default(self):
-        return {
+        """Built-in groups plus every group declared by an installed package's
+        microdrop.plugins entry-point manifest. Manifest discovery reads TOML
+        package data only (no plugin imports), so a broken installed plugin
+        can't break startup; last writer wins on a name collision."""
+        groups = {
             spec["name"]: PluginGroup(**spec) for spec in BUILTIN_PLUGIN_GROUPS
         }
+        for manifest, dist_name in (
+                entry_point_discovery.discover_entry_point_manifests()):
+            self._add_manifest_groups(manifest, dist_name=dist_name, into=groups)
+        return groups
+
+    def _add_manifest_groups(self, manifest, dist_name="", into=None):
+        """Create a PluginGroup per spec in ``manifest`` and put it in ``into``
+        (defaults to self.groups)."""
+        target = self.groups if into is None else into
+        for spec in manifest.groups:
+            target[spec.name] = PluginGroup(
+                name=spec.name,
+                label=spec.label,
+                plugin_specs=list(spec.plugins),
+                enabled_key=spec.enabled_key,
+                post_enable_publish_topic=spec.post_enable_publish_topic,
+                manifest_name=manifest.name,
+                manifest_label=manifest.label,
+                dist_name=dist_name,
+                optional=spec.optional,
+                toggle_label=spec.toggle_label or spec.label,
+                manifest_version=manifest.version,
+            )
+
+    def register_manifest(self, manifest, dist_name=""):
+        """Register a freshly-installed manifest's groups at runtime. Refuses
+        (raises) if a colliding group name is currently loaded."""
+        for spec in manifest.groups:
+            existing = self.groups.get(spec.name)
+            if existing is not None and existing.loaded:
+                raise RuntimeError(
+                    f"group '{spec.name}' is currently enabled; disable it "
+                    f"before reinstalling")
+        self._add_manifest_groups(manifest, dist_name=dist_name)
+
+    #: The app's own distribution — its plugins are bundled (disable-only).
+    APP_DIST_NAMES = frozenset({"microdrop-py", "microdrop_py"})
+
+    @staticmethod
+    def _norm_dist(name):
+        return (name or "").strip().lower().replace("_", "-")
+
+    def installed_plugins(self):
+        """User-installed plugins (whose owning distribution is NOT the app's
+        own), one entry per distinct manifest, as (name, label, dist_name,
+        [group_names]) in discovery order. Built-in/bundled groups (no
+        dist_name, or the app's own distribution) are excluded."""
+        app = {self._norm_dist(n) for n in self.APP_DIST_NAMES}
+        out = {}
+        for group in self.groups.values():
+            if self._norm_dist(group.dist_name) in app or not group.dist_name:
+                continue
+            entry = out.get(group.manifest_name)
+            if entry is None:
+                entry = (group.manifest_name,
+                         group.manifest_label or group.manifest_name,
+                         group.dist_name, [])
+                out[group.manifest_name] = entry
+            entry[3].append(group.name)
+        return list(out.values())
+
+    def deregister_plugin(self, manifest_name):
+        """Drop every group owned by ``manifest_name`` from the registry and
+        clear its persisted enabled flag. Used by uninstall."""
+        for name in [n for n, g in self.groups.items()
+                     if g.manifest_name == manifest_name]:
+            group = self.groups.pop(name)
+            if group.enabled_key:
+                try:
+                    if group.enabled_key in app_globals:
+                        del app_globals[group.enabled_key]
+                except Exception as e:
+                    logger.debug(f"could not clear flag {group.enabled_key}: {e}")
 
     # --- launch integration -------------------------------------------
 
