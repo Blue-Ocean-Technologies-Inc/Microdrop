@@ -15,7 +15,8 @@ logger = get_logger(__name__)
 
 
 class ManagePluginsAction(TaskAction):
-    """Open the Manage Plugins window (enable/disable plugin groups)."""
+    """Open the Manage Plugins window (enable/disable groups, install from the
+    channel, uninstall)."""
 
     id = "manage_plugins_action"
     name = "&Manage Plugins…"
@@ -34,4 +35,4 @@ class ManagePluginsAction(TaskAction):
 
         model = ManagePluginsModel(manager=manager, application=application)
         model.edit_traits(view=manage_plugins_view,
-                          handler=ManagePluginsController())
+                          handler=ManagePluginsController(task=task))
