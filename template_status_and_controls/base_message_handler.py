@@ -32,6 +32,7 @@ from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
+    unregister_dramatiq_listener_actor,
 )
 from logger.logger_service import get_logger
 
@@ -76,6 +77,18 @@ class BaseMessageHandler(HasTraits):
             listener_name=self.name,
             class_method=self.listener_actor_routine,
         )
+
+    def teardown(self):
+        """Release the Dramatiq listener actor (inverse of traits_init).
+
+        Called when the owning pane is unmounted at runtime, so a future
+        handler instance can re-register under the same listener name.
+        Topic routing itself is retracted separately: the message router
+        reacts to the plugin's ACTOR_TOPIC_ROUTES contribution going away.
+        """
+        logger.info(f"Stopping message listener: {self.name!r}")
+        unregister_dramatiq_listener_actor(self.name)
+        self.dramatiq_listener_actor = None
 
     def listener_actor_routine(self, message, topic):
         """

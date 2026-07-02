@@ -9,10 +9,8 @@ from microdrop_application.backend_application import MicrodropBackendApplicatio
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
-from heater_controls_ui.plugin import HeaterControlsUiPlugin
-from peripheral_controller.plugin import PeripheralControllerPlugin
-from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
+from plugin_management.plugin import PluginManagementPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
@@ -20,9 +18,6 @@ from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
-from peripherals_ui.plugin import PeripheralUiPlugin
-from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
-from heater_protocol_controls.plugin import HeaterProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
@@ -66,14 +61,19 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     LoggerUIPlugin,
+    PluginManagementPlugin,
     DeviceViewerPlugin,
-    PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
-    PeripheralProtocolControlsPlugin,
-    HeaterProtocolControlsPlugin,
+    # The Z-Stage/magnet and heater stacks are standalone installable plugin
+    # packages now (magnet-microdrop-plugin, heater-microdrop-plugin): their
+    # groups are discovered from the installed packages' manifests and
+    # enabled by the plugin-group manager at application_initialized / via
+    # Tools > Manage Plugins — never listed here (double-loading a plugin
+    # duplicates its service offers and panes). The protocol tree hot-swaps
+    # their protocol columns when PROTOCOL_COLUMNS contributions change.
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
@@ -84,7 +84,6 @@ DROPBOT_FRONTEND_PLUGINS = [
     DropbotPreferencesPlugin,
     DropbotStatusAndControlsPlugin,
     DropbotToolsMenuPlugin,
-    HeaterControlsUiPlugin,
 ]
 
 OPENDROP_FRONTEND_PLUGINS = [
@@ -101,8 +100,8 @@ OPENDROP_BACKEND_PLUGINS = [
 ]
 
 DROPBOT_BACKEND_PLUGINS = [
-    PeripheralControllerPlugin,
-    HeaterControllerPlugin,
+    # PeripheralControllerPlugin / HeaterControllerPlugin are group-managed —
+    # see the note in FRONTEND_PLUGINS.
     DropbotControllerPlugin
 ]
 

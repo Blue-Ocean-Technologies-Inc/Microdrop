@@ -1,9 +1,0 @@
-heater_control:
-  compensation_offset: -12.14
-  compensation_rate: 1.43
-serial:
-  baudrate: 115200
-  pid: '0005'
-  vid: 2E8A
-zmq:
-  port: '88080'

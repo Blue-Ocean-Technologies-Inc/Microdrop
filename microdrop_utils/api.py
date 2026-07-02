@@ -79,7 +79,12 @@ from dropbot_protocol_controls import consts as _dpc
 from electrode_controller import consts as _electrode
 from device_viewer import consts as _device_viewer
 from microdrop_application import consts as _app
-from peripheral_controller import consts as _peripheral
+# The Z-Stage/magnet stack ships as an installable plugin now — its topics
+# are only aggregated here when the plugin is present in the environment.
+try:
+    from peripheral_controller import consts as _peripheral
+except ImportError:
+    _peripheral = None
 from ssh_controls import consts as _ssh
 from opendrop_controller import consts as _opendrop
 from mock_dropbot_controller import consts as _mock
@@ -190,30 +195,33 @@ class ApplicationTopics:
 # Peripheral / ZStage Controller  (peripheral_controller/consts.py)
 # ---------------------------------------------------------------------------
 
-class ZStageTopics:
-    """Topics for the ZStage peripheral (MR-Box magnets / z-stage)."""
+if _peripheral is not None:
+    class ZStageTopics:
+        """Topics for the ZStage peripheral (MR-Box magnets / z-stage)."""
 
-    DEVICE_NAME = _peripheral.DEVICE_NAME
+        DEVICE_NAME = _peripheral.DEVICE_NAME
 
-    class Signals:
-        """Signals emitted by the ZStage backend."""
-        CONNECTED           = _peripheral.CONNECTED
-        DISCONNECTED        = _peripheral.DISCONNECTED
-        POSITION_UPDATED    = _peripheral.ZSTAGE_POSITION_UPDATED
+        class Signals:
+            """Signals emitted by the ZStage backend."""
+            CONNECTED           = _peripheral.CONNECTED
+            DISCONNECTED        = _peripheral.DISCONNECTED
+            POSITION_UPDATED    = _peripheral.ZSTAGE_POSITION_UPDATED
 
-    class Requests:
-        """Requests accepted by the ZStage backend."""
-        START_DEVICE_MONITORING = _peripheral.START_DEVICE_MONITORING
-        GO_HOME                 = _peripheral.GO_HOME
-        MOVE_UP                 = _peripheral.MOVE_UP
-        MOVE_DOWN               = _peripheral.MOVE_DOWN
-        SET_POSITION            = _peripheral.SET_POSITION
-        RETRY_CONNECTION        = _peripheral.RETRY_CONNECTION
-        UPDATE_CONFIG           = _peripheral.UPDATE_CONFIG
+        class Requests:
+            """Requests accepted by the ZStage backend."""
+            START_DEVICE_MONITORING = _peripheral.START_DEVICE_MONITORING
+            GO_HOME                 = _peripheral.GO_HOME
+            MOVE_UP                 = _peripheral.MOVE_UP
+            MOVE_DOWN               = _peripheral.MOVE_DOWN
+            SET_POSITION            = _peripheral.SET_POSITION
+            RETRY_CONNECTION        = _peripheral.RETRY_CONNECTION
+            UPDATE_CONFIG           = _peripheral.UPDATE_CONFIG
 
-    class Errors:
-        """Error topics for the ZStage domain."""
-        ERROR               = _peripheral.ERROR
+        class Errors:
+            """Error topics for the ZStage domain."""
+            ERROR               = _peripheral.ERROR
+else:
+    ZStageTopics = None            # magnet plugin not installed
 
 
 # ---------------------------------------------------------------------------
