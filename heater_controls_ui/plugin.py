@@ -24,6 +24,11 @@ class HeaterControlsUiPlugin(BaseStatusPlugin):
         from .dock_pane import HeaterStatusDockPane
         return HeaterStatusDockPane
 
+    def _get_extra_dock_pane_classes(self) -> list:
+        # Second dock pane: live Temperature / PWM plots.
+        from .plots.dock_pane import HeaterPlotDockPane
+        return [HeaterPlotDockPane]
+
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 

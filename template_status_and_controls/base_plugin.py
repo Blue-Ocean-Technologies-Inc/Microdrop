@@ -78,7 +78,10 @@ class BaseStatusPlugin(Plugin):
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
-                dock_pane_factories=[self._get_dock_pane_class()],
+                dock_pane_factories=[
+                    self._get_dock_pane_class(),
+                    *self._get_extra_dock_pane_classes(),
+                ],
                 actions=self._get_menu_additions(),
             )
         ]
@@ -116,5 +119,14 @@ class BaseStatusPlugin(Plugin):
         Return a list of SchemaAddition objects to add to the menu bar.
 
         Default: empty list (no menus). Override to add device-specific menus.
+        """
+        return []
+
+    def _get_extra_dock_pane_classes(self) -> list:
+        """
+        Return additional dock pane factory classes to contribute alongside the
+        primary one (e.g. a plotting pane).
+
+        Default: empty list (just the primary dock pane). Override to add more.
         """
         return []

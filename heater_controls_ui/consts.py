@@ -1,18 +1,22 @@
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, GREY
 
 from heater_controller.consts import (  # noqa: F401 (re-export)
-    DEVICE_NAME, START_DEVICE_MONITORING, DUMP_CONFIG,
+    DEVICE_NAME, START_DEVICE_MONITORING, DUMP_CONFIG, TELEMETRY,
 )
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ").replace("Ui", "UI")
 listener_name = f"{PKG}_listener"
+# The plots dock pane taps telemetry through its own listener (re-exported from
+# plots.consts for use inside the plots package).
+plot_listener_name = f"{PKG}_plot_listener"
 
-# Single listener subscribing to all heater signals (connected/disconnected,
-# heaters_available, telemetry).
+# Main listener subscribes to all heater signals (connected/disconnected,
+# heaters_available, telemetry); the plot listener taps telemetry only.
 ACTOR_TOPIC_DICT = {
     listener_name: [f"{DEVICE_NAME}/signals/#"],
+    plot_listener_name: [TELEMETRY],
 }
 
 # Setpoint ranges (units shown in the spinbox suffix).

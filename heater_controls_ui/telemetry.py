@@ -30,6 +30,46 @@ def heater_from_frame(frame):
     return None
 
 
+def telemetry_samples(data):
+    """Extract the numeric plot samples from a telemetry frame.
+
+    The status readouts use :func:`format_telemetry` (display strings); the
+    plots need the raw numbers, so this is its numeric sibling and shares the
+    same frame semantics. Returns a dict shaped as one of:
+
+      * ``{"temperatures": {sensor_name: float}}``  — a ``TEMP`` frame's
+        per-sensor snapshot,
+      * ``{"heater": str, "pid_temperature": float?, "pwm_percentage": float?}``
+        — a ``PID_<HEATER>`` frame (each numeric key present only when valid).
+
+    Empty dict for frames with nothing plottable (WHOAMI / ERR / INFO / no
+    valid readings). Sub-threshold temperature sentinels are dropped, matching
+    the readout formatter.
+    """
+    frame = data.get("_frame", "")
+    if frame in ("WHOAMI", "ERR", "INFO"):
+        return {}
+
+    heater = heater_from_frame(frame)
+    if heater is not None:
+        out = {"heater": heater}
+        pid_temp = data.get("pid_temperature")
+        if isinstance(pid_temp, (int, float)) and pid_temp > INVALID_TEMP_THRESHOLD:
+            out["pid_temperature"] = float(pid_temp)
+        pwm = data.get("pwm_percentage")
+        if isinstance(pwm, (int, float)):
+            out["pwm_percentage"] = float(pwm)
+        return out
+
+    temps = data.get("temperatures") or {}
+    if isinstance(temps, dict):
+        clean = {name: float(value) for name, value in temps.items()
+                 if isinstance(value, (int, float)) and value > INVALID_TEMP_THRESHOLD}
+        if clean:
+            return {"temperatures": clean}
+    return {}
+
+
 def format_telemetry(data, pid_mode=False):
     """Map a telemetry frame to ``(heater, updates)``.
 
