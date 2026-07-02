@@ -1,27 +1,40 @@
-"""PluginManagementPlugin — runtime plugin management infrastructure.
+"""PluginManagementPlugin — runtime plugin management.
 
-Phase C scope: wires the reactive TASK_EXTENSIONS consumer, so any plugin
-added to / removed from the running application gets its dock panes mounted /
-unmounted and the menu bar rebuilt automatically. This is the UI-side analogue
-of what the message router already does for ACTOR_TOPIC_ROUTES.
-
-The manage/install/uninstall orchestration and its Tools-menu UI land on top
-of this in a later phase.
+Wires the reactive TASK_EXTENSIONS consumer (any plugin added to / removed
+from the running application gets its dock panes mounted/unmounted and the
+menu bar rebuilt automatically — the UI-side analogue of the message router's
+reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service,
+contributes the Tools ▸ Manage Plugins action, and restores each group's
+persisted enabled state on launch.
 """
-from envisage.api import Plugin, TASK_EXTENSIONS
-from traits.api import Any
+from envisage.api import Plugin, SERVICE_OFFERS, ServiceOffer, TASK_EXTENSIONS
+from envisage.ui.tasks.api import TaskExtension
+from pyface.action.schema.schema_addition import SchemaAddition
+from traits.api import Any, List, Str, observe
+
+from microdrop_application.consts import PKG as microdrop_application_PKG
 
 from .consts import PKG, PKG_name
+from .i_plugin_group_manager import IPluginGroupManager
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
 class PluginManagementPlugin(Plugin):
-    """Wires the reactive dock-pane / menu mounting for runtime plugin changes."""
+    """Reactive pane/menu mounting + the plugin-group manager service + UI."""
 
     id = PKG + ".plugin"
     name = f"{PKG_name} Plugin"
+
+    #: The task whose Tools menu we contribute to.
+    task_id_to_contribute_view = Str(f"{microdrop_application_PKG}.task")
+
+    my_service_offers = List(contributes_to=SERVICE_OFFERS)
+    contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+
+    #: Cached singleton group manager (lazily built by the service factory).
+    _manager = Any()
 
     #: View-layer controller that reactively mounts/unmounts dock panes +
     #: rebuilds the menu bar when TASK_EXTENSIONS change at runtime.
@@ -59,3 +72,57 @@ class PluginManagementPlugin(Plugin):
         if self._live_task_exts is not None:
             self._live_task_exts.on_changed(
                 list(event.added), list(event.removed))
+
+    # --- group-manager service -----------------------------------------
+
+    def _my_service_offers_default(self):
+        return [
+            ServiceOffer(
+                protocol=IPluginGroupManager,
+                factory=self._create_plugin_group_manager,
+            )
+        ]
+
+    def _create_plugin_group_manager(self, *args, **kwargs):
+        """Factory for the group manager, cached on the plugin so every lookup
+        shares one manager (and thus the loaded-group state)."""
+        if self._manager is None:
+            from .group_manager import PluginGroupManager
+            self._manager = PluginGroupManager()
+        return self._manager
+
+    # --- menu contribution ----------------------------------------------
+
+    def _contributed_task_extensions_default(self):
+        return [
+            TaskExtension(
+                task_id=self.task_id_to_contribute_view,
+                actions=[
+                    SchemaAddition(
+                        id="plugin_management.tools_actions",
+                        factory=self._tools_actions_group,
+                        path="MenuBar/Tools",
+                    )
+                ],
+            )
+        ]
+
+    def _tools_actions_group(self):
+        """Single Manage Plugins action in Tools."""
+        from pyface.tasks.action.api import SGroup
+        from .menus import ManagePluginsAction
+        return SGroup(ManagePluginsAction(), id="plugin_management_actions")
+
+    # --- launch restore ---------------------------------------------------
+
+    @observe("application.application_initialized")
+    def _restore_groups_on_launch(self, event):
+        """Adopt the startup-composed group plugins, then reconcile every
+        group to its persisted enabled flag (default enabled) — so a group
+        toggled off in a previous session stays off."""
+        manager = self._create_plugin_group_manager()
+        try:
+            manager.adopt_running(self.application)
+            manager.restore_persisted(self.application)
+        except Exception:
+            logger.exception("plugin-group launch restore failed")
