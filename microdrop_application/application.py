@@ -144,9 +144,26 @@ class MicrodropApplication(TasksApplication):
 
     def _splash_screen_default(self):
         splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo_FHD.png'
-        return SplashScreen(
+
+        class _TopMostSplashScreen(SplashScreen):
+            """SplashScreen forced to stay on top of every other window.
+
+            A bare ``QSplashScreen`` is frameless and top-level but does NOT carry
+            ``WindowStaysOnTopHint``, so while the app boots it can get buried behind
+            the task window. We add the hint (and raise/activate on show) so the splash
+            always sits at the top level of the application until it's closed.
+            """
+
+            def _create_control(self, parent):
+                control = super()._create_control(parent)
+                control.setWindowFlags(control.windowFlags() | Qt.WindowStaysOnTopHint)
+                control.raise_()
+                control.activateWindow()
+                return control
+
+        return _TopMostSplashScreen(
             image=ImageResource(str(splash_image_path)),
-            text="Microdrop-Next-Gen v.alpha"
+            text="Microdrop-Next-Gen v.beta"
         )
 
     #### Trait property getter/setters ########################################
