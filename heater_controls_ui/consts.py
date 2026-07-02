@@ -8,8 +8,7 @@ from heater_controller.consts import (  # noqa: F401 (re-export)
 PKG = '.'.join(__name__.split('.')[:-1])
 PKG_name = PKG.title().replace("_", " ").replace("Ui", "UI")
 listener_name = f"{PKG}_listener"
-# The plots dock pane taps telemetry through its own listener (re-exported from
-# plots.consts for use inside the plots package).
+# The plots dock pane taps telemetry through its own listener.
 plot_listener_name = f"{PKG}_plot_listener"
 
 # Main listener subscribes to all heater signals (connected/disconnected,
