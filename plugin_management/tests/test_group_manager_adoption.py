@@ -52,36 +52,46 @@ class FakeApp:
         self.calls.append(("unreg", sid))
 
 
+def test_group_registry_splits_ui_and_backend_per_device():
+    m = PluginGroupManager()
+    assert {"zstage_ui", "zstage_backend", "heater_ui", "heater_backend"} <= set(m.groups)
+
+
 def test_adopt_running_matches_startup_instances_by_class():
     ui, backend = HeaterControlsUiPlugin(), HeaterControllerPlugin()
     app = FakeApp(plugins=[ui, backend])
     m = PluginGroupManager()
     m.adopt_running(app)
-    heater = m.groups["heater"]
-    assert heater.loaded is True
-    assert heater.instances == [ui, backend]        # the LIVE instances
-    assert m.groups["zstage"].loaded is False       # not in this process
+    heater_ui = m.groups["heater_ui"]
+    assert heater_ui.loaded is True
+    assert heater_ui.instances == [ui]              # the LIVE instance
+    # Only the half present in this process becomes active.
+    assert heater_ui.active_specs == [
+        "heater_controls_ui.plugin:HeaterControlsUiPlugin"]
+    heater_backend = m.groups["heater_backend"]
+    assert heater_backend.loaded is True
+    assert heater_backend.instances == [backend]
+    assert m.groups["zstage_ui"].loaded is False    # not in this process
 
 
 def test_enable_adopts_already_registered_plugins_instead_of_duplicating():
-    ui, backend = HeaterControlsUiPlugin(), HeaterControllerPlugin()
-    app = FakeApp(plugins=[ui, backend])
+    backend = HeaterControllerPlugin()
+    app = FakeApp(plugins=[backend])
     m = PluginGroupManager()
     # No adoption ran (simulates the early-restore race): enable must still
-    # NOT add second instances of the startup-composed plugins.
-    m.enable(app, "heater")
-    assert m.is_loaded("heater")
-    assert m.groups["heater"].instances == [ui, backend]
+    # NOT add a second instance of the startup-composed plugin.
+    m.enable(app, "heater_backend")
+    assert m.is_loaded("heater_backend")
+    assert m.groups["heater_backend"].instances == [backend]
     assert not [c for c in app.calls if c[0] == "add"], app.calls
 
 
-def test_disable_after_adoption_removes_the_adopted_instances():
-    ui, backend = HeaterControlsUiPlugin(), HeaterControllerPlugin()
-    app = FakeApp(plugins=[ui, backend])
+def test_disable_after_adoption_removes_the_adopted_instance():
+    backend = HeaterControllerPlugin()
+    app = FakeApp(plugins=[backend])
     m = PluginGroupManager()
     m.adopt_running(app)
-    m.disable(app, "heater")
-    assert not m.is_loaded("heater")
-    removed = [name for op, name in app.calls if op == "remove"]
-    # Reverse unload order: backend stopped/removed before the UI.
-    assert removed == ["HeaterControllerPlugin", "HeaterControlsUiPlugin"]
+    m.disable(app, "heater_backend")
+    assert not m.is_loaded("heater_backend")
+    assert [name for op, name in app.calls if op == "remove"] == [
+        "HeaterControllerPlugin"]

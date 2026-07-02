@@ -18,8 +18,6 @@ from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
-from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
-from heater_protocol_controls.plugin import HeaterProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
@@ -69,15 +67,12 @@ FRONTEND_PLUGINS = [
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
-    # The Z-Stage / heater DEVICE plugins (UI + backend) are NOT startup-loaded:
-    # they are owned by the plugin-group manager (BUILTIN_PLUGIN_GROUPS), which
-    # enables them at application_initialized and via Tools > Manage Plugins.
-    # Listing them here too double-loads them (duplicate service offers /
-    # panes). Their PROTOCOL-CONTROLS plugins stay startup-loaded, though: the
-    # protocol tree snapshots PROTOCOL_COLUMNS once at its own start, so a
-    # group-managed column contribution would never appear.
-    PeripheralProtocolControlsPlugin,
-    HeaterProtocolControlsPlugin,
+    # The Z-Stage / heater plugins (UI, protocol-controls, and backend) are
+    # NOT startup-loaded: they are owned by the plugin-group manager
+    # (BUILTIN_PLUGIN_GROUPS), which enables them at application_initialized
+    # and via Tools > Manage Plugins. Listing them here too double-loads them
+    # (duplicate service offers / panes). The protocol tree hot-swaps their
+    # protocol columns when PROTOCOL_COLUMNS contributions change at runtime.
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
