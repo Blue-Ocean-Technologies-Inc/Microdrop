@@ -235,12 +235,23 @@ class BaseStatusDockPane(TraitsDockPane):
         if self.status_bar_icon is not None:
             self.status_bar_icon.setStyleSheet(f"color: {event.new}")
 
+    def on_live_mounted(self):
+        """Called by add_dock_pane_live after a runtime hot-mount.
+
+        The @observe("task:window:status_bar_manager") trigger below never
+        fires on a hot-mount — the window's status bar already exists — so the
+        live-mount path calls this instead. Idempotent via the guard in
+        _populate_status_bar."""
+        self._populate_status_bar(None)
+
     @observe("task:window:status_bar_manager")
     def _populate_status_bar(self, event):
         """Build the status-bar widgets and insert each (plus a spacer).
 
         Subclass overrides MUST re-apply the @observe decorator above —
         an undecorated override silently drops the observer registration."""
+        if self._status_bar_inserted_widgets:
+            return                      # already populated (observer + hot-mount)
         self.status_bar_icon = self._create_status_bar_icon()
         self._refresh_status_bar_tooltip()
         QApplication.styleHints().colorSchemeChanged.connect(
