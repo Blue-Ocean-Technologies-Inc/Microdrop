@@ -61,6 +61,42 @@ def test_clear_resets_everything():
     assert m.snapshot() == ([], {}, {}, {})
 
 
+def test_disabled_model_ignores_telemetry_and_clears_history():
+    m = HeaterPlotModel()
+    m.apply({"temperatures": {"inlet": 25.0}})
+    m.sample(now=0.0)
+    m.enabled = False                                   # full stop
+    assert m.snapshot() == ([], {}, {}, {})             # history dropped
+    m.apply({"temperatures": {"inlet": 26.0}})          # ignored while stopped
+    m.sample(now=1.0)
+    assert m.snapshot() == ([], {}, {}, {})
+    m.enabled = True                                    # fresh start
+    m.apply({"temperatures": {"inlet": 27.0}})
+    m.sample(now=2.0)
+    _times, sensors, _pids, _pwms = m.snapshot()
+    assert sensors["inlet"] == [27.0]
+
+
+def test_revision_moves_only_when_buffers_change():
+    m = HeaterPlotModel()
+    before = m.revision
+    m.sample(now=0.0)                                   # no data yet: no-op
+    assert m.revision == before
+    m.apply({"temperatures": {"inlet": 25.0}})          # latest only: no bump
+    assert m.revision == before
+    m.sample(now=1.0)                                   # appended a point
+    assert m.revision == before + 1
+    m.clear()                                           # blanking needs a redraw
+    assert m.revision == before + 2
+
+
+def test_run_state_defaults():
+    m = HeaterPlotModel()
+    assert m.paused is False
+    assert m.enabled is True
+    assert m.hidden_series == set()
+
+
 def test_rolling_window_caps_history():
     m = HeaterPlotModel()
     m.apply({"temperatures": {"inlet": 25.0}})
