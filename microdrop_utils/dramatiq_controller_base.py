@@ -153,6 +153,25 @@ def generate_class_method_dramatiq_listener_actor(
         return dramatiq_controller.listener_actor
 
 
+def unregister_dramatiq_listener_actor(listener_name: str) -> bool:
+    """Remove a listener actor from the broker's registry.
+
+    The inverse of generate_class_method_dramatiq_listener_actor, needed for
+    runtime hot unload/reload: while the name stays registered, a re-mount's
+    generate call warns and returns None, and the stale actor keeps dispatching
+    to the old, torn-down handler instance. Dramatiq has no public
+    remove-actor API, so this pops the broker's actor registry directly.
+
+    Returns True if an actor was removed, False if none was registered.
+    """
+    actor = dramatiq.get_broker().actors.pop(listener_name, None)
+    if actor is None:
+        logger.debug(f"No dramatiq actor named {listener_name!r} to unregister")
+        return False
+    logger.info(f"Unregistered dramatiq actor {listener_name!r}")
+    return True
+
+
 def basic_listener_actor_routine(
     parent_obj: object,
     timestamped_message: TimestampedMessage,    
