@@ -16,6 +16,10 @@ help_label = HtmlLabelEditor()  # plain, word-wrapped
 _MUTED = "color:#888; font-style:italic;"
 source_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Config source: {{}}</span>')
+# Scan result summary — non-italic and a touch stronger than the muted labels so
+# the operator's eye lands on it right after pressing "Scan for sensors".
+scan_summary_label = HtmlLabelEditor(
+    template='<span style="color:#555; font-weight:bold;">{}</span>')
 available_label = HtmlLabelEditor(
     template=f'<span style="{_MUTED}">Available sensors: {{}}</span>')
 push_status_label = HtmlLabelEditor(template=f'<span style="{_MUTED}">{{}}</span>')
@@ -53,6 +57,8 @@ SensorConfigView = View(
     VGroup(
         UItem("help_text", editor=help_label),
         UItem("source", editor=source_label),
+        UItem("scan_summary", editor=scan_summary_label,
+              visible_when="scan_summary"),
         Tabbed(
             UItem("sensors", editor=sensors_table, label="Sensors"),
             VGroup(

@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from heater_controls_ui.sensor_config.parsing import (
     sensor_rows, heater_rows, thermistor_names, parse_board_config, RESERVED_OW_KEYS,
-    split_sensor_names, build_board_config,
+    split_sensor_names, build_board_config, scan_summary,
 )
 from heater_controls_ui.sensor_config.model import SensorConfigModel
 from heater_controller.datamodels import HeaterConfigEdit, SensorNaming
@@ -51,6 +51,42 @@ def test_sensor_rows_status_logic():
 def test_sensor_rows_in_config_before_scan():
     rows = {r["rom"]: r["status"] for r in sensor_rows(CONFIG, [], scan_done=False)}
     assert rows["28ff1111111111aa"] == "In config"
+
+
+def test_scan_summary_before_scan_is_blank():
+    assert scan_summary(CONFIG, [], scan_done=False) == ""
+
+
+def test_scan_summary_matched_new_and_missing():
+    # inlet matched, outlet missing, one brand-new ROM on the bus.
+    summary = scan_summary(
+        CONFIG, ["28ff1111111111aa", "28ff9999999999cc"], scan_done=True)
+    assert summary == (
+        "Scan complete: 2 on bus (1 matched, 1 new). "
+        "1 config entry not found on bus.")
+
+
+def test_scan_summary_all_matched_no_missing():
+    summary = scan_summary(
+        CONFIG, ["28ff1111111111aa", "28ff2222222222bb"], scan_done=True)
+    assert summary == "Scan complete: 2 on bus (2 matched, 0 new)."
+
+
+def test_scan_summary_none_found_reports_all_missing():
+    summary = scan_summary(CONFIG, [], scan_done=True)
+    assert summary == (
+        "Scan complete: 0 on bus (0 matched, 0 new). "
+        "2 config entries not found on bus.")
+
+
+def test_model_sets_and_clears_scan_summary():
+    m = SensorConfigModel()
+    assert m.load_config_text(json.dumps(CONFIG)) is True
+    assert m.scan_summary == ""                       # no scan yet
+    m.set_scanned_roms(["28ff1111111111aa", "28ff9999999999cc"])
+    assert m.scan_summary.startswith("Scan complete: 2 on bus (1 matched, 1 new)")
+    m.load_config_text(json.dumps(CONFIG))            # fresh config clears it
+    assert m.scan_summary == ""
 
 
 def test_heater_rows():

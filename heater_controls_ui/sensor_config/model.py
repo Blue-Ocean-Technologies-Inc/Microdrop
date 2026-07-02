@@ -5,7 +5,9 @@ results (via :mod:`.parsing`); the view renders the two row lists as tables.
 """
 from traits.api import Str, Bool, List, HasTraits, Instance, Dict, observe
 
-from .parsing import parse_board_config, sensor_rows, heater_rows, thermistor_names
+from .parsing import (
+    parse_board_config, sensor_rows, heater_rows, thermistor_names, scan_summary,
+)
 
 # Instructional copy shown at the top of the dialog (rendered word-wrapped so a
 # long sentence doesn't force the pane wide).
@@ -73,6 +75,11 @@ class SensorConfigModel(HasTraits):
     # plus the thermistor names. Updates live as sensor names are edited.
     available_sensor_names = Str("(none)")
 
+    # One-line summary of the last bus scan (matched / new / missing counts),
+    # shown near the top of the dialog. Mirrors the old heater UI's scan status
+    # label. Empty until the first scan; cleared when a fresh config is loaded.
+    scan_summary = Str("")
+
     # Result of the last "Save & push to board" (set by the message handler from
     # the CONFIG_PUSHED signal); shown at the bottom of the dialog.
     push_status = Str("")
@@ -90,6 +97,7 @@ class SensorConfigModel(HasTraits):
         # old UI, every sensor reverts to "In config" until the bus is rescanned.
         self.scanned_roms = []
         self.scan_done = False
+        self.scan_summary = ""
         self._rebuild_rows(update_names=True)
         return True
 
@@ -99,6 +107,7 @@ class SensorConfigModel(HasTraits):
         self.scanned_roms = [str(r) for r in (roms or [])]
         self.scan_done = True
         self._rebuild_rows(update_names=False)
+        self.scan_summary = scan_summary(self.config, self.scanned_roms, self.scan_done)
 
     # ------------------------------------------------------------------ #
     @observe("sensors:items:name, sensors, config")

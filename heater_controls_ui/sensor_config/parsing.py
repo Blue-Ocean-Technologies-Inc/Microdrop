@@ -75,6 +75,28 @@ def sensor_rows(config, scanned_roms, scan_done):
     return rows
 
 
+def scan_summary(config, scanned_roms, scan_done):
+    """One-line summary of the last bus scan, mirroring the old heater UI:
+    how many sensors are on the bus (matched vs new) and how many configured
+    sensors were not found. Empty string until a scan has run (``scan_done``).
+
+    A scan that finds nothing still summarises ("0 on bus ...") so the operator
+    gets explicit feedback rather than silence."""
+    if not scan_done:
+        return ""
+    by_rom = set(_ow_name_to_rom(config))
+    scanned = {r.lower() for r in (scanned_roms or []) if isinstance(r, str)}
+    matched = len(scanned & by_rom)
+    new = len(scanned - by_rom)
+    missing = len(by_rom - scanned)
+    summary = (f"Scan complete: {matched + new} on bus "
+               f"({matched} matched, {new} new)")
+    if missing:
+        entries = "entry" if missing == 1 else "entries"
+        summary += f". {missing} config {entries} not found on bus"
+    return summary + "."
+
+
 def heater_rows(config):
     """Rows for the Heater Assignments table: one per heater channel, with its
     type and a comma-joined list of assigned sensor names. Each row is
