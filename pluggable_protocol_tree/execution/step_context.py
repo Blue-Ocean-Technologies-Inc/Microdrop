@@ -17,7 +17,13 @@ import time
 from typing import Callable, Optional
 
 from pyface.api import GUI
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
 
+from heater_controller.consts import TEMPERATURE_REACHED
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
+from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.models.row import BaseRow
 from pluggable_protocol_tree.execution.exceptions import AbortError
 
 
@@ -108,17 +114,6 @@ class Mailbox:
             if triggered is stop_event:
                 raise AbortError("stop_event fired while waiting")
             # else self._wake fired; loop back and try to drain.
-
-
-# --- contexts ---
-
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
-
-from pluggable_protocol_tree.execution.cursor import ExecutionCursor
-from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.interfaces.i_column import IColumn
-from pluggable_protocol_tree.models.row import BaseRow
-
 
 class ProtocolContext(HasTraits):
     """Spans one protocol run.
@@ -471,6 +466,14 @@ class StepContext(HasTraits):
                 f"wait_for({topic!r}) called but topic not in any handler's "
                 f"wait_for_topics; declare it on the IColumnHandler."
             )
+        # An ack-wait is a pause in the protocol for TIMING purposes: freeze the
+        # status timers (step / phase / protocol) while blocked, then thaw. This
+        # runs on the executor's worker thread; setting the Traits event drives
+        # the status controller synchronously. Skipped headless (signals None).
+        # try/finally keeps the freeze balanced across TimeoutError / AbortError.
+        signals = self.protocol.signals
+        if signals is not None:
+            signals.ack_wait_started = True
         try:
             return box.drain_one(
                 predicate=predicate,
@@ -486,6 +489,9 @@ class StepContext(HasTraits):
                 f"backend responder for this topic may be disconnected, not "
                 f"running, or slower than the timeout."
             ) from None
+        finally:
+            if signals is not None:
+                signals.ack_wait_finished = True
 
     def wait(self, *args, **kwargs):
         return self.protocol.wait(*args, **kwargs)

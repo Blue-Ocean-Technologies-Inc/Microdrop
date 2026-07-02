@@ -3,7 +3,7 @@ from traits.api import observe
 from pyface.tasks.dock_pane import DockPane
 
 from pyface.qt.QtGui import QFont, Qt
-from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QLabel, QApplication
+from pyface.qt.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QApplication
 
 from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.general_style import get_general_style
@@ -13,8 +13,9 @@ from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_STAIRS
 from microdrop_style.label_style import get_label_style
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
-from .consts import PKG, PKG_name,DEVICE_NAME
+from microdrop_utils.pyside_helpers import horizontal_spacer_widget, ClickableLabel
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from .consts import PKG, PKG_name, DEVICE_NAME, START_DEVICE_MONITORING
 
 from dropbot_status_and_controls.consts import disconnected_color, connected_color
 
@@ -97,7 +98,10 @@ class PeripheralStatusDockPane(DockPane):
 
         _model = self.dramatiq_controller.ui.model
 
-        device_status = QLabel(ICON_STAIRS)
+        # Clickable: triggers a Z-Stage connection scan (same as Tools ▸
+        # Peripherals ▸ Z-Stage ▸ Search Connection), ignored while one is
+        # already running (see model.searching).
+        device_status = ClickableLabel(ICON_STAIRS)
 
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
@@ -113,20 +117,40 @@ class PeripheralStatusDockPane(DockPane):
 
         _model.observe(set_status_color, "status")
 
+        def search_connection():
+            """Ask the backend to start a connection scan, unless one is already
+            running. The backend acknowledges via the searching signal, which
+            disables the icon."""
+            if _model.searching:
+                return
+            publish_message(message="", topic=START_DEVICE_MONITORING)
+
+        device_status.clicked.connect(search_connection)
+
         self.status_bar_icon = device_status
 
-        ### update tooltip based on dark / light mode
-        def _apply_theme_style():
-            self.status_bar_icon.setToolTip(get_status_icon_tooltip_themed())
+        def apply_tooltip(*args):
+            # Themed legend; the hint flips to "searching" while a scan is active.
+            device_status.setToolTip(get_status_icon_tooltip_themed(_model.searching))
 
-        _apply_theme_style()  # initial setting
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)  # track theme changes
+        def sync_search_affordance(event=None):
+            # Pointing-hand only when a click would actually start a scan.
+            device_status.setCursor(
+                Qt.CursorShape.ArrowCursor if _model.searching
+                else Qt.CursorShape.PointingHandCursor)
+            apply_tooltip()
 
-def get_status_icon_tooltip_themed():
+        sync_search_affordance()  # initial cursor + tooltip
+        _model.observe(sync_search_affordance, "searching")
+        QApplication.styleHints().colorSchemeChanged.connect(apply_tooltip)  # track theme changes
+
+def get_status_icon_tooltip_themed(searching=False):
     if is_dark_mode():
         title_color = WHITE
     else:
         title_color = GREY['dark']
+
+    hint = "Searching for device…" if searching else "Click to search for a connection."
 
     z_stage_status_icon_tooltip_html = f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
@@ -135,6 +159,7 @@ def get_status_icon_tooltip_themed():
         <li><strong style="color: {disconnected_color};">Disconnected</strong></li>
         <li><strong style="color: {connected_color};">Connected</strong></li>
       </ul>
+      <div style="margin-top: 3px;"><em>{hint}</em></div>
     </div>
     """
     return z_stage_status_icon_tooltip_html

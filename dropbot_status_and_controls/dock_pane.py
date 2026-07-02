@@ -3,7 +3,9 @@ from PySide6.QtWidgets import QMenu
 from traits.api import Instance, observe
 
 from dropbot_status_and_controls.preferences import DropbotStatusAndControlsPreferences
+from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
+from template_status_and_controls.realtime_mode_icon_mixin import RealtimeModeIconMixin
 
 from .consts import PKG, PKG_name, listener_name
 from .model import DropbotStatusAndControlsModel
@@ -13,29 +15,35 @@ from .message_handler import DialogSignals, DropbotStatusAndControlsMessageHandl
 from .dialog_views import DialogView
 
 
-class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
+class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane):
     """Dock pane for DropBot status display and controls."""
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
 
-    # TraitsDockPane wires these together; view.handler must be set at class level.
-    dropbot_status_preferences = Instance(DropbotStatusAndControlsPreferences)
-    model = DropbotStatusAndControlsModel()
     view = UnifiedView
-    controller = ControlsController(model)
-    view.handler = controller
+    status_bar_icon_glyph = ICON_DROP_EC
+
+    dropbot_status_preferences = Instance(DropbotStatusAndControlsPreferences)
+    dialog_view = Instance(DialogView)
+    _dialog_signals = Instance(DialogSignals)
 
     def traits_init(self):
         super().traits_init()
         self.dropbot_status_preferences = DropbotStatusAndControlsPreferences(
             preferences=self.task.window.application.preferences_helper.preferences
         )
-        self.model.preferences=self.dropbot_status_preferences
+        self.model.preferences = self.dropbot_status_preferences
 
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factories                                          #
     # ------------------------------------------------------------------ #
+
+    def _create_model(self):
+        return DropbotStatusAndControlsModel()
+
+    def _create_controller(self):
+        return ControlsController(self.model)
 
     def _create_message_handler(self) -> DropbotStatusAndControlsMessageHandler:
         self._dialog_signals = DialogSignals()
@@ -46,7 +54,7 @@ class DropbotStatusAndControlsDockPane(BaseStatusDockPane):
         )
 
     def _setup_extras(self):
-        """Wire up dialog popups and the status-bar icon."""
+        """Wire up the dialog popups."""
         self.dialog_view = DialogView(
             dialog_signals=self._dialog_signals,
             message_handler=self.message_handler,

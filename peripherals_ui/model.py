@@ -10,3 +10,6 @@ class PeripheralModel(HasTraits):
     realtime_mode = Bool(False)
     # True once a connection search has been requested (by button or menu action) this session.
     search_requested = Bool(False)
+    # True while the backend's monitor thread is actively scanning for the board
+    # (driven by the ZStage/signals/searching signal). Gates the status-icon click.
+    searching = Bool(False)

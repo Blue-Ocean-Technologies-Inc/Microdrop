@@ -1,10 +1,13 @@
 # enthought imports
 from envisage.ids import PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import List, Str
+from traits.api import List, Str, observe
 from envisage.api import Plugin, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.hardware_device_monitoring_helpers import check_connected_ports_hwid
+from peripheral_controller.consts import MR_BOX_HWID, START_DEVICE_MONITORING as START_DEVICE_MONITORING
 from .consts import PKG, ACTOR_TOPIC_DICT
 
 # microdrop imports
@@ -74,3 +77,18 @@ class PeripheralUiPlugin(Plugin):
         from .menus import tools_menu_factory
 
         return tools_menu_factory()
+
+    @observe("application.application_initialized")
+    def _on_app_initialized(self, event):
+
+        # check if peripheral board connected
+        if check_connected_ports_hwid(MR_BOX_HWID):
+            logger.critical(
+                "Peripheral Board Maybe Connected: Requesting Peripheral Board Search"
+            )
+            publish_message(message="", topic=START_DEVICE_MONITORING)
+        else:
+            logger.info(
+                "Peripheral Board not connected. To start search, goto tools menu:"
+                "Tools -> Peripherals -> Z-Stage -> Search Connection or use the peripheral UI Dock Pane button."
+            )

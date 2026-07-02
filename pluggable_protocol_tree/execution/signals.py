@@ -31,6 +31,16 @@ class ExecutorSignals(HasTraits):
     # when the wait ends. Drives the loading screen.
     protocol_wait_started  = Event()        # payload: int ms
     protocol_wait_finished = Event()
+    # Acknowledgement wait (ctx.wait_for) bracketing. Set when a mailbox wait
+    # begins blocking and again when it unblocks, so the status timers freeze
+    # for the duration of the wait — an ack-wait is a pause in the protocol for
+    # timing purposes. Distinct from protocol_paused: it does NOT enter the
+    # operator-Paused state (no pause_event, no "Paused" UI), so a per-phase
+    # hardware ack can't flicker the UI or corrupt the executor's real pause
+    # checkpoints. Ref-counted on the model, so concurrent parallel-bucket
+    # waits nest correctly. Payload unused.
+    ack_wait_started   = Event()
+    ack_wait_finished  = Event()
 
     # Per-step. step_started carries the executor's AUTHORITATIVE 1-based
     # position so the status model can SET (never increment) its step index —

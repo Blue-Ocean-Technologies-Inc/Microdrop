@@ -59,6 +59,80 @@ def test_pause_freezes_active_not_elapsed_all_scopes():
     assert m.protocol_clock.active(6.0) == 2.0
 
 
+def test_ack_wait_freezes_active_without_entering_paused():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(0.0, step_total=1)
+    m.on_step_start(0.0, 1, 1, (0,), "A", "-")
+    m.on_phase_start(0.0, 1, 1, 1.0)
+    m.enter_ack_wait(1.0)
+    # An ack-wait is a pause for timing only: active freezes, elapsed keeps
+    # ticking, and the operator-Paused flag is NOT set.
+    assert m.paused is False
+    assert m.protocol_clock.elapsed(5.0) == 5.0
+    assert m.protocol_clock.active(5.0) == 1.0
+    assert m.step_clock.active(5.0) == 1.0
+    assert m.phase_clock.active(5.0) == 1.0
+    m.exit_ack_wait(5.0)
+    assert m.phase_clock.active(6.0) == 2.0
+
+
+def test_nested_ack_waits_thaw_only_when_last_ends():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(0.0, step_total=1)
+    m.on_step_start(0.0, 1, 1, (0,), "A", "-")
+    m.on_phase_start(0.0, 1, 1, 1.0)
+    m.enter_ack_wait(1.0)          # depth 1 -> freeze
+    m.enter_ack_wait(2.0)          # depth 2 -> already frozen
+    m.exit_ack_wait(3.0)          # depth 1 -> still frozen
+    assert m.phase_clock.active(4.0) == 1.0
+    m.exit_ack_wait(4.0)          # depth 0 -> thaw
+    assert m.phase_clock.active(5.0) == 2.0
+
+
+def test_ack_wait_ending_while_operator_paused_stays_frozen():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(0.0, step_total=1)
+    m.on_step_start(0.0, 1, 1, (0,), "A", "-")
+    m.on_phase_start(0.0, 1, 1, 1.0)
+    m.enter_ack_wait(1.0)          # freeze via wait
+    m.pause(2.0)                   # operator also pauses (already frozen)
+    m.exit_ack_wait(3.0)          # wait ends but operator still paused
+    assert m.paused is True
+    assert m.phase_clock.active(9.0) == 1.0   # stays frozen
+    m.resume(9.0)
+    assert m.phase_clock.active(10.0) == 2.0
+
+
+def test_phase_start_during_ack_wait_starts_frozen():
+    m = ProtocolStatusModel()
+    m.on_protocol_start(0.0, step_total=1)
+    m.on_step_start(0.0, 1, 1, (0,), "A", "-")
+    m.enter_ack_wait(0.0)                 # wait in flight before the phase
+    m.on_phase_start(1.0, 1, 1, 1.0)     # phase clock starts, must be frozen
+    assert m.phase_clock.active(5.0) == 0.0
+    m.exit_ack_wait(5.0)
+    assert m.phase_clock.active(6.0) == 1.0
+
+
+def test_ack_wait_ending_after_paused_seek_does_not_start_sought_clocks():
+    # Seek-stopped clocks may only be fresh-started by an operator resume.
+    # An exit_ack_wait thaw must leave them at 0 until the executor's
+    # step_started re-seats them — the sought-to step has not begun executing.
+    m = ProtocolStatusModel()
+    m.on_protocol_start(0.0, step_total=2)
+    m.on_step_start(0.0, 1, 2, (0,), "A", "B")
+    m.enter_ack_wait(1.0)                 # step A blocks on an ack
+    m.pause(2.0)                          # operator pauses during the wait
+    m.seek_step(3.0, 2, 2, (1,), "B", "-")
+    m.resume(4.0)                         # wait still in flight: stay frozen
+    m.exit_ack_wait(5.0)                  # thaws protocol clock ONLY
+    assert m.step_clock.active(9.0) == 0.0
+    assert m.step_clock.elapsed(9.0) == 0.0
+    assert m.protocol_clock.active(9.0) == 5.0   # frozen 1.0-5.0, then resumed
+    m.on_step_start(9.0, 2, 2, (1,), "B", "-")   # executor re-seats the clock
+    assert m.step_clock.active(10.0) == 1.0
+
+
 def test_step_start_while_paused_keeps_active_frozen():
     m = ProtocolStatusModel()
     m.on_protocol_start(0.0, step_total=2)

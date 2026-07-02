@@ -3,13 +3,19 @@
 Holds the observable counters / names and three ScopeStopwatch clocks
 (protocol / step / phase), and encapsulates the timing *rules* (a new step
 resets the phase clock; pause freezes active but not elapsed; ...). Pure:
-no Qt, no threads, no direct clock calls -- every timing method takes
-``now`` so the model is unit-testable with a fake clock.
+no Qt, no direct clock calls -- every timing method takes ``now`` so the
+model is unit-testable with a fake clock. NOT thread-free: the executor's
+worker threads drive the freeze transitions (pause/resume, ack-wait
+bracketing) and the step/phase starts concurrently, so every mutation of
+the clocks or the freeze state (``paused`` / ``_wait_depth``) happens under
+``_freeze_lock``.
 
 The view binds to the observable traits (discrete updates) and polls the
 clocks for the continuously-changing time readouts. See
 ProtocolStatusController for the executor-signal -> model wiring.
 """
+
+import threading
 
 from traits.api import Any, Bool, Float, HasTraits, Instance, Int, Str
 
@@ -66,6 +72,57 @@ class ProtocolStatusModel(HasTraits):
     step_clock = Instance(ScopeStopwatch, ())
     phase_clock = Instance(ScopeStopwatch, ())
 
+    # Guards the freeze-state transitions (paused / _wait_depth) since the
+    # executor's worker threads drive them concurrently. Mirrors the plain
+    # lock StepContext keeps for its phase-buffer coordination state.
+    _freeze_lock = Instance(threading.Lock)
+
+    # Nesting depth of in-progress acknowledgement waits (ctx.wait_for). An
+    # ack-wait is a pause in the protocol AS FAR AS TIMING GOES, so the active
+    # clocks freeze while depth > 0 -- but WITHOUT entering the operator-Paused
+    # state (``paused`` stays False, no pause_event, no "Paused" UI). Ref-counted
+    # because parallel-bucket handlers (RoutesHandler + VolumeThresholdHandler)
+    # can each be inside a wait_for at the same time, on different worker threads.
+    _wait_depth = Int(0)
+
+    def __freeze_lock_default(self):
+        return threading.Lock()
+
+    # --- freeze helpers (shared by operator-pause AND ack-wait) ---
+
+    def _clocks_should_run(self):
+        """The active clocks tick only when neither the operator has paused
+        NOR an acknowledgement wait is in flight."""
+        return not self.paused and self._wait_depth == 0
+
+    def _freeze_clocks(self, now):
+        self.protocol_clock.pause(now)
+        self.step_clock.pause(now)
+        self.phase_clock.pause(now)
+
+    def _thaw_clocks(self, now, restart_seek_stopped=False):
+        self.protocol_clock.resume(now)
+        # Clocks that were stopped by seek need a fresh start rather than a
+        # resume so they begin ticking from now -- but ONLY on an operator
+        # resume. An exit_ack_wait thaw must NOT restart them: after a paused
+        # seek the sought-to step has not begun executing, so its clocks stay
+        # at 0 until step_started re-seats them.
+        for clock_attr in ("step_clock", "phase_clock"):
+            clock = getattr(self, clock_attr)
+            if restart_seek_stopped and clock.is_stopped_at_zero():
+                clock.start(now)
+            else:
+                clock.resume(now)
+
+    def _apply_freeze(self, now, was_running, restart_seek_stopped=False):
+        """Freeze or thaw the active clocks to match the current combined state,
+        given whether they WERE running before the state change."""
+        now_running = self._clocks_should_run()
+        if was_running and not now_running:
+            self._freeze_clocks(now)
+        elif not was_running and now_running:
+            self._thaw_clocks(now, restart_seek_stopped)
+
     # --- rule methods ---
 
     def reset(self):
@@ -76,16 +133,23 @@ class ProtocolStatusModel(HasTraits):
         signals that fire right after the executor's on_post_protocol_end).
         Clocks are zeroed BEFORE flipping ``running`` so the view's
         running->False refresh paints 0.0, not the final frozen time."""
-        self.protocol_clock = ScopeStopwatch()
-        self.step_clock = ScopeStopwatch()
-        self.phase_clock = ScopeStopwatch()
+        # The clock swap, wait-depth zeroing and paused clearing must be ONE
+        # atomic freeze-state transition: an exit_ack_wait landing between
+        # them on a worker thread would see stale depth/paused against the
+        # fresh clocks and start them, leaving the idle view ticking.
+        with self._freeze_lock:
+            self.protocol_clock = ScopeStopwatch()
+            self.step_clock = ScopeStopwatch()
+            self.phase_clock = ScopeStopwatch()
+            self._wait_depth = 0
+            self.paused = False
         self.current_step_path = None
         self.trait_set(
             step_index=0, step_total=0, phase_index=0, phase_total=0,
             repeats_completed=0, repeats_total=1,
             frame_index=0, frame_total=0, step_rep_index=0, step_rep_total=0,
             recent_step_name="-", next_step_name="-", rep_chain_label="",
-            phase_target_s=0.0, running=False, paused=False, dyn_idle=False,
+            phase_target_s=0.0, running=False, dyn_idle=False,
             dyn_loop_active=False,
         )
 
@@ -109,14 +173,18 @@ class ProtocolStatusModel(HasTraits):
         self.phase_index = 0
         self.phase_total = 0
         self.phase_target_s = 0.0
-        self.step_clock.start(now)
-        self.phase_clock = ScopeStopwatch()      # fresh, unstarted
+        # The start + freeze-check must be one atomic freeze-state read: an
+        # exit_ack_wait thawing on another worker thread in between would let
+        # the stale "frozen" verdict pause the clock with no thaw ever coming.
+        with self._freeze_lock:
+            self.step_clock.start(now)
+            self.phase_clock = ScopeStopwatch()  # fresh, unstarted
+            if not self._clocks_should_run():    # started mid-freeze: keep frozen
+                self.step_clock.pause(now)
         # Advancing to the next step clears any stale dynamic-loop state from
         # the previous step (fixes BUG #2 — stale dyn_idle/dyn_loop_active).
         self.dyn_idle = False
         self.dyn_loop_active = False
-        if self.paused:                          # started mid-pause: keep frozen
-            self.step_clock.pause(now)
 
     def on_phase_start(self, now, phase_index, phase_total, phase_target_s):
         self.phase_index = int(phase_index)
@@ -125,9 +193,11 @@ class ProtocolStatusModel(HasTraits):
             self.phase_target_s = float(phase_target_s)
         except (TypeError, ValueError):
             self.phase_target_s = 0.0
-        self.phase_clock.start(now)
-        if self.paused:
-            self.phase_clock.pause(now)
+        # Atomic with the freeze state for the same reason as on_step_start.
+        with self._freeze_lock:
+            self.phase_clock.start(now)
+            if not self._clocks_should_run():
+                self.phase_clock.pause(now)
         # A NORMAL phase clears the dynamic-loop flags; the dyn_* methods below
         # call this first and re-set them afterward (#477).
         self.dyn_idle = False
@@ -195,22 +265,34 @@ class ProtocolStatusModel(HasTraits):
             pass
 
     def pause(self, now):
-        self.paused = True
-        self.protocol_clock.pause(now)
-        self.step_clock.pause(now)
-        self.phase_clock.pause(now)
+        with self._freeze_lock:
+            was_running = self._clocks_should_run()
+            self.paused = True
+            self._apply_freeze(now, was_running)
 
     def resume(self, now):
-        self.paused = False
-        self.protocol_clock.resume(now)
-        # Clocks that were stopped by seek (elapsed_anchor is None) need a
-        # fresh start rather than a resume so they begin ticking from now.
-        for clock_attr in ("step_clock", "phase_clock"):
-            clock = getattr(self, clock_attr)
-            if clock._elapsed_anchor is None and clock._elapsed_accum == 0.0:
-                clock.start(now)
-            else:
-                clock.resume(now)
+        with self._freeze_lock:
+            was_running = self._clocks_should_run()
+            self.paused = False
+            self._apply_freeze(now, was_running, restart_seek_stopped=True)
+
+    def enter_ack_wait(self, now):
+        """A ctx.wait_for started blocking: freeze the active clocks (unless
+        already frozen by pause or another in-flight wait). Balanced by
+        :meth:`exit_ack_wait`."""
+        with self._freeze_lock:
+            was_running = self._clocks_should_run()
+            self._wait_depth += 1
+            self._apply_freeze(now, was_running)
+
+    def exit_ack_wait(self, now):
+        """A ctx.wait_for stopped blocking: thaw the active clocks once the last
+        wait ends AND the operator has not paused."""
+        with self._freeze_lock:
+            was_running = self._clocks_should_run()
+            if self._wait_depth > 0:
+                self._wait_depth -= 1
+            self._apply_freeze(now, was_running)
 
     def on_repetition(self, completed, total):
         self.repeats_completed = int(completed)

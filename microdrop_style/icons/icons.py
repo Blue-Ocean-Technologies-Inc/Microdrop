@@ -37,3 +37,4 @@ ICON_DROP_EC         = "\uf875" # droplet with bolt
 
 ICON_STAIRS          = "\uf46c" # stairs
 ICON_JOYSTICK        = "\uf5ee" # joystick (gamepad connection indicator)
+ICON_MODE_HEAT       = "\uf16a" # mode_heat (heater status indicator)
