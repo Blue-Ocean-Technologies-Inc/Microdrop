@@ -46,7 +46,12 @@ class IMessageHandler(Interface):
     The handler subscribes to pub/sub topics and updates the model.
     It must be started (Dramatiq actor registered) via traits_init().
     """
-    pass
+
+    def teardown(self) -> None:
+        """Release the Dramatiq listener actor (inverse of traits_init) so a
+        future handler instance can re-register under the same name — required
+        for runtime hot unload/reload of the owning pane."""
+        ...
 
 
 class IStatusController(Interface):
