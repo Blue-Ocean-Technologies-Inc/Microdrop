@@ -9,9 +9,6 @@ from microdrop_application.backend_application import MicrodropBackendApplicatio
 from microdrop_application.plugin import MicrodropPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
-from heater_controls_ui.plugin import HeaterControlsUiPlugin
-from peripheral_controller.plugin import PeripheralControllerPlugin
-from heater_controller.plugin import HeaterControllerPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.plugin import PluginManagementPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
@@ -21,7 +18,6 @@ from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
 from device_viewer.plugin import DeviceViewerPlugin
-from peripherals_ui.plugin import PeripheralUiPlugin
 from peripheral_protocol_controls.plugin import PeripheralProtocolControlsPlugin
 from heater_protocol_controls.plugin import HeaterProtocolControlsPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
@@ -69,11 +65,17 @@ FRONTEND_PLUGINS = [
     LoggerUIPlugin,
     PluginManagementPlugin,
     DeviceViewerPlugin,
-    PeripheralUiPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
+    # The Z-Stage / heater DEVICE plugins (UI + backend) are NOT startup-loaded:
+    # they are owned by the plugin-group manager (BUILTIN_PLUGIN_GROUPS), which
+    # enables them at application_initialized and via Tools > Manage Plugins.
+    # Listing them here too double-loads them (duplicate service offers /
+    # panes). Their PROTOCOL-CONTROLS plugins stay startup-loaded, though: the
+    # protocol tree snapshots PROTOCOL_COLUMNS once at its own start, so a
+    # group-managed column contribution would never appear.
     PeripheralProtocolControlsPlugin,
     HeaterProtocolControlsPlugin,
     ProtocolQuickActionToolsPlugin,
@@ -86,7 +88,6 @@ DROPBOT_FRONTEND_PLUGINS = [
     DropbotPreferencesPlugin,
     DropbotStatusAndControlsPlugin,
     DropbotToolsMenuPlugin,
-    HeaterControlsUiPlugin,
 ]
 
 OPENDROP_FRONTEND_PLUGINS = [
@@ -103,8 +104,8 @@ OPENDROP_BACKEND_PLUGINS = [
 ]
 
 DROPBOT_BACKEND_PLUGINS = [
-    PeripheralControllerPlugin,
-    HeaterControllerPlugin,
+    # PeripheralControllerPlugin / HeaterControllerPlugin are group-managed —
+    # see the note in FRONTEND_PLUGINS.
     DropbotControllerPlugin
 ]
 
