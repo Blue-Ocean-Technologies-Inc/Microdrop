@@ -168,14 +168,45 @@ No per-device `plugin.py` changes are needed.
   ran in `task.activated()` — that timing was load-bearing.
   `application_initialized` fires via `set_trait_later` after
   `_create_windows()` returns, safely past both hazards.
-- **Other status-bar citizens are untouched:** `device_viewer`'s
-  recording icon (direct `insertPermanentWidget(1, ...)`) and the
-  `StatusBarManager`'s own joystick indicator
-  (`attach_gamepad_indicator`, inserted at the first permanent slot
-  after all other icons so it is the outermost-LEFT icon) keep their
-  existing direct-insertion paths. The icon container is *appended*
-  (rightmost), so the joystick stays left of all pane icons. Migrating
-  those two into the extension point is deliberately out of scope.
+- ~~Other status-bar citizens are untouched~~ — superseded by Phase 2
+  (below): the joystick and recording icons are migrated too.
+
+## Phase 2 (same branch): icon priorities + last two direct inserts
+
+User-approved follow-up 2026-07-03: every icon flows through the
+extension point; no `insertPermanentWidget` outside `microdrop_status_bar`.
+
+- **Priority:** contributions stay bare QWidgets. An optional plain
+  attribute `status_bar_icon_priority` (int, default 0) orders the
+  container: sorted by `(priority, arrival order)`, lower = further
+  left; positives land right of defaults. `consts.py` adds
+  `ICON_PRIORITY_DEFAULT = 0`, `ICON_PRIORITY_LEFT = -1`,
+  `ICON_PRIORITY_LEFTMOST = -2`. `_apply_icon_changes` inserts at the
+  index of the first existing widget with a strictly greater priority.
+- **Joystick → device_viewer** (owner of the gamepad service): the
+  dock pane creates the QLabel (same glyph/font/colors), tags it
+  `ICON_PRIORITY_LEFTMOST`, hands it to the gamepad service
+  (`svc.gamepad_icon`), and contributes it via a new
+  `DeviceViewerPlugin.status_bar_icons` trait. The service colors the
+  icon directly (green/controller-name vs grey/"Gamepad disconnected",
+  logic moved from `StatusBarManager._apply_gamepad_label_state`); its
+  re-apply observer watches `gamepad_icon`. The deferred
+  `QTimer.singleShot(0, attach_gamepad_indicator)` ordering hack is
+  deleted — priority replaces timing.
+- **Recording icon → contribution**, tagged `ICON_PRIORITY_LEFT`
+  (right of joystick, left of device icons), still hidden until the
+  record toggle fires; the `insertPermanentWidget(1, ...)` call is
+  deleted.
+- **StatusBarManager slims down:** `gamepad_label`, `gamepad_status`,
+  `_gamepad_attached`, `attach_gamepad_indicator`,
+  `_gamepad_status_updated`, `_apply_gamepad_label_state`,
+  `STATUSBAR_ICON_SPACING`, `STATUSBAR_FIRST_PERMANENT_INDEX`, and the
+  joystick-related imports are deleted; the manager handles messages,
+  the center label, and theming only. HUD messages keep using the
+  manager unchanged.
+- **Visible change (accepted):** joystick/recording gaps become the
+  container's uniform `ICON_SPACING` instead of the old style-default
+  gaps.
 
 ## Testing
 

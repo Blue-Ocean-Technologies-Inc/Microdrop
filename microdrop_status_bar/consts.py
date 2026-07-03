@@ -13,3 +13,10 @@ DEFAULT_STATUS_MESSAGE = "Free Mode"
 
 #: Contents margins (left, top, right, bottom) of the status bar.
 STATUS_BAR_CONTENTS_MARGINS = (30, 0, 30, 0)
+
+#: Contributors may set ``widget.status_bar_icon_priority`` (plain int
+#: attribute) on a contributed widget to order it in the bar: lower =
+#: further left, ties keep arrival order. Unset means ICON_PRIORITY_DEFAULT.
+ICON_PRIORITY_DEFAULT = 0
+ICON_PRIORITY_LEFT = -1
+ICON_PRIORITY_LEFTMOST = -2

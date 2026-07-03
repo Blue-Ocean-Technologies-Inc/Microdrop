@@ -20,6 +20,7 @@ from microdrop_utils.pyface_helpers import StatusBarManager
 
 from .consts import (
     DEFAULT_STATUS_MESSAGE,
+    ICON_PRIORITY_DEFAULT,
     ICON_SPACING,
     PKG,
     PKG_name,
@@ -85,9 +86,8 @@ class StatusBarPlugin(Plugin):
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(ICON_SPACING)
-        # Appended, i.e. rightmost — so the joystick indicator's deferred
-        # insert at the first permanent slot stays LEFT of every
-        # contributed icon (see StatusBarManager.attach_gamepad_indicator).
+        # One container, appended once; icons order INSIDE it by their
+        # ``status_bar_icon_priority`` attribute (see consts).
         status_bar.addPermanentWidget(container)
         self._icon_container = container
 
@@ -117,11 +117,28 @@ class StatusBarPlugin(Plugin):
             except RuntimeError as e:
                 logger.debug(f"status-bar icon already deleted: {e}")
         for widget in added:
-            layout.addWidget(widget)
+            layout.insertWidget(self._insert_index(layout, widget), widget)
         logger.info(
             f"status bar icons changed: +{len(added)} -{len(removed)}; "
             f"{layout.count()} in the bar"
         )
+
+    @staticmethod
+    def _insert_index(layout, widget):
+        """Slot for ``widget`` in the priority-ordered container: before the
+        first icon with a strictly greater ``status_bar_icon_priority``, so
+        equal priorities keep arrival order (lower priority = further left).
+        """
+        priority = getattr(
+            widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
+        )
+        for i in range(layout.count()):
+            other = layout.itemAt(i).widget()
+            if priority < getattr(
+                other, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
+            ):
+                return i
+        return layout.count()
 
     @on_trait_change("status_bar_icons_items")
     def _on_status_bar_icons_items_changed(self, event):
