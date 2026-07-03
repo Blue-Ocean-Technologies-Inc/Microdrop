@@ -59,7 +59,7 @@ class MessageRouterPlugin(Plugin):
                 for topic in topics_list:
                     try:
                         data.remove_subscriber_from_topic(topic, actor_name)
-                        logger.info(f"router unsubscribed {actor_name} from {topic}")
+                        logger.debug(f"router unsubscribed {actor_name} from {topic}")
                     except (KeyError, ValueError):
                         # Two contributions can declare the same (actor,
                         # topic) pair; the flat map holds it once, so the
@@ -72,7 +72,7 @@ class MessageRouterPlugin(Plugin):
                 for topic in topics_list:
                     data.add_subscriber_to_topic(topic, actor_name)
 
-                logger.info(f"router subscribed {actor_name} to {topics_list}")
+                logger.debug(f"router subscribed {actor_name} to {topics_list}")
 
     @on_trait_change("actor_topic_routing_items")
     def _on_actor_topic_routing_items_changed(self, event):

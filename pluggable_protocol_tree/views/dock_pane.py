@@ -360,7 +360,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # grid entries and push any persisted ack waits into them.
         self.preferences.seed_ack_times_from_columns(self.columns)
         self._sync_handler_ack_times()
-        logger.info(
+        logger.debug(
             f"protocol columns rebuilt: +{sorted(added)} -{sorted(removed)}"
         )
 
