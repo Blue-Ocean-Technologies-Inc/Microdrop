@@ -11,11 +11,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error as error_dialog, escape_html_multiline)
 from microdrop_utils.threaded_progress import run_with_wait
 
-from logger.logger_service import get_logger
-
 from .relaunch import confirm_and_relaunch
-
-logger = get_logger(__name__)
 
 
 def show_update_dialog(report, application):

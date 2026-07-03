@@ -172,6 +172,12 @@ class PluginManagementPlugin(Plugin):
         except package_installer.InstallError as e:
             logger.info(f"plugin update check skipped: {e}")
             return
+        except Exception:
+            # The design promises a silent, log-only skip on ANY failure —
+            # e.g. the post-fetch cache write raising OSError (disk full /
+            # read-only app home), which is not an InstallError.
+            logger.exception("plugin update check failed unexpectedly")
+            return
         report = compute_update_report(old, new, installed)
         if not report.has_content:
             logger.info("plugin update check: everything up to date")
