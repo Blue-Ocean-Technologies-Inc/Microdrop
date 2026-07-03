@@ -138,4 +138,4 @@ def rebuild_menu_bar_live(window, task, application):
             logger.exception(
                 "rebuild_menu_bar_live: failed to destroy old menu bar manager"
             )
-    logger.info("rebuild_menu_bar_live: menu bar rebuilt")
+    logger.debug("rebuild_menu_bar_live: menu bar rebuilt")

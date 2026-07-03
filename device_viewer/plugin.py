@@ -1,6 +1,7 @@
 # Standard library imports.
 from traits.api import List, Str
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
 # Enthought library imports.
 from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
@@ -36,6 +37,11 @@ class DeviceViewerPlugin(Plugin):
 
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    #: Status-bar widgets contributed at runtime: the device-viewer dock
+    #: pane extends this list (joystick + recording icons); the
+    #: microdrop_status_bar plugin places, spaces, and removes them.
+    status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
     ###########################################################################
     # Protected interface.

@@ -1,0 +1,161 @@
+"""
+StatusBarPlugin — the one home for the application status bar.
+
+Creates the window's StatusBarManager and owns the ``status_bar_icons``
+extension point: other plugins contribute QWidget instances (typically at
+runtime, from their dock panes) and this plugin places them in a single
+icon container whose QHBoxLayout gives every icon the same gap. Removing
+a widget from the extension point removes it from the bar and deletes it.
+
+Dynamic contribution handling mirrors MessageRouterPlugin: apply the
+current extensions once the container exists, then react to
+``<name>_items`` delta events for runtime (hot load/unload) changes.
+"""
+from envisage.api import ExtensionPoint, Plugin
+from pyface.qt.QtGui import QHBoxLayout, QWidget
+from traits.api import Any, List, observe, on_trait_change
+
+from logger.logger_service import get_logger
+from microdrop_utils.pyface_helpers import StatusBarManager
+
+from .consts import (
+    DEFAULT_STATUS_MESSAGE,
+    ICON_PRIORITY_DEFAULT,
+    ICON_SPACING,
+    PKG,
+    PKG_name,
+    STATUS_BAR_CONTENTS_MARGINS,
+    STATUS_BAR_ICONS,
+)
+
+logger = get_logger(__name__)
+
+
+class StatusBarPlugin(Plugin):
+    """Creates the app status bar and manages contributed status icons."""
+
+    id = PKG + ".plugin"
+    name = f"{PKG_name} Plugin"
+
+    status_bar_icons = ExtensionPoint(
+        List(),
+        id=STATUS_BAR_ICONS,
+        desc="QWidget instances to show in the app status bar; this plugin "
+             "owns their placement, spacing, and removal",
+    )
+
+    #: Single container appended to the status bar; its HBox layout gives
+    #: every contributed icon the same gap.
+    _icon_container = Any(None)
+
+    def start(self):
+        # Wire the registry's extension-point listeners to this plugin's
+        # traits so the handlers below fire when contributions change at
+        # runtime. Opt-in (envisage never calls it for you), and only
+        # possible once the plugin is attached to the application.
+        self.connect_extension_point_traits()
+
+    @observe("application:application_initialized")
+    def _setup_status_bar(self, event):
+        """Build the status bar once windows and their pane contents exist.
+
+        Deliberately NOT ``application:active_window``: that fires on the
+        first Qt focus-activation, mid ``window.open()`` — before dock-pane
+        contents are created (their status-bar observers would run against
+        half-built panes), and before the task-activation sweep (pyface
+        ``TaskWindow._update_traits_given_new_active_state``) overwrites
+        ``window.status_bar_manager`` with ``task.status_bar`` (None),
+        discarding anything installed earlier. ``application_initialized``
+        is set via ``set_trait_later`` after ``_create_windows()`` returns,
+        so both hazards are past.
+        """
+        windows = self.application.windows
+        window = self.application.active_window or (
+            windows[0] if windows else None
+        )
+        if window is None or self._icon_container is not None:
+            return
+        if window.status_bar_manager is None:
+            window.status_bar_manager = StatusBarManager(
+                messages=[DEFAULT_STATUS_MESSAGE], size_grip=True
+            )
+        status_bar = window.status_bar_manager.status_bar
+        status_bar.setContentsMargins(*STATUS_BAR_CONTENTS_MARGINS)
+
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(ICON_SPACING)
+        # One container, appended once; icons order INSIDE it by their
+        # ``status_bar_icon_priority`` attribute (see consts).
+        status_bar.addPermanentWidget(container)
+        self._icon_container = container
+
+        # Contributions made before the window existed already sit in the
+        # extension point — apply them now; the _items handler below keeps
+        # the bar in sync from here on.
+        self._apply_icon_changes(added=self.status_bar_icons, removed=[])
+
+    # ------------------------------------------------------------------ #
+    # Extension-point sync                                                 #
+    # ------------------------------------------------------------------ #
+
+    def _apply_icon_changes(self, added, removed):
+        """Apply contribution deltas to the icon container."""
+        if self._icon_container is None:
+            return  # no window yet; current extensions applied at setup
+        try:
+            layout = self._icon_container.layout()
+        except RuntimeError as e:   # container died with the window (app exit)
+            logger.debug(f"status-bar icon container gone: {e}")
+            self._icon_container = None
+            return
+        for widget in removed:
+            try:
+                layout.removeWidget(widget)
+                widget.deleteLater()
+            except RuntimeError as e:
+                logger.debug(f"status-bar icon already deleted: {e}")
+        for widget in added:
+            layout.insertWidget(self._insert_index(layout, widget), widget)
+        logger.info(
+            f"status bar icons changed: +{len(added)} -{len(removed)}; "
+            f"{layout.count()} in the bar"
+        )
+
+    @staticmethod
+    def _insert_index(layout, widget):
+        """Slot for ``widget`` in the priority-ordered container: before the
+        first icon with a strictly greater ``status_bar_icon_priority``, so
+        equal priorities keep arrival order (lower priority = further left).
+        """
+        priority = getattr(
+            widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
+        )
+        for i in range(layout.count()):
+            other = layout.itemAt(i).widget()
+            if priority < getattr(
+                other, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
+            ):
+                return i
+        return layout.count()
+
+    @on_trait_change("status_bar_icons_items")
+    def _on_status_bar_icons_items_changed(self, event):
+        """A contribution changed while the app is running.
+
+        Plugin-driven changes (a contributing plugin mutating its
+        contribution trait, plugins added/removed from the manager) always
+        carry an index, which ExtensionPoint.connect surfaces as this
+        synthetic "<name>_items" property event. No real
+        ``status_bar_icons_items`` trait exists, so the string-matched
+        on_trait_change must bind it — observe() rejects unknown names.
+        """
+        self._apply_icon_changes(event.added, event.removed)
+
+    @observe("status_bar_icons")
+    def _on_status_bar_icons_replaced(self, event):
+        """Index-less wholesale replacement of the extension point
+        (registry.set_extensions) — never fired for plugin contribution
+        changes; covered for completeness."""
+        self._apply_icon_changes(added=event.new, removed=event.old)

@@ -9,6 +9,11 @@ from electrode_controller.consts import electrode_state_change_publisher
 
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.icons.icons import ICON_JOYSTICK
+from microdrop_status_bar.consts import (
+    ICON_PRIORITY_LEFT,
+    ICON_PRIORITY_LEFTMOST,
+)
 
 from microdrop_application.dialogs.pyface_wrapper import (
     NO,
@@ -25,6 +30,7 @@ from pyface.qt.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
+    QLabel,
     QMenu,
     QPushButton,
     QScrollArea,
@@ -62,7 +68,6 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     CollapsibleVStackBox,
-    horizontal_spacer_widget,
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
@@ -1349,42 +1354,54 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
+        if getattr(self, "gamepad_icon", None) is not None:
+            return                      # already built; a re-fired manager
+                                        # assignment must not duplicate icons
         # Push the manager to the camera widget now that it exists, so
         # media-capture notifications can use it directly.
         self.camera_control_widget.status_bar_manager = event.new
 
-        # Same for the gamepad interaction service: it was constructed before
-        # the manager existed, so push it now. The service re-applies its
-        # connection indicator (and HUD) once the manager is set.
-        svc = self._gamepad_interaction_service()
-        if svc is not None:
-            svc.status_bar_manager = event.new
+        _font = QFont(ICON_FONT_FAMILY)
+        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
 
-        # --- Initialize widgets ---
+        # Recording indicator: hidden until the camera's record toggle fires.
         self.recording_icon = PulsingLabel(
             icon_str="album",
             stylesheet="color: red;",
             tooltip="Recording in progress...",
         )
-
-        # Apply font settings
-        _font = QFont(ICON_FONT_FAMILY)
-        _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
         self.recording_icon.setFont(_font)
-
-        # --- Add to Status Bar ---
-        self.task.window.status_bar_manager.status_bar.insertPermanentWidget(1, self.recording_icon)
-
-        # Hide recording icon initially so it waits for a trigger
         self.recording_icon.hide()
+        self.recording_icon.status_bar_icon_priority = ICON_PRIORITY_LEFT
+        self.camera_control_widget.record_toggle_button.toggled.connect(
+            self.recording_icon.set_enabled
+        )
 
-        self.camera_control_widget.record_toggle_button.toggled.connect(self.recording_icon.set_enabled)
+        # Joystick indicator: always visible, outermost-left of all status
+        # icons via priority. Created in the disconnected state; the gamepad
+        # interaction service recolors it on controller connect/disconnect.
+        self.gamepad_icon = QLabel(ICON_JOYSTICK)
+        self.gamepad_icon.setFont(_font)
+        self.gamepad_icon.setStyleSheet(f"color: {GREY['lighter']};")
+        self.gamepad_icon.setToolTip("Gamepad disconnected")
+        self.gamepad_icon.status_bar_icon_priority = ICON_PRIORITY_LEFTMOST
 
-        # Place the joystick icon as the outermost-LEFT status-bar icon.
-        # Deferred via singleShot(0) so it runs after every other plugin's
-        # synchronous status-bar setup (realtime icon, ladder, etc.) has added
-        # its icons; attach_gamepad_indicator then inserts the joystick at the
-        # first permanent slot, to the left of them all, with uniform spacing.
-        _mgr = event.new
-        if _mgr is not None and hasattr(_mgr, "attach_gamepad_indicator"):
-            QTimer.singleShot(0, _mgr.attach_gamepad_indicator)
+        # Hand the gamepad service its HUD sink (the manager) and its
+        # indicator icon; both were unavailable when it was constructed.
+        # Setting gamepad_icon re-applies the current connection state.
+        svc = self._gamepad_interaction_service()
+        if svc is not None:
+            svc.status_bar_manager = event.new
+            svc.gamepad_icon = self.gamepad_icon
+
+        # Contribute both icons; the microdrop_status_bar plugin owns their
+        # placement, spacing, and removal.
+        plugin = self.task.window.application.get_plugin(PKG)
+        if plugin is None:
+            logger.warning(
+                f"{PKG}: plugin not found; status-bar icons not shown"
+            )
+            return
+        plugin.status_bar_icons.extend(
+            [self.gamepad_icon, self.recording_icon]
+        )

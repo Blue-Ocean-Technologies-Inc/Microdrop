@@ -4,6 +4,7 @@ BaseStatusPlugin — Envisage plugin wiring for device status-and-controls panel
 Every device panel plugin needs the same Envisage boilerplate:
   - contributed_task_extensions  (dock pane + optional menu items)
   - actor_topic_routing          (Dramatiq topic subscriptions)
+  - status_bar_icons             (runtime status-bar icon contributions)
 
 Subclasses provide the device-specific pieces through factory methods,
 keeping the Envisage machinery out of each device module.
@@ -22,6 +23,7 @@ from envisage.ui.tasks.api import TaskExtension
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
 from logger.logger_service import get_logger
 
@@ -69,6 +71,10 @@ class BaseStatusPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
     actor_topic_routing = List(contributes_to=ACTOR_TOPIC_ROUTES)
+    #: Status-bar widgets contributed at runtime: BaseStatusDockPane
+    #: extends this list when it populates the bar; the
+    #: microdrop_status_bar plugin places, spaces, and removes them.
+    status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
     # ------------------------------------------------------------------ #
     # Trait defaults                                                        #

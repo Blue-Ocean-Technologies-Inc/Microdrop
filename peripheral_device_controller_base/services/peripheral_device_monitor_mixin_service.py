@@ -1,6 +1,6 @@
 import json
 
-from traits.api import provides, HasTraits, Bool, Instance, Str, List, observe
+from traits.api import provides, HasTraits, Bool, Instance, Str, List, observe, Event
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_SHUTDOWN
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -38,7 +38,7 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
 
     _default_hwids = List(Str)
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
-    _searching = Bool(False)    # Is the monitor thread actively scanning right now?
+    _searching = Event(desc="Is the monitor thread actively scanning right now?")
 
     @observe("_searching")
     def _searching_changed(self, event):

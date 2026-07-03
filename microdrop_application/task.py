@@ -15,7 +15,6 @@ from electrode_controller.consts import electrode_disable_request_publisher, dis
 from .consts import PKG
 from dropbot_controller.models.self_tests import TestEvent
 
-from microdrop_utils.pyface_helpers import StatusBarManager
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
                                                       basic_listener_actor_routine)
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
@@ -102,15 +101,6 @@ class MicrodropTask(Task):
     def activated(self):
         """Called when the task is activated."""
         logger.info("Microdrop task activated")
-        if self.window.status_bar_manager is None:
-            logger.info("Microdrop task: No status bar manager created: Adding now...")
-            self._add_status_bar_to_window()
-
-    def _add_status_bar_to_window(self):
-        logger.info(f"Adding status bar to Microdrop Task window.")
-        self.window.status_bar_manager = StatusBarManager(messages=["Free Mode"], size_grip=True)
-
-        self.window.status_bar_manager.status_bar.setContentsMargins(30, 0, 30, 0)
 
     ###########################################################################
     # Protected interface.
