@@ -25,6 +25,7 @@ from device_viewer.consts import (
     GAMEPAD_DEBOUNCE_REALTIME_S, GAMEPAD_AXIS_THRESHOLD,
 )
 from logger.logger_service import get_logger
+from microdrop_style.colors import GREY, SUCCESS_COLOR
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
@@ -80,6 +81,11 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     #: Optional: status bar manager for HUD messages
     status_bar_manager = Instance(object, allow_none=True)
+
+    #: Optional: persistent joystick indicator (QLabel) on the app status
+    #: bar. Created and contributed by the device-viewer dock pane; this
+    #: service only recolors it and sets its tooltip.
+    gamepad_icon = Instance(object, allow_none=True)
 
     autoroute_paths = Dict({})
 
@@ -217,27 +223,33 @@ class ElectrodeInteractionControllerService(HasTraits):
             pass
 
     def _set_gamepad_indicator(self, text: str) -> None:
-        """Update the persistent gamepad indicator on the app status bar.
+        """Color/tooltip the persistent joystick icon on the app status bar.
 
-        Empty ``text`` hides the indicator. Unlike ``_set_hud`` (a transient,
-        rotating action message), this is a persistent connection state.
+        Empty ``text`` shows the disconnected state. Unlike ``_set_hud`` (a
+        transient, rotating action message), this is a persistent connection
+        state: connected = the same green as the other status-bar icons with
+        the controller name as tooltip; disconnected = a theme-independent
+        light gray that reads correctly on both status-bar backgrounds.
         """
-        mgr = getattr(self, "status_bar_manager", None)
-        if mgr is None:
+        icon = self.gamepad_icon
+        if icon is None:
             return
         try:
-            mgr.gamepad_status = text
-        except Exception:
-            pass
+            connected = bool(text)
+            color = SUCCESS_COLOR if connected else GREY["lighter"]
+            icon.setStyleSheet(f"color: {color};")
+            icon.setToolTip(text if connected else "Gamepad disconnected")
+        except RuntimeError as e:       # icon deleted with the window
+            logger.debug(f"gamepad indicator gone: {e}")
 
-    @observe("status_bar_manager")
-    def _on_status_bar_manager_set(self, event):
-        """Re-apply the gamepad indicator when the status bar manager arrives.
+    @observe("gamepad_icon")
+    def _on_gamepad_icon_set(self, event):
+        """Re-apply the connection state when the joystick icon arrives.
 
-        The manager is typically None when this service is constructed (the task
-        creates it in activated(), after dock-pane creation) and is pushed in
-        later. Without this, a controller acquired during startup would set the
-        indicator against a None manager and never show the icon.
+        The icon is None when this service is constructed (the dock pane
+        creates and contributes it once the status bar exists) and is pushed
+        in later. Without this, a controller acquired during startup would
+        color a None icon and never show as connected.
         """
         if event.new is None or not self._pygame_enabled or self._pygame_joystick is None:
             return
