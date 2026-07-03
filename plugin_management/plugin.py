@@ -7,6 +7,8 @@ reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service,
 contributes the Tools ▸ Manage Plugins action, and restores each group's
 persisted enabled state on launch.
 """
+import threading
+
 from envisage.api import Plugin, SERVICE_OFFERS, ServiceOffer, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
@@ -138,3 +140,44 @@ class PluginManagementPlugin(Plugin):
             manager.restore_persisted(self.application)
         except Exception:
             logger.exception("plugin-group launch restore failed")
+
+    #: True once the launch update check has started (runs exactly once).
+    _update_check_started = Bool(False)
+
+    @observe("application:application_initialized")
+    def _check_plugin_updates_on_launch(self, event):
+        """Fetch the plugins channel in the background and, when an
+        installed package has an update or new plugins appeared since the
+        last launch, show the update dialog. Never blocks launch; offline
+        (or any fetch failure) is silent. Colon-observe for the same
+        reason as _restore_groups_on_launch above."""
+        if self._update_check_started:
+            return
+        self._update_check_started = True
+        threading.Thread(target=self._run_update_check, daemon=True,
+                         name="plugin-update-check").start()
+
+    def _run_update_check(self):
+        from pyface.api import GUI
+
+        from . import package_installer
+        from .update_controller import show_update_dialog
+        from .update_model import compute_update_report
+
+        try:
+            # Read the previous launch's copy BEFORE the fetch rewrites it.
+            old = package_installer.read_cached_index()
+            new = package_installer.search_channel()
+            installed = package_installer.installed_plugin_dists()
+        except package_installer.InstallError as e:
+            logger.info(f"plugin update check skipped: {e}")
+            return
+        report = compute_update_report(old, new, installed)
+        if not report.has_content:
+            logger.info("plugin update check: everything up to date")
+            return
+        logger.info(
+            f"plugin update check: {len(report.updates)} update(s), "
+            f"{len(report.new_plugins)} new plugin(s)"
+        )
+        GUI.invoke_later(show_update_dialog, report, self.application)
