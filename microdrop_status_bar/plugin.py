@@ -54,10 +54,24 @@ class StatusBarPlugin(Plugin):
         # possible once the plugin is attached to the application.
         self.connect_extension_point_traits()
 
-    @observe("application:active_window")
+    @observe("application:application_initialized")
     def _setup_status_bar(self, event):
-        """Build the status bar on the first window; later re-fires no-op."""
-        window = event.new
+        """Build the status bar once windows and their pane contents exist.
+
+        Deliberately NOT ``application:active_window``: that fires on the
+        first Qt focus-activation, mid ``window.open()`` — before dock-pane
+        contents are created (their status-bar observers would run against
+        half-built panes), and before the task-activation sweep (pyface
+        ``TaskWindow._update_traits_given_new_active_state``) overwrites
+        ``window.status_bar_manager`` with ``task.status_bar`` (None),
+        discarding anything installed earlier. ``application_initialized``
+        is set via ``set_trait_later`` after ``_create_windows()`` returns,
+        so both hazards are past.
+        """
+        windows = self.application.windows
+        window = self.application.active_window or (
+            windows[0] if windows else None
+        )
         if window is None or self._icon_container is not None:
             return
         if window.status_bar_manager is None:

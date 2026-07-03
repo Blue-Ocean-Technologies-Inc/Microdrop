@@ -62,8 +62,7 @@ microdrop_status_bar/
 
 - **Creates the status bar.** `start()` calls
   `connect_extension_point_traits()`; a null-guarded, idempotent
-  `@observe("application:active_window")` (the canonical lifecycle hook
-  per `docs/PLUGIN_DEVELOPMENT.md` §6) sets
+  `@observe("application:application_initialized")` sets
   `window.status_bar_manager = StatusBarManager(
   messages=[DEFAULT_STATUS_MESSAGE], size_grip=True)`, applies the
   `setContentsMargins(30, 0, 30, 0)` margins, and appends **one
@@ -157,8 +156,18 @@ No per-device `plugin.py` changes are needed.
 - **App shutdown:** the container dies with the window; the manager
   guards removal with the same `RuntimeError`/broad-`Exception` guards
   the pane teardown uses today.
-- **Single window:** the app is single-window; the manager binds to the
-  first non-None `active_window` and ignores later re-fires.
+- **Single window:** the app is single-window; the manager binds once at
+  `application_initialized` and ignores later re-fires.
+- **Why `application_initialized`, not `active_window`:** `active_window`
+  fires on the first Qt focus-activation, mid `window.open()` — before
+  dock-pane contents exist (their `task:window:status_bar_manager`
+  observers would run against half-built panes), and before pyface's
+  task-activation sweep (`TaskWindow._update_traits_given_new_active_state`)
+  overwrites `window.status_bar_manager` with `task.status_bar` (None),
+  discarding an early-installed manager. This is also why the legacy code
+  ran in `task.activated()` — that timing was load-bearing.
+  `application_initialized` fires via `set_trait_later` after
+  `_create_windows()` returns, safely past both hazards.
 - **Other status-bar citizens are untouched:** `device_viewer`'s
   recording icon (direct `insertPermanentWidget(1, ...)`) and the
   `StatusBarManager`'s own joystick indicator
