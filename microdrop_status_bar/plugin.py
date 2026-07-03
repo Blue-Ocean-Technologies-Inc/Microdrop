@@ -90,7 +90,12 @@ class StatusBarPlugin(Plugin):
         """Apply contribution deltas to the icon container."""
         if self._icon_container is None:
             return  # no window yet; current extensions applied at setup
-        layout = self._icon_container.layout()
+        try:
+            layout = self._icon_container.layout()
+        except RuntimeError as e:   # container died with the window (app exit)
+            logger.debug(f"status-bar icon container gone: {e}")
+            self._icon_container = None
+            return
         for widget in removed:
             try:
                 layout.removeWidget(widget)
