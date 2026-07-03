@@ -25,8 +25,8 @@ from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 STATUSBAR_ICON_SPACING = 2
 
 #: First permanent-widget slot. Indices 0/1 are the non-permanent persistent and
-#: center labels, so permanent icons start at 2 (same convention as
-#: template_status_and_controls.base_dock_pane).
+#: center labels, so permanent icons start at 2. Inserting here lands LEFT of
+#: the microdrop_status_bar icon container, which is appended at the right end.
 STATUSBAR_FIRST_PERMANENT_INDEX = 2
 
 from logger.logger_service import get_logger
@@ -161,10 +161,9 @@ class StatusBarManager(_StatusBarManager):
 
         Call this *after* every other plugin has added its status-bar icons
         (defer it), so inserting at the first permanent slot pushes the joystick
-        to the left of them all. Mirrors the icon+spacer pattern used by
-        template_status_and_controls so spacing stays uniform: insert the icon,
-        then a leading spacer, both at the first permanent index — giving
-        [spacer][joystick][…other icons, each with their own leading spacer].
+        to the left of them all. Insert the icon, then a leading spacer, both at
+        the first permanent index — giving [spacer][joystick][microdrop_status_bar
+        icon container].
         Idempotent.
         """
         if self.status_bar is None or getattr(self, "gamepad_label", None) is None:
