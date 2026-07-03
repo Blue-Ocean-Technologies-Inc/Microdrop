@@ -4,13 +4,14 @@ Uses `pixi add <name>` (channel registered on demand) so the conda solver
 resolves the package + its run-dependencies. Qt-free; snapshots pyproject.toml
 + pixi.lock for rollback.
 """
+import importlib.metadata
 import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from plugin_management import paths
-from plugin_management.consts import PLUGIN_CHANNEL_URL
+from plugin_management.consts import ENTRY_POINT_GROUP, PLUGIN_CHANNEL_URL
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -115,6 +116,21 @@ def read_cached_index() -> list[dict]:
     except (OSError, ValueError) as e:
         logger.warning(f"could not read cached plugin index: {e}")
         return []
+
+
+def installed_plugin_dists() -> dict[str, str]:
+    """{distribution name: version} for every installed distribution that
+    exposes a ``microdrop.plugins`` entry point — i.e. every installed
+    MicroDrop plugin package. Dist names match channel package names
+    (e.g. heater-microdrop-plugin)."""
+    dists = {}
+    for dist in importlib.metadata.distributions():
+        if not any(ep.group == ENTRY_POINT_GROUP for ep in dist.entry_points):
+            continue
+        name = dist.metadata["Name"] if dist.metadata else None
+        if name:
+            dists[name] = dist.version
+    return dists
 
 
 def uninstall_package(name, *, cwd=None) -> None:
