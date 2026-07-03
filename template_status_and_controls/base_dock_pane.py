@@ -24,10 +24,9 @@ from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, GREY
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
-from microdrop_utils.pyside_helpers import horizontal_spacer_widget
 from pyface.tasks.api import TraitsDockPane
 from pyface.qt.QtGui import QApplication, QLabel, QFont
-from traits.api import Any, Instance, List, observe
+from traits.api import Any, Instance, List, Str, observe
 from traitsui.api import Handler
 
 from logger.logger_service import get_logger
@@ -35,12 +34,6 @@ from logger.logger_service import get_logger
 from .interfaces import IMessageHandler
 
 logger = get_logger(__name__)
-
-#: Position in the status bar at which every pane widget is inserted.
-STATUS_BAR_INSERT_INDEX = 2
-
-#: Width (px) of the spacer inserted alongside each status-bar widget.
-STATUS_BAR_SPACER_WIDTH = 10
 
 
 def status_bar_icon_font() -> QFont:
@@ -118,10 +111,22 @@ class BaseStatusDockPane(TraitsDockPane):
     #: Status-bar icon widget (built once the window's status bar appears).
     status_bar_icon = Any(None)
 
-    #: Every widget this pane inserted into the status bar (icons AND their
-    #: spacers), tracked so destroy() can remove exactly what was added —
-    #: required for runtime hot unload of the pane.
-    _status_bar_inserted_widgets = List()
+    #: Id of the Envisage plugin whose ``status_bar_icons`` contribution
+    #: list this pane extends; "<pkg>.dock_pane" → "<pkg>.plugin" by
+    #: convention (override for panes that don't follow it).
+    status_bar_plugin_id = Str()
+
+    #: The contribution plugin resolved at populate time, cached so
+    #: teardown can withdraw contributions without touching the window.
+    _contribution_plugin = Any(None)
+
+    #: Widgets this pane contributed to the status bar, tracked so
+    #: teardown withdraws exactly what was added — required for runtime
+    #: hot unload of the pane.
+    _contributed_status_bar_widgets = List()
+
+    def _status_bar_plugin_id_default(self):
+        return self.id.rsplit(".", 1)[0] + ".plugin"
 
     # ------------------------------------------------------------------ #
     # Lifecycle                                                             #
@@ -166,24 +171,26 @@ class BaseStatusDockPane(TraitsDockPane):
         super().destroy()
 
     def _teardown_status_bar(self):
-        """Remove this pane's status-bar widgets and signal hookups."""
-        if self._status_bar_inserted_widgets:
+        """Withdraw this pane's status-bar contributions and signal hookups.
+
+        Removing the widgets from the plugin's contribution list fires the
+        extension-point event that makes the status-bar plugin take them
+        out of the bar and delete them. Idempotent: widgets already gone
+        from the list (e.g. the plugin was hot-unloaded first) are skipped.
+        """
+        if self._contributed_status_bar_widgets:
             try:
                 QApplication.styleHints().colorSchemeChanged.disconnect(
                     self._refresh_status_bar_tooltip
                 )
             except (RuntimeError, TypeError):
                 pass                    # never connected / already gone
-            try:
-                status_bar = self.task.window.status_bar_manager.status_bar
-            except Exception as e:      # window already torn down (app exit)
-                logger.debug(f"Status bar gone before pane teardown: {e}")
-                status_bar = None
-            for widget in self._status_bar_inserted_widgets:
-                if status_bar is not None:
-                    status_bar.removeWidget(widget)
-                widget.deleteLater()
-            self._status_bar_inserted_widgets = []
+            contributed = self._contribution_plugin.status_bar_icons
+            for widget in self._contributed_status_bar_widgets:
+                if widget in contributed:
+                    contributed.remove(widget)
+            self._contributed_status_bar_widgets = []
+            self._contribution_plugin = None
         self.status_bar_icon = None
 
     # ------------------------------------------------------------------ #
@@ -246,24 +253,32 @@ class BaseStatusDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _populate_status_bar(self, event):
-        """Build the status-bar widgets and insert each (plus a spacer).
+        """Build the pane's status-bar widgets and contribute them to the
+        status-bar extension point — the microdrop_status_bar plugin owns
+        placement, spacing, and removal.
 
         Subclass overrides MUST re-apply the @observe decorator above —
         an undecorated override silently drops the observer registration."""
-        if self._status_bar_inserted_widgets:
+        if self._contributed_status_bar_widgets:
             return                      # already populated (observer + hot-mount)
+        plugin = self.task.window.application.get_plugin(
+            self.status_bar_plugin_id
+        )
+        if plugin is None:
+            logger.warning(
+                f"{self.id}: no plugin {self.status_bar_plugin_id!r} to carry "
+                f"status-bar contributions; status-bar icons not shown"
+            )
+            return
         self.status_bar_icon = self._create_status_bar_icon()
         self._refresh_status_bar_tooltip()
         QApplication.styleHints().colorSchemeChanged.connect(
             self._refresh_status_bar_tooltip
         )
-        status_bar = self.task.window.status_bar_manager.status_bar
-        for widget in self._create_status_bar_widgets():
-            spacer = horizontal_spacer_widget(STATUS_BAR_SPACER_WIDTH)
-            status_bar.insertPermanentWidget(STATUS_BAR_INSERT_INDEX, widget)
-            status_bar.insertPermanentWidget(STATUS_BAR_INSERT_INDEX, spacer)
-            # Track both so destroy() removes exactly what this pane added.
-            self._status_bar_inserted_widgets.extend([widget, spacer])
+        widgets = self._create_status_bar_widgets()
+        self._contribution_plugin = plugin
+        self._contributed_status_bar_widgets = list(widgets)
+        plugin.status_bar_icons.extend(widgets)
 
     def _create_status_bar_icon(self):
         """
