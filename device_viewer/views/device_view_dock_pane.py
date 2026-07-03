@@ -68,7 +68,6 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     CollapsibleVStackBox,
-    horizontal_spacer_widget,
     PulsingLabel, ClickableToggleIcon,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
@@ -1355,6 +1354,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
+        if getattr(self, "gamepad_icon", None) is not None:
+            return                      # already built; a re-fired manager
+                                        # assignment must not duplicate icons
         # Push the manager to the camera widget now that it exists, so
         # media-capture notifications can use it directly.
         self.camera_control_widget.status_bar_manager = event.new

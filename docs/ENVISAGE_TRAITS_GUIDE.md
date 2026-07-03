@@ -168,8 +168,8 @@ decision constants (conventions skill).
 
 **Pyface widgets extended with traits** — `microdrop_utils/pyface_helpers.py`:
 `StatusBarManager` subclasses pyface's status-bar manager and adds
-`center_message = Str()` / `gamepad_status = Str()` with `@observe` handlers driving
-Qt labels. `microdrop_utils/dramatiq_traits_helpers.py` subclasses
+`center_message = Str()` with an `@observe` handler driving the centered
+Qt label. `microdrop_utils/dramatiq_traits_helpers.py` subclasses
 `pyface.tasks.action.TaskWindowAction`.
 
 **Preferences** — `microdrop_application/preferences.py` and
