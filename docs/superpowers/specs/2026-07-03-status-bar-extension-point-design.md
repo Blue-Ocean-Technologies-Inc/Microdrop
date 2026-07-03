@@ -61,11 +61,13 @@ microdrop_status_bar/
   ```
 
 - **Creates the status bar.** `start()` calls
-  `connect_extension_point_traits()` and observes the application's
-  `window_created` event. When the window appears it sets
-  `window.status_bar_manager = StatusBarManager(messages=DEFAULT_MESSAGES,
-  size_grip=True)`, applies the `setContentsMargins(30, 0, 30, 0)`
-  margins, and inserts **one container widget** (`QWidget` +
+  `connect_extension_point_traits()`; a null-guarded, idempotent
+  `@observe("application:active_window")` (the canonical lifecycle hook
+  per `docs/PLUGIN_DEVELOPMENT.md` §6) sets
+  `window.status_bar_manager = StatusBarManager(
+  messages=[DEFAULT_STATUS_MESSAGE], size_grip=True)`, applies the
+  `setContentsMargins(30, 0, 30, 0)` margins, and appends **one
+  container widget** (`QWidget` +
   `QHBoxLayout` with `spacing=ICON_SPACING`, zero contents margins) as a
   permanent widget. This wholly replaces the status-bar block in
   `MicrodropTask.activated()`, which is deleted.
@@ -90,13 +92,15 @@ widgets exist anywhere.
 
 ### 2. Contributing plugins
 
-Each device plugin declares an initially-empty runtime contribution:
+All five contributors subclass
+`template_status_and_controls.base_plugin.BaseStatusPlugin`, so the
+initially-empty runtime contribution is declared **once** there:
 
 ```python
 status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 ```
 
-(All five current contributors get this one-liner in their `plugin.py`.)
+No per-device `plugin.py` changes are needed.
 
 ### 3. `base_dock_pane.py` — panes build widgets, never place them
 
@@ -154,7 +158,15 @@ status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
   guards removal with the same `RuntimeError`/broad-`Exception` guards
   the pane teardown uses today.
 - **Single window:** the app is single-window; the manager binds to the
-  first `window_created` event.
+  first non-None `active_window` and ignores later re-fires.
+- **Other status-bar citizens are untouched:** `device_viewer`'s
+  recording icon (direct `insertPermanentWidget(1, ...)`) and the
+  `StatusBarManager`'s own joystick indicator
+  (`attach_gamepad_indicator`, inserted at the first permanent slot
+  after all other icons so it is the outermost-LEFT icon) keep their
+  existing direct-insertion paths. The icon container is *appended*
+  (rightmost), so the joystick stays left of all pane icons. Migrating
+  those two into the extension point is deliberately out of scope.
 
 ## Testing
 
