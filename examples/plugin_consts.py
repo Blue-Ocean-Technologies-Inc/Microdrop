@@ -7,6 +7,7 @@ from manual_controls.plugin import ManualControlsPlugin
 from microdrop_application.application import MicrodropApplication
 from microdrop_application.backend_application import MicrodropBackendApplication
 from microdrop_application.plugin import MicrodropPlugin
+from microdrop_status_bar.plugin import StatusBarPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
@@ -60,6 +61,7 @@ from user_help_plugin.plugin import UserHelpPlugin
 FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
+    StatusBarPlugin,
     LoggerUIPlugin,
     PluginManagementPlugin,
     DeviceViewerPlugin,
