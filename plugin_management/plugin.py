@@ -148,6 +148,8 @@ class PluginManagementPlugin(Plugin):
         except Exception:
             logger.exception("plugin-group launch restore failed")
 
+        self.application.extra_plugins_loaded = True
+
     #: True once the launch update check has started (runs exactly once).
     _update_check_started = Bool(False)
 

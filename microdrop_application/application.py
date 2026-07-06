@@ -107,9 +107,13 @@ class MicrodropApplication(TasksApplication):
     icon = Instance(ImageResource)
     splash_screen = Instance(SplashScreen)
 
-    #### 'Application' interface ####################################
+    #### 'Application' interface ##############################################
 
     preferences_helper = Instance(MicrodropPreferences)
+
+    ######### Extra 'Application' Events #############################################
+
+    extra_plugins_loaded = Event(desc="Trigger if extra plugins are loaded post app initialization")
 
     ###########################################################################
     # Private interface.
