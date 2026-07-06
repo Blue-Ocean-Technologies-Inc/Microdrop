@@ -103,3 +103,13 @@ def test_install_from_channel_rolls_back(tmp_path, monkeypatch):
     with pytest.raises(package_installer.InstallError):
         package_installer.install_from_channel("x", "https://c", cwd=tmp_path)
     assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "orig"
+
+
+def test_installed_plugin_dists_shape():
+    """Every entry maps a non-empty dist name to a non-empty version string;
+    only distributions advertising the microdrop.plugins entry point appear."""
+    dists = package_installer.installed_plugin_dists()
+    assert isinstance(dists, dict)
+    for name, version in dists.items():
+        assert name and isinstance(name, str)
+        assert version and isinstance(version, str)

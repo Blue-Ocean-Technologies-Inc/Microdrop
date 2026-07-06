@@ -7,15 +7,24 @@ reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service,
 contributes the Tools ▸ Manage Plugins action, and restores each group's
 persisted enabled state on launch.
 """
+
+import dramatiq
+
 from envisage.api import Plugin, SERVICE_OFFERS, ServiceOffer, TASK_EXTENSIONS
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
+from pyface.api import GUI
+
 from traits.api import Any, Bool, List, Str, observe
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 from .consts import PKG, PKG_name
 from .i_plugin_group_manager import IPluginGroupManager
+
+from . import package_installer
+from .update_controller import show_update_dialog
+from .update_model import compute_update_report
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -138,3 +147,54 @@ class PluginManagementPlugin(Plugin):
             manager.restore_persisted(self.application)
         except Exception:
             logger.exception("plugin-group launch restore failed")
+
+    #: True once the launch update check has started (runs exactly once).
+    _update_check_started = Bool(False)
+
+    @observe("application:application_initialized")
+    def _check_plugin_updates_on_launch(self, event):
+        """Fetch the plugins channel in the background and, when an
+        installed package has an update or new plugins appeared since the
+        last launch, show the update dialog. Never blocks launch; offline
+        (or any fetch failure) is silent. Colon-observe for the same
+        reason as _restore_groups_on_launch above."""
+        if self._update_check_started:
+            return
+        self._update_check_started = True
+        self._make_update_check_actor().send()
+
+    def _make_update_check_actor(self):
+        """Declare the one-shot update-check actor on the shared broker.
+
+        max_retries=0: a crash escaping the internal guards must not make
+        the Retries middleware re-enqueue the check (repeated channel
+        fetches, duplicate dialogs) — a failed check just waits for the
+        next launch.
+        """
+        @dramatiq.actor(max_retries=0)
+        def plugin_update_check():
+            try:
+                # Read the previous launch's copy BEFORE the fetch rewrites it.
+                old = package_installer.read_cached_index()
+                new = package_installer.search_channel()
+                installed = package_installer.installed_plugin_dists()
+            except package_installer.InstallError as e:
+                logger.info(f"plugin update check skipped: {e}")
+                return
+            except Exception:
+                # The design promises a silent, log-only skip on ANY failure —
+                # e.g. the post-fetch cache write raising OSError (disk full /
+                # read-only app home), which is not an InstallError.
+                logger.exception("plugin update check failed unexpectedly")
+                return
+            report = compute_update_report(old, new, installed)
+            if not report.has_content:
+                logger.info("plugin update check: everything up to date")
+                return
+            logger.info(
+                f"plugin update check: {len(report.updates)} update(s), "
+                f"{len(report.new_plugins)} new plugin(s)"
+            )
+            GUI.invoke_later(show_update_dialog, report, self.application)
+
+        return plugin_update_check
