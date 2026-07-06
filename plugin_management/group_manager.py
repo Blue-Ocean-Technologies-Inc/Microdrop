@@ -91,8 +91,6 @@ class PluginGroup(HasTraits):
     manifest_name = Str()
     manifest_label = Str()
     dist_name = Str()
-    #: Owning manifest's version (shown next to the plugin name).
-    manifest_version = Str()
     #: True if this group is independently toggleable; built-ins always are.
     optional = Bool(True)
     #: Short label for the toggle checkbox column (falls back to label).
@@ -136,7 +134,6 @@ class PluginGroupManager(HasTraits):
                 dist_name=dist_name,
                 optional=spec.optional,
                 toggle_label=spec.toggle_label or spec.label,
-                manifest_version=manifest.version,
             )
 
     def register_manifest(self, manifest, dist_name=""):
@@ -308,7 +305,7 @@ class PluginGroupManager(HasTraits):
 
         group.active_specs = list(specs)
         group.service_ids = sorted(set(registry._services.keys()) - before)
-        logger.info(f"enable: captured service ids {group.service_ids}")
+        logger.debug(f"enable: captured service ids {group.service_ids}")
 
         if group.post_enable_publish_topic:
             try:

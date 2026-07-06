@@ -31,7 +31,6 @@ _SPEC_PREFIX = "plugin_management.tests.test_group_manager_adoption"
 TEST_MANIFEST = manifest_from_dict({
     "schema_version": 1,
     "name": "dummy_device",
-    "version": "1.0",
     "packages": ["plugin_management"],
     "groups": [
         {"name": "dummy_ui_group",

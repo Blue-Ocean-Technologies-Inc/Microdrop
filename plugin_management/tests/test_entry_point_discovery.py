@@ -11,7 +11,6 @@ from plugin_management import entry_point_discovery as d
 
 MANIFEST = """schema_version = 1
 name = "toplevel_demo"
-version = "0.1.0"
 packages = ["pkgx"]
 [[groups]]
 name = "g"

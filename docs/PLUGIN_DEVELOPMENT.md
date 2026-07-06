@@ -163,13 +163,14 @@ my_plugin/
 ### 2.2 The package manifest — `microdrop_plugin.toml`
 
 Parsed by `manifest.manifest_from_dict`. Ship it as **package data** (in the importable
-package directory, not at the repo root). Schema (`schema_version` must be `1`):
+package directory, not at the repo root). Schema (`schema_version` must be `1`; the
+package version is NOT declared here — it lives in `pyproject.toml` and is read from
+the installed distribution via `importlib.metadata`):
 
 ```toml
 schema_version = 1
 name = "magnet_peripherals"
 label = "Magnet Peripherals"
-version = "1.0.0"
 packages = ["peripheral_controller", "peripheral_protocol_controls", "peripherals_ui"]
 
 [[groups]]
@@ -333,7 +334,6 @@ scipy_analysis_pkg/
 schema_version = 1
 name = "scipy_analysis"
 label = "Scipy Random Analysis (conda-package spike)"
-version = "0.1.0"
 packages = ["scipy_analysis"]
 
 [[groups]]
