@@ -4,7 +4,7 @@ sliding switch instead of a radio group. Checked maps to ``on_value``,
 unchecked to ``off_value``.
 
 Two widgets are shown:
-  * ToggleEditor          - the static Toggle switch (sliding handle, no animation).
+  * SlidingToggleEditor   - the static Toggle switch (sliding handle, no animation).
   * AnimatedToggleEditor  - the AnimatedToggle switch (animated handle + pulse
                             halo on switch). Accepts checked_color and
                             pulse_checked_color.
@@ -20,7 +20,7 @@ so flipping one updates the other.
 from traits.api import Enum, HasTraits, observe
 from traitsui.api import HGroup, Item, VGroup, View
 
-from microdrop_utils.traitsui_qt_helpers import ToggleEditor, AnimatedToggleEditor
+from microdrop_utils.traitsui_qt_helpers import SlidingToggleEditor, AnimatedToggleEditor
 from microdrop_style.colors import WARNING_COLOR
 
 
@@ -36,7 +36,7 @@ class EnumToggleDemo(HasTraits):
             # flipping either updates the other.
             HGroup(
                 Item("mode", label="Toggle",
-                     editor=ToggleEditor(on_value="Temp", off_value="PWM")),
+                     editor=SlidingToggleEditor(on_value="Temp", off_value="PWM")),
                 Item("mode", label="Animated",
                      editor=AnimatedToggleEditor(on_value="Temp",
                                                  off_value="PWM")),

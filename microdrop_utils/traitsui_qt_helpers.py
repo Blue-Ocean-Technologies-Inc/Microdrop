@@ -22,7 +22,7 @@ from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as Tab
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR
+from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, GREY, SUCCESS_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
 from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
@@ -733,7 +733,7 @@ class _TwoValueToggleEditor(QtEditor):
             self.control.setChecked(self.value == self.factory.on_value)
 
 
-class _ToggleEditor(_TwoValueToggleEditor):
+class _SlidingToggleEditor(_TwoValueToggleEditor):
     def _make_control(self):
         return Toggle(
             bar_color=self.factory.bar_color,
@@ -752,17 +752,19 @@ class _AnimatedToggleEditor(_TwoValueToggleEditor):
             pulse_checked_color=self.factory.pulse_checked_color,
         )
 
+class SlidingToggleEditor(BasicEditorFactory):
+    """Factory for the static :class:`Toggle` iOS-style sliding switch over an
+    Enum/Str/Bool trait::
 
-class ToggleEditor(BasicEditorFactory):
-    """Factory for the static :class:`Toggle` switch over an Enum/Str trait::
-
-        Item("mode", editor=ToggleEditor(on_value="Temp", off_value="PWM"))
+        Item("mode", editor=SlidingToggleEditor(on_value="Temp", off_value="PWM"))
 
     The colour traits mirror the :class:`Toggle` constructor; they're ``Any``
     so they accept a hex string or a Qt colour (the defaults Qt.gray / Qt.white).
+    For a labelled push-button toggle instead of a sliding switch, see
+    :class:`InPlaceToggleEditor`.
     """
 
-    klass = _ToggleEditor
+    klass = _SlidingToggleEditor
 
     #: Trait values the checked / unchecked states map to.
     on_value = Any()
@@ -773,16 +775,16 @@ class ToggleEditor(BasicEditorFactory):
     handle_color = Any(Qt.white)     # unchecked handle
 
 
-class AnimatedToggleEditor(ToggleEditor):
+class AnimatedToggleEditor(SlidingToggleEditor):
     """Factory for the animated :class:`AnimatedToggle` sliding switch over an
     Enum/Str trait::
 
         Item("mode", editor=AnimatedToggleEditor(on_value="Temp",
                                                   off_value="PWM"))
 
-    Inherits the :class:`ToggleEditor` colour traits and adds the pulse-halo
-    colours specific to :class:`AnimatedToggle` (ARGB hex — the leading byte is
-    the glow's alpha).
+    Inherits the :class:`SlidingToggleEditor` colour traits and adds the
+    pulse-halo colours specific to :class:`AnimatedToggle` (ARGB hex — the
+    leading byte is the glow's alpha).
     """
 
     klass = _AnimatedToggleEditor
@@ -790,6 +792,71 @@ class AnimatedToggleEditor(ToggleEditor):
     #: Pulse halo colour when toggling off / on (ARGB hex).
     pulse_unchecked_color = Str("#44999999")
     pulse_checked_color = Str("#4400B0EE")
+
+
+class _InPlaceToggleEditor(QtEditor):
+    """A checkable QPushButton bound to a Bool trait: the button's label and
+    colour flip in place with the state (green while on, grey while off)."""
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setCheckable(True)
+        self.control.setChecked(self.value)
+        self.control.clicked.connect(self._on_click)
+        self.control.setMaximumWidth(100)
+
+        # Apply initial label + styling, and keep them in sync on every toggle
+        # (click included; the trait-driven update_editor() does not fire on a
+        # user click).
+        self._refresh()
+        self.control.toggled.connect(self._refresh)
+
+    def _refresh(self, *_):
+        """Label + styling from the factory's on/off labels for the state."""
+        checked = self.control.isChecked()
+        self.control.setText(
+            self.factory.on_label if checked else self.factory.off_label)
+        background = SUCCESS_COLOR if checked else GREY["lighter"]
+        foreground = "white" if checked else "#333333"
+        self.control.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {background};
+                color: {foreground};
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+                max-width: 100px;
+            }}
+        """)
+
+    def _on_click(self):
+        # Read the button state rather than inverting self.value, so the
+        # _setattr path fires exactly once per click.
+        self.value = self.control.isChecked()
+
+    def update_editor(self):
+        """External trait change (never fired by a user click): re-sync the
+        button state, label, and styling."""
+        self.control.setChecked(self.value)
+        self._refresh()
+
+
+class InPlaceToggleEditor(BasicEditorFactory):
+    """Factory for the labelled push-button toggle over a Bool trait::
+
+        Item("realtime_mode", editor=InPlaceToggleEditor(
+            on_label="Realtime On", off_label="Realtime Off"))
+
+    The button swaps its label/colour in place. For an iOS-style sliding
+    switch, see :class:`SlidingToggleEditor`.
+    """
+
+    klass = _InPlaceToggleEditor
+
+    #: Button labels for the checked / unchecked states.
+    on_label = Str("On")
+    off_label = Str("Off")
 
 
 class _IconToggleEditor(QtEditor):

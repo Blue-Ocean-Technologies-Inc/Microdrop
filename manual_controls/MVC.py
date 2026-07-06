@@ -2,9 +2,7 @@ import functools
 
 import dramatiq
 from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict, Str
-from traitsui.api import View, Group, Item, BasicEditorFactory, Controller
-from traitsui.qt.editor import Editor as QtEditor
-from PySide6.QtWidgets import QPushButton
+from traitsui.api import View, Group, Item, Controller
 
 from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 from logger.logger_service import get_logger
@@ -15,6 +13,7 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.decorators import debounce
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 
@@ -23,119 +22,11 @@ from dropbot_controller.consts import (
     SET_FREQUENCY,
     SET_REALTIME_MODE,
 )
-from microdrop_style.colors import GREY, SUCCESS_COLOR
 
 from .consts import PKG_name, listener_name
 
 
 logger = get_logger(__name__)
-
-
-class ToggleEditor(QtEditor):
-    
-    def init(self, parent):
-        # The button is the control that will be displayed in the editor
-        self.control = QPushButton()
-        self.control.setCheckable(True)
-        self.control.setChecked(self.value)
-        self.control.clicked.connect(self.click_handler)
-        
-        # Set max-width to 100px
-        self.control.setMaximumWidth(100)
-        
-        # Apply initial label + styling based on current state
-        self._refresh_label()
-        self._apply_toggle_styling()
-
-        # Keep label + styling in sync on every toggle (click included; the
-        # trait-driven update_editor() does not fire on a user click).
-        self.control.toggled.connect(self._refresh_label)
-        self.control.toggled.connect(self._apply_toggle_styling)
-
-    def _refresh_label(self):
-        """Set the button text from the factory's on/off labels for the current
-        checked state."""
-        self.control.setText(
-            self.factory.on_label if self.control.isChecked() else self.factory.off_label
-        )
-
-    def _apply_toggle_styling(self):
-        """Apply styling based on the button's checked state"""
-        if self.control.isChecked():
-            # ON state - SUCCESS_COLOR
-            style = f"""
-                QPushButton {{
-                    background-color: {SUCCESS_COLOR};
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-weight: bold;
-                    max-width: 100px;
-                }}
-                QPushButton:hover {{
-                    background-color: {SUCCESS_COLOR};
-                    opacity: 0.9;
-                }}
-                QPushButton:pressed {{
-                    background-color: {SUCCESS_COLOR};
-                    opacity: 0.8;
-                }}
-            """
-        else:
-            # OFF state - GREY["lighter"]
-            style = f"""
-                QPushButton {{
-                    background-color: {GREY["lighter"]};
-                    color: #333333;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    font-weight: bold;
-                    max-width: 100px;
-                }}
-                QPushButton:hover {{
-                    background-color: {GREY["lighter"]};
-                    opacity: 0.9;
-                }}
-                QPushButton:pressed {{
-                    background-color: {GREY["lighter"]};
-                    opacity: 0.8;
-                }}
-            """
-        
-        self.control.setStyleSheet(style)
-
-    def click_handler(self):
-        '''Update the trait value to the button state. The value change will also invoke the _setattr method.'''
-        # Monitor the button state, don't simply invert self.value because it will trigger the _setattr method multiple times
-        self.value = self.control.isChecked()
-        # This assignment and the setChecked() in update_editor keep the control.isChecked synced with the model
-        # In this case, the 'isChecked' property only exists to store state in a place readable by the view, and has no visual effect
-
-    def update_editor(self):
-        '''
-        Override from QtEditor. Run when the trait changes externally to the editor. 
-        Default behavior is to update the label to the trait value.
-       
-        ATTENTION: For some reason, update_editor is called when the button is debounced, 
-        but it's not called when the button is clicked.
-        '''
-        self.control.setChecked(self.value)
-        self._refresh_label()
-
-        # Update styling after changing the state
-        self._apply_toggle_styling()
-
-
-class ToggleEditorFactory(BasicEditorFactory):
-    # Editor is the class that actually implements your editor
-    klass = ToggleEditor
-
-    # On/off button labels. Default to the original realtime-mode wording so
-    # existing usages are unchanged; other panes pass their own (e.g. PID On/Off).
-    on_label = Str("Realtime On")
-    off_label = Str("Realtime Off")
 
 
 def _make_manual_control_model():
@@ -190,7 +81,7 @@ ManualControlView = View(
                 label='Realtime Mode',
                 style='custom',
                 resizable=True,
-                editor=ToggleEditorFactory(),
+                editor=InPlaceToggleEditor(on_label="Realtime On", off_label="Realtime Off"),
                 enabled_when='connected',
             ),
         ), 

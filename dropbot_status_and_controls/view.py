@@ -1,6 +1,6 @@
 from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
 from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory, HoverScrollEnumEditor
-from manual_controls.MVC import ToggleEditorFactory
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
 
 from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid
 
@@ -22,7 +22,7 @@ left = HGroup(
         UItem(
             "realtime_mode",
             style="custom",
-            editor=ToggleEditorFactory(),
+            editor=InPlaceToggleEditor(on_label="Realtime On", off_label="Realtime Off"),
             enabled_when="connected and not halted and not protocol_running",
         ),
         Spring("10"),

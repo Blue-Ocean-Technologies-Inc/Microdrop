@@ -1,5 +1,5 @@
 from traitsui.api import View, Item, UItem, HGroup, VGroup, Group, Spring, EnumEditor
-from manual_controls.MVC import ToggleEditorFactory
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
 
 # Each section is an independently collapsible panel: a header checkbox
 # (the `show_*` model trait) toggles the `visible_when` on its content
@@ -14,7 +14,7 @@ mock_controls = VGroup(
             UItem(
                 "realtime_mode",
                 style="custom",
-                editor=ToggleEditorFactory(),
+                editor=InPlaceToggleEditor(on_label="Realtime On", off_label="Realtime Off"),
                 enabled_when="connected",
             ),
             visible_when="show_status",
