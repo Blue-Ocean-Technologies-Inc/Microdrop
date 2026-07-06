@@ -27,10 +27,12 @@ class PluginGroupSpec:
 
 @dataclass
 class PluginManifest:
+    # No version field: the package version lives in pyproject.toml and is
+    # read from the installed distribution (importlib.metadata) — a manifest
+    # `version` key, if present in older packages, is simply ignored.
     schema_version: int
     name: str
     label: str
-    version: str
     packages: List[str]
     groups: List[PluginGroupSpec]
 
@@ -91,7 +93,6 @@ def manifest_from_dict(data) -> PluginManifest:
         schema_version=schema,
         name=name,
         label=data.get("label") or name,
-        version=str(data.get("version", "")),
         packages=list(packages),
         groups=groups,
     )
