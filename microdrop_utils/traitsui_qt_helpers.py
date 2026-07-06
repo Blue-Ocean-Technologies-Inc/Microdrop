@@ -765,8 +765,8 @@ class ToggleEditor(BasicEditorFactory):
     klass = _ToggleEditor
 
     #: Trait values the checked / unchecked states map to.
-    on_value = Str()
-    off_value = Str()
+    on_value = Any()
+    off_value = Any()
     #: Toggle widget colours (hex string or Qt colour).
     bar_color = Any(Qt.gray)         # unchecked bar
     checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
