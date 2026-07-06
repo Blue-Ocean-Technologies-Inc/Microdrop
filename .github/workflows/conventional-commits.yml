@@ -1,0 +1,24 @@
+name: Conventional commits
+
+# Every PR commit must follow Conventional Commits (feat/fix/refactor/...),
+# so releases can be derived from history: `cz bump` (see .cz.toml) computes
+# the version bump and CHANGELOG.md from these messages. cz check's default
+# allowed prefixes (Merge, Revert, fixup!, squash!) are permitted.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # cz check walks the PR's commit range
+
+      - name: Install commitizen
+        run: pipx install "commitizen>=4,<5"
+
+      - name: Check PR commit messages
+        run: cz check --rev-range "origin/${{ github.base_ref }}..HEAD"

@@ -65,8 +65,13 @@ with proxy.transaction_lock:
 
 ## Git & PR Workflow
 - Commit early, commit frequently — make multiple small, incremental commits for each iterative change (e.g., add constant, then add listener, then add dialog, then wire it up). Each commit should have a clear, descriptive message.
+- Commit messages MUST follow Conventional Commits (a CI check enforces this on PRs): `type(scope): subject` with types `feat` / `fix` / `refactor` / `perf` / `docs` / `ci` / `chore` / `test`; append `!` or a `BREAKING CHANGE:` footer for breaking changes. These messages drive versioning and CHANGELOG.md generation (commitizen).
 - Always create a new branch for resolving issues (never commit directly to main/master)
 - Always submit a PR for reviewing changes after pushing the branch
+
+## Releases & changelogs
+- **This repo (the app)**: version = git tags (`.cz.toml`, `version_provider = "scm"`). Cut a release from an up-to-date `main`: `pixi exec --spec "commitizen>=4,<5" -- cz bump` (derives the bump from conventional commits since the last `v*` tag, updates CHANGELOG.md, tags `vX.Y.Z`), then `git push origin main --follow-tags` (requires branch-protection bypass, i.e. an admin).
+- **heater/magnet plugin repos**: releases are fully automatic — every push to `main` with release-worthy conventional commits bumps, updates CHANGELOG.md, publishes the conda package to `prefix.dev/microdrop-plugins`, and tags. Non-release commits (docs/ci/chore/non-conventional) skip publishing.
 
 ## Presentation (`microdrop-architecture.html`)
 - Self-contained HTML presentation about MicroDrop architecture and DropBot hardware communication
