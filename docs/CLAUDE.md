@@ -65,7 +65,7 @@ with proxy.transaction_lock:
 
 ## Git & PR Workflow
 - Commit early, commit frequently — make multiple small, incremental commits for each iterative change (e.g., add constant, then add listener, then add dialog, then wire it up). Each commit should have a clear, descriptive message.
-- One-time per clone: `pre-commit install --hook-type commit-msg --hook-type pre-commit` (enforces the commit format locally and blocks scratch files / syntax errors; config in `.pre-commit-config.yaml`).
+- One-time per clone: `pixi run setup-hooks` (from `microdrop-py/`) installs the shared git hooks into this repo and the heater/magnet clones — commit-format enforcement, scratch-file block, syntax check; config in each repo's `.pre-commit-config.yaml`. (Equivalent manual command: `pre-commit install --hook-type commit-msg --hook-type pre-commit`.)
 - Commit messages MUST follow Conventional Commits (a CI check enforces this on PRs): `type(scope): subject` with types `feat` / `fix` / `refactor` / `perf` / `docs` / `ci` / `chore` / `test`; append `!` or a `BREAKING CHANGE:` footer for breaking changes. These messages drive versioning and CHANGELOG.md generation (commitizen).
 - Always create a new branch for resolving issues (never commit directly to main/master)
 - Always submit a PR for reviewing changes after pushing the branch
