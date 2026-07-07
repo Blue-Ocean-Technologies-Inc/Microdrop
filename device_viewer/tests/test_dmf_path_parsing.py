@@ -48,3 +48,50 @@ def test_bezier_segments_are_sampled():
     points = SVGProcessor._parse_path_string("M 0,0 C 0,10 10,10 10,0 Z")
     assert len(points) == 1 + CURVE_SEGMENT_SAMPLES + 1
     assert Polygon(points).area > 0
+
+# A notched electrode mixing arcs with h/v runs (real Inkscape output). Its
+# final arc lands on the FIRST arc's endpoint rather than the path start, so
+# the raw flattened ring self-intersects near the seam — SVG's fill rule
+# tolerates that; shapely needs the buffer(0) repair applied in
+# SvgUtil.get_electrode_polygons.
+NOTCHED_D = ("m 484.35753,1040.403 "
+             "a 2.427163,2.427163 0 0 0 1.86089,1.7124 "
+             "v 1.3988 h -1.72913 -1.95591 v -2.0944 h -1.51181 "
+             "v -3.4898 h 1.51181 v -1.9749 h 3.68504 v 1.3988 "
+             "a 2.427163,2.427163 0 0 0 0,4.7615")
+
+
+def test_mixed_arc_and_straight_path_flattens():
+    from svg.path import parse_path, Arc
+
+    points = SVGProcessor._parse_path_string(NOTCHED_D)
+    segments = list(parse_path(NOTCHED_D))
+    arcs = [s for s in segments if isinstance(s, Arc)]
+    straights = [s for s in segments if not isinstance(s, Arc)]
+    assert len(arcs) == 2 and len(straights) == 11
+    assert len(points) == len(straights) + len(arcs) * CURVE_SEGMENT_SAMPLES
+
+    # Straight endpoints are preserved verbatim among the vertices.
+    for segment in straights:
+        end = (segment.end.real, segment.end.imag)
+        assert any(np.allclose(p, end) for p in points)
+
+    # Every sampled arc vertex lies on its arc's own circle (svg.path
+    # exposes the analytic center/radius — no magic numbers needed).
+    for arc in arcs:
+        center = np.array([arc.center.real, arc.center.imag])
+        for i in range(1, CURVE_SEGMENT_SAMPLES + 1):
+            p = arc.point(i / CURVE_SEGMENT_SAMPLES)
+            radius = np.linalg.norm(np.array([p.real, p.imag]) - center)
+            assert radius == pytest.approx(arc.radius.real, rel=1e-6)
+
+
+def test_self_intersecting_ring_is_repaired_like_downstream():
+    points = SVGProcessor._parse_path_string(NOTCHED_D)
+    raw = Polygon(points)
+    assert not raw.is_valid            # overlapping arc traversals at the seam
+
+    repaired = raw.buffer(0)           # what get_electrode_polygons applies
+    assert repaired.geom_type == "Polygon"
+    assert repaired.is_valid
+    assert repaired.area == pytest.approx(26.17, rel=0.01)
