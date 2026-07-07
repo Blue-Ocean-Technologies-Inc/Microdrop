@@ -1,0 +1,21 @@
+# Local guardrails mirroring the CI gates. One-time setup per clone:
+#   pre-commit install --hook-type commit-msg --hook-type pre-commit
+repos:
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.16.4
+    hooks:
+      - id: commitizen        # commit-msg: enforce Conventional Commits
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast         # staged .py files must parse
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+  - repo: local
+    hooks:
+      - id: forbid-scratch-files
+        name: forbid scratch/artifact files
+        entry: scratch/artifact paths must never be committed
+        language: fail
+        files: (^|/)(\.task-report\.md$|\.superpowers/|__pycache__/|\.pixi/)
