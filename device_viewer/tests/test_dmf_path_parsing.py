@@ -86,12 +86,37 @@ def test_mixed_arc_and_straight_path_flattens():
             assert radius == pytest.approx(arc.radius.real, rel=1e-6)
 
 
-def test_self_intersecting_ring_is_repaired_like_downstream():
+def test_self_intersecting_ring_is_repaired():
+    from device_viewer.utils.dmf_utils_helpers import as_valid_polygon
+
     points = SVGProcessor._parse_path_string(NOTCHED_D)
     raw = Polygon(points)
     assert not raw.is_valid            # overlapping arc traversals at the seam
 
-    repaired = raw.buffer(0)           # what get_electrode_polygons applies
+    repaired = as_valid_polygon(raw)   # what get_electrode_polygons applies
     assert repaired.geom_type == "Polygon"
     assert repaired.is_valid
     assert repaired.area == pytest.approx(26.17, rel=0.01)
+
+
+def test_multi_lobe_repair_keeps_largest_lobe():
+    from device_viewer.utils.dmf_utils_helpers import as_valid_polygon
+
+    # A ring pinched at the origin: buffer(0) splits it into two lobes
+    # (areas 1 and 4); real device SVGs produce such shapes and the
+    # SvgUtil.polygons trait requires a single Polygon per electrode.
+    pinched = Polygon([(0, 0), (1, 0), (1, 1), (0, 1),
+                       (0, 0), (-2, 0), (-2, -2), (0, -2)])
+    assert pinched.buffer(0).geom_type == "MultiPolygon"
+
+    repaired = as_valid_polygon(pinched)
+    assert repaired.geom_type == "Polygon"
+    assert repaired.is_valid
+    assert repaired.area == 4.0        # dominant lobe wins
+
+
+def test_valid_polygon_passes_through_untouched():
+    from device_viewer.utils.dmf_utils_helpers import as_valid_polygon
+
+    square = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+    assert as_valid_polygon(square) is square

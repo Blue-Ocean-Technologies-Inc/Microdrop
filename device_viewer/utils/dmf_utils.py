@@ -2,12 +2,12 @@
 import re
 import numpy as np
 import xml.etree.ElementTree as ET
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 
 from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Property, cached_property
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeData, \
-    SVGProcessor, AlgorithmError
+    SVGProcessor, AlgorithmError, as_valid_polygon
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__, "DEBUG")
@@ -125,14 +125,7 @@ class SvgUtil(HasTraits):
         for k, v in list(self.electrodes.items()):
             try:
                 coords = v.path.reshape(-1, 2)
-                polygon = Polygon(coords)
-                if not polygon.is_valid:
-                    # Self-intersecting ring (e.g. an Inkscape path whose arc
-                    # traversals overlap at the seam): SVG's fill rule renders
-                    # these fine, but shapely ops (area/centroid/STRtree) need
-                    # a valid ring — buffer(0) rebuilds one.
-                    polygon = polygon.buffer(0)
-                polygons[k] = polygon
+                polygons[k] = as_valid_polygon(Polygon(coords))
             except Exception as e:
                 logger.error(f"Failed to create polygon for '{k}': {e}")
                 errors_found.append(k)

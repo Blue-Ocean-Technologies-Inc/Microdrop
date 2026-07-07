@@ -79,6 +79,29 @@ _mm_converter_func_inverse = {
 }
 
 
+def as_valid_polygon(polygon: Polygon) -> Polygon:
+    """Return a valid single Polygon for ``polygon``.
+
+    Self-intersecting rings (Inkscape paths whose arc traversals overlap at
+    the seam) render fine under SVG's fill rule but break shapely ops.
+    ``buffer(0)`` rebuilds a valid geometry; when the crossing splits the
+    ring into several lobes (a MultiPolygon), the dominant lobe is the
+    electrode body — keep it and log the discarded sliver area.
+    """
+    if polygon.is_valid:
+        return polygon
+    repaired = polygon.buffer(0)
+    if repaired.geom_type == "MultiPolygon":
+        largest = max(repaired.geoms, key=lambda g: g.area)
+        dropped = repaired.area - largest.area
+        if dropped > 0:
+            logger.debug(
+                f"Self-intersection repair dropped {dropped:.4f} area units "
+                f"({dropped / repaired.area:.1%}) of sliver lobes")
+        repaired = largest
+    return repaired
+
+
 class AlgorithmError(Exception):
     """Raised when the algorithm fails to find a valid solution."""
     pass
