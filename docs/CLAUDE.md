@@ -159,7 +159,7 @@ All inter-plugin communication goes through a pub/sub message router — plugins
 
 ### SVG Device Handling
 
-Electrode layouts are defined in SVG files. Metadata is parsed from SVG path elements (`data-channels` attribute). Centers are computed from path vertices and neighbors from distance calculations. Only simple path commands (M, H, V, Z) are supported — no curves. See `device_viewer/utils/dmf_utils.py`.
+Electrode layouts are defined in SVG files. Metadata is parsed from SVG path elements (`data-channels` attribute). Centers are computed from path vertices and neighbors from distance calculations. Straight path commands (M, L, H, V, Z) contribute endpoints; curved segments (arcs, Béziers — e.g. Inkscape circles) are flattened into polygon vertices by sampling (CURVE_SEGMENT_SAMPLES per segment). See `device_viewer/utils/dmf_utils.py`.
 
 ## Coding Conventions
 

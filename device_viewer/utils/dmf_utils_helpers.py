@@ -9,13 +9,18 @@ from collections import defaultdict
 from typing import List, Dict, Set, Union
 from traits.api import HasTraits, Instance, Array
 
-from svg.path import parse_path
+from svg.path import parse_path, Arc, CubicBezier, QuadraticBezier
 
 from logger.logger_service import get_logger
 from microdrop_application.dialogs.pyface_wrapper import error
 from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line, draw_polygons_and_line
 
 logger = get_logger(__name__, "DEBUG")
+
+#: Vertices sampled along each curved path segment (arcs, Béziers) when a
+#: path is flattened to a polygon; 24/segment keeps an Inkscape circle
+#: (two Arc segments) within ~0.2% radial error of the true curve.
+CURVE_SEGMENT_SAMPLES = 24
 
 DPI = 96
 INCH_TO_MM = 25.4
@@ -357,6 +362,13 @@ class SVGProcessor:
         Robustly parses an SVG path 'd' string into an array of vertex
         coordinates using the original SVG coordinate system.
 
+        Straight segments (Move/Line/Close) contribute their endpoint.
+        Curved segments (Arc, cubic/quadratic Bézier) are flattened by
+        sampling CURVE_SEGMENT_SAMPLES points along the curve, so shapes
+        like Inkscape circles (encoded as two Arc segments) become regular
+        polygons instead of degenerate endpoint pairs — downstream shapely
+        Polygons then get real areas/centroids/neighbours for them.
+
         Args:
             d_string: The string from the 'd' attribute of an SVG path.
 
@@ -366,10 +378,16 @@ class SVGProcessor:
         path = parse_path(d_string)
         points = []
         for segment in path:
-            # The endpoint attribute is a complex number (x + yj)
-            end_point = segment.end
-            # Extract real (x) and imag (y) parts directly without flipping
-            points.append((end_point.real, end_point.imag))
+            if isinstance(segment, (Arc, CubicBezier, QuadraticBezier)):
+                # t=0 is the previous segment's end (already appended);
+                # sample up to and including this segment's own end.
+                for i in range(1, CURVE_SEGMENT_SAMPLES + 1):
+                    point = segment.point(i / CURVE_SEGMENT_SAMPLES)
+                    points.append((point.real, point.imag))
+            else:
+                # The endpoint attribute is a complex number (x + yj)
+                end_point = segment.end
+                points.append((end_point.real, end_point.imag))
         return np.array(points)
 
     def _update_bounding_box(self, points_list: List[np.ndarray]):
