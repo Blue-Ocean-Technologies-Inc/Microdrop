@@ -19,6 +19,7 @@ from microdrop_utils.decorators import debounce
 from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, \
     CONNECTION_LINE_ON_DEFAULT, default_alphas, electrode_text_key, electrode_outline_key
 from device_viewer.models.electrodes import Electrode
+from device_viewer.views.electrode_view.electrode_view_helpers import label_geometry
 
 logger = get_logger(__name__, level='INFO')
 
@@ -187,8 +188,9 @@ class ElectrodeView(QGraphicsPathItem):
         self.text_path = QGraphicsTextItem(parent=self)
         self.text_color = QColor(ELECTRODE_TEXT_COLOR)
         self.text_path.setDefaultTextColor(self.text_color)
-        self.path_extremes = [np.min(path_data[:, 0]), np.max(path_data[:, 0]),
-                              np.min(path_data[:, 1]), np.max(path_data[:, 1])]
+        # Pole of inaccessibility + inscribed diameter: keeps the label
+        # inside curved/concave shapes where the bbox center falls outside.
+        self.label_anchor_x, self.label_anchor_y, self.label_extent =             label_geometry(path_data)
         self._fit_text_in_path(alpha=default_alphas.get(electrode_text_key, 1.0)) # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
@@ -230,20 +232,17 @@ class ElectrodeView(QGraphicsPathItem):
         """
 
         text = str(self.electrode.channel)
-        path_extremes = self.path_extremes
 
         self.text_path.setPlainText(text if text != "None" else "")
 
-        # Determine the font size based on the path size
-        left, right, top, bottom = path_extremes
-        range_x = right - left
-        range_y = bottom - top
+        # Size the font by the room actually available around the anchor
+        # (inscribed-circle diameter — equals the bbox min side for rectangles)
         if len(text) == 1:
-            font_size = min(range_x, range_y) / 1.2
+            font_size = self.label_extent / 1.2
         elif len(text) == 2:
-            font_size = min(range_x, range_y) / 2
+            font_size = self.label_extent / 2
         else:
-            font_size = min(range_x, range_y) / 3
+            font_size = self.label_extent / 3
             if font_size < default_font_size:
                 font_size = default_font_size
 
@@ -255,12 +254,10 @@ class ElectrodeView(QGraphicsPathItem):
         new_color.setAlphaF(alpha)
         self.text_path.setDefaultTextColor(new_color)
 
-        # Adjust the font size to fit the text in the path
+        # center the text on the label anchor
         text_size = self.text_path.document().size()
-        # center the text to the path
-        posx = left + (right - left - text_size.width()) / 2
-        posy = top + (bottom - top - text_size.height()) / 2
-        self.text_path.setPos(posx, posy)
+        self.text_path.setPos(self.label_anchor_x - text_size.width() / 2,
+                              self.label_anchor_y - text_size.height() / 2)
 
     def rotate_electrode_text(self, angle=0):
         self.text_path.setTransformOriginPoint(self.text_path.boundingRect().center())
