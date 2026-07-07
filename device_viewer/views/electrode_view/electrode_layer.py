@@ -58,6 +58,14 @@ class ElectrodeLayer():
     def add_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
         for electrode_id, electrode_view in self.electrode_views.items():
             parent_scene.addItem(electrode_view)
+        # Promote labels to top-level items above every electrode: as
+        # children they are painted over by later-added sibling electrodes
+        # wherever a label overhangs its own shape. ElectrodeViews sit at
+        # the origin, so the labels' coordinates are already scene coords.
+        for electrode_view in self.electrode_views.values():
+            electrode_view.text_path.setParentItem(None)
+            electrode_view.text_path.setZValue(1)
+            parent_scene.addItem(electrode_view.text_path)
 
     def add_connections_to_scene(self, parent_scene: 'QGraphicsScene'):
         """
@@ -73,6 +81,7 @@ class ElectrodeLayer():
     ######################## remove electrodes/connections from scene ###################################
     def remove_electrodes_to_scene(self, parent_scene: 'QGraphicsScene'):
         for electrode_id, electrode_view in self.electrode_views.items():
+            parent_scene.removeItem(electrode_view.text_path)
             parent_scene.removeItem(electrode_view)
 
     def remove_connections_to_scene(self, parent_scene: 'QGraphicsScene'):
