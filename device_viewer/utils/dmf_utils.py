@@ -125,7 +125,14 @@ class SvgUtil(HasTraits):
         for k, v in list(self.electrodes.items()):
             try:
                 coords = v.path.reshape(-1, 2)
-                polygons[k] = Polygon(coords)
+                polygon = Polygon(coords)
+                if not polygon.is_valid:
+                    # Self-intersecting ring (e.g. an Inkscape path whose arc
+                    # traversals overlap at the seam): SVG's fill rule renders
+                    # these fine, but shapely ops (area/centroid/STRtree) need
+                    # a valid ring — buffer(0) rebuilds one.
+                    polygon = polygon.buffer(0)
+                polygons[k] = polygon
             except Exception as e:
                 logger.error(f"Failed to create polygon for '{k}': {e}")
                 errors_found.append(k)
