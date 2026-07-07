@@ -15,7 +15,7 @@ from logger.logger_service import get_logger
 from microdrop_application.dialogs.pyface_wrapper import error
 from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line, draw_polygons_and_line
 
-logger = get_logger(__name__, "DEBUG")
+logger = get_logger(__name__)
 
 #: Vertices sampled along each curved path segment (arcs, Béziers) when a
 #: path is flattened to a polygon; 24/segment keeps an Inkscape circle
@@ -77,6 +77,29 @@ _mm_converter_func_inverse = {
     "pc": mm_to_picas,
     "px": mm_to_pixels,
 }
+
+
+def as_valid_polygon(polygon: Polygon) -> Polygon:
+    """Return a valid single Polygon for ``polygon``.
+
+    Self-intersecting rings (Inkscape paths whose arc traversals overlap at
+    the seam) render fine under SVG's fill rule but break shapely ops.
+    ``buffer(0)`` rebuilds a valid geometry; when the crossing splits the
+    ring into several lobes (a MultiPolygon), the dominant lobe is the
+    electrode body — keep it and log the discarded sliver area.
+    """
+    if polygon.is_valid:
+        return polygon
+    repaired = polygon.buffer(0)
+    if repaired.geom_type == "MultiPolygon":
+        largest = max(repaired.geoms, key=lambda g: g.area)
+        dropped = repaired.area - largest.area
+        if dropped > 0:
+            logger.info(
+                f"Self-intersection repair dropped {dropped:.4f} area units "
+                f"({dropped / repaired.area:.1%}) of sliver lobes")
+        repaired = largest
+    return repaired
 
 
 class AlgorithmError(Exception):
@@ -430,6 +453,22 @@ class SVGProcessor:
             if d_string and element_id:
                 # Parse the path using the original coordinate system
                 path_points = self._parse_path_string(d_string)
+
+                # Repair self-intersecting rings AT THE SOURCE so the
+                # rendered electrode (ElectrodeView fills this path) and the
+                # geometry math (shapely polygons) agree on one shape. Left
+                # raw, Qt's default odd-even fill rule unfills the seam
+                # overlap — a visible notch the SVG's nonzero fill rule
+                # (Inkscape) never shows.
+                if len(path_points) >= 3:
+                    try:
+                        ring = Polygon(path_points)
+                        if not ring.is_valid:
+                            path_points = np.array(
+                                as_valid_polygon(ring).exterior.coords)
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not validity-check path '{element_id}': {e}")
 
                 # Apply all transformations: translation and then scaling
                 transformed_path = self.unit_normalization_func(path_points + transform)

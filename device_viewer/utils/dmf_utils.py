@@ -2,7 +2,7 @@
 import re
 import numpy as np
 import xml.etree.ElementTree as ET
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 
 from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Property, cached_property
 
@@ -125,6 +125,9 @@ class SvgUtil(HasTraits):
         for k, v in list(self.electrodes.items()):
             try:
                 coords = v.path.reshape(-1, 2)
+                # Rings are repaired once, at the source (svg_to_electrodes
+                # stores the as_valid_polygon exterior), so construction
+                # here is plain — no per-call validity rescan.
                 polygons[k] = Polygon(coords)
             except Exception as e:
                 logger.error(f"Failed to create polygon for '{k}': {e}")
