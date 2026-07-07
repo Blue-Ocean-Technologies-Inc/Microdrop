@@ -52,8 +52,8 @@ def test_bezier_segments_are_sampled():
 # A notched electrode mixing arcs with h/v runs (real Inkscape output). Its
 # final arc lands on the FIRST arc's endpoint rather than the path start, so
 # the raw flattened ring self-intersects near the seam — SVG's fill rule
-# tolerates that; shapely needs the buffer(0) repair applied in
-# SvgUtil.get_electrode_polygons.
+# tolerates that; shapely needs the as_valid_polygon repair,
+# applied once at the source (svg_to_electrodes).
 NOTCHED_D = ("m 484.35753,1040.403 "
              "a 2.427163,2.427163 0 0 0 1.86089,1.7124 "
              "v 1.3988 h -1.72913 -1.95591 v -2.0944 h -1.51181 "
@@ -93,7 +93,7 @@ def test_self_intersecting_ring_is_repaired():
     raw = Polygon(points)
     assert not raw.is_valid            # overlapping arc traversals at the seam
 
-    repaired = as_valid_polygon(raw)   # what get_electrode_polygons applies
+    repaired = as_valid_polygon(raw)   # what svg_to_electrodes applies
     assert repaired.geom_type == "Polygon"
     assert repaired.is_valid
     assert repaired.area == pytest.approx(26.17, rel=0.01)

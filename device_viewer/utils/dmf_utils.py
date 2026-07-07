@@ -7,7 +7,7 @@ from shapely.geometry import Polygon, MultiPolygon
 from traits.api import HasTraits, Float, Dict, Str, Bool, File, observe, List, Instance, Tuple, Property, cached_property
 
 from device_viewer.utils.dmf_utils_helpers import PolygonNeighborFinder, create_adjacency_dict, ElectrodeData, \
-    SVGProcessor, AlgorithmError, as_valid_polygon
+    SVGProcessor, AlgorithmError
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__, "DEBUG")
@@ -125,7 +125,10 @@ class SvgUtil(HasTraits):
         for k, v in list(self.electrodes.items()):
             try:
                 coords = v.path.reshape(-1, 2)
-                polygons[k] = as_valid_polygon(Polygon(coords))
+                # Rings are repaired once, at the source (svg_to_electrodes
+                # stores the as_valid_polygon exterior), so construction
+                # here is plain — no per-call validity rescan.
+                polygons[k] = Polygon(coords)
             except Exception as e:
                 logger.error(f"Failed to create polygon for '{k}': {e}")
                 errors_found.append(k)
