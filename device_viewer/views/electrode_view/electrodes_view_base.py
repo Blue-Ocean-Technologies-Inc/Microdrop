@@ -258,6 +258,11 @@ class ElectrodeView(QGraphicsPathItem):
         text_size = self.text_path.document().size()
         self.text_path.setPos(self.label_anchor_x - text_size.width() / 2,
                               self.label_anchor_y - text_size.height() / 2)
+        # Any rotation (device-view counter-rotation) must pivot about the
+        # NEW text's center: after an edit changes the label's size, the
+        # origin set at load would be stale and swing the label off its
+        # anchor — load-time and refresh placement must match.
+        self.text_path.setTransformOriginPoint(self.text_path.boundingRect().center())
 
     def rotate_electrode_text(self, angle=0):
         self.text_path.setTransformOriginPoint(self.text_path.boundingRect().center())
