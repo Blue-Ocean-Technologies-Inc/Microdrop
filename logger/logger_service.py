@@ -1,6 +1,9 @@
 import logging
+import threading
+import time
 
-from .consts import LOGGER_COLORS, LEVEL_COLORS, COLORS, MIN_APP_LOGLEVEL, DEV_MODE, LEVELS
+from .consts import (LOGGER_COLORS, LEVEL_COLORS, COLORS, MIN_APP_LOGLEVEL,
+                     DEV_MODE, LEVELS, THIRD_PARTY_LOGGER_NAMES)
 
 class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None):
@@ -56,6 +59,13 @@ def init_logger(preferred_log_level=LEVELS["INFO"],
     # setup root logger:
     ROOT_LOGGER = logging.getLogger()
     ROOT_LOGGER.setLevel(preferred_log_level)
+
+    # A debug switch should only make THIS repo's modules verbose: pin the
+    # known third-party loggers to INFO so their internals (dramatiq enqueue
+    # lines, apscheduler ticks, ...) don't flood the log.
+    for third_party_name in THIRD_PARTY_LOGGER_NAMES:
+        logging.getLogger(third_party_name).setLevel(
+            max(logging.INFO, preferred_log_level))
     ROOT_LOGGER.handlers = []  # Clear existing handlers
 
     # if file handler provided, add to root logger.
@@ -64,3 +74,32 @@ def init_logger(preferred_log_level=LEVELS["INFO"],
         ROOT_LOGGER.addHandler(file_handler)
 
     ROOT_LOGGER.addHandler(console_handler)
+
+# ---------------------------------------------------------------------------
+# Throttled debug: for log sites on hot message paths (router fan-out, actor
+# publishes) where a streaming topic would otherwise emit hundreds of nearly
+# identical lines per second.
+# ---------------------------------------------------------------------------
+_throttle_lock = threading.Lock()
+_throttle_state = {}
+
+
+def debug_throttled(logger, key, message, min_interval_s=2.0):
+    """``logger.debug`` rate-limited per ``key``.
+
+    Messages sharing a key (e.g. one key per topic) are emitted at most once
+    per ``min_interval_s``; repeats in between are counted and reported on
+    the next emission as ``(+N similar suppressed)``.
+    """
+    now = time.monotonic()
+    state_key = (logger.name, key)
+    with _throttle_lock:
+        last_emit, suppressed = _throttle_state.get(state_key, (0.0, 0))
+        if now - last_emit < min_interval_s:
+            _throttle_state[state_key] = (last_emit, suppressed + 1)
+            return
+        _throttle_state[state_key] = (now, 0)
+    if suppressed:
+        message = f"{message} (+{suppressed} similar suppressed)"
+    # stacklevel=2: attribute the record to the caller, not this helper.
+    logger.debug(message, stacklevel=2)
