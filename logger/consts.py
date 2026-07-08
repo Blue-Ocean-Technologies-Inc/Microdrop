@@ -51,5 +51,5 @@ LEVELS = {
 # debug switch applies only to this repo's own modules.
 THIRD_PARTY_LOGGER_NAMES = (
     "dramatiq", "apscheduler", "envisage", "traits", "pyface",
-    "asyncio", "PIL", "matplotlib", "urllib3",
+    "asyncio", "PIL", "matplotlib", "urllib3", "base_node_rpc",
 )

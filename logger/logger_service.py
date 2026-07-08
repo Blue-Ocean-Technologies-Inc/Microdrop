@@ -24,6 +24,23 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
+class RepoOnlyDebugFilter(logging.Filter):
+    """Drops DEBUG records that originate from installed packages.
+
+    Logger-name pinning (THIRD_PARTY_LOGGER_NAMES) cannot catch everything:
+    dramatiq's Actor logs its per-message "Received args= / Completed after"
+    records under a logger NAMED AFTER OUR MODULE (e.g.
+    ``microdrop_utils.dramatiq_pub_sub_helpers.publish_message``) while the
+    emitting code lives in site-packages/dramatiq/actor.py. Filtering on the
+    record's pathname keeps debug output for repo lines only.
+    """
+
+    def filter(self, record):
+        if record.levelno > logging.DEBUG:
+            return True
+        return "site-packages" not in record.pathname
+
+
 # Create formatters
 log_format = '%(asctime)s.%(msecs)03d [%(levelname)s:%(name)s]: %(message)s File "%(pathname)s", line %(lineno)d'
 date_format = r'%Y-%m-%d %H:%M:%S'
@@ -55,6 +72,7 @@ def init_logger(preferred_log_level=LEVELS["INFO"],
         console_handler_formatter = console_formatter
 
     console_handler.setFormatter(console_handler_formatter)
+    console_handler.addFilter(RepoOnlyDebugFilter())
 
     # setup root logger:
     ROOT_LOGGER = logging.getLogger()
@@ -71,6 +89,7 @@ def init_logger(preferred_log_level=LEVELS["INFO"],
     # if file handler provided, add to root logger.
     if file_handler:
         file_handler.setFormatter(file_formatter)
+        file_handler.addFilter(RepoOnlyDebugFilter())
         ROOT_LOGGER.addHandler(file_handler)
 
     ROOT_LOGGER.addHandler(console_handler)
