@@ -120,7 +120,7 @@ class BaseMessageHandler(HasTraits):
     @timestamped_value("realtime_mode_message")
     def _on_realtime_mode_updated_triggered(self, body):
         realtime = body == "True"
-        logger.debug(f"Realtime mode → {realtime}")
+        logger.debug(f"Realtime mode --> {realtime}")
         self.model.realtime_mode = realtime
 
     def _on_protocol_running_triggered(self, message):

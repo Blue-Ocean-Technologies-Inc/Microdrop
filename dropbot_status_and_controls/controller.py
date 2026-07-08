@@ -40,9 +40,9 @@ class ControlsController(BaseStatusController):
     @observe("model:voltage")
     def _on_voltage_changed(self, event):
         if self._publish_or_queue(topic=SET_VOLTAGE, message=str(event.new)):
-            logger.debug(f"Voltage → {event.new} V")
+            logger.debug(f"Voltage --> {event.new} V")
 
     @observe("model:frequency")
     def _on_frequency_changed(self, event):
         if self._publish_or_queue(topic=SET_FREQUENCY, message=str(event.new)):
-            logger.debug(f"Frequency → {event.new} Hz")
+            logger.debug(f"Frequency --> {event.new} Hz")

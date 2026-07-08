@@ -10,7 +10,7 @@ from dramatiq import Actor
 from dramatiq.middleware import CurrentMessage
 from traits.api import Instance, Str, provides, HasTraits, Callable
 
-from logger.logger_service import get_logger
+from logger.logger_service import get_logger, debug_throttled
 
 from .i_dramatiq_controller_base import IDramatiqControllerBase
 from .datetime_helpers import TimestampedMessage
@@ -109,10 +109,12 @@ class DramatiqControllerBase(HasTraits):
                     msg_proxy._message.message_timestamp if msg_proxy is not None
                     else None
                 )
-                logger.debug(f"Message going to message_router: {message} at {msg_timestamp}")
+                debug_throttled(logger, f"to_router:{topic}",
+                                f"Message going to message_router: {message} at {msg_timestamp}")
             else: # This is the message *from* the message_router (since message_router is the only publish_message that adds a timestamp)
                 msg_timestamp = timestamp
-                logger.debug(f"Message received from message_router: {message} at {msg_timestamp}")
+                debug_throttled(logger, f"from_router:{topic}",
+                                f"Message received from message_router: {message} at {msg_timestamp}")
 
             timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
                 content=message,
@@ -202,7 +204,9 @@ def basic_listener_actor_routine(
     
     # Debug level: at info this printed EVERY routed message (the old code
     # hand-excluded the two chattiest topics; at debug no exclusion needed).
-    logger.debug(
+    # Throttled per (listener, topic): streaming topics fire many times a second.
+    debug_throttled(
+        logger, f"listener_rx:{parent_obj.name}:{topic}",
         f"{parent_obj.name}: Received message: '{timestamped_message}' "
         f"from topic: {topic} at {timestamped_message.timestamp}"
     )

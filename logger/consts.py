@@ -45,3 +45,11 @@ LEVELS = {
     "ERROR": logging.ERROR,
     "CRITICAL": logging.CRITICAL
 }
+# Loggers from third-party libraries whose DEBUG output floods the log the
+# moment the app is switched to debug level (dramatiq enqueues every message,
+# apscheduler ticks every second, ...). Pinned to INFO by init_logger so a
+# debug switch applies only to this repo's own modules.
+THIRD_PARTY_LOGGER_NAMES = (
+    "dramatiq", "apscheduler", "envisage", "traits", "pyface",
+    "asyncio", "PIL", "matplotlib", "urllib3", "base_node_rpc",
+)
