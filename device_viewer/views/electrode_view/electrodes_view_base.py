@@ -7,7 +7,7 @@ from PySide6.QtGui import QTransform
 from traits.observation.observe import observe
 
 # local imports
-from logger.logger_service import get_logger
+from logger.logger_service import get_logger, debug_throttled
 
 # enthought imports
 from traits.api import Instance, Array, Str
@@ -306,7 +306,10 @@ class ElectrodeView(QGraphicsPathItem):
         # if tooltip toggled on, it's not empty: Needs updating to show new information.
         if self.toolTip():
             self.setToolTip(self._tooltip_text)
-            logger.debug(f"{self.id}: Redrew electrode tooltip")
+            # One shared key: a redraw touches every electrode at once, so
+            # per-id keys would still emit one line per electrode.
+            debug_throttled(logger, "tooltip_redraw",
+                            f"{self.id}: Redrew electrode tooltip")
 
     def toggle_tooltip(self, checked: bool):
         if checked:
