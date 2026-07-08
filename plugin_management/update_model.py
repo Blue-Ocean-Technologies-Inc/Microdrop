@@ -94,7 +94,7 @@ class UpdateDialogModel(HasTraits):
         self.has_new = bool(report.new_plugins)
         self.updates_html = "<br>".join(
             f"<b>{html.escape(name)}</b>: {html.escape(installed)} "
-            f"→ {html.escape(latest)}"
+            f"--> {html.escape(latest)}"
             for name, installed, latest in report.updates
         )
         if report.new_plugins:

@@ -106,7 +106,7 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         else:
             logger.error(f"Invalid chip_inserted value: {body!r}")
             inserted = False
-        logger.debug(f"Chip inserted → {inserted}")
+        logger.debug(f"Chip inserted --> {inserted}")
         self.model.chip_inserted = inserted
 
     def _on_capacitance_updated_triggered(self, body):
