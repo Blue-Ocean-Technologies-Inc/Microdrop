@@ -10,7 +10,7 @@ import pytest
 
 import microdrop_utils.hardware_device_monitoring_helpers as helpers
 from microdrop_utils.hardware_device_monitoring_helpers import (
-    device_id_from_whoami_output, find_port_by_device_id,
+    PORT_BUSY, device_id_from_whoami_output, find_port_by_device_id,
 )
 
 WHOAMI_HEATER = 'noise\n§WHOAMI{"uid": "e6614c30", "device_id": "heater_board"}\nmore'
@@ -40,8 +40,8 @@ def ports(monkeypatch):
         helpers, "grep",
         lambda hwid: [SimpleNamespace(device=p) for p in state["ports"]])
     monkeypatch.setattr(
-        helpers, "probe_port_device_id",
-        lambda port, baudrate=115200: state["ids"].get(port))
+        helpers, "_probe_port",
+        lambda port, baudrate: state["ids"].get(port))
     return state
 
 
@@ -74,4 +74,19 @@ def test_unidentified_port_is_the_fallback(ports):
 def test_identified_match_beats_unidentified_fallback(ports):
     ports["ports"] = ["COM3", "COM4"]
     ports["ids"] = {"COM3": None, "COM4": "heater_board"}
+    assert find_port_by_device_id(HWIDS, "heater") == "COM4"
+
+
+def test_busy_port_is_never_the_fallback(ports):
+    # A port that cannot be OPENED is likely the other plugin's board (or a
+    # probe in flight): skip it this scan instead of blind-claiming it.
+    ports["ports"] = ["COM3"]
+    ports["ids"] = {"COM3": PORT_BUSY}
+    with pytest.raises(Exception, match="No 'heater' board found"):
+        find_port_by_device_id(HWIDS, "heater")
+
+
+def test_busy_port_skipped_but_open_unidentified_still_falls_back(ports):
+    ports["ports"] = ["COM3", "COM4"]
+    ports["ids"] = {"COM3": PORT_BUSY, "COM4": None}
     assert find_port_by_device_id(HWIDS, "heater") == "COM4"
