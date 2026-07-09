@@ -118,6 +118,17 @@ APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
                     LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
 # ---------------------------------------------------------------------------
+# Capture file layout (under the experiment directory). Other plugins may
+# import these to LOCATE captures (e.g. the fluorescence image viewer);
+# only the device viewer writes them.
+# ---------------------------------------------------------------------------
+CAPTURES_DIR_NAME = "captures"
+RECORDINGS_DIR_NAME = "recordings"
+# Unprocessed (16-bit) sensor frames from provider feeds, saved alongside
+# every display capture under captures/.
+RAW_CAPTURES_SUBDIR = "16bit_raw"
+
+# ---------------------------------------------------------------------------
 # GUI configuration
 # ---------------------------------------------------------------------------
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320
@@ -172,6 +183,9 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 #       feed.error: Signal(str)                    #   fatal feed errors
 #       feed.start() / feed.stop()                 #   lifecycle
 #       feed.create_controls(parent) -> QWidget|None   # optional settings row
+#       feed.raw_frame() -> QImage|None                # optional: unprocessed
+#                                                      #   (e.g. 16-bit) frame,
+#                                                      #   saved next to captures
 # Frames ride the same QGraphicsVideoItem as QtMultimedia cameras, so
 # provider sources inherit the perspective alignment under the electrodes.
 CAMERA_SOURCES = "device_viewer.camera_sources"
