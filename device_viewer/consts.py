@@ -186,7 +186,8 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 #       feed.raw_frame() -> QImage|None                # optional: unprocessed
 #                                                      #   (e.g. 16-bit) frame,
 #                                                      #   THE saved capture
-# The device viewer does NOT display provider frames: its video layer stays
-# hidden while a provider source is selected (contributing plugins ship
-# their own preview pane) — captures save the feed's raw frame directly.
+# The device viewer previews provider frames only on request (the camera
+# pane's "Live feed" checkbox): its video layer stays hidden otherwise
+# (contributing plugins ship their own preview pane) — captures save the
+# feed's raw frame directly either way.
 CAMERA_SOURCES = "device_viewer.camera_sources"

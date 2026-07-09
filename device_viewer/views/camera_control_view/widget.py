@@ -10,6 +10,7 @@ from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, Q
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
+    QCheckBox,
     QHBoxLayout,
     QPushButton,
     QVBoxLayout,
@@ -143,6 +144,16 @@ class CameraControlWidget(QWidget):
         self.resolution_select_layout.addWidget(self.resolution_label)
         self.resolution_select_layout.addWidget(self.combo_resolutions)
 
+        # Provider sources only: opt into rendering the external feed in
+        # the device view (hidden for QtMultimedia cameras, which always
+        # render). See _on_live_feed_toggled for why this is opt-in.
+        self.live_feed_checkbox = QCheckBox("Live feed")
+        self.live_feed_checkbox.setToolTip(
+            "Show the external camera feed in the device view "
+            "(full-resolution frames can reduce GUI smoothness)"
+        )
+        self.live_feed_checkbox.setVisible(False)
+
         # Buttons
         self.button_align = QPushButton("view_in_ar")
         self.button_align.setToolTip("Align Camera Perspective")
@@ -196,6 +207,7 @@ class CameraControlWidget(QWidget):
         main_layout = QVBoxLayout()
         main_layout.addLayout(self.camera_select_layout)
         main_layout.addLayout(self.resolution_select_layout)
+        main_layout.addWidget(self.live_feed_checkbox)
         main_layout.addLayout(top_layout)
         main_layout.addLayout(bottom_layout)
         self.setLayout(main_layout)
@@ -217,6 +229,7 @@ class CameraControlWidget(QWidget):
         self.model.observe(self.on_mode_changed, "mode")
         self.combo_cameras.currentIndexChanged.connect(self.on_camera_changed)
         self.combo_resolutions.currentIndexChanged.connect(self.on_resolution_changed)
+        self.live_feed_checkbox.toggled.connect(self._on_live_feed_toggled)
 
     # ... [Existing Camera Management Methods (populate_resolutions, etc.) remain unchanged] ...
 
@@ -389,14 +402,16 @@ class CameraControlWidget(QWidget):
 
     def _select_provider_source(self, label, was_running):
         """Route the capture path to a provider source: no QCamera. The
-        video layer stays HIDDEN — provider plugins ship their own preview
-        (the fluorescence image viewer pane), and rendering full-resolution
-        sensor frames under the electrode layer just costs GUI smoothness.
-        Captures don't need it either: they save the feed's raw frame."""
+        video layer shows the feed only when the "Live feed" checkbox is
+        on (see _on_live_feed_toggled) — captures don't need it either
+        way: they save the feed's raw frame."""
         self.camera = None
         self.session.setCamera(None)
         self.preferences.selected_camera = label
-        self.video_item.setVisible(False)
+        self.live_feed_checkbox.blockSignals(True)
+        self.live_feed_checkbox.setChecked(self.preferences.provider_live_feed)
+        self.live_feed_checkbox.blockSignals(False)
+        self.video_item.setVisible(self.live_feed_checkbox.isChecked())
         self._disable_camera_buttons(False)
         # The recorder taps the QtMultimedia session, which provider feeds
         # bypass; screen captures still work (they grab the scene).
@@ -415,8 +430,11 @@ class CameraControlWidget(QWidget):
         except Exception as e:
             logger.error(f"Camera-source feed for '{label}' failed to open: {e}")
             return
-        # No frame connection: the provider preview lives in its own pane
-        # (see _select_provider_source) — only errors are of interest here.
+        # The frame connection is opt-in (Live feed checkbox): feeds skip
+        # the heavy display conversion while nothing listens, so leaving
+        # the signal unconnected IS the disable switch.
+        if self.live_feed_checkbox.isChecked():
+            feed.frame.connect(self._on_feed_frame)
         feed.error.connect(self._on_feed_error)
         controls = None
         create_controls = getattr(feed, "create_controls", None)
@@ -448,6 +466,21 @@ class CameraControlWidget(QWidget):
 
     def _on_feed_frame(self, image):
         self.video_item.videoSink().setVideoFrame(QVideoFrame(image))
+
+    def _on_live_feed_toggled(self, checked):
+        """Show/hide the provider feed in the device view. Rendering
+        full-resolution sensor frames under the electrode layer costs GUI
+        smoothness, so the feed's frame signal is connected only while the
+        user actually wants the live view — provider feeds skip the display
+        conversion entirely when nothing is connected."""
+        self.preferences.provider_live_feed = checked
+        self.video_item.setVisible(checked)
+        if self._active_feed is None:
+            return
+        if checked:
+            self._active_feed.frame.connect(self._on_feed_frame)
+        else:
+            self._active_feed.frame.disconnect(self._on_feed_frame)
 
     def _on_feed_error(self, message):
         logger.error(f"Provider camera feed error: {message}")
@@ -571,6 +604,8 @@ class CameraControlWidget(QWidget):
             if  self.camera.isActive():
                 self.turn_off_camera()
                 was_running = True
+
+        self.live_feed_checkbox.setVisible(label in self._provider_sources)
 
         if label in self._provider_sources:
             self._select_provider_source(label, was_running)
