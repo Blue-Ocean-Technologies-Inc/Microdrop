@@ -158,3 +158,146 @@ default `dropbot`) and pulls in the matching device-specific plugins.
 - Tell the application where to find the Redis server by editing the redis_settings.json (you can copy the template [redis_settings.example.json](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/blob/main/redis_settings.example.json))
 - Set the host to the Redis server's IP and the port to match.
 
+# **Developer Workflow**
+
+## **Commit Messages (Conventional Commits)**
+
+Every commit message must follow the
+[Conventional Commits](https://www.conventionalcommits.org/) format — a CI
+check ([conventional-commits.yml](.github/workflows/conventional-commits.yml))
+runs `cz check` on every PR commit, so non-conforming messages block the merge.
+The format matters because releases are derived from it: commitizen reads the
+commit history to compute the next version number and generate the changelog
+(see [Releases & CHANGELOG.md](#releases--changelogmd) below).
+
+```
+type(scope): subject
+
+optional body explaining why and what
+
+optional footer (e.g. BREAKING CHANGE: ...)
+```
+
+- **Types:** `feat` (new feature → minor bump), `fix` (bug fix → patch bump),
+  `refactor`, `perf`, `docs`, `ci`, `chore`, `test`.
+- **Scope** is optional but encouraged — use the plugin/package name, e.g.
+  `feat(device_viewer): add electrode search`.
+- **Breaking changes:** append `!` after the type/scope
+  (`feat(api)!: drop legacy topics`) or add a `BREAKING CHANGE:` footer →
+  major bump.
+- Keep the subject imperative and ~50 characters; put the why/what in the body.
+
+Examples:
+
+```
+feat(dropbot_controller): add short-detection retry
+fix(protocol_grid): preserve step order on paste
+docs: add developer workflow section to README
+chore: release v1.1.0
+```
+
+### **Setup: enforce the convention locally**
+
+The repo ships a [pre-commit](https://pre-commit.com/) config
+([.pre-commit-config.yaml](.pre-commit-config.yaml)) that installs git hooks
+enforcing the format at commit time, so mistakes are caught before CI.
+
+**If you develop through the
+[pixi-microdrop](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop)
+repo** (the pixi environment that carries this repo as the `src/` submodule),
+this is a one-time command per clone, run from the outer `microdrop-py/`
+directory:
+
+```bash
+pixi run setup-hooks
+```
+
+This installs the hooks into this repo **and** the plugin clones
+(heater / magnet / fluorescence).
+
+**Without pixi**, install `pre-commit` yourself (e.g.
+`pipx install pre-commit` or `pip install pre-commit`) and run this once
+inside each repo clone:
+
+```bash
+pre-commit install --hook-type commit-msg --hook-type pre-commit
+```
+
+If you prefer to be prompted instead of writing the message yourself,
+commitizen can compose a conforming message interactively:
+
+```bash
+# via pixi-microdrop (no install needed)
+pixi exec --spec "commitizen>=4,<5" -- cz commit
+
+# without pixi (after `pipx install "commitizen>=4,<5"`)
+cz commit
+```
+
+## **Git Hooks**
+
+The setup above (`pixi run setup-hooks`, or the manual `pre-commit install`)
+wires two kinds of hooks (defined in
+[.pre-commit-config.yaml](.pre-commit-config.yaml)); they run automatically on
+every `git commit`:
+
+**commit-msg hook** (runs on the message):
+
+| Hook | What it does |
+|---|---|
+| `commitizen` | Rejects the commit if the message isn't valid Conventional Commits — the local mirror of the CI gate. |
+
+**pre-commit hooks** (run on the staged files):
+
+| Hook | What it does |
+|---|---|
+| `check-ast` | Staged `.py` files must parse (catches syntax errors before they land). |
+| `check-merge-conflict` | Blocks files containing leftover merge-conflict markers. |
+| `check-added-large-files` | Blocks files larger than 500 kB. |
+| `forbid-scratch-files` | Blocks scratch/artifact paths (`__pycache__/`, `.pixi/`, `.task-report.md`, `.superpowers/`) from ever being committed. |
+
+Useful commands:
+
+```bash
+# Run all file hooks against the whole repo (not just staged files)
+pre-commit run --all-files
+
+# A failed hook aborts the commit — fix the issue (or the message) and retry.
+# In a genuine emergency a hook can be bypassed with `git commit --no-verify`,
+# but the CI check will still fail the PR, so fix the message instead.
+```
+
+## **Releases & CHANGELOG.md**
+
+[CHANGELOG.md](CHANGELOG.md) is **generated, never hand-edited**. Commitizen
+(configured in [.cz.toml](.cz.toml)) builds it from the Conventional Commit
+history:
+
+- The version lives in **git tags only** (`version_provider = "scm"`, tags
+  formatted `vX.Y.Z`) — there is no version string in the source to bump.
+- `cz bump` looks at all commits since the last `v*` tag, derives the bump
+  (`feat` → minor, `fix` → patch, `BREAKING CHANGE`/`!` → major), rewrites
+  CHANGELOG.md with sections grouped by type (Feat / Fix / Refactor / ...),
+  commits it as `chore: release vX.Y.Z`, and creates an annotated tag.
+- Commit **scopes** become the bold prefixes in changelog entries
+  (e.g. `- **plugin-management**: full Manage Plugins window`), which is why
+  meaningful scopes are worth writing.
+
+Cutting a release (maintainers, from an up-to-date `main`):
+
+```bash
+# via pixi-microdrop
+pixi exec --spec "commitizen>=4,<5" -- cz bump
+
+# without pixi (after `pipx install "commitizen>=4,<5"`)
+cz bump
+
+# then, either way (requires branch-protection bypass, i.e. an admin):
+git push origin main --follow-tags
+```
+
+The related **heater/magnet plugin repos** release fully automatically: every
+push to `main` containing release-worthy conventional commits bumps the
+version, regenerates their CHANGELOG.md, publishes the conda package to
+`prefix.dev/microdrop-plugins`, and tags — no manual `cz bump` needed there.
+
