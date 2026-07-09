@@ -6,7 +6,7 @@ from PySide6.QtCore import (
     QTimer,
 )
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat
+from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -64,6 +64,7 @@ class CameraControlWidget(QWidget):
         scene: ElectrodeScene,
         preferences: Preferences,
         status_bar_manager=None,
+        source_providers=None,
     ):
         super().__init__()
         self.model = model
@@ -88,6 +89,16 @@ class CameraControlWidget(QWidget):
         # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
         # to store as combo box userData.
         self._linux_device_containers = {}
+        # Extra camera sources from the CAMERA_SOURCES extension point.
+        # A callable is resolved fresh on every camera-list refresh, so
+        # contributions from hot-loaded plugin groups (which start AFTER
+        # this widget is built) appear on the next refresh. Label ->
+        # (provider, key); labels double as combo entries (only Qt types
+        # are safe as combo userData, so providers ride a side dict).
+        self.source_providers = source_providers
+        self._provider_sources = {}
+        self._active_feed = None
+        self._feed_controls = None
         self.last_camera_state = False
         self.available_cameras = None
         self.available_formats = None
@@ -219,6 +230,14 @@ class CameraControlWidget(QWidget):
 
     def turn_on_camera(self):
         logger.info("Turning camera on")
+        if self._provider_selected():
+            if self._active_feed is None:
+                self._start_provider_feed()
+            self.camera_toggle_button.setText("videocam")
+            self.camera_toggle_button.setToolTip("Camera On")
+            self.camera_toggle_button.setChecked(True)
+            self.preferences.camera_state = True
+            return
         if not self.camera.isActive():
             self.camera.start()
             self.camera_toggle_button.setText("videocam")
@@ -228,6 +247,13 @@ class CameraControlWidget(QWidget):
 
     def turn_off_camera(self):
         logger.info("Turning camera off")
+        if self._provider_selected():
+            self._stop_provider_feed()
+            self.camera_toggle_button.setText("videocam_off")
+            self.camera_toggle_button.setToolTip("Camera Off")
+            self.camera_toggle_button.setChecked(False)
+            self.preferences.camera_state = False
+            return
         if self.camera.isActive():
             self.camera.stop()
             self.camera_toggle_button.setText("videocam_off")
@@ -245,13 +271,13 @@ class CameraControlWidget(QWidget):
             )
 
         if choice in (OK, YES):
-            self.turn_off_camera() if self.camera.isActive() else self.turn_on_camera()
+            self.turn_off_camera() if self._feed_active() else self.turn_on_camera()
         else:
             # Revert the button's checked state since Qt auto-toggles it on click
-            self.camera_toggle_button.setChecked(self.camera.isActive())
+            self.camera_toggle_button.setChecked(self._feed_active())
 
         # keep the camera toggled button in sync with the alpha map.
-        self.model.set_visible(video_key, self.camera.isActive())
+        self.model.set_visible(video_key, self._feed_active())
 
     def check_initial_camera_state(self):
         """Sync the camera toggle button with the actual camera state.
@@ -346,6 +372,79 @@ class CameraControlWidget(QWidget):
         elif isinstance(selected_device, QCameraDevice):
             return selected_device.description()
 
+    # ------------------------------------------------------------------ #
+    # Provider sources (CAMERA_SOURCES extension point)                    #
+    # ------------------------------------------------------------------ #
+    def _provider_selected(self) -> bool:
+        return self.combo_cameras.currentText() in self._provider_sources
+
+    def _feed_active(self) -> bool:
+        """True while any video source is live (QCamera or provider feed)."""
+        if self._active_feed is not None:
+            return True
+        return bool(self.camera) and self.camera.isActive()
+
+    def _select_provider_source(self, label, was_running):
+        """Route the video layer to a provider source: no QCamera, frames
+        arrive from the provider's feed through the same video sink (and so
+        inherit the perspective alignment)."""
+        self.camera = None
+        self.session.setCamera(None)
+        self.preferences.selected_camera = label
+        self.video_item.setVisible(True)
+        self._disable_camera_buttons(False)
+        # The recorder taps the QtMultimedia session, which provider feeds
+        # bypass; screen captures still work (they grab the scene).
+        self.record_toggle_button.setDisabled(True)
+        self.combo_resolutions.blockSignals(True)
+        self.combo_resolutions.clear()   # providers stream full resolution
+        self.combo_resolutions.blockSignals(False)
+        if was_running:
+            self.turn_on_camera()
+
+    def _start_provider_feed(self):
+        label = self.combo_cameras.currentText()
+        provider, key = self._provider_sources[label]
+        try:
+            feed = provider.open(key)
+        except Exception as e:
+            logger.error(f"Camera-source feed for '{label}' failed to open: {e}")
+            return
+        feed.frame.connect(self._on_feed_frame)
+        feed.error.connect(self._on_feed_error)
+        controls = None
+        create_controls = getattr(feed, "create_controls", None)
+        if create_controls is not None:
+            controls = create_controls(self)
+        if controls is not None:
+            self.layout().addWidget(controls)
+        self._feed_controls = controls
+        self._active_feed = feed
+        feed.start()
+        logger.info(f"Provider camera feed started: {label}")
+
+    def _stop_provider_feed(self):
+        if self._active_feed is None:
+            return
+        try:
+            self._active_feed.stop()
+        except Exception:
+            logger.error("Provider feed failed to stop cleanly", exc_info=True)
+        if self._feed_controls is not None:
+            self.layout().removeWidget(self._feed_controls)
+            self._feed_controls.deleteLater()
+            self._feed_controls = None
+        self._active_feed = None
+        self.record_toggle_button.setDisabled(False)
+        logger.info("Provider camera feed stopped")
+
+    def _on_feed_frame(self, image):
+        self.video_item.videoSink().setVideoFrame(QVideoFrame(image))
+
+    def _on_feed_error(self, message):
+        logger.error(f"Provider camera feed error: {message}")
+        self.turn_off_camera()
+
     def _get_camera_resolution_max_framerate(self, w=0, h=0, fmt=None):
         """Return the max framerate for a given resolution, or 0.0 if unknown.
 
@@ -399,6 +498,21 @@ class CameraControlWidget(QWidget):
             else:
                 self.combo_cameras.addItem(description, userData=camera)
 
+        # provider-contributed sources (ASI cameras etc.)
+        self._provider_sources.clear()
+        if callable(self.source_providers):
+            providers = self.source_providers()
+        else:
+            providers = self.source_providers or []
+        for provider in providers:
+            try:
+                for label, key in provider.list_sources():
+                    self._provider_sources[label] = (provider, key)
+                    self.combo_cameras.addItem(label, userData=None)
+            except Exception:
+                logger.error(f"Camera-source provider {provider!r} failed to "
+                             "enumerate; skipping", exc_info=True)
+
         # account for no camera
         _available_cameras.append(None)
         self.combo_cameras.addItem("<No Camera>", userData=None)
@@ -412,6 +526,11 @@ class CameraControlWidget(QWidget):
                 if camera and self._get_camera_description(camera) == old_camera_name:
                     self.combo_cameras.setCurrentIndex(i)
                     return
+
+            if old_camera_name in self._provider_sources:
+                self.combo_cameras.setCurrentIndex(
+                    self.combo_cameras.findText(old_camera_name))
+                return
 
             # Preferred camera not found — clear stale resolution since it
             # belonged to the missing camera, then fall back.
@@ -436,12 +555,18 @@ class CameraControlWidget(QWidget):
             return
 
         camera = self.combo_cameras.itemData(index)
+        label = self.combo_cameras.itemText(index)
 
-        was_running = False
+        was_running = self._feed_active()
+        self._stop_provider_feed()
         if self.camera:
             if  self.camera.isActive():
                 self.turn_off_camera()
                 was_running = True
+
+        if label in self._provider_sources:
+            self._select_provider_source(label, was_running)
+            return
 
         if camera:
             self.camera = self._get_camera_from_available_cameras(camera)
@@ -471,6 +596,12 @@ class CameraControlWidget(QWidget):
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
+
+        if self.camera is None:
+            # No QCamera bound (provider source or "<No Camera>"): nothing
+            # to enumerate.
+            self.combo_resolutions.blockSignals(False)
+            return
 
         # -- 1. Collect and sort available formats --------------------------------
         formats = self.camera.cameraDevice().videoFormats()

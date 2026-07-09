@@ -4,13 +4,13 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
 # Enthought library imports.
-from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
+from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 
 # local imports
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, CAMERA_SOURCES
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -42,6 +42,15 @@ class DeviceViewerPlugin(Plugin):
     #: pane extends this list (joystick + recording icons); the
     #: microdrop_status_bar plugin places, spaces, and removes them.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
+
+    #: Extra camera sources (e.g. the fluorescence plugin's ASI cameras):
+    #: zero-arg provider factories, rendered through the same video layer
+    #: as QtMultimedia cameras. See consts.CAMERA_SOURCES for the contract.
+    camera_sources = ExtensionPoint(
+        List, id=CAMERA_SOURCES,
+        desc="Zero-arg factories returning camera-source providers for the "
+             "device viewer's video layer",
+    )
 
     ###########################################################################
     # Protected interface.

@@ -163,3 +163,15 @@ device_modified_tag = " (modified)"
 # statusbar messages
 camera_place_status_message_text = "Select 4 points on image"
 camera_edit_status_message_text = "Drag vertices to align with device outline"
+
+# Extension point: extra camera sources for the device-viewer video layer.
+# Contributions are zero-arg factories returning a provider object:
+#   provider.list_sources() -> [(label, key)]      # dropdown entries
+#   provider.open(key)      -> feed                # QObject with:
+#       feed.frame: Signal(QImage)                 #   frames to display
+#       feed.error: Signal(str)                    #   fatal feed errors
+#       feed.start() / feed.stop()                 #   lifecycle
+#       feed.create_controls(parent) -> QWidget|None   # optional settings row
+# Frames ride the same QGraphicsVideoItem as QtMultimedia cameras, so
+# provider sources inherit the perspective alignment under the electrodes.
+CAMERA_SOURCES = "device_viewer.camera_sources"
