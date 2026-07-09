@@ -388,13 +388,15 @@ class CameraControlWidget(QWidget):
         return bool(self.camera) and self.camera.isActive()
 
     def _select_provider_source(self, label, was_running):
-        """Route the video layer to a provider source: no QCamera, frames
-        arrive from the provider's feed through the same video sink (and so
-        inherit the perspective alignment)."""
+        """Route the capture path to a provider source: no QCamera. The
+        video layer stays HIDDEN — provider plugins ship their own preview
+        (the fluorescence image viewer pane), and rendering full-resolution
+        sensor frames under the electrode layer just costs GUI smoothness.
+        Captures don't need it either: they save the feed's raw frame."""
         self.camera = None
         self.session.setCamera(None)
         self.preferences.selected_camera = label
-        self.video_item.setVisible(True)
+        self.video_item.setVisible(False)
         self._disable_camera_buttons(False)
         # The recorder taps the QtMultimedia session, which provider feeds
         # bypass; screen captures still work (they grab the scene).
@@ -413,7 +415,8 @@ class CameraControlWidget(QWidget):
         except Exception as e:
             logger.error(f"Camera-source feed for '{label}' failed to open: {e}")
             return
-        feed.frame.connect(self._on_feed_frame)
+        # No frame connection: the provider preview lives in its own pane
+        # (see _select_provider_source) — only errors are of interest here.
         feed.error.connect(self._on_feed_error)
         controls = None
         create_controls = getattr(feed, "create_controls", None)
