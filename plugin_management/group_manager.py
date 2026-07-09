@@ -21,19 +21,17 @@ runs), so a later re-enable brings back only those.
 """
 import importlib
 
+from apptools.preferences.api import get_default_preferences
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 from . import entry_point_discovery
-from .consts import BUILTIN_PLUGIN_GROUPS
+from .consts import BUILTIN_PLUGIN_GROUPS, GROUP_ENABLED_PREFERENCES_PATH
 from .i_plugin_group_manager import IPluginGroupManager
 
 logger = get_logger(__name__)
-
-app_globals = get_microdrop_redis_globals_manager()
 
 
 def _resolve_plugin_class(spec):
@@ -79,7 +77,9 @@ class PluginGroup(HasTraits):
     #: cleaned up by each plugin's own stop()).
     service_ids = List()
     loaded = Bool(False)
-    #: App-globals flag persisting this group's enabled state across runs.
+    #: Key persisting this group's enabled state across runs, stored in the
+    #: application preferences file under GROUP_ENABLED_PREFERENCES_PATH
+    #: (app_globals is NOT durable: its Redis dies with the app).
     enabled_key = Str()
     #: Optional topic published (empty message) right after a successful
     #: enable — re-kicks the device's connection search, since the plugin's
@@ -181,8 +181,7 @@ class PluginGroupManager(HasTraits):
             group = self.groups.pop(name)
             if group.enabled_key:
                 try:
-                    if group.enabled_key in app_globals:
-                        del app_globals[group.enabled_key]
+                    get_default_preferences().remove(self._flag_path(group))
                 except Exception as e:
                     logger.debug(f"could not clear flag {group.enabled_key}: {e}")
 
@@ -219,14 +218,18 @@ class PluginGroupManager(HasTraits):
         """Reconcile every group to its persisted enabled flag (default:
         enabled, so out of the box nothing changes). Runs after adoption, so a
         persisted 'off' unloads the startup-composed group."""
+        try:
+            preferences = get_default_preferences()
+        except Exception as e:
+            logger.warning(f"restore: preferences unavailable: {e}")
+            preferences = None
         desired = {}
         for name, group in self.groups.items():
             enabled = True
-            if group.enabled_key:
-                try:
-                    enabled = bool(app_globals.get(group.enabled_key, True))
-                except Exception as e:   # tolerated no-Redis path
-                    logger.debug(f"restore: no app_globals for {name}: {e}")
+            if group.enabled_key and preferences is not None:
+                raw = preferences.get(self._flag_path(group), "True")
+                # Preferences stores strings — bool("False") is True, parse.
+                enabled = str(raw).strip().lower() != "false"
             desired[name] = enabled
         self.apply(application, desired)
 
@@ -361,10 +364,21 @@ class PluginGroupManager(HasTraits):
     # --- helpers -------------------------------------------------------
 
     @staticmethod
+    def _flag_path(group):
+        return f"{GROUP_ENABLED_PREFERENCES_PATH}.{group.enabled_key}"
+
+    @staticmethod
     def _persist_flag(group, value):
+        """Write the enabled flag to the application preferences file,
+        flushed immediately so the choice survives even a crash. This must
+        NOT go to app_globals: the app-managed Redis runs with persistence
+        disabled (redis.conf: save "") and is terminated at shutdown, which
+        silently discarded every toggle."""
         if not group.enabled_key:
             return
         try:
-            app_globals[group.enabled_key] = value
-        except Exception as e:           # tolerated no-Redis path
-            logger.debug(f"could not persist {group.enabled_key}: {e}")
+            preferences = get_default_preferences()
+            preferences.set(PluginGroupManager._flag_path(group), value)
+            preferences.flush()
+        except Exception as e:
+            logger.warning(f"could not persist {group.enabled_key}: {e}")

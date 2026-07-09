@@ -91,7 +91,8 @@ the consent gate is the backstop — installing a conda package runs third-party
    `application.start_plugin`; capture the **new** service ids (the before/after diff).
 3. Publish `post_enable_publish_topic` if set (e.g. the magnet backend kicks off its
    hardware search).
-4. Set the group's `enabled_key` app-global flag (persists the "on" state).
+4. Persist the group's `enabled_key` flag to the application preferences file
+   (survives restarts — app_globals would die with the app-managed Redis).
 
 The plugins' **dock panes and menu contributions are mounted/rebuilt reactively** — *not* in
 `enable()`. `add_plugin`/`start_plugin` makes each plugin's `TASK_EXTENSIONS` contribution
@@ -203,7 +204,7 @@ Field reference:
 | `groups[].name` | yes | Unique group id (the enable/disable unit). |
 | `groups[].label` | no | Shown in Manage Plugins (defaults to `name`). |
 | `groups[].plugins` | yes | Ordered `"module:Class"` strings — the Envisage `Plugin` classes, imported lazily on enable, started in this order (stopped in reverse). |
-| `groups[].enabled_key` | yes | App-global flag key persisting the on/off state (e.g. `"microdrop.<x>_enabled"`). |
+| `groups[].enabled_key` | yes | Key persisting the on/off state in the application preferences file (e.g. `"microdrop.<x>_enabled"`). |
 | `groups[].post_enable_publish_topic` | no | A pub/sub topic published (empty message) right after enable — e.g. to start hardware monitoring. |
 
 **Grouping & order tips:** list groups in **enable order** (backend before UI, so services/

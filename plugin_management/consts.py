@@ -17,3 +17,9 @@ PLUGIN_CHANNEL_URL = "https://prefix.dev/microdrop-plugins"
 # the microdrop.plugins entry point. The tuple stays as the seam for any
 # future group that genuinely ships inside the app itself.
 BUILTIN_PLUGIN_GROUPS = ()
+
+# Application-preferences node holding each group's persisted enabled flag
+# (full path: f"{GROUP_ENABLED_PREFERENCES_PATH}.{enabled_key}"). The flags
+# must live in the preferences FILE — the Redis-backed app_globals runs with
+# persistence disabled (redis.conf: save "") and dies with the app.
+GROUP_ENABLED_PREFERENCES_PATH = "microdrop.plugin_groups"
