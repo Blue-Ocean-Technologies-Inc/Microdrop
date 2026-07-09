@@ -1,4 +1,5 @@
 ICON_FOLDER_OPEN     = "\ue2c8"  # folder_open
+ICON_HOME            = "home"  # home
 ICON_EMOJI_OBJECTS   = "\uea24"  # emoji_objects
 ICON_HEADSET_MIC     = "\ue311"  # headset_mic
 ICON_INFO            = "\ue88e"  # info

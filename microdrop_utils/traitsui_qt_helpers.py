@@ -876,6 +876,8 @@ class _IconToggleEditor(QtEditor):
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
         self.control.setChecked(self.value)
         self.control.clicked.connect(self._on_click)
         self._refresh()
@@ -911,6 +913,49 @@ class IconToggleEditor(BasicEditorFactory):
     #: Material Symbols ligature shown when checked / unchecked.
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
+    point_size = Int(14)
+    tooltip = Str()
+
+
+class _IconButtonEditor(QtEditor):
+    """A compact glyph button (same footprint as _IconToggleEditor — Qt's
+    default push-button minimum width would otherwise inflate toolbars)
+    that fires a Button/Event trait on click."""
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setFlat(True)
+        self.control.setCursor(Qt.PointingHandCursor)
+        self.control.setMaximumWidth(self.factory.point_size + 12)
+        self.control.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(self.factory.point_size)
+        self.control.setFont(font)
+        self.control.setText(self.factory.glyph)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
+        self.control.clicked.connect(self._on_click)
+
+    def _on_click(self):
+        self.value = True
+
+    def update_editor(self):
+        """Button/Event traits carry no state to reflect back."""
+
+
+class IconButtonEditor(BasicEditorFactory):
+    """Factory for a Button trait rendered as a Material glyph button::
+
+        UItem("open_button", editor=IconButtonEditor(
+            glyph=ICON_FOLDER_OPEN, tooltip="Open an image"))
+    """
+
+    klass = _IconButtonEditor
+
+    #: Material Symbols ligature (or codepoint) shown on the button.
+    glyph = Str()
+    tooltip = Str()
     point_size = Int(14)
 
 
@@ -957,13 +1002,34 @@ class _HoverScrollEnumEditor(QtEditor):
 
     def init(self, parent):
         self.control = MarqueeComboBox()
-        self.control.addItems(list(self.factory.values))
 
         self.control.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
 
         self.control.currentTextChanged.connect(self.update_object)
+        if self.factory.values_name:
+            self.object.observe(self._on_values_changed,
+                                self.factory.values_name)
+        self._repopulate()
+
+    def dispose(self):
+        if self.factory.values_name:
+            self.object.observe(self._on_values_changed,
+                                self.factory.values_name, remove=True)
+        super().dispose()
+
+    def _repopulate(self):
+        values = (getattr(self.object, self.factory.values_name)
+                  if self.factory.values_name else self.factory.values)
+        self.control.blockSignals(True)
+        self.control.clear()
+        self.control.addItems(list(values))
+        self.control.setCurrentText(str(self.value))
+        self.control.blockSignals(False)
+
+    def _on_values_changed(self, event):
+        self._repopulate()
 
     def update_object(self, value):
         self.value = value
@@ -977,11 +1043,17 @@ class _HoverScrollEnumEditor(QtEditor):
 
 
 class HoverScrollEnumEditor(BasicEditorFactory):
-    """Factory for an Enum combo box that marquee-scrolls overflow text on hover."""
+    """Factory for an Enum combo box that marquee-scrolls overflow text on
+    hover. Choices come from the static ``values`` list, or live from the
+    edited object's List trait named by ``values_name`` (repopulated on
+    change)."""
 
     klass = Property
 
     values = List(Str)
+    #: Name of a List(Str) trait on the edited object supplying the choices
+    #: dynamically (takes precedence over ``values``).
+    values_name = Str()
 
     def _get_klass(self):
         return _HoverScrollEnumEditor
