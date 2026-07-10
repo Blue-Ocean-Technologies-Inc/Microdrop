@@ -1249,6 +1249,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self._disable_state_messages:
             return
 
+        if self.model.route_execution_service_executing:
+            # Route playback replaces actuated_channels every phase;
+            # serializing + publishing the whole model per phase is
+            # GUI-thread work with no consumer at that rate. The final
+            # state still publishes: _cleanup flips this flag off BEFORE
+            # restoring the user-toggled channels.
+            return
+
         if not self.model.electrodes.svg_model:
             logger.warning("Unable to publish device view model yet. Need svg_model to fully initialize.")
             return
