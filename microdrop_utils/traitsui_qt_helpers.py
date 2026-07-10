@@ -228,6 +228,62 @@ class RangeWithSteppedSpinViewHint(Range):
         )
 
 
+## --------------------------------------------------------
+# Range-editing slider that moves in fixed increments
+## --------------------------------------------------------
+
+class _SteppedSliderEditor(QtEditor):
+    """A horizontal slider whose handle snaps to fixed increments (the
+    slider works in integer notches of ``step``), with a value readout."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QWidget()
+        layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, self.control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
+        self._slider.setMinimum(0)
+        self._slider.setMaximum(round(
+            (self.factory.high - self.factory.low) / self.factory.step))
+        self._slider.setPageStep(1)
+        self._readout = QLabel()
+        layout.addWidget(self._slider)
+        layout.addWidget(self._readout)
+        self._slider.valueChanged.connect(self.update_object)
+
+    def update_object(self, notches):
+        """Handles the user moving the slider handle."""
+        # Round away float artifacts (0.1 * 3 -> 0.30000000000000004).
+        self.value = round(
+            self.factory.low + notches * self.factory.step, 10)
+        # TraitsUI skips update_editor for editor-caused changes (the
+        # `updating` guard), so refresh the readout here.
+        self._readout.setText(self.factory.format % self.value)
+
+    def update_editor(self):
+        """Updates the GUI when the Trait changes externally."""
+        if self.control is not None:
+            self._slider.blockSignals(True)
+            self._slider.setValue(round(
+                (self.value - self.factory.low) / self.factory.step))
+            self._slider.blockSignals(False)
+            self._readout.setText(self.factory.format % self.value)
+
+
+class SteppedSliderEditor(BasicEditorFactory):
+    """The factory class passed into the Item's editor parameter."""
+
+    klass = Property
+
+    low = Float(0.0)
+    high = Float(1.0)
+    step = Float(0.1)
+    #: printf-style format of the value readout next to the slider.
+    format = Str("%.1f")
+
+    def _get_klass(self):
+        return _SteppedSliderEditor
+
+
 class RangeWithViewHints(Range):
     def create_editor(self):
         """ Returns the default UI editor for the trait.
@@ -876,6 +932,8 @@ class _IconToggleEditor(QtEditor):
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
         self.control.setChecked(self.value)
         self.control.clicked.connect(self._on_click)
         self._refresh()
@@ -911,6 +969,49 @@ class IconToggleEditor(BasicEditorFactory):
     #: Material Symbols ligature shown when checked / unchecked.
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
+    point_size = Int(14)
+    tooltip = Str()
+
+
+class _IconButtonEditor(QtEditor):
+    """A compact glyph button (same footprint as _IconToggleEditor — Qt's
+    default push-button minimum width would otherwise inflate toolbars)
+    that fires a Button/Event trait on click."""
+
+    def init(self, parent):
+        self.control = QPushButton()
+        self.control.setFlat(True)
+        self.control.setCursor(Qt.PointingHandCursor)
+        self.control.setMaximumWidth(self.factory.point_size + 12)
+        self.control.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPointSize(self.factory.point_size)
+        self.control.setFont(font)
+        self.control.setText(self.factory.glyph)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
+        self.control.clicked.connect(self._on_click)
+
+    def _on_click(self):
+        self.value = True
+
+    def update_editor(self):
+        """Button/Event traits carry no state to reflect back."""
+
+
+class IconButtonEditor(BasicEditorFactory):
+    """Factory for a Button trait rendered as a Material glyph button::
+
+        UItem("open_button", editor=IconButtonEditor(
+            glyph=ICON_FOLDER_OPEN, tooltip="Open an image"))
+    """
+
+    klass = _IconButtonEditor
+
+    #: Material Symbols ligature (or codepoint) shown on the button.
+    glyph = Str()
+    tooltip = Str()
     point_size = Int(14)
 
 
@@ -957,13 +1058,34 @@ class _HoverScrollEnumEditor(QtEditor):
 
     def init(self, parent):
         self.control = MarqueeComboBox()
-        self.control.addItems(list(self.factory.values))
 
         self.control.setSizeAdjustPolicy(
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
 
         self.control.currentTextChanged.connect(self.update_object)
+        if self.factory.values_name:
+            self.object.observe(self._on_values_changed,
+                                self.factory.values_name)
+        self._repopulate()
+
+    def dispose(self):
+        if self.factory.values_name:
+            self.object.observe(self._on_values_changed,
+                                self.factory.values_name, remove=True)
+        super().dispose()
+
+    def _repopulate(self):
+        values = (getattr(self.object, self.factory.values_name)
+                  if self.factory.values_name else self.factory.values)
+        self.control.blockSignals(True)
+        self.control.clear()
+        self.control.addItems(list(values))
+        self.control.setCurrentText(str(self.value))
+        self.control.blockSignals(False)
+
+    def _on_values_changed(self, event):
+        self._repopulate()
 
     def update_object(self, value):
         self.value = value
@@ -977,11 +1099,17 @@ class _HoverScrollEnumEditor(QtEditor):
 
 
 class HoverScrollEnumEditor(BasicEditorFactory):
-    """Factory for an Enum combo box that marquee-scrolls overflow text on hover."""
+    """Factory for an Enum combo box that marquee-scrolls overflow text on
+    hover. Choices come from the static ``values`` list, or live from the
+    edited object's List trait named by ``values_name`` (repopulated on
+    change)."""
 
     klass = Property
 
     values = List(Str)
+    #: Name of a List(Str) trait on the edited object supplying the choices
+    #: dynamically (takes precedence over ``values``).
+    values_name = Str()
 
     def _get_klass(self):
         return _HoverScrollEnumEditor

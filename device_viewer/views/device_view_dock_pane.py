@@ -881,6 +881,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scene,
             self.app_preferences,
             status_bar_manager=self.task.window.status_bar_manager,
+            source_providers=self._camera_source_providers,
         )
 
         # keep the camera toggled button in sync with the alpha map.
@@ -1351,6 +1352,33 @@ class DeviceViewerDockPane(TraitsDockPane):
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
         self.device_view.auto_fit_margin_scale = event.new
+
+    @observe("task:window:application:extra_plugins_loaded", post_init=True)
+    def _on_extra_plugins_loaded(self, event):
+        """Hot-loaded plugin groups start after the camera panel is built:
+        re-enumerate so their camera sources appear without a manual
+        refresh."""
+        if getattr(self, "camera_control_widget", None) is not None:
+            self.camera_control_widget.initialize_camera_list()
+
+    def _camera_source_providers(self):
+        """Instantiate camera-source providers contributed by other plugins
+        (CAMERA_SOURCES extension point). A failing factory is logged and
+        skipped so a broken contribution can't take the camera panel down."""
+        from device_viewer.consts import CAMERA_SOURCES
+        providers = []
+        try:
+            factories = self.task.window.application.get_extensions(CAMERA_SOURCES)
+        except Exception:
+            logger.warning("Camera-source extension point unavailable")
+            return providers
+        for factory in factories:
+            try:
+                providers.append(factory())
+            except Exception:
+                logger.error(f"Camera-source provider {factory!r} failed to "
+                             "construct; skipping", exc_info=True)
+        return providers
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):

@@ -44,10 +44,15 @@ TEST_MANIFEST = manifest_from_dict({
 
 
 @pytest.fixture(autouse=True)
-def isolated_app_globals(monkeypatch):
-    """Keep enable/disable from persisting flags into the REAL redis-backed
-    app_globals — a polluted flag makes the real app restore groups wrongly."""
-    monkeypatch.setattr(group_manager, "app_globals", {})
+def isolated_preferences(monkeypatch):
+    """Keep enable/disable from persisting flags into the REAL application
+    preferences file — a polluted flag makes the real app restore groups
+    wrongly."""
+    from apptools.preferences.api import Preferences
+    store = Preferences()
+    monkeypatch.setattr(group_manager, "get_default_preferences",
+                        lambda: store)
+    return store
 
 
 def make_manager():
@@ -135,3 +140,35 @@ def test_enable_constructs_when_nothing_registered():
     assert [c for c in app.calls if c[0] == "add"] == [("add", "DummyUiPlugin")]
     m.disable(app, "dummy_ui_group")
     assert not m.is_loaded("dummy_ui_group")
+
+
+def test_disabled_group_stays_disabled_across_restart(isolated_preferences):
+    """The user's toggle-off must survive an app restart: disable persists
+    the flag to preferences, and a FRESH manager (new process) restoring
+    against the same preferences unloads the startup-composed group."""
+    app = FakeApp(plugins=[DummyBackendPlugin()])
+    m = make_manager()
+    m.adopt_running(app)
+    m.disable(app, "dummy_backend_group")
+
+    # "Restart": new manager + new app, same preferences store.
+    app2 = FakeApp(plugins=[DummyUiPlugin(), DummyBackendPlugin()])
+    m2 = make_manager()
+    m2.adopt_running(app2)
+    m2.restore_persisted(app2)
+    assert not m2.is_loaded("dummy_backend_group")   # stayed disabled
+    assert m2.is_loaded("dummy_ui_group")            # untouched: default on
+
+
+def test_reenabled_group_restores_enabled(isolated_preferences):
+    app = FakeApp(plugins=[DummyBackendPlugin()])
+    m = make_manager()
+    m.adopt_running(app)
+    m.disable(app, "dummy_backend_group")
+    m.enable(app, "dummy_backend_group")             # user toggles back on
+
+    app2 = FakeApp(plugins=[DummyBackendPlugin()])
+    m2 = make_manager()
+    m2.adopt_running(app2)
+    m2.restore_persisted(app2)
+    assert m2.is_loaded("dummy_backend_group")

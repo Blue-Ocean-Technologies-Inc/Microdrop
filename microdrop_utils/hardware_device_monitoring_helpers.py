@@ -141,14 +141,14 @@ def find_port_by_device_id(hwids, device_id_fragment) -> str:
             port = str(port_info.device)
             result = _probe_port(port, 115200)
             if result is PORT_BUSY:
-                logger.info(f"Port {port} busy; skipping this scan")
+                logger.debug(f"Port {port} busy; skipping this scan")
             elif result is None:
                 unidentified.append(port)
             elif device_id_fragment in result:
                 logger.info(f"Board '{result}' matched on port {port}")
                 return port
             else:
-                logger.info(
+                logger.debug(
                     f"Port {port} identifies as '{result}' — not a "
                     f"'{device_id_fragment}' board; skipping")
     if unidentified:

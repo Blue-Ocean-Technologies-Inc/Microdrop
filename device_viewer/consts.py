@@ -118,6 +118,17 @@ APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
                     LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
 # ---------------------------------------------------------------------------
+# Capture file layout (under the experiment directory). Other plugins may
+# import these to LOCATE captures (e.g. the fluorescence image viewer);
+# only the device viewer writes them.
+# ---------------------------------------------------------------------------
+CAPTURES_DIR_NAME = "captures"
+RECORDINGS_DIR_NAME = "recordings"
+# Unprocessed (16-bit) sensor frames from provider feeds, saved alongside
+# every display capture under captures/.
+RAW_CAPTURES_SUBDIR = "16bit_raw"
+
+# ---------------------------------------------------------------------------
 # GUI configuration
 # ---------------------------------------------------------------------------
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320
@@ -163,3 +174,21 @@ device_modified_tag = " (modified)"
 # statusbar messages
 camera_place_status_message_text = "Select 4 points on image"
 camera_edit_status_message_text = "Drag vertices to align with device outline"
+
+# Extension point: extra camera sources for the device-viewer camera panel.
+# Contributions are zero-arg factories returning a provider object:
+#   provider.list_sources() -> [(label, key)]      # dropdown entries
+#   provider.open(key)      -> feed                # QObject with:
+#       feed.error: Signal(str)                    #   fatal feed errors
+#       feed.start() / feed.stop()                 #   lifecycle
+#       feed.frame: Signal(QImage)                 #   optional preview frames
+#       feed.streaming: Signal(bool)               #   optional preview state
+#       feed.create_controls(parent) -> QWidget|None   # optional settings row
+#       feed.raw_frame() -> QImage|None                # optional: unprocessed
+#                                                      #   (e.g. 16-bit) frame,
+#                                                      #   THE saved capture
+# The feed owns its preview state: the device viewer shows its video layer
+# only while feed.streaming reports True (e.g. the fluorescence pane's
+# "Device View Stream" checkbox) — captures save the feed's raw frame
+# directly either way.
+CAMERA_SOURCES = "device_viewer.camera_sources"
