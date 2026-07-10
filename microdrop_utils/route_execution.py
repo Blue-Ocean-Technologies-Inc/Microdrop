@@ -1,16 +1,20 @@
-"""Phase-by-phase route execution planning for the device viewer's interactive
-route preview/playback (the per-layer Run / Pause / Step controls driven by
-``RouteExecutionService``).
+"""Centralized phase-by-phase route-execution planning.
 
-Lifted from the legacy ``protocol_grid.services.path_execution_service`` during
-PPT-9 (#371): the device viewer's route playback is a live feature that must
-outlive the deleted ``protocol_grid`` plugin. Only the parameter-based planning
-helpers ``RouteExecutionService`` actually uses are kept here; the legacy
-``ProtocolStep`` / ``DeviceState`` couplings are replaced by tiny local stand-ins
-so this module carries no ``protocol_grid`` dependency. Protocol-RUN route
-execution in the new system is handled separately by ``pluggable_protocol_tree``
-(``RoutesHandler`` / ``phase_math``); this module only drives the device
-viewer's standalone preview.
+THE single source of route-execution geometry: which electrodes are active
+at each timed phase of a step, and how phases break down into repetitions.
+Two consumers drive their playback from it so routes behave identically in
+both places:
+
+* the device viewer's interactive route preview/playback
+  (``device_viewer.services.route_execution_service``), and
+* protocol-run route execution in ``pluggable_protocol_tree``
+  (``RoutesHandler`` via ``services.phase_math``, a thin adapter).
+
+Originally lifted from the legacy ``protocol_grid.services.
+path_execution_service`` during PPT-9 (#371) and centralized here from
+``device_viewer.services``; the legacy ``ProtocolStep`` / ``DeviceState``
+couplings are replaced by tiny local stand-ins so this module has no
+plugin dependencies.
 """
 
 import copy
@@ -555,6 +559,67 @@ class PathExecutionService:
             soft_start=soft_start, soft_terminate=soft_terminate,
             linear_repeats=linear_repeats,
         )
+
+    @staticmethod
+    def calculate_phase_rep_breakdown(
+        paths: List[List[str]],
+        plan_length: int,
+        *,
+        duration: float,
+        repetitions: int,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+        soft_start: bool = False,
+        soft_terminate: bool = False,
+        linear_repeats: bool = False,
+    ) -> tuple:
+        """(phases_per_rep, total_reps) for an execution plan's status
+        display.
+
+        One repetition is one full cycle of the LONGEST loop path (ties
+        broken by the higher effective-rep count). With open paths only and
+        ``linear_repeats`` on, one rep is the longest path's single
+        traversal and total reps is the raw ``repetitions`` count.
+        Otherwise the whole plan (``plan_length`` phases) is one rep.
+        """
+        max_cycle_length = 0
+        max_effective_reps = 1
+        has_loops = False
+        for path in paths:
+            if not PathExecutionService.is_loop_path(path):
+                continue
+            has_loops = True
+            effective_reps = PathExecutionService.calculate_effective_repetitions_for_path(
+                path, repetitions, duration, repeat_duration,
+                trail_length, trail_overlay,
+            )
+            cycle_length = len(PathExecutionService.calculate_loop_cycle_phases(
+                path, trail_length, trail_overlay))
+            if cycle_length > max_cycle_length or (
+                cycle_length == max_cycle_length
+                and effective_reps > max_effective_reps
+            ):
+                max_cycle_length = cycle_length
+                max_effective_reps = effective_reps
+
+        if has_loops:
+            # One rep = one full cycle of the longest loop path
+            return max(max_cycle_length, 1), max_effective_reps
+        if linear_repeats:
+            # Open-only paths with linear_repeats on: longest path's single
+            # traversal = one rep; total reps = the raw Repetitions count.
+            max_open_cycle = 0
+            for path in paths:
+                max_open_cycle = max(max_open_cycle, len(
+                    PathExecutionService.calculate_trail_phases_for_path(
+                        path, trail_length, trail_overlay,
+                        soft_start=soft_start,
+                        soft_terminate=soft_terminate,
+                    )))
+            return max(max_open_cycle, 1), max(int(repetitions), 1)
+        # Open paths only, no linear repeats — entire plan is one rep
+        return max(plan_length, 1), 1
 
     @staticmethod
     def get_active_channels_from_map(id_to_channel: Dict[str, int], active_electrodes: List[str]) -> set:
