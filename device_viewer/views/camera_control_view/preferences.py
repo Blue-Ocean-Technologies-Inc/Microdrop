@@ -43,9 +43,6 @@ class CameraPreferences(PreferencesHelper):
     preferred_video_format = Enum("NV12", "JPEG")
     strict_video_format = Bool
     resolution = Str
-    # Provider (external) sources only: render the live feed in the device
-    # view. Off by default — full-resolution frames cost GUI smoothness.
-    provider_live_feed = Bool(False)
 
     def _preferred_video_format_default(self):
         return default_video_format

@@ -179,15 +179,16 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 # Contributions are zero-arg factories returning a provider object:
 #   provider.list_sources() -> [(label, key)]      # dropdown entries
 #   provider.open(key)      -> feed                # QObject with:
-#       feed.frame: Signal(QImage)                 #   optional preview frames
 #       feed.error: Signal(str)                    #   fatal feed errors
 #       feed.start() / feed.stop()                 #   lifecycle
+#       feed.frame: Signal(QImage)                 #   optional preview frames
+#       feed.streaming: Signal(bool)               #   optional preview state
 #       feed.create_controls(parent) -> QWidget|None   # optional settings row
 #       feed.raw_frame() -> QImage|None                # optional: unprocessed
 #                                                      #   (e.g. 16-bit) frame,
 #                                                      #   THE saved capture
-# The device viewer previews provider frames only on request (the camera
-# pane's "Live feed" checkbox): its video layer stays hidden otherwise
-# (contributing plugins ship their own preview pane) — captures save the
-# feed's raw frame directly either way.
+# The feed owns its preview state: the device viewer shows its video layer
+# only while feed.streaming reports True (e.g. the fluorescence pane's
+# "Device View Stream" checkbox) — captures save the feed's raw frame
+# directly either way.
 CAMERA_SOURCES = "device_viewer.camera_sources"
