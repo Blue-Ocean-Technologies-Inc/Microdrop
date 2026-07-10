@@ -1,4 +1,4 @@
-from traits.api import observe, HasTraits, Instance, Any, Int, Bool, provides
+from traits.api import observe, HasTraits, Instance, Bool, Int, List, Set, provides
 
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
@@ -16,14 +16,17 @@ logger = get_logger(__name__)
 class RouteExecutionService(HasTraits):
     model = Instance(IDeviceViewMainModel)
 
-    _execution_plan = Any()  # List of execution plan dicts
+    #: Execution plan dicts from the centralized PathExecutionService.
+    _execution_plan = List()
     _current_phase_index = Int(0)
 
-    _user_toggled_channels = Any()  # set: channels the user manually toggled during execution
-    _last_set_channels = Any()  # set: channels we programmatically set last phase (for diffing)
+    #: Channels the user manually toggled during execution.
+    _user_toggled_channels = Set()
+    #: Channels we programmatically set last phase (for diffing).
+    _last_set_channels = Set()
 
-    _phase_timer = Any()  # PausableTimer instance
-    _display_timer = Any()  # QTimer for updating status display
+    _phase_timer = Instance(PausableTimer)
+    _display_timer = Instance(QTimer)
     _navigated_while_paused = Bool(False)
 
     _total_reps = Int(1)
