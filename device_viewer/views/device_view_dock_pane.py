@@ -93,7 +93,7 @@ from ..models.electrodes import Electrodes
 # models and services
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel
-from ..models.route import Route
+from ..models.route import Route, RouteLayer
 from ..preferences import DeviceViewerPreferences, sidebar_settings_grid, DeviceViewerAdvancedPreferences
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
@@ -448,10 +448,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
 
-        # Reset the model to clear any existing routes and channels
+        # Apply the incoming state as a DIFF — no reset-then-rebuild. The
+        # old path cleared every route layer and re-added them one by one,
+        # repainting the connection map once per layer with the routes
+        # visibly blinking off in between (the per-phase flicker).
         self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
         self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
-        self.model.reset()
 
         # Apply step ID
         self.model.step_id = message_model.step_id
@@ -466,27 +468,39 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.model.editable = message_model.editable
 
         # Electrode->channel mapping is NOT carried on state messages (#415):
-        # electrodes keep their geometry-derived channels (reset() clears only
-        # actuation state, not channel assignments), so there is nothing to
-        # apply here.
+        # electrodes keep their geometry-derived channels, so there is
+        # nothing to apply here.
 
-        # Apply electrode on/off states
-        self.model.electrodes.actuated_channels.update(
+        # Apply electrode on/off states in ONE assignment: the recolor
+        # observer receives a single old/new event and repaints only the
+        # channels whose membership flipped.
+        self.model.electrodes.electrode_editing = None
+        self.model.electrodes.actuated_channels = set(
             message_model.channels_activated
         )
 
-        # Apply routes
-        for route, color in message_model.routes:
-            self.model.routes.add_layer(Route(route=route.copy()), None, color)
+        # Apply routes only when they actually changed (phase toggles change
+        # actuation only) — and then as one list swap, so the connection map
+        # repaints exactly once with the final layer stack. This also means
+        # the layers are never transiently empty, so repeats_frozen can't
+        # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
+        # step's execution params are pulled below.
+        incoming_routes = [(route, color) for route, color in message_model.routes]
+        current_routes = [(list(layer.route.route), layer.color)
+                          for layer in self.model.routes.layers]
+        if incoming_routes != current_routes:
+            self.model.routes.layers = [
+                RouteLayer(route=Route(route=route.copy()), color=color)
+                for route, color in message_model.routes
+            ]
         self.model.routes.selected_layer = None
+        self.model.routes.layer_to_merge = None
+        self.model.routes.mode = "draw"
+        self.model.routes.message = ""
 
         # Pull the step's execution params into the sidebar AFTER the routes
-        # exist. reset() above transiently empties the layers, which flips
-        # repeats_frozen on (no loop present) and pins Repetitions/Repeat Dur
-        # to 1/0; applying the params now — with the real route set in place —
-        # means that pin can't clobber the pulled values (e.g. a loop step's
-        # Repetitions snapping back to 1). Also baselines the sidebar so the
-        # commit button starts disabled.
+        # are in place, then baseline the sidebar so the commit button
+        # starts disabled.
         if step_changed:
             if message_model.execution_params:
                 self.model.routes.apply_execution_params(message_model.execution_params)
@@ -500,8 +514,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Publish geometry if the electrode-to-channel mapping changed.
         self._publish_geometry_if_changed()
-
-        QApplication.processEvents()
 
     def _check_unsaved_execution_params(self):
         # ask user if they want to save changes if there are any before moving on
