@@ -142,7 +142,8 @@ class VideoRecorder(QObject):
     # Internal signal to bridge UI thread and Worker thread
     _send_to_worker = Signal(QImage, QRectF, QRectF, QTransform)
 
-    def __init__(self, video_item: 'QGraphicsVideoItem', ffmpeg_binary="ffmpeg", parent=None):
+    def __init__(self, video_item: 'QGraphicsVideoItem', ffmpeg_binary="ffmpeg",
+                 parent=None, frame_sink=None):
         super().__init__(parent)
         self.ffmpeg_binary = ffmpeg_binary
 
@@ -150,6 +151,11 @@ class VideoRecorder(QObject):
         self.is_recording = False
         self._output_path = None
         self._video_item = video_item
+        # Frames come from this sink; geometry still comes from the video
+        # item. Passing the capture session's own sink keeps recordings at
+        # full camera rate while the DISPLAY item receives rate-capped
+        # preview frames (see CameraControlWidget._forward_preview_frame).
+        self._frame_sink = frame_sink if frame_sink is not None else video_item.videoSink()
         self.current_image = None
 
         # FFmpeg / IO internals
@@ -348,7 +354,7 @@ class VideoRecorder(QObject):
         # 4. Connect to Video Source
         # We connect the video sink directly to our internal handler
         self.is_recording = True
-        self._video_item.videoSink().videoFrameChanged.connect(self._on_frame_arrived)
+        self._frame_sink.videoFrameChanged.connect(self._on_frame_arrived)
 
         self.recording_started.emit(output_path)
         logger.info(f"Recording started: {output_path}")
@@ -365,9 +371,9 @@ class VideoRecorder(QObject):
         self.is_recording = False
 
         # 1. Disconnect Source (Stop incoming data)
-        if self._video_item:
+        if self._frame_sink:
             try:
-                self._video_item.videoSink().videoFrameChanged.disconnect(self._on_frame_arrived)
+                self._frame_sink.videoFrameChanged.disconnect(self._on_frame_arrived)
             except Exception:
                 pass
 

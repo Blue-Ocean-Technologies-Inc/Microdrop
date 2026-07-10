@@ -169,6 +169,15 @@ GAMEPAD_POLL_INTERVAL_MS = 10
 GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
 
 # ---------------------------------------------------------------------------
+# Camera preview
+# ---------------------------------------------------------------------------
+# Ceiling for frames forwarded to the device view's video item. Every frame
+# composited under the electrodes is a full-scene repaint, and the preview
+# doesn't need camera rate to be useful — recordings are unaffected (the
+# recorder taps the capture session's own sink at full rate).
+CAMERA_PREVIEW_MAX_FPS = 20
+
+# ---------------------------------------------------------------------------
 # Resources & UI text
 # ---------------------------------------------------------------------------
 # main view device layout

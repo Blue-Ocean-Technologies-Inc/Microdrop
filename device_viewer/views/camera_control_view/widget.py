@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -6,7 +7,10 @@ from PySide6.QtCore import (
     QTimer,
 )
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice, QCameraFormat, QVideoFrame
+from PySide6.QtMultimedia import (
+    QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice,
+    QCameraFormat, QVideoFrame, QVideoSink,
+)
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QWidget,
@@ -26,6 +30,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from ...consts import (
+    CAMERA_PREVIEW_MAX_FPS,
     CAPTURES_DIR_NAME,
     DEVICE_VIEWER_RECORDING_STATE,
     RAW_CAPTURES_SUBDIR,
@@ -108,10 +113,18 @@ class CameraControlWidget(QWidget):
         self.show_media_capture_dialog_for_video = True
 
         self.scene.addItem(self.video_item)
-        self.session.setVideoOutput(self.video_item)
+        # The session delivers to our own sink at full camera rate; frames
+        # are forwarded to the DISPLAY item capped at CAMERA_PREVIEW_MAX_FPS
+        # (every frame under the electrodes is a full-scene composite, and
+        # the preview doesn't need camera rate to be useful).
+        self._camera_sink = QVideoSink(self)
+        self._camera_sink.videoFrameChanged.connect(self._forward_preview_frame)
+        self.session.setVideoSink(self._camera_sink)
+        self._last_preview_frame_time = 0.0
 
-        # 1. Initialize Recorder
-        self.recorder = VideoRecorder(self.video_item)
+        # 1. Initialize Recorder — fed from the full-rate camera sink, so
+        # recordings are untouched by the preview cap.
+        self.recorder = VideoRecorder(self.video_item, frame_sink=self._camera_sink)
         self.recorder.error_occurred.connect(self.handle_recording_error)
         self.recorder.recording_stopped.connect(self.handle_recording_stopped)
         self.recording_file_path = None
@@ -457,8 +470,22 @@ class CameraControlWidget(QWidget):
         self.video_item.setVisible(False)
         logger.info("Provider camera feed stopped")
 
+    def _preview_frame_due(self) -> bool:
+        """Rate gate for frames forwarded to the display item (see
+        CAMERA_PREVIEW_MAX_FPS). Recording is fed separately at full rate."""
+        now = time.monotonic()
+        if now - self._last_preview_frame_time < 1.0 / CAMERA_PREVIEW_MAX_FPS:
+            return False
+        self._last_preview_frame_time = now
+        return True
+
+    def _forward_preview_frame(self, frame):
+        if self._preview_frame_due():
+            self.video_item.videoSink().setVideoFrame(frame)
+
     def _on_feed_frame(self, image):
-        self.video_item.videoSink().setVideoFrame(QVideoFrame(image))
+        if self._preview_frame_due():
+            self.video_item.videoSink().setVideoFrame(QVideoFrame(image))
 
     def _on_feed_streaming(self, active):
         """Provider feeds own their preview state (e.g. the fluorescence
