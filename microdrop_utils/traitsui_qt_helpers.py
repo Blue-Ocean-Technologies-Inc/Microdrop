@@ -255,6 +255,9 @@ class _SteppedSliderEditor(QtEditor):
         # Round away float artifacts (0.1 * 3 -> 0.30000000000000004).
         self.value = round(
             self.factory.low + notches * self.factory.step, 10)
+        # TraitsUI skips update_editor for editor-caused changes (the
+        # `updating` guard), so refresh the readout here.
+        self._readout.setText(self.factory.format % self.value)
 
     def update_editor(self):
         """Updates the GUI when the Trait changes externally."""
