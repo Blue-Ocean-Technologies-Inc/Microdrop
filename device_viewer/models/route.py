@@ -347,6 +347,10 @@ class RouteLayerManager(HasTraits):
 
     # --------------------------- Model Helpers --------------------------
 
+    @staticmethod
+    def _least_used_color(color_counts: dict) -> str:
+        return Counter(color_counts).most_common()[-1][0]
+
     def get_available_color(self, exclude=()):
         color_counts = {}
         color_pool = ROUTE_COLOR_POOL
@@ -355,7 +359,23 @@ class RouteLayerManager(HasTraits):
         for layer in self.layers:
             if layer.color in color_counts.keys():
                 color_counts[layer.color] += 1
-        return Counter(color_counts).most_common()[-1][0] # Return least common color
+        return self._least_used_color(color_counts)
+
+    def replace_all_layers(self, routes: list[Route]):
+        """Swap the full layer stack in ONE list assignment (a single
+        layers-items notification, so the connection map repaints exactly
+        once with the final stack). Colors come from the standard pool the
+        same way sequential add_layer calls on an empty manager would pick
+        them — callers applying protocol-side state use this so route
+        colors are always the device viewer's own (selected/loop colors
+        are applied at render time regardless of layer color)."""
+        color_counts = {color: 0 for color in ROUTE_COLOR_POOL}
+        new_layers = []
+        for route in routes:
+            color = self._least_used_color(color_counts)
+            color_counts[color] += 1
+            new_layers.append(RouteLayer(route=route, color=color))
+        self.layers = new_layers
 
     def replace_layer(self, old_route_layer: RouteLayer, new_routes: list[Route]):
         index = self.layers.index(old_route_layer)

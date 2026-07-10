@@ -23,6 +23,7 @@ from device_viewer.consts import (
     GAMEPAD_BTN_REMOVE, GAMEPAD_BTN_REALTIME, GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
     GAMEPAD_DEBOUNCE_ADD_REMOVE_S, GAMEPAD_DEBOUNCE_FIND_S,
     GAMEPAD_DEBOUNCE_REALTIME_S, GAMEPAD_AXIS_THRESHOLD,
+    GAMEPAD_POLL_INTERVAL_MS, GAMEPAD_IDLE_POLL_INTERVAL_MS,
 )
 from logger.logger_service import get_logger
 from microdrop_style.colors import GREY, SUCCESS_COLOR
@@ -482,7 +483,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 pass
 
     def _start_pygame_timer(self) -> None:
-        """Start the ~100 Hz poll timer (idempotent).
+        """Start the gamepad poll timer (idempotent).
 
         The timer is parented to the device view (a QObject) so Qt bounds its
         lifetime and tears it down even if ``cleanup`` is somehow missed —
@@ -491,10 +492,21 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self._pygame_timer is not None:
             return  # already running
         timer = QTimer(self.device_view)
-        timer.setInterval(10)  # ~100 Hz
         timer.timeout.connect(self._poll_pygame_events)
         timer.start()
         self._pygame_timer = timer
+        self._update_pygame_timer_interval()
+
+    def _update_pygame_timer_interval(self) -> None:
+        """~100 Hz while a controller is attached; a slow hot-plug-detection
+        tick while none is (a persistent 100 Hz GUI-thread wakeup for an
+        absent gamepad costs smoothness for nothing)."""
+        if self._pygame_timer is None:
+            return
+        interval = (GAMEPAD_POLL_INTERVAL_MS if self._pygame_enabled
+                    else GAMEPAD_IDLE_POLL_INTERVAL_MS)
+        if self._pygame_timer.interval() != interval:
+            self._pygame_timer.setInterval(interval)
 
     # ------------------ Live remap (button capture) ------------------
 
@@ -660,6 +672,10 @@ class ElectrodeInteractionControllerService(HasTraits):
                 axis = int(getattr(e, "axis", -1))
                 value = float(getattr(e, "value", 0.0))
                 self._handle_pygame_axis(axis, value)
+
+        # Hot-plug events above may have attached/released the controller:
+        # follow with the matching poll cadence.
+        self._update_pygame_timer_interval()
 
     def _sync_modifiers_from_pygame_state(self) -> None:
         """
@@ -1905,17 +1921,54 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
-    @observe("model.electrodes.actuated_channels.items")
-    @observe("model.electrodes.disabled_channels.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
-    @observe("electrode_hovered")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(
                 self.model,
                 self.electrode_hovered,
             )
+
+    @observe("model.electrodes.actuated_channels.items")
+    @observe("model.electrodes.disabled_channels.items")
+    def actuation_state_recolor(self, event):
+        """Recolor only the electrodes whose channels changed — the hot
+        path during protocol runs (each phase touches a handful of the
+        board's channels).
+
+        Two event shapes arrive here: in-place mutation gives a
+        SetChangeEvent (added/removed); wholesale replacement — what
+        RouteExecutionService._apply_phase does every phase — gives the
+        container change event (old/new sets), diffed here by symmetric
+        difference (= exactly the channels whose membership flipped)."""
+        if not self.electrode_view_layer:
+            return
+        added = getattr(event, "added", None)
+        removed = getattr(event, "removed", None)
+        if added is not None or removed is not None:
+            changed_channels = set(added or ()) | set(removed or ())
+        else:
+            old, new = getattr(event, "old", None), getattr(event, "new", None)
+            if not isinstance(old, (set, frozenset)) or not isinstance(new, (set, frozenset)):
+                # Unknown event shape: recolor everything rather than guess.
+                self.electrode_view_layer.redraw_electrode_colors(
+                    self.model, self.electrode_hovered)
+                return
+            changed_channels = old ^ new
+        self.electrode_view_layer.redraw_electrode_colors_for_channels(
+            self.model, changed_channels, self.electrode_hovered)
+
+    @observe("electrode_hovered")
+    def hovered_electrode_recolor(self, event):
+        """Hover only affects the two electrodes involved; recoloring the
+        whole board per mouse move made hovering expensive."""
+        if not self.electrode_view_layer:
+            return
+        for electrode_view in (event.old, event.new):
+            if electrode_view is not None:
+                self.electrode_view_layer.recolor_electrode(
+                    self.model, electrode_view, self.electrode_hovered)
 
     @observe("model.electrodes.electrodes.items.channel")
     def electrode_channel_change(self, event):

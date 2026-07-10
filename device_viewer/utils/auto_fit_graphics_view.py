@@ -25,7 +25,11 @@ class AutoFitGraphicsView(QGraphicsView):
 
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setRenderHint(QPainter.TextAntialiasing, True)
-        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
+        # Repaint only the changed items' bounding rects: with
+        # FullViewportUpdate, any change (a video frame, one electrode
+        # toggling) re-rasterized the ENTIRE scene — every electrode path
+        # and label — per update.
+        self.setViewportUpdateMode(QGraphicsView.BoundingRectViewportUpdate)
 
     def resizeEvent(self, event):
         if self.auto_fit:

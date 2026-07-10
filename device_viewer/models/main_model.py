@@ -1,7 +1,7 @@
 from pathlib import Path
 from microdrop_utils.decorators import debounce
 
-from traits.api import Property, Str, Enum, observe, Instance, Bool, List, Float, HasTraits, Event, Int, UUID, provides, DelegatesTo
+from traits.api import Property, Str, Enum, observe, Instance, Bool, Dict, List, Float, HasTraits, Event, Int, UUID, provides, DelegatesTo
 from pyface.undo.api import UndoManager
 
 from .alpha import AlphaValue
@@ -99,6 +99,19 @@ class DeviceViewMainModel(HasTraits):
 
     # --------------------------------- Alpha Color Model --------------------------------
     alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
+
+    #: key -> AlphaValue lookup over alpha_map. get_alpha runs inside the
+    #: per-electrode recolor loop every protocol phase, so it must not be
+    #: a linear scan of the list (the list stays the TraitsUI-editable
+    #: source of truth; entries are mutated in place, so the index only
+    #: rebuilds when list membership changes).
+    _alpha_index = Dict()
+
+    @observe("alpha_map")
+    @observe("alpha_map.items")
+    def _rebuild_alpha_index(self, event):
+        self._alpha_index = {alpha_value.key: alpha_value
+                             for alpha_value in self.alpha_map}
 
     # ------------------ Camera Model --------------------
     camera_perspective = Instance(PerspectiveModel, PerspectiveModel())
@@ -220,27 +233,26 @@ class DeviceViewMainModel(HasTraits):
 
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
-        for alpha_value in self.alpha_map:
-            if alpha_value.key == key:
-                return alpha_value.alpha / 100 if alpha_value.visible else 0.0
-        return 1.0 # Default alpha if not found
+        alpha_value = self._alpha_index.get(key)
+        if alpha_value is None:
+            return 1.0 # Default alpha if not found
+        return alpha_value.alpha / 100 if alpha_value.visible else 0.0
 
     def set_alpha(self, key: str, alpha: float):
         """Set the alpha value for a given key."""
-        for alpha_value in self.alpha_map:
-            if alpha_value.key == key:
-                alpha_value.alpha = alpha
-                return
-        # If not found, add a new alpha value
+        alpha_value = self._alpha_index.get(key)
+        if alpha_value is not None:
+            alpha_value.alpha = alpha
+            return
+        # If not found, add a new alpha value (the items observer re-indexes)
         self.alpha_map.append(AlphaValue(key=key, alpha=alpha))
 
     @debounce(0.2)
     def set_visible(self, key: str, visible: bool):
         """Set the visibility of a given alpha value."""
-        for alpha_value in self.alpha_map:
-            if alpha_value.key == key:
-                alpha_value.visible = visible
-                return
+        alpha_value = self._alpha_index.get(key)
+        if alpha_value is not None:
+            alpha_value.visible = visible
 
     def goto_last_mode(self):
         logger.debug(f"Going to last mode: {self.last_mode}")
