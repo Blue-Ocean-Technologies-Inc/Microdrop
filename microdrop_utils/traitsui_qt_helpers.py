@@ -228,6 +228,59 @@ class RangeWithSteppedSpinViewHint(Range):
         )
 
 
+## --------------------------------------------------------
+# Range-editing slider that moves in fixed increments
+## --------------------------------------------------------
+
+class _SteppedSliderEditor(QtEditor):
+    """A horizontal slider whose handle snaps to fixed increments (the
+    slider works in integer notches of ``step``), with a value readout."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QWidget()
+        layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, self.control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
+        self._slider.setMinimum(0)
+        self._slider.setMaximum(round(
+            (self.factory.high - self.factory.low) / self.factory.step))
+        self._slider.setPageStep(1)
+        self._readout = QLabel()
+        layout.addWidget(self._slider)
+        layout.addWidget(self._readout)
+        self._slider.valueChanged.connect(self.update_object)
+
+    def update_object(self, notches):
+        """Handles the user moving the slider handle."""
+        # Round away float artifacts (0.1 * 3 -> 0.30000000000000004).
+        self.value = round(
+            self.factory.low + notches * self.factory.step, 10)
+
+    def update_editor(self):
+        """Updates the GUI when the Trait changes externally."""
+        if self.control is not None:
+            self._slider.blockSignals(True)
+            self._slider.setValue(round(
+                (self.value - self.factory.low) / self.factory.step))
+            self._slider.blockSignals(False)
+            self._readout.setText(self.factory.format % self.value)
+
+
+class SteppedSliderEditor(BasicEditorFactory):
+    """The factory class passed into the Item's editor parameter."""
+
+    klass = Property
+
+    low = Float(0.0)
+    high = Float(1.0)
+    step = Float(0.1)
+    #: printf-style format of the value readout next to the slider.
+    format = Str("%.1f")
+
+    def _get_klass(self):
+        return _SteppedSliderEditor
+
+
 class RangeWithViewHints(Range):
     def create_editor(self):
         """ Returns the default UI editor for the trait.
