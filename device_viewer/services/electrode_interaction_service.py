@@ -1905,17 +1905,54 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
-    @observe("model.electrodes.actuated_channels.items")
-    @observe("model.electrodes.disabled_channels.items")
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
-    @observe("electrode_hovered")
     def electrode_state_recolor(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_colors(
                 self.model,
                 self.electrode_hovered,
             )
+
+    @observe("model.electrodes.actuated_channels.items")
+    @observe("model.electrodes.disabled_channels.items")
+    def actuation_state_recolor(self, event):
+        """Recolor only the electrodes whose channels changed — the hot
+        path during protocol runs (each phase touches a handful of the
+        board's channels).
+
+        Two event shapes arrive here: in-place mutation gives a
+        SetChangeEvent (added/removed); wholesale replacement — what
+        RouteExecutionService._apply_phase does every phase — gives the
+        container change event (old/new sets), diffed here by symmetric
+        difference (= exactly the channels whose membership flipped)."""
+        if not self.electrode_view_layer:
+            return
+        added = getattr(event, "added", None)
+        removed = getattr(event, "removed", None)
+        if added is not None or removed is not None:
+            changed_channels = set(added or ()) | set(removed or ())
+        else:
+            old, new = getattr(event, "old", None), getattr(event, "new", None)
+            if not isinstance(old, (set, frozenset)) or not isinstance(new, (set, frozenset)):
+                # Unknown event shape: recolor everything rather than guess.
+                self.electrode_view_layer.redraw_electrode_colors(
+                    self.model, self.electrode_hovered)
+                return
+            changed_channels = set(old) ^ set(new)
+        self.electrode_view_layer.redraw_electrode_colors_for_channels(
+            self.model, changed_channels, self.electrode_hovered)
+
+    @observe("electrode_hovered")
+    def hovered_electrode_recolor(self, event):
+        """Hover only affects the two electrodes involved; recoloring the
+        whole board per mouse move made hovering expensive."""
+        if not self.electrode_view_layer:
+            return
+        for electrode_view in (event.old, event.new):
+            if electrode_view is not None:
+                self.electrode_view_layer.recolor_electrode(
+                    self.model, electrode_view, self.electrode_hovered)
 
     @observe("model.electrodes.electrodes.items.channel")
     def electrode_channel_change(self, event):
