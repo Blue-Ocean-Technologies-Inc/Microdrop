@@ -75,6 +75,10 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
 
         self.setPath(self._arrow_path)
 
+        # Rendered as a cached pixmap: with the video item repainting the
+        # scene at frame rate, uncached paths would re-rasterize per frame.
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+
         # Add a new variable specific to this class
         self.key = key
         self.set_inactive()
@@ -122,7 +126,10 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         path.closeSubpath()
 
         self.setPath(path)
-   
+
+        # Rendered as a cached pixmap (see ElectrodeConnectionItem).
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+
         # Add a new variable specific to this class
         self.electrode_id = electrode_id
         self.set_inactive()
@@ -196,6 +203,13 @@ class ElectrodeView(QGraphicsPathItem):
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
+
+        # Render electrode + label as cached pixmaps: geometry is static, so
+        # video frames underneath composite the cache instead of
+        # re-rasterizing every antialiased path per frame. Color changes
+        # invalidate the cache automatically (update()).
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+        self.text_path.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
         # Show electrode info on hover
         self.setToolTip(self._tooltip_text)
@@ -275,6 +289,11 @@ class ElectrodeView(QGraphicsPathItem):
         """
         Method to update the color of the electrode based on the state
         """
+        # Recolor passes rebuild equal-valued stacks for untouched
+        # electrodes; skipping them avoids repainting the whole layer
+        # (QColor equality compares rgba, so this is value comparison).
+        if colors == self.color_stack:
+            return
         # set the color stack: supports only two elements right now.
         self.color_stack = colors
         self.update()
