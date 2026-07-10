@@ -162,6 +162,12 @@ GAMEPAD_DEBOUNCE_FIND_S = 2.0         # find-liquid button debounce
 GAMEPAD_DEBOUNCE_REALTIME_S = 0.4     # realtime-toggle button debounce
 GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation threshold
 
+# Poll cadence: ~100 Hz only while a controller is attached; with none,
+# a slow tick suffices to catch JOYDEVICEADDED hot-plug events instead
+# of waking the GUI thread 100x a second for nothing.
+GAMEPAD_POLL_INTERVAL_MS = 10
+GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
+
 # ---------------------------------------------------------------------------
 # Resources & UI text
 # ---------------------------------------------------------------------------
