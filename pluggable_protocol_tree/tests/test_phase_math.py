@@ -1,256 +1,40 @@
 """Tests for services.phase_math.
 
-Pure-function unit tests — no Traits, no Qt, no broker. Each helper
-gets its own section. Sections grow as later tasks land more helpers.
+Pure-function unit tests — no Traits, no Qt, no broker. phase_math is a
+thin adapter over the centralized ``PathExecutionService``
+(``microdrop_utils.route_execution``), so these tests pin the DELEGATION
+contract (protocol-run phases exactly mirror the device viewer's
+execution plan) plus the tree-local dynamic-loop helpers.
 """
 
+from microdrop_utils.route_execution import PathExecutionService
+
 from pluggable_protocol_tree.services.phase_math import (
-    _is_loop_route, _route_windows,
-    unit_cycle_len, another_loop_fits, loop_completion_fits, idle_cell_index,
+    another_loop_fits, duration_loop_parts, effective_repetitions_for_duration,
+    estimate_repeat_duration_s, idle_cell_index, iter_phases,
+    loop_completion_fits, unit_cycle_len,
 )
 
 
-# --- _is_loop_route ---
-
-def test_is_loop_route_first_equals_last():
-    assert _is_loop_route(["a", "b", "c", "a"]) is True
-
-
-def test_is_loop_route_open_path():
-    assert _is_loop_route(["a", "b", "c"]) is False
-
-
-def test_is_loop_route_single_element_not_a_loop():
-    assert _is_loop_route(["a"]) is False
-
-
-def test_is_loop_route_empty_not_a_loop():
-    assert _is_loop_route([]) is False
-
-
-# --- _route_windows ---
-
-def test_windows_open_route_trail_length_1_no_overlap():
-    """trail_length=1, trail_overlay=0: window = single electrode at
-    each position, advancing by 1 each step (step = max(1, 1-0))."""
-    out = list(_route_windows(["a", "b", "c"], trail_length=1, trail_overlay=0))
-    assert out == [{"a"}, {"b"}, {"c"}]
-
-
-def test_windows_open_route_trail_length_2_overlap_1():
-    """trail_length=2, trail_overlay=1: step = 1, window slides by 1."""
-    out = list(_route_windows(["a", "b", "c", "d"], trail_length=2, trail_overlay=1))
-    assert out == [{"a", "b"}, {"b", "c"}, {"c", "d"}]
-
-
-def test_windows_trail_length_exceeds_route():
-    """trail_length larger than route: one window of the whole route."""
-    out = list(_route_windows(["a", "b"], trail_length=5, trail_overlay=0))
-    assert out == [{"a", "b"}]
-
-
-def test_windows_overlap_ge_length_clamps_step_to_1():
-    """trail_overlay >= trail_length: step clamped to 1 (always advance)."""
-    out = list(_route_windows(["a", "b", "c"], trail_length=2, trail_overlay=10))
-    assert out == [{"a", "b"}, {"b", "c"}]
-
-
-def test_windows_loop_route_one_cycle():
-    """Loop route: drop the duplicated last electrode, walk one cycle
-    of windows that wrap around."""
-    out = list(_route_windows(["a", "b", "c", "a"], trail_length=1, trail_overlay=0))
-    assert out == [{"a"}, {"b"}, {"c"}]
-
-
-def test_windows_loop_route_trail_2_wraps():
-    """Loop route with trail_length=2 wraps the window across the cycle."""
-    out = list(_route_windows(["a", "b", "c", "a"], trail_length=2, trail_overlay=1))
-    # Effective path is ['a', 'b', 'c'], step=1, windows wrap mod 3:
-    # pos 0: {a, b}; pos 1: {b, c}; pos 2: {c, a}
-    assert out == [{"a", "b"}, {"b", "c"}, {"c", "a"}]
-
-
-def test_windows_empty_route_yields_nothing():
-    out = list(_route_windows([], trail_length=1, trail_overlay=0))
-    assert out == []
-
-
-# --- _route_with_repeats ---
-
-from pluggable_protocol_tree.services.phase_math import (
-    _route_with_repeats,
-)
-
-
-def test_repeats_open_route_no_linear_repeats_one_pass():
-    """Open route, linear_repeats=False: same as one _route_windows pass."""
-    out = list(_route_with_repeats(
-        ["a", "b", "c"], trail_length=1, trail_overlay=0,
-        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"c"}]
-
-
-def test_repeats_open_route_linear_repeats_replays_n_times():
-    """Open route, linear_repeats=True: replay the windows N=2 times."""
-    out = list(_route_with_repeats(
-        ["a", "b"], trail_length=1, trail_overlay=0,
-        linear_repeats=True, n_repeats=2,
-        repeat_duration_s=0.0, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"a"}, {"b"}]
-
-
-def test_repeats_loop_route_default_one_cycle():
-    """One cycle of a 3-electrode loop yields 4 phases — the three
-    cycle windows plus a return-to-start phase (matches the legacy
-    device-viewer route executor)."""
-    out = list(_route_with_repeats(
-        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
-        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]
-
-
-def test_repeats_loop_route_n_repeats():
-    """Loop route + n_repeats=2 --> 2 full cycles + 1 return phase."""
-    out = list(_route_with_repeats(
-        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
-        linear_repeats=False, n_repeats=2,
-        repeat_duration_s=0.0, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]
-
-
-def test_repeats_loop_with_repeat_duration_caps_cycles():
-    """Loop route, repeat_duration_s=2.5, step_duration_s=1.0,
-    cycle_phases=3 --> 2.5/3 = 0.83, floor --> 0 cycles. But minimum is 1
-    cycle. Duration mode still closes the loop with a return-to-start
-    phase (the RoutesHandler's len(phases)-based hold-pad keeps timing
-    exact)."""
-    out = list(_route_with_repeats(
-        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
-        linear_repeats=False, n_repeats=999,   # would otherwise loop 999×
-        repeat_duration_s=2.5, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}]   # 1 cycle + return-to-start
-
-
-def test_repeats_loop_with_repeat_duration_fits_two_cycles():
-    """Loop route, repeat_duration_s=6.5, step_duration_s=1.0,
-    cycle_phases=3 --> 6.5/3 = 2.17, floor --> 2 cycles. Duration mode closes
-    the loop with a return-to-start phase, same as count mode."""
-    out = list(_route_with_repeats(
-        ["a", "b", "c", "a"], trail_length=1, trail_overlay=0,
-        linear_repeats=False, n_repeats=999,
-        repeat_duration_s=6.5, step_duration_s=1.0,
-    ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
-
-
-def test_repeats_empty_route_yields_nothing():
-    out = list(_route_with_repeats(
-        [], trail_length=1, trail_overlay=0,
-        linear_repeats=False, repeat_duration_s=0.0, step_duration_s=1.0,
-    ))
-    assert out == []
-
-
-# --- _zip_with_static ---
-
-from pluggable_protocol_tree.services.phase_math import _zip_with_static
-
-
-def test_zip_no_routes_yields_static_once_then_stops():
-    out = list(_zip_with_static([], static={"x", "y"}))
-    assert out == [{"x", "y"}]
-
-
-def test_zip_no_routes_no_static_yields_one_empty_phase():
-    """Edge case: still emit one (empty) phase to keep the executor
-    semantics that 'every step has at least one phase'."""
-    out = list(_zip_with_static([], static=set()))
-    assert out == [set()]
-
-
-def test_zip_one_route_unions_static_each_phase():
-    route_iter = iter([{"a"}, {"b"}, {"c"}])
-    out = list(_zip_with_static([route_iter], static={"x"}))
-    assert out == [{"a", "x"}, {"b", "x"}, {"c", "x"}]
-
-
-def test_zip_two_routes_same_length_union_each_phase():
-    r1 = iter([{"a"}, {"b"}])
-    r2 = iter([{"p"}, {"q"}])
-    out = list(_zip_with_static([r1, r2], static=set()))
-    assert out == [{"a", "p"}, {"b", "q"}]
-
-
-def test_zip_routes_of_different_length_shorter_holds_at_last():
-    """The shorter route holds at its last window once exhausted, so
-    the longer route's remaining windows still get emitted."""
-    r1 = iter([{"a"}, {"b"}, {"c"}])
-    r2 = iter([{"p"}])
-    out = list(_zip_with_static([r1, r2], static=set()))
-    assert out == [{"a", "p"}, {"b", "p"}, {"c", "p"}]
-
-
-def test_zip_stops_when_all_routes_exhausted():
-    """An empty-from-the-start route iterator contributes nothing; the
-    other route's iterator drives the output."""
-    r1 = iter([{"a"}, {"b"}])
-    r2 = iter([])
-    out = list(_zip_with_static([r1, r2], static={"x"}))
-    assert out == [{"a", "x"}, {"b", "x"}]
-
-
-# --- _ramp_up / _ramp_down ---
-
-from pluggable_protocol_tree.services.phase_math import (
-    _ramp_up, _ramp_down,
-)
-
-
-def test_ramp_up_single_electrode_first_phase_is_noop():
-    """First phase has 1 electrode --> nothing to ramp."""
-    out = list(_ramp_up(iter([{"a"}, {"b"}])))
-    assert out == [{"a"}, {"b"}]
-
-
-def test_ramp_up_three_electrode_first_phase_prepends_two():
-    """First phase {a,b,c} --> prepend {a}, {a,b} so the trail grows."""
-    out = list(_ramp_up(iter([{"a", "b", "c"}, {"d", "e", "f"}])))
-    assert len(out) == 4
-    assert len(out[0]) == 1 and out[0].issubset({"a", "b", "c"})
-    assert len(out[1]) == 2 and out[1].issubset({"a", "b", "c"})
-    assert out[2] == {"a", "b", "c"}
-    assert out[3] == {"d", "e", "f"}
-
-
-def test_ramp_up_empty_input_yields_empty():
-    out = list(_ramp_up(iter([])))
-    assert out == []
-
-
-def test_ramp_down_single_electrode_last_phase_is_noop():
-    out = list(_ramp_down(iter([{"a"}, {"b"}])))
-    assert out == [{"a"}, {"b"}]
-
-
-def test_ramp_down_three_electrode_last_phase_appends_two():
-    """Last phase {x,y,z} --> append two ramp-down phases shrinking by 1."""
-    out = list(_ramp_down(iter([{"a"}, {"x", "y", "z"}])))
-    assert len(out) == 4
-    assert out[0] == {"a"}
-    assert out[1] == {"x", "y", "z"}
-    assert len(out[2]) == 2 and out[2].issubset({"x", "y", "z"})
-    assert len(out[3]) == 1 and out[3].issubset({"x", "y", "z"})
-
-
-# --- iter_phases (public composition) ---
-
-from pluggable_protocol_tree.services.phase_math import iter_phases
-
+# --- iter_phases mirrors the centralized execution plan -------------------
+
+def test_iter_phases_equals_central_execution_plan():
+    """The delegation contract: phase sets are exactly the centralized
+    plan's activated-electrode sets, in order."""
+    kwargs = dict(trail_length=2, trail_overlay=1, soft_start=True,
+                  soft_end=True, repeat_duration_s=0.0, linear_repeats=True,
+                  n_repeats=2, step_duration_s=0.5)
+    phases = list(iter_phases(["s"], [["a", "b", "c", "d"]], **kwargs))
+    plan = PathExecutionService.calculate_execution_plan_from_params(
+        duration=0.5, repetitions=2, repeat_duration=0.0,
+        trail_length=2, trail_overlay=1, paths=[["a", "b", "c", "d"]],
+        activated_electrodes=["s"], repeat_duration_mode=False,
+        soft_start=True, soft_terminate=True, linear_repeats=True)
+    assert phases == [set(item["activated_electrodes"]) for item in plan]
+    assert phases   # non-empty
+
+
+# --- iter_phases behavior ---
 
 def test_iter_phases_no_routes_static_only():
     out = list(iter_phases(static_electrodes=["a", "b"], routes=[]))
@@ -281,8 +65,8 @@ def test_iter_phases_one_loop_route():
 
 def test_iter_phases_four_electrode_loop_yields_five_phases():
     """Loop with 4 unique electrodes, trail=1, one square at a time:
-    A-->B-->C-->D-->A. Five phases total (4 forward + 1 return). Mirrors the
-    legacy device-viewer loop execution that the user expects."""
+    A-->B-->C-->D-->A. Five phases total (4 forward + 1 return), same as
+    the device viewer's route playback."""
     out = list(iter_phases(
         static_electrodes=[], routes=[["a", "b", "c", "d", "a"]],
         trail_length=1, trail_overlay=0,
@@ -323,10 +107,11 @@ def test_iter_phases_soft_end_appends_ramp():
     assert len(out[4]) == 1
 
 
-def test_iter_phases_repeat_duration_caps_loop_cycles():
-    """Loop with cycle=3, step_duration=1, budget=6.5 --> 2 cycles, then a
-    return-to-start phase so the loop closes (timing stays exact via the
-    RoutesHandler's len(phases)-based hold-pad)."""
+def test_iter_phases_repeat_duration_caps_loop_cycles_with_idle():
+    """Loop with cycle=3, step_duration=1, budget=6.5. Like the device
+    viewer: effective reps = floor((6.5/1 - 1) / 3) = 1 cycle + return,
+    then idle phases (hold at the loop start) pad the remaining budget:
+    int(6.5 - 4) = 2 idle phases."""
     out = list(iter_phases(
         static_electrodes=[],
         routes=[["a", "b", "c", "a"]],
@@ -334,7 +119,7 @@ def test_iter_phases_repeat_duration_caps_loop_cycles():
         repeat_duration_s=6.5, step_duration_s=1.0,
         n_repeats=999,
     ))
-    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"b"}, {"c"}, {"a"}]   # 2 cycles + return
+    assert out == [{"a"}, {"b"}, {"c"}, {"a"}, {"a"}, {"a"}]
 
 
 def test_iter_phases_linear_repeats_replays_open_route():
@@ -352,27 +137,55 @@ def test_iter_phases_linear_repeats_replays_open_route():
 
 def test_loop_closes_with_return_phase_in_both_modes():
     """A loop that starts at electrode 'a' must also end at 'a' in both
-    count and duration mode. 4-window cycle; both modes append the
-    return-to-start phase. Only the cycle count differs."""
-    route = ["a", "b", "c", "d", "a"]   # loop, effective len 4, trail 1 => 4 windows
-    count_mode = list(_route_with_repeats(
-        route, trail_length=1, trail_overlay=0,
+    count and duration mode. 4-window cycle: count mode runs the asked
+    reps + return; duration mode caps reps by budget and idles at the
+    start for the balance — either way the last phase is back at 'a'."""
+    route = ["a", "b", "c", "d", "a"]   # loop, effective len 4, trail 1
+    count_mode = list(iter_phases(
+        [], [route], trail_length=1, trail_overlay=0,
         n_repeats=2, repeat_duration_s=0.0, step_duration_s=1.0))
-    dur_mode = list(_route_with_repeats(
-        route, trail_length=1, trail_overlay=0,
+    dur_mode = list(iter_phases(
+        [], [route], trail_length=1, trail_overlay=0,
         n_repeats=2, repeat_duration_s=8.0, step_duration_s=1.0))
-    # Both: cycles * 4 windows + 1 return-to-start (= the first window).
+    # Count: 2 cycles * 4 windows + 1 return-to-start.
     assert len(count_mode) == 2 * 4 + 1
-    assert len(dur_mode) == 2 * 4 + 1
+    # Duration: floor((8-1)/4) = 1 cycle + return = 5 active, + 3 idle.
+    assert len(dur_mode) == 8
     # The loop closes: last phase == first phase (back at the start, 'a').
     assert count_mode[-1] == count_mode[0] == {"a"}
     assert dur_mode[-1] == dur_mode[0] == {"a"}
 
 
+# --- effective_repetitions_for_duration / estimate_repeat_duration_s ---
+
+def test_effective_repetitions_matches_central_formula():
+    # cycle 3, dwell 1, budget 10 --> floor((10-1)/3) = 3 reps.
+    reps = effective_repetitions_for_duration(
+        routes=[["a", "b", "c", "a"]], trail_length=1, trail_overlay=0,
+        step_duration_s=1.0, repeat_duration_s=10.0)
+    assert reps == 3
+
+
+def test_effective_repetitions_no_loops_or_budget_is_one():
+    assert effective_repetitions_for_duration(
+        routes=[["a", "b"]], repeat_duration_s=10.0) == 1
+    assert effective_repetitions_for_duration(
+        routes=[["a", "b", "a"]], repeat_duration_s=0.0) == 1
+
+
+def test_estimate_repeat_duration_counts_phases():
+    # Loop cycle 3 + return = 4 phases * 0.5 s.
+    est = estimate_repeat_duration_s(
+        routes=[["a", "b", "c", "a"]], trail_length=1, trail_overlay=0,
+        n_repeats=1, step_duration_s=0.5)
+    assert est == 4 * 0.5
+
+
+def test_estimate_repeat_duration_no_routes_is_zero():
+    assert estimate_repeat_duration_s(routes=[]) == 0.0
+
+
 # --- duration_loop_parts ---
-
-from pluggable_protocol_tree.services.phase_math import duration_loop_parts
-
 
 def test_duration_loop_parts_loop_route_basic():
     """One loop route, trail 1: unit cycle is the two windows; the return
@@ -385,17 +198,28 @@ def test_duration_loop_parts_loop_route_basic():
     assert ramp == []
 
 
-def test_duration_loop_parts_soft_start_ramps_first_unit_phase():
-    """soft_start grows 1->N toward the first unit phase (sorted order),
-    just like _ramp_up, but as an explicit list."""
+def test_duration_loop_parts_soft_start_statics_never_ramp():
+    """Device-viewer soft-start semantics: static electrodes are always
+    fully on (they never ramp), and a 1-electrode trail window needs no
+    ramp at all."""
     ramp, cycle, ret = duration_loop_parts(
         static_electrodes=["s1", "s2"], routes=[["a", "b", "a"]],
         trail_length=1, trail_overlay=0, soft_start=True)
-    first = cycle[0]
-    assert first == {"s1", "s2", "a"}            # static unioned into window
-    ordered = sorted(first)
-    assert ramp == [set(ordered[:1]), set(ordered[:2])]
-    assert ret == first
+    assert cycle[0] == {"s1", "s2", "a"}         # static unioned into window
+    assert ramp == []                            # nothing to ramp
+    assert ret == cycle[0]
+
+
+def test_duration_loop_parts_soft_start_ramps_in_path_order():
+    """Device-viewer soft-start semantics: the ramp grows the first trail
+    window in PATH order from the route start (with statics fully on),
+    not in sorted-ID order."""
+    ramp, cycle, _ret = duration_loop_parts(
+        static_electrodes=["s"], routes=[["b", "a", "c", "b"]],
+        trail_length=2, trail_overlay=1, soft_start=True)
+    assert cycle[0] == {"s", "b", "a"}           # first window: b, a
+    # Ramp starts from the ROUTE's first electrode ('b'), not sorted 'a'.
+    assert ramp == [{"s", "b"}]
 
 
 def test_duration_loop_parts_no_routes_static_only():
@@ -412,8 +236,8 @@ def test_duration_loop_parts_no_routes_static_only():
 # --- unit_cycle_len ---
 
 def test_unit_cycle_len_loop_route():
-    # a genuine loop route (first == last) a-b-c-d-a exercises the loop branch
-    # of _route_windows: 4 unique nodes -> 4 windows in the unit cycle.
+    # a genuine loop route (first == last) a-b-c-d-a: 4 unique nodes ->
+    # 4 windows in the unit cycle (the return phase is not part of it).
     n = unit_cycle_len([], [["a", "b", "c", "d", "a"]], trail_length=1, trail_overlay=0)
     assert n == 4
 
