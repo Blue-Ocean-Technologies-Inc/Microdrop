@@ -93,7 +93,7 @@ from ..models.electrodes import Electrodes
 # models and services
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel
-from ..models.route import Route, RouteLayer
+from ..models.route import Route
 from ..preferences import DeviceViewerPreferences, sidebar_settings_grid, DeviceViewerAdvancedPreferences
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
@@ -485,14 +485,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         # the layers are never transiently empty, so repeats_frozen can't
         # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
         # step's execution params are pulled below.
-        incoming_routes = [(route, color) for route, color in message_model.routes]
-        current_routes = [(list(layer.route.route), layer.color)
+        #
+        # Protocol-side colors are deliberately IGNORED: the tree echoes
+        # back whatever it stored, which drifts from (and reorders against)
+        # the viewer's palette — the visible symptom was routes flipping
+        # between shades on alternate phases. Route colors are the device
+        # viewer's own: selected paints yellow and loops CW/CCW at render
+        # time; everything else gets the standard pool color.
+        incoming_routes = [route for route, _color in message_model.routes]
+        current_routes = [list(layer.route.route)
                           for layer in self.model.routes.layers]
         if incoming_routes != current_routes:
-            self.model.routes.layers = [
-                RouteLayer(route=Route(route=route.copy()), color=color)
-                for route, color in message_model.routes
-            ]
+            self.model.routes.replace_all_layers(
+                [Route(route=route.copy()) for route in incoming_routes])
         self.model.routes.selected_layer = None
         self.model.routes.layer_to_merge = None
         self.model.routes.mode = "draw"
