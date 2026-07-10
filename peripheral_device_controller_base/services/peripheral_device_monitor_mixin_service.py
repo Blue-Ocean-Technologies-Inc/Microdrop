@@ -166,10 +166,13 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
     ################################# Protected methods ######################################
     def _on_monitor_shutdown(self, event=None):
         """The monitor thread stopped — announce that the search is no longer
-        running (one-shot, mirrors the start flip) so a frontend re-enables its
-        'search connection' control. A hard process kill can't reach here."""
-        if self._searching:
-            self._searching = False
+        running (mirrors the start flip) so a frontend re-enables its
+        'search connection' control. A hard process kill can't reach here.
+
+        _searching is an Event trait (write-only, notifies on every write),
+        so announce unconditionally — the frontend's searching flag is
+        idempotent."""
+        self._searching = False
 
     def _on_port_found(self, event):
         """What to do when the device has been found on a port."""
