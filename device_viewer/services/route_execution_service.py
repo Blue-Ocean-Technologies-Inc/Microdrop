@@ -1,10 +1,10 @@
-from traits.api import observe, HasTraits, Instance, Any, Int, Bool, provides
+from traits.api import observe, HasTraits, Instance, Bool, Int, List, Set, provides
 
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 from electrode_controller.consts import electrode_state_change_publisher
 from ..consts import ROUTES_EXECUTING
-from .path_execution_service import PathExecutionService
+from microdrop_utils.route_execution import PathExecutionService
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from PySide6.QtCore import QTimer
 from microdrop_utils.pyside_helpers import PausableTimer
@@ -16,14 +16,17 @@ logger = get_logger(__name__)
 class RouteExecutionService(HasTraits):
     model = Instance(IDeviceViewMainModel)
 
-    _execution_plan = Any()  # List of execution plan dicts
+    #: Execution plan dicts from the centralized PathExecutionService.
+    _execution_plan = List()
     _current_phase_index = Int(0)
 
-    _user_toggled_channels = Any()  # set: channels the user manually toggled during execution
-    _last_set_channels = Any()  # set: channels we programmatically set last phase (for diffing)
+    #: Channels the user manually toggled during execution.
+    _user_toggled_channels = Set()
+    #: Channels we programmatically set last phase (for diffing).
+    _last_set_channels = Set()
 
-    _phase_timer = Any()  # PausableTimer instance
-    _display_timer = Any()  # QTimer for updating status display
+    _phase_timer = Instance(PausableTimer)
+    _display_timer = Instance(QTimer)
     _navigated_while_paused = Bool(False)
 
     _total_reps = Int(1)
@@ -116,52 +119,20 @@ class RouteExecutionService(HasTraits):
         self.model.route_execution_service_paused = False
         publish_message(topic=ROUTES_EXECUTING, message=str(True))
 
-        # Compute phases-per-rep from the longest loop cycle across all paths
-        max_cycle_length = 0
-        max_effective_reps = 1
-        has_loops = False
-        for path in paths:
-            if PathExecutionService.is_loop_path(path):
-                has_loops = True
-                effective_reps = PathExecutionService.calculate_effective_repetitions_for_path(
-                    path,
-                    self.model.routes.repetitions,
-                    self.model.routes.duration,
-                    self.model.routes.repeat_duration,  # repeat_duration
-                    self.model.routes.trail_length,
-                    self.model.routes.trail_overlay,
-                )
-                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(
-                    path, self.model.routes.trail_length, self.model.routes.trail_overlay
-                )
-                cycle_length = len(cycle_phases)
-                if cycle_length > max_cycle_length or (
-                    cycle_length == max_cycle_length and effective_reps > max_effective_reps
-                ):
-                    max_cycle_length = cycle_length
-                    max_effective_reps = effective_reps
-
-        if has_loops:
-            # One rep = one full cycle of the longest loop path
-            self._phases_per_rep = max(max_cycle_length, 1)
-            self._total_reps = max_effective_reps
-        elif linear_repeats:
-            # Open-only paths with linear_repeats on: longest path's single
-            # traversal = one rep; total reps = the raw Repetitions count.
-            max_open_cycle = 0
-            for path in paths:
-                cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
-                    path, self.model.routes.trail_length, self.model.routes.trail_overlay,
-                    soft_start=self.model.routes.soft_start,
-                    soft_terminate=self.model.routes.soft_terminate,
-                )
-                max_open_cycle = max(max_open_cycle, len(cycle_phases))
-            self._phases_per_rep = max(max_open_cycle, 1)
-            self._total_reps = max(int(self.model.routes.repetitions), 1)
-        else:
-            # Open paths only, no linear repeats — entire plan is one rep
-            self._phases_per_rep = max(len(plan), 1)
-            self._total_reps = 1
+        # Phases-per-rep / total reps from the centralized logic (shared
+        # with the protocol tree so both report the same breakdown).
+        self._phases_per_rep, self._total_reps = (
+            PathExecutionService.calculate_phase_rep_breakdown(
+                paths, len(plan),
+                duration=self.model.routes.duration,
+                repetitions=self.model.routes.repetitions,
+                repeat_duration=self.model.routes.repeat_duration,
+                trail_length=self.model.routes.trail_length,
+                trail_overlay=self.model.routes.trail_overlay,
+                soft_start=self.model.routes.soft_start,
+                soft_terminate=self.model.routes.soft_terminate,
+                linear_repeats=linear_repeats,
+            ))
 
         # Initialize status display
         self._total_phases = len(plan)
