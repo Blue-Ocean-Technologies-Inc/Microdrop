@@ -1955,7 +1955,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.electrode_view_layer.redraw_electrode_colors(
                     self.model, self.electrode_hovered)
                 return
-            changed_channels = set(old) ^ set(new)
+            changed_channels = old ^ new
         self.electrode_view_layer.redraw_electrode_colors_for_channels(
             self.model, changed_channels, self.electrode_hovered)
 
