@@ -68,12 +68,13 @@ class DeviceViewerPlugin(Plugin):
 
     def _contributed_task_extensions_default(self):
         from .views.device_view_dock_pane import DeviceViewerDockPane
+        from .views.video_viewer.dock_pane import VideoViewerDockPane
         from .menus import tools_menu_factory
 
-        return [ 
+        return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
-                dock_pane_factories=[DeviceViewerDockPane],
+                dock_pane_factories=[DeviceViewerDockPane, VideoViewerDockPane],
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
