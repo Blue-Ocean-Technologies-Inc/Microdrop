@@ -36,6 +36,7 @@ from ...consts import (
     RAW_CAPTURES_SUBDIR,
     RECORDINGS_DIR_NAME,
     device_viewer_recording_state_publisher,
+    media_capture_event_model,
     recording_state_model,
 )
 
@@ -47,7 +48,7 @@ from ..electrode_view.electrode_scene import ElectrodeScene
 from ...default_settings import video_key
 
 from ...utils.camera import (
-    VideoRecorder,
+    NativeVideoRecorder,
     get_transformed_frame,
     ImageSaver,
 )
@@ -122,9 +123,11 @@ class CameraControlWidget(QWidget):
         self.session.setVideoSink(self._camera_sink)
         self._last_preview_frame_time = 0.0
 
-        # 1. Initialize Recorder — fed from the full-rate camera sink, so
-        # recordings are untouched by the preview cap.
-        self.recorder = VideoRecorder(self.video_item, frame_sink=self._camera_sink)
+        # 1. Initialize Recorder — Qt's native QMediaRecorder on the capture
+        # session: hardware-encoded raw camera stream, zero per-frame Python
+        # work, alignment geometry saved to a sidecar (see
+        # NativeVideoRecorder). Untouched by the preview frame cap.
+        self.recorder = NativeVideoRecorder(self.session, self.video_item)
         self.recorder.error_occurred.connect(self.handle_recording_error)
         self.recorder.recording_stopped.connect(self.handle_recording_stopped)
         self.recording_file_path = None
@@ -776,6 +779,7 @@ class CameraControlWidget(QWidget):
             raw_path.parent.mkdir(parents=True, exist_ok=True)
             if raw_image.save(str(raw_path)):
                 _cache_media_capture(MediaType.IMAGE, str(raw_path))
+                media_capture_event_model.captured = str(raw_path)
                 logger.info(f"Raw sensor frame saved: {raw_path}")
                 if show_dialog:
                     _show_media_capture_dialog(
@@ -795,6 +799,7 @@ class CameraControlWidget(QWidget):
 
         def _post_image_capture():
             _cache_media_capture(MediaType.IMAGE, str(save_path))
+            media_capture_event_model.captured = str(save_path)
             if show_dialog:
                 _show_media_capture_dialog(MediaType.IMAGE, str(save_path), self.status_bar_manager)
 

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from device_viewer.models.media import RecordingStatePublisher, RecordingStateModel
+from device_viewer.models.media import (
+    MediaCaptureEventModel, RecordingStatePublisher, RecordingStateModel,
+)
 from dropbot_controller.consts import (
     CHIP_INSERTED,
     CAPACITANCE_UPDATED,
@@ -114,6 +116,11 @@ DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live vid
 # Mirrors the live recording state to app_globals (see DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
 recording_state_model = RecordingStateModel(globals_key=DEVICE_VIEWER_RECORDING_ACTIVE_KEY)
 
+# Fires with the saved file's path when a capture finishes writing — the
+# event-driven alternative to polling the captures folder (e.g. the
+# fluorescence image viewer refreshes on it).
+media_capture_event_model = MediaCaptureEventModel()
+
 APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
                     LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
 
@@ -167,6 +174,11 @@ GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation thresho
 # of waking the GUI thread 100x a second for nothing.
 GAMEPAD_POLL_INTERVAL_MS = 10
 GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
+
+# Sidecar written next to every recording by NativeVideoRecorder: the video
+# item's alignment geometry, letting viewers reproduce the device-aligned
+# (perspective-warped) view of the raw camera file on demand.
+RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
 
 # ---------------------------------------------------------------------------
 # Camera preview

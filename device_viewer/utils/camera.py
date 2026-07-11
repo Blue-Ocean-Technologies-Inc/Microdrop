@@ -2,14 +2,16 @@ import json
 import shutil
 import subprocess
 import threading
+from pathlib import Path
 from typing import List, Tuple
 import queue
 
-from PySide6.QtCore import QPointF, QRectF, Signal, QObject, QRunnable, Slot, QThread
+from PySide6.QtCore import QPointF, QRectF, QSize, QUrl, Signal, QObject, QRunnable, Slot, QThread
 from PySide6.QtGui import QImage, QTransform, Qt, QPainter
-from PySide6.QtMultimedia import QVideoFrame
+from PySide6.QtMultimedia import QMediaFormat, QMediaRecorder, QVideoFrame
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 
+from device_viewer.consts import RECORDING_TRANSFORM_SIDECAR_SUFFIX
 from device_viewer.models.media import MediaType
 from device_viewer.views.camera_control_view.utils import _cache_media_capture
 from logger.logger_service import get_logger
@@ -128,6 +130,112 @@ class VideoProcessWorker(QObject):
     def stop(self):
         self._is_running = False
         logger.debug(f"Video image processing worker thread Stopped.")
+
+
+class NativeVideoRecorder(QObject):
+    """Records the RAW camera stream through Qt's own QMediaRecorder —
+    the platform's hardware-accelerated encoding pipeline (Media
+    Foundation on Windows). Per-frame cost to the application: zero — no
+    frames pass through Python at all, so the GUI stays smooth while
+    recording at any resolution.
+
+    The device-alignment perspective warp is NOT baked into the file
+    (baking it is what forced every frame through the GUI thread — see
+    VideoRecorder below). Instead the video item's alignment geometry is
+    written to a ``<video>.transform.json`` sidecar next to the
+    recording, so the aligned view can be reproduced offline on demand
+    (same parameters ``get_transformed_frame`` consumes per frame).
+
+    Drop-in for VideoRecorder's public surface: start/stop, is_recording,
+    current_image (always None — screenshots fall back to the live sink),
+    and the recording_started/recording_stopped/error_occurred signals.
+    """
+
+    recording_started = Signal(str)  # Emits path when started
+    recording_stopped = Signal(str)  # Emits output path
+    error_occurred = Signal(str)
+
+    def __init__(self, session, video_item: 'QGraphicsVideoItem', parent=None):
+        super().__init__(parent)
+        self._video_item = video_item
+        self.current_image = None  # VideoRecorder parity (see class docstring)
+        self._was_recording = False
+
+        self._recorder = QMediaRecorder(self)
+        session.setRecorder(self._recorder)
+        # Matroska/H.264, matching the legacy ffmpeg-pipe recordings'
+        # .mkv container (Qt's FFmpeg multimedia backend muxes it).
+        media_format = QMediaFormat(QMediaFormat.FileFormat.Matroska)
+        media_format.setVideoCodec(QMediaFormat.VideoCodec.H264)
+        self._recorder.setMediaFormat(media_format)
+        self._recorder.setQuality(QMediaRecorder.Quality.HighQuality)
+        self._recorder.errorOccurred.connect(self._on_recorder_error)
+        self._recorder.recorderStateChanged.connect(self._on_recorder_state_changed)
+
+    @property
+    def is_recording(self) -> bool:
+        return (self._recorder.recorderState()
+                == QMediaRecorder.RecorderState.RecordingState)
+
+    def start(self, output_path, resolution, fps):
+        """Start recording the RAW camera stream. ``resolution`` is the
+        selected camera format's size — pinned on the recorder so the
+        output is guaranteed full resolution (e.g. a 1920x1080 format
+        records a 1920x1080 file); the backend already records the active
+        format by default, this makes it explicit. ``fps`` is left to the
+        camera's real delivery rate."""
+        if self.is_recording:
+            return
+        if resolution:
+            self._recorder.setVideoResolution(QSize(*[int(side)
+                                                      for side in resolution]))
+        self._recorder.setOutputLocation(QUrl.fromLocalFile(str(output_path)))
+        self._recorder.record()
+        logger.info(f"Native recording requested: {output_path} "
+                    f"at {resolution}")
+
+    def stop(self):
+        """Stop recording; recording_stopped fires on the state change."""
+        if self.is_recording:
+            logger.info("Stopping native recording...")
+            self._recorder.stop()
+
+    def _on_recorder_state_changed(self, state):
+        if state == QMediaRecorder.RecorderState.RecordingState:
+            self._was_recording = True
+            self.recording_started.emit(
+                self._recorder.actualLocation().toLocalFile())
+        elif (state == QMediaRecorder.RecorderState.StoppedState
+                and self._was_recording):
+            self._was_recording = False
+            path = self._recorder.actualLocation().toLocalFile()
+            self._write_transform_sidecar(path)
+            _cache_media_capture.send(MediaType.VIDEO, path)
+            self.recording_stopped.emit(path)
+            logger.info(f"Native recording stopped: {path}")
+
+    def _on_recorder_error(self, _error, error_string):
+        logger.error(f"Native recorder error: {error_string}")
+        self.error_occurred.emit(error_string)
+
+    def _write_transform_sidecar(self, video_path):
+        """Persist the alignment geometry needed to reproduce the
+        device-aligned (warped) view offline — the same parameters the
+        legacy pipeline fed to get_transformed_frame for every frame."""
+        sidecar = {
+            "transform": json.loads(
+                qtransform_serialize(self._video_item.transform())),
+            "scene_bounding_rect": list(
+                self._video_item.sceneBoundingRect().getRect()),
+            "bounding_rect": list(self._video_item.boundingRect().getRect()),
+        }
+        sidecar_path = Path(video_path).with_suffix(
+            RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+        try:
+            sidecar_path.write_text(json.dumps(sidecar, indent=2))
+            logger.info(f"Wrote recording transform sidecar: {sidecar_path}")
+        except Exception as e:
+            logger.warning(f"Could not write transform sidecar: {e}")
 
 
 class VideoRecorder(QObject):
