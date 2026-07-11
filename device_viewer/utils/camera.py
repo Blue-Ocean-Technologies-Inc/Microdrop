@@ -168,7 +168,15 @@ class NativeVideoRecorder(QObject):
         media_format = QMediaFormat(QMediaFormat.FileFormat.Matroska)
         media_format.setVideoCodec(QMediaFormat.VideoCodec.H264)
         self._recorder.setMediaFormat(media_format)
-        self._recorder.setQuality(QMediaRecorder.Quality.HighQuality)
+        # Highest-fidelity settings the API offers: quality-driven encoding
+        # (the quality level is IGNORED in the bitrate-driven modes) at the
+        # top quality tier — the FFmpeg backend maps this to a low-CRF,
+        # visually near-lossless encode. The remaining ceiling is the
+        # pipeline's 4:2:0 chroma subsampling; full-fidelity data lives in
+        # the 16-bit raw still captures.
+        self._recorder.setEncodingMode(
+            QMediaRecorder.EncodingMode.ConstantQualityEncoding)
+        self._recorder.setQuality(QMediaRecorder.Quality.VeryHighQuality)
         self._recorder.errorOccurred.connect(self._on_recorder_error)
         self._recorder.recorderStateChanged.connect(self._on_recorder_state_changed)
 
