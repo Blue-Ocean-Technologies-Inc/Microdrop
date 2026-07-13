@@ -64,7 +64,8 @@ class DeviceViewerPlugin(Plugin):
 
     def _preferences_categories_default(self):
         from .preferences import device_viewer_tab
-        return [device_viewer_tab]
+        from .views.camera_control_view.preferences import video_settings_tab
+        return [device_viewer_tab, video_settings_tab]
 
     def _contributed_task_extensions_default(self):
         from .views.device_view_dock_pane import DeviceViewerDockPane

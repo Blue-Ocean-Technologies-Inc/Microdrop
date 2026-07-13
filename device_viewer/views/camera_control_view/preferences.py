@@ -1,6 +1,6 @@
 import platform
 
-from envisage.ui.tasks.api import PreferencesPane
+from envisage.ui.tasks.api import PreferencesPane, PreferencesCategory
 from traitsui.api import View, Item, Group, EnumEditor
 from apptools.preferences.api import PreferencesHelper
 from traits.api import Str, Bool, Enum, List, Range, observe
@@ -24,7 +24,6 @@ from device_viewer.consts import (
     RECORDING_BITRATE_CLASSES,
     RECORDING_BITRATE_TIERS,
 )
-from device_viewer.preferences import device_viewer_tab
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
@@ -291,6 +290,11 @@ qt_recorder_settings_group = Group(
 )
 
 
+video_settings_tab = PreferencesCategory(
+    id="microdrop.video_settings.preferences",
+    name="Video Settings",
+)
+
 class CameraPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
 
@@ -299,7 +303,7 @@ class CameraPreferencesPane(PreferencesPane):
     # The factory to use for creating the preferences model object.
     model_factory = CameraPreferences
 
-    category = device_viewer_tab.id
+    category = video_settings_tab.id
 
     ########################################################################################
     video_format_item = create_item_label_group(
