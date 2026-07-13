@@ -22,7 +22,7 @@ from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtCore import Qt, QSizeF, Slot, QUrl
 from PySide6.QtGui import QBrush
 
-from device_viewer.utils.camera import VideoRecorder
+from device_viewer.utils.camera import RawFFMPEGVideoRecorder
 
 # --- Logging Setup ---
 from logger.logger_service import get_logger, init_logger
@@ -68,7 +68,7 @@ class CameraRunner(QMainWindow):
         )
         layout.addWidget(self.record_btn)
 
-        self.recorder = VideoRecorder(self.video_item)
+        self.recorder = RawFFMPEGVideoRecorder(self.video_item)
 
         self.init_camera()
 
