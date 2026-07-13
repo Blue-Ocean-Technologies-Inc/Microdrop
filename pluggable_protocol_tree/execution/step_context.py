@@ -284,6 +284,29 @@ class ProtocolContext(HasTraits):
                 f"Timed out after {timeout}s wait"
             ) from None
 
+    def sleep(self, seconds: float):
+        """Stop-aware settle wait that keeps the status timers honest.
+
+        For fixed hardware settle times (LED stabilization, stage motion):
+        blocks the worker thread for ``seconds`` under the same ref-counted
+        ack-wait freeze as :meth:`StepContext.wait_for`, so the settle is
+        excluded from the step/phase/protocol timers instead of being
+        misreported as step time — without entering the operator Paused
+        state (no pause_event, no "Paused" UI). Use this instead of
+        ``time.sleep`` in column handlers.
+
+        Raises ``AbortError`` if the protocol's ``stop_event`` fires during
+        the wait, so Stop aborts the settle immediately.
+        """
+        if self.signals is not None:
+            self.signals.ack_wait_started = True
+        try:
+            if self.stop_event.wait(max(0.0, float(seconds))):
+                raise AbortError("stop_event fired while settling")
+        finally:
+            if self.signals is not None:
+                self.signals.ack_wait_finished = True
+
     def prompt_gui(self, gui_callable: Callable, *,
                    timeout: float = float("inf")):
         """Run ``gui_callable`` on the GUI thread, paused, and return its result.
@@ -494,6 +517,9 @@ class StepContext(HasTraits):
 
     def wait(self, *args, **kwargs):
         return self.protocol.wait(*args, **kwargs)
+
+    def sleep(self, *args, **kwargs):
+        return self.protocol.sleep(*args, **kwargs)
 
     def prompt_gui(self, *args, **kwargs):
         # Must return: ProtocolContext.prompt_gui hands back the dialog's
