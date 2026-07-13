@@ -13,7 +13,15 @@ app_globals = get_microdrop_redis_globals_manager()
 
 
 def is_advanced_mode():
-    return app_globals.get("microdrop.advanced_mode", False)
+    # Tolerate no-Redis (tests / headless imports): this runs at CLASS
+    # DEFINITION time below, so a connect error here used to make ANY
+    # import of this module (e.g. via device_viewer.preferences) require
+    # a live Redis server.
+    try:
+        return app_globals.get("microdrop.advanced_mode", False)
+    except Exception as e:
+        logger.debug(f"Advanced-mode flag unavailable (no Redis?): {e}")
+        return False
 
 
 class AdvancedModeAction(Action):

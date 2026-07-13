@@ -2,7 +2,7 @@ import json
 
 from pydantic import BaseModel, FilePath, StrictBool
 from enum import Enum
-from traits.api import HasTraits, Bool, observe, Str
+from traits.api import HasTraits, Bool, Event, observe, Str
 
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
@@ -45,6 +45,18 @@ class RecordingStatePublisher(ValidatedTopicPublisher):
         (Validated as StrictBool by RecordingActiveState on publish.)
         """
         super().publish({"state": state})
+
+
+class MediaCaptureEventModel(HasTraits):
+    """In-process notification that a capture file finished writing.
+
+    Lives as a singleton in device_viewer.consts (like
+    recording_state_model) so any frontend plugin can observe it instead
+    of polling the captures folder; the event's payload is the saved
+    file's path. Fired AFTER the file is on disk.
+    """
+
+    captured = Event(Str)
 
 
 class RecordingStateModel(HasTraits):

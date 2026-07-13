@@ -39,3 +39,11 @@ ICON_DROP_EC         = "\uf875" # droplet with bolt
 ICON_STAIRS          = "\uf46c" # stairs
 ICON_JOYSTICK        = "\uf5ee" # joystick (gamepad connection indicator)
 ICON_MODE_HEAT       = "\uf16a" # mode_heat (heater status indicator)
+
+# Recording viewer (ligature names \u2014 the Material Symbols font resolves
+# them like "home"/"play_arrow" above)
+ICON_FIT_SCREEN      = "fit_screen"  # refit content to the view
+ICON_TRANSFORM       = "transform"   # device-aligned (warped) view
+ICON_CROP            = "crop"        # region-of-interest edit mode
+ICON_DELETE          = "delete"      # clear regions
+ICON_SAVE            = "save"        # export/save

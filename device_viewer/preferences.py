@@ -5,7 +5,7 @@ from pathlib import Path
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from microdrop_application.preferences_dialog import advanced_mode_tab
-from traits.api import Button, Dict, Directory, File, Instance, Property, Range, Bool, Str, observe
+from traits.api import Button, Dict, Directory, File, Float, Instance, Property, Range, Bool, Str, observe
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, HGroup, Item, View
 from pyface.qt.QtCore import QTimer
@@ -70,6 +70,14 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
+
+    ### Recording viewer (video_viewer pane) prefs ###
+    # Persisted zoom/pan of the playback canvas — the alignment transform
+    # can push the frame outside the pane's bounds, so the user's chosen
+    # framing must survive reloads. zoom 0.0 = unset (fit to view).
+    video_viewer_zoom = Float(0.0)
+    video_viewer_center_x = Float(0.0)
+    video_viewer_center_y = Float(0.0)
 
     ### main view prefs ###
     AUTO_FIT_MARGIN_SCALE = Range(
