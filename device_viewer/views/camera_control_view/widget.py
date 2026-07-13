@@ -8,7 +8,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QImage
 from PySide6.QtMultimedia import (
-    QMediaCaptureSession, QCamera, QMediaDevices, QCameraDevice,
+    QMediaCaptureSession, QCamera, QCameraDevice,
     QCameraFormat, QVideoFrame, QVideoSink,
 )
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
@@ -26,14 +26,13 @@ from apptools.preferences.api import Preferences
 
 from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
 from microdrop_application.helpers import get_current_experiment_directory
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
     CAPTURES_DIR_NAME,
-    DEVICE_VIEWER_RECORDING_STATE,
     RAW_CAPTURES_SUBDIR,
+    RECORDER_BACKEND_FFMPEG,
     RECORDINGS_DIR_NAME,
     device_viewer_recording_state_publisher,
     media_capture_event_model,
@@ -50,7 +49,7 @@ from ...default_settings import video_key
 from ...utils.camera import (
     NativeVideoRecorder,
     get_transformed_frame,
-    ImageSaver,
+    ImageSaver, RawFFMPEGVideoRecorder
 )
 from ...models.media import MediaType
 
@@ -123,13 +122,11 @@ class CameraControlWidget(QWidget):
         self.session.setVideoSink(self._camera_sink)
         self._last_preview_frame_time = 0.0
 
-        # 1. Initialize Recorder — Qt's native QMediaRecorder on the capture
-        # session: hardware-encoded raw camera stream, zero per-frame Python
-        # work, alignment geometry saved to a sidecar (see
-        # NativeVideoRecorder). Untouched by the preview frame cap.
-        self.recorder = NativeVideoRecorder(self.session, self.video_item)
-        self.recorder.error_occurred.connect(self.handle_recording_error)
-        self.recorder.recording_stopped.connect(self.handle_recording_stopped)
+        # 1. Initialize Recorder. The backend (Qt MediaRecorder vs FFmpeg
+        # process) and its encoding settings come from the camera
+        # preferences; the recorder is rebuilt from them at every recording
+        # start (see _build_recorder), so preference changes apply live.
+        self.recorder = self._build_recorder()
         self.recording_file_path = None
         self._camera_state_pre_recording = None
 
@@ -144,6 +141,53 @@ class CameraControlWidget(QWidget):
         # Check initial camera state
         self.initialize_camera_list()
         self.check_initial_camera_state()
+
+    def _build_recorder(self, resolution=None, fps=None):
+        """Recorder configured from the camera preferences. Both recorders
+        share VideoRecorderBase, so the rest of the widget is agnostic.
+        ``resolution``/``fps`` (known at recording start) select which
+        per-resolution-class bitrate preference applies to the Qt/MKV
+        recorder; at construction time they are unknown and the bitrate
+        stays encoder-chosen."""
+        if self.preferences.recorder_backend == RECORDER_BACKEND_FFMPEG:
+            # Raw camera planes piped to an ffmpeg subprocess at full
+            # camera rate (untouched by the preview frame cap thanks to
+            # frame_sink=self._camera_sink).
+            logger.info(
+                f"Recorder from preferences: FFmpeg process — "
+                f"container={self.preferences.ffmpeg_container}, "
+                f"codec={self.preferences.ffmpeg_video_codec}, "
+                f"preset={self.preferences.ffmpeg_preset}, "
+                f"crf={self.preferences.ffmpeg_crf}, "
+                f"extra args={self.preferences.ffmpeg_extra_output_args!r}")
+            recorder = RawFFMPEGVideoRecorder(
+                self.video_item,
+                frame_sink=self._camera_sink,
+                video_codec=self.preferences.ffmpeg_video_codec,
+                preset=self.preferences.ffmpeg_preset,
+                crf=self.preferences.ffmpeg_crf,
+                extra_output_args=self.preferences.ffmpeg_extra_output_args,
+            )
+        else:
+            # Qt's own QMediaRecorder: hardware-encoded, zero per-frame
+            # Python work.
+            video_bitrate = self.preferences.recording_bitrate_bps(
+                resolution, fps)
+            logger.info(
+                f"Recorder from preferences: Qt MediaRecorder — "
+                f"format={self.preferences.qt_video_format}, "
+                f"codec={self.preferences.qt_video_codec}, "
+                f"bitrate={f'{video_bitrate:,} bps' if video_bitrate else 'encoder default'}")
+            recorder = NativeVideoRecorder(
+                session=self.session,
+                video_item=self.video_item,
+                file_format=self.preferences.qt_video_format,
+                video_codec=self.preferences.qt_video_codec,
+                video_bitrate=video_bitrate,
+            )
+        recorder.error_occurred.connect(self.handle_recording_error)
+        recorder.recording_stopped.connect(self.handle_recording_stopped)
+        return recorder
 
     def _init_ui(self):
         # Camera Combo Box
@@ -843,7 +887,9 @@ class CameraControlWidget(QWidget):
         return self._generate_media_filename(step_description, step_id, ".png")
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
-        return self._generate_media_filename(step_description, step_id, ".mkv")
+        return self._generate_media_filename(
+            step_description, step_id,
+            self.preferences.recording_file_extension())
 
     def on_recording_active(self, recording_data):
         if isinstance(recording_data, dict):
@@ -919,6 +965,10 @@ class CameraControlWidget(QWidget):
     ):
         logger.info("Starting video recorder...")
 
+        # A rebuild while recording would orphan the active recorder.
+        if self.recorder.is_recording:
+            return
+
         # Provider feeds (ASI) bypass the QtMultimedia session the recorder
         # taps: recording is unsupported for them. The button is disabled
         # while a provider source is selected, so this guard covers the
@@ -966,6 +1016,10 @@ class CameraControlWidget(QWidget):
             _current_fmt.resolution().height(),
         )
 
+        # Rebuild from current preferences so backend/container/bitrate
+        # changes apply without a restart, with the bitrate class matched
+        # to the actual camera resolution and frame rate.
+        self.recorder = self._build_recorder(_resolution, fps)
         self.recorder.start(
             _recording_file_path, _resolution, fps
         )

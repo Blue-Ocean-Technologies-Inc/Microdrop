@@ -181,6 +181,50 @@ GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
 RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
 
 # ---------------------------------------------------------------------------
+# Video recording preferences (camera preferences node). The recorder is
+# rebuilt from these at every recording start, so changes apply live.
+# ---------------------------------------------------------------------------
+RECORDER_BACKEND_QT = "Qt MediaRecorder (hardware)"
+RECORDER_BACKEND_FFMPEG = "FFmpeg process"
+
+# Qt recorder container choices (drive both the QMediaFormat and the
+# recording file extension).
+QT_RECORDER_FORMAT_MP4 = "MP4"
+QT_RECORDER_FORMAT_MKV = "MKV"
+
+# FFmpeg-process recorder encoding choices. fps, resolution and pixel
+# format are always taken from the camera, never from preferences.
+FFMPEG_CONTAINERS = ("mkv", "mp4")
+FFMPEG_VIDEO_CODECS = ("libx264", "libx265")
+FFMPEG_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast",
+                  "medium", "slow", "slower", "veryslow")
+FFMPEG_DEFAULT_CRF = 17
+
+#: Qt/MKV recording quality tiers, easiest first: Auto is the recommended
+#: rate for the class (same as Medium — the sweet spot of the commonly
+#: recommended H.264 delivery bitrates), Low..Ultra span that range.
+RECORDING_BITRATE_TIERS = ("Auto", "Low", "Medium", "High", "Ultra")
+
+#: Resolution class label -> (CameraPreferences trait, {tier: Mbps}).
+RECORDING_BITRATE_CLASSES = {
+    "1080p @ 30 fps": ("qt_bitrate_1080p30_tier",
+                       {"Auto": 4.5, "Low": 3, "Medium": 4.5,
+                        "High": 6, "Ultra": 8}),
+    "1080p @ 60 fps": ("qt_bitrate_1080p60_tier",
+                       {"Auto": 6, "Low": 4.5, "Medium": 6,
+                        "High": 7.5, "Ultra": 9}),
+    "4K @ 24/30 fps": ("qt_bitrate_4k30_tier",
+                       {"Auto": 20, "Low": 15, "Medium": 20,
+                        "High": 25, "Ultra": 30}),
+    "4K @ 60 fps": ("qt_bitrate_4k60_tier",
+                    {"Auto": 45, "Low": 35, "Medium": 45,
+                     "High": 55, "Ultra": 70}),
+}
+# Class-matching thresholds for the ACTUAL camera format at record time.
+RECORDING_4K_MIN_HEIGHT = 1600   # frames at least this tall use the 4K classes
+RECORDING_60FPS_MIN_FPS = 45     # at least this fps uses the 60 fps classes
+
+# ---------------------------------------------------------------------------
 # Camera preview
 # ---------------------------------------------------------------------------
 # Ceiling for frames forwarded to the device view's video item. Every frame
