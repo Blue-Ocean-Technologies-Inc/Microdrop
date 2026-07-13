@@ -18,6 +18,7 @@ from pyface.api import GUI
 from traits.api import Any, Bool, List, Str, observe
 
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
 from .consts import PKG, PKG_name
 from .i_plugin_group_manager import IPluginGroupManager
@@ -148,7 +149,30 @@ class PluginManagementPlugin(Plugin):
         except Exception:
             logger.exception("plugin-group launch restore failed")
 
+        # The reactive pane mount for any group enabled above is already
+        # queued on the UI loop (LiveTaskExtensionsController defers its
+        # reconcile with invoke_later), so queue the saved-layout re-apply
+        # behind it: at window creation those panes did not exist yet, so
+        # envisage dropped their saved placement (restore_saved_task_layout).
+        GUI.invoke_later(self._reapply_saved_layout_after_launch_restore)
+
         self.application.extra_plugins_loaded = True
+
+    def _reapply_saved_layout_after_launch_restore(self):
+        """Give the user back their saved window layout when the enabled
+        plugin set is unchanged from the previous session. Only re-applies
+        when the launch restore actually hot-mounted panes — a mid-session
+        Manage Plugins toggle never re-runs this, so it cannot stomp a live
+        arrangement."""
+        if self._live_task_exts is None or not self._live_task_exts.has_mounted_panes:
+            return
+        window = self.application.active_window
+        if window is None:
+            return
+        try:
+            restore_saved_task_layout(window, self.application)
+        except Exception:
+            logger.exception("saved-layout re-apply after launch restore failed")
 
     #: True once the launch update check has started (runs exactly once).
     _update_check_started = Bool(False)
