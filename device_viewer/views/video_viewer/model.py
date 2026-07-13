@@ -52,11 +52,18 @@ class VideoViewerModel(HasTraits):
     # ------------------------------------------------------------------ #
     # Region of interest (dynamic: keyframed over playback time)           #
     # ------------------------------------------------------------------ #
-    #: (position_ms, (x, y, w, h)) keyframes in the ALIGNED view's scene
-    #: coordinates, sorted by time. Each keyframe's region holds until the
-    #: next one, so drawing regions at different times makes the export's
-    #: crop follow the action frame to frame. Empty = no crop.
+    #: (position_ms, (x, y, w, h)) keyframes in the scene coordinates of
+    #: the view they were drawn in (see roi_aligned), sorted by time. Each
+    #: keyframe's region holds until the next one, so drawing regions at
+    #: different times makes the export's crop follow the action frame to
+    #: frame. Empty = no crop.
     roi_keyframes = List()
+
+    #: Which view's coordinates the keyframes live in: the device-aligned
+    #: scene (True) or the raw frame (False). Regions live in ONE space at
+    #: a time — drawing in the other view clears them (the two coordinate
+    #: systems don't mix).
+    roi_aligned = Bool(True)
 
     #: Rubber-band ROI drawing mode (the Edit Region toggle): while on,
     #: dragging on the canvas defines the region at the CURRENT position.
@@ -100,11 +107,17 @@ class VideoViewerModel(HasTraits):
             active = region
         return active
 
-    def set_roi_keyframe(self, position_ms, region):
+    def set_roi_keyframe(self, position_ms, region, aligned):
         """Add (or replace) the region keyframe at ``position_ms``.
-        ``region`` is an (x, y, w, h) tuple in aligned-scene coordinates."""
-        keyframes = [(ms, rect) for ms, rect in self.roi_keyframes
-                     if ms != position_ms]
+        ``region`` is an (x, y, w, h) tuple in the scene coordinates of the
+        view it was drawn in (``aligned``). Drawing in the other view than
+        the existing keyframes clears them — the spaces don't mix."""
+        if aligned != self.roi_aligned:
+            keyframes = []
+        else:
+            keyframes = [(ms, rect) for ms, rect in self.roi_keyframes
+                         if ms != position_ms]
+        self.roi_aligned = aligned
         keyframes.append((int(position_ms), tuple(region)))
         keyframes.sort(key=lambda keyframe: keyframe[0])
         self.roi_keyframes = keyframes

@@ -111,7 +111,13 @@ class VideoPlaybackCanvas(QGraphicsView):
         self._apply_view()
 
     def _on_aligned_changed(self, event):
+        # Applying/unapplying the alignment transform changes the frame's
+        # size and position, so the persisted framing no longer fits:
+        # refit to the pane on every flip (like the Fit View button).
+        self._preferences.video_viewer_zoom = 0.0
         self._apply_view()
+        # The ROI overlay only makes sense in the space it was drawn in.
+        self._on_active_roi_changed()
 
     def _on_playing_changed(self, event):
         if event.new:
@@ -250,9 +256,11 @@ class VideoPlaybackCanvas(QGraphicsView):
     # ------------------------------------------------------------------ #
     # Region of interest: overlay + rubber-band editing                    #
     # ------------------------------------------------------------------ #
-    def _on_active_roi_changed(self, event):
+    def _on_active_roi_changed(self, event=None):
         region = self._model.active_roi
-        if region:
+        # Regions live in the coordinates of the view they were drawn in —
+        # only overlay them while that view is the one displayed.
+        if region and self._model.roi_aligned == self._model.aligned:
             self._roi_item.setRect(QRectF(*region))
             self._roi_item.setVisible(True)
         else:
@@ -289,10 +297,12 @@ class VideoPlaybackCanvas(QGraphicsView):
             if (region.width() >= MIN_ROI_SIZE
                     and region.height() >= MIN_ROI_SIZE):
                 # Keyframe the region at the CURRENT playback position —
-                # drawing at different times makes the crop dynamic.
+                # drawing at different times makes the crop dynamic. The
+                # region is recorded in the displayed view's space.
                 self._model.set_roi_keyframe(
                     self._model.position_ms,
-                    (region.x(), region.y(), region.width(), region.height()))
+                    (region.x(), region.y(), region.width(), region.height()),
+                    aligned=self._model.aligned)
             else:
                 self._on_active_roi_changed(None)   # stray click: restore
             event.accept()

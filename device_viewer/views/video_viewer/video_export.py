@@ -1,11 +1,11 @@
-"""Offline export of a recording's device-aligned rendition.
+"""Offline export of a recording's device-aligned and/or cropped rendition.
 
-Decodes the raw recording with ffmpeg, warps every frame through the
-sidecar's alignment transform (the same ``get_transformed_frame`` the
-live pipeline used), crops to the model's region-of-interest keyframes
-(stepwise over playback time, so the crop can follow the action), and
-re-encodes. Runs on a background thread; the GUI only receives progress
-strings.
+Decodes the recording with ffmpeg, optionally warps every frame through
+the sidecar's alignment transform (the same ``get_transformed_frame`` the
+live pipeline used — skipped for raw-space exports and recordings with no
+sidecar), crops to the model's region-of-interest keyframes (stepwise
+over playback time, so the crop can follow the action), and re-encodes.
+Runs on a background thread; the GUI only receives progress strings.
 """
 import json
 import re
@@ -26,8 +26,9 @@ logger = get_logger(__name__)
 #: Used when the container doesn't report a frame rate.
 FALLBACK_EXPORT_FPS = 30.0
 
-#: Suffix of the exported file, next to the source recording.
+#: Suffixes of the exported file, next to the source recording.
 ALIGNED_EXPORT_SUFFIX = "_aligned.mkv"
+CROPPED_EXPORT_SUFFIX = "_cropped.mkv"
 
 
 def roi_at(roi_keyframes, position_ms):
@@ -51,18 +52,24 @@ def _even(value):
 
 
 class AlignedVideoExporter(QObject):
-    """One export job: input recording + sidecar + ROI keyframes -> the
-    aligned (and cropped) video next to the source."""
+    """One export job: input recording (+ sidecar when aligned) + ROI
+    keyframes -> the aligned and/or cropped video next to the source.
+    ``aligned`` says which space the rendition (and its regions) live in:
+    the device-aligned scene (warps every frame through the sidecar's
+    transform) or the raw frame (no warp — works for ANY video)."""
 
     progress = Signal(str)
     finished = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, input_path, sidecar, roi_keyframes,
+    def __init__(self, input_path, sidecar, roi_keyframes, aligned=True,
                  ffmpeg_binary="ffmpeg", parent=None):
         super().__init__(parent)
         self._input_path = str(input_path)
-        self._output_path = str(Path(input_path).with_suffix("")) + ALIGNED_EXPORT_SUFFIX
+        self._aligned = bool(aligned) and sidecar is not None
+        suffix = (ALIGNED_EXPORT_SUFFIX if self._aligned
+                  else CROPPED_EXPORT_SUFFIX)
+        self._output_path = str(Path(input_path).with_suffix("")) + suffix
         self._sidecar = sidecar
         self._roi_keyframes = sorted(roi_keyframes, key=lambda kf: kf[0])
         self._ffmpeg = ffmpeg_binary
@@ -109,22 +116,28 @@ class AlignedVideoExporter(QObject):
         decode = encode = None
         try:
             width, height, fps = self._probe()
-            transform = qtransform_deserialize(
-                json.dumps(self._sidecar["transform"]))
-            scene = self._sidecar["scene_bounding_rect"]
-            bounding = QRectF(*self._sidecar["bounding_rect"])
-            scene_rect = QRectF(*scene)
-
-            # Warp canvas at 1:1 scene scale, so ROI scene coordinates map
-            # directly onto warped pixels (minus the scene origin).
-            warp_size = (_even(scene_rect.width()), _even(scene_rect.height()))
+            if self._aligned:
+                transform = qtransform_deserialize(
+                    json.dumps(self._sidecar["transform"]))
+                bounding = QRectF(*self._sidecar["bounding_rect"])
+                scene_rect = QRectF(*self._sidecar["scene_bounding_rect"])
+                # Warp canvas at 1:1 scene scale, so ROI scene coordinates
+                # map directly onto warped pixels (minus the scene origin).
+                warp_size = (_even(scene_rect.width()),
+                             _even(scene_rect.height()))
+            else:
+                # Raw space: no warp — regions are in frame pixels, the
+                # "warp" IS the decoded frame.
+                transform = bounding = None
+                scene_rect = QRectF(0, 0, width, height)
+                warp_size = (width, height)
             # Constant output size (a video can't change resolution):
-            # the FIRST region's size, or the full warp when no regions.
+            # the FIRST region's size, or the full frame when no regions.
             if self._roi_keyframes:
                 first_region = self._roi_keyframes[0][1]
                 output_size = (_even(first_region[2]), _even(first_region[3]))
             else:
-                output_size = warp_size
+                output_size = (_even(warp_size[0]), _even(warp_size[1]))
 
             decode = subprocess.Popen(
                 [self._ffmpeg, "-hide_banner", "-loglevel", "error",
@@ -153,8 +166,11 @@ class AlignedVideoExporter(QObject):
                     break
                 source = QImage(chunk, width, height,
                                 QImage.Format_RGBA8888)
-                warped = get_transformed_frame(
-                    source, scene_rect, bounding, transform, warp_size)
+                if self._aligned:
+                    warped = get_transformed_frame(
+                        source, scene_rect, bounding, transform, warp_size)
+                else:
+                    warped = source
                 frame = self._crop_frame(warped, scene_rect, warp_size,
                                          output_size,
                                          frame_index * 1000.0 / fps)
@@ -193,7 +209,7 @@ class AlignedVideoExporter(QObject):
                 _, err = encode.communicate()
                 raise RuntimeError(err.decode("utf-8", errors="ignore")
                                    or "ffmpeg encode failed")
-            logger.info(f"Aligned export complete: {self._output_path}")
+            logger.info(f"Export complete: {self._output_path}")
             self.finished.emit(self._output_path)
         except Exception as e:
             logger.error(f"Aligned export failed: {e}", exc_info=True)

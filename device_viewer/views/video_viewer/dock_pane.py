@@ -4,8 +4,9 @@ Plays the raw recordings the native recorder writes, with a
 Device-Aligned toggle that reconstructs the perspective-warped view from
 the recording's ``.transform.json`` sidecar — the same alignment the live
 device view showed while recording. Regions of interest can be keyframed
-over playback time (Edit Region mode) and the aligned + cropped
-rendition exported to a file next to the recording.
+over playback time (Edit Region mode) in EITHER view — raw or aligned,
+sidecar or not — and the matching rendition (aligned and/or cropped)
+exported to a file next to the recording.
 """
 import json
 from pathlib import Path
@@ -84,18 +85,19 @@ class VideoViewerDockPane(TraitsDockPane):
             UItem("roi_edit_mode", editor=IconToggleEditor(
                 on_glyph=ICON_CROP, off_glyph=ICON_CROP,
                 tooltip="Edit the region of interest: drag on the video "
-                        "to set the region at the current time"),
-                enabled_when="aligned"),
+                        "to set the region at the current time (works in "
+                        "the raw and the device-aligned view)"),
+                enabled_when="current_path"),
             UItem("pane.clear_roi_button", editor=IconButtonEditor(
                 glyph=ICON_DELETE,
                 tooltip="Clear all region-of-interest keyframes"),
                 enabled_when="roi_keyframes"),
             UItem("pane.export_button", editor=IconButtonEditor(
                 glyph=ICON_SAVE,
-                tooltip="Save the device-aligned (and region-cropped) "
-                        "video next to the recording"),
-                enabled_when="has_transform and current_path "
-                             "and not exporting"),
+                tooltip="Save the current rendition (device-aligned "
+                        "and/or region-cropped) next to the recording"),
+                enabled_when="current_path and not exporting "
+                             "and (aligned or roi_keyframes)"),
             Readonly("export_status", show_label=False),
         ),
         Item("selected_video", label="Recording",
@@ -185,15 +187,24 @@ class VideoViewerDockPane(TraitsDockPane):
 
     def _load_roi_sidecar(self, video_path):
         roi_path = Path(video_path).with_suffix(ROI_SIDECAR_SUFFIX)
-        keyframes = []
+        keyframes, roi_aligned = [], True
         if roi_path.is_file():
             try:
+                data = json.loads(roi_path.read_text())
+                if isinstance(data, dict):
+                    roi_aligned = bool(data.get("aligned", True))
+                    raw_keyframes = data.get("keyframes", [])
+                else:
+                    # Legacy bare-list sidecar: regions were always drawn
+                    # in the aligned view back then.
+                    raw_keyframes = data
                 keyframes = [(int(ms), tuple(region))
-                             for ms, region in json.loads(roi_path.read_text())]
+                             for ms, region in raw_keyframes]
             except Exception as e:
                 logger.warning(f"Unreadable ROI sidecar {roi_path}: {e}")
         self._loading_roi = True
         try:
+            self.model.roi_aligned = roi_aligned
             self.model.roi_keyframes = keyframes
         finally:
             self._loading_roi = False
@@ -205,9 +216,11 @@ class VideoViewerDockPane(TraitsDockPane):
         roi_path = Path(self.model.current_path).with_suffix(ROI_SIDECAR_SUFFIX)
         try:
             if self.model.roi_keyframes:
-                roi_path.write_text(json.dumps(
-                    [[ms, list(region)]
-                     for ms, region in self.model.roi_keyframes]))
+                roi_path.write_text(json.dumps({
+                    "aligned": self.model.roi_aligned,
+                    "keyframes": [[ms, list(region)]
+                                  for ms, region in self.model.roi_keyframes],
+                }))
             elif roi_path.is_file():
                 roi_path.unlink()
         except Exception as e:
@@ -232,17 +245,25 @@ class VideoViewerDockPane(TraitsDockPane):
         model = self.model
         if model.exporting or not model.current_path:
             return
-        sidecar_path = Path(model.current_path).with_suffix(
-            RECORDING_TRANSFORM_SIDECAR_SUFFIX)
-        try:
-            sidecar = json.loads(sidecar_path.read_text())
-        except Exception as e:
-            model.export_status = f"No usable transform sidecar: {e}"
-            return
+        # The regions' space decides the rendition (they only make sense in
+        # the view they were drawn in); with no regions, export whatever
+        # view is displayed.
+        export_aligned = (model.roi_aligned if model.roi_keyframes
+                          else model.aligned)
+        sidecar = None
+        if export_aligned:
+            sidecar_path = Path(model.current_path).with_suffix(
+                RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+            try:
+                sidecar = json.loads(sidecar_path.read_text())
+            except Exception as e:
+                model.export_status = f"No usable transform sidecar: {e}"
+                return
         model.exporting = True
         model.export_status = "Exporting…"
         self._exporter = AlignedVideoExporter(
-            model.current_path, sidecar, list(model.roi_keyframes))
+            model.current_path, sidecar, list(model.roi_keyframes),
+            aligned=export_aligned)
         # Exporter signals fire on its worker thread; marshal every trait
         # write back onto the GUI thread.
         self._exporter.progress.connect(
