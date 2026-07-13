@@ -1238,7 +1238,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     def model_change_handler_with_timeout(self, event=None):
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
-            if not self.model.editable:
+            # The not-editable revert protects STEP state (electrodes,
+            # routes, camera alignment) while a protocol runs. Alphas are
+            # global display preferences, not step state — they stay
+            # adjustable mid-run (like the visibility toggles, which this
+            # handler never observed).
+            if not self.model.editable and not isinstance(event.object,
+                                                          AlphaValue):
                 self.undo()  # Revert changes if not editable
                 return
 
