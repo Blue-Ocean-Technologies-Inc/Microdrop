@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import (
     Signal,
     Slot,
+    QThreadPool,
     QTimer,
 )
 from PySide6.QtGui import QImage
@@ -111,6 +112,10 @@ class CameraControlWidget(QWidget):
         self.available_cameras = None
         self.available_formats = None
         self.show_media_capture_dialog_for_video = True
+        # In-flight ImageSaver workers, referenced so a pool worker (and its
+        # signals QObject) cannot be garbage-collected before its completion
+        # signal is delivered back to the GUI thread.
+        self._pending_image_savers = set()
 
         self.scene.addItem(self.video_item)
         # The session delivers to our own sink at full camera rate; frames
@@ -814,24 +819,35 @@ class CameraControlWidget(QWidget):
 
         # Provider feeds (ASI) supply the unprocessed sensor frame (16-bit):
         # that IS the capture — an 8-bit display grab adds nothing next to
-        # it, so it is skipped.
+        # it, so it is skipped. The frame is snapshotted here, synchronously;
+        # only the PNG encode + disk write are deferred to the thread pool.
         raw_getter = getattr(self._active_feed, "raw_frame", None)
         raw_image = raw_getter() if raw_getter is not None else None
         if raw_image is not None and not raw_image.isNull():
             raw_path = (save_path.parent / RAW_CAPTURES_SUBDIR
                         / f"{save_path.stem}_raw.png")
             raw_path.parent.mkdir(parents=True, exist_ok=True)
-            if raw_image.save(str(raw_path)):
-                _cache_media_capture(MediaType.IMAGE, str(raw_path))
-                media_capture_event_model.captured = str(raw_path)
-                logger.info(f"Raw sensor frame saved: {raw_path}")
+
+            def _on_raw_saved(saved_path):
+                _cache_media_capture(MediaType.IMAGE, saved_path)
+                media_capture_event_model.captured = saved_path
+                logger.info(f"Raw sensor frame saved: {saved_path}")
                 if show_dialog:
                     _show_media_capture_dialog(
-                        MediaType.IMAGE, str(raw_path), self.status_bar_manager)
-                return
-            logger.error(f"Failed to save raw sensor frame: {raw_path}; "
-                         "falling back to a display capture")
+                        MediaType.IMAGE, saved_path, self.status_bar_manager)
 
+            def _on_raw_save_failed(saved_path):
+                logger.error(f"Failed to save raw sensor frame: {saved_path}; "
+                             "falling back to a display capture")
+                self._capture_display_image(save_path, show_dialog)
+
+            self._start_image_saver(
+                raw_image, str(raw_path), _on_raw_saved, _on_raw_save_failed)
+            return
+
+        self._capture_display_image(save_path, show_dialog)
+
+    def _capture_display_image(self, save_path, show_dialog):
         # Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
 
@@ -839,18 +855,37 @@ class CameraControlWidget(QWidget):
             return
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        worker = ImageSaver(image.copy(), str(save_path))
 
-        def _post_image_capture():
-            _cache_media_capture(MediaType.IMAGE, str(save_path))
-            media_capture_event_model.captured = str(save_path)
+        def _post_image_capture(saved_path):
+            _cache_media_capture(MediaType.IMAGE, saved_path)
+            media_capture_event_model.captured = saved_path
             if show_dialog:
-                _show_media_capture_dialog(MediaType.IMAGE, str(save_path), self.status_bar_manager)
+                _show_media_capture_dialog(
+                    MediaType.IMAGE, saved_path, self.status_bar_manager)
 
-        worker.signals.save_complete.connect(_post_image_capture)
+        # get_screen_shot may return the recorder's live current_image, which
+        # the recorder keeps painting into — snapshot it before handing off.
+        self._start_image_saver(image.copy(), str(save_path), _post_image_capture)
 
-        # FIXME: this could be run in a separate thread for more performance if needed. Its a QRunnable...
-        worker.run()
+    def _start_image_saver(self, image, save_path, on_saved, on_failed=None):
+        """Run an ImageSaver on the global thread pool — PNG-encoding a
+        full-resolution frame inline visibly freezes the GUI. The worker is
+        kept referenced until one of its completion signals (delivered queued
+        on the GUI thread) has fired; ``on_saved``/``on_failed`` then run on
+        the GUI thread."""
+        worker = ImageSaver(image, save_path)
+        self._pending_image_savers.add(worker)
+
+        def _finish(saved_path, callback):
+            self._pending_image_savers.discard(worker)
+            if callback is not None:
+                callback(saved_path)
+
+        worker.signals.save_complete.connect(
+            lambda saved_path: _finish(saved_path, on_saved))
+        worker.signals.save_failed.connect(
+            lambda saved_path: _finish(saved_path, on_failed))
+        QThreadPool.globalInstance().start(worker)
 
     def _capture_image_and_close(self, capture_data):
         self._capture_image_routine(capture_data)
