@@ -93,6 +93,47 @@ def remove_dock_pane_live(window, pane_id):
     return pane
 
 
+def restore_saved_task_layout(window, application):
+    """Re-apply the dock-pane layout envisage saved at the last exit.
+
+    Envisage restores the saved layout exactly once, at window creation
+    (``TasksApplication._create_windows``). A dock pane whose plugin is
+    hot-loaded afterwards (the plugin-group launch restore) does not exist at
+    that point, so pyface drops its saved ``PaneItem`` ("Cannot retrieve dock
+    widget for pane") and the pane is later mounted at its default dock area.
+    Calling this after the hot-loaded panes are mounted re-applies the saved
+    layout against the now-complete pane set. Saved panes that no longer exist
+    are still skipped by pyface with a warning; live panes without a saved
+    placement fall back to their default dock area.
+
+    Returns True if a saved layout was found and applied.
+    """
+    if getattr(application, "always_use_default_layout", False):
+        logger.debug(
+            "restore_saved_task_layout: skipped (always_use_default_layout)")
+        return False
+
+    # The envisage TasksApplicationState loaded from the application_memento
+    # pickle — kept on the application for its lifetime, no public accessor.
+    saved_application_state = getattr(application, "_state", None)
+    task = window.active_task
+    if saved_application_state is None or task is None:
+        return False
+
+    saved_task_layout = saved_application_state.get_task_layout(task.id)
+    if saved_task_layout is None:
+        logger.debug(
+            f"restore_saved_task_layout: no saved layout for task '{task.id}'")
+        return False
+
+    # Clone so the live window's subsequent layout mutations cannot corrupt
+    # the state object that gets pickled back at exit.
+    window._window_backend.set_layout(saved_task_layout.clone_traits())
+    logger.info(
+        f"restore_saved_task_layout: re-applied saved layout for task '{task.id}'")
+    return True
+
+
 def rebuild_menu_bar_live(window, task, application):
     """Rebuild a live ``TaskWindow``'s menu bar from the CURRENT started
     plugins' TaskExtension actions.

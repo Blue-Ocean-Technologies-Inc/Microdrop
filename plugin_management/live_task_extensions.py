@@ -23,7 +23,7 @@ neither defer nor coalesce. ``GUI.invoke_later`` is the deferral primitive.)
 """
 
 from pyface.api import GUI
-from traits.api import Any, Bool, Dict, HasTraits, List
+from traits.api import Any, Bool, Dict, HasTraits, List, Property
 
 from microdrop_utils.tasks_runtime_helpers import (
     add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
@@ -52,6 +52,13 @@ class LiveTaskExtensionsController(HasTraits):
     #: True once a reconcile is queued on the UI loop — coalesces a burst of
     #: TASK_EXTENSIONS changes into one reconcile.
     _scheduled = Bool(False)
+
+    has_mounted_panes = Property(Bool)
+
+    def _get_has_mounted_panes(self):
+        """True while at least one dock pane this controller hot-mounted is
+        still mounted (entries are dropped again on unmount)."""
+        return bool(self._pane_id_by_factory)
 
     def on_changed(self, added, removed):
         """Record a TASK_EXTENSIONS delta and schedule one deferred reconcile."""
