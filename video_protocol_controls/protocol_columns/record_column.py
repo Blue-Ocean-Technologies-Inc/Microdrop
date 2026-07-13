@@ -130,7 +130,7 @@ class RecordHandler(BaseColumnHandler):
                 "directory": ctx.protocol.scratch.get(
                     EXPERIMENT_DIR_SCRATCH_KEY, ""),
                 "step_description": row.name,
-                "step_id": row.uuid,
+                "step_id": row.dotted_path(),
                 "show_dialog": False,
             }
             publish_message(
