@@ -236,15 +236,15 @@ class ProtocolTreePane(QWidget):
         tree's own bare-arrow navigation and Space checkbox toggle; Esc is
         deliberately left to the tree's clear-selection (#519)."""
         nb = self.navigation_bar
-        # (key sequence, button, tooltip verb). Play/Pause/Resume is special
-        # — the visible one of play/resume is clicked (see _activate_play).
+        # Play/Pause/Resume is special — the visible one of play/resume is
+        # clicked (see _activate_play).
         bindings = [
-            ("Ctrl+Left", nb.btn_prev),
-            ("Ctrl+Right", nb.btn_next),
-            ("Ctrl+Home", nb.btn_first),
-            ("Ctrl+End", nb.btn_last),
-            ("Ctrl+Shift+Left", nb.btn_prev_phase),
-            ("Ctrl+Shift+Right", nb.btn_next_phase),
+            ("W", nb.btn_prev),
+            ("S", nb.btn_next),
+            ("A", nb.btn_first),
+            ("D", nb.btn_last),
+            ("Ctrl+Left", nb.btn_prev_phase),
+            ("Ctrl+Right", nb.btn_next_phase),
             ("Ctrl+.", nb.btn_stop),
         ]
         self._nav_shortcuts = []   # keep refs (PySide6 GCs stray QShortcuts)
