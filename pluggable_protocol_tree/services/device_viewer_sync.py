@@ -50,8 +50,10 @@ from microdrop_application.menus import is_advanced_mode
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
-    PROTOCOL_TREE_DISPLAY_STATE, SYNC_LISTENER_NAME,
+    PROTOCOL_TREE_DISPLAY_STATE, PROTOCOL_TREE_SET_CELL, SYNC_LISTENER_NAME,
+    protocol_tree_row_selected_publisher,
 )
+from pluggable_protocol_tree.models.cell_sync import ProtocolTreeSetCellMessage
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
@@ -166,6 +168,7 @@ class DeviceViewerSyncController(HasTraits):
     _dv_state_changed_event       = Event(Str)
     _protocol_running_changed_event = Event(Bool)
     _step_params_committed_event  = Event(Str)
+    _set_cell_request_event       = Event(Str)
 
     def _advanced_mode_default(self):
         return bool(is_advanced_mode())
@@ -217,24 +220,27 @@ class DeviceViewerSyncController(HasTraits):
 
     @observe("row_manager:cell_changed")
     def _republish_on_param_cell_change(self, event):
-        """Tree-originated edits to an execution-param cell on the selected
-        step republish display state so the DV sidebar reloads + rebaselines
-        - protocol values supersede whatever the sidebar holds. DV-originated
-        writes (the commit handler) suppress this and publish once at the
-        end instead."""
-        if event.new.get("col_id") not in DV_EXECUTION_PARAM_COL_IDS:
-            return
+        """Cell edits on the selected step rebroadcast row_selected so
+        column-owning panes tracking the selection stay current (e.g. the
+        fluorescence cell checked/unchecked mid-selection). Edits to an
+        execution-param cell additionally republish display state so the
+        DV sidebar reloads + rebaselines - protocol values supersede
+        whatever the sidebar holds. DV-originated writes (the commit
+        handler) suppress this and publish once at the end instead."""
         if self._suppress_publish or not self._last_selected_uuid:
-            return
-        if self._free_mode_stash is not None:
-            # Never let a cell edit trigger the leave-free-mode prompt
-            # inside _publish_for_row; the next selection change handles it.
             return
         try:
             row = self.row_manager.get_row(tuple(event.new["path"]))
         except (IndexError, AttributeError):
             return
         if isinstance(row, GroupRow) or row.uuid != self._last_selected_uuid:
+            return
+        self._publish_row_selected(row)
+        if event.new.get("col_id") not in DV_EXECUTION_PARAM_COL_IDS:
+            return
+        if self._free_mode_stash is not None:
+            # Never let a cell edit trigger the leave-free-mode prompt
+            # inside _publish_for_row; the next selection change handles it.
             return
         self._publish_for_row(row)
 
@@ -289,6 +295,8 @@ class DeviceViewerSyncController(HasTraits):
             self._protocol_running_changed_event = (message.casefold() == "true")
         elif topic == STEP_PARAMS_COMMIT:
             self._step_params_committed_event = message
+        elif topic == PROTOCOL_TREE_SET_CELL:
+            self._set_cell_request_event = message
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = True
         elif topic == ADVANCED_MODE_CHANGE:
@@ -438,6 +446,62 @@ class DeviceViewerSyncController(HasTraits):
         if row.uuid == self._last_selected_uuid:
             self._publish_for_row(row)
 
+    @observe("_set_cell_request_event", dispatch="ui")
+    def _on_set_cell_request(self, event) -> None:
+        """PROTOCOL_TREE_SET_CELL: a column-owning pane writes one value
+        into the step that owns it (e.g. the fluorescence pane's
+        live-tracking write-back). dispatch="ui" — it mutates rows.
+        Ignored during a run: the executor owns the rows then, and pane
+        edits are display-only."""
+        try:
+            set_cell_msg = ProtocolTreeSetCellMessage.deserialize(event.new)
+        except Exception as e:
+            logger.warning(f"failed to parse set-cell request: {e}")
+            return
+        if self._protocol_running:
+            logger.info(
+                f"set-cell for {set_cell_msg.col_id!r} ignored during a run")
+            return
+        row = self.row_manager.get_row_by_uuid(set_cell_msg.step_id)
+        if row is None or isinstance(row, GroupRow):
+            logger.warning(
+                f"set-cell for unknown step {set_cell_msg.step_id!r} dropped")
+            return
+        try:
+            column = self.row_manager._column_by_id(set_cell_msg.col_id)
+        except KeyError:
+            logger.warning(
+                f"set-cell for unknown column {set_cell_msg.col_id!r} dropped")
+            return
+        value = column.model.deserialize(set_cell_msg.value)
+        current = column.model.get_value(row)
+        if set_cell_msg.only_if_set and current is None:
+            return
+        if current == value:
+            return
+        # set_value fires cell_changed, so the edit flows through the same
+        # dirty tracking + rebroadcast path as a manual cell edit.
+        self.row_manager.set_value(tuple(row.path), set_cell_msg.col_id, value)
+        logger.info(f"set-cell applied to Step {row.dotted_path()} "
+                    f"column {set_cell_msg.col_id!r}")
+
+    def _publish_row_selected(self, row) -> None:
+        """Broadcast PROTOCOL_TREE_ROW_SELECTED: the selected step's uuid
+        plus every column's serialized value (step_id None for free mode /
+        group selection). Column-owning panes (fluorescence) live-track
+        the selected step through this without reaching into the tree."""
+        if row is None:
+            protocol_tree_row_selected_publisher.publish(step_id=None,
+                                                         cells={})
+            return
+        cells = {
+            column.model.col_id:
+                column.model.serialize(column.model.get_value(row))
+            for column in self.row_manager.columns
+        }
+        protocol_tree_row_selected_publisher.publish(step_id=row.uuid,
+                                                     cells=cells)
+
     def _publish_for_row(self, row) -> None:
         """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
         free-mode payload if row is None / a group). Gated only on the
@@ -508,6 +572,8 @@ class DeviceViewerSyncController(HasTraits):
             topic=PROTOCOL_TREE_DISPLAY_STATE,
             message=msg.serialize(),
         )
+        self._publish_row_selected(
+            None if row is None or isinstance(row, GroupRow) else row)
 
     def _insert_free_mode_as_new_step(self) -> None:
         """Reentrancy-guarded RowManager.add_step for the free-mode capture.
