@@ -53,18 +53,25 @@ class QuickActionBar(QWidget):
 
 
 class QuickActionsController:
-    """Wires a QuickActionBar to a ProtocolTreePane.
+    """Wires a QuickActionBar to the protocol dock pane.
 
-    Listens for ``pane.selection_changed`` / ``pane.protocol_running_changed``
-    and keeps ``button.setEnabled(...)`` in sync with each action's
-    ``is_enabled(ctx)``. Routes clicks through ``_execute(action)`` so
-    a buggy contribution can't crash the bar. Builds a fresh ctx on
-    every call — never caches.
+    Takes the ``PluggableProtocolDockPane`` (the composition root) and
+    reaches its tree pane via ``dock_pane._pane`` for the selection /
+    running signals, ``manager.selection``, and the shortcut parent.
+    Every ctx it builds carries the dock pane, so actions can reach both
+    the tree pane (``ctx.pane``) and dock-level state such as the logging
+    controller (``ctx.dock_pane.logging_controller``).
+
+    Keeps ``button.setEnabled(...)`` in sync with each action's
+    ``is_enabled(ctx)`` on ``selection_changed`` / ``protocol_running_changed``.
+    Routes clicks through ``_execute(action)`` so a buggy contribution
+    can't crash the bar. Builds a fresh ctx on every call — never caches.
     """
 
-    def __init__(self, *, bar: QuickActionBar, pane, actions):
+    def __init__(self, *, bar: QuickActionBar, dock_pane, actions):
         self._bar = bar
-        self._pane = pane
+        self._dock_pane = dock_pane
+        self._pane = dock_pane._pane
         self._actions = list(actions)
         self._is_running = False
         # Wire button clicks. Only wire the first action per action_id —
@@ -81,16 +88,16 @@ class QuickActionsController:
             _wired_ids.add(action.action_id)
             btn = bar.buttons[action.action_id]
             btn.clicked.connect(lambda _checked=False, a=action: self._execute(a))
-        # Wire pane signals (drives re-enable + running state).
-        pane.selection_changed.connect(self.refresh_enabled)
-        pane.protocol_running_changed.connect(self._on_running_changed)
+        # Wire tree-pane signals (drives re-enable + running state).
+        self._pane.selection_changed.connect(self.refresh_enabled)
+        self._pane.protocol_running_changed.connect(self._on_running_changed)
         self.shortcuts = []
         self._wire_shortcuts()
         self.refresh_enabled()
 
     def _build_ctx(self) -> QuickActionCtx:
         sel = tuple(tuple(p) for p in (self._pane.manager.selection or []))
-        return QuickActionCtx(pane=self._pane,
+        return QuickActionCtx(dock_pane=self._dock_pane,
                               selected_paths=sel,
                               is_running=self._is_running)
 

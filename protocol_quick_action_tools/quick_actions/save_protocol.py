@@ -19,4 +19,5 @@ def make_save_protocol_action() -> _SaveProtocolAction:
         icon_text="save",
         tooltip="Save Protocol",
         priority=60,
+        shortcut="Ctrl+S"
     )

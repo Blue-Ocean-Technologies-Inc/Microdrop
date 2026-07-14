@@ -6,7 +6,7 @@ the trait set and default ``is_enabled`` for free) or write a fresh
 """
 
 from traits.api import (
-    Any, Bool, HasStrictTraits, Tuple, provides,
+    Any, Bool, HasStrictTraits, Property, Tuple, provides,
 )
 
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
@@ -42,13 +42,25 @@ class BaseQuickAction(IQuickAction):
 class QuickActionCtx(HasStrictTraits):
     """Value object handed to every action callback.
 
-    Built fresh by the controller on each click / refresh — never
-    cached on the action. ``pane`` is the live ``ProtocolTreePane``
-    (so contributions can reach ``pane.manager``, ``pane.widget.tree``,
-    ``pane.application``, ``pane.experiment_manager``, etc.).
+    Built fresh by the controller on each click / refresh — never cached
+    on the action. ``dock_pane`` is the live ``PluggableProtocolDockPane``
+    — the composition root that owns run control and the logging
+    controller. The tree pane (``pane`` methods, selection, widgets) is
+    reached through it via the ``pane`` convenience property
+    (``dock_pane._pane``). Typed lazily by qualified name to avoid a
+    models -> views import cycle; None in demo / headless contexts that
+    mount the tree pane without a dock pane.
     """
-    pane = Any
+    #: The live ``PluggableProtocolDockPane``. Typed ``Any`` (not
+    #: ``Instance``) to avoid a models -> views import cycle and to keep
+    #: duck-typed test stand-ins usable.
+    dock_pane = Any
+    #: The ProtocolTreePane owned by the dock pane, or None.
+    pane = Property()
     selected_paths = Tuple(
         desc="Tuple of 0-indexed path tuples (matching RowManager.selection) "
              "currently highlighted in the tree.")
     is_running = Bool(False)
+
+    def _get_pane(self):
+        return getattr(self.dock_pane, "_pane", None)

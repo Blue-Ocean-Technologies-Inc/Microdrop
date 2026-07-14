@@ -19,4 +19,5 @@ def make_new_protocol_action() -> _NewProtocolAction:
         icon_text="new_window",
         tooltip="New protocol",
         priority=70,
+        shortcut="Ctrl+N"
     )

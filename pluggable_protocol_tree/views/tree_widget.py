@@ -1,6 +1,8 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
+from contextlib import contextmanager
+
 from pyface.qt.QtCore import (
     Qt, QItemSelectionModel, QModelIndex, Signal,
 )
@@ -38,9 +40,23 @@ class _ProtocolTreeView(QTreeView):
 
     delete_pressed = Signal()
 
+    def _clear_to_free_mode(self):
+        """Drop the selection AND the current index. The invalid current
+        index flows through currentChanged -> the DV sync controller's
+        _publish_for_row(None), returning the device viewer to free mode."""
+        self.clearSelection()
+        self.setCurrentIndex(QModelIndex())
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete:
             self.delete_pressed.emit()
+            event.accept()
+            return
+        # Escape deselects the current step -> free mode. A delegate editor,
+        # when open, has focus and consumes Escape itself (cancels the edit),
+        # so the view only sees it once no cell is being edited.
+        if event.key() == Qt.Key_Escape and self.currentIndex().isValid():
+            self._clear_to_free_mode()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -49,8 +65,7 @@ class _ProtocolTreeView(QTreeView):
         if event.button() == Qt.LeftButton:
             idx = self.indexAt(event.position().toPoint())
             if not idx.isValid():
-                self.clearSelection()
-                self.setCurrentIndex(QModelIndex())
+                self._clear_to_free_mode()
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -164,6 +179,20 @@ class ProtocolTreeWidget(QWidget):
 
     # --- active-row highlight + scroll (called by the executor wiring) ---
 
+    @contextmanager
+    def _keep_horizontal_scroll(self):
+        """Preserve the tree's horizontal scroll position across a step
+        switch. Both ``scrollTo`` and ``setCurrentIndex`` (which auto-scrolls
+        to the current index) otherwise snap the view back to the first
+        column; the user working scrolled-right expects only vertical
+        tracking to the active step (#516)."""
+        hbar = self.tree.horizontalScrollBar()
+        saved = hbar.value()
+        try:
+            yield
+        finally:
+            hbar.setValue(saved)
+
     def highlight_active_row(self, node):
         """Mark `node` as the currently-active step and scroll to it.
 
@@ -174,7 +203,8 @@ class ProtocolTreeWidget(QWidget):
             return
         idx = self._node_to_index(node)
         if idx.isValid():
-            self.tree.scrollTo(idx, QTreeView.PositionAtCenter)
+            with self._keep_horizontal_scroll():
+                self.tree.scrollTo(idx, QTreeView.PositionAtCenter)
             self._expand_ancestors(idx)
 
     def set_current_row(self, row):
@@ -185,8 +215,9 @@ class ProtocolTreeWidget(QWidget):
         if not idx.isValid():
             return
         self._expand_ancestors(idx)
-        self.tree.setCurrentIndex(idx)
-        self.tree.scrollTo(idx)
+        with self._keep_horizontal_scroll():
+            self.tree.setCurrentIndex(idx)
+            self.tree.scrollTo(idx)
 
     def set_editable(self, editable: bool, structural: bool = None):
         """Lock/unlock cell editing and (separately) the structural context
