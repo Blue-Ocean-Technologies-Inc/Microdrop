@@ -611,9 +611,9 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
 
 
 def test_select_step_does_not_suppress_sync_publish(qapp):
-    """Nav buttons (next/prev/first/last) call _select_step. The user
+    """Nav buttons (next/prev/first/last) call select_row. The user
     expects the DV to update on those clicks just as on a direct row
-    click, so _select_step must NOT suppress the sync controller."""
+    click, so select_row must NOT suppress the sync controller."""
     from unittest.mock import MagicMock
     from pluggable_protocol_tree.views.protocol_tree_pane import (
         ProtocolTreePane,
@@ -633,7 +633,7 @@ def test_select_step_does_not_suppress_sync_publish(qapp):
         seen_states.append(sync._suppress_publish)
         return original(idx)
     pane.widget.tree.setCurrentIndex = capturing
-    pane._select_step(row)
+    pane.select_row(row)
 
     assert seen_states == [False]
     assert sync._suppress_publish is False
@@ -675,7 +675,7 @@ def test_delete_selection_picks_alternative_step(qapp):
     pane.manager.add_step(values={"name": "S3"})
 
     # Select S2, then delete it.
-    pane._select_step(pane.manager.get_row((1,)))
+    pane.select_row(pane.manager.get_row((1,)))
     pane.manager.select([(1,)], mode="set")
     pane.widget._delete_selection()
 
@@ -696,12 +696,37 @@ def test_delete_all_steps_goes_to_free_mode(qapp):
     )
     pane = ProtocolTreePane([make_name_column()])
     pane.manager.add_step(values={"name": "S1"})
-    pane._select_step(pane.manager.get_row((0,)))
+    pane.select_row(pane.manager.get_row((0,)))
     pane.manager.select([(0,)], mode="set")
     pane.widget._delete_selection()
 
     assert len(pane.manager.root.children) == 0
     assert not pane.widget.tree.currentIndex().isValid()
+
+
+def test_escape_clears_selection_to_free_mode(qapp):
+    """Escape on the tree deselects the current step (clears selection AND
+    current index) so the device viewer returns to free mode."""
+    from pyface.qt.QtCore import Qt
+    from pyface.qt.QtGui import QKeyEvent
+    from pyface.qt.QtCore import QEvent
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    pane = ProtocolTreePane([make_name_column()])
+    pane.manager.add_step(values={"name": "S1"})
+    pane.select_row(pane.manager.get_row((0,)))
+    assert pane.widget.tree.currentIndex().isValid()
+
+    press = QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
+    pane.widget.tree.keyPressEvent(press)
+
+    assert not pane.widget.tree.currentIndex().isValid()
+    assert not pane.widget.tree.selectionModel().hasSelection()
+    assert press.isAccepted()
 
 
 def test_clear_highlights_suppresses_sync_publish(qapp):

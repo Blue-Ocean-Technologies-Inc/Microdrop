@@ -38,9 +38,23 @@ class _ProtocolTreeView(QTreeView):
 
     delete_pressed = Signal()
 
+    def _clear_to_free_mode(self):
+        """Drop the selection AND the current index. The invalid current
+        index flows through currentChanged -> the DV sync controller's
+        _publish_for_row(None), returning the device viewer to free mode."""
+        self.clearSelection()
+        self.setCurrentIndex(QModelIndex())
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete:
             self.delete_pressed.emit()
+            event.accept()
+            return
+        # Escape deselects the current step -> free mode. A delegate editor,
+        # when open, has focus and consumes Escape itself (cancels the edit),
+        # so the view only sees it once no cell is being edited.
+        if event.key() == Qt.Key_Escape and self.currentIndex().isValid():
+            self._clear_to_free_mode()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -49,8 +63,7 @@ class _ProtocolTreeView(QTreeView):
         if event.button() == Qt.LeftButton:
             idx = self.indexAt(event.position().toPoint())
             if not idx.isValid():
-                self.clearSelection()
-                self.setCurrentIndex(QModelIndex())
+                self._clear_to_free_mode()
                 event.accept()
                 return
         super().mousePressEvent(event)
