@@ -41,7 +41,14 @@ def add_dock_pane_live(window, task, factory, area=None):
     pane.task = task
     pane.create(main_window)
 
-    main_window.addDockWidget(AREA_MAP[area or pane.dock_area], pane.control)
+    dock_area = AREA_MAP[area or pane.dock_area]
+    main_window.addDockWidget(dock_area, pane.control)
+    # Tab the pane behind whatever is already docked in this area instead of
+    # stacking under it: stacking several panes in one area overflows it and
+    # produces a layout the user could never build by hand (Qt refuses such a
+    # manual drop, but a programmatic add does not — #527). Tabs share the
+    # area, so it never overflows.
+    tabify_dock_pane_in_area(main_window, state.dock_panes, pane, dock_area)
     pane.visible = True
     pane.control.show()
 
@@ -63,6 +70,27 @@ def add_dock_pane_live(window, task, factory, area=None):
 
     logger.info(f"add_dock_pane_live: mounted dock pane '{pane.id}'")
     return pane
+
+
+def tabify_dock_pane_in_area(main_window, existing_panes, new_pane, dock_area):
+    """Tab ``new_pane`` behind the first non-floating pane already docked in
+    ``dock_area`` so several panes in one area share it as tabs instead of
+    stacking (which overflows the area — #527). No-op when the area is empty
+    (the pane keeps its normal docked position). Returns the pane it tabbed
+    behind, or None."""
+    new_control = getattr(new_pane, "control", None)
+    if new_control is None:
+        return None
+    for existing in existing_panes:
+        control = getattr(existing, "control", None)
+        if control is None or control is new_control:
+            continue
+        if control.isFloating():
+            continue
+        if main_window.dockWidgetArea(control) == dock_area:
+            main_window.tabifyDockWidget(control, new_control)
+            return existing
+    return None
 
 
 def remove_dock_pane_live(window, pane_id):
