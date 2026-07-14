@@ -19,4 +19,5 @@ def make_open_protocol_action() -> _OpenProtocolAction:
         icon_text="file_open",
         tooltip="Open Protocol",
         priority=50,
+        shortcut="Ctrl+O"
     )

@@ -19,4 +19,5 @@ def make_add_group_action() -> _AddGroupAction:
         icon_text="playlist_add",
         tooltip="Add group",
         priority=30,
+        shortcut="Ctrl+Shift+G",
     )

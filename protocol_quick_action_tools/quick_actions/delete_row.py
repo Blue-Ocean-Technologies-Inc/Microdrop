@@ -19,4 +19,5 @@ def make_delete_row_action() -> _DeleteRowAction:
         icon_text="delete",
         tooltip="Delete last step",
         priority=20,
+        shortcut="Ctrl+Backspace"
     )

@@ -31,7 +31,7 @@ def make_browse_reports_action() -> _BrowseReportsAction:
     return _BrowseReportsAction(
         action_id=ACTION_BROWSE_REPORTS,
         icon_text="summarize",
-        tooltip="Browse session reports (R)",
+        tooltip="Browse session reports",
         priority=80,
         shortcut="R",
     )
