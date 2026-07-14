@@ -85,6 +85,10 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
             row, self.compound_model, self.field_id, value,
         )
 
+    def on_pre_protocol_start(self, ctx):
+        if self.is_owner:
+            self.compound_handler.on_pre_protocol_start(ctx)
+
     def on_protocol_start(self, ctx):
         if self.is_owner:
             self.compound_handler.on_protocol_start(ctx)
@@ -104,6 +108,10 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     def on_protocol_end(self, ctx):
         if self.is_owner:
             self.compound_handler.on_protocol_end(ctx)
+
+    def on_post_protocol_end(self, ctx):
+        if self.is_owner:
+            self.compound_handler.on_post_protocol_end(ctx)
 
 
 from .column import Column  # noqa: E402 — after class definitions to avoid circular
