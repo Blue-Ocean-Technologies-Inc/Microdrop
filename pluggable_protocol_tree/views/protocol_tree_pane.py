@@ -56,9 +56,7 @@ from pluggable_protocol_tree.views.navigation_bar import (
     NavigationBar, StatusBar, make_separator,
 )
 from pluggable_protocol_tree.views.timeline_bar import TimelineBar
-from pluggable_protocol_tree.views.quick_action_bar import (
-    QuickActionBar, QuickActionsController,
-)
+from pluggable_protocol_tree.views.quick_action_bar import QuickActionBar
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 from logger.logger_service import get_logger
@@ -168,19 +166,17 @@ class ProtocolTreePane(QWidget):
         self.timeline_controls = self._build_timeline_controls()
         self._build_experiment_bar()
 
-        # Quick-actions toolbar (bar + controller). Both are None when no
-        # contributions exist (demo / headless test environments) so the
-        # pane stays usable with no chrome below the tree. Constructed
-        # before _build_layout() so it can be inserted in the layout.
+        # Quick-actions toolbar. The BAR is a layout element built here (so
+        # _build_layout can insert it under the tree); its CONTROLLER is
+        # created by the dock pane — the composition root — once it exists,
+        # so the action ctx can carry the dock pane (ctx.dock_pane.*). None
+        # when no contributions exist (demo / headless test environments).
         if quick_actions:
             self.quick_action_bar = QuickActionBar(
                 actions=list(quick_actions), parent=self)
-            self.quick_actions_controller = QuickActionsController(
-                bar=self.quick_action_bar, pane=self,
-                actions=list(quick_actions))
         else:
             self.quick_action_bar = None
-            self.quick_actions_controller = None
+        self.quick_actions_controller = None
 
         self._build_layout()
 
@@ -286,7 +282,10 @@ class ProtocolTreePane(QWidget):
         'Next Step (Ctrl+Right)'."""
         base = btn.toolTip()
         hint = QKeySequence(seq).toString(QKeySequence.NativeText)
-        if base and hint and hint not in base:
+        # Check for the parenthesised form, not a bare substring: a
+        # single-letter hint like "S" is otherwise "found" inside words
+        # like "Step" and the append is wrongly skipped.
+        if base and hint and f"({hint})" not in base:
             btn.setToolTip(f"{base} ({hint})")
 
     def _build_timeline_controls(self):

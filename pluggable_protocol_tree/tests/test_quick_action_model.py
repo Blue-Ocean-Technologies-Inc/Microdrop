@@ -29,20 +29,24 @@ def test_base_quick_action_defaults():
     assert a.is_enabled(ctx=None) is True
 
 
-def test_quick_action_ctx_carries_pane_selection_running():
-    pane = MagicMock()
+def test_quick_action_ctx_carries_dock_pane_selection_running():
+    dock_pane = MagicMock()
     ctx = QuickActionCtx(
-        pane=pane,
+        dock_pane=dock_pane,
         selected_paths=((0,), (1, 2)),
         is_running=True,
     )
-    assert ctx.pane is pane
+    assert ctx.dock_pane is dock_pane
+    # The tree pane is reached through the dock pane.
+    assert ctx.pane is dock_pane._pane
     assert ctx.selected_paths == ((0,), (1, 2))
     assert ctx.is_running is True
 
 
-def test_quick_action_ctx_defaults():
-    ctx = QuickActionCtx(pane=MagicMock())
+def test_quick_action_ctx_pane_is_none_without_dock_pane():
+    ctx = QuickActionCtx()
+    assert ctx.dock_pane is None
+    assert ctx.pane is None
     assert ctx.selected_paths == ()
     assert ctx.is_running is False
 

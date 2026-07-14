@@ -19,15 +19,16 @@ def _shown_pane(qapp):
     return pane
 
 
-def test_ctrl_right_on_focused_tree_clicks_next(qapp):
+def test_nav_shortcut_fires_on_focused_tree(qapp):
     """A nav shortcut fires while the tree (child of the pane) has focus —
-    the whole point of the WidgetWithChildrenShortcut scope."""
+    the whole point of the WidgetWithChildrenShortcut scope. 'S' is Next
+    Step in the current scheme."""
     pane = _shown_pane(qapp)
     fired = []
     pane.navigation_bar.btn_next.clicked.connect(lambda: fired.append(1))
     pane.widget.tree.setFocus()
     qapp.processEvents()
-    QTest.keyClick(pane.widget.tree, Qt.Key_Right, Qt.ControlModifier)
+    QTest.keyClick(pane.widget.tree, Qt.Key_S)
     qapp.processEvents()
     assert fired == [1]
 
@@ -36,8 +37,7 @@ def test_all_nav_shortcuts_installed_with_tooltips(qapp):
     pane = _shown_pane(qapp)
     keys = {s.key().toString() for s in pane._nav_shortcuts}
     assert keys == {
-        "Ctrl+Left", "Ctrl+Right", "Ctrl+Home", "Ctrl+End",
-        "Ctrl+Shift+Left", "Ctrl+Shift+Right", "Ctrl+.", "Ctrl+R",
+        "W", "S", "A", "D", "Ctrl+Left", "Ctrl+Right", "Ctrl+.", "Ctrl+R",
     }
     # Discoverability: the shortcut is surfaced in the tooltip.
     assert "(" in pane.navigation_bar.btn_next.toolTip()
