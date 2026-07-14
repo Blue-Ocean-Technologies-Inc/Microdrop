@@ -167,6 +167,57 @@ class RowManager(HasTraits):
             target.insert_row(target_index + offset, row)
         self.rows_changed = True
 
+    def _normalize_fold_paths(self, paths: List[Path]) -> Optional[List[Path]]:
+        """The subset of ``paths`` that ``fold_into_group`` would wrap:
+        descendants of another selected path dropped (their group folds in
+        whole). Returns the cleaned list, or None when it is empty or spans
+        more than one parent (the v1 single-parent restriction)."""
+        paths = [tuple(p) for p in paths]
+        paths = [p for p in paths
+                 if not any(self._is_ancestor(a, p) for a in paths if a != p)]
+        if not paths:
+            return None
+        parent_path = paths[0][:-1]
+        if any(p[:-1] != parent_path for p in paths):
+            return None
+        return paths
+
+    def can_fold_into_group(self, paths: List[Path]) -> bool:
+        """True when ``fold_into_group(paths)`` would act (>=1 row, all
+        sharing one parent). Drives the context-menu entry's enabled state."""
+        return self._normalize_fold_paths(paths) is not None
+
+    def fold_into_group(self, paths: List[Path],
+                        name: str = "Group") -> Optional[Path]:
+        """Wrap the rows at ``paths`` in a new group at the position of the
+        first selected row, preserving their order, identity (uuids, names,
+        column values), and any group children.
+
+        All paths must share one parent (v1 restriction); returns None
+        otherwise (see ``_normalize_fold_paths``).
+
+        Re-parents the live row objects (like ``move``), NOT a serialize +
+        rebuild, so per-step references — capture recordings, the
+        fluorescence pane's live-tracked step — survive the fold."""
+        normalized = self._normalize_fold_paths(paths)
+        if normalized is None:
+            return None
+        parent_path = normalized[0][:-1]
+        # Collect the row objects (in tree order) BEFORE mutating, and the
+        # anchor position (the first selected row). The objects stay valid
+        # across the group insert, so the shifted indices don't matter.
+        rows = [self.get_row(p) for p in sorted(normalized)]
+        anchor_index = min(p[-1] for p in normalized)
+        parent = self._parent_for_path(parent_path)
+        group = self.group_type(name=name)
+        parent.insert_row(anchor_index, group)
+        for row in rows:
+            if row.parent is not None:
+                row.parent.remove_row(row)
+            group.insert_row(len(group.children), row)
+        self.rows_changed = True
+        return parent_path + (anchor_index,)
+
     # --- selection ---
 
     def select(self, paths: List[Path], mode: str = "set") -> None:
