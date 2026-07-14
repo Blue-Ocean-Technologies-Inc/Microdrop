@@ -20,7 +20,7 @@ from pathlib import Path
 from pyface.qt.QtCore import (
     Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
 )
-from pyface.qt.QtGui import QFont
+from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel,
     QProgressDialog, QToolButton, QVBoxLayout, QWidget,
@@ -163,6 +163,7 @@ class ProtocolTreePane(QWidget):
 
         self._build_status_bar()
         self._build_navigation_bar()
+        self._install_navigation_shortcuts()
         self.timeline_bar = TimelineBar()
         self.timeline_controls = self._build_timeline_controls()
         self._build_experiment_bar()
@@ -222,6 +223,71 @@ class ProtocolTreePane(QWidget):
 
     def _build_navigation_bar(self):
         self.navigation_bar = NavigationBar()
+
+    def _install_navigation_shortcuts(self):
+        """Keyboard shortcuts for the navigation-bar buttons, active whenever
+        the protocol pane (the tree included) has focus (#517).
+
+        Each shortcut fires its button's ``click()``, which is a no-op on a
+        disabled button — so the shortcuts inherit the buttons' run-state
+        enablement and existing wiring without re-deriving handlers. Hidden
+        buttons are skipped too (the phase cluster is hidden outside
+        phase-by-phase mode). Ctrl-modified keys avoid clashing with the
+        tree's own bare-arrow navigation and Space checkbox toggle; Esc is
+        deliberately left to the tree's clear-selection (#519)."""
+        nb = self.navigation_bar
+        # (key sequence, button, tooltip verb). Play/Pause/Resume is special
+        # — the visible one of play/resume is clicked (see _activate_play).
+        bindings = [
+            ("Ctrl+Left", nb.btn_prev),
+            ("Ctrl+Right", nb.btn_next),
+            ("Ctrl+Home", nb.btn_first),
+            ("Ctrl+End", nb.btn_last),
+            ("Ctrl+Shift+Left", nb.btn_prev_phase),
+            ("Ctrl+Shift+Right", nb.btn_next_phase),
+            ("Ctrl+.", nb.btn_stop),
+        ]
+        self._nav_shortcuts = []   # keep refs (PySide6 GCs stray QShortcuts)
+        for seq, btn in bindings:
+            self._add_shortcut(seq, lambda b=btn: self._click_if_active(b))
+            self._append_shortcut_to_tooltip(btn, seq)
+        # Play / Pause / Resume: whichever of play / resume is currently shown.
+        self._add_shortcut("Ctrl+R", self._activate_play)
+        for btn in (nb.btn_play, nb.btn_resume):
+            self._append_shortcut_to_tooltip(btn, "Ctrl+R")
+
+    def _add_shortcut(self, seq, slot):
+        sc = QShortcut(QKeySequence(seq), self)
+        sc.setContext(Qt.WidgetWithChildrenShortcut)
+        sc.activated.connect(slot)
+        self._nav_shortcuts.append(sc)
+
+    def _activate_play(self):
+        """Trigger the visible play-or-resume control (btn_play in normal
+        mode, btn_resume in phase-by-phase mode)."""
+        nb = self.navigation_bar
+        for btn in (nb.btn_resume, nb.btn_play):
+            if self._click_if_active(btn):
+                return
+
+    @staticmethod
+    def _click_if_active(btn) -> bool:
+        """Click ``btn`` only when it is visible and enabled; returns whether
+        it was clicked. Visibility matters because the phase cluster stays in
+        the layout (hidden) outside phase mode."""
+        if btn.isVisible() and btn.isEnabled():
+            btn.click()
+            return True
+        return False
+
+    @staticmethod
+    def _append_shortcut_to_tooltip(btn, seq):
+        """Surface the shortcut in the button's tooltip, e.g.
+        'Next Step (Ctrl+Right)'."""
+        base = btn.toolTip()
+        hint = QKeySequence(seq).toString(QKeySequence.NativeText)
+        if base and hint and hint not in base:
+            btn.setToolTip(f"{base} ({hint})")
 
     def _build_timeline_controls(self):
         """Step-rep and phase-rep selectors (side by side) + a 'show full
