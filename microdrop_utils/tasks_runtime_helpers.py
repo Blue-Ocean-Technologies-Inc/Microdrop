@@ -24,9 +24,12 @@ def add_dock_pane_live(window, task, factory, area=None):
     """Create ``factory`` and dock it onto the live ``window`` at runtime.
 
     Mirrors ``TaskWindowBackend._layout_state``: create the QDockWidget,
-    ``addDockWidget`` it onto the QMainWindow (``window.control``), show it,
-    and register it in both the active ``TaskState`` and the window so
-    ``window.get_dock_pane(id)`` and the View-menu toggle group see it.
+    ``addDockWidget`` it onto the QMainWindow (``window.control``), and
+    register it in both the active ``TaskState`` and the window so
+    ``window.get_dock_pane(id)`` and the View-menu toggle group see it. The
+    pane is NOT force-shown — it keeps its own ``visible`` state / the
+    restored saved layout — so a plugin group contributing several panes
+    doesn't crowd the window (which was clipping the status bar, #520).
 
     ``area`` overrides the pane's own ``dock_area`` ('left'/'right'/'top'/
     'bottom'); pass None to honour the pane default. Returns the pane.
@@ -42,8 +45,6 @@ def add_dock_pane_live(window, task, factory, area=None):
     pane.create(main_window)
 
     main_window.addDockWidget(AREA_MAP[area or pane.dock_area], pane.control)
-    pane.visible = True
-    pane.control.show()
 
     state.dock_panes = state.dock_panes + [pane]
     window.dock_panes = state.dock_panes
