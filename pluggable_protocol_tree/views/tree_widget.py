@@ -255,6 +255,9 @@ class ProtocolTreeWidget(QWidget):
         menu = QMenu()
         menu.addAction("Add Step", lambda: self._add_step_at(idx))
         menu.addAction("Add Group", lambda: self._add_group_at(idx))
+        fold = menu.addAction("Fold into Group", self._fold_into_group)
+        fold.setEnabled(
+            self._manager.can_fold_into_group(self._manager.selection))
         menu.addSeparator()
         menu.addAction("Copy", self._copy)
         menu.addAction("Cut", self._cut)
@@ -366,6 +369,26 @@ class ProtocolTreeWidget(QWidget):
     def _add_group_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
         self._manager.add_group(parent_path=parent_path)
+
+    def _fold_into_group(self):
+        """Wrap the selected rows in a new group at the first row's
+        position (#518), then select the new group so the user can rename
+        it (F2 / double-click) and subsequent actions target it."""
+        try:
+            group_path = self._manager.fold_into_group(
+                [tuple(p) for p in self._manager.selection])
+            if group_path is None:
+                return
+            idx = self._node_to_index(self._manager.get_row(group_path))
+            if idx.isValid():
+                self._expand_ancestors(idx)
+                self.tree.selectionModel().setCurrentIndex(
+                    idx,
+                    (QItemSelectionModel.SelectionFlag.ClearAndSelect
+                     | QItemSelectionModel.SelectionFlag.Rows),
+                )
+        except Exception:
+            logger.exception("Fold into group failed")
 
     def _parent_path_for_anchor(self, idx):
         """If anchored on a group --> insert inside. On a step --> insert as

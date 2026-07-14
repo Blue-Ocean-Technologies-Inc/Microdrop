@@ -704,6 +704,31 @@ def test_delete_all_steps_goes_to_free_mode(qapp):
     assert not pane.widget.tree.currentIndex().isValid()
 
 
+def test_fold_into_group_wraps_selection_and_selects_group(qapp):
+    """The tree widget's Fold into Group action folds the manager's
+    selection into a new group and makes that group the current row (#518)."""
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+    from pluggable_protocol_tree.builtins.name_column import (
+        make_name_column,
+    )
+    from pluggable_protocol_tree.models.row import GroupRow
+    pane = ProtocolTreePane([make_name_column()])
+    for n in ["A", "B", "C"]:
+        pane.manager.add_step(values={"name": n})
+    pane.manager.select([(1,), (2,)], mode="set")
+
+    pane.widget._fold_into_group()
+
+    assert [r.name for r in pane.manager.root.children] == ["A", "Group"]
+    group = pane.manager.get_row((1,))
+    assert isinstance(group, GroupRow)
+    assert [r.name for r in group.children] == ["B", "C"]
+    # The new group is current so the user can rename it / act on it.
+    assert pane.widget.index_to_path(pane.widget.tree.currentIndex()) == (1,)
+
+
 def test_clear_highlights_suppresses_sync_publish(qapp):
     """clear_highlights also moves selection programmatically; same
     guard requirement."""

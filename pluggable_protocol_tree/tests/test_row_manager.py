@@ -106,6 +106,64 @@ def test_move_reparents_into_group(manager):
     assert new_group.children[0].name == "S"
 
 
+# --- fold into group (#518) ---
+
+def _names(rows):
+    return [r.name for r in rows]
+
+
+def test_fold_contiguous_wraps_selection_in_new_group(manager):
+    for n in ["A", "B", "C", "D", "E"]:
+        manager.add_step(values={"name": n})
+    group_path = manager.fold_into_group([(1,), (2,), (3,)], name="G")
+    assert group_path == (1,)
+    assert _names(manager.root.children) == ["A", "G", "E"]
+    group = manager.get_row((1,))
+    assert isinstance(group, GroupRow)
+    assert _names(group.children) == ["B", "C", "D"]
+
+
+def test_fold_preserves_row_identity(manager):
+    for n in ["A", "B", "C"]:
+        manager.add_step(values={"name": n})
+    b_uuid = manager.get_row((1,)).uuid
+    manager.fold_into_group([(1,), (2,)])
+    # B is re-parented, not rebuilt: same uuid survives (capture recordings,
+    # fluorescence live-tracking depend on this).
+    assert manager.get_row((1, 0)).uuid == b_uuid
+
+
+def test_fold_non_contiguous_closes_ranks(manager):
+    for n in ["A", "B", "C", "D"]:
+        manager.add_step(values={"name": n})
+    manager.fold_into_group([(0,), (2,)], name="G")
+    assert _names(manager.root.children) == ["G", "B", "D"]
+    assert _names(manager.get_row((0,)).children) == ["A", "C"]
+
+
+def test_fold_includes_selected_group_with_its_children(manager):
+    for n in ["A", "B", "C", "D"]:
+        manager.add_step(values={"name": n})
+    manager.fold_into_group([(1,), (2,)], name="Inner")  # [A, Inner(B,C), D]
+    manager.fold_into_group([(1,), (2,)], name="Outer")  # [A, Outer(Inner,D)]
+    assert _names(manager.root.children) == ["A", "Outer"]
+    outer = manager.get_row((1,))
+    assert _names(outer.children) == ["Inner", "D"]
+    assert _names(manager.get_row((1, 0)).children) == ["B", "C"]
+
+
+def test_fold_rejects_multi_parent_and_empty(manager):
+    for n in ["A", "B", "C"]:
+        manager.add_step(values={"name": n})
+    manager.fold_into_group([(1,), (2,)], name="G")  # [A, G(B,C)]
+    # A is at the root, (1, 0) is inside G — different parents.
+    assert manager.fold_into_group([(0,), (1, 0)]) is None
+    assert manager.fold_into_group([]) is None
+    assert not manager.can_fold_into_group([(0,), (1, 0)])
+    assert not manager.can_fold_into_group([])
+    assert manager.can_fold_into_group([(0,)])
+
+
 # --- selection ---
 
 def test_select_set_replaces_selection(manager):
