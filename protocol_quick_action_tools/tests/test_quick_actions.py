@@ -56,7 +56,10 @@ def _ctx(*, selected_paths=(), is_running=False, group=False,
     else:
         pane.manager.get_row.return_value = MagicMock(spec=[])
     pane.experiment_manager = MagicMock() if experiment_manager else None
-    return QuickActionCtx(pane=pane,
+    # The ctx carries the dock pane; ctx.pane resolves to dock_pane._pane.
+    dock_pane = MagicMock()
+    dock_pane._pane = pane
+    return QuickActionCtx(dock_pane=dock_pane,
                           selected_paths=tuple(selected_paths),
                           is_running=is_running)
 
@@ -68,7 +71,7 @@ def test_add_step_metadata():
     assert a.action_id == ACTION_ADD_STEP
     assert a.icon_text == "add"
     assert a.priority == 10
-    assert a.shortcut == ""
+    assert a.shortcut == "Ctrl+Return"
 
 
 def test_add_step_execute_calls_pane_helper():
@@ -218,11 +221,13 @@ def test_browse_reports_execute_opens_dialog_with_session_paths(monkeypatch):
 
     a = make_browse_reports_action()
     pane = MagicMock()
-    pane.logging_controller.all_report_paths = [
+    dock_pane = MagicMock()
+    dock_pane._pane = pane
+    dock_pane.logging_controller.all_report_paths = [
         Path("/x/y/report_a.html"),
         Path("/x/y/report_b.html"),
     ]
-    ctx = QuickActionCtx(pane=pane, is_running=False)
+    ctx = QuickActionCtx(dock_pane=dock_pane, is_running=False)
     a.on_execute_action(ctx)
 
     assert captured["paths"] == [
@@ -248,8 +253,10 @@ def test_browse_reports_execute_empty_session_opens_empty_dialog(monkeypatch):
 
     a = make_browse_reports_action()
     pane = MagicMock()
-    pane.logging_controller.all_report_paths = []
-    a.on_execute_action(QuickActionCtx(pane=pane, is_running=False))
+    dock_pane = MagicMock()
+    dock_pane._pane = pane
+    dock_pane.logging_controller.all_report_paths = []
+    a.on_execute_action(QuickActionCtx(dock_pane=dock_pane, is_running=False))
 
     assert captured["paths"] == []
 

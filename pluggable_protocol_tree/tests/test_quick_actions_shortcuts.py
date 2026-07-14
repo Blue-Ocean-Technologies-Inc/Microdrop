@@ -24,6 +24,13 @@ class _Pane(QObject):
         self.manager.selection = []
 
 
+class _FakeDockPane:
+    """Stand-in for PluggableProtocolDockPane exposing the tree pane."""
+
+    def __init__(self, pane):
+        self._pane = pane
+
+
 class _Counting(BaseQuickAction):
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -38,7 +45,7 @@ def test_shortcut_registers_widget_scoped_qshortcut(qapp):
                   shortcut="R")
     pane = _Pane()
     bar = QuickActionBar(actions=[a])
-    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a])
+    ctrl = QuickActionsController(bar=bar, dock_pane=_FakeDockPane(pane), actions=[a])
     assert len(ctrl.shortcuts) == 1
     qs = ctrl.shortcuts[0]
     assert qs.key() == QKeySequence("R")
@@ -51,7 +58,7 @@ def test_shortcut_triggers_execute(qapp):
                   shortcut="R")
     pane = _Pane()
     bar = QuickActionBar(actions=[a])
-    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a])
+    ctrl = QuickActionsController(bar=bar, dock_pane=_FakeDockPane(pane), actions=[a])
     ctrl.shortcuts[0].activated.emit()
     assert a.calls == 1
 
@@ -61,7 +68,7 @@ def test_shortcut_is_gated_by_is_running(qapp):
                   shortcut="R")
     pane = _Pane()
     bar = QuickActionBar(actions=[a])
-    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a])
+    ctrl = QuickActionsController(bar=bar, dock_pane=_FakeDockPane(pane), actions=[a])
     pane.protocol_running_changed.emit(True)
     ctrl.shortcuts[0].activated.emit()
     assert a.calls == 0
@@ -71,7 +78,7 @@ def test_no_shortcut_means_no_qshortcut_registered(qapp):
     a = _Counting(action_id="r", icon_text="add", tooltip="", shortcut="")
     pane = _Pane()
     bar = QuickActionBar(actions=[a])
-    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a])
+    ctrl = QuickActionsController(bar=bar, dock_pane=_FakeDockPane(pane), actions=[a])
     assert ctrl.shortcuts == []
 
 
@@ -82,7 +89,7 @@ def test_duplicate_shortcut_skips_second_and_logs_warning(qapp, caplog):
                   shortcut="R")
     pane = _Pane()
     bar = QuickActionBar(actions=[a, b])
-    ctrl = QuickActionsController(bar=bar, pane=pane, actions=[a, b])
+    ctrl = QuickActionsController(bar=bar, dock_pane=_FakeDockPane(pane), actions=[a, b])
     # Only the first wins.
     assert len(ctrl.shortcuts) == 1
     ctrl.shortcuts[0].activated.emit()

@@ -51,6 +51,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
+from pluggable_protocol_tree.views.quick_action_bar import QuickActionsController
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
 from pluggable_protocol_tree.services.experiment_manager import ExperimentManager
 
@@ -203,6 +204,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
             settling_provider=lambda: float(self.preferences.logs_settling_time_s),
         )
         self.logging_controller.attach(self.executor.signals)
+
+        # Quick-actions controller: created here, not in the tree pane, so the
+        # action ctx carries THIS dock pane (composition root) — with _pane and
+        # logging_controller both live. The pane built only the bar.
+        if pane.quick_action_bar is not None:
+            pane.quick_actions_controller = QuickActionsController(
+                bar=pane.quick_action_bar,
+                dock_pane=self,
+                actions=list(self.quick_actions),
+            )
+
         # Execution lifecycle policy lives in handlers, not the view. These run
         # once per run (on_pre_protocol_start / on_post_protocol_end) at high
         # priority so they trail every column's start hooks: realtime mode is

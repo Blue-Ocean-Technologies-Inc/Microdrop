@@ -19,4 +19,5 @@ def make_add_step_action() -> _AddStepAction:
         icon_text="add",
         tooltip="Add step below selection",
         priority=10,
+        shortcut="Ctrl+Return",
     )

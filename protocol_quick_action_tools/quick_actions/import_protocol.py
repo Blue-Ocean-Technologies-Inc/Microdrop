@@ -20,4 +20,5 @@ def make_import_protocol_action() -> _ImportProtocolAction:
         icon_text="unarchive",
         tooltip="Import protocol into selected group",
         priority=40,
+        shortcut="Ctrl+Shift+I"
     )
