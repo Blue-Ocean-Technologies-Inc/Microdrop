@@ -90,11 +90,13 @@ class BaseCompoundColumnHandler(HasTraits):
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)
 
+    def on_pre_protocol_start(self, ctx): pass
     def on_protocol_start(self, ctx): pass
     def on_pre_step(self, row, ctx): pass
     def on_step(self, row, ctx): pass
     def on_post_step(self, row, ctx): pass
     def on_protocol_end(self, ctx): pass
+    def on_post_protocol_end(self, ctx): pass
 
 
 @provides(ICompoundColumn)

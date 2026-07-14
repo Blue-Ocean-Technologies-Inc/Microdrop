@@ -14,6 +14,10 @@ from microdrop_application.consts import ADVANCED_MODE_CHANGE
 
 from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED
 
+from pluggable_protocol_tree.models.cell_sync import (
+    ProtocolTreeRowSelectedPublisher, ProtocolTreeSetCellPublisher,
+)
+
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
@@ -86,6 +90,18 @@ PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"
 # PPT-10.2: tree -> DV slim display message
 PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
+# Generic per-cell sync between the tree and column-owning plugin panes
+# (payload contracts + publishers in models/cell_sync.py): row_selected
+# broadcasts the selected step's uuid + every column's serialized value;
+# set_cell writes one value back into a step's cell.
+PROTOCOL_TREE_ROW_SELECTED = "ui/protocol_tree/row_selected"
+PROTOCOL_TREE_SET_CELL = "ui/protocol_tree/set_cell"
+
+protocol_tree_row_selected_publisher = ProtocolTreeRowSelectedPublisher(
+    topic=PROTOCOL_TREE_ROW_SELECTED)
+protocol_tree_set_cell_publisher = ProtocolTreeSetCellPublisher(
+    topic=PROTOCOL_TREE_SET_CELL)
+
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
 LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
@@ -98,6 +114,7 @@ ACTOR_TOPIC_DICT = {
         REALTIME_MODE_UPDATED,
         STEP_PARAMS_COMMIT,
         ADVANCED_MODE_CHANGE,
+        PROTOCOL_TREE_SET_CELL,
     ],
 
     LOGGING_LISTENER_NAME: [

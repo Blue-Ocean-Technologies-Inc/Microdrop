@@ -81,29 +81,38 @@ def get_transformed_frame(src_image: QImage,
 
 
 class SaveSignals(QObject):
-    # Signal sends the (media_type, save_path)
+    # Both signals send the save_path.
     save_complete = Signal(str)
+    save_failed = Signal(str)
 
 
 class ImageSaver(QRunnable):
+    """PNG-encode + write ``image`` to ``save_path``; run it on a QThreadPool
+    (encoding a full-resolution frame takes long enough to visibly freeze the
+    GUI when run inline). Callers must hand over an image they will not paint
+    into afterwards (pass ``image.copy()`` if unsure) — QImage is implicitly
+    shared, so holding the reference is enough and copying here would put a
+    second full-frame memcpy on the caller's (GUI) thread."""
+
     def __init__(self, image, save_path):
         super().__init__()
-        # Copy image to ensure it doesn't change while we save
-        self.image = image.copy()
+        self.image = image
         self.save_path = save_path
         self.signals = SaveSignals()
 
     def run(self):
         try:
-            # 1. Heavy I/O happens here
-            self.image.save(self.save_path, "PNG")
-            logger.info(f"Saved image to: {self.save_path}")
-
-            # 2. Tell the UI we are done
-            self.signals.save_complete.emit(self.save_path)
-
+            # 1. Heavy PNG encode + disk I/O happens here.
+            if self.image.save(self.save_path, "PNG"):
+                logger.info(f"Saved image to: {self.save_path}")
+                # 2. Tell the UI we are done (queued back to the GUI thread).
+                self.signals.save_complete.emit(self.save_path)
+            else:
+                logger.error(f"Failed to save image: {self.save_path}")
+                self.signals.save_failed.emit(self.save_path)
         except Exception as e:
-            logger.error(f"Failed to save image: {e}")
+            logger.error(f"Failed to save image {self.save_path}: {e}")
+            self.signals.save_failed.emit(self.save_path)
 
 
 class VideoRecorderBase(QObject):
