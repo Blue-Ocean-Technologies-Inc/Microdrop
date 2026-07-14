@@ -2,15 +2,14 @@
 import json
 import dramatiq
 from PySide6.QtCore import QTimer
-from apptools.preferences.preferences_helper import PreferencesHelper
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
-from pyface.tasks.api import PaneItem, Task, TaskLayout, HSplitter, VSplitter
+from pyface.tasks.api import PaneItem, Task, TaskLayout, VSplitter
 from pyface.api import GUI
 from traits.api import Instance, provides
 
-from electrode_controller.consts import electrode_disable_request_publisher, disabled_channels_changed_publisher
+from electrode_controller.consts import disabled_channels_changed_publisher
 # Local imports.
 from .consts import PKG
 from dropbot_controller.models.self_tests import TestEvent
