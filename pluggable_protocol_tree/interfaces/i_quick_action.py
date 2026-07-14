@@ -31,7 +31,10 @@ class IQuickAction(Interface):
              "shortcut. Registered widget-scoped to the pane.")
 
     def traits_init(self):
-        self.tooltip += f" ({self.shortcut})"
+        # Advertise the shortcut in the tooltip; actions with no shortcut
+        # keep their tooltip unchanged (no trailing " ()").
+        if self.shortcut:
+            self.tooltip += f" ({self.shortcut})"
 
     def on_execute_action(self, ctx):
         """Called when the button is clicked or its shortcut fires.
