@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QGraphicsScene, QGraphicsSceneContextMenuEvent
 
 from logger.logger_service import get_logger
 from ...services.electrode_interaction_service import ElectrodeInteractionControllerService
+from .electrodes_view_base import EditableChannelTextItem
 
 logger = get_logger(__name__)
 
@@ -39,12 +40,27 @@ class ElectrodeScene(QGraphicsScene):
         return None
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        # While a channel label is being edited, let the focused text item
+        # consume keys instead of the global electrode key handler (which would
+        # otherwise step electrodes, toggle pan on Space, etc.).
+        focus_item = self.focusItem()
+        if isinstance(focus_item, EditableChannelTextItem) and focus_item.editing:
+            super().keyPressEvent(event)
+            return
         self.interaction_service.handle_key_press_event(event)
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
+        # In channel-edit mode a click on an electrode enters inline label
+        # editing. When it starts a fresh edit the press is consumed, so the
+        # whole-value selection isn't cleared by caret placement; clicks inside
+        # the field already being edited fall through to Qt for caret/drag.
+        started_edit = self.interaction_service.handle_channel_label_press(event)
         self.interaction_service.handle_mouse_press_event(event)
+        if started_edit:
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):

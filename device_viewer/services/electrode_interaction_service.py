@@ -41,21 +41,9 @@ from ..views.electrode_view.scale_edit_view import ScaleEditViewController
 
 logger = get_logger(__name__)
 
-###### Channel edit helper methods #################
-def remove_last_digit(number: int | None) -> int | None:
-    if number == None: return None
-
-    string = str(number)[:-1]
-    if string == "":
-        return None
-    else:
-        return int(string)
-
-def add_digit(number: int | None, digit: str) -> int:
-    if number == None:
-        return int(digit)
-    else:
-        return int(str(number) + digit)
+# Sentinel returned by channel-text parsing when the edit should be reverted
+# (kept distinct from None, which means "unassign the channel").
+_CHANNEL_REVERT = object()
 
 class ElectrodeInteractionControllerService(HasTraits):
     """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
@@ -1514,6 +1502,85 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_electrode_channel_editing(self, electrode: Electrode):
         self.model.electrodes.electrode_editing = electrode
 
+    def handle_channel_label_press(self, event) -> bool:
+        """In channel-edit mode, a left-click on an electrode enters (or
+        switches to) inline label editing.
+
+        Returns True when a NEW edit is started — the caller consumes the press
+        so the whole value stays selected (type to replace). Returns False for
+        clicks inside the field already being edited, letting Qt place the caret
+        or start a drag-selection."""
+        if self.model.mode != "channel-edit" or event.button() != Qt.LeftButton:
+            return False
+        electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+        if electrode_view is None:
+            return False
+        if getattr(self, "_editing_view", None) is electrode_view:
+            return False  # already editing this label — in-field click
+        self._begin_channel_label_edit(electrode_view)
+        return True
+
+    def _begin_channel_label_edit(self, electrode_view):
+        # Commit and close any editor already open before opening the new one —
+        # only one label edits at a time. Done explicitly (not via focus-out) so
+        # the switch is deterministic regardless of focus event ordering.
+        if getattr(self, "_editing_view", None) is not None:
+            self._on_channel_label_committed()
+
+        self.model.electrodes.electrode_editing = electrode_view.electrode  # highlight
+        self._editing_view = electrode_view
+
+        text_item = electrode_view.text_path
+        text_item.editing_committed.connect(self._on_channel_label_committed)
+        text_item.editing_cancelled.connect(self._on_channel_label_cancelled)
+        electrode_view.enter_label_edit()
+
+    def _end_channel_label_edit(self):
+        electrode_view = getattr(self, "_editing_view", None)
+        if electrode_view is None:
+            return
+        text_item = electrode_view.text_path
+        try:
+            text_item.editing_committed.disconnect(self._on_channel_label_committed)
+            text_item.editing_cancelled.disconnect(self._on_channel_label_cancelled)
+        except (RuntimeError, TypeError):
+            pass  # already disconnected
+        electrode_view.exit_label_edit()
+        self._editing_view = None
+        # Snap the label back to the model value: on commit this repaints the
+        # committed number; on cancel/revert it discards the typed text.
+        self.electrode_view_layer.redraw_electrode_labels(self.model)
+
+    def _on_channel_label_committed(self):
+        electrode_view = getattr(self, "_editing_view", None)
+        if electrode_view is None:
+            return
+        new_channel = self._parse_channel_text(electrode_view.text_path.toPlainText())
+        if new_channel is not _CHANNEL_REVERT:
+            # Writing the channel fires the label-redraw observer; we still tear
+            # down below to reset interaction state.
+            electrode_view.electrode.channel = new_channel
+        self._end_channel_label_edit()
+
+    def _on_channel_label_cancelled(self):
+        self._end_channel_label_edit()
+
+    def _parse_channel_text(self, text):
+        """Map raw field text to a channel value: '' -> None (unassign), an
+        in-range int -> that int, anything else -> _CHANNEL_REVERT (keep the
+        prior value)."""
+        text = text.strip()
+        if text == "":
+            return None
+        try:
+            value = int(text)
+        except ValueError:
+            return _CHANNEL_REVERT  # digits are blocked live, so unexpected
+        n_channels = self.device_viewer_preferences.NUMBER_OF_CHANNELS
+        if 0 <= value < n_channels:
+            return value
+        return _CHANNEL_REVERT
+
     def handle_electrode_click(self, electrode_id: Str):
         """Handle an electrode click event."""
         if self.model.mode == "channel-edit":
@@ -1603,24 +1670,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     # Key handlers
     #######################################################################################################
 
-    def handle_digit_input(self, digit: str):
-        if self.model.mode == "channel-edit":
-            n_channels = self.device_viewer_preferences.NUMBER_OF_CHANNELS
-            new_channel = add_digit(self.model.electrodes.electrode_editing.channel, digit)
-            if new_channel == None or 0 <= new_channel < n_channels:
-                self.model.electrodes.electrode_editing.channel = new_channel
-
-            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
-
-    def handle_backspace(self):
-        if self.model.mode == "channel-edit":
-            n_channels = self.device_viewer_preferences.NUMBER_OF_CHANNELS
-            new_channel = remove_last_digit(self.model.electrodes.electrode_editing.channel)
-            if new_channel == None or 0 <= new_channel < n_channels:
-                self.model.electrodes.electrode_editing.channel = new_channel
-
-            self.electrode_view_layer.redraw_electrode_tooltip(self.model.electrodes.electrode_editing.id)
-
     def handle_ctrl_key_left(self):
         self.model.camera_perspective.rotate_output(-90)
 
@@ -1657,14 +1706,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     ##########################################################################################
 
     def handle_key_press_event(self, event: QKeyEvent):
-        char = event.text()
         key = event.key()
-
-        if char.isprintable() and char.isdigit():  # If an actual char digit was inputted
-            self.handle_digit_input(char)
-
-        elif key == Qt.Key_Backspace:
-            self.handle_backspace()
 
         # Arrow-key stepping (keyboard).
         # Only when Ctrl/Alt are NOT held to avoid conflicts with existing shortcuts.
@@ -1929,6 +1971,13 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self.model,
                 self.electrode_hovered,
             )
+
+    @observe("model.electrodes.electrode_editing")
+    def _teardown_label_edit_on_deselect(self, event):
+        # Leaving channel-edit mode clears electrode_editing (main_model), so an
+        # open editor is cancelled and reset along with the deselection.
+        if event.new is None and getattr(self, "_editing_view", None) is not None:
+            self._end_channel_label_edit()
 
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.electrodes.disabled_channels.items")
