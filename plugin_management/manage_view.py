@@ -3,9 +3,11 @@
 tab (a table split with a details pane, like the Browse Plugins window). Pure
 presentation — the controller (a Handler) handles the buttons + per-row actions;
 the model supplies ``rows`` / ``installed_rows`` / ``installed_details_text``."""
-from traitsui.api import (Action, HSplit, HTMLEditor, Item, Label, TableEditor,
-                          Tabbed, ToolBar, UItem, VGroup, View)
+from traitsui.api import (Action, ButtonEditor, Group, HGroup, HSplit, HTMLEditor,
+                          Item, Label, TableEditor, Tabbed, ToolBar, UItem, VGroup,
+                          View)
 
+from microdrop_style.button_styles import NARROW_BUTTON_STYLE
 from microdrop_style.icons.icons import ICON_REFRESH
 from microdrop_utils.traitsui_qt_helpers import CustomCheckboxColumn, ObjectColumn
 from .installed_table import installed_table_editor
@@ -46,10 +48,21 @@ manage_plugins_view = View(
             label="Available Groups",
         ),
         HSplit(
-            Item("installed_rows", show_label=False, editor=installed_table_editor,
-                 tooltip=_INSTALLED_HELP),
-            Item("installed_details_text", show_label=False, style="custom",
-                 editor=HTMLEditor(open_externally=True)),
+            # Left: the table + a full-height chevron button that collapses the
+            # details pane. The controller owns the toggle state + gap-tightening
+            # (ManagePluginsController). Details collapsed by default.
+            HGroup(
+                Item("installed_rows", show_label=False,
+                     editor=installed_table_editor, tooltip=_INSTALLED_HELP),
+                VGroup(UItem("handler.toggle_details", style="custom", springy=True,
+                             editor=ButtonEditor(label_value="handler.details_btn_label"),
+                             style_sheet=NARROW_BUTTON_STYLE, tooltip="Show/Hide Details")),
+            ),
+            Group(
+                Item("installed_details_text", show_label=False, style="custom",
+                     editor=HTMLEditor(open_externally=True)),
+                visible_when="handler.details_shown",
+            ),
             label="Installed Packages",
         ),
     ),

@@ -9,7 +9,7 @@ docs-specific greying is defined locally.
 """
 from traitsui.api import TableEditor
 
-from microdrop_style.colors import GREY
+from microdrop_style.colors import GREY, INFO_COLOR
 from microdrop_style.icons.icons import ICON_DESCRIPTION, ICON_DELETE
 from microdrop_utils.traitsui_qt_helpers import (
     ObjectColumn, GlyphActionColumn, EnumSelectColumn)
@@ -26,8 +26,8 @@ class DocColumn(GlyphActionColumn):
 
     def get_text_color(self, object):
         if not getattr(object, "doc_url", ""):
-            return GREY
-        return super().get_text_color(object)
+            return GREY["dark"]
+        return INFO_COLOR
 
     def get_tooltip(self, object):
         if not getattr(object, "doc_url", ""):
@@ -41,13 +41,14 @@ class DocColumn(GlyphActionColumn):
 
 installed_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="Name", editable=False),
-        DocColumn(name="doc_url", label="Docs", glyph=ICON_DESCRIPTION),
-        EnumSelectColumn(name="version", label="Version",
-                         values_name="available_versions", width=90),
-        GlyphActionColumn(name="dist_name", label="Upgrade", glyph=ICON_UPGRADE,
+        ObjectColumn(name="name", label="", editable=False),
+        DocColumn(name="doc_url", label="", glyph=ICON_DESCRIPTION),
+        EnumSelectColumn(name="version", label="",
+                         values_name="available_versions", width=90,
+                         persistent_editor=True),
+        GlyphActionColumn(name="dist_name", label="", glyph=ICON_UPGRADE,
                           fire="upgrade"),
-        GlyphActionColumn(name="manifest_name", label="Uninstall", glyph=ICON_DELETE,
+        GlyphActionColumn(name="manifest_name", label="", glyph=ICON_DELETE,
                           fire="uninstall"),
     ],
     editable=True,

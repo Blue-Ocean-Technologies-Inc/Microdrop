@@ -34,5 +34,5 @@ class ManagePluginsAction(TaskAction):
             return
 
         model = ManagePluginsModel(manager=manager, application=application)
-        model.edit_traits(view=manage_plugins_view,
-                          handler=ManagePluginsController(task=task))
+        controller = ManagePluginsController(model=model, task=task)
+        model.edit_traits(view=manage_plugins_view, handler=controller)

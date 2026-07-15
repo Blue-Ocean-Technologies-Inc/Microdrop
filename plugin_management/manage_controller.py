@@ -10,20 +10,27 @@ those Events land here, where dialogs + threading are allowed.
 """
 import webbrowser
 
-from traits.api import Instance
+from traits.api import Instance, Button, Bool, Str, observe
 from pyface.tasks.api import Task
-from pyface.qt.QtWidgets import QToolBar
+from pyface.qt.QtWidgets import QToolBar, QSplitter, QWidget
 from pyface.qt.QtGui import QFont
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, error as error_dialog, YES, escape_html_multiline)
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_utils.threaded_progress import run_with_wait
-from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
+from microdrop_utils.traitsui_qt_helpers import (
+    SafeCancelTableController, show_persistent_editors, table_view_of)
 from logger.logger_service import get_logger
 
 #: Point size of the Material Symbols glyph on the Refresh toolbar button.
 REFRESH_ICON_POINT_SIZE = 16
+#: Even, minimal gap (px) around the Installed Packages collapse button — the
+#: HSplit handle width and the pane layout spacing are both set to this.
+INSTALLED_SPLIT_GAP = 4
+#: Column index of the version dropdown in the installed-packages table
+#: (name, docs, version, upgrade, uninstall).
+INSTALLED_VERSION_COLUMN = 2
 
 from .browse_model import BrowsePluginsModel
 from .browse_view import browse_view
@@ -37,25 +44,57 @@ def _esc(s):
     return escape_html_multiline(str(s))
 
 
-class ManagePluginsController(SafeCancelTableHandler):
+class ManagePluginsController(SafeCancelTableController):
     """Handles the Manage Plugins view's actions over the model (info.object)."""
 
     task = Instance(Task)
 
+    # --- Installed Packages details-pane collapse (state lives on the handler;
+    #     the view binds the button + visible_when to these) ---
+    toggle_details = Button()
+    details_shown = Bool(False)                  # collapsed by default
+    details_btn_label = Str("chevron_left")      # points the way the pane moves
+
+    # Guards the version observer while we programmatically revert a
+    # cancelled selection (so the revert doesn't re-prompt).
+    _suppress_version = Bool(False)
+
     # --- lifecycle: wire per-row installed-package Events -----------------
     def init(self, info):
-        model = info.object
-        self._model = model
-        # Guards the version observer while we programmatically revert a
-        # cancelled selection (so the revert doesn't re-prompt).
-        self._suppress_version = False
-        model.observe(self._on_open_docs, "installed_rows:items:open_docs")
-        model.observe(self._on_version_selected, "installed_rows:items:version")
-        model.observe(self._on_upgrade, "installed_rows:items:upgrade")
-        model.observe(self._on_uninstall, "installed_rows:items:uninstall")
         super().init(info)            # Escape deselects instead of closing
         self._style_toolbar(info)
+        self._tighten_splitters(info.ui.control)
+        # Always show the version combo boxes (not just on click).
+        show_persistent_editors(table_view_of(getattr(info, "installed_rows", None)),
+                                INSTALLED_VERSION_COLUMN)
         return True
+
+    # --- details-pane collapse ---
+    @observe("toggle_details")
+    def _on_toggle_details(self, event):
+        self.details_shown = not self.details_shown
+
+    @observe("details_shown")
+    def _on_details_shown(self, event):
+        # chevron_right when shown (click collapses it rightward), chevron_left
+        # when hidden (click brings it back in).
+        self.details_btn_label = "chevron_right" if self.details_shown else "chevron_left"
+
+    def _tighten_splitters(self, control):
+        """Shrink the Installed Packages HSplit divider and zero the pane inner
+        margins so the collapse button sits flush with an even, minimal gap on
+        both sides."""
+        if control is None:
+            return
+        for splitter in control.findChildren(QSplitter):
+            splitter.setHandleWidth(INSTALLED_SPLIT_GAP)
+            for i in range(splitter.count()):
+                pane = splitter.widget(i)
+                for widget in [pane, *pane.findChildren(QWidget)]:
+                    layout = widget.layout()
+                    if layout is not None:
+                        layout.setContentsMargins(0, 0, 0, 0)
+                        layout.setSpacing(INSTALLED_SPLIT_GAP)
 
     def _style_toolbar(self, info):
         """Render the Refresh toolbar action as a Material Symbols glyph by
@@ -94,11 +133,13 @@ class ManagePluginsController(SafeCancelTableHandler):
         info.ui.dispose()
 
     # --- per-row installed-package actions -------------------------------
+    @observe("model:installed_rows:items:open_docs")
     def _on_open_docs(self, event):
         row = event.object
         if row.doc_url:
             webbrowser.open(row.doc_url)
 
+    @observe("model:installed_rows:items:version")
     def _on_version_selected(self, event):
         if self._suppress_version:
             return
@@ -113,14 +154,15 @@ class ManagePluginsController(SafeCancelTableHandler):
             self._set_row_version(row, old_version)  # revert the dropdown
             return
         label, dist = row.label, row.dist_name
-        self._run(lambda: self._model.do_install_version(dist, new_version),
+        self._run(lambda: self.model.do_install_version(dist, new_version),
                   title="Installing version",
                   message=f"Installing {label} {new_version}…",
-                  done=lambda r: (self._model.refresh_installed(),
+                  done=lambda r: (self.model.refresh_installed(),
                                   self._after_change(
                                       f"Installed <b>{_esc(label)}</b> "
                                       f"{_esc(new_version)}.")))
 
+    @observe("model:installed_rows:items:upgrade")
     def _on_upgrade(self, event):
         row = event.object
         latest = row.available_versions[0] if row.available_versions else ""
@@ -130,12 +172,13 @@ class ManagePluginsController(SafeCancelTableHandler):
                    message=f"Upgrade <b>{_esc(label)}</b> to the latest "
                            f"version{target}?", cancel=False) != YES:
             return
-        self._run(lambda: self._model.do_upgrade(dist),
+        self._run(lambda: self.model.do_upgrade(dist),
                   title="Upgrading plugin", message=f"Upgrading {label}…",
-                  done=lambda r: (self._model.refresh_installed(),
+                  done=lambda r: (self.model.refresh_installed(),
                                   self._after_change(
                                       f"Upgraded <b>{_esc(label)}</b>.")))
 
+    @observe("model:installed_rows:items:uninstall")
     def _on_uninstall(self, event):
         row = event.object
         label, dist, manifest = row.label, row.dist_name, row.manifest_name
@@ -143,10 +186,10 @@ class ManagePluginsController(SafeCancelTableHandler):
                    message=f"Uninstall <b>{_esc(label)}</b>? This removes its "
                            f"package from the environment.", cancel=False) != YES:
             return
-        self._model.pre_uninstall(manifest)
-        self._run(lambda: self._model.do_uninstall(dist),
+        self.model.pre_uninstall(manifest)
+        self._run(lambda: self.model.do_uninstall(dist),
                   title="Uninstalling plugin", message=f"Removing {label}…",
-                  done=lambda r: (self._model.refresh_installed(),
+                  done=lambda r: (self.model.refresh_installed(),
                                   self._after_change(
                                       f"Uninstalled <b>{_esc(label)}</b>.")))
 
