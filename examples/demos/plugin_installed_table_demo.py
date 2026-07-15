@@ -1,11 +1,11 @@
-"""Minimal runner for the Manage Plugins → Installed Packages tab (issue #532).
+"""Minimal runner for the Manage Plugins window (issue #532).
 
-Uses the **real** production components — ``InstalledPackageRow`` +
-``format_installed_details_html`` from the model, ``installed_table_editor`` /
-``groups_table`` from the view — with fake data and a throwaway demo handler, so
-the split table+details layout, the reload-glyph toolbar, and the columns render
-exactly as in the app but no real pixi install/uninstall runs (the row Events
-just print + update a status line).
+Reuses the **real** production view + controller (``manage_plugins_view`` +
+``ManagePluginsController``) and only swaps in a fake model: a
+``ManagePluginsModel`` subclass that supplies sample rows and stubs the
+environment-mutating worker methods so nothing runs ``pixi``. Lets you eyeball
+the tabbed layout, the installed-packages table, the collapsible details pane,
+and the toolbar without launching the whole app.
 
 Run:
     pixi run python examples/demos/plugin_installed_table_demo.py
@@ -13,104 +13,35 @@ Run:
 
 import sys
 
-from PySide6.QtWidgets import QApplication, QToolBar
-from PySide6.QtGui import QFont
-
-from traits.api import HasTraits, List, Str, Instance, observe
-from traitsui.api import (Action, HSplit, HTMLEditor, Item, Tabbed, ToolBar,
-                          UItem, VGroup, View)
+from PySide6.QtWidgets import QApplication
 
 from microdrop_style.helpers import style_app
-from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.icons.icons import ICON_REFRESH
-from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 from plugin_management.manage_model import (
-    GroupRow, InstalledPackageRow, format_installed_details_html)
-from plugin_management.manage_view import groups_table
-from plugin_management.installed_table import installed_table_editor
+    ManagePluginsModel, GroupRow, InstalledPackageRow)
+from plugin_management.manage_view import manage_plugins_view
+from plugin_management.manage_controller import ManagePluginsController
+
+# Fake channel search result (feeds the version dropdowns via apply_channel_data).
+_FAKE_CHANNEL = [
+    {"name": n, "version": v}
+    for n, versions in {
+        "heater-microdrop-plugin": ["3.11.2", "3.11.1", "3.10.0", "3.9.4"],
+        "magnet-microdrop-plugin": ["1.4.0", "1.3.2", "1.3.1", "1.2.0"],
+        "fluorescence-microdrop-plugin": ["0.2.1", "0.2.0", "0.1.0"],
+    }.items()
+    for v in versions
+]
 
 
-class _DemoHandler(SafeCancelTableHandler):
-    def init(self, info):
-        super().init(info)
-        control = getattr(info.ui, "control", None)
-        if control is not None:
-            for tb in control.findChildren(QToolBar):
-                tb.setFont(QFont(ICON_FONT_FAMILY, 16))
-        return True
+class DemoManagePluginsModel(ManagePluginsModel):
+    """Fake data + no-op workers so the real view/controller run without pixi."""
 
-    def refresh_versions(self, info):
-        info.object.status = "Refresh versions (demo: no-op)."
-        print(info.object.status)
+    def _build_rows(self):
+        return [GroupRow(name="heater_ui", label="Heater controls", enabled=True),
+                GroupRow(name="magnet_ui", label="Magnet controls", enabled=False)]
 
-
-class InstalledTableDemo(HasTraits):
-    rows = List(Instance(GroupRow))
-    installed_rows = List(Instance(InstalledPackageRow))
-    installed_selected = Instance(InstalledPackageRow)
-    installed_details_text = Str()
-    status = Str("Ready.")
-
-    view = View(
-        Tabbed(
-            VGroup(
-                UItem("rows", editor=groups_table),
-                label="Available Groups",
-            ),
-            HSplit(
-                Item("installed_rows", show_label=False, editor=installed_table_editor),
-                Item("installed_details_text", show_label=False, style="custom",
-                     editor=HTMLEditor(open_externally=True)),
-                label="Installed Packages",
-            ),
-        ),
-        UItem("status", style="readonly"),
-        toolbar=ToolBar(Action(name=ICON_REFRESH, action="refresh_versions",
-                               tooltip="Refresh available versions")),
-        title="Manage Plugins — Installed Packages (demo)",
-        width=680, height=380, resizable=True,
-        handler=_DemoHandler(),
-    )
-
-    @observe("installed_selected")
-    def _details(self, event):
-        self.installed_details_text = (
-            format_installed_details_html(self.installed_selected)
-            if self.installed_selected else "")
-
-    @observe("installed_rows:items:open_docs")
-    def _open_docs(self, event):
-        row = event.object
-        self.status = f"[docs] {row.name} → {row.doc_url or '(no URL — not yet published)'}"
-        print(self.status)
-
-    @observe("installed_rows:items:upgrade")
-    def _upgrade(self, event):
-        row = event.object
-        latest = row.available_versions[0] if row.available_versions else row.version
-        self.status = f"Would upgrade {row.name} → {latest}, then relaunch."
-        print(self.status)
-
-    @observe("installed_rows:items:uninstall")
-    def _uninstall(self, event):
-        row = event.object
-        self.status = f"Would uninstall {row.name}, then relaunch."
-        print(self.status)
-
-    @observe("installed_rows:items:version")
-    def _version(self, event):
-        row = event.object
-        self.status = f"Would install {row.name}=={event.new}, then relaunch."
-        print(self.status)
-
-
-def _sample():
-    return InstalledTableDemo(
-        rows=[
-            GroupRow(name="heater_ui", label="Heater controls", enabled=True),
-            GroupRow(name="magnet_ui", label="Magnet controls", enabled=False),
-        ],
-        installed_rows=[
+    def _build_installed_rows(self):
+        return [
             InstalledPackageRow(
                 name="heater-microdrop-plugin", dist_name="heater-microdrop-plugin",
                 label="Heater", manifest_name="heater", version="3.11.2",
@@ -129,11 +60,33 @@ def _sample():
                 group_names=["fluorescence_ui"],
                 available_versions=["0.2.1", "0.2.0", "0.1.0"],
                 doc_url=""),  # not yet published — greyed docs glyph + tooltip
-        ],
-    )
+        ]
+
+    # --- stub the env-mutating workers (no pixi) ---
+    def apply(self):
+        print("[demo] apply groups:", self.desired())
+
+    def pre_uninstall(self, manifest_name):
+        print(f"[demo] pre_uninstall {manifest_name}")
+
+    def do_install_version(self, dist_name, version):
+        print(f"[demo] would install {dist_name}=={version}")
+
+    def do_upgrade(self, dist_name):
+        print(f"[demo] would upgrade {dist_name}")
+
+    def do_uninstall(self, dist_name):
+        print(f"[demo] would uninstall {dist_name}")
+
+    def do_search_channel(self):
+        print("[demo] search channel")
+        return _FAKE_CHANNEL
 
 
 if __name__ == "__main__":
     app = QApplication.instance() or QApplication(sys.argv)
     style_app(app)  # loads the Material Symbols font so glyph icons render
-    _sample().configure_traits()
+
+    model = DemoManagePluginsModel()
+    controller = ManagePluginsController(model=model, task=None)
+    model.configure_traits(view=manage_plugins_view, handler=controller)
