@@ -104,9 +104,12 @@ def format_details_html(raw: dict) -> str:
 
 
 class AvailablePackage(HasTraits):
-    """One package available in the channel: name/version + its full metadata."""
+    """One package available in the channel: name + its metadata. ``version`` is
+    the version selected for install (defaults to the latest); ``available_versions``
+    lists every channel version (newest first) for the version dropdown."""
     name = Str()
     version = Str()
+    available_versions = List(Str)
     raw = Dict()
 
 
@@ -135,24 +138,38 @@ class BrowsePluginsModel(HasTraits):
         self.details_text = format_details_html(self.selected.raw) if self.selected else ""
 
     def set_packages(self, data, stale):
-        """GUI thread: build one row per package (latest version) + flags."""
+        """GUI thread: build one row per not-yet-installed package + flags."""
         self.stale = stale
         self.packages = self._rows_from(data)
 
     def _rows_from(self, data):
-        latest = {}
+        """One AvailablePackage per channel package name, **excluding packages
+        already installed** (this window is for installing new ones). ``version``
+        defaults to the latest; ``available_versions`` holds every channel
+        version (newest first) for the dropdown."""
+        installed = set(package_installer.installed_plugin_dists())
+        by_name = {}
         for pkg in data:
             name = pkg.get("name")
-            if not name:
+            if not name or name in installed:
                 continue
-            current = latest.get(name)
-            if current is None or _version_key(pkg.get("version", "")) >= _version_key(
-                    current.get("version", "")):
-                latest[name] = pkg
-        return [AvailablePackage(name=p["name"], version=str(p.get("version", "")),
-                                 raw=p)
-                for p in sorted(latest.values(), key=lambda p: p["name"])]
+            by_name.setdefault(name, []).append(pkg)
+        rows = []
+        for name in sorted(by_name):
+            pkgs = sorted(by_name[name],
+                          key=lambda p: _version_key(p.get("version", "")),
+                          reverse=True)
+            latest = pkgs[0]
+            rows.append(AvailablePackage(
+                name=name,
+                version=str(latest.get("version", "")),
+                available_versions=[str(p.get("version", "")) for p in pkgs],
+                raw=latest,
+            ))
+        return rows
 
-    def do_install(self, name):
-        """Worker-thread safe: install via package_installer (no trait mutation)."""
-        return package_installer.install_from_channel(name, self.channel_url)
+    def do_install(self, name, version=None):
+        """Worker-thread safe: install the package (optionally a specific
+        version) via package_installer (no trait mutation)."""
+        return package_installer.install_from_channel(
+            name, self.channel_url, version=version)

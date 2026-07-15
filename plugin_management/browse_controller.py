@@ -15,12 +15,15 @@ from microdrop_application.dialogs.pyface_wrapper import (
     confirm, information, error as error_dialog, YES, escape_html_multiline)
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_utils.threaded_progress import run_with_wait
-from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
+from microdrop_utils.traitsui_qt_helpers import (
+    SafeCancelTableHandler, show_persistent_editors, table_view_of)
 
 from plugin_management.relaunch import confirm_and_relaunch
 
 #: Point size of the Material Symbols glyph rendered on the Refresh toolbar button.
 REFRESH_ICON_POINT_SIZE = 16
+#: Column index of the version dropdown in the browse table (name, version).
+BROWSE_VERSION_COLUMN = 1
 
 
 def _consent_html(pkg):
@@ -40,6 +43,9 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
     def init(self, info):
         super().init(info)            # Escape deselects instead of closing
         self._style_toolbar(info)
+        # Always show the version combo boxes (not just on click).
+        show_persistent_editors(table_view_of(getattr(info, "packages", None)),
+                                BROWSE_VERSION_COLUMN)
         self._load(info.object, message="Fetching available plugins…")
         return True
 
@@ -85,10 +91,12 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
                    message=_consent_html(pkg), cancel=False) != YES:
             return
         run_with_wait(
-            lambda: model.do_install(pkg.name),
-            title="Installing plugin", message=f"Installing {pkg.name}…",
+            lambda: model.do_install(pkg.name, pkg.version),
+            title="Installing plugin",
+            message=f"Installing {pkg.name} {pkg.version}…",
             on_success=lambda r: confirm_and_relaunch(
-                self.task, f"Installed <b>{escape_html_multiline(pkg.name)}</b>."),
+                self.task, f"Installed <b>{escape_html_multiline(pkg.name)}</b> "
+                           f"{escape_html_multiline(pkg.version)}."),
             on_error=lambda e: error_dialog(
                 parent=None, title="Install failed", message=str(e)))
 
