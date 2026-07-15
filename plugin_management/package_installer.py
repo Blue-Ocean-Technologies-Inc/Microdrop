@@ -133,6 +133,35 @@ def installed_plugin_dists() -> dict[str, str]:
     return dists
 
 
+#: Project-URL labels we surface as a plugin's "Documentation" link, in
+#: preference order: a dedicated docs site if the package declares one, else
+#: its homepage (repo landing page). Matched case-insensitively against the
+#: labels in the installed distribution's core metadata (PEP 621
+#: `[project.urls]` -> `Project-URL: <label>, <url>`).
+DOCUMENTATION_URL_LABELS = ("documentation", "homepage")
+
+
+def documentation_url(dist_name) -> str:
+    """The best documentation link for an installed distribution, or "" if it
+    declares none. Reads the standard `Project-URL` metadata (populated from
+    `[project.urls]`), preferring a Documentation URL and falling back to the
+    Homepage — so no MicroDrop-specific manifest field is needed and the same
+    data serves PyPI, IDEs, and other package managers."""
+    try:
+        metadata = importlib.metadata.metadata(dist_name)
+    except importlib.metadata.PackageNotFoundError:
+        return ""
+    urls = {}
+    for entry in metadata.get_all("Project-URL") or ():
+        label, _, url = entry.partition(",")
+        urls[label.strip().lower()] = url.strip()
+    for label in DOCUMENTATION_URL_LABELS:
+        if urls.get(label):
+            return urls[label]
+    # Legacy core-metadata field, emitted by older tools for Homepage.
+    return (metadata.get("Home-page") or "").strip()
+
+
 def uninstall_package(name, *, cwd=None) -> None:
     """`pixi remove <name>`. Best-effort; logs on failure."""
     cwd = Path(cwd or WORKSPACE_DIR)
