@@ -14,6 +14,7 @@ from traits.api import Instance, Button, Bool, Str, observe
 from pyface.tasks.api import Task
 from pyface.qt.QtWidgets import QToolBar, QSplitter, QWidget
 from pyface.qt.QtGui import QFont
+from pyface.qt.QtCore import QTimer
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, error as error_dialog, YES, escape_html_multiline)
@@ -204,9 +205,16 @@ class ManagePluginsController(SafeCancelTableController):
 
     def _set_row_version(self, row, version):
         """Revert a cancelled dropdown selection without re-triggering the
-        install prompt."""
-        self._suppress_version = True
-        try:
-            row.version = version
-        finally:
-            self._suppress_version = False
+        install prompt.
+
+        Deferred to the next event-loop tick: the revert runs while we're inside
+        the combo box's own change signal, and the editor's update guard would
+        otherwise swallow the refresh — leaving the combo showing the rejected
+        value while the model held the old one, so re-picking it did nothing."""
+        def _revert():
+            self._suppress_version = True
+            try:
+                row.version = version
+            finally:
+                self._suppress_version = False
+        QTimer.singleShot(0, _revert)
