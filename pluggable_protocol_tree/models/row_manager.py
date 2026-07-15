@@ -218,6 +218,70 @@ class RowManager(HasTraits):
         self.rows_changed = True
         return parent_path + (anchor_index,)
 
+    def _group_path_for_unfold(self, path: Path) -> Optional[Path]:
+        """The group that unfolding ``path`` would dissolve: the row itself
+        when it is a group, else its containing group. None when that resolves
+        to the root (a top-level step has no enclosing group to unfold)."""
+        path = tuple(path)
+        row = self.get_row(path)
+        if isinstance(row, GroupRow):
+            return path
+        parent_path = path[:-1]
+        return parent_path or None
+
+    def _resolve_unfold_group(self, paths: List[Path]) -> Optional[Path]:
+        """The single group the selection agrees on unfolding, or None when the
+        selection is empty, targets no group (top-level steps), or spans more
+        than one group (ambiguous). Drives ``can_unfold_group``."""
+        candidates = set()
+        for p in paths:
+            try:
+                group_path = self._group_path_for_unfold(p)
+            except IndexError:
+                return None
+            if group_path is None:
+                return None
+            candidates.add(group_path)
+        if len(candidates) != 1:
+            return None
+        return next(iter(candidates))
+
+    def can_unfold_group(self, paths: List[Path]) -> bool:
+        """True when ``unfold_group(paths)`` would act (the selection targets a
+        single group, directly or via a row inside it). Drives the context-menu
+        entry's enabled state."""
+        return self._resolve_unfold_group(paths) is not None
+
+    def unfold_group(self, paths: List[Path]) -> Optional[List[Path]]:
+        """Dissolve the group the selection targets: move its children up into
+        the group's parent at the group's position, preserving their order and
+        identity, then remove the now-empty group. The inverse of
+        ``fold_into_group``.
+
+        Re-parents the live row objects (like ``move``/``fold_into_group``), NOT
+        a serialize + rebuild, so per-step references — capture recordings, the
+        fluorescence pane's live-tracked step — survive the unfold.
+
+        Returns the new paths of the moved children (empty list if the group
+        had none), or None when the selection targets no single unfoldable
+        group (see ``_resolve_unfold_group``)."""
+        group_path = self._resolve_unfold_group(paths)
+        if group_path is None:
+            return None
+        group = self.get_row(group_path)
+        parent = group.parent
+        parent_path = group_path[:-1]
+        anchor_index = group_path[-1]
+        # Snapshot children before mutating; the objects stay valid across the
+        # re-parent, so the shifting indices don't matter.
+        children = list(group.children)
+        for offset, row in enumerate(children):
+            group.remove_row(row)
+            parent.insert_row(anchor_index + offset, row)
+        parent.remove_row(group)
+        self.rows_changed = True
+        return [parent_path + (anchor_index + i,) for i in range(len(children))]
+
     # --- selection ---
 
     def select(self, paths: List[Path], mode: str = "set") -> None:

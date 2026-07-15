@@ -128,6 +128,10 @@ class ProtocolTreeWidget(QWidget):
             (QKeySequence.Copy,  self._copy),
             (QKeySequence.Cut,   self._cut),
             (QKeySequence.Paste, self._paste),
+            # Structural grouping (#529). Guarded so they honor the run-lock
+            # (#471) the same way the context-menu entries do.
+            (QKeySequence("Ctrl+G"),       self._fold_shortcut),
+            (QKeySequence("Ctrl+Shift+G"), self._unfold_shortcut),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -289,6 +293,9 @@ class ProtocolTreeWidget(QWidget):
         fold = menu.addAction("Fold into Group", self._fold_into_group)
         fold.setEnabled(
             self._manager.can_fold_into_group(self._manager.selection))
+        unfold = menu.addAction("Unfold Group", self._unfold_group)
+        unfold.setEnabled(
+            self._manager.can_unfold_group(self._manager.selection))
         menu.addSeparator()
         menu.addAction("Copy", self._copy)
         menu.addAction("Cut", self._cut)
@@ -401,6 +408,16 @@ class ProtocolTreeWidget(QWidget):
         parent_path = self._parent_path_for_anchor(idx)
         self._manager.add_group(parent_path=parent_path)
 
+    def _fold_shortcut(self):
+        # Keyboard path for "Fold into Group"; run-locked like the menu entry.
+        if self._structural_editable:
+            self._fold_into_group()
+
+    def _unfold_shortcut(self):
+        # Keyboard path for "Unfold Group"; run-locked like the menu entry.
+        if self._structural_editable:
+            self._unfold_group()
+
     def _fold_into_group(self):
         """Wrap the selected rows in a new group at the first row's
         position (#518), then select the new group so the user can rename
@@ -420,6 +437,39 @@ class ProtocolTreeWidget(QWidget):
                 )
         except Exception:
             logger.exception("Fold into group failed")
+
+    def _unfold_group(self):
+        """Dissolve the selected group, moving its children up into the parent
+        at the group's position (#529), then select all the unfolded rows."""
+        try:
+            child_paths = self._manager.unfold_group(
+                [tuple(p) for p in self._manager.selection])
+            if not child_paths:
+                return
+            indexes = [
+                idx for idx in (
+                    self._node_to_index(self._manager.get_row(p))
+                    for p in child_paths
+                )
+                if idx.isValid()
+            ]
+            if not indexes:
+                return
+            sm = self.tree.selectionModel()
+            self._expand_ancestors(indexes[0])
+            sm.setCurrentIndex(
+                indexes[0],
+                (QItemSelectionModel.SelectionFlag.ClearAndSelect
+                 | QItemSelectionModel.SelectionFlag.Rows),
+            )
+            for idx in indexes[1:]:
+                sm.select(
+                    idx,
+                    (QItemSelectionModel.SelectionFlag.Select
+                     | QItemSelectionModel.SelectionFlag.Rows),
+                )
+        except Exception:
+            logger.exception("Unfold group failed")
 
     def _parent_path_for_anchor(self, idx):
         """If anchored on a group --> insert inside. On a step --> insert as
