@@ -11,9 +11,9 @@ from logger.logger_service import get_logger, debug_throttled
 
 # enthought imports
 from traits.api import Instance, Array, Str
-from pyface.qt.QtCore import Qt, QPointF
+from pyface.qt.QtCore import Qt, QPointF, Signal
 from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
-                             QGraphicsItem)
+                             QGraphicsItem, QTextCursor)
 
 from microdrop_utils.decorators import debounce
 from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, \
@@ -150,6 +150,91 @@ class ElectrodeEndpointItem(QGraphicsPathItem):
         self.setBrush(Qt.NoBrush)
 
 
+class EditableChannelTextItem(QGraphicsTextItem):
+    """Electrode channel label that doubles as an inline, text-editor-style field.
+
+    Display-only until ``begin_edit`` flips it into Qt's native
+    ``TextEditorInteraction`` — which supplies the blinking caret, drag- and
+    shift-selection, and bulk select-then-replace for free. Input is constrained
+    to digits, and the commit/cancel gestures are surfaced as signals so the
+    controller (not this view) writes the model.
+    """
+
+    #: Emitted on Enter or focus-out (click-away); the controller reads the
+    #: field text and writes the model.
+    editing_committed = Signal()
+    #: Emitted on Escape — the edit is abandoned, the model left untouched.
+    editing_cancelled = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._editing = False
+
+    @property
+    def editing(self) -> bool:
+        return self._editing
+
+    def begin_edit(self):
+        """Turn the static label into a focused, fully-selected edit field."""
+        self._editing = True
+        # The device-coordinate cache would freeze the blinking caret, so edit
+        # uncached and restore the cache in end_edit.
+        self.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        self.setTextInteractionFlags(Qt.TextEditorInteraction)
+        self.setFocus(Qt.MouseFocusReason)
+        # Select the whole value so the first digit typed replaces it.
+        cursor = self.textCursor()
+        cursor.select(QTextCursor.Document)
+        self.setTextCursor(cursor)
+
+    def end_edit(self):
+        """Return to a static, cached, non-interactive label."""
+        self._editing = False
+        cursor = self.textCursor()
+        cursor.clearSelection()
+        self.setTextCursor(cursor)
+        self.setTextInteractionFlags(Qt.NoTextInteraction)
+        self.clearFocus()
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+
+    def keyPressEvent(self, event):
+        if not self._editing:
+            return
+
+        key = event.key()
+        if key in (Qt.Key_Return, Qt.Key_Enter):
+            self.editing_committed.emit()
+            event.accept()
+            return
+        if key == Qt.Key_Escape:
+            self.editing_cancelled.emit()
+            event.accept()
+            return
+
+        # Block printable non-digits; let navigation/editing keys (arrows,
+        # Home/End, Backspace, Delete, Ctrl+A/C/X, ...) reach the editor.
+        text = event.text()
+        if text and text.isprintable() and not text.isdigit():
+            event.accept()
+            return
+
+        super().keyPressEvent(event)
+
+    def insertFromMimeData(self, source):
+        # Paste digits only — silently drop everything else.
+        digits = "".join(ch for ch in source.text() if ch.isdigit())
+        if digits:
+            cursor = self.textCursor()
+            cursor.insertText(digits)
+            self.setTextCursor(cursor)
+
+    def focusOutEvent(self, event):
+        # Click-away commits whatever is currently in the field.
+        if self._editing:
+            self.editing_committed.emit()
+        super().focusOutEvent(event)
+
+
 # electrode polygons
 class ElectrodeView(QGraphicsPathItem):
     """
@@ -187,7 +272,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.update_line_alpha(default_alphas.get(electrode_outline_key,1.0))
 
         # Text item
-        self.text_path = QGraphicsTextItem(parent=self)
+        self.text_path = EditableChannelTextItem(parent=self)
         self.text_color = QColor(ELECTRODE_TEXT_COLOR)
         self.text_path.setDefaultTextColor(self.text_color)
         # Pole of inaccessibility + inscribed diameter: keeps the label
@@ -276,6 +361,14 @@ class ElectrodeView(QGraphicsPathItem):
     def rotate_electrode_text(self, angle=0):
         self.text_path.setTransformOriginPoint(self.text_path.boundingRect().center())
         self.text_path.setRotation(self.text_path.rotation() + angle)
+
+    def enter_label_edit(self):
+        """Begin inline editing of this electrode's channel label."""
+        self.text_path.begin_edit()
+
+    def exit_label_edit(self):
+        """End inline editing and restore the static label."""
+        self.text_path.end_edit()
 
     ##################################################################################
     # Public electrode view update methods
