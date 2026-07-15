@@ -1,3 +1,85 @@
+## v1.2.0 (2026-07-15)
+
+### Feat
+
+- **plugin_management**: read plugin docs URL from distribution metadata
+- **pluggable_protocol_tree**: add Unfold Group action and grouping shortcuts
+- **device_viewer**: inline text-editor channel labels
+- **protocol-tree**: WASD step nav, Ctrl+arrow phase nav shortcuts
+- **quick-actions**: keyboard shortcuts + auto-append to tooltips
+- **protocol-tree**: keyboard shortcuts for the navigation-bar buttons
+- **protocol-tree**: keep horizontal scroll when switching steps
+- **protocol-tree**: Escape clears the step selection to free mode
+- **protocol-tree**: Fold into Group context-menu action
+- **protocol-tree**: generic row_selected/set_cell cell sync
+- **protocol-tree**: add stop-aware ctx.sleep with timer freeze
+- **device-viewer**: crop/export any recording + auto-fit on align flip
+- **device-viewer**: move camera preferences to a Video Settings tab
+- **video-protocol-controls**: use step dotted path as recording step id
+- **device-viewer**: video recording preferences
+- **device-viewer**: interchangeable, preference-driven video recorders
+- **device-viewer**: pin constant-quality encoding on the recorder
+- **device-viewer**: Recording Viewer dock pane
+- **device-viewer**: native hardware recording + alignment sidecar
+- **utils**: stepped slider editor for fixed-increment float ranges
+- **device-viewer**: Live feed checkbox for provider camera sources
+- **protocol-tree**: dialog-editing views via edit_dialog hook
+- **device-viewer**: raw-only ASI captures; no recording for provider feeds
+- **microdrop_utils**: icon-button and dynamic-combo traitsui editors
+- **device-viewer**: camera-source extension point
+- **device-viewer**: throttle tooltip-redraw debug line
+- **logger**: drop third-party DEBUG by record pathname
+- **logger**: repo-only debug mode + throttled hot-path logs
+- **microdrop-utils**: whoami port identity probe
+- **device-viewer**: label_geometry anchor helper
+- **device-viewer**: flatten curved SVG segments
+
+### Fix
+
+- **dock-panes**: don't force-show hot-mounted dock panes
+- **quick-actions**: skip tooltip shortcut suffix when there is no shortcut
+- **protocol-tree**: forward run-bracket hooks to compound handlers
+- **video-protocol**: capture step_id uses dotted path to match recording scheme
+- **plugin_management**: restore saved layout after hot-loaded panes mount
+- **device-viewer**: keep alpha settings adjustable while protocol runs
+- **application**: tolerate no-Redis at menus import
+- **device-viewer**: ignore protocol-side route colors
+- **device-viewer**: apply display state as a diff, not reset-rebuild
+- **protocol-tree**: route execution mirrors the device viewer
+- **utils**: stepped slider readout follows user drags
+- **peripherals**: announce monitor shutdown without reading _searching
+- **plugin-management**: persist group toggles in app preferences
+- **logger**: write log files as utf-8
+- ascii arrows in log messages
+- **microdrop-utils**: never fall back to a busy port
+- **device-viewer**: re-pivot label rotation on refit
+- **device-viewer**: draw channel labels above all shapes
+- **device-viewer**: anchor channel labels inside the shape
+- **device-viewer**: repair electrode rings at the source
+- **device-viewer**: keep largest lobe of repaired rings
+- **device-viewer**: repair self-intersecting rings
+
+### Refactor
+
+- **protocol_quick_action_tools**: move New Group shortcut to Ctrl+Shift+Return
+- **quick-actions**: carry the dock pane in the action context
+- **device-viewer**: render-perf review cleanups
+- **device-viewer**: typed traits in RouteExecutionService
+- **utils**: fold the plan builder into the params entry point
+- **utils**: centralize route-execution planning
+- **device-viewer**: feed-owned streaming replaces Live feed checkbox
+- **device-viewer**: repair rings in one place
+
+### Perf
+
+- **device-viewer**: move capture PNG saves off the GUI thread
+- **device-viewer**: cap preview frame rate without touching recordings
+- **device-viewer**: skip whole-model serialization during route playback
+- **device-viewer**: gamepad poll idles without a controller
+- **device-viewer**: recolor proportional to what changed
+- **device-viewer**: repaint only changed items, cache static geometry
+- **device-viewer**: stop rendering provider camera frames in video layer
+
 ## v1.1.0 (2026-07-06)
 
 ### Feat
