@@ -18,7 +18,7 @@ from pyface.qt import QtWidgets
 
 from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_,
-                          UIInfo, Handler, RangeEditor, BasicEditorFactory)
+                          UIInfo, Handler, RangeEditor, EnumEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
@@ -86,8 +86,7 @@ class ColorColumn(ObjectColumn):
 
 
 class CustomCheckboxColumn(ObjectColumn):
-    def __init__(self, **traits: Any):
-        super().__init__(**traits)
+    def traits_init(self):
         self.format_func = self.formatter
         self.text_font = QFont(ICON_FONT_FAMILY, 15)
 
@@ -104,65 +103,119 @@ class VisibleColumn(CustomCheckboxColumn):
         return ICON_VISIBILITY if value else ICON_VISIBILITY_OFF
 
 
-######## We have to define a new range column to properly handle range traits with spin boxes ########
-class RangeColumn(ObjectColumn):
-    editing_object_key = Str
+class GlyphActionColumn(ObjectColumn):
+    """Read-only table column that always renders a fixed Material Symbols glyph
+    and fires a named Event (or sets a Bool) on the row when clicked — for
+    per-row actions like open / upgrade / delete. The toggle-with-two-glyphs
+    variant is :class:`CustomCheckboxColumn`.
 
-    def __init__(self, **traits):
-        super().__init__(**traits)
-        self.editing_object_key = ""
+        GlyphActionColumn(name="dist_name", label="Uninstall",
+                          glyph=ICON_DELETE, fire="uninstall")
 
-        ### traitsui renders the static read-mode label and the editor labels
-        ### when in edit-mode we have to check which row is edited and remove the static read-mode text
-        self.format_func = self.formatter
+    ``name`` may point at any readable row trait (used only for column
+    identity — the cell text is always ``glyph``); ``fire`` names the row's
+    Event/Bool trait set True on click.
+    """
 
-    def formatter(
-        self, value, object
-    ):  # No self since were just passing it as a function
-        if object.key == self.editing_object_key:
-            return ""
-        return value
+    #: Material Symbols ligature/codepoint shown in every cell.
+    glyph = Str()
+    #: Name of the Event/Bool trait on the row set True when the cell is clicked.
+    fire = Str()
+    #: Icon font point size.
+    icon_point_size = Int(16)
 
-    def get_editor(self, object):
-        """Gets the editor for the column of a specified object."""
-
-        # get the editor returned by super class to obtain some trait values for modified editor.
-        _editor = super().get_editor(object)
-
-        ### the current edited row object key is set here
-        self.editing_object_key = object.key
-
-        ### We have to override the del method of the range editor so when the edit mode is exited and del is called,
-        ### we indicate that none of the rows are edited by setting the editing_object_key to "".
-        ### to do this we need to apss the reference of this "parent_column" object to the range editor
-
-        ### This is a major hack!
-        ### TODO: Figure out better way to do this.
-
-        class _RangeEditor(RangeEditor):
-            parent_column = Instance(RangeColumn)
-
-            def __del__(self):
-                self.parent_column.editing_object_key = ""
-
-        editor = _RangeEditor(
-            low=_editor.low, high=_editor.high, mode=_editor.mode, parent_column=self
-        )
-
-        return editor
+    def traits_init(self):
+        self.editable = False
+        self.horizontal_alignment = "center"
+        self.text_font = QFont(ICON_FONT_FAMILY, self.icon_point_size)
 
     def get_value(self, object):
-        """Gets the formatted value of the column for a specified object."""
-        try:
-            if self.format_func is not None:
-                return self.format_func(self.get_raw_value(object), object)
+        return self.glyph
 
-            return self.format % (self.get_raw_value(object),)
-        except:
-            logger.error(
-                "Error occurred trying to format a %s value" % self.__class__.__name__
-            )
-            return "Format!"
+    def on_click(self, object):
+        if self.fire:
+            setattr(object, self.fire, True)
+
+
+class EditBlankingColumn(ObjectColumn):
+    """ObjectColumn whose in-cell editor *replaces* rather than overlaps the
+    static text.
+
+    TraitsUI paints a cell's static read-mode text even while its editor widget
+    is open, so a spin box / dropdown renders on top of the stale value. This
+    base blanks the edited row's static text for the duration of the edit. The
+    edited row is tracked by object identity, so no per-row 'key' trait is
+    needed.
+
+    Subclasses implement ``make_cell_editor(object)`` to supply the editor —
+    typically built via ``self._editor_with_reset(FactoryClass, **kwargs)`` so
+    the static text reappears when the editor is disposed.
+    """
+
+    #: id() of the row whose cell is currently open for editing (0 == none).
+    _editing_id = Int(0)
+
+    def traits_init(self):
+        self.format_func = self._blank_if_editing
+
+    def _blank_if_editing(self, value, object):
+        return "" if id(object) == self._editing_id else value
+
+    def get_value(self, object):
+        # ObjectColumn.get_value passes only the value to format_func; our
+        # formatter needs the object too (to know which row is being edited).
+        if self.format_func is not None:
+            return self.format_func(self.get_raw_value(object), object)
+        return self.get_raw_value(object)
+
+    def get_editor(self, object):
+        self._editing_id = id(object)
+        return self.make_cell_editor(object)
+
+    def make_cell_editor(self, object):
+        """Return the in-cell editor for ``object``. Subclass hook."""
+        raise NotImplementedError
+
+    def _editor_with_reset(self, editor_factory_cls, **kwargs):
+        """Instantiate ``editor_factory_cls(**kwargs)``, clearing the 'editing'
+        marker when the editor is disposed so the row's static text returns.
+        (TraitsUI editor factories are GC'd when the edit ends; a per-instance
+        ``__del__`` isn't possible, so subclass the factory here.)"""
+        column = self
+
+        class _ResettingEditor(editor_factory_cls):
+            def __del__(self):
+                column._editing_id = 0
+
+        return _ResettingEditor(**kwargs)
+
+
+class RangeColumn(EditBlankingColumn):
+    """Range trait rendered as an in-cell spin box, with the row's static value
+    blanked while editing so it doesn't show through the spin box (see
+    :class:`EditBlankingColumn`)."""
+
+    def make_cell_editor(self, object):
+        # The trait's default editor carries the resolved low/high/mode.
+        base = ObjectColumn.get_editor(self, object)
+        return self._editor_with_reset(
+            RangeEditor, low=base.low, high=base.high, mode=base.mode)
+
+
+class EnumSelectColumn(EditBlankingColumn):
+    """Edit-in-cell column whose editor is a dropdown (EnumEditor) of choices
+    taken per-row from a ``List(Str)`` trait named by ``values_name``. The
+    static text is blanked while the dropdown is open (see
+    :class:`EditBlankingColumn`).
+
+        EnumSelectColumn(name="version", values_name="available_versions")
+    """
+
+    #: Name of the row's List(Str) trait supplying the dropdown choices.
+    values_name = Str()
+
+    def make_cell_editor(self, object):
+        return self._editor_with_reset(EnumEditor, name=self.values_name)
 
 ## --------------------------------------------------------
 # Range editing spinner box with custom increments
