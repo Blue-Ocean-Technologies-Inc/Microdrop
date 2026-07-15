@@ -19,5 +19,7 @@ def make_add_group_action() -> _AddGroupAction:
         icon_text="playlist_add",
         tooltip="Add group",
         priority=30,
-        shortcut="Ctrl+Shift+G",
+        # Ctrl+Shift+Return (main Enter, mirroring add_step's Ctrl+Return) frees
+        # Ctrl+Shift+G for the tree's Unfold Group shortcut (#529).
+        shortcut="Ctrl+Shift+Return",
     )
