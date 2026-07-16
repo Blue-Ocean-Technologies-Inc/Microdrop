@@ -75,9 +75,22 @@ def test_ensure_channel_registered_passes_url(monkeypatch):
     calls = []
     monkeypatch.setattr(package_installer, "_run",
                         lambda args, cwd=None: calls.append((list(args), cwd)))
+    monkeypatch.setattr(package_installer, "_registered_channels", set())
     package_installer._ensure_channel_registered("https://prefix.dev/microdrop-plugins", cwd=None)
     assert calls[0][0] == ["workspace", "channel", "add",
                            "https://prefix.dev/microdrop-plugins"]
+
+
+def test_ensure_channel_registered_memoizes_per_process(monkeypatch):
+    """The channel URL is a fixed constant; re-registering it on every install
+    wastes a pixi subprocess. Once per (url, workspace) per run is enough."""
+    calls = []
+    monkeypatch.setattr(package_installer, "_run",
+                        lambda args, cwd=None: calls.append(list(args)))
+    monkeypatch.setattr(package_installer, "_registered_channels", set())
+    package_installer._ensure_channel_registered("https://c", cwd=None)
+    package_installer._ensure_channel_registered("https://c", cwd=None)
+    assert len(calls) == 1
 
 
 def test_install_from_channel_adds_and_returns(tmp_path, monkeypatch):
@@ -196,16 +209,16 @@ def test_uninstall_pure_removal_does_not_require_relaunch(tmp_path, monkeypatch)
     assert result.diff.removed == {"my-plugin": "1.0.0"}
 
 
-def test_uninstall_failure_requires_relaunch(tmp_path, monkeypatch):
-    """`pixi remove` failing is swallowed (existing contract) but must never
-    claim the hot path."""
+def test_uninstall_failure_raises(tmp_path, monkeypatch):
+    """A failed `pixi remove` must RAISE, not be swallowed — swallowing made
+    it indistinguishable from success-needing-relaunch, so the UI reported
+    'Uninstalled X.' for a package still on disk. The controllers' on_error
+    path turns the raise into an error dialog."""
     def fake_run(args, cwd=None):
         if args[:1] == ["remove"]:
             raise package_installer.InstallError("boom")
         return SimpleNamespace(stdout=json.dumps([_rec("numpy", "2.1.0")]))
     monkeypatch.setattr(package_installer, "_run", fake_run)
 
-    result = package_installer.uninstall_package("my-plugin", cwd=tmp_path)
-
-    assert result.diff is None
-    assert result.requires_relaunch is True
+    with pytest.raises(package_installer.InstallError):
+        package_installer.uninstall_package("my-plugin", cwd=tmp_path)

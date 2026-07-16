@@ -85,13 +85,25 @@ def _restore(cwd, snapshot):
         (Path(cwd) / name).write_bytes(data)
 
 
+#: (channel_url, workspace dir) pairs this process has already registered —
+#: `pixi workspace channel add` is idempotent but costs a subprocess, and the
+#: channel URL is a fixed constant, so paying it once per run is enough.
+_registered_channels = set()
+
+
 def _ensure_channel_registered(channel_url, cwd):
-    """`pixi workspace channel add <url>`; tolerate an already-registered channel."""
+    """`pixi workspace channel add <url>`; tolerate an already-registered
+    channel, and skip the subprocess entirely once this process has
+    registered the pair."""
+    key = (channel_url, str(cwd or WORKSPACE_DIR))
+    if key in _registered_channels:
+        return
     try:
         _run(["workspace", "channel", "add", channel_url], cwd=cwd)
     except InstallError as e:
         if "already" not in str(e).lower():
             raise
+    _registered_channels.add(key)
 
 
 def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
@@ -266,17 +278,15 @@ def documentation_url(dist_name) -> str:
 
 
 def uninstall_package(name, *, cwd=None) -> EnvChangeResult:
-    """`pixi remove <name>` + `pixi install`. Best-effort: a failure is logged,
-    not raised, and reports requires_relaunch=True so a failed removal never
-    claims the hot path."""
+    """`pixi remove <name>` + `pixi install`. Raises InstallError on failure —
+    swallowing it made a failed removal indistinguishable from a successful
+    one that merely needs a relaunch, so the UI reported "Uninstalled X."
+    for a package still on disk. InstallError names the failing pixi command,
+    and the controllers' on_error path surfaces it in an error dialog."""
     cwd = Path(cwd or WORKSPACE_DIR)
     before = _try_snapshot(cwd)
-    try:
-        _run(["remove", name], cwd=cwd)
-        _run(["install"], cwd=cwd)
-    except InstallError as e:
-        logger.warning(f"`pixi remove {name}` failed: {e}")
-        return EnvChangeResult(name=name, diff=None, requires_relaunch=True)
+    _run(["remove", name], cwd=cwd)
+    _run(["install"], cwd=cwd)
     diff = _diff_or_none(before, _try_snapshot(cwd))
     return EnvChangeResult(
         name=name, diff=diff,
