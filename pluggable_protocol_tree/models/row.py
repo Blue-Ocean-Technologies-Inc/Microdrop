@@ -11,7 +11,9 @@ and add one trait per column in the active column set.
 
 import uuid as _uuid
 
-from traits.api import HasTraits, Str, List, Instance, Tuple, Property, Bool, provides
+from traits.api import (
+    HasTraits, Str, List, Instance, Tuple, Property, Bool, Dict, provides,
+)
 
 from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
 
@@ -29,6 +31,12 @@ class BaseRow(HasTraits):
         desc="Internal mode flag: True when Route Reps Dur is the "
              "authoritative loop knob; False when Route Reps controls. "
              "Not a column — persisted via the row_flags map.")
+    column_locks = Dict(
+        Str, Dict,
+        desc="Owner-keyed per-row column locks: {col_id: {owner: reason}}. "
+             "Runtime-derived state, rebuilt from its source on load — "
+             "never persisted (a lock with no live owner could never be "
+             "released).")
 
     def _uuid_default(self):
         return _uuid.uuid4().hex
@@ -49,6 +57,40 @@ class BaseRow(HasTraits):
         """1-indexed dotted display id ('1.2.3') for this row — matches
         the Id column's rendering. Empty string for detached rows."""
         return ".".join(str(i + 1) for i in self.path) if self.path else ""
+
+    # --- per-row column locks (issue #541) ---
+
+    def lock_column(self, col_id: str, owner: str, reason: str = "") -> None:
+        """Lock ``col_id``'s cell on this row on behalf of ``owner``.
+
+        ``reason`` surfaces as the cell tooltip. The whole dict is
+        rebuilt and reassigned so trait observers (the tree model's
+        repaint wiring) fire — Traits does not notify on nested
+        mutation.
+        """
+        locks = {cid: dict(owners) for cid, owners in self.column_locks.items()}
+        locks.setdefault(col_id, {})[owner] = reason
+        self.column_locks = locks
+
+    def unlock_column(self, col_id: str, owner: str) -> None:
+        """Release ``owner``'s lock on ``col_id``. The cell stays locked
+        while any other owner still holds one. Unknown column ids or
+        owners are a no-op."""
+        if owner not in self.column_locks.get(col_id, {}):
+            return
+        locks = {cid: dict(owners) for cid, owners in self.column_locks.items()}
+        del locks[col_id][owner]
+        if not locks[col_id]:
+            del locks[col_id]
+        self.column_locks = locks
+
+    def is_column_locked(self, col_id: str) -> bool:
+        return bool(self.column_locks.get(col_id))
+
+    def column_lock_reasons(self, col_id: str) -> list:
+        """Non-empty lock reasons for ``col_id`` — the cell tooltip."""
+        return [reason for reason in self.column_locks.get(col_id, {}).values()
+                if reason]
 
 
 @provides(IGroupRow)
