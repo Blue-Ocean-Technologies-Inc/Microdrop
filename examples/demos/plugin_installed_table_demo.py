@@ -67,8 +67,8 @@ class DemoManagePluginsModel(ManagePluginsModel):
     def apply(self):
         print("[demo] apply groups:", self.desired())
 
-    def pre_uninstall(self, manifest_name):
-        print(f"[demo] pre_uninstall {manifest_name}")
+    def pre_change(self, manifest_name, dist_name=""):
+        print(f"[demo] pre_change {manifest_name}")
 
     def do_install_version(self, dist_name, version):
         print(f"[demo] would install {dist_name}=={version}")

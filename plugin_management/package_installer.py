@@ -56,7 +56,7 @@ class EnvDiff:
 
     @property
     def is_pure_removal(self):
-        """True when packages were only REMOVED. Safe after pre_uninstall has
+        """True when packages were only REMOVED. Safe after pre_change has
         already disabled the affected groups."""
         return not self.changed and not self.added
 
@@ -135,10 +135,51 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
 
 
 def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> EnvChangeResult:
-    """Upgrade a plugin to the latest channel version — an unpinned
-    `pixi add <name>` that re-resolves to the newest compatible build. Thin
-    wrapper over :func:`install_from_channel`."""
-    return install_from_channel(name, channel_url, cwd=cwd)
+    """Upgrade a plugin to the latest channel version via a full
+    remove + add cycle. Thin wrapper over :func:`reinstall_from_channel`."""
+    return reinstall_from_channel(name, channel_url, cwd=cwd)
+
+
+def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
+                           version=None) -> EnvChangeResult:
+    """Replace an installed package: `pixi remove <name>` then `pixi add`
+    (pinned when ``version`` is given) then `pixi install`.
+
+    A full remove + add rather than an in-place `pixi add <name>==<version>`
+    so NOTHING of the old build survives on disk — stale ``__pycache__`` or
+    leftover dist-info from an in-place transaction can hand the import
+    system old code under the new version's name.
+
+    The env is snapshotted BEFORE the remove and diffed against the state
+    after the add — never against the post-remove trough, where a plugin-only
+    dependency that left and came back at a different version would look like
+    a harmless addition while its old version is still imported.
+
+    Rolls back pyproject + lock on failure and best-effort re-materializes
+    the env, so a failed reinstall does not leave the removed state on disk."""
+    cwd = Path(cwd or WORKSPACE_DIR)
+    snapshot = _snapshot(cwd)
+    before = _try_snapshot(cwd)
+    spec = f"{name}=={version}" if version else name
+    try:
+        _run(["remove", name], cwd=cwd)
+        _ensure_channel_registered(channel_url, cwd)
+        _run(["add", spec], cwd=cwd)
+        _run(["install"], cwd=cwd)
+    except Exception:
+        _restore(cwd, snapshot)
+        try:
+            _run(["install"], cwd=cwd)
+        except InstallError as e:
+            logger.warning(
+                f"could not re-materialize the env after a failed reinstall "
+                f"of '{name}': {e}")
+        raise
+    diff = _diff_or_none(before, _try_snapshot(cwd))
+    logger.info(f"reinstalled plugin '{spec}' from {channel_url}")
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition)
 
 
 def _parse_search_json(stdout: str) -> list[dict]:

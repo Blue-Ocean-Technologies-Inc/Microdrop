@@ -9,7 +9,10 @@ and on Windows a loaded .pyd/.dll cannot be replaced.
 
 Two INDEPENDENT checks gate the fast path:
 
-1. The env diff must be purely additive (``EnvDiff.is_pure_addition``).
+1. No package OTHER than the target dist itself may change or vanish in the
+   env diff. The target changing itself (an in-place version change) is fine
+   *because of check 2*: callers unload + ``purge_plugin_modules`` the plugin
+   first, so its fresh code is genuinely importable.
 2. None of the modules ``enable()`` would import may already be in
    ``sys.modules``. The diff alone reports a reinstall-after-uninstall as a
    pure addition, but ``import_module`` would hand back the stale module and
@@ -21,6 +24,7 @@ human-readable string, also logged) so the relaunch dialog can say why the
 change could not be applied live instead of looking like arbitrary nagging.
 """
 import importlib
+import importlib.metadata as importlib_metadata
 import sys
 
 from plugin_management.entry_point_discovery import (
@@ -31,14 +35,19 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
+def _top_modules(plugin_specs):
+    """The top-level module of each ``"module.path:ClassName"`` spec — exactly
+    what ``group_manager._resolve_plugin_class`` imports. Derived from the
+    specs rather than by mapping package names to modules — conda names,
+    python dist names and module names all differ, and native libs map to no
+    dist at all, so any mapping-based check under-reports in the unsafe
+    direction."""
+    return {spec.partition(":")[0].split(".")[0] for spec in plugin_specs}
+
+
 def _live_modules(manifest, already_imported):
     """Top-level modules ``enable()`` would import that were ALREADY loaded
     before this install — i.e. stale code we cannot replace in-process.
-
-    Keys on exactly what ``group_manager._resolve_plugin_class`` imports,
-    rather than mapping package names to modules — conda names, python dist
-    names and module names all differ, and native libs map to no dist at all,
-    so any mapping-based check under-reports in the unsafe direction.
 
     ``already_imported`` MUST be a snapshot of ``sys.modules`` taken before
     discovery runs, NOT a live read. ``discover_entry_point_manifests()``
@@ -46,11 +55,61 @@ def _live_modules(manifest, already_imported):
     ``importlib.resources.files(ep.module)``, which *imports that module* — so
     a live read would report the module discovery itself had just imported and
     refuse every install. See ``_hot_load_installed``."""
-    for spec in manifest.groups:
-        for plugin_spec in spec.plugins:          # "module.path:ClassName"
-            top = plugin_spec.partition(":")[0].split(".")[0]
-            if top in already_imported:
-                yield top
+    specs = [p for group in manifest.groups for p in group.plugins]
+    for top in sorted(_top_modules(specs)):
+        if top in already_imported:
+            yield top
+
+
+def _dist_top_modules(dist_name):
+    """Every top-level module the installed distribution SHIPS, from its file
+    RECORD. The group specs name only the plugin-class modules; a dist may
+    ship additional top-level helper packages those modules import — purging
+    by specs alone leaves them cached, and the fresh re-import silently binds
+    old helper code under the new version. Empty set if not installed."""
+    try:
+        dist = importlib_metadata.distribution(dist_name)
+    except importlib_metadata.PackageNotFoundError:
+        return set()
+    tops = set()
+    for f in dist.files or ():
+        first = f.parts[0] if f.parts else ""
+        if not first or first.endswith((".dist-info", ".data")):
+            continue
+        if len(f.parts) == 1:
+            if first.endswith(".py"):
+                tops.add(first[:-3])
+        else:
+            tops.add(first)
+    return tops
+
+
+def purge_plugin_modules(plugin_specs, dist_name=""):
+    """Drop the plugin's top-level modules (and all their submodules) from
+    ``sys.modules`` so a later install re-imports FRESH code from disk instead
+    of binding to the cached, now-stale module objects.
+
+    Purges the union of the spec-derived tops and — when ``dist_name`` is
+    given and still installed — every top-level module the distribution's
+    RECORD ships, so helper packages outside the specs cannot survive as
+    stale code.
+
+    Call only after the plugin's groups are disabled and deregistered. Safe
+    because MicroDrop plugins are fully isolated (decoupled via dramatiq
+    topics / app_globals, no cross-plugin imports — they can even run as
+    separate processes), so once a plugin's own instances are torn down
+    nothing else holds references into its modules. This is what lets an
+    install → uninstall → reinstall cycle, and an in-place version change,
+    hot-load instead of demanding a relaunch."""
+    tops = _top_modules(plugin_specs) | _dist_top_modules(dist_name)
+    purged = [name for name in list(sys.modules)
+              if name.split(".")[0] in tops]
+    for name in purged:
+        del sys.modules[name]
+    if purged:
+        logger.info(f"purged {len(purged)} module(s) under {sorted(tops)} "
+                    f"for reinstall")
+    return purged
 
 
 def hot_load_installed(application, manager, dist_name, diff) -> str | None:
@@ -79,13 +138,19 @@ def _refuse(dist_name, reason):
 
 
 def _hot_load_installed(application, manager, dist_name, diff):
+    norm = PluginGroupManager._norm_dist
     if diff is None:
         return _refuse(dist_name,
                        "the environment change could not be determined")
-    if not diff.is_pure_addition:
-        moved = sorted(diff.changed) + sorted(diff.removed)
+    # The target dist changing ITSELF (in-place version change) is allowed:
+    # the caller unloads + purges its modules first, and the sys.modules
+    # guard below still refuses if that didn't happen. Any OTHER package
+    # moving may be live in this interpreter — relaunch.
+    moved = sorted(diff.changed) + sorted(diff.removed)
+    blocking = [m for m in moved if norm(m) != norm(dist_name)]
+    if blocking:
         return _refuse(dist_name, f"existing packages were changed or "
-                                  f"removed: {', '.join(moved)}")
+                                  f"removed: {', '.join(blocking)}")
 
     # Snapshot sys.modules BEFORE discovery. discover_entry_point_manifests()
     # reads each entry point's package-data manifest via
@@ -100,7 +165,6 @@ def _hot_load_installed(application, manager, dist_name, diff):
     # import_module goes through is not.
     importlib.invalidate_caches()
 
-    norm = PluginGroupManager._norm_dist
     mine = [(m, d) for m, d in discover_entry_point_manifests()
             if norm(d) == norm(dist_name)]
     if not mine:

@@ -222,3 +222,45 @@ def test_uninstall_failure_raises(tmp_path, monkeypatch):
 
     with pytest.raises(package_installer.InstallError):
         package_installer.uninstall_package("my-plugin", cwd=tmp_path)
+
+
+def test_reinstall_diffs_across_the_whole_cycle(tmp_path, monkeypatch):
+    """The diff must span pre-remove -> post-add: a plugin-only dep that left
+    and came back at a DIFFERENT version is a change (its old build may still
+    be imported), never a harmless addition against the post-remove trough."""
+    fake = _FakeRun([_rec("my-plugin", "1.0"), _rec("scipy", "1.10")],
+                    [_rec("my-plugin", "2.0"), _rec("scipy", "1.11")])
+    monkeypatch.setattr(package_installer, "_run", fake)
+    monkeypatch.setattr(package_installer, "_registered_channels", set())
+
+    result = package_installer.reinstall_from_channel(
+        "my-plugin", "https://c", cwd=tmp_path, version="2.0")
+
+    assert ["remove", "my-plugin"] in fake.calls
+    assert ["add", "my-plugin==2.0"] in fake.calls
+    assert result.diff.changed == {"my-plugin": ("1.0", "2.0"),
+                                   "scipy": ("1.10", "1.11")}
+
+
+def test_reinstall_failure_rolls_back_and_rematerializes(tmp_path, monkeypatch):
+    """A failed add must restore pyproject/lock AND re-run `pixi install`, so
+    the env is not left at the post-remove trough."""
+    (tmp_path / "pyproject.toml").write_text("orig", encoding="utf-8")
+    calls = []
+
+    def fake_run(args, cwd=None):
+        calls.append(list(args))
+        if args[:1] == ["add"]:
+            raise package_installer.InstallError("boom")
+        if args[:1] == ["list"]:
+            return SimpleNamespace(stdout=json.dumps([_rec("my-plugin", "1.0")]))
+        return None
+    monkeypatch.setattr(package_installer, "_run", fake_run)
+    monkeypatch.setattr(package_installer, "_registered_channels", set())
+
+    with pytest.raises(package_installer.InstallError):
+        package_installer.reinstall_from_channel("my-plugin", "https://c",
+                                                 cwd=tmp_path)
+
+    assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "orig"
+    assert ["install"] in calls

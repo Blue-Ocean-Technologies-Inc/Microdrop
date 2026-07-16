@@ -159,6 +159,44 @@ def test_refuses_when_the_plugin_cannot_be_imported(monkeypatch):
     assert "failed to load" in reason
 
 
+def test_purge_then_reinstall_hot_loads(monkeypatch, dummy_module):
+    """install -> uninstall (disable + deregister + purge, what
+    manage_model.pre_change does) -> reinstall must hot-load: the purge drops
+    the stale module, so the guard passes and fresh code imports from disk."""
+    _patch_discovery(monkeypatch, _manifest(dummy_module))
+    app, manager = FakeApp(), PluginGroupManager()
+    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is None
+
+    manager.disable(app, "my_group")
+    manager.deregister_plugin("my_plugin")
+    hot_load.purge_plugin_modules([f"{dummy_module}:HotDummyPlugin"])
+    assert dummy_module not in sys.modules
+
+    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is None
+    assert manager.is_loaded("my_group")
+
+
+def test_own_dist_version_change_is_allowed(monkeypatch, dummy_module):
+    """An in-place version change moves ONLY the target dist in the diff; its
+    modules were purged by pre_change, so hot-load instead of relaunching."""
+    _patch_discovery(monkeypatch, _manifest(dummy_module))
+    app, manager = FakeApp(), PluginGroupManager()
+    own_change = EnvDiff(added={}, changed={DIST: ("1.0", "2.0")}, removed={})
+
+    assert hot_load.hot_load_installed(app, manager, DIST, own_change) is None
+    assert manager.is_loaded("my_group")
+
+
+def test_purge_plugin_modules_drops_module_and_submodules(dummy_module):
+    importlib.import_module(dummy_module)
+    assert dummy_module in sys.modules
+
+    purged = hot_load.purge_plugin_modules([f"{dummy_module}:HotDummyPlugin"])
+
+    assert dummy_module in purged
+    assert dummy_module not in sys.modules
+
+
 def test_live_modules_keys_on_the_top_level_package():
     """`plugin_management` is always imported here, so a spec nested under it
     must report the ROOT package, not the leaf module."""

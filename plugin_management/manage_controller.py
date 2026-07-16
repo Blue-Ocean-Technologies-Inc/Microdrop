@@ -33,6 +33,7 @@ from .browse_model import BrowsePluginsModel
 from .browse_view import browse_view
 from .browse_controller import BrowsePluginsHandler
 from .hot_load import hot_load_installed
+from .package_installer import EnvDiff
 from .relaunch import finish_change
 
 logger = get_logger(__name__)
@@ -162,12 +163,16 @@ class ManagePluginsController(SafeCancelTableController):
             self._set_row_version(row, old_version)  # revert the dropdown
             return
         label, dist = row.label, row.dist_name
+        # Unload + purge first so the new version's code is genuinely
+        # importable — an in-place version change hot-loads like an install.
+        self.model.pre_change(row.manifest_name, dist)
         self._run(lambda: self.model.do_install_version(dist, new_version),
                   title="Installing version",
                   message=f"Installing {label} {new_version}…",
                   done=lambda r: self._finish_install_change(
                       f"Installed <b>{_esc(label)}</b> {_esc(new_version)}.",
-                      dist, r))
+                      dist, r),
+                  error=lambda e: self._reenable_from_disk(dist))
 
     @observe("model:installed_rows:items:upgrade")
     def _on_upgrade(self, event):
@@ -179,10 +184,12 @@ class ManagePluginsController(SafeCancelTableController):
                    message=f"Upgrade <b>{_esc(label)}</b> to the latest "
                            f"version{target}?", cancel=False) != YES:
             return
+        self.model.pre_change(row.manifest_name, dist)
         self._run(lambda: self.model.do_upgrade(dist),
                   title="Upgrading plugin", message=f"Upgrading {label}…",
                   done=lambda r: self._finish_install_change(
-                      f"Upgraded <b>{_esc(label)}</b>.", dist, r))
+                      f"Upgraded <b>{_esc(label)}</b>.", dist, r),
+                  error=lambda e: self._reenable_from_disk(dist))
 
     @observe("model:installed_rows:items:uninstall")
     def _on_uninstall(self, event):
@@ -192,7 +199,7 @@ class ManagePluginsController(SafeCancelTableController):
                    message=f"Uninstall <b>{_esc(label)}</b>? This removes its "
                            f"package from the environment.", cancel=False) != YES:
             return
-        self.model.pre_uninstall(manifest)
+        self.model.pre_change(manifest, dist)
         self._run(lambda: self.model.do_uninstall(dist),
                   title="Uninstalling plugin", message=f"Removing {label}…",
                   done=lambda r: (self.model.refresh(),
@@ -200,13 +207,32 @@ class ManagePluginsController(SafeCancelTableController):
                                   finish_change(
                                       self.task,
                                       f"Uninstalled <b>{_esc(label)}</b>.",
-                                      not r.requires_relaunch)))
+                                      not r.requires_relaunch)),
+                  error=lambda e: self._reenable_from_disk(dist))
 
     # --- helpers ---
-    def _run(self, work, *, title, message, done):
+    def _run(self, work, *, title, message, done, error=None):
+        """Threaded worker + wait dialog. ``error`` (GUI thread) runs before
+        the error dialog — recovery first, then tell the user what failed."""
+        def _on_error(e):
+            if error is not None:
+                error(e)
+            error_dialog(parent=None, title=title, message=str(e))
         run_with_wait(work, title=title, message=message, on_success=done,
-                      on_error=lambda e: error_dialog(
-                          parent=None, title=title, message=str(e)))
+                      on_error=_on_error)
+
+    def _reenable_from_disk(self, dist_name):
+        """GUI thread: a failed pixi step left the plugin unloaded + purged
+        while its files are still on disk (install rolls back). Re-register
+        and re-enable from disk so the failure costs only the error dialog —
+        an empty diff passes the gate, and the purge means fresh imports."""
+        reason = hot_load_installed(self.model.application, self.model.manager,
+                                    dist_name, EnvDiff({}, {}, {}))
+        if reason is not None:
+            logger.warning(f"could not re-enable '{dist_name}' after a failed "
+                           f"change: {reason}")
+        self.model.refresh()
+        self.model.refresh_installed()
 
     def _finish_install_change(self, msg_html, dist_name, result):
         """GUI thread: apply an install/upgrade live if safe, rebuild BOTH
