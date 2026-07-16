@@ -4,7 +4,7 @@ from PySide6.QtGui import QColor
 from apptools.preferences.api import PreferencesHelper
 from traits.etsconfig.api import ETSConfig
 from traits.api import Bool, Str, Directory, Range
-from traitsui.api import VGroup, View, Item, Group, RangeEditor, Color
+from traitsui.api import VGroup, View, Item, RangeEditor, Color
 from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
@@ -35,9 +35,6 @@ class MicrodropPreferences(PreferencesHelper):
     always_use_default_layout = Bool
 
     EXPERIMENTS_DIR = Directory()
-
-    # dialogs:
-    suppress_no_shorts_information = Bool(False)
 
     # ---- Central canvas background styling ----------------------------------
     # `canvas_background_use_custom` is the master switch:
@@ -126,37 +123,3 @@ class MicrodropPreferencesPane(PreferencesPane):
 
         resizable=True,
     )
-
-
-class MicrodropDialogsPreferencesPane(PreferencesPane):
-    """Microdrop General preferences pane — 'Dialog Settings' group.
-
-    Contributes to the same `microdrop.app.general_settings` tab as
-    MicrodropPreferencesPane but in a separate group so the dialog-related
-    toggles can live independently of the canvas/startup controls.
-    """
-
-    #### 'PreferencesPane' interface ##########################################
-
-    # The factory to use for creating the preferences model object.
-    model_factory = MicrodropPreferences
-
-    category = microdrop_tab.id
-
-    ########################################################################################
-
-    view = View(
-        Item("_"),  # Separator
-        Group(
-            Item("suppress_no_shorts_information"),
-            label="Dialog Settings",
-            show_border=True,
-            style_sheet=preferences_group_style_sheet,
-        ),
-        Item("_"),  # Separator
-        resizable=True,
-    )
-
-    def apply(self, info=None):
-        # super().apply(info)
-        pass

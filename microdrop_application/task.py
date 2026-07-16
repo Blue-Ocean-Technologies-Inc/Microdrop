@@ -13,6 +13,7 @@ from electrode_controller.consts import disabled_channels_changed_publisher
 # Local imports.
 from .consts import PKG
 from dropbot_controller.models.self_tests import TestEvent
+from dropbot_controller.models.shorts import ShortsDetectedSignal
 
 from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
                                                       basic_listener_actor_routine)
@@ -205,17 +206,22 @@ class MicrodropTask(Task):
         Handle shorts-detected messages. Parse the shorted channels and emit
         a Qt signal so the UI thread can show a confirmation dialog.
         """
-        data = json.loads(message)
-        shorts = data.get("Shorts_detected", [])
+        signal = ShortsDetectedSignal.model_validate_json(message)
+        shorts = signal.shorted_channels
         if shorts:
             logger.info(f"Shorts detected on channels: {shorts}")
         else:
             logger.info(f"No Shorts detected")
 
-        GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(self._on_shorts_detected_dialog(shorts), shorts))
+        GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(
+            self._on_shorts_detected_dialog(shorts, signal.show_window), shorts))
 
-    def _on_shorts_detected_dialog(self, shorted_channels: list):
-        """Offer the user the option to disable shorted channels (runs in UI thread)."""
+    def _on_shorts_detected_dialog(self, shorted_channels: list, show_window: bool):
+        """Offer the user the option to disable shorted channels (runs in UI thread).
+
+        With no shorts to report there is only something to say when the
+        publisher forced `show_window` — i.e. the user asked for the check.
+        """
 
         if shorted_channels:
             channels_str = ", ".join(str(ch) for ch in shorted_channels)
@@ -228,14 +234,10 @@ class MicrodropTask(Task):
                 ),
             )
 
-        else:
-            if not self.microdrop_preferences.suppress_no_shorts_information:
-                _, checked = information(None, title="No Shorts Detected", message="No shorts were detected.",
-                                         checkbox_text="Do not show again (can be undone from preferences)")
+        elif show_window:
+            information(None, title="No Shorts Detected", message="No shorts were detected.")
 
-                self.microdrop_preferences.suppress_no_shorts_information = checked
-
-            return None
+        return None
 
     @staticmethod
     def _handle_shorts_detected_dialog_user_input(result, shorts):
