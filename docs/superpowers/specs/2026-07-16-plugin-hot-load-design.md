@@ -3,9 +3,10 @@
 **Date:** 2026-07-16
 **Scope:** `plugin_management` only — new `hot_load.py`; snapshot/diff
 helpers + `EnvChangeResult` in `package_installer.py`; `register_manifest`
-added to `i_plugin_group_manager.py`; the four `confirm_and_relaunch` call
-sites in `browse_controller.py` / `manage_controller.py` /
-`update_controller.py` routed through one `finish_change(...)` helper.
+added to `i_plugin_group_manager.py`; the three `confirm_and_relaunch` call
+sites in `browse_controller.py` / `manage_controller.py` routed through one
+`finish_change(...)` helper. `update_controller.py` is deliberately **not**
+touched (see §7).
 **Goal:** after a plugin package is installed or removed, decide from a
 `pixi list --json` diff whether the change is safe to apply to the live
 interpreter. When it is, re-discover entry points, register the new
@@ -317,12 +318,19 @@ simply fail it on the first line and cost nothing:
   returns `False` immediately and behaviour is unchanged. Routing them
   through the same code keeps one path and means a future loosening of the
   gate needs no new wiring.
-- `update_controller` — update-all; same two calls, always `changed`, always
-  relaunch.
-- `manage_controller._on_uninstall` — the one exception. `pre_uninstall`
-  still runs first, then `finish_change(task, msg, not r.requires_relaunch)`
-  with **no** `hot_load_installed` call, because uninstall imports nothing
-  and has nothing to register.
+- `manage_controller._on_uninstall` — `pre_uninstall` still runs first, then
+  `finish_change(task, msg, not r.requires_relaunch)` with **no**
+  `hot_load_installed` call, because uninstall imports nothing and has
+  nothing to register.
+
+**`update_controller` is left untouched**, and this is the one place the
+"uniform" rule does not apply. `update_model.do_update_all` loops over
+several packages and returns `(succeeded, failed)` — lists of *names*, not
+an `EnvChangeResult` — so routing it through `finish_change` would mean
+reshaping its return type. It would buy nothing: update-all only ever
+updates *already-installed* plugins, so its diff always contains `changed`
+and it can never take the fast path. It keeps calling
+`confirm_and_relaunch` directly.
 
 `register_manifest` is added to `IPluginGroupManager`
 (`i_plugin_group_manager.py`), which currently declares only `is_loaded` /
