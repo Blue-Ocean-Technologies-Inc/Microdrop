@@ -14,6 +14,7 @@ from traits.api import Instance, Button, Bool, Str, observe
 from pyface.tasks.api import Task
 from pyface.qt.QtWidgets import QToolBar, QSplitter, QWidget
 from pyface.qt.QtGui import QFont
+from pyface.qt.QtCore import QTimer
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, error as error_dialog, YES, escape_html_multiline)
@@ -140,6 +141,14 @@ class ManagePluginsController(SafeCancelTableController):
         new_version, old_version = event.new, event.old
         if not new_version or new_version == old_version:
             return
+        # This fires from inside the cell editor's commit; running a modal
+        # confirm (nested event loop) + reverting the trait here reentrantly
+        # corrupts the item-view mid-edit and crashes Qt. Handle it after the
+        # editor has closed.
+        QTimer.singleShot(
+            0, lambda: self._prompt_install_version(row, new_version, old_version))
+
+    def _prompt_install_version(self, row, new_version, old_version):
         if confirm(parent=None, title="Install version?",
                    message=f"Install <b>{_esc(row.label)}</b> version "
                            f"<b>{_esc(new_version)}</b>? This changes the package "
