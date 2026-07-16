@@ -158,3 +158,24 @@ live route sync so step cells only mutate on deliberate user action.
 - The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
 - The tree publishes that same-step refresh in two cases: the post-commit echo (above), and any tree-originated edit to an execution-param cell on the selected step (`_republish_on_param_cell_change`, gated on `DV_EXECUTION_PARAM_COL_IDS`) — protocol values supersede the sidebar, including uncommitted sidebar edits.
 
+### Backend → Microdrop task: shorts detected
+
+One topic carries both the spontaneous hardware shorts signal and the answer to an explicit user check, so the payload has to say which one it is: an empty channel list means "no shorts", and only the publisher knows whether the user is waiting to hear that.
+
+**Topic**
+- `SHORTS_DETECTED = "dropbot/signals/shorts_detected"` — defined in `dropbot_controller/consts.py`.
+
+**Payload schema**
+- Pydantic `ShortsDetectedSignal` at `dropbot_controller/models/shorts.py`.
+- Fields: `shorted_channels: list[int]` (empty means none found), `show_window: bool` (force a dialog even with no shorts).
+- Published through the `shorts_detected_publisher` singleton in `dropbot_controller/consts.py` — never hand-rolled `json.dumps`.
+
+**Publisher side (dropbot_controller)**
+- `dropbot_controller_base._shorts_detected_wrapper` — the proxy's `shorts-detected` signal; `show_window=False`, nobody asked, so no shorts means stay silent.
+- `dropbot_controller_base.on_detect_shorts_request` and `services/dropbot_self_tests_mixin_service` (the `test_shorts` branch) — both answer an explicit user request, so `show_window=True`.
+- `mock_dropbot_controller/mock_controller.py` mirrors both cases (`on_detect_shorts_request`, `simulate_shorts`).
+
+**Subscriber side (microdrop_application)**
+- `task._on_shorts_detected_triggered` validates the payload and hands off to the UI thread.
+- `task._on_shorts_detected_dialog`: with shorts → a `confirm` offering to keep the channels enabled; declining publishes them via `disabled_channels_changed_publisher`. Without shorts → the "No Shorts Detected" info dialog only when `show_window` is set.
+
