@@ -14,8 +14,8 @@ from microdrop_utils.ureg_helpers import ureg
 from microdrop_utils.dramatiq_controller_base import generate_class_method_dramatiq_listener_actor, invoke_class_method, TimestampedMessage
 
 from .consts import (CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, HALT, START_DEVICE_MONITORING,
-                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, SHORTS_DETECTED, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
-                     SET_REALTIME_MODE, DROPBOT_CONNECTION_STATE_KEY)
+                     RETRY_CONNECTION, OUTPUT_ENABLE_PIN, PKG, SELF_TEST_CANCEL, CHANGE_SETTINGS,
+                     SET_REALTIME_MODE, DROPBOT_CONNECTION_STATE_KEY, shorts_detected_publisher)
 
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 
@@ -249,9 +249,7 @@ class DropbotControllerBase(HasTraits):
 
     @staticmethod
     def _shorts_detected_wrapper(signal: dict[str, str]):
-        shorts_list = signal.get('values')
-        shorts_dict = {'Shorts_detected': shorts_list}
-        publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
+        shorts_detected_publisher.publish(shorted_channels=signal.get('values', []))
 
     @staticmethod
     def _halted_event_wrapper(signal):
@@ -308,9 +306,10 @@ class DropbotControllerBase(HasTraits):
         if self.proxy is not None:
             if self.proxy.monitor is not None:
                 shorts_list = self.proxy.detect_shorts()
-                shorts_dict = {'Shorts_detected': shorts_list}
-                logger.info(f"Detected shorts: {shorts_dict}")
-                publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
+                logger.info(f"Detected shorts: {shorts_list}")
+                # The request came from the user, so always report back — even
+                # when there is nothing to report.
+                shorts_detected_publisher.publish(shorted_channels=shorts_list, show_window=True)
 
     def on_halt_request(self, message):
         message = json.loads(message)
