@@ -1,5 +1,6 @@
 """Tests for the channel search/parse/cache data layer."""
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -89,6 +90,8 @@ def test_install_from_channel_adds_and_returns(tmp_path, monkeypatch):
         "scipy_analysis", "https://prefix.dev/microdrop-plugins", cwd=tmp_path)
     assert ["add", "scipy_analysis"] in calls
     assert result.name == "scipy_analysis"
+    # The fake _run returns None, so snapshotting fails -> unknown -> relaunch.
+    assert result.diff is None
     assert result.requires_relaunch is True
 
 
@@ -113,3 +116,96 @@ def test_installed_plugin_dists_shape():
     for name, version in dists.items():
         assert name and isinstance(name, str)
         assert version and isinstance(version, str)
+
+
+def _rec(name, version, build="b0", kind="conda"):
+    return {"name": name, "version": version, "build": build, "kind": kind}
+
+
+class _FakeRun:
+    """Stands in for package_installer._run.
+
+    Serves a different `pixi list --json` payload on each successive `list`
+    call, so an install can be made to look purely additive or not."""
+
+    def __init__(self, *list_payloads):
+        self.payloads = list(list_payloads)
+        self.calls = []
+
+    def __call__(self, args, cwd=None):
+        self.calls.append(list(args))
+        if args[:1] == ["list"]:
+            return SimpleNamespace(stdout=json.dumps(self.payloads.pop(0)))
+        return None
+
+
+def test_install_pure_addition_does_not_require_relaunch(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text("orig", encoding="utf-8")
+    fake = _FakeRun([_rec("numpy", "2.1.0")],
+                    [_rec("numpy", "2.1.0"), _rec("my-plugin", "1.0.0")])
+    monkeypatch.setattr(package_installer, "_run", fake)
+
+    result = package_installer.install_from_channel(
+        "my-plugin", "https://c", cwd=tmp_path)
+
+    assert result.requires_relaunch is False
+    assert result.diff.added == {"my-plugin": "1.0.0"}
+
+
+def test_install_that_bumps_a_dep_requires_relaunch(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text("orig", encoding="utf-8")
+    fake = _FakeRun([_rec("numpy", "2.1.0")],
+                    [_rec("numpy", "2.2.0"), _rec("my-plugin", "1.0.0")])
+    monkeypatch.setattr(package_installer, "_run", fake)
+
+    result = package_installer.install_from_channel(
+        "my-plugin", "https://c", cwd=tmp_path)
+
+    assert result.requires_relaunch is True
+    assert result.diff.changed == {"numpy": ("2.1.0", "2.2.0")}
+
+
+def test_install_snapshot_failure_still_installs_and_asks_relaunch(
+        tmp_path, monkeypatch):
+    """A broken `pixi list` must never break the install — it degrades to the
+    relaunch prompt."""
+    (tmp_path / "pyproject.toml").write_text("orig", encoding="utf-8")
+
+    def fake_run(args, cwd=None):
+        if args[:1] == ["list"]:
+            raise package_installer.InstallError("list exploded")
+        return None
+    monkeypatch.setattr(package_installer, "_run", fake_run)
+
+    result = package_installer.install_from_channel(
+        "my-plugin", "https://c", cwd=tmp_path)
+
+    assert result.name == "my-plugin"
+    assert result.diff is None
+    assert result.requires_relaunch is True
+
+
+def test_uninstall_pure_removal_does_not_require_relaunch(tmp_path, monkeypatch):
+    fake = _FakeRun([_rec("numpy", "2.1.0"), _rec("my-plugin", "1.0.0")],
+                    [_rec("numpy", "2.1.0")])
+    monkeypatch.setattr(package_installer, "_run", fake)
+
+    result = package_installer.uninstall_package("my-plugin", cwd=tmp_path)
+
+    assert result.requires_relaunch is False
+    assert result.diff.removed == {"my-plugin": "1.0.0"}
+
+
+def test_uninstall_failure_requires_relaunch(tmp_path, monkeypatch):
+    """`pixi remove` failing is swallowed (existing contract) but must never
+    claim the hot path."""
+    def fake_run(args, cwd=None):
+        if args[:1] == ["remove"]:
+            raise package_installer.InstallError("boom")
+        return SimpleNamespace(stdout=json.dumps([_rec("numpy", "2.1.0")]))
+    monkeypatch.setattr(package_installer, "_run", fake_run)
+
+    result = package_installer.uninstall_package("my-plugin", cwd=tmp_path)
+
+    assert result.diff is None
+    assert result.requires_relaunch is True

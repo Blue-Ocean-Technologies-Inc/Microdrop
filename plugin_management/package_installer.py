@@ -25,8 +25,14 @@ class InstallError(Exception):
 
 
 @dataclass
-class InstallResult:
+class EnvChangeResult:
+    """The outcome of an env-mutating pixi command.
+
+    ``diff`` is None when the environment could not be snapshotted; callers
+    must treat that as 'unknown' and relaunch."""
+
     name: str
+    diff: "EnvDiff | None"
     requires_relaunch: bool
 
 
@@ -89,14 +95,18 @@ def _ensure_channel_registered(channel_url, cwd):
 
 
 def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                         version=None) -> InstallResult:
+                         version=None) -> EnvChangeResult:
     """Register the channel and `pixi add <name>` so the solver resolves the
     package + its deps. When ``version`` is given, pin it (`pixi add
     <name>==<version>`) to install that specific version (down/upgrade).
-    Snapshot/restore pyproject + lock on any failure. Returns
-    InstallResult(name, requires_relaunch=True)."""
+    Snapshot/restore pyproject + lock on any failure.
+
+    Snapshots the environment either side of the install so the caller can
+    tell a purely-additive change (hot-loadable) from one that moved a
+    package already imported by this interpreter (needs a relaunch)."""
     cwd = Path(cwd or WORKSPACE_DIR)
     snapshot = _snapshot(cwd)
+    before = _try_snapshot(cwd)
     spec = f"{name}=={version}" if version else name
     try:
         _ensure_channel_registered(channel_url, cwd)
@@ -105,11 +115,14 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     except Exception:
         _restore(cwd, snapshot)
         raise
+    diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"installed plugin '{spec}' from {channel_url}")
-    return InstallResult(name=name, requires_relaunch=True)
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition)
 
 
-def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> InstallResult:
+def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> EnvChangeResult:
     """Upgrade a plugin to the latest channel version — an unpinned
     `pixi add <name>` that re-resolves to the newest compatible build. Thin
     wrapper over :func:`install_from_channel`."""
@@ -167,6 +180,23 @@ def diff_snapshots(before, after) -> EnvDiff:
                for n in before.keys() & after.keys()
                if before[n] != after[n]}
     return EnvDiff(added=added, changed=changed, removed=removed)
+
+
+def _try_snapshot(cwd):
+    """env_snapshot() or None. Snapshotting must never break an install: it
+    runs through _run, which raises InstallError on a non-zero exit."""
+    try:
+        return env_snapshot(cwd=cwd)
+    except Exception as e:
+        logger.warning(f"could not snapshot the pixi environment: {e}")
+        return None
+
+
+def _diff_or_none(before, after):
+    """EnvDiff, or None when either snapshot is missing."""
+    if before is None or after is None:
+        return None
+    return diff_snapshots(before, after)
 
 
 def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list[dict]:
@@ -235,11 +265,19 @@ def documentation_url(dist_name) -> str:
     return (metadata.get("Home-page") or "").strip()
 
 
-def uninstall_package(name, *, cwd=None) -> None:
-    """`pixi remove <name>`. Best-effort; logs on failure."""
+def uninstall_package(name, *, cwd=None) -> EnvChangeResult:
+    """`pixi remove <name>` + `pixi install`. Best-effort: a failure is logged,
+    not raised, and reports requires_relaunch=True so a failed removal never
+    claims the hot path."""
     cwd = Path(cwd or WORKSPACE_DIR)
+    before = _try_snapshot(cwd)
     try:
         _run(["remove", name], cwd=cwd)
         _run(["install"], cwd=cwd)
     except InstallError as e:
         logger.warning(f"`pixi remove {name}` failed: {e}")
+        return EnvChangeResult(name=name, diff=None, requires_relaunch=True)
+    diff = _diff_or_none(before, _try_snapshot(cwd))
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_removal)
