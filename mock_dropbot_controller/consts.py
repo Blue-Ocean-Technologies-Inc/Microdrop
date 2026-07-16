@@ -12,6 +12,7 @@ from dropbot_controller.consts import (
     TEST_ON_BOARD_FEEDBACK_CALIBRATION, TEST_SHORTS, TEST_CHANNELS,
     CHIP_CHECK, SELF_TEST_CANCEL, DETECT_DROPLETS, CHANGE_SETTINGS,
     HARDWARE_DEFAULT_VOLTAGE, HARDWARE_DEFAULT_FREQUENCY,
+    shorts_detected_publisher,
 )
 from dropbot_controller.models.self_tests import (
     TestEvent, create_test_progress_message,
