@@ -30,6 +30,31 @@ class InstallResult:
     requires_relaunch: bool
 
 
+@dataclass(frozen=True)
+class EnvDiff:
+    """What a pixi command did to the environment, keyed by package name.
+
+    ``added``/``removed`` map name -> version; ``changed`` maps
+    name -> (old_version, new_version)."""
+
+    added: dict
+    changed: dict
+    removed: dict
+
+    @property
+    def is_pure_addition(self):
+        """True when packages were only ADDED — nothing upgraded, downgraded,
+        rebuilt or removed. The only shape safe to import into a live
+        interpreter."""
+        return not self.changed and not self.removed
+
+    @property
+    def is_pure_removal(self):
+        """True when packages were only REMOVED. Safe after pre_uninstall has
+        already disabled the affected groups."""
+        return not self.changed and not self.added
+
+
 def _run(args, *, cwd=None):
     proc = subprocess.run(["pixi", *args], cwd=str(cwd or WORKSPACE_DIR),
                           capture_output=True, text=True)
@@ -106,6 +131,42 @@ def _parse_search_json(stdout: str) -> list[dict]:
         if isinstance(subdir_packages, list):
             packages.extend(subdir_packages)
     return packages
+
+
+def _parse_list_json(stdout: str) -> list[dict]:
+    """Parse `pixi list --json` stdout (which may be preceded by warning
+    lines) into the package record list."""
+    start = stdout.find("[")
+    if start == -1:
+        raise InstallError("no JSON array in pixi list output")
+    try:
+        return json.loads(stdout[start:])
+    except ValueError as e:
+        raise InstallError(f"could not parse pixi list JSON: {e}") from e
+
+
+def env_snapshot(*, cwd=None) -> dict:
+    """{name: (version, build, kind)} for every package in the workspace env.
+
+    `pixi list` defaults to the platform best matching this machine — the
+    same platform, and the same prefix, the running interpreter uses."""
+    proc = _run(["list", "--json"], cwd=cwd)
+    return {r["name"]: (r["version"], r["build"], r["kind"])
+            for r in _parse_list_json(proc.stdout)}
+
+
+def diff_snapshots(before, after) -> EnvDiff:
+    """Classify per-package differences between two env_snapshot() results.
+
+    Compares the FULL (version, build, kind) record, so a same-version
+    rebuild counts as changed — it still replaces files on disk underneath
+    whatever is already imported."""
+    added = {n: rec[0] for n, rec in after.items() if n not in before}
+    removed = {n: rec[0] for n, rec in before.items() if n not in after}
+    changed = {n: (before[n][0], after[n][0])
+               for n in before.keys() & after.keys()
+               if before[n] != after[n]}
+    return EnvDiff(added=added, changed=changed, removed=removed)
 
 
 def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list[dict]:
