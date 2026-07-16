@@ -6,7 +6,7 @@ handles the buttons; the model supplies ``packages``.
 from traitsui.api import Action, Item, TableEditor, View, HSplit, HTMLEditor, ToolBar
 
 from microdrop_style.icons.icons import ICON_REFRESH
-from microdrop_utils.traitsui_qt_helpers import ObjectColumn
+from microdrop_utils.traitsui_qt_helpers import ObjectColumn, EnumSelectColumn
 
 # The Refresh action's label is the Material Symbols refresh glyph; the handler
 # renders it by applying the icon font to the toolbar (see BrowsePluginsHandler).
@@ -18,11 +18,13 @@ close_action = Action(name="Close", action="do_close")
 _packages_table = TableEditor(
     columns=[
         ObjectColumn(name="name", label="Name", editable=False),
-        ObjectColumn(name="version", label="Version", editable=False),
+        EnumSelectColumn(name="version", label="Version",
+                         values_name="available_versions"),
     ],
     selected="selected",
     selection_mode="row",
-    editable=False,
+    editable=True,   # the version cell edits into a dropdown
+    show_column_labels=False,
 )
 
 browse_view = View(

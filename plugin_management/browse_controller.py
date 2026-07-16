@@ -85,10 +85,12 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
                    message=_consent_html(pkg), cancel=False) != YES:
             return
         run_with_wait(
-            lambda: model.do_install(pkg.name),
-            title="Installing plugin", message=f"Installing {pkg.name}…",
+            lambda: model.do_install(pkg.name, pkg.version),
+            title="Installing plugin",
+            message=f"Installing {pkg.name} {pkg.version}…",
             on_success=lambda r: confirm_and_relaunch(
-                self.task, f"Installed <b>{escape_html_multiline(pkg.name)}</b>."),
+                self.task, f"Installed <b>{escape_html_multiline(pkg.name)}</b> "
+                           f"{escape_html_multiline(pkg.version)}."),
             on_error=lambda e: error_dialog(
                 parent=None, title="Install failed", message=str(e)))
 

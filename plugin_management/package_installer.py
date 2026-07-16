@@ -63,20 +63,31 @@ def _ensure_channel_registered(channel_url, cwd):
             raise
 
 
-def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> InstallResult:
+def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
+                         version=None) -> InstallResult:
     """Register the channel and `pixi add <name>` so the solver resolves the
-    package + its deps. Snapshot/restore pyproject + lock on any failure.
-    Returns InstallResult(name, requires_relaunch=True)."""
+    package + its deps. When ``version`` is given, pin it (`pixi add
+    <name>==<version>`) to install that specific version (down/upgrade).
+    Snapshot/restore pyproject + lock on any failure. Returns
+    InstallResult(name, requires_relaunch=True)."""
     cwd = Path(cwd or WORKSPACE_DIR)
     snapshot = _snapshot(cwd)
+    spec = f"{name}=={version}" if version else name
     try:
         _ensure_channel_registered(channel_url, cwd)
-        _run(["add", name], cwd=cwd)
+        _run(["add", spec], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
         raise
-    logger.info(f"installed plugin '{name}' from {channel_url}")
+    logger.info(f"installed plugin '{spec}' from {channel_url}")
     return InstallResult(name=name, requires_relaunch=True)
+
+
+def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> InstallResult:
+    """Upgrade a plugin to the latest channel version — an unpinned
+    `pixi add <name>` that re-resolves to the newest compatible build. Thin
+    wrapper over :func:`install_from_channel`."""
+    return install_from_channel(name, channel_url, cwd=cwd)
 
 
 def _parse_search_json(stdout: str) -> list[dict]:
