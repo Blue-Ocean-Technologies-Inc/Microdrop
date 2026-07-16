@@ -39,9 +39,12 @@ class RepeatDurationColumnModel(BaseColumnModel):
 
 
 class RepeatDurationHandler(BaseColumnHandler):
-    """Intercepts edits to prompt for the Route Reps --> Route Reps Dur
-    mode handoff. Read-through writes (no prompt) when:
-      * the row is already in Route Reps Dur-controls mode, or
+    """Intercepts edits to prompt for the Route Reps <--> Route Reps Dur
+    mode handoffs: entering duration mode on a diverging non-zero edit,
+    and handing control back on a 0 edit while in duration mode.
+    Read-through writes (no prompt) when:
+      * the row is already in Route Reps Dur-controls mode and the new
+        value is non-zero, or
       * the new value matches the auto-estimate (rounding to the
         column's display precision), or
       * the row has no routes (Route Reps Dur has no semantic effect, so
