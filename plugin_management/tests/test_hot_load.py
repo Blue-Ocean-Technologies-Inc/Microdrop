@@ -44,17 +44,21 @@ def dummy_module(tmp_path, monkeypatch):
     sys.modules.pop("hotload_dummy_pkg", None)
 
 
-def _manifest(module):
+def _manifest_for(plugin_spec):
     return manifest_from_dict({
         "schema_version": 1,
         "name": "my_plugin",
-        "packages": [module],
+        "packages": [plugin_spec.partition(":")[0]],
         "groups": [{
             "name": "my_group",
-            "plugins": [f"{module}:HotDummyPlugin"],
+            "plugins": [plugin_spec],
             "enabled_key": "plugin_group_enabled.my_group",
         }],
     })
+
+
+def _manifest(module):
+    return _manifest_for(f"{module}:HotDummyPlugin")
 
 
 def _patch_discovery(monkeypatch, manifest, dist=DIST):
@@ -119,14 +123,25 @@ def test_refuses_when_the_module_is_already_imported(monkeypatch, dummy_module):
 
 
 def test_refuses_when_a_colliding_group_is_loaded(monkeypatch, dummy_module):
-    manifest = _manifest(dummy_module)
-    _patch_discovery(monkeypatch, manifest)
+    """A group-NAME collision across two distributions shipping DIFFERENT
+    top-level packages: enable() imports test_group_manager_adoption's
+    module (already in sys.modules anyway, since this test suite imports it),
+    so the sys.modules guard passes and register_manifest is what refuses."""
     app, manager = FakeApp(), PluginGroupManager()
-    manager.register_manifest(manifest, dist_name=DIST)
+    loaded_spec = ("plugin_management.tests.test_group_manager_adoption"
+                   ":DummyUiPlugin")
+    manager.register_manifest(_manifest_for(loaded_spec), dist_name=DIST)
     manager.enable(app, "my_group")               # already live
+
+    # The incoming manifest reuses the NAME but points at a fresh, unimported
+    # module, so the guard passes and register_manifest is what refuses.
+    _patch_discovery(monkeypatch, _manifest(dummy_module))
 
     assert hot_load.hot_load_installed(
         app, manager, DIST, PURE_ADDITION) is False
+    # Prove it refused at register_manifest, not earlier: the live group's
+    # spec is still the ORIGINAL one, not overwritten by the incoming one.
+    assert manager.groups["my_group"].plugin_specs == [loaded_spec]
 
 
 def test_refuses_when_the_plugin_cannot_be_imported(monkeypatch):
