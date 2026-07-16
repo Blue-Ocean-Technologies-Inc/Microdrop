@@ -56,6 +56,13 @@ def test_is_pure_removal_only_when_nothing_else_moved():
     assert EnvDiff({}, {"a": ("1", "2")}, {"c": "1"}).is_pure_removal is False
 
 
+def test_empty_diff_is_both_pure_addition_and_pure_removal():
+    """A no-op pixi call changes nothing, so both directions are trivially safe."""
+    empty = EnvDiff({}, {}, {})
+    assert empty.is_pure_addition is True
+    assert empty.is_pure_removal is True
+
+
 def test_env_snapshot_parses_records(monkeypatch):
     payload = [{"name": "numpy", "version": "2.1.0", "build": "py313h0",
                 "kind": "conda"}]

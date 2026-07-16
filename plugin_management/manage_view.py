@@ -26,7 +26,8 @@ refresh_versions_action = Action(
 
 _INSTALLED_HELP = ("Installed plugin packages. Open docs, switch the version "
                    "(installs that build), upgrade to latest, or uninstall. "
-                   "Version changes and uninstall prompt a relaunch.")
+                   "Version changes and upgrades prompt a relaunch; a clean "
+                   "uninstall applies immediately.")
 
 groups_table = TableEditor(
     columns=[

@@ -163,11 +163,25 @@ The asymmetry is deliberate:
   already disabled and deregistered the affected groups, and orphaned
   dependencies will not be re-imported by anything.
 
-**Consequence, stated plainly:** upgrade, install-version, and update-all
-will *always* relaunch, because the plugin's own version change lands in
-`changed`. The fast path realistically fires for exactly two flows — fresh
-install of a new plugin, and clean uninstall. This is a smaller win than
-"no more relaunches", and it is the intended, conservative scope.
+**Consequence, stated plainly:** install-version and update-all will
+*always* relaunch, because the plugin's own version change lands in
+`changed`. **Upgrade is different, and the reasoning is one layer thinner
+than the other two flows.** The upgrade glyph is unconditional on every row
+(`installed_table.py:48-49`) — it can fire on a plugin that is already at
+the latest channel version, in which case the unpinned `pixi add` re-resolves
+to nothing and yields an *empty* `EnvDiff`, which passes `is_pure_addition`
+(the first gate) trivially. What actually stops the fast path in that case
+is the **second, independent gate**: `PluginGroupManager.adopt_running`
+(`group_manager.py:198-201`) resolves every registered group's every plugin
+spec via `_resolve_plugin_class` (i.e. `import_module`) at launch, so by the
+time Manage is open, every installed plugin's top-level module is already
+sitting in `sys.modules` — and `_live_modules` trips, refusing the hot-load.
+The fast path realistically fires for exactly two flows — fresh install of a
+new plugin, and clean uninstall — but for upgrade specifically that is a
+genuine defense-in-depth result (two gates, not one) rather than the
+`changed`-always-populated invariant the paragraph above states for the
+other two flows. This is a smaller win than "no more relaunches", and it is
+the intended, conservative scope.
 
 ### 3. Hot-load (`hot_load.py`, new)
 
@@ -183,8 +197,10 @@ def hot_load_installed(application, manager, dist_name, diff) -> bool:
             if norm(d) == norm(dist_name)]
     if not mine:
         return False                       # discovered nothing -> be conservative
-    if any(_live_modules(m) for m, _ in mine):
-        return False                       # stale sys.modules -> relaunch
+    for manifest, _ in mine:
+        live = sorted(set(_live_modules(manifest)))
+        if live:
+            return False                   # stale sys.modules -> relaunch
     names = []
     try:
         for manifest, dist in mine:

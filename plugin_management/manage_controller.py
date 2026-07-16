@@ -115,6 +115,11 @@ class ManagePluginsController(SafeCancelTableController):
         model.edit_traits(view=browse_view,
                           handler=BrowsePluginsHandler(task=self.task),
                           kind="livemodal")
+        # Browse's own hot-load may have registered + enabled a new plugin
+        # live; refresh so the Installed Packages table reflects it without
+        # requiring the user to close and reopen this dialog.
+        self.model.refresh()
+        self.model.refresh_installed()
 
     # --- Refresh Versions: re-fetch the channel, update the dropdowns ---
     def refresh_versions(self, info):
