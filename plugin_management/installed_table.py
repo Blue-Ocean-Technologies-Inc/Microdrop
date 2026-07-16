@@ -5,11 +5,11 @@ Documentation / Upgrade / Uninstall as Material-glyph action columns. The
 reusable column types live in ``microdrop_utils.traitsui_qt_helpers``
 (``GlyphActionColumn`` for the click-to-fire glyphs, ``EnumSelectColumn`` for
 the version dropdown that blanks its static text while editing); only the
-docs-specific greying is defined locally.
+docs- and upgrade-specific enabled/disabled treatments are defined locally.
 """
 from traitsui.api import TableEditor
 
-from microdrop_style.colors import GREY, INFO_COLOR
+from microdrop_style.colors import GREY, INFO_COLOR, SUCCESS_COLOR
 from microdrop_style.icons.icons import ICON_DESCRIPTION, ICON_DELETE
 from microdrop_utils.traitsui_qt_helpers import (
     ObjectColumn, GlyphActionColumn, EnumSelectColumn)
@@ -39,14 +39,33 @@ class DocColumn(GlyphActionColumn):
             object.open_docs = True
 
 
+class UpgradeColumn(GlyphActionColumn):
+    """Upgrade glyph: success-green + click-to-fire when the channel offers a
+    newer version; darker grey and inert when already up to date (the same
+    disabled treatment as DocColumn)."""
+
+    def get_text_color(self, object):
+        if object.upgrade_available():
+            return SUCCESS_COLOR
+        return GREY["dark"]
+
+    def get_tooltip(self, object):
+        if object.upgrade_available():
+            return f"Upgrade to {object.available_versions[0]}"
+        return "Already up to date"
+
+    def on_click(self, object):
+        if object.upgrade_available():
+            object.upgrade = True
+
+
 installed_table_editor = TableEditor(
     columns=[
         ObjectColumn(name="name", label="", editable=False),
         DocColumn(name="doc_url", label="", glyph=ICON_DESCRIPTION),
         EnumSelectColumn(name="version", label="",
                          values_name="available_versions", width=90),
-        GlyphActionColumn(name="dist_name", label="", glyph=ICON_UPGRADE,
-                          fire="upgrade"),
+        UpgradeColumn(name="dist_name", label="", glyph=ICON_UPGRADE),
         GlyphActionColumn(name="manifest_name", label="", glyph=ICON_DELETE,
                           fire="uninstall"),
     ],

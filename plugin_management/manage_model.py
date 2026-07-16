@@ -57,6 +57,13 @@ class InstalledPackageRow(HasTraits):
     upgrade = Event()
     uninstall = Event()
 
+    def upgrade_available(self):
+        """True when the channel offers a newer version than the installed
+        one. ``available_versions`` is newest-first and always contains the
+        current version, so a differing head is exactly 'newer exists'."""
+        return (bool(self.available_versions)
+                and self.available_versions[0] != self.version)
+
 
 def format_installed_details_html(row):
     """Styled HTML details for an installed package (shown in the details pane).
