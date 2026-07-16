@@ -27,3 +27,17 @@ def test_finish_change_offers_relaunch_when_not_live(monkeypatch):
 
     assert seen["msg"] == "Installed <b>X</b>."
     assert "informed" not in seen
+
+
+def test_finish_change_names_the_refusal_reason(monkeypatch):
+    """The relaunch prompt must say WHY the change could not be applied live
+    — a bare prompt reads as arbitrary nagging."""
+    seen = {}
+    monkeypatch.setattr(relaunch, "confirm_and_relaunch",
+                        lambda task, msg: seen.update(msg=msg))
+
+    relaunch.finish_change(None, "Installed <b>X</b>.", False,
+                           reason="heater_controller is already loaded")
+
+    assert "Installed <b>X</b>." in seen["msg"]
+    assert "heater_controller is already loaded" in seen["msg"]

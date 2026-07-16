@@ -71,7 +71,7 @@ def test_hot_loads_and_enables_a_pure_addition(monkeypatch, dummy_module):
     _patch_discovery(monkeypatch, _manifest(dummy_module))
     app, manager = FakeApp(), PluginGroupManager()
 
-    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is True
+    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is None
     assert manager.is_loaded("my_group")
     assert [c for c in app.calls if c[0] == "add"] == [("add", "HotDummyPlugin")]
 
@@ -79,47 +79,51 @@ def test_hot_loads_and_enables_a_pure_addition(monkeypatch, dummy_module):
 def test_refuses_when_diff_is_none(monkeypatch, dummy_module):
     _patch_discovery(monkeypatch, _manifest(dummy_module))
     manager = PluginGroupManager()
-    assert hot_load.hot_load_installed(FakeApp(), manager, DIST, None) is False
+    reason = hot_load.hot_load_installed(FakeApp(), manager, DIST, None)
+    assert "could not be determined" in reason
     assert "my_group" not in manager.groups
 
 
 def test_refuses_when_a_dep_was_bumped(monkeypatch, dummy_module):
+    """The refusal reason names the moved packages, for the relaunch dialog."""
     _patch_discovery(monkeypatch, _manifest(dummy_module))
     manager = PluginGroupManager()
-    assert hot_load.hot_load_installed(
-        FakeApp(), manager, DIST, BUMPED_DEP) is False
+    reason = hot_load.hot_load_installed(FakeApp(), manager, DIST, BUMPED_DEP)
+    assert "numpy" in reason
     assert "my_group" not in manager.groups
 
 
 def test_refuses_when_nothing_was_discovered(monkeypatch):
     monkeypatch.setattr(hot_load, "discover_entry_point_manifests", lambda: [])
-    assert hot_load.hot_load_installed(
-        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION) is False
+    reason = hot_load.hot_load_installed(
+        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION)
+    assert "no plugin manifest" in reason
 
 
 def test_refuses_when_dist_name_does_not_match(monkeypatch, dummy_module):
     _patch_discovery(monkeypatch, _manifest(dummy_module), dist="someone-else")
-    assert hot_load.hot_load_installed(
-        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION) is False
+    reason = hot_load.hot_load_installed(
+        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION)
+    assert "no plugin manifest" in reason
 
 
 def test_dist_name_match_ignores_case_and_underscores(monkeypatch, dummy_module):
     _patch_discovery(monkeypatch, _manifest(dummy_module),
                      dist="My_Microdrop_Plugin")
     assert hot_load.hot_load_installed(
-        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION) is True
+        FakeApp(), PluginGroupManager(), DIST, PURE_ADDITION) is None
 
 
 def test_refuses_when_the_module_is_already_imported(monkeypatch, dummy_module):
     """Reinstall-after-uninstall: the lock diff says 'pure addition', but
     import_module would hand back the STALE module."""
-    import importlib
     importlib.import_module(dummy_module)          # simulate it being live
     _patch_discovery(monkeypatch, _manifest(dummy_module))
     manager = PluginGroupManager()
 
-    assert hot_load.hot_load_installed(
-        FakeApp(), manager, DIST, PURE_ADDITION) is False
+    reason = hot_load.hot_load_installed(
+        FakeApp(), manager, DIST, PURE_ADDITION)
+    assert "hotload_dummy_pkg" in reason and "already loaded" in reason
     assert "my_group" not in manager.groups
 
 
@@ -138,8 +142,8 @@ def test_refuses_when_a_colliding_group_is_loaded(monkeypatch, dummy_module):
     # module, so the guard passes and register_manifest is what refuses.
     _patch_discovery(monkeypatch, _manifest(dummy_module))
 
-    assert hot_load.hot_load_installed(
-        app, manager, DIST, PURE_ADDITION) is False
+    reason = hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION)
+    assert "currently enabled" in reason      # register_manifest's message
     # Prove it refused at register_manifest, not earlier: the live group's
     # spec is still the ORIGINAL one, not overwritten by the incoming one.
     assert manager.groups["my_group"].plugin_specs == [loaded_spec]
@@ -150,8 +154,9 @@ def test_refuses_when_the_plugin_cannot_be_imported(monkeypatch):
     resolve it, the group never loads, and relaunch is a real remedy."""
     _patch_discovery(monkeypatch, _manifest("hotload_missing_pkg"))
     manager = PluginGroupManager()
-    assert hot_load.hot_load_installed(
-        FakeApp(), manager, DIST, PURE_ADDITION) is False
+    reason = hot_load.hot_load_installed(
+        FakeApp(), manager, DIST, PURE_ADDITION)
+    assert "failed to load" in reason
 
 
 def test_live_modules_keys_on_the_top_level_package():
@@ -190,5 +195,5 @@ def test_hot_loads_even_though_discovery_imported_the_module(monkeypatch,
                         _discovery_that_imports)
 
     app, manager = FakeApp(), PluginGroupManager()
-    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is True
+    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is None
     assert manager.is_loaded("my_group")

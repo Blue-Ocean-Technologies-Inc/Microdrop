@@ -15,8 +15,10 @@ Two INDEPENDENT checks gate the fast path:
    pure addition, but ``import_module`` would hand back the stale module and
    silently run the old code under the new version's name.
 
-Anything unexpected returns False and the caller falls back to the relaunch
-prompt — always correct, just slower.
+Anything unexpected refuses, and the caller falls back to the relaunch
+prompt — always correct, just slower. A refusal returns its REASON (a short
+human-readable string, also logged) so the relaunch dialog can say why the
+change could not be applied live instead of looking like arbitrary nagging.
 """
 import importlib
 import sys
@@ -51,7 +53,7 @@ def _live_modules(manifest, already_imported):
                 yield top
 
 
-def hot_load_installed(application, manager, dist_name, diff) -> bool:
+def hot_load_installed(application, manager, dist_name, diff) -> str | None:
     """Register + enable a just-installed distribution's plugin groups on the
     live application.
 
@@ -59,21 +61,31 @@ def hot_load_installed(application, manager, dist_name, diff) -> bool:
     TASK_EXTENSIONS delta that LiveTaskExtensionsController reconciles into
     mounted dock panes.
 
-    Returns True when the plugin is live and no relaunch is needed; False
-    means the caller must offer the relaunch prompt."""
+    Returns None when the plugin is live and no relaunch is needed; otherwise
+    a short human-readable reason the fast path was refused, for the caller
+    to show alongside the relaunch prompt."""
     try:
         return _hot_load_installed(application, manager, dist_name, diff)
     except Exception:
         logger.exception(
             f"hot-load of '{dist_name}' failed; falling back to relaunch")
-        return False
+        return "an unexpected error occurred (see the log)"
+
+
+def _refuse(dist_name, reason):
+    """Log a refusal and return its reason for the relaunch dialog."""
+    logger.info(f"hot-load refused for '{dist_name}': {reason}")
+    return reason
 
 
 def _hot_load_installed(application, manager, dist_name, diff):
-    if diff is None or not diff.is_pure_addition:
-        logger.info(f"hot-load refused for '{dist_name}': the env change is "
-                    f"not purely additive")
-        return False
+    if diff is None:
+        return _refuse(dist_name,
+                       "the environment change could not be determined")
+    if not diff.is_pure_addition:
+        moved = sorted(diff.changed) + sorted(diff.removed)
+        return _refuse(dist_name, f"existing packages were changed or "
+                                  f"removed: {', '.join(moved)}")
 
     # Snapshot sys.modules BEFORE discovery. discover_entry_point_manifests()
     # reads each entry point's package-data manifest via
@@ -92,16 +104,13 @@ def _hot_load_installed(application, manager, dist_name, diff):
     mine = [(m, d) for m, d in discover_entry_point_manifests()
             if norm(d) == norm(dist_name)]
     if not mine:
-        logger.warning(
-            f"hot-load refused: no manifest discovered for '{dist_name}'")
-        return False
+        return _refuse(dist_name, "no plugin manifest was found for it")
 
     for manifest, _ in mine:
         live = sorted(set(_live_modules(manifest, already_imported)))
         if live:
-            logger.info(f"hot-load refused for '{dist_name}': modules already "
-                        f"imported: {live}")
-            return False
+            return _refuse(dist_name, f"{', '.join(live)} is already loaded "
+                                      f"from an earlier install")
 
     names = []
     try:
@@ -109,8 +118,7 @@ def _hot_load_installed(application, manager, dist_name, diff):
             manager.register_manifest(manifest, dist_name=dist)
             names += [g.name for g in manifest.groups]
     except RuntimeError as e:
-        logger.warning(f"hot-load refused for '{dist_name}': {e}")
-        return False
+        return _refuse(dist_name, str(e))
 
     # apply() rather than enable(): it is the public reconcile entry point AND
     # it persists the enabled flag, so a hot-installed plugin comes back on
@@ -119,9 +127,8 @@ def _hot_load_installed(application, manager, dist_name, diff):
 
     not_loaded = [n for n in names if not manager.is_loaded(n)]
     if not_loaded:
-        logger.warning(f"hot-load of '{dist_name}' left groups unloaded: "
-                       f"{not_loaded}; relaunch needed")
-        return False
+        return _refuse(dist_name, f"plugin groups failed to load: "
+                                  f"{', '.join(not_loaded)}")
 
     logger.info(f"hot-loaded '{dist_name}': enabled groups {names}")
-    return True
+    return None

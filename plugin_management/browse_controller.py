@@ -96,24 +96,28 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
 
     def _finish_install(self, pkg, model, result):
         """GUI thread: try to apply the install live, drop the now-installed
-        row, then report."""
-        ok = self._hot_load(pkg.name, result)
+        row, then report — naming the refusal reason when a relaunch is
+        still needed."""
+        reason = self._hot_load(pkg.name, result)
+        ok = reason is None
         model.drop_installed()
         name = escape_html_multiline(pkg.name)
         version = escape_html_multiline(pkg.version)
         verb = "Installed and enabled" if ok else "Installed"
-        finish_change(self.task, f"{verb} <b>{name}</b> {version}.", ok)
+        finish_change(self.task, f"{verb} <b>{name}</b> {version}.", ok,
+                      reason or "")
 
     def _hot_load(self, dist_name, result):
-        """False (relaunch) whenever the live application or its group manager
-        is unreachable — e.g. the standalone installer demo."""
+        """None when applied live; otherwise the refusal reason. Refuses
+        whenever the live application or its group manager is unreachable —
+        e.g. the standalone installer demo."""
         application = getattr(
             getattr(self.task, "window", None), "application", None)
         if application is None:
-            return False
+            return "no running application to load it into"
         manager = application.get_service(IPluginGroupManager)
         if manager is None:
-            return False
+            return "the plugin-group manager is unavailable"
         return hot_load_installed(application, manager, dist_name, result.diff)
 
     def do_close(self, info):

@@ -8,7 +8,8 @@ the same entry point under ``pixi run`` (the default environment).
 import os
 from pathlib import Path
 
-from microdrop_application.dialogs.pyface_wrapper import confirm, information, YES
+from microdrop_application.dialogs.pyface_wrapper import (
+    confirm, escape_html_multiline, information, YES)
 from logger.logger_service import get_logger
 
 #: The pixi workspace root (microdrop-py/, parent of src/) — has pyproject.toml.
@@ -63,10 +64,15 @@ def relaunch_app(application=None):
         logger.exception("relaunch into default env failed")
 
 
-def finish_change(task, msg_html, ok):
+def finish_change(task, msg_html, ok, reason=""):
     """Report the outcome of an env change. ``ok`` means it is already live —
-    say so and stop. Otherwise fall back to the standard relaunch offer."""
+    say so and stop. Otherwise fall back to the standard relaunch offer,
+    naming the ``reason`` the change could not be applied live so the prompt
+    explains itself instead of reading as arbitrary nagging."""
     if ok:
         information(parent=None, title="Plugin ready", message=msg_html)
         return
+    if reason:
+        msg_html += (f"<br><br>Could not apply without a relaunch: "
+                     f"{escape_html_multiline(reason)}.")
     confirm_and_relaunch(task, msg_html)
