@@ -19,21 +19,25 @@
 - **Logging:** `from logger.logger_service import get_logger` then `logger = get_logger(__name__)`.
 - **Commits:** Conventional Commits — `type(scope): subject`, imperative, ~50 chars including the prefix. Scope is `plugin_management`.
 - **Never mint a new name when an existing one expresses it.** Reuse `_norm_dist`, `apply()`, `run_with_wait`, `confirm_and_relaunch`.
-- **DO NOT RUN ANY TESTS.** Not pytest, not the app. The project owner runs
-  every test manually and has explicitly asked that agents never invoke them.
-  Write the test code exactly as specified, commit it, and move on. Never
-  `pixi run pytest`, `python -m pytest`, or launch `pixi run microdrop`.
-- **Consequence to respect, not paper over:** because nothing is executed, no
-  task's tests are verified. Do not write "tests pass", "verified", or
-  "working" in any commit message, summary, or report. Say what you wrote and
-  that it is unrun. The only real gate is Task 5, which the owner performs.
-- **Syntax check instead** (this is not a test run, and is the one command you
-  may use to catch typos):
+- **TEST POLICY (standing owner preference, used on the four prior features
+  in this repo):** **NEVER run pytest** and **never launch the app**
+  (`pixi run microdrop`). Write the test files exactly as specified and commit
+  them — they are deliverables the owner runs manually.
+- **Verify with py_compile + a headless logic smoke instead.** This is the
+  established pattern here and it is how you check your work:
   ```bash
+  # syntax
   cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py/src" && python -m py_compile <files you touched>
+  # logic smoke — real execution, no pytest
+  cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py" && pixi run bash -c "cd src && python -c '<exercise the function, print the result>'"
   ```
-  `py_compile` works with a bare `python` because it never imports numpy. Any
-  *real* execution would need `pixi run` — but you are not doing any.
+  Always go through `pixi run` for smokes — a bare `python` crashes on
+  `import numpy` (`0xc06d007f`) because the env's DLL dirs are off PATH.
+  `py_compile` is the exception: it never imports numpy, so bare `python` is fine.
+- **Report honestly.** A smoke is not the test suite. Never write "tests
+  pass", "verified", or "all green" in a commit message or report — say what
+  the smoke printed and that pytest was not run. The committed test files are
+  **unrun**; Task 5 (owner-performed) is the real gate.
 
 ## File Structure
 
@@ -232,13 +236,33 @@ def diff_snapshots(before, after) -> EnvDiff:
     return EnvDiff(added=added, changed=changed, removed=removed)
 ```
 
-- [ ] **Step 4: Syntax-check only**
+- [ ] **Step 4: Syntax check + logic smoke (never pytest)**
 
-Run:
 ```bash
 cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py/src" && python -m py_compile plugin_management/package_installer.py plugin_management/tests/test_env_diff.py
 ```
-Expected: no output. Do **not** run pytest.
+Expected: no output.
+
+Then exercise the diff for real:
+```bash
+cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py" && pixi run bash -c "cd src && python -c \"
+from plugin_management.package_installer import diff_snapshots
+before = {'numpy': ('2.1', 'b0', 'conda'), 'gone': ('1.0', 'b0', 'conda')}
+after  = {'numpy': ('2.1', 'b1', 'conda'), 'new': ('1.0', 'b0', 'conda')}
+d = diff_snapshots(before, after)
+print('added', d.added); print('changed', d.changed); print('removed', d.removed)
+print('pure_addition', d.is_pure_addition, 'pure_removal', d.is_pure_removal)
+\""
+```
+Expected exactly:
+```
+added {'new': '1.0'}
+changed {'numpy': ('2.1', '2.1')}
+removed {'gone': '1.0'}
+pure_addition False pure_removal False
+```
+The `changed` entry proves a build-only bump is caught. If it is absent, the
+comparison is on version alone and the gate is unsafe — fix before committing.
 
 - [ ] **Step 5: Commit**
 
@@ -803,13 +827,37 @@ In `plugin_management/i_plugin_group_manager.py`, add after the `groups` trait a
         if a colliding group name is currently loaded."""
 ```
 
-- [ ] **Step 5: Syntax-check only**
+- [ ] **Step 5: Syntax check + logic smoke (never pytest)**
 
-Run:
 ```bash
 cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py/src" && python -m py_compile plugin_management/hot_load.py plugin_management/i_plugin_group_manager.py plugin_management/tests/test_hot_load.py
 ```
-Expected: no output. Do **not** run pytest — not this file, not the suite.
+Expected: no output.
+
+Then prove the two refusal paths without any plugin installed:
+```bash
+cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py" && pixi run bash -c "cd src && python -c \"
+from plugin_management import hot_load
+from plugin_management.package_installer import EnvDiff
+from plugin_management.manifest import manifest_from_dict
+bumped = EnvDiff(added={'p': '1'}, changed={'numpy': ('2.1','2.2')}, removed={})
+print('bumped dep ->', hot_load.hot_load_installed(None, None, 'p', bumped))
+print('diff None  ->', hot_load.hot_load_installed(None, None, 'p', None))
+m = manifest_from_dict({'schema_version': 1, 'name': 'x', 'packages': ['plugin_management'],
+    'groups': [{'name': 'g', 'plugins': ['plugin_management.tests.z:C'],
+                'enabled_key': 'plugin_group_enabled.g'}]})
+print('live modules ->', list(hot_load._live_modules(m)))
+\""
+```
+Expected exactly:
+```
+bumped dep -> False
+diff None  -> False
+live modules -> ['plugin_management']
+```
+Both refusals must return before touching `application`/`manager` (both passed
+as `None` here) — if either raises `AttributeError`, the gate is checking in
+the wrong order. `live modules` proves the guard keys on the ROOT package.
 
 - [ ] **Step 6: Re-read hot_load.py against the spec**
 
