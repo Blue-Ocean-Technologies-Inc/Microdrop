@@ -26,7 +26,7 @@ needed.
 import json
 
 from pyface.qt.QtCore import Qt
-from traits.api import Bool, Enum, List
+from traits.api import Bool, Enum, List, Str
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -79,6 +79,12 @@ class CaptureAtComboBoxView(ComboBoxColumnView):
     when the step doesn't capture (cross-cell editability via the
     canonical PPT-11 get_flags(row) pattern, mirroring the magnet
     height cell)."""
+
+    #: get_flags/format_display above are pure functions of row.capture;
+    #: declare it so the tree model repaints this cell the moment the
+    #: checkbox toggles (issue #541 latent bug — previously the grey-out
+    #: waited for an incidental repaint).
+    depends_on_row_traits = List(Str, value=["capture"])
 
     def _options_default(self):
         return list(CHOICES)

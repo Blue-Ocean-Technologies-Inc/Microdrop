@@ -231,3 +231,13 @@ def test_payload_missing_capture_at_fills_from_pref_default(qapp):
     assert captures.capture is True and plain.capture is False
     assert captures.capture_at == StepTime.END    # filled from the pref
     assert plain.capture_at == StepTime.END
+
+
+def test_capture_at_view_declares_capture_dependency():
+    """CaptureAtComboBoxView gates flags + display on row.capture; without
+    this declaration its grey-out only refreshed on an incidental
+    repaint (issue #541 latent bug)."""
+    from video_protocol_controls.protocol_columns.capture_column import (
+        CaptureAtComboBoxView,
+    )
+    assert list(CaptureAtComboBoxView().depends_on_row_traits) == ["capture"]
