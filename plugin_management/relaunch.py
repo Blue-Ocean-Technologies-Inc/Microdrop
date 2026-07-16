@@ -6,7 +6,6 @@ the same entry point under ``pixi run`` (the default environment).
 """
 
 import os
-import sys
 from pathlib import Path
 
 from microdrop_application.dialogs.pyface_wrapper import confirm, information, YES
@@ -16,19 +15,6 @@ from logger.logger_service import get_logger
 WORKSPACE_DIR = Path(__file__).resolve().parents[2]
 
 logger = get_logger(__name__)
-
-
-def _relaunch_argv(script: str):
-    """`pixi run python <script> <args...>` for the current process (default env).
-
-    ``script`` must already be an absolute path (resolved before any chdir).
-    ``sys.argv[1:]`` (the original arguments after the script name) are
-    forwarded verbatim so the restarted process receives the same flags.
-    """
-    return [
-        "pixi", "run",
-        "python", script, *sys.argv[1:],
-    ]
 
 
 def confirm_and_relaunch(task, msg_html):
@@ -49,26 +35,19 @@ def confirm_and_relaunch(task, msg_html):
 
 
 def relaunch_app(application=None):
-    """Quit the app (if given) and re-exec into the default pixi environment.
-    Best-effort: on failure, logs and returns so the caller can fall back to
-    a message.
+    """Quit the app (if given) and re-exec into the default pixi environment by
+    running the ``microdrop`` task. Best-effort: on failure, logs and returns so
+    the caller can fall back to a message.
 
-    The entry script is resolved to an ABSOLUTE path against the current
-    working directory BEFORE any ``os.chdir``.  If the resolved path does not
-    exist the function logs an error and returns WITHOUT touching the
-    application, leaving it running (graceful degradation).
+    ``--manifest-path`` points pixi at the workspace ``pyproject.toml`` so the
+    task resolves regardless of the current working directory.
     """
     try:
-        # Resolve the entry script while the original cwd is still intact.
-        script = os.path.abspath(sys.argv[0])
-        if not os.path.exists(script):
-            logger.error(
-                f"relaunch: entry script not found at '{script}'; "
-                "aborting relaunch to keep the app alive"
-            )
-            return
-
-        argv = _relaunch_argv(script)
+        argv = [
+            "pixi", "run",
+            "--manifest-path", str(WORKSPACE_DIR / "pyproject.toml"),
+            "microdrop",
+        ]
         logger.info(f"relaunching into default env: {' '.join(argv)}")
 
         # Ask the envisage app to exit cleanly first (saves window state).
@@ -78,8 +57,7 @@ def relaunch_app(application=None):
             except Exception:
                 logger.exception("relaunch: application.exit() failed; continuing")
 
-        # Replace this process. os.chdir so pixi finds the workspace manifest.
-        os.chdir(str(WORKSPACE_DIR))
+        # Replace this process with the pixi task.
         os.execvp(argv[0], argv)
     except Exception:
         logger.exception("relaunch into default env failed")
