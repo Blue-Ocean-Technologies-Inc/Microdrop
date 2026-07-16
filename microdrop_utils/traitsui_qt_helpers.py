@@ -12,7 +12,8 @@ from pyface.qt.QtGui import (
 )
 from pyface.qt.QtWidgets import (
     QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
-    QGroupBox, QLabel, QSizePolicy,
+    QGroupBox, QLabel, QSizePolicy, QStyle, QStyleOption, QStyleOptionComboBox,
+    QApplication,
 )
 from pyface.qt import QtWidgets
 
@@ -202,17 +203,47 @@ class RangeColumn(EditBlankingColumn):
             RangeEditor, low=base.low, high=base.high, mode=base.mode)
 
 
+class _DropdownArrowRenderer(QStyledItemDelegate):
+    """Paints the cell normally, then the active style's combo-box down arrow on
+    the right — so a read-mode cell looks like the dropdown it becomes on click
+    (the real style artwork, theme-aware; there is no plain-text glyph for it)."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        if not index.data():
+            return   # blank (row being edited) — the real combo shows its own arrow
+        widget = option.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        combo = QStyleOptionComboBox()
+        combo.rect = option.rect
+        combo.state = QStyle.State_Enabled
+        arrow_rect = style.subControlRect(
+            QStyle.CC_ComboBox, combo, QStyle.SC_ComboBoxArrow, widget)
+        arrow = QStyleOption()
+        arrow.rect = arrow_rect
+        arrow.state = QStyle.State_Enabled
+        style.drawPrimitive(QStyle.PE_IndicatorArrowDown, arrow, painter, widget)
+
+
 class EnumSelectColumn(EditBlankingColumn):
     """Edit-in-cell column whose editor is a dropdown (EnumEditor) of choices
     taken per-row from a ``List(Str)`` trait named by ``values_name``. The
     static text is blanked while the dropdown is open (see
-    :class:`EditBlankingColumn`).
+    :class:`EditBlankingColumn`). By default the read-mode cell shows the
+    style's dropdown arrow so it's obviously pickable (``show_dropdown_arrow``).
 
         EnumSelectColumn(name="version", values_name="available_versions")
     """
 
     #: Name of the row's List(Str) trait supplying the dropdown choices.
     values_name = Str()
+    #: Draw the style's combo-box arrow in the static cell.
+    show_dropdown_arrow = Bool(True)
+
+    def traits_init(self):
+        super().traits_init()
+        if self.show_dropdown_arrow:
+            self.renderer = _DropdownArrowRenderer()
 
     def make_cell_editor(self, object):
         return self._editor_with_reset(EnumEditor, name=self.values_name)
