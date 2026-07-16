@@ -217,6 +217,9 @@ class EnumSelectColumn(EditBlankingColumn):
     def make_cell_editor(self, object):
         return self._editor_with_reset(EnumEditor, name=self.values_name)
 
+    def _blank_if_editing(self, value, object):
+        return "" if id(object) == self._editing_id else f"{value} ⌄"
+
 ## --------------------------------------------------------
 # Range editing spinner box with custom increments
 ## --------------------------------------------------------
