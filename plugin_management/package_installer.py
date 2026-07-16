@@ -76,6 +76,7 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     try:
         _ensure_channel_registered(channel_url, cwd)
         _run(["add", spec], cwd=cwd)
+        _run(["install"], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
         raise
@@ -178,5 +179,6 @@ def uninstall_package(name, *, cwd=None) -> None:
     cwd = Path(cwd or WORKSPACE_DIR)
     try:
         _run(["remove", name], cwd=cwd)
+        _run(["install"], cwd=cwd)
     except InstallError as e:
         logger.warning(f"`pixi remove {name}` failed: {e}")
