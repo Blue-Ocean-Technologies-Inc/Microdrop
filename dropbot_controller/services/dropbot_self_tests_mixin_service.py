@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from functools import wraps
 
@@ -20,7 +19,7 @@ from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from microdrop_utils.file_handler import open_html_in_browser
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import SHORTS_DETECTED
+from dropbot_controller.consts import shorts_detected_publisher
 
 from ..consts import SELF_TESTS_PROGRESS
 from ..models.self_tests import TestEvent, create_test_progress_message
@@ -161,10 +160,10 @@ class DropbotSelfTestsMixinService(HasTraits):
                                                     failed_channels=failed_channels if test_name == "test_channels" else None)
                     GUI.invoke_later(show_results_dialog)
                 else:
-                    shorts_dict = {'Shorts_detected': result[test_name]['shorts'], 
-                                   'Show_window': True}
-                    publish_message(topic=SHORTS_DETECTED, message=json.dumps(shorts_dict))
-                    pass
+                    # The user ran the shorts test, so always report back —
+                    # even when there is nothing to report.
+                    shorts_detected_publisher.publish(shorted_channels=result[test_name]['shorts'],
+                                                      show_window=True)
 
             # do whatever else is defined in func
             func(self, report_generation_directory)  

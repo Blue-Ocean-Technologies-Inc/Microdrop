@@ -2,6 +2,7 @@ import json
 
 from traits.api import Instance
 
+from dropbot_controller.models.shorts import ShortsDetectedSignal
 from logger.logger_service import get_logger
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
@@ -50,8 +51,7 @@ class MockDropbotMessageHandler(BaseMessageHandler):
         logger.info(f"Mock status: Drops detected on channels {channels}")
 
     def _on_shorts_detected_triggered(self, body):
-        data = json.loads(body)
-        shorts = data.get("Shorts_detected", [])
+        shorts = ShortsDetectedSignal.model_validate_json(body).shorted_channels
         logger.info(f"Mock status: Shorts on channels {shorts}")
 
     # ---- Mock-specific signal handlers (from backend via pub/sub) ----
