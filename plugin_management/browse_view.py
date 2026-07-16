@@ -19,7 +19,7 @@ _packages_table = TableEditor(
     columns=[
         ObjectColumn(name="name", label="Name", editable=False),
         EnumSelectColumn(name="version", label="Version",
-                         values_name="available_versions", persistent_editor=True),
+                         values_name="available_versions"),
     ],
     selected="selected",
     selection_mode="row",

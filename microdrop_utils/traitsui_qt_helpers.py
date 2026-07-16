@@ -2,7 +2,7 @@ import html
 import math
 
 from pyface.qt.QtCore import (
-    Qt, QSize, QPoint, QPointF, QRectF, QTimer,
+    Qt, QSize, QPoint, QPointF, QRectF,
     QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
     Slot, Property as QtProperty,   # aliased: traits.api.Property (below) shadows it
 )
@@ -12,7 +12,7 @@ from pyface.qt.QtGui import (
 )
 from pyface.qt.QtWidgets import (
     QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
-    QGroupBox, QLabel, QSizePolicy, QAbstractItemView,
+    QGroupBox, QLabel, QSizePolicy,
 )
 from pyface.qt import QtWidgets
 
@@ -154,18 +154,12 @@ class EditBlankingColumn(ObjectColumn):
 
     #: id() of the row whose cell is currently open for editing (0 == none).
     _editing_id = Int(0)
-    #: Set True when the cell editor is kept permanently open in every row (via
-    #: ``show_persistent_editors``); the static text is then always blank so it
-    #: never shows through behind the always-open editor.
-    persistent_editor = Bool(False)
 
     def traits_init(self):
         self.format_func = self._blank_if_editing
 
     def _blank_if_editing(self, value, object):
-        if self.persistent_editor or id(object) == self._editing_id:
-            return ""
-        return value
+        return "" if id(object) == self._editing_id else value
 
     def get_value(self, object):
         # ObjectColumn.get_value passes only the value to format_func; our
@@ -222,41 +216,6 @@ class EnumSelectColumn(EditBlankingColumn):
 
     def make_cell_editor(self, object):
         return self._editor_with_reset(EnumEditor, name=self.values_name)
-
-
-def table_view_of(editor):
-    """The QAbstractItemView of a TableEditor-edited Item's editor (or None).
-    Pass the editor from a Handler, e.g. ``table_view_of(info.installed_rows)``."""
-    control = getattr(editor, "control", None)
-    if control is None:
-        return None
-    if isinstance(control, QAbstractItemView):
-        return control
-    return control.findChild(QAbstractItemView)
-
-
-def show_persistent_editors(table_view, column):
-    """Keep ``column``'s in-cell editor permanently open in every row of a
-    TableEditor view, so e.g. an :class:`EnumSelectColumn` always shows its combo
-    box (a clear 'this is pickable' affordance) instead of only on click. Re-opens
-    the editors whenever the model's rows change (e.g. a data refresh)."""
-    if table_view is None:
-        return
-
-    def _open_all(*_):
-        model = table_view.model()
-        if model is None:
-            return
-        for row in range(model.rowCount()):
-            index = model.index(row, column)
-            if not table_view.isPersistentEditorOpen(index):
-                table_view.openPersistentEditor(index)
-
-    model = table_view.model()
-    if model is not None:
-        for signal in (model.modelReset, model.layoutChanged, model.rowsInserted):
-            signal.connect(lambda *a: QTimer.singleShot(0, _open_all))
-    QTimer.singleShot(0, _open_all)
 
 ## --------------------------------------------------------
 # Range editing spinner box with custom increments

@@ -14,14 +14,12 @@ from traits.api import Instance, Button, Bool, Str, observe
 from pyface.tasks.api import Task
 from pyface.qt.QtWidgets import QToolBar, QSplitter, QWidget
 from pyface.qt.QtGui import QFont
-from pyface.qt.QtCore import QTimer
 
 from microdrop_application.dialogs.pyface_wrapper import (
     confirm, error as error_dialog, YES, escape_html_multiline)
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_utils.threaded_progress import run_with_wait
-from microdrop_utils.traitsui_qt_helpers import (
-    SafeCancelTableController, show_persistent_editors, table_view_of)
+from microdrop_utils.traitsui_qt_helpers import SafeCancelTableController
 from logger.logger_service import get_logger
 
 #: Point size of the Material Symbols glyph on the Refresh toolbar button.
@@ -29,9 +27,6 @@ REFRESH_ICON_POINT_SIZE = 16
 #: Even, minimal gap (px) around the Installed Packages collapse button — the
 #: HSplit handle width and the pane layout spacing are both set to this.
 INSTALLED_SPLIT_GAP = 4
-#: Column index of the version dropdown in the installed-packages table
-#: (name, docs, version, upgrade, uninstall).
-INSTALLED_VERSION_COLUMN = 2
 
 from .browse_model import BrowsePluginsModel
 from .browse_view import browse_view
@@ -65,9 +60,6 @@ class ManagePluginsController(SafeCancelTableController):
         super().init(info)            # Escape deselects instead of closing
         self._style_toolbar(info)
         self._tighten_splitters(info.ui.control)
-        # Always show the version combo boxes (not just on click).
-        show_persistent_editors(table_view_of(getattr(info, "installed_rows", None)),
-                                INSTALLED_VERSION_COLUMN)
         return True
 
     # --- details-pane collapse ---
@@ -205,16 +197,9 @@ class ManagePluginsController(SafeCancelTableController):
 
     def _set_row_version(self, row, version):
         """Revert a cancelled dropdown selection without re-triggering the
-        install prompt.
-
-        Deferred to the next event-loop tick: the revert runs while we're inside
-        the combo box's own change signal, and the editor's update guard would
-        otherwise swallow the refresh — leaving the combo showing the rejected
-        value while the model held the old one, so re-picking it did nothing."""
-        def _revert():
-            self._suppress_version = True
-            try:
-                row.version = version
-            finally:
-                self._suppress_version = False
-        QTimer.singleShot(0, _revert)
+        install prompt."""
+        self._suppress_version = True
+        try:
+            row.version = version
+        finally:
+            self._suppress_version = False
