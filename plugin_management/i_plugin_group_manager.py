@@ -13,6 +13,10 @@ class IPluginGroupManager(Interface):
     #: group name -> PluginGroup.
     groups = Dict()
 
+    def register_manifest(self, manifest, dist_name="") -> None:
+        """Register a freshly-installed manifest's groups at runtime. Raises
+        if a colliding group name is currently loaded."""
+
     def is_loaded(self, group_name) -> bool:
         """True if the named group is currently loaded."""
 

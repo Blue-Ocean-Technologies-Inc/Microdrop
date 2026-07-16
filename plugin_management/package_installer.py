@@ -25,9 +25,40 @@ class InstallError(Exception):
 
 
 @dataclass
-class InstallResult:
+class EnvChangeResult:
+    """The outcome of an env-mutating pixi command.
+
+    ``diff`` is None when the environment could not be snapshotted; callers
+    must treat that as 'unknown' and relaunch."""
+
     name: str
+    diff: "EnvDiff | None"
     requires_relaunch: bool
+
+
+@dataclass(frozen=True)
+class EnvDiff:
+    """What a pixi command did to the environment, keyed by package name.
+
+    ``added``/``removed`` map name -> version; ``changed`` maps
+    name -> (old_version, new_version)."""
+
+    added: dict
+    changed: dict
+    removed: dict
+
+    @property
+    def is_pure_addition(self):
+        """True when packages were only ADDED — nothing upgraded, downgraded,
+        rebuilt or removed. The only shape safe to import into a live
+        interpreter."""
+        return not self.changed and not self.removed
+
+    @property
+    def is_pure_removal(self):
+        """True when packages were only REMOVED. Safe after pre_change has
+        already disabled the affected groups."""
+        return not self.changed and not self.added
 
 
 def _run(args, *, cwd=None):
@@ -54,40 +85,101 @@ def _restore(cwd, snapshot):
         (Path(cwd) / name).write_bytes(data)
 
 
+#: (channel_url, workspace dir) pairs this process has already registered —
+#: `pixi workspace channel add` is idempotent but costs a subprocess, and the
+#: channel URL is a fixed constant, so paying it once per run is enough.
+_registered_channels = set()
+
+
 def _ensure_channel_registered(channel_url, cwd):
-    """`pixi workspace channel add <url>`; tolerate an already-registered channel."""
+    """`pixi workspace channel add <url>`; tolerate an already-registered
+    channel, and skip the subprocess entirely once this process has
+    registered the pair."""
+    key = (channel_url, str(cwd or WORKSPACE_DIR))
+    if key in _registered_channels:
+        return
     try:
         _run(["workspace", "channel", "add", channel_url], cwd=cwd)
     except InstallError as e:
         if "already" not in str(e).lower():
             raise
+    _registered_channels.add(key)
 
 
 def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                         version=None) -> InstallResult:
+                         version=None) -> EnvChangeResult:
     """Register the channel and `pixi add <name>` so the solver resolves the
     package + its deps. When ``version`` is given, pin it (`pixi add
     <name>==<version>`) to install that specific version (down/upgrade).
-    Snapshot/restore pyproject + lock on any failure. Returns
-    InstallResult(name, requires_relaunch=True)."""
+    Snapshot/restore pyproject + lock on any failure.
+
+    Snapshots the environment either side of the install so the caller can
+    tell a purely-additive change (hot-loadable) from one that moved a
+    package already imported by this interpreter (needs a relaunch)."""
     cwd = Path(cwd or WORKSPACE_DIR)
     snapshot = _snapshot(cwd)
+    before = _try_snapshot(cwd)
     spec = f"{name}=={version}" if version else name
     try:
         _ensure_channel_registered(channel_url, cwd)
         _run(["add", spec], cwd=cwd)
+        _run(["install"], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
         raise
+    diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"installed plugin '{spec}' from {channel_url}")
-    return InstallResult(name=name, requires_relaunch=True)
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition)
 
 
-def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> InstallResult:
-    """Upgrade a plugin to the latest channel version — an unpinned
-    `pixi add <name>` that re-resolves to the newest compatible build. Thin
-    wrapper over :func:`install_from_channel`."""
-    return install_from_channel(name, channel_url, cwd=cwd)
+def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> EnvChangeResult:
+    """Upgrade a plugin to the latest channel version via a full
+    remove + add cycle. Thin wrapper over :func:`reinstall_from_channel`."""
+    return reinstall_from_channel(name, channel_url, cwd=cwd)
+
+
+def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
+                           version=None) -> EnvChangeResult:
+    """Replace an installed package: `pixi remove <name>` then `pixi add`
+    (pinned when ``version`` is given) then `pixi install`.
+
+    A full remove + add rather than an in-place `pixi add <name>==<version>`
+    so NOTHING of the old build survives on disk — stale ``__pycache__`` or
+    leftover dist-info from an in-place transaction can hand the import
+    system old code under the new version's name.
+
+    The env is snapshotted BEFORE the remove and diffed against the state
+    after the add — never against the post-remove trough, where a plugin-only
+    dependency that left and came back at a different version would look like
+    a harmless addition while its old version is still imported.
+
+    Rolls back pyproject + lock on failure and best-effort re-materializes
+    the env, so a failed reinstall does not leave the removed state on disk."""
+    cwd = Path(cwd or WORKSPACE_DIR)
+    snapshot = _snapshot(cwd)
+    before = _try_snapshot(cwd)
+    spec = f"{name}=={version}" if version else name
+    try:
+        _run(["remove", name], cwd=cwd)
+        _ensure_channel_registered(channel_url, cwd)
+        _run(["add", spec], cwd=cwd)
+        _run(["install"], cwd=cwd)
+    except Exception:
+        _restore(cwd, snapshot)
+        try:
+            _run(["install"], cwd=cwd)
+        except InstallError as e:
+            logger.warning(
+                f"could not re-materialize the env after a failed reinstall "
+                f"of '{name}': {e}")
+        raise
+    diff = _diff_or_none(before, _try_snapshot(cwd))
+    logger.info(f"reinstalled plugin '{spec}' from {channel_url}")
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition)
 
 
 def _parse_search_json(stdout: str) -> list[dict]:
@@ -105,6 +197,59 @@ def _parse_search_json(stdout: str) -> list[dict]:
         if isinstance(subdir_packages, list):
             packages.extend(subdir_packages)
     return packages
+
+
+def _parse_list_json(stdout: str) -> list[dict]:
+    """Parse `pixi list --json` stdout (which may be preceded by warning
+    lines) into the package record list."""
+    start = stdout.find("[")
+    if start == -1:
+        raise InstallError("no JSON array in pixi list output")
+    try:
+        return json.loads(stdout[start:])
+    except ValueError as e:
+        raise InstallError(f"could not parse pixi list JSON: {e}") from e
+
+
+def env_snapshot(*, cwd=None) -> dict:
+    """{name: (version, build, kind)} for every package in the workspace env.
+
+    `pixi list` defaults to the platform best matching this machine — the
+    same platform, and the same prefix, the running interpreter uses."""
+    proc = _run(["list", "--json"], cwd=cwd)
+    return {r["name"]: (r["version"], r["build"], r["kind"])
+            for r in _parse_list_json(proc.stdout)}
+
+
+def diff_snapshots(before, after) -> EnvDiff:
+    """Classify per-package differences between two env_snapshot() results.
+
+    Compares the FULL (version, build, kind) record, so a same-version
+    rebuild counts as changed — it still replaces files on disk underneath
+    whatever is already imported."""
+    added = {n: rec[0] for n, rec in after.items() if n not in before}
+    removed = {n: rec[0] for n, rec in before.items() if n not in after}
+    changed = {n: (before[n][0], after[n][0])
+               for n in before.keys() & after.keys()
+               if before[n] != after[n]}
+    return EnvDiff(added=added, changed=changed, removed=removed)
+
+
+def _try_snapshot(cwd):
+    """env_snapshot() or None. Snapshotting must never break an install: it
+    runs through _run, which raises InstallError on a non-zero exit."""
+    try:
+        return env_snapshot(cwd=cwd)
+    except Exception as e:
+        logger.warning(f"could not snapshot the pixi environment: {e}")
+        return None
+
+
+def _diff_or_none(before, after):
+    """EnvDiff, or None when either snapshot is missing."""
+    if before is None or after is None:
+        return None
+    return diff_snapshots(before, after)
 
 
 def search_channel(channel_url: str = PLUGIN_CHANNEL_URL, *, cwd=None) -> list[dict]:
@@ -173,10 +318,17 @@ def documentation_url(dist_name) -> str:
     return (metadata.get("Home-page") or "").strip()
 
 
-def uninstall_package(name, *, cwd=None) -> None:
-    """`pixi remove <name>`. Best-effort; logs on failure."""
+def uninstall_package(name, *, cwd=None) -> EnvChangeResult:
+    """`pixi remove <name>` + `pixi install`. Raises InstallError on failure —
+    swallowing it made a failed removal indistinguishable from a successful
+    one that merely needs a relaunch, so the UI reported "Uninstalled X."
+    for a package still on disk. InstallError names the failing pixi command,
+    and the controllers' on_error path surfaces it in an error dialog."""
     cwd = Path(cwd or WORKSPACE_DIR)
-    try:
-        _run(["remove", name], cwd=cwd)
-    except InstallError as e:
-        logger.warning(f"`pixi remove {name}` failed: {e}")
+    before = _try_snapshot(cwd)
+    _run(["remove", name], cwd=cwd)
+    _run(["install"], cwd=cwd)
+    diff = _diff_or_none(before, _try_snapshot(cwd))
+    return EnvChangeResult(
+        name=name, diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_removal)

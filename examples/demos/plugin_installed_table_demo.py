@@ -20,6 +20,7 @@ from plugin_management.manage_model import (
     ManagePluginsModel, GroupRow, InstalledPackageRow)
 from plugin_management.manage_view import manage_plugins_view
 from plugin_management.manage_controller import ManagePluginsController
+from plugin_management.package_installer import EnvChangeResult
 
 # Fake channel search result (feeds the version dropdowns via apply_channel_data).
 _FAKE_CHANNEL = [
@@ -66,17 +67,20 @@ class DemoManagePluginsModel(ManagePluginsModel):
     def apply(self):
         print("[demo] apply groups:", self.desired())
 
-    def pre_uninstall(self, manifest_name):
-        print(f"[demo] pre_uninstall {manifest_name}")
+    def pre_change(self, manifest_name, dist_name=""):
+        print(f"[demo] pre_change {manifest_name}")
 
     def do_install_version(self, dist_name, version):
         print(f"[demo] would install {dist_name}=={version}")
+        return EnvChangeResult(name=dist_name, diff=None, requires_relaunch=True)
 
     def do_upgrade(self, dist_name):
         print(f"[demo] would upgrade {dist_name}")
+        return EnvChangeResult(name=dist_name, diff=None, requires_relaunch=True)
 
     def do_uninstall(self, dist_name):
         print(f"[demo] would uninstall {dist_name}")
+        return EnvChangeResult(name=dist_name, diff=None, requires_relaunch=True)
 
     def do_search_channel(self):
         print("[demo] search channel")

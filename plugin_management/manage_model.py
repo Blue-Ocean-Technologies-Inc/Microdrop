@@ -8,7 +8,7 @@ import html
 
 from traits.api import Any, Bool, Event, HasTraits, Instance, List, Str, observe
 
-from . import package_installer
+from . import hot_load, package_installer
 from .browse_model import _version_key, _DETAILS_CSS
 from .group_manager import PluginGroupManager
 from logger.logger_service import get_logger
@@ -56,6 +56,13 @@ class InstalledPackageRow(HasTraits):
     open_docs = Event()
     upgrade = Event()
     uninstall = Event()
+
+    def upgrade_available(self):
+        """True when the channel offers a newer version than the installed
+        one. ``available_versions`` is newest-first and always contains the
+        current version, so a differing head is exactly 'newer exists'."""
+        return (bool(self.available_versions)
+                and self.available_versions[0] != self.version)
 
 
 def format_installed_details_html(row):
@@ -119,7 +126,16 @@ class ManagePluginsModel(HasTraits):
         self.rows = self._build_rows()
 
     def refresh_installed(self):
+        """Rebuild the Installed Packages rows, re-selecting the same package
+        by name. The rows are FRESH objects — keeping the old selection object
+        would leave the details pane rendering the previous version's
+        metadata after a version change. Re-assigning the selection fires
+        ``_update_installed_details``, so the pane follows; a package that
+        vanished (uninstall) clears the selection and blanks the pane."""
+        keep = self.installed_selected.dist_name if self.installed_selected else ""
         self.installed_rows = self._build_installed_rows()
+        self.installed_selected = next(
+            (r for r in self.installed_rows if r.dist_name == keep), None)
 
     def _build_rows(self):
         return [
@@ -172,28 +188,39 @@ class ManagePluginsModel(HasTraits):
 
     # --- worker-thread safe ops (no trait mutation) ---
     def do_install_version(self, dist_name, version):
-        """Install a specific version of a package (version dropdown select)."""
-        package_installer.install_from_channel(dist_name, version=version)
+        """Replace a package with a specific version (version dropdown select)
+        — a full remove + add, so nothing of the old build survives on disk."""
+        return package_installer.reinstall_from_channel(dist_name,
+                                                        version=version)
 
     def do_upgrade(self, dist_name):
         """Upgrade a package to the latest channel version (upgrade button)."""
-        package_installer.upgrade_package(dist_name)
+        return package_installer.upgrade_package(dist_name)
 
     def do_search_channel(self):
         """Re-fetch the channel package list (Refresh Versions). Returns the
         data; the controller applies it on the GUI thread."""
         return package_installer.search_channel()
 
-    def pre_uninstall(self, manifest_name):
-        """Hot-unload + deregister a plugin's groups before its package is
-        removed, so declining the relaunch doesn't leave dead groups
-        loaded/registered."""
+    def pre_change(self, manifest_name, dist_name=""):
+        """Hot-unload + deregister a plugin's groups, then purge its modules
+        from ``sys.modules``, before its package is removed or replaced.
+
+        The purge is what lets an install → uninstall → reinstall cycle and
+        an in-place version change hot-load instead of demanding a relaunch:
+        the next ``enable()`` re-imports FRESH code from disk rather than
+        binding to the cached, stale module objects. Safe because plugins are
+        fully isolated (no cross-plugin imports; they can run as separate
+        processes), so after disable() nothing else references their modules."""
+        specs = []
         for name in [n for n, g in self.manager.groups.items()
                      if g.manifest_name == manifest_name]:
+            specs += self.manager.groups[name].plugin_specs
             if self.manager.is_loaded(name):
                 self.manager.disable(self.application, name)
         self.manager.deregister_plugin(manifest_name)
+        hot_load.purge_plugin_modules(specs, dist_name)
 
     def do_uninstall(self, dist_name):
         """Worker-thread safe: remove the package (no trait mutation)."""
-        package_installer.uninstall_package(dist_name)
+        return package_installer.uninstall_package(dist_name)
