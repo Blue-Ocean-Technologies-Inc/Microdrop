@@ -87,3 +87,9 @@ HARDWARE_DEFAULT_FREQUENCY = 10_000  # Hz
 # Known hardware minimum limits for DropBot DB3-120
 HARDWARE_MIN_VOLTAGE = 30    # V
 HARDWARE_MIN_FREQUENCY = 100  # Hz
+
+# Convenience publisher singleton, so call sites can do:
+#   from dropbot_controller.consts import shorts_detected_publisher
+#   shorts_detected_publisher.publish(shorted_channels=[...], show_window=True)
+from dropbot_controller.models.shorts import ShortsDetectedPublisher
+shorts_detected_publisher = ShortsDetectedPublisher(topic=SHORTS_DETECTED)
