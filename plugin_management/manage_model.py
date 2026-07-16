@@ -126,7 +126,16 @@ class ManagePluginsModel(HasTraits):
         self.rows = self._build_rows()
 
     def refresh_installed(self):
+        """Rebuild the Installed Packages rows, re-selecting the same package
+        by name. The rows are FRESH objects — keeping the old selection object
+        would leave the details pane rendering the previous version's
+        metadata after a version change. Re-assigning the selection fires
+        ``_update_installed_details``, so the pane follows; a package that
+        vanished (uninstall) clears the selection and blanks the pane."""
+        keep = self.installed_selected.dist_name if self.installed_selected else ""
         self.installed_rows = self._build_installed_rows()
+        self.installed_selected = next(
+            (r for r in self.installed_rows if r.dist_name == keep), None)
 
     def _build_rows(self):
         return [
