@@ -1,5 +1,6 @@
 """Tests for the hot-load gate: when may a just-installed plugin be applied
 to the LIVE app instead of relaunching?"""
+import importlib
 import sys
 
 import pytest
@@ -157,4 +158,37 @@ def test_live_modules_keys_on_the_top_level_package():
     """`plugin_management` is always imported here, so a spec nested under it
     must report the ROOT package, not the leaf module."""
     manifest = _manifest("plugin_management.tests.whatever")
-    assert list(hot_load._live_modules(manifest)) == ["plugin_management"]
+    assert list(hot_load._live_modules(manifest, set(sys.modules))) == [
+        "plugin_management"]
+
+
+def test_live_modules_reads_the_snapshot_not_sys_modules(dummy_module):
+    """The guard must key on what was imported BEFORE the install.
+
+    `discover_entry_point_manifests()` reads package data via
+    `importlib.resources.files(ep.module)`, which imports the entry point's
+    module. If the guard read `sys.modules` live it would see that import and
+    refuse every install — so it must consult a pre-discovery snapshot."""
+    manifest = _manifest(dummy_module)
+    before = set(sys.modules)                     # dummy_module not yet imported
+    importlib.import_module(dummy_module)         # what discovery does to us
+    assert dummy_module in sys.modules            # live read would refuse...
+    assert list(hot_load._live_modules(manifest, before)) == []   # ...snapshot does not
+
+
+def test_hot_loads_even_though_discovery_imported_the_module(monkeypatch,
+                                                             dummy_module):
+    """End-to-end regression: real discovery imports the plugin's module, so a
+    fresh install must still hot-load. Guarding on a live `sys.modules` read
+    made this refuse every time."""
+    manifest = _manifest(dummy_module)
+
+    def _discovery_that_imports():
+        importlib.import_module(dummy_module)     # exactly what the real one does
+        return [(manifest, DIST)]
+    monkeypatch.setattr(hot_load, "discover_entry_point_manifests",
+                        _discovery_that_imports)
+
+    app, manager = FakeApp(), PluginGroupManager()
+    assert hot_load.hot_load_installed(app, manager, DIST, PURE_ADDITION) is True
+    assert manager.is_loaded("my_group")

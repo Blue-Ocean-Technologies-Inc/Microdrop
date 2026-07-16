@@ -29,17 +29,25 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-def _live_modules(manifest):
-    """Top-level modules ``enable()`` would import that are ALREADY loaded.
+def _live_modules(manifest, already_imported):
+    """Top-level modules ``enable()`` would import that were ALREADY loaded
+    before this install — i.e. stale code we cannot replace in-process.
 
     Keys on exactly what ``group_manager._resolve_plugin_class`` imports,
     rather than mapping package names to modules — conda names, python dist
     names and module names all differ, and native libs map to no dist at all,
-    so any mapping-based check under-reports in the unsafe direction."""
+    so any mapping-based check under-reports in the unsafe direction.
+
+    ``already_imported`` MUST be a snapshot of ``sys.modules`` taken before
+    discovery runs, NOT a live read. ``discover_entry_point_manifests()``
+    resolves each entry point's package data via
+    ``importlib.resources.files(ep.module)``, which *imports that module* — so
+    a live read would report the module discovery itself had just imported and
+    refuse every install. See ``_hot_load_installed``."""
     for spec in manifest.groups:
         for plugin_spec in spec.plugins:          # "module.path:ClassName"
             top = plugin_spec.partition(":")[0].split(".")[0]
-            if top in sys.modules:
+            if top in already_imported:
                 yield top
 
 
@@ -67,6 +75,14 @@ def _hot_load_installed(application, manager, dist_name, diff):
                     f"not purely additive")
         return False
 
+    # Snapshot sys.modules BEFORE discovery. discover_entry_point_manifests()
+    # reads each entry point's package-data manifest via
+    # importlib.resources.files(ep.module), which IMPORTS that module — so a
+    # guard reading sys.modules afterwards would always see the plugin's own
+    # module and refuse every install. What we need to know is what was stale
+    # *before* this install, and only a pre-discovery snapshot answers that.
+    already_imported = set(sys.modules)
+
     # The metadata cache is mtime-keyed and would self-invalidate, but the
     # FileFinder / sys.path_importer_cache layer that enable()'s
     # import_module goes through is not.
@@ -81,7 +97,7 @@ def _hot_load_installed(application, manager, dist_name, diff):
         return False
 
     for manifest, _ in mine:
-        live = sorted(set(_live_modules(manifest)))
+        live = sorted(set(_live_modules(manifest, already_imported)))
         if live:
             logger.info(f"hot-load refused for '{dist_name}': modules already "
                         f"imported: {live}")
