@@ -173,11 +173,11 @@ class ManagePluginsModel(HasTraits):
     # --- worker-thread safe ops (no trait mutation) ---
     def do_install_version(self, dist_name, version):
         """Install a specific version of a package (version dropdown select)."""
-        package_installer.install_from_channel(dist_name, version=version)
+        return package_installer.install_from_channel(dist_name, version=version)
 
     def do_upgrade(self, dist_name):
         """Upgrade a package to the latest channel version (upgrade button)."""
-        package_installer.upgrade_package(dist_name)
+        return package_installer.upgrade_package(dist_name)
 
     def do_search_channel(self):
         """Re-fetch the channel package list (Refresh Versions). Returns the
@@ -196,4 +196,4 @@ class ManagePluginsModel(HasTraits):
 
     def do_uninstall(self, dist_name):
         """Worker-thread safe: remove the package (no trait mutation)."""
-        package_installer.uninstall_package(dist_name)
+        return package_installer.uninstall_package(dist_name)

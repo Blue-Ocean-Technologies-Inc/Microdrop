@@ -32,7 +32,8 @@ INSTALLED_SPLIT_GAP = 4
 from .browse_model import BrowsePluginsModel
 from .browse_view import browse_view
 from .browse_controller import BrowsePluginsHandler
-from .relaunch import confirm_and_relaunch
+from .hot_load import hot_load_installed
+from .relaunch import finish_change
 
 logger = get_logger(__name__)
 
@@ -160,9 +161,11 @@ class ManagePluginsController(SafeCancelTableController):
                   title="Installing version",
                   message=f"Installing {label} {new_version}…",
                   done=lambda r: (self.model.refresh_installed(),
-                                  self._after_change(
+                                  finish_change(
+                                      self.task,
                                       f"Installed <b>{_esc(label)}</b> "
-                                      f"{_esc(new_version)}.")))
+                                      f"{_esc(new_version)}.",
+                                      self._hot_load(dist, r))))
 
     @observe("model:installed_rows:items:upgrade")
     def _on_upgrade(self, event):
@@ -177,8 +180,10 @@ class ManagePluginsController(SafeCancelTableController):
         self._run(lambda: self.model.do_upgrade(dist),
                   title="Upgrading plugin", message=f"Upgrading {label}…",
                   done=lambda r: (self.model.refresh_installed(),
-                                  self._after_change(
-                                      f"Upgraded <b>{_esc(label)}</b>.")))
+                                  finish_change(
+                                      self.task,
+                                      f"Upgraded <b>{_esc(label)}</b>.",
+                                      self._hot_load(dist, r))))
 
     @observe("model:installed_rows:items:uninstall")
     def _on_uninstall(self, event):
@@ -192,8 +197,10 @@ class ManagePluginsController(SafeCancelTableController):
         self._run(lambda: self.model.do_uninstall(dist),
                   title="Uninstalling plugin", message=f"Removing {label}…",
                   done=lambda r: (self.model.refresh_installed(),
-                                  self._after_change(
-                                      f"Uninstalled <b>{_esc(label)}</b>.")))
+                                  finish_change(
+                                      self.task,
+                                      f"Uninstalled <b>{_esc(label)}</b>.",
+                                      not r.requires_relaunch)))
 
     # --- helpers ---
     def _run(self, work, *, title, message, done):
@@ -201,8 +208,11 @@ class ManagePluginsController(SafeCancelTableController):
                       on_error=lambda e: error_dialog(
                           parent=None, title=title, message=str(e)))
 
-    def _after_change(self, msg_html):
-        confirm_and_relaunch(self.task, msg_html)
+    def _hot_load(self, dist_name, result):
+        """GUI thread: try to apply an install live. The model already holds
+        the application and the group manager."""
+        return hot_load_installed(self.model.application, self.model.manager,
+                                  dist_name, result.diff)
 
     def _set_row_version(self, row, version):
         """Revert a cancelled dropdown selection without re-triggering the

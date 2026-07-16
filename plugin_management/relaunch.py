@@ -61,3 +61,12 @@ def relaunch_app(application=None):
         os.execvp(argv[0], argv)
     except Exception:
         logger.exception("relaunch into default env failed")
+
+
+def finish_change(task, msg_html, ok):
+    """Report the outcome of an env change. ``ok`` means it is already live —
+    say so and stop. Otherwise fall back to the standard relaunch offer."""
+    if ok:
+        information(parent=None, title="Plugin ready", message=msg_html)
+        return
+    confirm_and_relaunch(task, msg_html)

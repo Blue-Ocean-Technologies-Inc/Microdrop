@@ -17,7 +17,9 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_utils.threaded_progress import run_with_wait
 from microdrop_utils.traitsui_qt_helpers import SafeCancelTableHandler
 
-from plugin_management.relaunch import confirm_and_relaunch
+from plugin_management.hot_load import hot_load_installed
+from plugin_management.i_plugin_group_manager import IPluginGroupManager
+from plugin_management.relaunch import finish_change
 
 #: Point size of the Material Symbols glyph rendered on the Refresh toolbar button.
 REFRESH_ICON_POINT_SIZE = 16
@@ -88,11 +90,29 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
             lambda: model.do_install(pkg.name, pkg.version),
             title="Installing plugin",
             message=f"Installing {pkg.name} {pkg.version}…",
-            on_success=lambda r: confirm_and_relaunch(
-                self.task, f"Installed <b>{escape_html_multiline(pkg.name)}</b> "
-                           f"{escape_html_multiline(pkg.version)}."),
+            on_success=lambda r: self._finish_install(pkg, r),
             on_error=lambda e: error_dialog(
                 parent=None, title="Install failed", message=str(e)))
+
+    def _finish_install(self, pkg, result):
+        """GUI thread: try to apply the install live, then report."""
+        ok = self._hot_load(pkg.name, result)
+        name = escape_html_multiline(pkg.name)
+        version = escape_html_multiline(pkg.version)
+        verb = "Installed and enabled" if ok else "Installed"
+        finish_change(self.task, f"{verb} <b>{name}</b> {version}.", ok)
+
+    def _hot_load(self, dist_name, result):
+        """False (relaunch) whenever the live application or its group manager
+        is unreachable — e.g. the standalone installer demo."""
+        application = getattr(
+            getattr(self.task, "window", None), "application", None)
+        if application is None:
+            return False
+        manager = application.get_service(IPluginGroupManager)
+        if manager is None:
+            return False
+        return hot_load_installed(application, manager, dist_name, result.diff)
 
     def do_close(self, info):
         info.ui.dispose()
