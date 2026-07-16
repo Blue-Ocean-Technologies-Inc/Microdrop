@@ -16,6 +16,7 @@ from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STAT
 
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedPublisher, ProtocolTreeSetCellPublisher,
+    ProtocolTreeAddStepPublisher,
 )
 
 PKG = ".".join(__name__.split(".")[:-1])
@@ -96,11 +97,14 @@ PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 # set_cell writes one value back into a step's cell.
 PROTOCOL_TREE_ROW_SELECTED = "ui/protocol_tree/row_selected"
 PROTOCOL_TREE_SET_CELL = "ui/protocol_tree/set_cell"
+PROTOCOL_TREE_ADD_STEP = "ui/protocol_tree/add_step"
 
 protocol_tree_row_selected_publisher = ProtocolTreeRowSelectedPublisher(
     topic=PROTOCOL_TREE_ROW_SELECTED)
 protocol_tree_set_cell_publisher = ProtocolTreeSetCellPublisher(
     topic=PROTOCOL_TREE_SET_CELL)
+protocol_tree_add_step_publisher = ProtocolTreeAddStepPublisher(
+    topic=PROTOCOL_TREE_ADD_STEP)
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
@@ -115,6 +119,7 @@ ACTOR_TOPIC_DICT = {
         STEP_PARAMS_COMMIT,
         ADVANCED_MODE_CHANGE,
         PROTOCOL_TREE_SET_CELL,
+        PROTOCOL_TREE_ADD_STEP,
     ],
 
     LOGGING_LISTENER_NAME: [

@@ -13,6 +13,12 @@ equality-skipped and fired through ``cell_changed`` like a manual edit.
 ``only_if_set`` restricts the write to cells that currently hold a value,
 so a pane edit never populates an unchecked step. Ignored while a
 protocol runs — the executor owns the rows then.
+
+``PROTOCOL_TREE_ADD_STEP`` — request handled by the sync controller:
+insert a new step carrying ``cells`` (columns' serialized forms) either
+immediately after the step ``after_step_id``, or as the last child of
+the group ``group_id``, or appended at the root when neither is given.
+Ignored while a protocol runs — the executor owns the rows then.
 """
 
 from typing import Any
@@ -24,6 +30,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 class ProtocolTreeRowSelectedMessage(BaseModel):
     step_id: str | None = None
+    group_id: str | None = None
     cells: dict[str, Any] = {}
 
     def serialize(self) -> str:
@@ -52,8 +59,9 @@ class ProtocolTreeRowSelectedPublisher(ValidatedTopicPublisher):
     """Validated publisher for ``PROTOCOL_TREE_ROW_SELECTED``."""
     validator_class = ProtocolTreeRowSelectedMessage
 
-    def publish(self, *, step_id, cells, **kw):
-        super().publish({"step_id": step_id, "cells": cells}, **kw)
+    def publish(self, *, step_id, cells, group_id=None, **kw):
+        super().publish(
+            {"step_id": step_id, "group_id": group_id, "cells": cells}, **kw)
 
 
 class ProtocolTreeSetCellPublisher(ValidatedTopicPublisher):
@@ -66,4 +74,32 @@ class ProtocolTreeSetCellPublisher(ValidatedTopicPublisher):
             "col_id": col_id,
             "value": value,
             "only_if_set": only_if_set,
+        }, **kw)
+
+
+class ProtocolTreeAddStepMessage(BaseModel):
+    after_step_id: str | None = None
+    group_id: str | None = None
+    cells: dict[str, Any] = {}
+    name: str | None = None
+
+    def serialize(self) -> str:
+        return self.model_dump_json()
+
+    @classmethod
+    def deserialize(cls, json_str: str) -> "ProtocolTreeAddStepMessage":
+        return cls.model_validate_json(json_str)
+
+
+class ProtocolTreeAddStepPublisher(ValidatedTopicPublisher):
+    """Validated publisher for ``PROTOCOL_TREE_ADD_STEP``."""
+    validator_class = ProtocolTreeAddStepMessage
+
+    def publish(self, *, after_step_id=None, group_id=None, cells,
+                name=None, **kw):
+        super().publish({
+            "after_step_id": after_step_id,
+            "group_id": group_id,
+            "cells": cells,
+            "name": name,
         }, **kw)
