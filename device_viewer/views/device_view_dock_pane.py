@@ -467,6 +467,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Apply editable state
         self.model.editable = message_model.editable
 
+        if not self.model.protocol_running and self.model.mode == "display":
+            self.model.mode = "draw"
+
         # Electrode->channel mapping is NOT carried on state messages (#415):
         # electrodes keep their geometry-derived channels, so there is
         # nothing to apply here.
