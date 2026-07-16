@@ -189,6 +189,30 @@ def test_load_old_payload_without_row_flags_defaults_false(manager):
     assert new_mgr.root.children[0].repeat_duration_controls is False
 
 
+def test_column_locks_are_never_serialized(manager):
+    """Locks are runtime-derived; persisting one would strand a
+    protocol opened without the owning plugin (issue #541)."""
+    import json
+    p = manager.add_step(values={"name": "A"})
+    row = manager.get_row(p)
+    row.lock_column("route_repetitions", owner="repeat_duration",
+                     reason="Route Reps Dur is in control")
+    data = manager.to_json()
+    assert "column_locks" not in json.dumps(data)
+
+
+def test_loading_row_flags_rebuilds_route_reps_lock(manager):
+    """persistence writes repeat_duration_controls directly onto the
+    row; the BaseRow observer must rebuild the lock from it."""
+    p = manager.add_step(values={"name": "A"})
+    manager.get_row(p).repeat_duration_controls = True
+    data = manager.to_json()
+    new_mgr = RowManager.from_json(data, columns=list(manager.columns))
+    loaded_step = new_mgr.root.children[0]
+    assert loaded_step.repeat_duration_controls is True
+    assert loaded_step.is_column_locked("route_repetitions") is True
+
+
 # --- Issue-1 dedup fix ---
 
 def test_serialize_no_duplicate_type_or_name_in_fields():

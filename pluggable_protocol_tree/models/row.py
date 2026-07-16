@@ -13,6 +13,7 @@ import uuid as _uuid
 
 from traits.api import (
     HasTraits, Str, List, Instance, Tuple, Property, Bool, Dict, provides,
+    observe,
 )
 
 from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
@@ -91,6 +92,19 @@ class BaseRow(HasTraits):
         """Non-empty lock reasons for ``col_id`` — the cell tooltip."""
         return [reason for reason in self.column_locks.get(col_id, {}).values()
                 if reason]
+
+    @observe("repeat_duration_controls")
+    def _sync_repeat_duration_lock(self, event):
+        # "Route Reps will become read-only while Route Reps Dur is in
+        # control" — the mode-handoff dialog's promise (issue #541
+        # debt). Observed on the trait, not done in the column handler,
+        # because DV-sidebar sync and protocol load write this flag
+        # directly and the lock must follow on every path.
+        if event.new:
+            self.lock_column("route_repetitions", owner="repeat_duration",
+                             reason="Route Reps Dur is in control")
+        else:
+            self.unlock_column("route_repetitions", owner="repeat_duration")
 
 
 @provides(IGroupRow)
