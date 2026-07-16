@@ -112,6 +112,13 @@ class MicrodropPreferencesPane(PreferencesPane):
             style_sheet=preferences_group_style_sheet,
         ),
 
+    dialog_settings = Group(
+            Item("suppress_no_shorts_information"),
+            label="Dialog Settings",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
+
     view = View(
 
         Item("_"), # Separator
@@ -122,41 +129,11 @@ class MicrodropPreferencesPane(PreferencesPane):
 
         canvas_settings,
 
+        Item("_"),
+
+        dialog_settings,
+
         Item("_"),  # ensure other contributed pane groups are spaced out from this pane's group.
 
         resizable=True,
     )
-
-
-class MicrodropDialogsPreferencesPane(PreferencesPane):
-    """Microdrop General preferences pane — 'Dialog Settings' group.
-
-    Contributes to the same `microdrop.app.general_settings` tab as
-    MicrodropPreferencesPane but in a separate group so the dialog-related
-    toggles can live independently of the canvas/startup controls.
-    """
-
-    #### 'PreferencesPane' interface ##########################################
-
-    # The factory to use for creating the preferences model object.
-    model_factory = MicrodropPreferences
-
-    category = microdrop_tab.id
-
-    ########################################################################################
-
-    view = View(
-        Item("_"),  # Separator
-        Group(
-            Item("suppress_no_shorts_information"),
-            label="Dialog Settings",
-            show_border=True,
-            style_sheet=preferences_group_style_sheet,
-        ),
-        Item("_"),  # Separator
-        resizable=True,
-    )
-
-    def apply(self, info=None):
-        # super().apply(info)
-        pass

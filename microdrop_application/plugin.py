@@ -55,9 +55,9 @@ class MicrodropPlugin(Plugin):
         return [f"file://{filename}"]
 
     def _preferences_panes_default(self):
-        from .preferences import MicrodropPreferencesPane, MicrodropDialogsPreferencesPane
+        from .preferences import MicrodropPreferencesPane
 
-        return [MicrodropPreferencesPane, MicrodropDialogsPreferencesPane]
+        return [MicrodropPreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import microdrop_tab
