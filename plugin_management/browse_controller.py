@@ -90,13 +90,15 @@ class BrowsePluginsHandler(SafeCancelTableHandler):
             lambda: model.do_install(pkg.name, pkg.version),
             title="Installing plugin",
             message=f"Installing {pkg.name} {pkg.version}…",
-            on_success=lambda r: self._finish_install(pkg, r),
+            on_success=lambda r: self._finish_install(pkg, model, r),
             on_error=lambda e: error_dialog(
                 parent=None, title="Install failed", message=str(e)))
 
-    def _finish_install(self, pkg, result):
-        """GUI thread: try to apply the install live, then report."""
+    def _finish_install(self, pkg, model, result):
+        """GUI thread: try to apply the install live, drop the now-installed
+        row, then report."""
         ok = self._hot_load(pkg.name, result)
+        model.drop_installed()
         name = escape_html_multiline(pkg.name)
         version = escape_html_multiline(pkg.version)
         verb = "Installed and enabled" if ok else "Installed"

@@ -122,6 +122,11 @@ class BrowsePluginsModel(HasTraits):
     details_text = Str()
     stale = Bool(False)
 
+    #: The raw channel payload behind ``packages``, kept so the rows can be
+    #: rebuilt against a CHANGED INSTALLED SET without re-fetching. An install
+    #: does not change what the channel offers, only what is already installed.
+    _channel_data = List(Dict)
+
     def fetch_data(self):
         """Worker-thread safe: return (packages, stale). Does NOT touch traits.
         Tries the channel; on failure falls back to the app-data cache."""
@@ -140,7 +145,24 @@ class BrowsePluginsModel(HasTraits):
     def set_packages(self, data, stale):
         """GUI thread: build one row per not-yet-installed package + flags."""
         self.stale = stale
+        self._channel_data = list(data)
         self.packages = self._rows_from(data)
+
+    def drop_installed(self):
+        """GUI thread: rebuild the rows against the CURRENT installed set.
+
+        Call after an install so the package just installed leaves the list.
+        Deliberately does NOT re-fetch: the channel still offers exactly what
+        it did a moment ago — the only thing that changed is what is installed,
+        and ``_rows_from`` re-reads that itself.
+
+        Re-selects by NAME rather than keeping the old object: ``_rows_from``
+        builds fresh AvailablePackage rows every call, so an identity check
+        would drop a selection that is still perfectly valid."""
+        keep = self.selected.name if self.selected else ""
+        self.packages = self._rows_from(self._channel_data)
+        self.selected = next(
+            (p for p in self.packages if p.name == keep), None)
 
     def _rows_from(self, data):
         """One AvailablePackage per channel package name, **excluding packages
