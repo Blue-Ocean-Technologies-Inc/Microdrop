@@ -17,7 +17,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 from .consts import (
-    PKG, CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, SHORTS_DETECTED,
+    PKG, CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, shorts_detected_publisher,
     DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, DROPLETS_DETECTED,
     REALTIME_MODE_UPDATED, SELF_TESTS_PROGRESS,
     START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS,
@@ -219,10 +219,7 @@ class MockDropbotController(HasTraits):
         publish_message(str(len(self.actuated_channels)), topic=ELECTRODES_STATE_APPLIED)
 
     def on_detect_shorts_request(self, message):
-        publish_message(
-            topic=SHORTS_DETECTED,
-            message=json.dumps({"Shorts_detected": []}),
-        )
+        shorts_detected_publisher.publish(shorted_channels=[], show_window=True)
         logger.info("Mock: No shorts detected (mock)")
 
     def on_detect_droplets_request(self, message):
@@ -383,10 +380,7 @@ class MockDropbotController(HasTraits):
         logger.info(f"Mock: Chip {'inserted' if inserted else 'removed'}")
 
     def simulate_shorts(self, channels: list):
-        publish_message(
-            topic=SHORTS_DETECTED,
-            message=json.dumps({"Shorts_detected": channels, "Show_window": True}),
-        )
+        shorts_detected_publisher.publish(shorted_channels=channels, show_window=True)
         logger.info(f"Mock: Simulated shorts on channels {channels}")
 
     def simulate_halt(self, error_name: str = "output-current-exceeded"):
