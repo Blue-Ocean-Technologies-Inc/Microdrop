@@ -128,10 +128,19 @@ class MvcTreeModel(QAbstractItemModel):
         # Read-only cells get the light-grey fill (mirror of protocol_grid
         # #359): read-only == neither editable nor user-checkable. The
         # active-row highlight above already returned for that row.
+        # Reads self.flags(), not the view's raw get_flags, so per-row
+        # column locks (issue #541) pick up the fill for free.
         if role == Qt.BackgroundRole:
-            flags = col.view.get_flags(node)
+            flags = self.flags(index)
             if not (flags & Qt.ItemIsEditable) and not (flags & Qt.ItemIsUserCheckable):
                 return self._read_only_brush()
+
+        # A locked cell explains itself: lock reasons are the tooltip.
+        if role == Qt.ToolTipRole:
+            reasons = node.column_lock_reasons(col.model.col_id)
+            if reasons:
+                return "\n".join(reasons)
+            return None
 
         value = col.model.get_value(node)
 
@@ -169,7 +178,14 @@ class MvcTreeModel(QAbstractItemModel):
         if not index.isValid():
             return Qt.NoItemFlags
         col = self._manager.columns[index.column()]
-        return col.view.get_flags(index.internalPointer())
+        row = index.internalPointer()
+        flags = col.view.get_flags(row)
+        # Per-row column locks (issue #541): while any owner holds a
+        # lock on this col_id, the cell is inert. Both flags must go —
+        # checkbox cells are ItemIsUserCheckable, never ItemIsEditable.
+        if row.is_column_locked(col.model.col_id):
+            flags &= ~(Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+        return flags
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
@@ -290,9 +306,6 @@ class MvcTreeModel(QAbstractItemModel):
             traits = list(getattr(col.view, "depends_on_row_traits", []) or [])
             for trait_name in traits:
                 col_trait_pairs.append((col_idx, trait_name))
-        if not col_trait_pairs:
-            self._row_observer_handles.clear()
-            return
 
         live_rows = list(self._iter_all_rows())
         live_ids = {id(r) for r in live_rows}
@@ -316,19 +329,33 @@ class MvcTreeModel(QAbstractItemModel):
             if id(row) in self._row_observer_handles:
                 continue
             handles: list = []
+            # Column locks repaint centrally for every row (issue #541)
+            # — a gated column never has to declare the dependency, so
+            # the stale-grey-out class of bug can't recur.
+            lock_handler = partial(self._on_row_locks_changed, row)
+            row.observe(lock_handler, "column_locks")
+            handles.append(("column_locks", lock_handler))
             for col_idx, trait_name in col_trait_pairs:
                 if trait_name not in row.trait_names():
                     continue
                 handler = partial(self._on_row_trait_changed, row, col_idx)
                 row.observe(handler, trait_name)
                 handles.append((trait_name, handler))
-            if handles:
-                self._row_observer_handles[id(row)] = (row, handles)
+            self._row_observer_handles[id(row)] = (row, handles)
 
     def _on_row_trait_changed(self, row, col_idx, event):
         idx = self._index_for_cell(row, col_idx)
         if idx.isValid():
             self.dataChanged.emit(idx, idx)
+
+    def _on_row_locks_changed(self, row, event):
+        # A lock can gate any column on the row; one whole-row
+        # dataChanged is cheaper than diffing which col_ids moved.
+        top_left = self._index_for_cell(row, 0)
+        if not top_left.isValid():
+            return
+        bottom_right = self._index_for_cell(row, len(self._manager.columns) - 1)
+        self.dataChanged.emit(top_left, bottom_right)
 
     def _index_for_cell(self, row, col_idx) -> QModelIndex:
         parent = row.parent
