@@ -38,7 +38,7 @@ from device_viewer.models.messages import (
     DeviceViewerMessageModel, GeometryChangedMessage,
 )
 from device_viewer.models.step_params_commit import StepParamsCommitMessage
-from dropbot_controller.consts import REALTIME_MODE_UPDATED
+from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED
 from electrode_controller.consts import electrode_state_change_publisher
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
@@ -136,6 +136,7 @@ class DeviceViewerSyncController(HasTraits):
     listener_name            = Str(SYNC_LISTENER_NAME)
 
     _free_mode_stash         = Instance(dict, allow_none=True)
+    free_mode                = Bool(False)
     # "" = no row selected; we never expose this trait, so the empty
     # string sentinel is fine and keeps comparisons simple.
     _last_selected_uuid      = Str()
@@ -215,7 +216,7 @@ class DeviceViewerSyncController(HasTraits):
     # -------- trait observers --------------
     @observe("electrode_ids_channels_map")
     def _update_metadata(self, event=None):
-        logger.info(f"Protocol Tree Device View Sync: Updating metadata. Electrode Channels Change: {event.new}")
+        logger.info(f"PROTOCOL TREE (Device Sync): Updating metadata. Electrode Channels Change: {event.new}")
         self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
 
     @observe("row_manager:cell_changed")
@@ -260,35 +261,45 @@ class DeviceViewerSyncController(HasTraits):
 
     @observe("_protocol_running")
     @observe("realtime_mode")
+    @observe("free_mode")
     def _cannot_publish_actuation_log(self, event):
         reason = ""
         if self._protocol_running:
             reason += "Protocol running; "
 
-        if self.realtime_mode:
-            reason += "Realtime mode"
+        if not self.realtime_mode:
+            reason += "Realtime mode off; "
+
+        if self.free_mode:
+            reason += "In Free-mode"
 
         if reason:
-            logger.warning(f"PROTOCOL TREE: Cannot publish actuations; reason: {reason}")
+            logger.warning(f"PROTOCOL TREE (Device Sync): Cannot publish actuations; reason: {reason}")
         else:
-            logger.info("PROTOCOL TREE: Can publish actuations when step selected")
+            logger.info("PROTOCOL TREE (Device Sync): Will publish actuations")
 
-    @observe("realtime_mode")
     @observe("actuated_channels")
     def _send_actuation_request(self, event):
+        if not self._protocol_running and self.realtime_mode and not self._free_mode_stash:
+            logger.info(f"PROTOCOL TREE (Device Sync): Publishing electrode actuation:{self.actuated_channels}")
+            electrode_state_change_publisher.publish(actuated_channels=self.actuated_channels)
+
+    @observe("realtime_mode")
+    def _realtime_mode_change(self, event):
         if self._protocol_running or not self.realtime_mode:
             return
 
-        if self.realtime_mode and self._free_mode_stash:
+        if self._free_mode_stash:
+            logger.debug("Not processing actuation request... In free mode.")
             return
 
-        logger.info(f"PROTOCOL TREE: Publishing electrode actuation:{self.actuated_channels}")
+        logger.info(f"PROTOCOL TREE (Device Sync): Publishing electrode actuation:{self.actuated_channels}")
         electrode_state_change_publisher.publish(actuated_channels=self.actuated_channels)
 
     # --- worker-thread dispatch (no Qt / RowManager mutation here) -----
 
     def _listener_routine(self, message: str, topic: str) -> None:
-        logger.info(f"PROTOCOL TREE (Device Sync): Topic = {topic}; Message = {message}")
+        logger.debug(f"PROTOCOL TREE (Device Sync): Topic = {topic}; Message = {message}")
         if topic == DEVICE_VIEWER_STATE_CHANGED:
             self._dv_state_changed_event = message
         elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
@@ -300,7 +311,9 @@ class DeviceViewerSyncController(HasTraits):
         elif topic == PROTOCOL_TREE_SET_CELL:
             self._set_cell_request_event = message
         elif topic == REALTIME_MODE_UPDATED:
-            self.realtime_mode = True
+            self.realtime_mode = (message.casefold() == "true")
+        elif topic == DROPBOT_DISCONNECTED:
+            self.realtime_mode = False
         elif topic == ADVANCED_MODE_CHANGE:
             # Qt-free trait — the dock pane's dispatch="ui" observer marshals
             # the GUI-thread work (tree editability, live ctx update).
@@ -330,7 +343,7 @@ class DeviceViewerSyncController(HasTraits):
         payload = event.new
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
-            logger.info(f"Protocol Tree: Device View Sync recieved message: {dv_msg}")
+            logger.info(f"PROTOCOL TREE (Device Sync): received message: {dv_msg}")
         except Exception as e:
             logger.warning(f"failed to parse DV state: {e}")
             return
@@ -348,6 +361,7 @@ class DeviceViewerSyncController(HasTraits):
         routes = [list(ids) for ids, _color in dv_msg.routes]
 
         if dv_msg.step_id:
+            self.free_mode = False
             # Step-scoped edit: write electrodes/routes back to the
             # matching row's columns. Mirrors the legacy protocol_grid
             # 'edit step electrodes via DV' behavior.
@@ -390,6 +404,8 @@ class DeviceViewerSyncController(HasTraits):
                     "path": path, "col_id": "routes",
                 }
             return
+
+        self.free_mode = True
 
         if not electrodes and not routes:
             self._free_mode_stash = None
