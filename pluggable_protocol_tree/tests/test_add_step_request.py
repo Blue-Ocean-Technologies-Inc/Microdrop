@@ -2,13 +2,19 @@
 dramatiq/Qt plumbing around it is the same Event->observe pattern as
 set_cell and is not re-tested here)."""
 
+from traits.api import Int
+
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.models.cell_sync import ProtocolTreeAddStepMessage
+from pluggable_protocol_tree.models.column import BaseColumnModel, Column
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.device_viewer_sync import (
     _insert_step_from_message,
+)
+from pluggable_protocol_tree.views.columns.readonly_label import (
+    ReadOnlyLabelColumnView,
 )
 
 
@@ -51,3 +57,36 @@ def test_unknown_columns_in_cells_are_skipped():
     _insert_step_from_message(m, ProtocolTreeAddStepMessage(
         cells={"duration_s": 2.0, "not_a_column": 1}, name="Partial"))
     assert m.root.children[-1].duration_s == 2.0
+
+
+# --- on_row_loaded column hook (runtime-derived state, e.g. #541 locks) ---
+
+def test_insert_rebuilds_column_load_state_via_on_row_loaded():
+    """add_step writes cells via bare setattr, bypassing set_value and the
+    on_row_loaded column hook. A plugin-authored new step carrying a column
+    with runtime-derived state (e.g. the #541 capture lock) must still get
+    that hook invoked, exactly as persistence.py does after its setattr
+    loop."""
+    seen = []
+
+    class _HookedModel(BaseColumnModel):
+        def trait_for_row(self):
+            return Int(0)
+
+        def on_row_loaded(self, row):
+            seen.append(row.uuid)
+
+    hooked = Column(model=_HookedModel(col_id="hooked", col_name="Hooked",
+                                       default_value=0),
+                    view=ReadOnlyLabelColumnView())
+
+    m = RowManager(columns=[make_type_column(), make_name_column(),
+                            make_duration_column(), hooked])
+    m.add_step(values={"name": "A"})
+
+    _insert_step_from_message(m, ProtocolTreeAddStepMessage(
+        cells={"duration_s": 3.0}, name="New"))
+
+    new_row = m.root.children[-1]
+    assert new_row.name == "New"
+    assert seen == [new_row.uuid]

@@ -162,7 +162,19 @@ def _insert_step_from_message(row_manager, msg) -> None:
         group = row_manager.get_row_by_uuid(msg.group_id)
         if isinstance(group, GroupRow):
             parent_path = tuple(group.path)
-    row_manager.add_step(parent_path=parent_path, index=index, values=values)
+    new_path = row_manager.add_step(
+        parent_path=parent_path, index=index, values=values,
+    )
+
+    # add_step writes cell values via bare setattr, bypassing set_value and
+    # the on_row_loaded column hook. Runtime-derived column state (issue
+    # #541 locks and the like) must be rebuilt now that every cell value is
+    # in place — mirrors persistence.py's post-load hook pass.
+    new_row = row_manager.get_row(new_path)
+    for col in row_manager.columns:
+        hook = getattr(col.model, "on_row_loaded", None)
+        if hook is not None:
+            hook(new_row)
 
 
 class DeviceViewerSyncController(HasTraits):
