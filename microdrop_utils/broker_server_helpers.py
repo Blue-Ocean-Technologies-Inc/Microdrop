@@ -43,6 +43,40 @@ settings = load_redis_settings()
 REDIS_HOST = settings["host"]
 REDIS_PORT = settings["port"]
 
+# ---------------------------------------------------------------------------
+# Dramatiq worker settings — loaded from the project-level
+# dramatiq_settings.json (gitignored host-specific config, like
+# redis_settings.json). Copy dramatiq_settings.example.json to
+# dramatiq_settings.json and edit; falls back to the defaults below.
+# ---------------------------------------------------------------------------
+_DRAMATIQ_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "dramatiq_settings.json"
+
+DEFAULT_WORKER_THREADS = 4
+DEFAULT_WORKER_TIMEOUT_MS = 100
+
+
+def load_dramatiq_worker_settings() -> dict:
+    """
+    Load Dramatiq worker kwargs from the project-level dramatiq_settings.json.
+
+    worker_threads (int): The number of worker threads to spawn.
+    worker_timeout (int): The number of milliseconds workers should wake up
+        after if the queue is idle.
+
+    Returns:
+        dict with 'worker_threads' and 'worker_timeout' keys, falling back to
+        the defaults above when the file is missing or lacks the keys.
+    """
+    defaults = {"worker_threads": DEFAULT_WORKER_THREADS,
+                "worker_timeout": DEFAULT_WORKER_TIMEOUT_MS}
+    try:
+        with open(_DRAMATIQ_SETTINGS_PATH) as f:
+            loaded = {**defaults, **json.load(f)}
+    except (FileNotFoundError, json.JSONDecodeError):
+        loaded = defaults
+    return {"worker_threads": int(loaded["worker_threads"]),
+            "worker_timeout": int(loaded["worker_timeout"])}
+
 
 def configure_dramatiq_broker(host=REDIS_HOST, port=REDIS_PORT):
     """

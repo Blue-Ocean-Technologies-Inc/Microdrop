@@ -1,0 +1,4 @@
+{
+  "worker_threads": 4,
+  "worker_timeout": 100
+}
