@@ -78,7 +78,7 @@ class DropbotToolsMenuPlugin(Plugin):
         if topic == CHIP_INSERTED:
             logger.debug(f"Received {topic} signal")
             self.dropbot_connected = True
-            logger.info(f"Dropbot connected: {self.dropbot_connected}")
+            logger.info("Chip inserted signal received; marking DropBot connected")
         elif topic == DROPBOT_DISCONNECTED:
             logger.debug(f"Received {topic} signal")
             self.dropbot_connected = False   
