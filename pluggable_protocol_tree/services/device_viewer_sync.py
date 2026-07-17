@@ -273,11 +273,13 @@ class DeviceViewerSyncController(HasTraits):
         else:
             logger.info("PROTOCOL TREE: Can publish actuations when step selected")
 
-
     @observe("realtime_mode")
     @observe("actuated_channels")
     def _send_actuation_request(self, event):
         if self._protocol_running or not self.realtime_mode:
+            return
+
+        if self.realtime_mode and self._free_mode_stash:
             return
 
         logger.info(f"PROTOCOL TREE: Publishing electrode actuation:{self.actuated_channels}")
