@@ -173,6 +173,16 @@ def deserialize_tree(data: dict, columns: list, step_type, group_type):
                 continue
             setattr(row, col_id, live_col.model.deserialize(raw))
 
+        # Runtime-derived column state (issue #541 locks and the like)
+        # is never persisted; give each column a chance to rebuild it
+        # now that every cell value is in place.
+        for _col_id, live_col in resolved:
+            if live_col is None:
+                continue
+            hook = getattr(live_col.model, "on_row_loaded", None)
+            if hook is not None:
+                hook(row)
+
         parent.add_row(row)
 
         if row_type == "group":
