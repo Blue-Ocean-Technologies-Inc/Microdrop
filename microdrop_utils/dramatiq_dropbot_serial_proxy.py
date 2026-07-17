@@ -1,6 +1,6 @@
 from .dramatiq_pub_sub_helpers import publish_message
 from dropbot.proxy import SerialProxy
-from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, CHIP_INSERTED, CHIP_CHECK
+from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 import base_node_rpc as bnr
 import functools as ft
 
@@ -24,33 +24,28 @@ class DramatiqDropbotSerialProxy(SerialProxy):
         # of the message this wrapper takes care of.
 
         _connection_state = { 'connected': False }
-        # define the dramatiq pub sub wrappers
-        def connected_wrapper(f, *args, **kwargs):
-            f(*args, **kwargs)
-            
-            # are we already in the state you're about to report?
-            if _connection_state['connected']:
-                return    # already connected, skip
-            _connection_state['connected'] = True
-            publish_message(f'dropbot_connected', DROPBOT_CONNECTED)
-            # publish_message('', CHIP_CHECK) # this should be done at the handler for the dropbot connected.
 
-        def disconnected_wrapper(f, *args, **kwargs):
+        # define the dramatiq pub sub wrappers
+        def connection_event_wrapper(f, is_connected, *args, **kwargs):
             f(*args, **kwargs)
-            
+
             # are we already in the state you're about to report?
-            if not _connection_state['connected']:
-                return    # already disconnected, skip
-            _connection_state['connected'] = False
-            publish_message(f'dropbot_disconnected', DROPBOT_DISCONNECTED)
-            publish_message('False', CHIP_INSERTED)
-        
+            if _connection_state['connected'] == is_connected:
+                return    # no diff, skip
+
+            _connection_state['connected'] = is_connected
+
+            pub_topic = DROPBOT_CONNECTED if is_connected else DROPBOT_DISCONNECTED
+            publish_message("", pub_topic)
+
         self.monitor = bnr.ser_async.BaseNodeSerialMonitor(port=self.port)
 
-        self.monitor.connected_event.set = ft.partial(connected_wrapper,
-                                                 self.monitor.connected_event.set)
-        self.monitor.disconnected_event.set = ft.partial(disconnected_wrapper,
-                                                    self.monitor.disconnected_event.set)
+        self.monitor.connected_event.set = ft.partial(connection_event_wrapper,
+                                                      self.monitor.connected_event.set,
+                                                      True)
+        self.monitor.disconnected_event.set = ft.partial(connection_event_wrapper,
+                                                         self.monitor.disconnected_event.set,
+                                                         False)
 
         self.monitor.start()
 

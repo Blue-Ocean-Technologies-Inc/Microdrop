@@ -31,6 +31,7 @@ def wait_for_proxy(timeout=2, poll_interval=0.1):
                 elapsed += poll_interval
             if not self.proxy:
                 logger.warning(f"Timed out waiting for proxy after {timeout}s")
+                return None
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
@@ -72,15 +73,15 @@ class DropbotMonitorMixinService(HasTraits):
             if isinstance(self.monitor_scheduler, BackgroundScheduler):
 
                 if self.monitor_scheduler.state == STATE_RUNNING:
-                    logger.warning(f"Dropbot connections are already being monitored.")
+                    logger.warning("Dropbot connections are already being monitored.")
 
                 elif self.monitor_scheduler.state == STATE_STOPPED:
                     self.monitor_scheduler.start()
-                    logger.info(f"Dropbot connection monitoring started now.")
+                    logger.info("Dropbot connection monitoring started now.")
 
                 elif self.monitor_scheduler.state == STATE_PAUSED:
                     self.monitor_scheduler.resume()
-                    logger.info(f"Dropbot connection monitoring was paused, now it is resumed.")
+                    logger.info("Dropbot connection monitoring was paused, now it is resumed.")
 
                 else:
                     logger.error(f"Invalid dropbot monitor scheduler state: it is {self.monitor_scheduler.state}")
@@ -118,7 +119,7 @@ class DropbotMonitorMixinService(HasTraits):
 
     def on_retry_connection_request(self, message):
         if self.dropbot_connection_active:
-            logger.info(f"Retry connection request rejected: Dropbot already connected")
+            logger.info("Retry connection request rejected: Dropbot already connected")
             return
         logger.info("Attempting to retry connecting with a dropbot")
         self.monitor_scheduler.resume()
@@ -151,7 +152,11 @@ class DropbotMonitorMixinService(HasTraits):
     @wait_for_proxy(timeout=4)
     def on_connected_signal(self, message):
         # set connection active in case it was not changed.
+        if self._no_power:
+            logger.warning("There was no power detected, on connected routine ignored.")
+            return
         if not self.dropbot_connection_active:
+            logger.info("Dropbot Connected")
             self.dropbot_connection_active = True
 
         # Expose hardware limits as readonly info on the preferences model
@@ -178,16 +183,14 @@ class DropbotMonitorMixinService(HasTraits):
         if not event.retval:
             return
 
-        logger.debug("DropBot port found")
         self.monitor_scheduler.pause()
-        logger.debug("Paused DropBot monitor")
+        logger.debug("DropBot port found; Paused DropBot monitor")
+
         self.port_name = str(event.retval)
-        logger.info('Attempting to connect to DropBot on port: %s', self.port_name)
-        self._no_power = False # Reset no power state when device is found
-        self._connect_to_dropbot(port_name=self.port_name)
+        self._attempt_dropbot_port_connection(port_name=self.port_name)
         self._error_shown = False  # Reset error state when device is found
 
-    def _connect_to_dropbot(self, port_name):
+    def _attempt_dropbot_port_connection(self, port_name):
         """
         Once a port is found, attempt to connect to the DropBot on that port.
 
@@ -198,16 +201,15 @@ class DropbotMonitorMixinService(HasTraits):
         - No DropBot available for connection - USB not connected
         - No power to DropBot - power supply not connected
         """
-        self._no_power = False
+        self._no_power = False # Reset no power state when device is found
 
-        if self.proxy is None or getattr(self, 'proxy.monitor', None) is None:
-
-            logger.debug("Dropbot not connected. Attempting to connect")
+        if self.proxy is None or getattr(self.proxy, 'monitor', None) is None:
 
             ############################### Attempt to make a proxy object #############################
 
+            logger.info(f"Attempting to create DropBot serial proxy on port {port_name}")
+
             try:
-                logger.debug(f"Attempting to create DropBot serial proxy on port {port_name}")
                 self.proxy = DramatiqDropbotSerialProxy(port=port_name)
                 logger.info(f"DropBot connected on port {port_name}")
 

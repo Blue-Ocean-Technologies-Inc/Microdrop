@@ -577,7 +577,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("message_buffer")
     def publish_model_message(self, event):
-        logger.info(
+        logger.debug(
             f"Buffering message for device viewer state change: {self.message_buffer}"
         )
         publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
