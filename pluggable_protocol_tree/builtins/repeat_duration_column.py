@@ -7,6 +7,13 @@ diverges from what the auto-estimate would compute given the current
 Route Reps + Duration + trail config. On confirm, the row's
 ``repeat_duration_controls`` flag flips to True; on cancel, the edit
 is rejected and the column reverts to its previous value.
+
+Flipping the flag to True locks the ``route_repetitions`` cell (via the
+BaseRow observer in models/row.py — issue #541), so once duration
+control is active Route Reps is genuinely read-only. Editing Route Reps
+Dur back to 0 is therefore the only way back to count mode: it prompts
+with the same handoff dialog and, on confirm, flips the flag back to
+False, which unlocks Route Reps again.
 """
 
 from traits.api import Float
@@ -32,9 +39,12 @@ class RepeatDurationColumnModel(BaseColumnModel):
 
 
 class RepeatDurationHandler(BaseColumnHandler):
-    """Intercepts edits to prompt for the Route Reps --> Route Reps Dur
-    mode handoff. Read-through writes (no prompt) when:
-      * the row is already in Route Reps Dur-controls mode, or
+    """Intercepts edits to prompt for the Route Reps <--> Route Reps Dur
+    mode handoffs: entering duration mode on a diverging non-zero edit,
+    and handing control back on a 0 edit while in duration mode.
+    Read-through writes (no prompt) when:
+      * the row is already in Route Reps Dur-controls mode and the new
+        value is non-zero, or
       * the new value matches the auto-estimate (rounding to the
         column's display precision), or
       * the row has no routes (Route Reps Dur has no semantic effect, so
@@ -45,6 +55,26 @@ class RepeatDurationHandler(BaseColumnHandler):
         new_value = float(value or 0.0)
         already_controls = bool(getattr(row, "repeat_duration_controls", False))
         if already_controls:
+            if new_value == 0.0:
+                # 0 disables duration control (matches the DV sidebar,
+                # which derives the flag from repeat_duration > 0) —
+                # and it is the only way back now that the lock makes
+                # Route Reps genuinely read-only in duration mode.
+                choice = confirm(
+                    None,
+                    title="Switch to Route Reps Control",
+                    message=(
+                        "Setting Route Reps Dur to 0 hands loop control "
+                        "back to Route Reps: routes loop until the largest "
+                        "loop has completed all repetitions.<br><br>"
+                        "Route Reps will become editable again."
+                    ),
+                    yes_label="Switch",
+                    no_label="Cancel",
+                )
+                if choice != YES:
+                    return False
+                row.repeat_duration_controls = False
             return model.set_value(row, new_value)
 
         routes = list(getattr(row, "routes", []) or [])

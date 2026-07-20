@@ -187,3 +187,65 @@ def test_build_row_type_preserves_traits_semantics():
     r.observe(lambda e: seen.append((e.old, e.new)), "voltage")
     r.voltage = 5.0
     assert seen == [(0.0, 5.0)]
+
+
+# --- per-row column locks (issue #541) ---
+
+def test_lock_column_makes_column_locked():
+    r = BaseRow()
+    assert r.is_column_locked("capture") is False
+    r.lock_column("capture", owner="fluorescence", reason="Chain 'GFP' owns this step")
+    assert r.is_column_locked("capture") is True
+
+
+def test_unlock_requires_all_owners_released():
+    """Owner-keying is the point: one releasing owner must not re-enable
+    a cell another owner still wants locked."""
+    r = BaseRow()
+    r.lock_column("capture", owner="fluorescence", reason="chain")
+    r.lock_column("capture", owner="other_plugin", reason="busy")
+    r.unlock_column("capture", owner="fluorescence")
+    assert r.is_column_locked("capture") is True
+    r.unlock_column("capture", owner="other_plugin")
+    assert r.is_column_locked("capture") is False
+
+
+def test_unlock_unknown_owner_or_column_is_noop():
+    r = BaseRow()
+    r.unlock_column("capture", owner="nobody")          # never locked
+    r.lock_column("capture", owner="fluorescence")
+    r.unlock_column("capture", owner="somebody_else")   # wrong owner
+    assert r.is_column_locked("capture") is True
+
+
+def test_column_lock_reasons_collects_nonempty_reasons():
+    r = BaseRow()
+    r.lock_column("capture", owner="fluorescence", reason="Chain 'GFP' owns this step")
+    r.lock_column("capture", owner="other_plugin")      # no reason given
+    assert r.column_lock_reasons("capture") == ["Chain 'GFP' owns this step"]
+    assert r.column_lock_reasons("voltage") == []
+
+
+def test_relock_same_owner_updates_reason():
+    r = BaseRow()
+    r.lock_column("capture", owner="fluorescence", reason="old")
+    r.lock_column("capture", owner="fluorescence", reason="new")
+    assert r.column_lock_reasons("capture") == ["new"]
+
+
+def test_lock_and_unlock_fire_trait_notifications():
+    """The tree model repaints by observing column_locks — mutations
+    must reassign the dict so the notification actually fires."""
+    r = BaseRow()
+    events = []
+    r.observe(lambda e: events.append(e), "column_locks")
+    r.lock_column("capture", owner="fluorescence")
+    assert len(events) == 1
+    r.unlock_column("capture", owner="fluorescence")
+    assert len(events) == 2
+
+
+def test_locks_do_not_leak_between_rows():
+    a, b = BaseRow(), BaseRow()
+    a.lock_column("capture", owner="fluorescence")
+    assert b.is_column_locked("capture") is False

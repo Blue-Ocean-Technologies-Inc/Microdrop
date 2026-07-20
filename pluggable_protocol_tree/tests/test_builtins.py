@@ -190,7 +190,7 @@ def test_route_repetitions_editable_on_step_not_group():
     assert not (col.view.get_flags(GroupRow()) & Qt.ItemIsEditable)
 
 
-def test_route_reps_handler_plain_write_when_not_in_duration_mode():
+def test_route_reps_plain_write_when_not_in_duration_mode():
     from pluggable_protocol_tree.models.row import build_row_type, BaseRow
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
@@ -203,31 +203,72 @@ def test_route_reps_handler_plain_write_when_not_in_duration_mode():
     assert row.route_repetitions == 5
 
 
-def test_route_reps_handler_switch_back_from_duration_on_confirm(monkeypatch):
-    import pluggable_protocol_tree.builtins.route_repetitions_column as mod
+def test_repeat_duration_flag_locks_route_reps_cell():
+    """The mode-handoff dialog promises 'Route Reps will become
+    read-only while Route Reps Dur is in control' — the flag now
+    drives a column lock (issue #541 debt), on every path that flips
+    it (edit dialog, DV-sidebar sync, protocol load)."""
+    from pluggable_protocol_tree.models.row import BaseRow
+    row = BaseRow()
+    row.repeat_duration_controls = True
+    assert row.is_column_locked("route_repetitions") is True
+    assert row.column_lock_reasons("route_repetitions") == [
+        "Route Reps Dur is in control"]
+    row.repeat_duration_controls = False
+    assert row.is_column_locked("route_repetitions") is False
+
+
+def test_repeat_duration_zero_edit_switches_back_on_confirm(monkeypatch):
+    """Route Reps Dur = 0 is the way back to count mode now that the
+    Route Reps cell is genuinely read-only in duration mode."""
+    import pluggable_protocol_tree.builtins.repeat_duration_column as mod
     from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
     monkeypatch.setattr(mod, "confirm", lambda *a, **k: mod.YES)
-    col = mod.make_route_repetitions_column()
+    col = make_repeat_duration_column()
     Row = build_row_type([col], base=BaseRow)
     row = Row()
     row.repeat_duration_controls = True
-    assert col.handler.on_interact(row, col.model, 3) is True
-    assert row.repeat_duration_controls is False     # handed back to count mode
-    assert row.route_repetitions == 3
+    assert col.handler.on_interact(row, col.model, 0.0) is True
+    assert row.repeat_duration_controls is False
+    assert row.is_column_locked("route_repetitions") is False
+    assert row.repeat_duration == 0.0
 
 
-def test_route_reps_handler_cancel_rejects_edit(monkeypatch):
-    import pluggable_protocol_tree.builtins.route_repetitions_column as mod
+def test_repeat_duration_zero_edit_cancel_stays_in_duration_mode(monkeypatch):
+    import pluggable_protocol_tree.builtins.repeat_duration_column as mod
     from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
     monkeypatch.setattr(mod, "confirm", lambda *a, **k: 0)   # not YES
-    col = mod.make_route_repetitions_column()
+    col = make_repeat_duration_column()
     Row = build_row_type([col], base=BaseRow)
     row = Row()
     row.repeat_duration_controls = True
-    row.route_repetitions = 1
-    assert col.handler.on_interact(row, col.model, 9) is False
-    assert row.repeat_duration_controls is True          # unchanged
-    assert row.route_repetitions == 1                    # edit rejected
+    row.repeat_duration = 30.0
+    assert col.handler.on_interact(row, col.model, 0.0) is False
+    assert row.repeat_duration_controls is True
+    assert row.repeat_duration == 30.0
+
+
+def test_repeat_duration_nonzero_edit_in_duration_mode_is_plain_write(monkeypatch):
+    import pluggable_protocol_tree.builtins.repeat_duration_column as mod
+    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
+    monkeypatch.setattr(mod, "confirm", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("no dialog for a non-zero edit in duration mode")))
+    col = make_repeat_duration_column()
+    Row = build_row_type([col], base=BaseRow)
+    row = Row()
+    row.repeat_duration_controls = True
+    assert col.handler.on_interact(row, col.model, 45.0) is True
+    assert row.repeat_duration == 45.0
+    assert row.repeat_duration_controls is True
 
 
 def test_reps_handler_is_plain_write_through_even_in_duration_mode():

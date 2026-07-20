@@ -600,8 +600,14 @@ class RowManager(HasTraits):
         self._set_value(path, col, value)
 
     def set_values(self, paths: List[Path], col_id: str, value) -> None:
+        """Bulk write — the Bulk Set dialog's apply path. Rows where the
+        column is locked (issue #541) are skipped: a lock means some
+        owner arbitrates that cell, and a bulk write must not bypass
+        what the per-cell editor would refuse."""
         col = self._column_by_id(col_id)
         for path in paths:
+            if self.get_row(path).is_column_locked(col.model.col_id):
+                continue
             self._set_value(path, col, value)
 
     def apply(self, paths: List[Path], fn) -> None:

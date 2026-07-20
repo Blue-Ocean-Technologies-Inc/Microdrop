@@ -388,6 +388,17 @@ def test_set_values_bulk(manager):
     assert manager.get_row(b).duration_s == 4.2
 
 
+def test_set_values_skips_locked_rows(manager):
+    """Bulk Set must not write what the per-cell editor would refuse:
+    rows where the column is locked (issue #541) are skipped."""
+    a = manager.add_step()
+    b = manager.add_step()
+    manager.get_row(b).lock_column("duration_s", owner="test", reason="held")
+    manager.set_values([a, b], "duration_s", 4.2)
+    assert manager.get_row(a).duration_s == 4.2
+    assert manager.get_row(b).duration_s != 4.2
+
+
 def test_apply_runs_callable_per_row(manager):
     a = manager.add_step(values={"duration_s": 1.0})
     b = manager.add_step(values={"duration_s": 2.0})
