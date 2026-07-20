@@ -467,6 +467,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Apply editable state
         self.model.editable = message_model.editable
 
+        if not self.model.protocol_running and self.model.mode == "display":
+            self.model.mode = "draw"
+
         # Electrode->channel mapping is NOT carried on state messages (#415):
         # electrodes keep their geometry-derived channels, so there is
         # nothing to apply here.
@@ -574,7 +577,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("message_buffer")
     def publish_model_message(self, event):
-        logger.info(
+        logger.debug(
             f"Buffering message for device viewer state change: {self.message_buffer}"
         )
         publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)

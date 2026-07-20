@@ -17,7 +17,9 @@ from electrode_controller.plugin import ElectrodeControllerPlugin
 from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 from message_router.plugin import MessageRouterPlugin
-from microdrop_utils.broker_server_helpers import dramatiq_workers_context, redis_server_context
+from microdrop_utils.broker_server_helpers import (
+    dramatiq_workers_context, load_dramatiq_worker_settings,
+    redis_server_context)
 from device_viewer.plugin import DeviceViewerPlugin
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
@@ -128,8 +130,10 @@ REQUIRED_PLUGINS = [
     LoggerPlugin
 ]
 
+# Worker kwargs come from redis_settings.json when present (e.g. written by
+# the standalone launcher's Server Settings tab), else 4 threads / 100 ms.
 REQUIRED_CONTEXT = [
-    (dramatiq_workers_context, {"worker_threads": 4, "worker_timeout": 100}) #TODO optimize threads and timeout
+    (dramatiq_workers_context, load_dramatiq_worker_settings())
 ]
 
 SERVER_CONTEXT = [
