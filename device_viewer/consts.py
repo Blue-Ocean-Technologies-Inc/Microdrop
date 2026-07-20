@@ -255,11 +255,9 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 #       feed.frame: Signal(QImage)                 #   optional preview frames
 #       feed.streaming: Signal(bool)               #   optional preview state
 #       feed.create_controls(parent) -> QWidget|None   # optional settings row
-#       feed.raw_frame() -> QImage|None                # optional: unprocessed
-#                                                      #   (e.g. 16-bit) frame,
-#                                                      #   THE saved capture
 # The feed owns its preview state: the device viewer shows its video layer
 # only while feed.streaming reports True (e.g. the fluorescence pane's
-# "Device View Stream" checkbox) — captures save the feed's raw frame
-# directly either way.
+# "Device View Stream" checkbox). Captures here are display grabs for
+# every feed; raw (16-bit) sensor captures are the source plugin's own
+# concern (the fluorescence capture chain writes its own burst folders).
 CAMERA_SOURCES = "device_viewer.camera_sources"
