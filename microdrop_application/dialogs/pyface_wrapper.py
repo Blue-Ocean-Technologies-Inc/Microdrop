@@ -19,7 +19,7 @@ Usage:
 
 import html
 import traceback
-from typing import Optional
+from typing import Optional, Sequence
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFileDialog, QWidget
@@ -183,6 +183,89 @@ def confirm(
         mapped = CANCEL
 
     return _with_checkbox(dialog, mapped)
+
+
+def _map_choice(result: int, choices) -> Optional[str]:
+    """Map a dialog result code back to the caller's choice label.
+
+    Choice *i* closes with ``RESULT_CUSTOM_1 + i``. Anything else —
+    the Cancel button's RESULT_CANCEL, Escape, the window-close X —
+    is "no choice made" and maps to None.
+    """
+    offset = result - BaseMessageDialog.RESULT_CUSTOM_1
+    if 0 <= offset < len(choices):
+        return list(choices)[offset]
+    return None
+
+
+def choose(
+    parent: Optional[QWidget] = None,
+    message: str = "",
+    title: str = "Select an Option",
+    choices: Sequence[str] = (),
+    cancel: bool = True,
+    cancel_label: str = "Cancel",
+    detail: Optional[str] = None,
+    detail_visible_lines: Optional[int] = None,
+    informative: Optional[str] = None,
+    text_format: Optional[str] = None,
+    **kwargs,
+):
+    """Styled multi-choice question dialog (issue #542).
+
+    Shows one button per entry in *choices* (kept in order, primary
+    styling) plus an optional *cancel_label* button (secondary "exit"
+    styling, sorted leftmost by the dialog). Returns the clicked choice
+    label, or None when no choice was made — the Cancel button, Escape,
+    and the window-close X all mean None.
+
+    Reuses BaseMessageDialog's arbitrary ``buttons`` map and the
+    RESULT_CUSTOM_* range (choice i closes with RESULT_CUSTOM_1 + i, so
+    more than three choices work — the named constants are just the
+    first three codes).
+
+    If *checkbox_text* is provided (via kwargs), a checkbox is added and
+    the return value becomes a ``(label_or_None, checked)`` tuple, the
+    same convention as the other wrapper functions.
+    """
+    choices = list(choices)
+    if not choices:
+        raise ValueError("choose() needs at least one choice")
+    if len(set(choices)) != len(choices):
+        raise ValueError(f"choose() choices must be unique, got {choices}")
+    if cancel and cancel_label in choices:
+        raise ValueError(
+            f"cancel_label {cancel_label!r} collides with a choice")
+
+    dialog_ref = [None]  # mutable closure reference, as in confirm()
+
+    def close_result(result):
+        if dialog_ref[0] is not None:
+            dialog_ref[0].close_with_result(result)
+
+    buttons = {}
+    if cancel:
+        buttons[cancel_label] = {
+            "action": lambda: close_result(BaseMessageDialog.RESULT_CANCEL),
+            "role": "exit",
+        }
+    for i, label in enumerate(choices):
+        code = BaseMessageDialog.RESULT_CUSTOM_1 + i
+        buttons[label] = {"action": lambda code=code: close_result(code)}
+
+    def create_dialog(**opts):
+        return BaseMessageDialog(
+            dialog_type=BaseMessageDialog.TYPE_QUESTION,
+            buttons=buttons, **opts,
+        )
+
+    dialog = _prepare_dialog(create_dialog, parent, title, message, detail,
+                             detail_visible_lines, informative, text_format,
+                             **kwargs)
+    dialog_ref[0] = dialog
+
+    result = dialog.exec()
+    return _with_checkbox(dialog, _map_choice(result, choices))
 
 
 def information(
@@ -410,6 +493,7 @@ def file_dialog(parent: Optional[QWidget] = None, action: str = "open", default_
 # Export all for easy import
 __all__ = [
     "confirm",
+    "choose",
     "information",
     "success",
     "warning",
