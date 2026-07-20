@@ -50,10 +50,13 @@ from microdrop_application.menus import is_advanced_mode
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
-    PROTOCOL_TREE_DISPLAY_STATE, PROTOCOL_TREE_SET_CELL, SYNC_LISTENER_NAME,
+    PROTOCOL_TREE_ADD_STEP, PROTOCOL_TREE_DISPLAY_STATE,
+    PROTOCOL_TREE_SET_CELL, SYNC_LISTENER_NAME,
     protocol_tree_row_selected_publisher,
 )
-from pluggable_protocol_tree.models.cell_sync import ProtocolTreeSetCellMessage
+from pluggable_protocol_tree.models.cell_sync import (
+    ProtocolTreeAddStepMessage, ProtocolTreeSetCellMessage,
+)
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
@@ -129,6 +132,51 @@ def _col_values_from_execution_params(params: dict) -> dict:
     return result
 
 
+def _insert_step_from_message(row_manager, msg) -> None:
+    """Insert the step a PROTOCOL_TREE_ADD_STEP message describes.
+
+    Placement: after the step ``after_step_id``; as the last child of
+    the group ``group_id``; appended at the root when neither resolves.
+    ``cells`` values arrive in each column's serialized form and are
+    deserialized through the live column set — unknown col_ids are
+    skipped (plugin not loaded), matching persistence's behavior.
+    """
+    values = {}
+    by_id = {c.model.col_id: c for c in row_manager.columns}
+    for col_id, raw in (msg.cells or {}).items():
+        col = by_id.get(col_id)
+        if col is None:
+            logger.warning(f"add_step: skipping unknown column {col_id!r}")
+            continue
+        values[col_id] = col.model.deserialize(raw)
+    if msg.name:
+        values["name"] = msg.name
+
+    parent_path, index = (), None
+    if msg.after_step_id:
+        row = row_manager.get_row_by_uuid(msg.after_step_id)
+        if row is not None and not isinstance(row, GroupRow):
+            path = tuple(row.path)
+            parent_path, index = path[:-1], path[-1] + 1
+    elif msg.group_id:
+        group = row_manager.get_row_by_uuid(msg.group_id)
+        if isinstance(group, GroupRow):
+            parent_path = tuple(group.path)
+    new_path = row_manager.add_step(
+        parent_path=parent_path, index=index, values=values,
+    )
+
+    # add_step writes cell values via bare setattr, bypassing set_value and
+    # the on_row_loaded column hook. Runtime-derived column state (issue
+    # #541 locks and the like) must be rebuilt now that every cell value is
+    # in place — mirrors persistence.py's post-load hook pass.
+    new_row = row_manager.get_row(new_path)
+    for col in row_manager.columns:
+        hook = getattr(col.model, "on_row_loaded", None)
+        if hook is not None:
+            hook(new_row)
+
+
 class DeviceViewerSyncController(HasTraits):
     row_manager              = Instance(RowManager)
     parent_widget            = Instance(QWidget, allow_none=True)
@@ -170,6 +218,7 @@ class DeviceViewerSyncController(HasTraits):
     _protocol_running_changed_event = Event(Bool)
     _step_params_committed_event  = Event(Str)
     _set_cell_request_event       = Event(Str)
+    _add_step_request_event       = Event(Str)
 
     def _advanced_mode_default(self):
         return bool(is_advanced_mode())
@@ -310,6 +359,8 @@ class DeviceViewerSyncController(HasTraits):
             self._step_params_committed_event = message
         elif topic == PROTOCOL_TREE_SET_CELL:
             self._set_cell_request_event = message
+        elif topic == PROTOCOL_TREE_ADD_STEP:
+            self._add_step_request_event = message
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = (message.casefold() == "true")
         elif topic == DROPBOT_DISCONNECTED:
@@ -503,6 +554,24 @@ class DeviceViewerSyncController(HasTraits):
         logger.info(f"set-cell applied to Step {row.dotted_path()} "
                     f"column {set_cell_msg.col_id!r}")
 
+    @observe("_add_step_request_event", dispatch="ui")
+    def _on_add_step_request(self, event) -> None:
+        """PROTOCOL_TREE_ADD_STEP: insert a plugin-authored step. Runs on
+        the GUI thread (row mutation); refused mid-run like set_cell."""
+        if self._protocol_running:
+            logger.warning("add_step request ignored: protocol running")
+            return
+        try:
+            msg = ProtocolTreeAddStepMessage.deserialize(event.new)
+        except Exception as e:
+            logger.warning(f"bad add_step payload {event.new!r}: {e}")
+            return
+        self._suppress_publish = True
+        try:
+            _insert_step_from_message(self.row_manager, msg)
+        finally:
+            self._suppress_publish = False
+
     def _publish_row_selected(self, row) -> None:
         """Broadcast PROTOCOL_TREE_ROW_SELECTED: the selected step's uuid
         plus every column's serialized value (step_id None for free mode /
@@ -511,6 +580,10 @@ class DeviceViewerSyncController(HasTraits):
         if row is None:
             protocol_tree_row_selected_publisher.publish(step_id=None,
                                                          cells={})
+            return
+        if isinstance(row, GroupRow):
+            protocol_tree_row_selected_publisher.publish(
+                step_id=None, group_id=row.uuid, cells={})
             return
         cells = {
             column.model.col_id:
@@ -590,8 +663,7 @@ class DeviceViewerSyncController(HasTraits):
             topic=PROTOCOL_TREE_DISPLAY_STATE,
             message=msg.serialize(),
         )
-        self._publish_row_selected(
-            None if row is None or isinstance(row, GroupRow) else row)
+        self._publish_row_selected(row)
 
     def _insert_free_mode_as_new_step(self) -> None:
         """Reentrancy-guarded RowManager.add_step for the free-mode capture.

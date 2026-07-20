@@ -2,6 +2,9 @@
 
 import pytest
 
+from traits.api import Int
+
+from pluggable_protocol_tree.models.column import BaseColumnModel, Column
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
@@ -9,6 +12,7 @@ from pluggable_protocol_tree.builtins.duration_column import make_duration_colum
 from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
 from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
+from pluggable_protocol_tree.views.columns.readonly_label import ReadOnlyLabelColumnView
 
 
 @pytest.fixture
@@ -293,3 +297,34 @@ def test_load_old_duplicate_fields_payload_still_loads():
     assert nm.root.children[1].name == "OldGroup"
     assert nm.root.children[1].row_type == "group"
     assert nm.root.children[1].children[0].name == "Nested"
+
+
+# --- on_row_loaded column hook (runtime-derived state, e.g. #541 locks) ---
+
+def test_on_row_loaded_hook_fires_per_loaded_row():
+    """Columns with runtime-derived state (e.g. #541 locks) rebuild it
+    on load via an optional on_row_loaded(row) model hook."""
+    seen = []
+
+    class _HookedModel(BaseColumnModel):
+        def trait_for_row(self):
+            return Int(0)
+
+        def on_row_loaded(self, row):
+            seen.append(row.uuid)
+
+    hooked = Column(model=_HookedModel(col_id="hooked", col_name="Hooked",
+                                       default_value=0),
+                    view=ReadOnlyLabelColumnView())
+
+    cols = [make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(), hooked]
+    m = RowManager(columns=cols)
+    m.add_step(values={"name": "A"})
+    m.add_step(values={"name": "B"})
+    data = m.to_json()
+
+    new_manager = RowManager.from_json(data, columns=list(cols))
+    loaded_root = new_manager.root
+
+    assert sorted(seen) == sorted(r.uuid for r in loaded_root.children)
