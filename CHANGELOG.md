@@ -1,3 +1,118 @@
+## v1.3.0 (2026-07-21)
+
+### Feat
+
+- **user_help_plugin**: prefer GitHub-styled markdown render, offline fallback
+- **microdrop_utils**: GitHub-styled markdown page render with shared tag-token escaping
+- **examples**: mock-changelog render demo for What's New + Changelog viewer
+- **user_help_plugin**: Changelog help menu item rendering CHANGELOG.md
+- **microdrop_utils**: markdown_text_to_html QTextDocument helper
+- **microdrop_application**: What's New startup dialog for new changelog sections
+- **microdrop_application**: CHANGELOG_PATH constant
+- **microdrop_utils**: changelog delta helper for prepend-style changelogs
+- **user_help_plugin**: move Download MicroDrop Launcher into its own bottom menu group
+- **user_help_plugin**: show only the rendered launcher README in the help dialog
+- **microdrop_application**: WebViewDialog accepts html_content for direct HTML rendering
+- **microdrop_utils**: add helper rendering GitHub markdown files to standalone HTML
+- **user_help_plugin**: add Download MicroDrop Launcher help menu item
+- **user_help_plugin**: add architecture html path and launcher README url constants
+- **microdrop_application**: add generic WebViewDialog for HTML/web content
+- **pluggable_protocol_tree**: on_row_loaded column hook after load
+- **pluggable_protocol_tree**: handle add-step requests, identify groups
+- **pluggable_protocol_tree**: add-step topic + group id on row_selected
+- **pluggable_protocol_tree**: route reps lock honors mode dialog
+- **pluggable_protocol_tree**: bulk set skips locked cells
+- **pluggable_protocol_tree**: enforce column locks in MvcTreeModel
+- **pluggable_protocol_tree**: owner-keyed column locks on BaseRow
+- **microdrop_application**: add choose() multi-choice dialog
+- **microdrop_utils**: configurable dramatiq worker settings via json
+- **microdrop_utils**: self-update source repo at launch
+- **plugin_management**: gate the upgrade glyph
+- **plugin_management**: hot-load plugin reinstalls
+- **plugin_mgmt**: hot-load installs, skip relaunch
+- **plugin_management**: add hot-load gate
+- **plugin_management**: compute requires_relaunch from diff
+- **plugin_management**: add pixi env snapshot and diff
+- **microdrop_utils**: mark enum cells with a chevron
+- **dropbot_controller**: add validated publisher for shorts detected
+- **traitsui_qt_helpers**: draw real dropdown arrow on EnumSelectColumn cells
+- **plugin_management**: version picker + hide installed in Browse Plugins
+- **plugin_management**: collapsible details + always-on version combos
+- **traitsui_qt_helpers**: controller base + persistent-editor helpers
+- **plugin_management**: per-row install/uninstall + refresh handler
+- **plugin_management**: tabbed Manage Plugins with installed-packages table
+- **plugin_management**: installed-package rows + details model
+- **package_installer**: version-pinned install + upgrade helper
+
+### Fix
+
+- **microdrop_application**: re-enable What's New cache refresh
+- **microdrop_utils**: escape tag-like tokens before QTextDocument markdown render
+- **dialogs**: open help-document links in the system browser
+- **pluggable_protocol_tree**: rebuild column load-state on add-step insert
+- **video_protocol_controls**: repaint capture_at on capture toggle
+- **protocol_tree_sync**: track realtime mode state and gate actuation publishing correctly
+- **dropbot_monitor**: harden connection handlers in monitor mixin service
+- **dramatiq_dropbot_serial_proxy**: unify connect/disconnect monitor event wrappers
+- **device_viewer_sync**: Do not publish when realtime mode toggles on in free mode.
+- **device_viewer**: return to draw mode once a protocol ends
+- **plugin_management**: refresh details on change
+- **plugin_management**: stop swallowing uninstall errors
+- **plugin_management**: surface hot-load refusal reasons
+- **plugin_management**: drop installed rows after install
+- **plugin_management**: snapshot modules before discovery
+- resolve final review issues in hot-load
+- **plugin_management**: relaunch via the microdrop task
+- **plugin_management**: sync env after pixi add/remove
+- **microdrop_application**: report no-shorts on a user-requested check
+- **microdrop_application**: make the suppress-no-shorts preference persist
+- Revert "feat(traitsui_qt_helpers): draw real dropdown arrow on EnumSelectColumn cells"
+- **plugin_management**: crash when changing version repeatedly
+- **plugin_management**: version dropdown back to click-to-edit
+- **plugin_management**: version dropdown stuck after declining install
+
+### Refactor
+
+- **user_help_plugin**: single OpenMarkdownDialogAction for local and remote markdown
+- **microdrop_utils**: fetch raw GitHub markdown; drop GitHub-API render pipeline
+- **microdrop_application**: render What's New markdown via shared helper
+- **user_help_plugin**: replace About/Feedback dialog classes with generic WebViewDialog action
+- **microdrop_application**: move WebViewDialog size defaults to dialogs consts
+- **mock_dropbot**: publish/consume shorts via the validated model
+- **dropbot_controller**: publish shorts via the validated publisher
+- **traitsui_qt_helpers**: add reusable table column types
+
+### Docs
+
+- add ppt fluorescence-support-topics implementation plan
+- **pluggable_protocol_tree**: fix stale RepeatDurationHandler docstring
+- add column-locks + choose-dialog implementation plan
+- **plugin_management**: allow smokes in hot-load plan
+- **plugin_management**: plan hot-load implementation
+- **plugin_management**: drop update-all from hot-load scope
+- **plugin_management**: spec hot-load without relaunch
+- **MESSAGES**: document the shorts detected payload contract
+- **examples**: reuse real view/controller in installed-packages demo
+- **examples**: add installed-packages table demo runner
+
+### CI
+
+- quote tag-and-release if expression — unquoted 'chore: release' breaks YAML
+- changelog lists all conventional commit types
+- RELEASE_PAT fallback for org-blocked PR creation
+- reopen release PR if the previous one was closed without merging
+- PR-based releases — bot opens release PR, tag on merge
+- auto-release on push to main via commitizen bump
+
+### Test
+
+- **plugin_management**: fix collision refusal
+
+### Chore
+
+- **device_viewer**: lower message-buffer publish log to debug
+- **dropbot_tools_menu**: clarify chip-inserted connection log message
+
 ## v1.2.0 (2026-07-15)
 
 ### Feat
