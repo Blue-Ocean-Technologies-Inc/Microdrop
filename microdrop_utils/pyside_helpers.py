@@ -843,3 +843,14 @@ class _ScalingPixmapLabel(QLabel):
                 Qt.TransformationMode.SmoothTransformation,
             )
             self.setPixmap(scaled)
+
+
+def markdown_text_to_html(markdown_text: str) -> str:
+    """Render markdown to a standalone HTML document via QTextDocument.
+
+    Dependency-free markdown conversion (GitHub dialect by default) for
+    showing markdown content in rich-text widgets or web views.
+    """
+    document = QtGui.QTextDocument()
+    document.setMarkdown(markdown_text)
+    return document.toHtml()
