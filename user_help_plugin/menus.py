@@ -8,6 +8,7 @@ from .consts import (
     ARCHITECTURE_HTML_PATH,
     FEEDBACK_URL,
     GITHUB_ISSUES_URL,
+    MICRODROP_LAUNCHER_README_URL,
     SCIBOTS_URL,
     SUPPORT_EMAIL,
     INFO_EMAIL,
@@ -88,6 +89,12 @@ def menu_factory():
         ),
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
+        OpenWebViewDialogAction(
+            name="&Download MicroDrop Launcher...",
+            tooltip="View the MicroDrop Launcher README with download instructions",
+            source=MICRODROP_LAUNCHER_README_URL,
+            window_title="Download MicroDrop Launcher",
+        ),
         contact_submenu,
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
