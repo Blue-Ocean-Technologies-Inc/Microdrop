@@ -1,31 +1,41 @@
 name: Release
 
-# Every push to main is auto-released: commitizen computes the next semver
-# from Conventional Commits (fix -> patch, feat -> minor, BREAKING CHANGE ->
-# major), commits the CHANGELOG.md update, tags vX.Y.Z (see .cz.toml), and
-# publishes a GitHub Release with the changelog increment as its notes.
-# Pushes with no releasable commits (docs/chore/refactor/ci only) skip the
-# whole thing.
+# PR-based auto-release: a push to main containing releasable Conventional
+# Commits (fix -> patch, feat -> minor, BREAKING CHANGE -> major) opens or
+# updates a "chore: release vX.Y.Z" PR (branch ci/release) carrying the
+# version bump and CHANGELOG.md update. Approving and merging that PR is the
+# manual release gate: the merge lands on main with a "chore: release ..."
+# head commit, which triggers the tag job to tag that commit vX.Y.Z and
+# publish a GitHub Release with the version's changelog as notes. Pushes
+# with no releasable commits (docs/chore/refactor only) do nothing.
 #
-# The bump commit itself ("chore: release vX.Y.Z") is pushed with
-# GITHUB_TOKEN, which never retriggers workflows; the head_commit guard is
-# belt-and-suspenders on top of that.
+# This is PR-based (instead of pushing the bump commit straight to main)
+# because main requires pull requests and the github-actions app cannot be
+# added as a ruleset bypass actor on this org — the bot only ever pushes
+# the unprotected ci/release branch and tags.
+#
+# Requires "Allow GitHub Actions to create and approve pull requests"
+# (Settings -> Actions -> General -> Workflow permissions).
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write   # push bump commit + tag, create the release
+  contents: write        # push release branch + tag, create the release
+  pull-requests: write   # open/update the release PR
 
 # Queue runs so two quick pushes to main can't race the same bump.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  RELEASE_BRANCH: ci/release
+
 jobs:
-  release:
-    name: bump version, changelog & release
+  release-pr:
+    name: open/update release PR
     if: "!startsWith(github.event.head_commit.message, 'chore: release')"
     runs-on: ubuntu-latest
     steps:
@@ -36,8 +46,9 @@ jobs:
       - name: Install commitizen
         run: pipx install "commitizen>=4,<5"
 
-      - name: Bump version, update changelog, push tag
-        id: bump
+      - name: Bump on the release branch and open the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -48,21 +59,53 @@ jobs:
           # 3 = no commits since last tag, 21 = commits but none releasable
           if [ "$rc" -eq 3 ] || [ "$rc" -eq 21 ]; then
             echo "No feat/fix/BREAKING commits since the last tag — nothing to release."
-            echo "tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$rc" -ne 0 ]; then
             exit "$rc"
           fi
           tag="$(git describe --tags --abbrev=0)"
-          git push origin main "refs/tags/$tag"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # The real tag is created on the merge commit by tag-and-release.
+          git tag -d "$tag"
+          git push --force origin "HEAD:refs/heads/$RELEASE_BRANCH"
+          if gh pr view "$RELEASE_BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$RELEASE_BRANCH" --title "chore: release $tag" --body-file release_notes.md
+          else
+            gh pr create --base main --head "$RELEASE_BRANCH" \
+              --title "chore: release $tag" --body-file release_notes.md
+          fi
 
-      - name: Publish GitHub release
-        if: steps.bump.outputs.tag != ''
+  tag-and-release:
+    name: tag merged release & publish
+    if: startsWith(github.event.head_commit.message, 'chore: release')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # cz changelog regenerates notes from tag history
+
+      - name: Install commitizen
+        run: pipx install "commitizen>=4,<5"
+
+      - name: Tag the merge commit and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.bump.outputs.tag }}
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
-          gh release create "$TAG" --repo "${{ github.repository }}" \
-            --title "$TAG" --notes-file release_notes.md
+          tag="$(printf '%s' "$HEAD_MSG" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          if [ -z "$tag" ]; then
+            echo "No vX.Y.Z version found in the head commit message."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists — nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          cz changelog "${tag#v}" --dry-run > release_notes.md
+          gh release create "$tag" --title "$tag" --notes-file release_notes.md
+          # The merged release branch is no longer needed.
+          git push origin --delete "$RELEASE_BRANCH" || true
