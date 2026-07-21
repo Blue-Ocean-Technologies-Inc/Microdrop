@@ -46,44 +46,31 @@ class OpenWebViewDialogAction(Action):
         self.dialog.show()
 
 
-class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
-    """Renders a GitHub markdown file (just the document, not the full GitHub
-    page) in a WebViewDialog; falls back to loading the GitHub page itself if
-    fetching or rendering fails."""
+class OpenMarkdownDialogAction(OpenWebViewDialogAction):
+    """Renders a markdown document (just the document, not a full web page)
+    in a WebViewDialog. ``source`` is a local ``Path`` or a GitHub blob URL;
+    a failed remote fetch falls back to loading the page itself."""
 
     open_links_externally = Bool(True)
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
-        from microdrop_utils.markdown_helpers import fetch_github_markdown_as_html
-
-        try:
-            html_content = fetch_github_markdown_as_html(self.source)
-        except Exception as e:
-            logger.warning(f"Failed to render markdown from {self.source}: {e}. "
-                           f"Falling back to loading the page directly.")
-            return super().perform(event)
-
-        self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
-                                    width=self.width, height=self.height,
-                                    open_links_externally=self.open_links_externally)
-        self.dialog.show()
-
-
-class OpenLocalMarkdownDialogAction(OpenWebViewDialogAction):
-    """Renders a local markdown file as HTML in a WebViewDialog."""
-
-    open_links_externally = Bool(True)
-
-    def perform(self, event):
-        # Imported lazily so QtWebEngine only initializes on first use.
-        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        from microdrop_utils.markdown_helpers import fetch_github_markdown
         from microdrop_utils.pyside_helpers import markdown_text_to_html
 
-        html_content = markdown_text_to_html(
-            Path(self.source).read_text(encoding="utf-8"))
-        self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
+        try:
+            if isinstance(self.source, Path):
+                markdown_text = self.source.read_text(encoding="utf-8")
+            else:
+                markdown_text = fetch_github_markdown(self.source)
+        except Exception as e:
+            logger.warning(f"Failed to load markdown from {self.source}: {e}. "
+                           f"Falling back to loading it directly.")
+            return super().perform(event)
+
+        self.dialog = WebViewDialog(html_content=markdown_text_to_html(markdown_text),
+                                    title=self.window_title,
                                     width=self.width, height=self.height,
                                     open_links_externally=self.open_links_externally)
         self.dialog.show()
@@ -141,7 +128,7 @@ def menu_factory():
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
         contact_submenu,
-        OpenLocalMarkdownDialogAction(
+        OpenMarkdownDialogAction(
             name="&Changelog...",
             tooltip="View the full MicroDrop changelog",
             source=CHANGELOG_PATH,
@@ -160,7 +147,7 @@ def menu_factory():
 def launcher_menu_factory():
     """Separate bottom group so the launcher item sits below a separator line."""
     return SGroup(
-        OpenGithubMarkdownDialogAction(
+        OpenMarkdownDialogAction(
             name="&Download MicroDrop Launcher...",
             tooltip="View the MicroDrop Launcher README with download instructions",
             source=MICRODROP_LAUNCHER_README_URL,
