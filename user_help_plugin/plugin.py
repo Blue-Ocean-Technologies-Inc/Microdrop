@@ -28,7 +28,7 @@ class UserHelpPlugin(Plugin):
     #### Trait initializers ###################################################
 
     def _contributed_task_extensions_default(self):
-        from .menus import menu_factory
+        from .menus import menu_factory, launcher_menu_factory
 
         return [
             TaskExtension(
@@ -37,7 +37,12 @@ class UserHelpPlugin(Plugin):
                     SchemaAddition(
                         factory=menu_factory,
                         path='MenuBar/Help',
-                    )
+                    ),
+                    SchemaAddition(
+                        factory=launcher_menu_factory,
+                        path='MenuBar/Help',
+                        absolute_position='last',
+                    ),
                 ]
             )
         ]
