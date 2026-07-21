@@ -1,3 +1,14 @@
+## v1.3.1 (2026-07-21)
+
+### Refactor
+
+- **microdrop_utils**: use QToolButton for glyph editors
+- **device_viewer**: drop the raw-frame capture path
+
+### CI
+
+- state-based release detection — merge-method-proof, recursion-free
+
 ## v1.3.0 (2026-07-21)
 
 ### Feat
