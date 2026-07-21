@@ -1,8 +1,40 @@
 [tool.commitizen]
-name = "cz_conventional_commits"
+name = "cz_customize"
 version_provider = "scm"
 tag_format = "v$version"
 bump_message = "chore: release v$new_version"
 update_changelog_on_bump = true
 # Annotated so `git push --follow-tags` carries release tags along.
 annotated_tag = true
+
+# cz_customize replicates cz_conventional_commits, except the changelog also
+# lists non-releasable types (docs/style/test/build/ci/chore/revert). The
+# bump rules — what actually triggers a release — are unchanged: feat ->
+# MINOR; fix/refactor/perf -> PATCH; breaking -> MAJOR.
+[tool.commitizen.customize]
+bump_pattern = '^((BREAKING[\-\ ]CHANGE|\w+)(\(.+\))?!?):'
+changelog_pattern = '^(BREAKING[\-\ ]CHANGE|feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert)(\(.+\))?(!)?'
+commit_parser = '^((?P<change_type>feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert|BREAKING CHANGE)(?:\((?P<scope>[^()\r\n]*)\)|\()?(?P<breaking>!)?|\w+!):\s(?P<message>.*)?'
+schema_pattern = '(?s)(build|ci|docs|feat|fix|perf|refactor|style|test|chore|revert|bump)(\(\S+\))?!?:( [^\n\r]+)((\n\n.*)|(\s*))?$'
+change_type_order = ["BREAKING CHANGE", "Feat", "Fix", "Refactor", "Perf", "Docs", "CI", "Build", "Test", "Style", "Chore", "Revert"]
+
+[tool.commitizen.customize.bump_map]
+'^.+!$' = "MAJOR"
+'^BREAKING[\-\ ]CHANGE' = "MAJOR"
+'^feat' = "MINOR"
+'^fix' = "PATCH"
+'^refactor' = "PATCH"
+'^perf' = "PATCH"
+
+[tool.commitizen.customize.change_type_map]
+feat = "Feat"
+fix = "Fix"
+refactor = "Refactor"
+perf = "Perf"
+docs = "Docs"
+style = "Style"
+test = "Test"
+build = "Build"
+ci = "CI"
+chore = "Chore"
+revert = "Revert"
