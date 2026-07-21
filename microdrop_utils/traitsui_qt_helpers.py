@@ -1,6 +1,7 @@
 import html
 import math
 
+from PySide6.QtWidgets import QToolButton
 from pyface.qt.QtCore import (
     Qt, QSize, QPoint, QPointF, QRectF,
     QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
@@ -34,6 +35,8 @@ logger = get_logger(__name__)
 # "unbounded" wherever a spinbox range is conceptually infinite
 # (negate it for an unbounded minimum).
 DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
+
+DEFAULT_GLYPH_POINT_SIZE_PX = 16
 
 
 class TableColumn(TableColumn_):
@@ -122,7 +125,7 @@ class GlyphActionColumn(ObjectColumn):
     #: Name of the Event/Bool trait on the row set True when the cell is clicked.
     fire = Str()
     #: Icon font point size.
-    icon_point_size = Int(16)
+    icon_point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
 
     def traits_init(self):
         self.editable = False
@@ -941,7 +944,7 @@ class _InPlaceToggleEditor(QtEditor):
         self.control.setCheckable(True)
         self.control.setChecked(self.value)
         self.control.clicked.connect(self._on_click)
-        self.control.setMaximumWidth(100)
+        self.control.setMaximumWidth(self.factory.max_width)
 
         # Apply initial label + styling, and keep them in sync on every toggle
         # (click included; the trait-driven update_editor() does not fire on a
@@ -996,6 +999,8 @@ class InPlaceToggleEditor(BasicEditorFactory):
     on_label = Str("On")
     off_label = Str("Off")
 
+    max_width = Int(100)
+
 
 class _IconToggleEditor(QtEditor):
     """A flat, borderless checkable button rendering a Material Symbols glyph
@@ -1004,13 +1009,10 @@ class _IconToggleEditor(QtEditor):
     when checked, ``chevron_right`` (collapsed) when unchecked."""
 
     def init(self, parent):
-        self.control = QPushButton()
+        self.control = QToolButton()
         self.control.setCheckable(True)
-        self.control.setFlat(True)
         self.control.setCursor(Qt.PointingHandCursor)
-        self.control.setMaximumWidth(self.factory.point_size + 12)
-        self.control.setStyleSheet(
-            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        self.control.setMaximumWidth(self.factory.max_width)
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
@@ -1051,7 +1053,10 @@ class IconToggleEditor(BasicEditorFactory):
     #: Material Symbols ligature shown when checked / unchecked.
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
-    point_size = Int(14)
+
+    point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
+    max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
+
     tooltip = Str()
 
 
@@ -1061,12 +1066,9 @@ class _IconButtonEditor(QtEditor):
     that fires a Button/Event trait on click."""
 
     def init(self, parent):
-        self.control = QPushButton()
-        self.control.setFlat(True)
+        self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
-        self.control.setMaximumWidth(self.factory.point_size + 12)
-        self.control.setStyleSheet(
-            "QPushButton { border: none; background: transparent; padding: 0px; }")
+        self.control.setMaximumWidth(self.factory.max_width)
         font = QFont(ICON_FONT_FAMILY)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
@@ -1094,7 +1096,9 @@ class IconButtonEditor(BasicEditorFactory):
     #: Material Symbols ligature (or codepoint) shown on the button.
     glyph = Str()
     tooltip = Str()
-    point_size = Int(14)
+
+    point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
+    max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
 
 
 def _has_group_box_ancestor(layout):

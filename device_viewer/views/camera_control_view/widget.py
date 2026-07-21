@@ -32,7 +32,6 @@ from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceC
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
     CAPTURES_DIR_NAME,
-    RAW_CAPTURES_SUBDIR,
     RECORDER_BACKEND_FFMPEG,
     RECORDINGS_DIR_NAME,
     device_viewer_recording_state_publisher,
@@ -817,34 +816,10 @@ class CameraControlWidget(QWidget):
         base_dir = Path(directory) if directory else get_current_experiment_directory()
         save_path = base_dir / CAPTURES_DIR_NAME / filename
 
-        # Provider feeds (ASI) supply the unprocessed sensor frame (16-bit):
-        # that IS the capture — an 8-bit display grab adds nothing next to
-        # it, so it is skipped. The frame is snapshotted here, synchronously;
-        # only the PNG encode + disk write are deferred to the thread pool.
-        raw_getter = getattr(self._active_feed, "raw_frame", None)
-        raw_image = raw_getter() if raw_getter is not None else None
-        if raw_image is not None and not raw_image.isNull():
-            raw_path = (save_path.parent / RAW_CAPTURES_SUBDIR
-                        / f"{save_path.stem}_raw.png")
-            raw_path.parent.mkdir(parents=True, exist_ok=True)
-
-            def _on_raw_saved(saved_path):
-                _cache_media_capture(MediaType.IMAGE, saved_path)
-                media_capture_event_model.captured = saved_path
-                logger.info(f"Raw sensor frame saved: {saved_path}")
-                if show_dialog:
-                    _show_media_capture_dialog(
-                        MediaType.IMAGE, saved_path, self.status_bar_manager)
-
-            def _on_raw_save_failed(saved_path):
-                logger.error(f"Failed to save raw sensor frame: {saved_path}; "
-                             "falling back to a display capture")
-                self._capture_display_image(save_path, show_dialog)
-
-            self._start_image_saver(
-                raw_image, str(raw_path), _on_raw_saved, _on_raw_save_failed)
-            return
-
+        # Always a display grab, whatever the active feed. Raw (16-bit)
+        # sensor captures are the owning plugin's concern — the
+        # fluorescence capture chain writes its own per-burst folders —
+        # so this pipeline no longer special-cases raw-capable feeds.
         self._capture_display_image(save_path, show_dialog)
 
     def _capture_display_image(self, save_path, show_dialog):
