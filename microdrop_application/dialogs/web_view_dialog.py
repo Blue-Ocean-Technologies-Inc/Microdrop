@@ -11,8 +11,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyface.qt.QtWidgets import QDialog, QVBoxLayout
 from pyface.qt.QtCore import QUrl
 
-DEFAULT_WEB_VIEW_DIALOG_WIDTH = 1024
-DEFAULT_WEB_VIEW_DIALOG_HEIGHT = 768
+from .consts import DEFAULT_WEB_VIEW_DIALOG_WIDTH, DEFAULT_WEB_VIEW_DIALOG_HEIGHT
 
 
 class WebViewDialog(QDialog):
