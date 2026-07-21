@@ -4,11 +4,19 @@ name: Release
 # Commits (fix -> patch, feat -> minor, BREAKING CHANGE -> major) opens or
 # updates a "chore: release vX.Y.Z" PR (branch ci/release) carrying the
 # version bump and CHANGELOG.md update. Approving and merging that PR is the
-# manual release gate: the merge lands on main with a "chore: release ..."
-# head commit, which triggers the tag job to tag that commit vX.Y.Z and
-# publish a GitHub Release with the version's changelog as notes. Pushes
-# with no releasable commits (docs/chore/ci/test/style only) do nothing —
-# those commits still appear in the next release's changelog (see .cz.toml).
+# manual release gate: the next run sees the merged-but-untagged changelog,
+# tags the merge commit vX.Y.Z and publishes a GitHub Release with the
+# version's changelog as notes. Pushes with no releasable commits
+# (docs/chore/ci/test/style only) do nothing — those commits still appear
+# in the next release's changelog (see .cz.toml).
+#
+# A merged release PR is detected by STATE, not commit message: the top
+# version in CHANGELOG.md has no matching git tag. Message-based guards
+# break depending on merge method (a plain merge commit says "Merge pull
+# request ...", not "chore: release ..."), which both skipped the tag job
+# and recursed the bump job. State-based detection is merge-method-proof
+# and recursion-free: after tagging, the state is consistent again, and
+# GITHUB_TOKEN pushes never retrigger workflows anyway.
 #
 # This is PR-based (instead of pushing the bump commit straight to main)
 # because main requires pull requests and the github-actions app cannot be
@@ -38,24 +46,39 @@ env:
   RELEASE_BRANCH: ci/release
 
 jobs:
-  release-pr:
-    name: open/update release PR
-    if: "!startsWith(github.event.head_commit.message, 'chore: release')"
+  release:
+    name: tag merged release, or open/update the release PR
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # cz bump walks the full history and tags
+          fetch-depth: 0   # cz walks the full history and tags
 
       - name: Install commitizen
         run: pipx install "commitizen>=4,<5"
 
-      - name: Bump on the release branch and open the PR
+      - name: Tag merged release, or open/update the release PR
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Merged-release detection: the changelog's newest version has no
+          # tag yet, i.e. the release PR just landed. Tag this merge commit
+          # and publish; done.
+          top="$(grep -m1 -oE 'v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md || true)"
+          if [ -n "$top" ] && ! git rev-parse -q --verify "refs/tags/$top" >/dev/null; then
+            git tag -a "$top" -m "$top" "$GITHUB_SHA"
+            git push origin "refs/tags/$top"
+            cz changelog "${top#v}" --dry-run > release_notes.md
+            gh release create "$top" --title "$top" --notes-file release_notes.md
+            # The merged release branch is no longer needed.
+            git push origin --delete "$RELEASE_BRANCH" || true
+            exit 0
+          fi
+
+          # Normal push: compute the bump and open/update the release PR.
           set +e
           cz bump --yes --changelog --changelog-to-stdout > release_notes.md
           rc=$?
@@ -69,7 +92,7 @@ jobs:
             exit "$rc"
           fi
           tag="$(git describe --tags --abbrev=0)"
-          # The real tag is created on the merge commit by tag-and-release.
+          # The real tag is created on the merge commit once the PR lands.
           git tag -d "$tag"
           git push --force origin "HEAD:refs/heads/$RELEASE_BRANCH"
           # Look up the OPEN release PR only — a closed-without-merge PR for
@@ -81,38 +104,3 @@ jobs:
             gh pr create --base main --head "$RELEASE_BRANCH" \
               --title "chore: release $tag" --body-file release_notes.md
           fi
-
-  tag-and-release:
-    name: tag merged release & publish
-    if: "startsWith(github.event.head_commit.message, 'chore: release')"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # cz changelog regenerates notes from tag history
-
-      - name: Install commitizen
-        run: pipx install "commitizen>=4,<5"
-
-      - name: Tag the merge commit and publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_MSG: ${{ github.event.head_commit.message }}
-        run: |
-          tag="$(printf '%s' "$HEAD_MSG" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-          if [ -z "$tag" ]; then
-            echo "No vX.Y.Z version found in the head commit message."
-            exit 1
-          fi
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "Tag $tag already exists — nothing to do."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "$tag" "$GITHUB_SHA"
-          git push origin "refs/tags/$tag"
-          cz changelog "${tag#v}" --dry-run > release_notes.md
-          gh release create "$tag" --title "$tag" --notes-file release_notes.md
-          # The merged release branch is no longer needed.
-          git push origin --delete "$RELEASE_BRANCH" || true
