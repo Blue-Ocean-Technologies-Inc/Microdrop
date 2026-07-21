@@ -5,6 +5,7 @@ This module provides reusable UI components that enhance the user interface
 with consistent styling and behavior across the application.
 """
 import functools
+import re
 from typing import Union, List, Optional
 
 from PySide6 import QtWidgets, QtGui, QtCore
@@ -35,7 +36,12 @@ from microdrop_style.helpers import is_dark_mode
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-
+# Literal "<" in markdown, except when opening an autolink (<https://...>,
+# <mailto:...>). QTextDocument's markdown parser treats any other <token>
+# as an unclosed inline-HTML tag and silently swallows the rest of the
+# document (e.g. "PID_<HEATER>" in a changelog entry).
+MARKDOWN_NON_AUTOLINK_ANGLE_BRACKET_PATTERN = re.compile(
+    r"<(?!(?:https?|mailto):[^\s>]+>)")
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
@@ -850,7 +856,14 @@ def markdown_text_to_html(markdown_text: str) -> str:
 
     Dependency-free markdown conversion (GitHub dialect by default) for
     showing markdown content in rich-text widgets or web views.
+
+    Literal ``<`` characters are escaped first so tag-like tokens (e.g.
+    ``PID_<HEATER>``) can't be parsed as unclosed inline HTML that swallows
+    the rest of the document. Autolinks (``<https://...>``, ``<mailto:...>``)
+    and regular ``[text](url)`` links still render; intentional inline HTML
+    is consequently not supported.
     """
+    escaped = MARKDOWN_NON_AUTOLINK_ANGLE_BRACKET_PATTERN.sub("&lt;", markdown_text)
     document = QtGui.QTextDocument()
-    document.setMarkdown(markdown_text)
+    document.setMarkdown(escaped)
     return document.toHtml()
