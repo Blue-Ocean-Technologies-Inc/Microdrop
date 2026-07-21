@@ -11,7 +11,7 @@ from dropbot_tools_menu.menus import dropbot_tools_menu_factory
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_MENU
 from .consts import (scibots_icon_path, sidebar_menu_options,
-                     hamburger_btn_stylesheet, EXPERIMENT_DIR)
+                     hamburger_btn_stylesheet, EXPERIMENT_DIR, CHANGELOG_PATH)
 
 # Enthought library imports.
 from traits.etsconfig.api import ETSConfig
@@ -59,6 +59,41 @@ def _show_beta_disclaimer():
 
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("Beta disclaimer accepted.")
+
+
+def _show_whats_new():
+    """Show a What's New dialog with changelog sections added since the last run.
+
+    Mirrors the beta-disclaimer marker pattern: the changelog text as of the
+    previous run is cached in application_home/.previous_changelog, anything
+    newly prepended to CHANGELOG.md since then (commitizen prepends a section
+    per release) is rendered in an information dialog, and the cache is
+    refreshed. The first ever run only seeds the cache so users aren't
+    greeted with the entire history.
+    """
+    from microdrop_application.dialogs.pyface_wrapper import information
+    from microdrop_utils.markdown_helpers import changelog_sections_added_since
+    from microdrop_utils.pyside_helpers import markdown_text_to_html
+
+    if not CHANGELOG_PATH.exists():
+        return
+    current_changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
+
+    cache = Path(ETSConfig.application_home) / ".previous_changelog"
+    if not cache.exists():
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(current_changelog, encoding="utf-8")
+        return
+
+    new_sections = changelog_sections_added_since(
+        cache.read_text(encoding="utf-8"), current_changelog)
+    if not new_sections.strip():
+        return
+
+    information(None, markdown_text_to_html(new_sections), title="What's New?",
+                cancel=False)
+
+    cache.write_text(current_changelog, encoding="utf-8")
 
 
 class MicrodropApplication(TasksApplication):
@@ -207,6 +242,7 @@ class MicrodropApplication(TasksApplication):
     def _on_application_initialized(self, event):
         logger.critical("Application Initialized")
         _show_beta_disclaimer()
+        _show_whats_new()
 
         logger.info("Requesting Dropbot Search")
         publish_message(message="", topic=START_DEVICE_MONITORING)

@@ -1,4 +1,5 @@
 import webbrowser
+from pathlib import Path
 
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
@@ -18,6 +19,7 @@ from .consts import (
     INFO_EMAIL,
 )
 
+from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_WIDTH,
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
@@ -44,26 +46,45 @@ class OpenWebViewDialogAction(Action):
         self.dialog.show()
 
 
-class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
-    """Renders a GitHub markdown file (just the document, not the full GitHub
-    page) in a WebViewDialog; falls back to loading the GitHub page itself if
-    fetching or rendering fails."""
+class OpenMarkdownDialogAction(OpenWebViewDialogAction):
+    """Renders a markdown document (just the document, not a full web page)
+    in a WebViewDialog. ``source`` is a local ``Path`` or a GitHub blob URL;
+    a failed remote fetch falls back to loading the page itself.
+
+    Rendering prefers GitHub's markdown API for the GitHub-look styling and
+    degrades to the offline QTextDocument renderer when that call fails
+    (no network for a local file, rate-limited, ...)."""
 
     open_links_externally = Bool(True)
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
-        from microdrop_utils.markdown_helpers import fetch_github_markdown_as_html
+        from microdrop_utils.markdown_helpers import (
+            fetch_github_markdown, render_markdown_as_html_page)
+        from microdrop_utils.pyside_helpers import markdown_text_to_html
 
+        base_href = None
         try:
-            html_content = fetch_github_markdown_as_html(self.source)
+            if isinstance(self.source, Path):
+                markdown_text = self.source.read_text(encoding="utf-8")
+            else:
+                markdown_text = fetch_github_markdown(self.source)
+                base_href = self.source.rsplit("/", 1)[0] + "/"
         except Exception as e:
-            logger.warning(f"Failed to render markdown from {self.source}: {e}. "
-                           f"Falling back to loading the page directly.")
+            logger.warning(f"Failed to load markdown from {self.source}: {e}. "
+                           f"Falling back to loading it directly.")
             return super().perform(event)
 
-        self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
+        try:
+            html_content = render_markdown_as_html_page(markdown_text, base_href)
+        except Exception as e:
+            logger.warning(f"GitHub markdown render failed: {e}. "
+                           f"Using the offline renderer.")
+            html_content = markdown_text_to_html(markdown_text)
+
+        self.dialog = WebViewDialog(html_content=html_content,
+                                    title=self.window_title,
                                     width=self.width, height=self.height,
                                     open_links_externally=self.open_links_externally)
         self.dialog.show()
@@ -121,6 +142,12 @@ def menu_factory():
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
         contact_submenu,
+        OpenMarkdownDialogAction(
+            name="&Changelog...",
+            tooltip="View the full MicroDrop changelog",
+            source=CHANGELOG_PATH,
+            window_title="MicroDrop Changelog",
+        ),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
             tooltip="Learn about MicroDrop's architecture and capabilities",
@@ -134,7 +161,7 @@ def menu_factory():
 def launcher_menu_factory():
     """Separate bottom group so the launcher item sits below a separator line."""
     return SGroup(
-        OpenGithubMarkdownDialogAction(
+        OpenMarkdownDialogAction(
             name="&Download MicroDrop Launcher...",
             tooltip="View the MicroDrop Launcher README with download instructions",
             source=MICRODROP_LAUNCHER_README_URL,

@@ -35,7 +35,7 @@ from microdrop_style.helpers import is_dark_mode
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
-
+from microdrop_utils.markdown_helpers import escape_tag_like_tokens
 
 
 def horizontal_spacer_widget(width=10) -> QWidget:
@@ -843,3 +843,21 @@ class _ScalingPixmapLabel(QLabel):
                 Qt.TransformationMode.SmoothTransformation,
             )
             self.setPixmap(scaled)
+
+
+def markdown_text_to_html(markdown_text: str) -> str:
+    """Render markdown to a standalone HTML document via QTextDocument.
+
+    Dependency-free markdown conversion (GitHub dialect by default) for
+    showing markdown content in rich-text widgets or web views.
+
+    Literal ``<`` characters are escaped first so tag-like tokens (e.g.
+    ``PID_<HEATER>``) can't be parsed as unclosed inline HTML that swallows
+    the rest of the document. Autolinks (``<https://...>``, ``<mailto:...>``)
+    and regular ``[text](url)`` links still render; intentional inline HTML
+    is consequently not supported.
+    """
+    escaped = escape_tag_like_tokens(markdown_text)
+    document = QtGui.QTextDocument()
+    document.setMarkdown(escaped)
+    return document.toHtml()
