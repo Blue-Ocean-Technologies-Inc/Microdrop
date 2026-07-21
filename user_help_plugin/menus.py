@@ -2,31 +2,39 @@ import webbrowser
 
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Str
+from traits.api import Any, Int, Str
 
-from .consts import GITHUB_ISSUES_URL, SCIBOTS_URL, SUPPORT_EMAIL, INFO_EMAIL
+from .consts import (
+    ARCHITECTURE_HTML_PATH,
+    FEEDBACK_URL,
+    GITHUB_ISSUES_URL,
+    SCIBOTS_URL,
+    SUPPORT_EMAIL,
+    INFO_EMAIL,
+)
+
+from microdrop_application.dialogs.consts import (
+    DEFAULT_WEB_VIEW_DIALOG_WIDTH,
+    DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
+)
 
 
-class AboutMicrodropAction(Action):
-    name = Str("&About MicroDrop...")
-    tooltip = "Learn about MicroDrop's architecture and capabilities"
+class OpenWebViewDialogAction(Action):
+    """Opens a WebViewDialog rendering ``source`` (URL string or local Path)."""
+
+    source = Any()
+    window_title = Str()
+    width = Int(DEFAULT_WEB_VIEW_DIALOG_WIDTH)
+    height = Int(DEFAULT_WEB_VIEW_DIALOG_HEIGHT)
+    dialog = Any()
 
     def perform(self, event):
-        from .dialogs.about_dialog import AboutDialog
+        # Imported lazily so QtWebEngine only initializes on first use.
+        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
 
-        dialog = AboutDialog()
-        dialog.exec_()
-
-
-class ShowSendFeedbackAction(Action):
-    name = Str("Send &Feedback...")
-    tooltip = "Send feedback to the development team"
-
-    def perform(self, event):
-        from .dialogs.feedback_dialog import SendFeedbackDialog
-
-        dialog = SendFeedbackDialog()
-        dialog.exec_()
+        self.dialog = WebViewDialog(self.source, self.window_title,
+                                    width=self.width, height=self.height)
+        self.dialog.show()
 
 
 class OpenGitHubIssuesAction(Action):
@@ -70,10 +78,22 @@ def menu_factory():
     )
 
     return SGroup(
-        ShowSendFeedbackAction(),
+        OpenWebViewDialogAction(
+            name="Send &Feedback...",
+            tooltip="Send feedback to the development team",
+            source=FEEDBACK_URL,
+            window_title="Send Feedback",
+            width=600,
+            height=700,
+        ),
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
         contact_submenu,
-        AboutMicrodropAction(),
+        OpenWebViewDialogAction(
+            name="&About MicroDrop...",
+            tooltip="Learn about MicroDrop's architecture and capabilities",
+            source=ARCHITECTURE_HTML_PATH,
+            window_title="About MicroDrop",
+        ),
         id="user_help_actions",
     )
