@@ -93,7 +93,7 @@ def _show_whats_new():
     information(None, markdown_text_to_html(new_sections), title="What's New?",
                 cancel=False)
 
-    # cache.write_text(current_changelog, encoding="utf-8")
+    cache.write_text(current_changelog, encoding="utf-8")
 
 
 class MicrodropApplication(TasksApplication):
