@@ -1,4 +1,5 @@
 import webbrowser
+from pathlib import Path
 
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
@@ -18,6 +19,7 @@ from .consts import (
     INFO_EMAIL,
 )
 
+from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_WIDTH,
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
@@ -63,6 +65,24 @@ class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
                            f"Falling back to loading the page directly.")
             return super().perform(event)
 
+        self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
+                                    width=self.width, height=self.height,
+                                    open_links_externally=self.open_links_externally)
+        self.dialog.show()
+
+
+class OpenLocalMarkdownDialogAction(OpenWebViewDialogAction):
+    """Renders a local markdown file as HTML in a WebViewDialog."""
+
+    open_links_externally = Bool(True)
+
+    def perform(self, event):
+        # Imported lazily so QtWebEngine only initializes on first use.
+        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        from microdrop_utils.pyside_helpers import markdown_text_to_html
+
+        html_content = markdown_text_to_html(
+            Path(self.source).read_text(encoding="utf-8"))
         self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
                                     width=self.width, height=self.height,
                                     open_links_externally=self.open_links_externally)
@@ -121,6 +141,12 @@ def menu_factory():
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
         contact_submenu,
+        OpenLocalMarkdownDialogAction(
+            name="&Changelog...",
+            tooltip="View the full MicroDrop changelog",
+            source=CHANGELOG_PATH,
+            window_title="MicroDrop Changelog",
+        ),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
             tooltip="Learn about MicroDrop's architecture and capabilities",
