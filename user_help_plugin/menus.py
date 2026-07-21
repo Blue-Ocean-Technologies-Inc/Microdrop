@@ -120,12 +120,6 @@ def menu_factory():
         ),
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
-        OpenGithubMarkdownDialogAction(
-            name="&Download MicroDrop Launcher...",
-            tooltip="View the MicroDrop Launcher README with download instructions",
-            source=MICRODROP_LAUNCHER_README_URL,
-            window_title="Download MicroDrop Launcher",
-        ),
         contact_submenu,
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
@@ -134,4 +128,17 @@ def menu_factory():
             window_title="About MicroDrop",
         ),
         id="user_help_actions",
+    )
+
+
+def launcher_menu_factory():
+    """Separate bottom group so the launcher item sits below a separator line."""
+    return SGroup(
+        OpenGithubMarkdownDialogAction(
+            name="&Download MicroDrop Launcher...",
+            tooltip="View the MicroDrop Launcher README with download instructions",
+            source=MICRODROP_LAUNCHER_README_URL,
+            window_title="Download MicroDrop Launcher",
+        ),
+        id="microdrop_launcher_actions",
     )
