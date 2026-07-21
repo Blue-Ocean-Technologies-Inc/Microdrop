@@ -2,7 +2,7 @@ import webbrowser
 
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Int, Str
+from traits.api import Any, Bool, Int, Str
 
 from logger.logger_service import get_logger
 
@@ -31,6 +31,7 @@ class OpenWebViewDialogAction(Action):
     window_title = Str()
     width = Int(DEFAULT_WEB_VIEW_DIALOG_WIDTH)
     height = Int(DEFAULT_WEB_VIEW_DIALOG_HEIGHT)
+    open_links_externally = Bool(False)
     dialog = Any()
 
     def perform(self, event):
@@ -38,7 +39,8 @@ class OpenWebViewDialogAction(Action):
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
 
         self.dialog = WebViewDialog(self.source, self.window_title,
-                                    width=self.width, height=self.height)
+                                    width=self.width, height=self.height,
+                                    open_links_externally=self.open_links_externally)
         self.dialog.show()
 
 
@@ -46,6 +48,8 @@ class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
     """Renders a GitHub markdown file (just the document, not the full GitHub
     page) in a WebViewDialog; falls back to loading the GitHub page itself if
     fetching or rendering fails."""
+
+    open_links_externally = Bool(True)
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
@@ -60,7 +64,8 @@ class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
             return super().perform(event)
 
         self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
-                                    width=self.width, height=self.height)
+                                    width=self.width, height=self.height,
+                                    open_links_externally=self.open_links_externally)
         self.dialog.show()
 
 
