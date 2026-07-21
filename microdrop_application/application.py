@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (QToolBar, QLabel,
                                QPushButton, QVBoxLayout,
                                QHBoxLayout, QWidget, QFrame)
 from PySide6.QtCore import Qt, QEvent, QSize
-from PySide6.QtGui import QPixmap, QFont, QTextDocument
+from PySide6.QtGui import QPixmap, QFont
 
 
 from logger.logger_service import get_logger
@@ -73,6 +73,7 @@ def _show_whats_new():
     """
     from microdrop_application.dialogs.pyface_wrapper import information
     from microdrop_utils.markdown_helpers import changelog_sections_added_since
+    from microdrop_utils.pyside_helpers import markdown_text_to_html
 
     if not CHANGELOG_PATH.exists():
         return
@@ -89,12 +90,10 @@ def _show_whats_new():
     if not new_sections.strip():
         return
 
-    document = QTextDocument()
-    document.setMarkdown(new_sections)
-    information(None, informative=document.toHtml(), title="What's New?",
+    information(None, markdown_text_to_html(new_sections), title="What's New?",
                 cancel=False)
 
-    cache.write_text(current_changelog, encoding="utf-8")
+    # cache.write_text(current_changelog, encoding="utf-8")
 
 
 class MicrodropApplication(TasksApplication):
