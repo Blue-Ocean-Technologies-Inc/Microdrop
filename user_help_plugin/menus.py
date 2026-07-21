@@ -4,6 +4,10 @@ from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Int, Str
 
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+
 from .consts import (
     ARCHITECTURE_HTML_PATH,
     FEEDBACK_URL,
@@ -34,6 +38,28 @@ class OpenWebViewDialogAction(Action):
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
 
         self.dialog = WebViewDialog(self.source, self.window_title,
+                                    width=self.width, height=self.height)
+        self.dialog.show()
+
+
+class OpenGithubMarkdownDialogAction(OpenWebViewDialogAction):
+    """Renders a GitHub markdown file (just the document, not the full GitHub
+    page) in a WebViewDialog; falls back to loading the GitHub page itself if
+    fetching or rendering fails."""
+
+    def perform(self, event):
+        # Imported lazily so QtWebEngine only initializes on first use.
+        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        from microdrop_utils.markdown_helpers import fetch_github_markdown_as_html
+
+        try:
+            html_content = fetch_github_markdown_as_html(self.source)
+        except Exception as e:
+            logger.warning(f"Failed to render markdown from {self.source}: {e}. "
+                           f"Falling back to loading the page directly.")
+            return super().perform(event)
+
+        self.dialog = WebViewDialog(html_content=html_content, title=self.window_title,
                                     width=self.width, height=self.height)
         self.dialog.show()
 
@@ -89,7 +115,7 @@ def menu_factory():
         ),
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
-        OpenWebViewDialogAction(
+        OpenGithubMarkdownDialogAction(
             name="&Download MicroDrop Launcher...",
             tooltip="View the MicroDrop Launcher README with download instructions",
             source=MICRODROP_LAUNCHER_README_URL,
