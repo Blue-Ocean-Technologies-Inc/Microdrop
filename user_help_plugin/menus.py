@@ -49,27 +49,41 @@ class OpenWebViewDialogAction(Action):
 class OpenMarkdownDialogAction(OpenWebViewDialogAction):
     """Renders a markdown document (just the document, not a full web page)
     in a WebViewDialog. ``source`` is a local ``Path`` or a GitHub blob URL;
-    a failed remote fetch falls back to loading the page itself."""
+    a failed remote fetch falls back to loading the page itself.
+
+    Rendering prefers GitHub's markdown API for the GitHub-look styling and
+    degrades to the offline QTextDocument renderer when that call fails
+    (no network for a local file, rate-limited, ...)."""
 
     open_links_externally = Bool(True)
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
-        from microdrop_utils.markdown_helpers import fetch_github_markdown
+        from microdrop_utils.markdown_helpers import (
+            fetch_github_markdown, render_markdown_as_html_page)
         from microdrop_utils.pyside_helpers import markdown_text_to_html
 
+        base_href = None
         try:
             if isinstance(self.source, Path):
                 markdown_text = self.source.read_text(encoding="utf-8")
             else:
                 markdown_text = fetch_github_markdown(self.source)
+                base_href = self.source.rsplit("/", 1)[0] + "/"
         except Exception as e:
             logger.warning(f"Failed to load markdown from {self.source}: {e}. "
                            f"Falling back to loading it directly.")
             return super().perform(event)
 
-        self.dialog = WebViewDialog(html_content=markdown_text_to_html(markdown_text),
+        try:
+            html_content = render_markdown_as_html_page(markdown_text, base_href)
+        except Exception as e:
+            logger.warning(f"GitHub markdown render failed: {e}. "
+                           f"Using the offline renderer.")
+            html_content = markdown_text_to_html(markdown_text)
+
+        self.dialog = WebViewDialog(html_content=html_content,
                                     title=self.window_title,
                                     width=self.width, height=self.height,
                                     open_links_externally=self.open_links_externally)
