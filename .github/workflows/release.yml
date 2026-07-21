@@ -7,15 +7,19 @@ name: Release
 # manual release gate: the merge lands on main with a "chore: release ..."
 # head commit, which triggers the tag job to tag that commit vX.Y.Z and
 # publish a GitHub Release with the version's changelog as notes. Pushes
-# with no releasable commits (docs/chore/refactor only) do nothing.
+# with no releasable commits (docs/chore/ci/test/style only) do nothing —
+# those commits still appear in the next release's changelog (see .cz.toml).
 #
 # This is PR-based (instead of pushing the bump commit straight to main)
 # because main requires pull requests and the github-actions app cannot be
 # added as a ruleset bypass actor on this org — the bot only ever pushes
 # the unprotected ci/release branch and tags.
 #
-# Requires "Allow GitHub Actions to create and approve pull requests"
-# (Settings -> Actions -> General -> Workflow permissions).
+# PR creation needs "Allow GitHub Actions to create and approve pull
+# requests" (Settings -> Actions -> General); when org policy locks that
+# setting, add a PAT with repo access as the RELEASE_PAT secret instead —
+# gh then acts as the PAT owner for the release PR (everything else still
+# runs on GITHUB_TOKEN).
 
 on:
   push:
@@ -48,7 +52,7 @@ jobs:
 
       - name: Bump on the release branch and open the PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
