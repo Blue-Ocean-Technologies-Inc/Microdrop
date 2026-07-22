@@ -119,8 +119,16 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         if self.connection_active:
             logger.info(f"Retry connection request rejected: {self._device_name} already connected")
             return
+        # A shutdown (or never-started) monitor stays down: cleanup() stops it
+        # deliberately — e.g. a firmware upload releasing the port — and the
+        # disconnect-triggered retry must not resurrect the search; only a new
+        # start_device_monitoring request restarts it.
+        scheduler = self.monitor_scheduler
+        if not isinstance(scheduler, BackgroundScheduler) or scheduler.state == STATE_STOPPED:
+            logger.info(f"{self._device_name} monitoring is stopped; not resuming the search.")
+            return
         logger.info(f"Attempting to retry connecting with a {self._device_name}")
-        self.monitor_scheduler.resume()
+        scheduler.resume()
         self._searching = True
 
     ############################################################
