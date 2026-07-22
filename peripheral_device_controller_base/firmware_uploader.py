@@ -301,11 +301,17 @@ def _diff_configs(device_config_path, repo_config_path, log):
 # File selection                                                      #
 # ------------------------------------------------------------------ #
 
+#: Packaging junk that a zip may carry but must never reach the board: macOS
+#: Finder adds a top-level __MACOSX/ tree of ._* AppleDouble sidecar files
+#: when zipping a folder.
+_ARCHIVE_JUNK_DIRS = frozenset({"__pycache__", "__MACOSX"})
+
+
 def _keep(f: Path) -> bool:
     """True if f is a candidate for upload at all (before the config.json
-    filter): no bytecode caches, markdown, hidden files/dirs, or
-    suffix-less non-directories."""
-    if "__pycache__" in f.parts:
+    filter): no bytecode caches, packaging junk, markdown, hidden files/dirs,
+    or suffix-less non-directories."""
+    if _ARCHIVE_JUNK_DIRS.intersection(f.parts):
         return False
     if f.suffix == ".pyc":
         return False
@@ -334,10 +340,17 @@ def _cancelled(cancel_event, log):
 # ------------------------------------------------------------------ #
 
 def _firmware_root(extracted_dir: Path) -> Path:
-    """The firmware root inside an extracted bundle. If the archive wrapped
-    everything in a single top-level directory (a zip of the firmware
-    folder), that directory is the root; otherwise the extraction dir is."""
-    entries = list(extracted_dir.iterdir())
+    """The firmware root inside an extracted bundle. Packaging junk (macOS
+    __MACOSX/, hidden dot-entries) is ignored; if exactly one real directory
+    remains at the top level (a zip of the firmware folder), that directory
+    is the root, otherwise the extraction dir is.
+
+    Ignoring the junk matters: a Finder-made zip carries both ``firmware/``
+    and ``__MACOSX/`` at the top level, and without this the wrapper wouldn't
+    be unwrapped — every file would land under ``:firmware/`` on the board."""
+    entries = [e for e in extracted_dir.iterdir()
+               if e.name not in _ARCHIVE_JUNK_DIRS
+               and not e.name.startswith(".")]
     if len(entries) == 1 and entries[0].is_dir():
         return entries[0]
     return extracted_dir
