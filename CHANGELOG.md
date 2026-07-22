@@ -1,3 +1,18 @@
+## v1.4.0 (2026-07-22)
+
+### Feat
+
+- **microdrop-utils**: shared firmware-upload dialog view
+- **peripheral-base**: shared firmware-upload backend
+- **style**: add ICON_ARCHIVE glyph
+- **style**: add ICON_USB glyph
+
+### Fix
+
+- **uploader**: unwrap the firmware folder past macOS zip junk
+- **peripheral-base**: rebuild the monitor after it was shut down
+- **peripheral-base**: don't resume a stopped monitor on retry
+
 ## v1.3.1 (2026-07-21)
 
 ### Refactor
