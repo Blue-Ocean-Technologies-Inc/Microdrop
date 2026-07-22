@@ -47,3 +47,5 @@ ICON_TRANSFORM       = "transform"   # device-aligned (warped) view
 ICON_CROP            = "crop"        # region-of-interest edit mode
 ICON_DELETE          = "delete"      # clear regions
 ICON_SAVE            = "save"        # export/save
+ICON_USB             = "usb"         # manual serial-port selection
+ICON_ARCHIVE         = "folder_zip"  # select a .zip firmware bundle

@@ -73,25 +73,32 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
             self._searching = True
             return None
 
-        ## handle cases where monitor scheduler object already exists
-        if isinstance(self.monitor_scheduler, BackgroundScheduler):
-            if self.monitor_scheduler.state == STATE_RUNNING:
+        ## A live (running or paused) monitor is reused as-is. A shut-down one
+        ## CANNOT be restarted: APScheduler's start() returns and flips the
+        ## state to RUNNING, but the scan job never fires again (its executor
+        ## and jobstore were torn down by shutdown()). That happens after
+        ## cleanup() releases the port for a firmware upload — so a stopped
+        ## scheduler is rebuilt from scratch below instead of restarted, else
+        ## the device would never be rediscovered and stay disconnected.
+        scheduler = self.monitor_scheduler
+        if isinstance(scheduler, BackgroundScheduler) and scheduler.state != STATE_STOPPED:
+            if scheduler.state == STATE_RUNNING:
                 logger.warning(f"{self._device_name} connections are already being monitored.")
-            elif self.monitor_scheduler.state == STATE_STOPPED:
-                self.monitor_scheduler.start()
-                logger.info(f"{self._device_name} connection monitoring started now.")
-            elif self.monitor_scheduler.state == STATE_PAUSED:
-                self.monitor_scheduler.resume()
+            elif scheduler.state == STATE_PAUSED:
+                scheduler.resume()
                 logger.info(f"{self._device_name} connection monitoring was paused, now it is resumed.")
             else:
                 logger.error(
-                    f"Invalid {self._device_name} monitor scheduler state: it is {self.monitor_scheduler.state}")
-
+                    f"Invalid {self._device_name} monitor scheduler state: it is {scheduler.state}")
             self._searching = True
-
             return None
 
-        ## monitor was never created, so we can make one now:
+        ## No monitor yet, or the previous one was shut down: build a fresh one.
+        self._create_and_start_monitor(hwids_to_check)
+        self._searching = True
+
+    def _create_and_start_monitor(self, hwids_to_check):
+        """Build and start a fresh port-scanning scheduler."""
         def check_devices_with_error_handling():
             """Wrapper to handle errors from the port finder."""
             try:
@@ -112,15 +119,22 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         self.monitor_scheduler = scheduler
 
         logger.info(f"{self._device_name} monitor created and started")
-        self.monitor_scheduler.start()
-        self._searching = True
+        scheduler.start()
 
     def on_retry_connection_request(self, message):
         if self.connection_active:
             logger.info(f"Retry connection request rejected: {self._device_name} already connected")
             return
+        # A shutdown (or never-started) monitor stays down: cleanup() stops it
+        # deliberately — e.g. a firmware upload releasing the port — and the
+        # disconnect-triggered retry must not resurrect the search; only a new
+        # start_device_monitoring request restarts it.
+        scheduler = self.monitor_scheduler
+        if not isinstance(scheduler, BackgroundScheduler) or scheduler.state == STATE_STOPPED:
+            logger.info(f"{self._device_name} monitoring is stopped; not resuming the search.")
+            return
         logger.info(f"Attempting to retry connecting with a {self._device_name}")
-        self.monitor_scheduler.resume()
+        scheduler.resume()
         self._searching = True
 
     ############################################################
