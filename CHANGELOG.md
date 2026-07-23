@@ -1,3 +1,9 @@
+## v1.4.1 (2026-07-23)
+
+### Fix
+
+- **firmware-upload**: persist firmware source in prefs
+
 ## v1.4.0 (2026-07-22)
 
 ### Feat
