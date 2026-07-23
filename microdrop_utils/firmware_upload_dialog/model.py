@@ -12,19 +12,23 @@ import serial.tools.list_ports
 
 from traits.api import (
     Bool, Button, Directory, File, HasTraits, Range, Str, observe,
-    List,
+    List, Instance
 )
+
+from apptools.preferences.api import PreferencesHelper
 
 from .consts import (
     DEVICE_ID_PLACEHOLDER, PICO_USB_VENDOR_ID, PORT_ENTRY_SEPARATOR,
 )
 
+from logger.logger_service import get_logger
+logger = get_logger(__name__)
+
 
 class FirmwareUploadModel(HasTraits):
     """Options for one firmware-upload request, plus the live log."""
 
-    #: Injected by the controller (device-specific).
-    default_firmware_dir = Str()
+    default_firmware_dir = Directory()
     #: Safe id the upload targets when no whoami id is known (device-specific).
     default_device_id = Str()
 
@@ -69,6 +73,18 @@ class FirmwareUploadModel(HasTraits):
     show_source = Bool(True)
     show_port = Bool(True)
     show_options = Bool(True)
+
+    preferences = Instance(PreferencesHelper)
+
+    def traits_init(self):
+        _firmware_source_saved = self.preferences.trait_get("firmware_source")
+        if _firmware_source_saved:
+            self.firmware_source = _firmware_source_saved["firmware_source"]
+
+    @observe("firmware_source")
+    def _save_firmware_source(self, event):
+        logger.info(f"Saved firmware source: {event.new}")
+        self.preferences.firmware_source = event.new
 
     def _firmware_source_default(self):
         return self.default_firmware_dir
