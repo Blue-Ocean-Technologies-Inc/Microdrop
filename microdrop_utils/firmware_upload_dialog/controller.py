@@ -55,7 +55,6 @@ class FirmwareUploadDialogController(HasTraits):
     started_topic = Str()
     log_topic = Str()
     finished_topic = Str()
-    default_firmware_dir = Str()
     default_device_id = Str()
     dialog_title = Str("Upload Firmware")
 

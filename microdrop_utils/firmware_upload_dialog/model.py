@@ -28,7 +28,6 @@ logger = get_logger(__name__)
 class FirmwareUploadModel(HasTraits):
     """Options for one firmware-upload request, plus the live log."""
 
-    default_firmware_dir = Directory()
     #: Safe id the upload targets when no whoami id is known (device-specific).
     default_device_id = Str()
 
@@ -85,9 +84,6 @@ class FirmwareUploadModel(HasTraits):
     def _save_firmware_source(self, event):
         logger.info(f"Saved firmware source: {event.new}")
         self.preferences.firmware_source = event.new
-
-    def _firmware_source_default(self):
-        return self.default_firmware_dir
 
     def _available_ports_default(self):
         return self._scan_port_entries()
