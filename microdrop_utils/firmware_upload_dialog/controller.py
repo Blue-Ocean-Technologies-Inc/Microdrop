@@ -19,6 +19,7 @@ from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import QFileDialog, QSizePolicy
 
 from traits.api import Any, HasTraits, Instance, Str, observe
+from apptools.preferences.api import PreferencesHelper
 
 from microdrop_application.dialogs.base_message_dialog import BaseMessageDialog
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error
@@ -59,14 +60,16 @@ class FirmwareUploadDialogController(HasTraits):
     dialog_title = Str("Upload Firmware")
 
     model = Instance(FirmwareUploadModel)
+    preferences = Instance(PreferencesHelper)
 
     dialog = Any()
     traits_ui = Any()
 
     def _model_default(self):
         return FirmwareUploadModel(
-            default_firmware_dir=self.default_firmware_dir,
-            default_device_id=self.default_device_id)
+            default_device_id=self.default_device_id,
+            preferences=self.preferences,
+        )
 
     # ---- dialog assembly -------------------------------------------------
 
