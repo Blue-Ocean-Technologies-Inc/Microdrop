@@ -1,3 +1,9 @@
+## v1.4.2 (2026-07-23)
+
+### Refactor
+
+- **firmware-upload**: drop the dead default_firmware_dir trait
+
 ## v1.4.1 (2026-07-23)
 
 ### Fix
