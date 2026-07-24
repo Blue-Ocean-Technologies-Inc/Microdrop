@@ -72,6 +72,12 @@ class _ProtocolTreeView(QTreeView):
 
 
 class ProtocolTreeWidget(QWidget):
+    # Emitted with the normalized selection roots when the user asks to run
+    # just the selected rows (issue #558). The widget deliberately knows
+    # nothing about the executor — the dock pane owns run control and
+    # connects to this via the pane's relay.
+    run_selected_requested = Signal(list)
+
     def __init__(self, row_manager: RowManager, preferences=None, parent=None):
         super().__init__(parent)
         self._manager = row_manager
@@ -132,6 +138,8 @@ class ProtocolTreeWidget(QWidget):
             # (#471) the same way the context-menu entries do.
             (QKeySequence("Ctrl+G"),       self._fold_shortcut),
             (QKeySequence("Ctrl+Shift+G"), self._unfold_shortcut),
+            # Run just the selected rows (#529-style guard, issue #558).
+            (QKeySequence("Ctrl+R"),       self._run_selected_shortcut),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -288,6 +296,12 @@ class ProtocolTreeWidget(QWidget):
             return
         idx = self.tree.indexAt(pos)
         menu = QMenu()
+        # Run-selected sits first, and deliberately far from Delete — a
+        # misclick between "run this subset" and "delete this subset" is the
+        # one adjacency worth designing out.
+        run_selected = menu.addAction("Run Selected Steps", self._run_selected)
+        run_selected.setEnabled(self._can_run_selection())
+        menu.addSeparator()
         menu.addAction("Add Step", lambda: self._add_step_at(idx))
         menu.addAction("Add Group", lambda: self._add_group_at(idx))
         fold = menu.addAction("Fold into Group", self._fold_into_group)
@@ -417,6 +431,38 @@ class ProtocolTreeWidget(QWidget):
         # Keyboard path for "Unfold Group"; run-locked like the menu entry.
         if self._structural_editable:
             self._unfold_group()
+
+    def _run_selected_shortcut(self):
+        # Keyboard path for "Run Selected Steps". Gated on
+        # _structural_editable like the fold shortcuts — not because running
+        # is a structural edit, but because that flag is False for the whole
+        # duration of a run, which is exactly when a second run must not
+        # start. The dock pane re-checks against the executor regardless.
+        if self._structural_editable:
+            self._run_selected()
+
+    def _selection_roots(self):
+        """Normalized selection roots for a scoped run — descendants of an
+        already-selected row dropped, tree-ordered."""
+        return self._manager.run_scope_roots(
+            [tuple(p) for p in self._manager.selection])
+
+    def _can_run_selection(self):
+        """True when the selection would actually execute something. Guards
+        against an empty selection and against selecting only empty groups,
+        which normalize to a root but expand to no frames. Short-circuits on
+        the first frame rather than materializing the whole expansion."""
+        frames = self._manager.iter_execution_frames(self._selection_roots())
+        return next(frames, None) is not None
+
+    def _run_selected(self):
+        """Ask the dock pane to run only the selected rows (issue #558)."""
+        if not self._can_run_selection():
+            return
+        roots = self._selection_roots()
+        logger.info(f"Run Selected Steps requested for {len(roots)} root(s): "
+                    f"{roots}")
+        self.run_selected_requested.emit(roots)
 
     def _fold_into_group(self):
         """Wrap the selected rows in a new group at the first row's
