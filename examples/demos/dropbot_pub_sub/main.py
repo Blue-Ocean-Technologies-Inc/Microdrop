@@ -9,7 +9,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
 def main():
 
     # import the MainWindow and MainWindowController classes from the dramatiq_ui module
-    from examples.dropbot_pub_sub.ui import MainWindow, MainWindowController
+    from examples.demos.dropbot_pub_sub.ui import MainWindow, MainWindowController
 
     app = QApplication(sys.argv)
     # create an instance of the MainWindow class

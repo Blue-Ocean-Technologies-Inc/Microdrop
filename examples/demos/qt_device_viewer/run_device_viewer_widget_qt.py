@@ -2,7 +2,7 @@ import os
 import sys
 
 from device_viewer.models.electrodes import Electrodes
-from examples.qt_device_viewer.device_viewer_widget import DeviceViewerWidget
+from examples.demos.qt_device_viewer.device_viewer_widget import DeviceViewerWidget
 from examples.tests.common import TEST_PATH
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))

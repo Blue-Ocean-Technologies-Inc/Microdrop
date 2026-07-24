@@ -51,7 +51,7 @@ from traits.api import HasTraits, Str, Regex, List, Instance
 from traitsui.api import Item, View, TreeNode
 from traitsui.editors.tree_editor import TreeEditor
 
-from examples.traits_ui_tree_view.Tree_editor_with_Renderer import ColumnTextRenderer, ColumnRenderTreeNode
+from examples.demos.traits_ui_tree_view.Tree_editor_with_Renderer import ColumnTextRenderer, ColumnRenderTreeNode
 
 
 class Employee(HasTraits):
