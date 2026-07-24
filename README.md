@@ -1,111 +1,135 @@
-![In Development](https://img.shields.io/badge/status-in_development-yellow)
+<p align="center">
+  <img src="microdrop_style/icons/Microdrop_Icon.png" alt="MicroDrop icon" width="96">
+</p>
 
-# **Microdrop Documentation Guide**
+<h1 align="center">MicroDrop</h1>
 
-## **Purpose**
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/status-in_development-yellow" alt="In Development"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPLv3-blue" alt="AGPLv3"></a>
+  <a href="https://prefix.dev/channels/microdrop-plugins"><img src="https://img.shields.io/badge/plugins-prefix.dev%2Fmicrodrop--plugins-green" alt="Plugin channel"></a>
+</p>
 
-*MicroDrop* is a graphical user interface designed for the DropBot Digital Microfluidics control system. The original *MicroDrop* application suffered from a lack of regular maintenance, resulting in poor portability and limited accessibility for developers. To address these issues, we introduce **MicroDrop-Next-Gen**, a modern application for running the DropBot Digital Microfluidics control system. This new version leverages updated technologies and is built with future development in mind. This document provides an overview of the design considerations, code documentation, current technology requirements, and installation instructions for **MicroDrop-Next-Gen**.
+<p align="center">
+  A modern, plugin-based control application for <b>digital microfluidics (DMF)</b> —
+  drive <a href="https://sci-bots.com/products/dropbot">DropBot</a> and
+  <a href="https://www.gaudi.ch/OpenDrop/">OpenDrop</a> hardware from an interactive
+  device viewer, build droplet-handling protocols, and extend it all with plugins.
+</p>
 
-## **Disclaimer**
+---
 
-*Microdrop* is an open-source software platform currently in beta and is provided for testing and evaluation purposes. It is under active development and may contain bugs, errors, or unexpected behaviour.
+## Table of Contents
 
-Users are responsible for validating the software in their own workflows and for maintaining appropriate data backups before, during, and after use.
+- [What is MicroDrop?](#what-is-microdrop)
+- [Getting Started](#getting-started)
+- [Running the Application](#running-the-application)
+- [Remote / Distributed Operation](#remote--distributed-operation)
+- [Architecture](#architecture)
+- [Plugins](#plugins)
+- [Developer Workflow](#developer-workflow)
+- [Disclaimer & License](#disclaimer--license)
 
-This software is provided under the GNU Affero General Public License (AGPLv3), without any warranty. Use at your own risk.
+## What is MicroDrop?
 
-## **Research Pre-Development**
-$$
-\begin{array}{|l|l|l|l|l|l|l|l|}
-\hline \text { Technology } & \text { Category } & \text{Platform Compatibility (Dev)} & \text{External Deps} & \text{Complexity} & \text{licensing} & \text{async} & \checkmark \text{/X } \\
-\hline \text { Redis } & \text { Message Broker } & \checkmark \\
-\hline \text { Celery } & \text { Message Broker } & \text { X } \\
-\hline \text { RabbitMQ } & \text { Message Broker } & \text { X } \\
-\hline \text { ZMQ } & \text { Messaging Backend } & \text { X } \\
-\hline \text { Pika } & \text { Pure Python Client Library for RabbitMQ } & \text { X } \\
-\hline \text { APScheduler } & \text { Task Execution Scheduler } & \text { X } \\
-\hline \text { FastAPIWebsockets } & \text { WebSocket specifically for use with FastAPI } & \text { X } \\
-\hline \text { AIO Pika } & \text { Async Client Library for RabbitMQ } & \text { X } \\
-\hline \text { Envisage } & \text { Plugin Architecture Framework } & \checkmark \\
-\hline \text { FastStream } & \text { Python Async Service Framework } & \text { X } \\
-\hline \text { FastAPI } & \text { Web Framework for Implementing APIs } & \text { X } \\
-\hline \text { QWebsockets } & \text { QT Websockets } & \text { X } \\
-\hline \text { Dramatiq } & \text { Messaging System } & \checkmark \\
-\hline \text { Pluggy } & \text { Plugin Architecture Framework } & \text { X } \\
-\hline
-\end{array}
-$$
+MicroDrop is the next generation of the open-source MicroDrop application by
+[Sci-Bots](https://sci-bots.com/): a graphical user interface for **digital
+microfluidics** control systems, which move tiny droplets across an electrode
+array using electric fields — lab-on-a-chip for biology, chemistry, and
+diagnostics.
 
+Highlights:
 
-### **Technology Selection Reasoning**
+- **Interactive device viewer** — click electrodes on an SVG chip layout to
+  actuate them, watch droplets move with live capacitance feedback
+- **Protocol editor** — compose, run, and repeat multi-step droplet
+  protocols
+- **Everything is a plugin** — built on the
+  [Envisage](https://docs.enthought.com/envisage/) framework; peripherals
+  (heater, magnet, fluorescence imaging) ship as separate installable plugins
+- **Fully decoupled frontend/backend** — GUI and hardware controller talk
+  over a Redis message bus, so they can run on the same machine or across a
+  network
+- **Cross-platform** — Windows, Linux, and macOS
 
-#### *Messaging Brokers*
-Messaging brokers are a tool used to facilitate messaging between different components of an application. In this case it helps to achieve the following:
+Supported hardware:
 
-1. **Decoupling** - By using message brokers, we can allow components to communicate without being directly connected. This allows external tasks to be completed without giving complete direct access to all related components.
+| Platform | Description |
+|---|---|
+| [DropBot](https://sci-bots.com/products/dropbot) | Sci-Bots' DMF platform — full capacitance sensing, short detection, multi-channel actuation |
+| [OpenDrop](https://www.gaudi.ch/OpenDrop/) | Open-source DMF platform by GaudiLabs |
+| Mock device | No hardware needed — for development and demos |
 
-2. **Asynchronous Communication** - Components can send messages to other components and continue completing tasks without needing responses to the messages that they send. This is useful when tasks do not need to be blocking, so that the application can run seamlessly.
+## Getting Started
 
-3. **Routing** - Ensuring that messages get to the correct recipient is one of the most important tasks in communication. Brokers typically give us a way to share information with specific recipients in many different ways like 'fanout', and 'direct' exchanges.
+There are three ways to get MicroDrop running, from easiest to most manual.
 
-4. **Reliability** - When determining which method of communication we use, the tool must make sure messages are reliably reaching their target. For example, if a message is sent, but is not properly received, the broker must make sure that the message is re-sent and achieves proper delivery.
+### Option 1 — MicroDrop Launcher (recommended)
 
-##### *Our Choices (Messaging Brokers)*
+The [MicroDrop Launcher](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher)
+is a standalone setup tool that bootstraps everything before any project
+environment exists. Only **git** is required — pixi installs automatically.
 
-**Celery** was our initial option. The main problem with **Celery** is that they have poor support for windows which is a requirement for our use case.
+Permanent links to the latest release:
 
-**ZMQ** was another option, but we determined that in terms of messaging and use of the technical tool and further support via other auxiliary tools, it was easier to use a full message broker like **Redis** over just the **ZMQ** framework.
+| OS | Download |
+|---|---|
+| Windows x64 | [microdrop_setup.exe](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup.exe) |
+| Linux x64 | [microdrop_setup-linux-x86_64](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup-linux-x86_64) |
+| macOS Apple Silicon | [Microdrop-Launcher-macos-arm64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-arm64.dmg) |
+| macOS Intel | [Microdrop-Launcher-macos-x86_64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-x86_64.dmg) |
 
-**RabbitMQ** was initially chosen since it had a great amount of support for auxiliary packages like **Pika**, **AIO-Pika**, **FastAPI**, **Dramatiq** **etc...** In addition, **RabbitMQ** achieves all 4 of the above goals. It allows for fully decoupled components, async messaging, routing methods that are defined in queue exchange methods, and reliability is all ensured via acknowledgements and resending of messages based on lack of acknowledgements. But installing it was complicated, and needed more external installations, like the need for Erlang. 
+The launcher operates in two stages:
 
-So we pivoted to using **Redis** which is more lightweight, and offers comparible features. Most importantly, it can be installed just using conda packages. For storing publisher subcriber data, we also use the efficient redis in-memory key–value database. If there is a need to pivot to **RabbitMQ**, this needs a replacement.
+1. **Setup** — installs [pixi](https://pixi.sh) if needed, clones
+   pixi-microdrop with its Microdrop submodule, and prefetches the
+   environment.
+2. **Launcher** — a tabbed GUI for selecting launch modes, devices, and
+   plugins; managing branches; editing server settings like the Redis
+   configuration; and creating desktop shortcuts that launch a saved profile
+   directly.
 
-However our code is written in a way that it can work with either a **RabbitMQ** or **Redis** backend since we are using a **Dramatiq** broker abstraction.
-This will choose whichever broker is available.
+Platform notes: on Linux, make the file executable first
+(`chmod +x microdrop_setup-linux-x86_64`); on macOS, drag the app to
+Applications and approve it in System Settings.
 
-#### *Frameworks*
+These download links are also available from inside the app under
+**Help → Download MicroDrop Launcher**.
 
-Originally, MicroDrop used a plugin framework, utilizing ZMQ and pyutilib for plugin support. For MicroDrop-Next-Gen, we have decided to retain the plugin model to facilitate future development of plugin modules for use with the DropBot. We have chosen Envisage as the framework to implement this plugin-supported application. Envisage is a robust and extensible framework designed for building applications with dynamically loadable plugins. It provides a well-structured and flexible environment that allows developers to add, remove, or update plugins without altering the core application. This choice will ensure that MicroDrop-Next-Gen remains maintainable, scalable, and adaptable to new technologies and requirements as they arise.
+### Option 2 — pixi-microdrop (developers)
 
-#### *Utility Packages (Dramatiq)*
+[pixi-microdrop](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop)
+wraps this repo as a submodule inside a reproducible
+[pixi](https://pixi.sh) environment — no manual dependency management, and the
+plugin repos are cloned alongside for editable installs:
 
-Dramatiq is a fast and reliable distributed task processing library for Python. It is designed to process tasks in the background using message brokers like RabbitMQ and Redis. It provides support for task scheduling, retries, and result storage, making it an excellent choice for handling asynchronous tasks in MicroDrop-Next-Gen. By integrating Dramatiq, we can ensure that our application remains responsive and capable of handling complex workflows efficiently.
+```bash
+git clone --recursive https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop
+cd pixi-microdrop/microdrop-py
+pixi run microdrop
+```
 
-#### *Not Used Technologies*
+Other useful tasks: `pixi run microdrop-frontend`, `pixi run
+microdrop-backend`, `pixi run opendrop-microdrop`, `pixi run run_redis`,
+`pixi run setup-hooks` (see [Developer Workflow](#developer-workflow)).
 
-*FastAPI* - an option for request and response handling but since we decided that it made more sense to use **Dramatiq** for task processing and not use web requests (only local) for task handling, we decided to not use **FastAPI**.
+### Option 3 — Manual (conda)
 
-*QWebsockets* - a QT specific websockets package. Not used for the same reason above.
+Requires **Python 3.12** and a running Redis server.
 
-*Pluggy* - a plugin architecture framework. We decided to use **Envisage** over **pluggy** since **pluggy**'s framework was more complex in usage and the tasks we needed from a plugin framework is better defined and implemented via **Envisage**. Envisage allowed us to implement the 5 stages of plugin development (Discovery, Loading, Instantiation, Registration, and Execution) in a more straightforward manner.
+```bash
+conda env create -f environment.yml
+# start Redis (either works):
+redis-server                              # plain terminal
+python examples/start_redis_server.py     # bundled helper
+```
 
-*FastStream* - a python async service framework. Not used since **Dramatiq** was chosen for task processing and this was only going to be thought of as an option if we used FastAPI as our communication method.
+## Running the Application
 
-*FastAPIWebsockets* - a websockets package specifically for use with FastAPI. Not used since we decided to not use **FastAPI**.
-
-*APScheduler* - a task execution scheduler. Not used since **Dramatiq** was chosen for task processing and we can handle task scheduling via **Dramatiq** information flow or if we choose, we can implement custom APScheduler's to handle step processing. As of current, it seems that development for step processing and control flow will be handled via communication and model structure (EX: Protocol Grid -> each step -> left to right order).
-
-## **Installation Instructions**
-
-### **Prerequisites**
-
-1. **Python 3.12** 
-
-We are using redis since it can be installed from the binstar anaconda channel.
-
-simply use the environment.yml from this repos root directory to create a conda environment with the necessary dependencies.
-The command to create the environment is:
-```conda create -f environment.yml```
-
-And remember to startup the redis server. There is a start_redis_server.py python script for thisnin examples. Or one can just ruin ``redis-server`` on a terminal.
-
-## **Running the Application**
-
-Redis must be running before launching (see above).
-
-The combined launcher `examples/run_device_viewer_pluggable.py` can load any
-combination of plugin layers via `--plugins`, so a single script covers the
-full app, frontend-only, or backend-only runs:
+Redis must be running first (pixi runs handle this for you). The combined
+launcher `examples/run_device_viewer_pluggable.py` can load any combination of
+plugin layers via `--plugins`, so a single script covers full-app,
+frontend-only, or backend-only runs:
 
 ```bash
 # Full app — frontend + backend (the default)
@@ -122,7 +146,7 @@ python examples/run_device_viewer_pluggable.py --plugins backend services --devi
 ```
 
 `--plugins` accepts one or more space-separated values from `frontend`,
-`backend`, and `services`, defaulting to `frontend backend`. Notes:
+`backend`, and `services`, defaulting to `frontend backend`:
 
 - **Services** (e.g. SSH controls) are trust-bound to the GUI host, so they
   load automatically with `frontend`, or on explicit `services` request.
@@ -134,41 +158,106 @@ python examples/run_device_viewer_pluggable.py --plugins backend services --devi
 `--device` selects the hardware target (`dropbot`, `opendrop`, or `mock`;
 default `dropbot`) and pulls in the matching device-specific plugins.
 
-# **Remote Microdrop Instructions**
+## Remote / Distributed Operation
 
-## **1. SERVER-SIDE (via SSH)**
+Because all communication flows through Redis, the GUI and the hardware
+controller don't have to share a machine.
 
-- Start your Redis server (see Redis configuration note below).
+**Server side (the machine wired to the hardware):**
 
-- Run the backend script by executing: pixi run microdrop-backend
+1. Ensure a Redis server is reachable (it can run anywhere — not necessarily
+   on this machine).
+2. Run the backend: `pixi run microdrop-backend`
 
-## **2. CLIENT-SIDE (Local Machine)**
-- Headless: Send commands using publish_message(message, topic).
-- GUI: Run pixi run microdrop-frontend to use the visual interface to send commands.
+**Client side (your local machine):**
 
-## **Redis Configuration Note**
+- GUI: `pixi run microdrop-frontend`
+- Headless: publish commands directly with `publish_message(message, topic)`
 
-### **On the Redis server machine:** 
+**Redis configuration:**
 
-- Ensure the Redis server is configured to accept external connections.
-- This means binding to the correct network adapter in the redis.conf file, and disabling protected mode if applicable.
-- This Redis server can actually run anywhere; it does not need to be on the exact same machine as the microdrop-backend script.
+- On the Redis host: bind to the correct network adapter in `redis.conf` and
+  disable protected mode if applicable, so external connections are accepted.
+- On each client: copy
+  [redis_settings.example.json](redis_settings.example.json) to
+  `redis_settings.json` and set the host/port to the Redis server's.
 
-### **On each client machine (frontend/backend):** 
-- Tell the application where to find the Redis server by editing the redis_settings.json (you can copy the template [redis_settings.example.json](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/blob/main/redis_settings.example.json))
-- Set the host to the Redis server's IP and the port to match.
+## Architecture
 
-# **Developer Workflow**
+MicroDrop is a three-layer, message-driven system — the GUI, the message bus,
+and the hardware backend are fully decoupled:
 
-## **Commit Messages (Conventional Commits)**
+```mermaid
+flowchart LR
+    subgraph FE["Frontend — PySide6 GUI"]
+        DV["Device Viewer<br/>(SVG electrode layout)"]
+        PG["Protocol Editor"]
+        DP["Status & Controls<br/>dock panes"]
+    end
+    subgraph BUS["Message Bus"]
+        R[("Redis + Dramatiq<br/>MQTT-style topics")]
+    end
+    subgraph BE["Backend — Hardware"]
+        DC["Device Controllers<br/>(DropBot / OpenDrop / peripherals)"]
+        HW[["USB serial RPC<br/>→ firmware"]]
+    end
+    FE <--> R
+    R <--> DC
+    DC <--> HW
+```
+
+A click on an electrode publishes a state-change message; Redis routes it to a
+backend worker, which translates it into a serial RPC call to the firmware;
+capacitance feedback flows back the same way to update the GUI. Plugins never
+call each other directly — every interaction is a published message.
+
+**Want the full tour?** The interactive
+[**MicroDrop Architecture presentation**](user_help_plugin/resources/microdrop-architecture.html)
+walks through the three-layer design, the plugin system, the message bus, and
+the DropBot API with diagrams and code examples. It's also available inside
+the app under **Help → MicroDrop Architecture**, or
+[viewable in your browser](https://raw.githack.com/Blue-Ocean-Technologies-Inc/Microdrop/main/user_help_plugin/resources/microdrop-architecture.html).
+
+Deeper reference docs:
+
+| Document | What's inside |
+|---|---|
+| [MESSAGES.md](MESSAGES.md) | Complete pub/sub topic map — who sends and receives what |
+| [docs/ENVISAGE_TRAITS_GUIDE.md](docs/ENVISAGE_TRAITS_GUIDE.md) | Envisage / Traits / TraitsUI guide and how this repo uses them |
+| [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) | How to build a MicroDrop plugin |
+| [DRAMATIQ_DOCS.md](DRAMATIQ_DOCS.md) | Dramatiq broker / encoder / actor notes |
+| [docs/DESIGN_HISTORY.md](docs/DESIGN_HISTORY.md) | Pre-development research & why Envisage / Redis / Dramatiq were chosen |
+
+## Plugins
+
+Every major feature is an Envisage plugin — the device viewer, protocol
+editor, status panes, and hardware controllers alike. Optional peripheral
+plugin groups can be toggled at runtime via **Tools → Peripherals**, no
+restart required.
+
+Peripheral plugins live in their own repos and are published as conda packages
+to [prefix.dev/microdrop-plugins](https://prefix.dev/channels/microdrop-plugins):
+
+| Plugin | Repo | What it does |
+|---|---|---|
+| Heater | [heater-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/heater-microdrop-plugin-py) | Multi-channel heater/TEC control with PID loops, live telemetry plots, sensor configuration, and firmware upload |
+| Magnet | [magnet-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/magnet-microdrop-plugin-py) | Magnet engage/disengage control for bead-based protocols |
+| Fluorescence | [fluorescence-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py) | Fluorescence imaging & measurement (ZWO ASI camera + illumination board) |
+
+Want to write your own? Start with
+[docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md).
+
+## Developer Workflow
+
+### Commit messages (Conventional Commits)
 
 Every commit message must follow the
 [Conventional Commits](https://www.conventionalcommits.org/) format — a CI
 check ([conventional-commits.yml](.github/workflows/conventional-commits.yml))
-runs `cz check` on every PR commit, so non-conforming messages block the merge.
-The format matters because releases are derived from it: commitizen reads the
-commit history to compute the next version number and generate the changelog
-(see [Releases & CHANGELOG.md](#releases--changelogmd) below).
+runs `cz check` on every PR commit, so non-conforming messages block the
+merge. The format matters because releases are derived from it: commitizen
+reads the commit history to compute the next version number and generate the
+changelog (see [Releases](#releases--changelogmd) below).
 
 ```
 type(scope): subject
@@ -185,7 +274,8 @@ optional footer (e.g. BREAKING CHANGE: ...)
 - **Breaking changes:** append `!` after the type/scope
   (`feat(api)!: drop legacy topics`) or add a `BREAKING CHANGE:` footer →
   major bump.
-- Keep the subject imperative and ~50 characters; put the why/what in the body.
+- Keep the subject imperative and ~50 characters; put the why/what in the
+  body.
 
 Examples:
 
@@ -196,32 +286,42 @@ docs: add developer workflow section to README
 chore: release v1.1.0
 ```
 
-### **Setup: enforce the convention locally**
+### Git hooks (setup once per clone)
 
 The repo ships a [pre-commit](https://pre-commit.com/) config
-([.pre-commit-config.yaml](.pre-commit-config.yaml)) that installs git hooks
-enforcing the format at commit time, so mistakes are caught before CI.
+([.pre-commit-config.yaml](.pre-commit-config.yaml)) that enforces the commit
+format locally and runs sanity checks on staged files.
 
-**If you develop through the
-[pixi-microdrop](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop)
-repo** (the pixi environment that carries this repo as the `src/` submodule),
-this is a one-time command per clone, run from the outer `microdrop-py/`
-directory:
+**Via [pixi-microdrop](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop)**
+(one command, run from the outer `microdrop-py/` directory — installs the
+hooks into this repo **and** the heater / magnet / fluorescence plugin
+clones):
 
 ```bash
 pixi run setup-hooks
 ```
 
-This installs the hooks into this repo **and** the plugin clones
-(heater / magnet / fluorescence).
-
-**Without pixi**, install `pre-commit` yourself (e.g.
-`pipx install pre-commit` or `pip install pre-commit`) and run this once
-inside each repo clone:
+**Without pixi**, install `pre-commit` yourself (e.g. `pipx install
+pre-commit`) and run once inside each repo clone:
 
 ```bash
 pre-commit install --hook-type commit-msg --hook-type pre-commit
 ```
+
+The hooks that run on every `git commit`:
+
+| Hook | What it does |
+|---|---|
+| `commitizen` (commit-msg) | Rejects the commit if the message isn't valid Conventional Commits — the local mirror of the CI gate |
+| `check-ast` | Staged `.py` files must parse (catches syntax errors before they land) |
+| `check-merge-conflict` | Blocks files containing leftover merge-conflict markers |
+| `check-added-large-files` | Blocks files larger than 500 kB |
+| `forbid-scratch-files` | Blocks scratch/artifact paths (`__pycache__/`, `.pixi/`, …) from ever being committed |
+
+Tips: `pre-commit run --all-files` runs the file hooks over the whole repo. A
+failed hook aborts the commit — fix the issue (or the message) and retry. In a
+genuine emergency a hook can be bypassed with `git commit --no-verify`, but
+the CI check will still fail the PR, so fix the message instead.
 
 If you prefer to be prompted instead of writing the message yourself,
 commitizen can compose a conforming message interactively:
@@ -234,40 +334,7 @@ pixi exec --spec "commitizen>=4,<5" -- cz commit
 cz commit
 ```
 
-## **Git Hooks**
-
-The setup above (`pixi run setup-hooks`, or the manual `pre-commit install`)
-wires two kinds of hooks (defined in
-[.pre-commit-config.yaml](.pre-commit-config.yaml)); they run automatically on
-every `git commit`:
-
-**commit-msg hook** (runs on the message):
-
-| Hook | What it does |
-|---|---|
-| `commitizen` | Rejects the commit if the message isn't valid Conventional Commits — the local mirror of the CI gate. |
-
-**pre-commit hooks** (run on the staged files):
-
-| Hook | What it does |
-|---|---|
-| `check-ast` | Staged `.py` files must parse (catches syntax errors before they land). |
-| `check-merge-conflict` | Blocks files containing leftover merge-conflict markers. |
-| `check-added-large-files` | Blocks files larger than 500 kB. |
-| `forbid-scratch-files` | Blocks scratch/artifact paths (`__pycache__/`, `.pixi/`, `.task-report.md`, `.superpowers/`) from ever being committed. |
-
-Useful commands:
-
-```bash
-# Run all file hooks against the whole repo (not just staged files)
-pre-commit run --all-files
-
-# A failed hook aborts the commit — fix the issue (or the message) and retry.
-# In a genuine emergency a hook can be bypassed with `git commit --no-verify`,
-# but the CI check will still fail the PR, so fix the message instead.
-```
-
-## **Releases & CHANGELOG.md**
+### Releases & CHANGELOG.md
 
 [CHANGELOG.md](CHANGELOG.md) is **generated, never hand-edited**. Commitizen
 (configured in [.cz.toml](.cz.toml)) builds it from the Conventional Commit
@@ -277,7 +344,7 @@ history:
   formatted `vX.Y.Z`) — there is no version string in the source to bump.
 - `cz bump` looks at all commits since the last `v*` tag, derives the bump
   (`feat` → minor, `fix` → patch, `BREAKING CHANGE`/`!` → major), rewrites
-  CHANGELOG.md with sections grouped by type (Feat / Fix / Refactor / ...),
+  CHANGELOG.md with sections grouped by type (Feat / Fix / Refactor / …),
   commits it as `chore: release vX.Y.Z`, and creates an annotated tag.
 - Commit **scopes** become the bold prefixes in changelog entries
   (e.g. `- **plugin-management**: full Manage Plugins window`), which is why
@@ -296,8 +363,20 @@ cz bump
 git push origin main --follow-tags
 ```
 
-The related **heater/magnet plugin repos** release fully automatically: every
-push to `main` containing release-worthy conventional commits bumps the
-version, regenerates their CHANGELOG.md, publishes the conda package to
-`prefix.dev/microdrop-plugins`, and tags — no manual `cz bump` needed there.
+The **plugin repos** (heater / magnet / fluorescence) release fully
+automatically: every push to `main` containing release-worthy conventional
+commits bumps the version, regenerates their CHANGELOG.md, publishes the
+conda package to `prefix.dev/microdrop-plugins`, and tags — no manual
+`cz bump` needed there.
 
+## Disclaimer & License
+
+MicroDrop is an open-source software platform currently in **beta**, provided
+for testing and evaluation purposes. It is under active development and may
+contain bugs, errors, or unexpected behaviour. Users are responsible for
+validating the software in their own workflows and for maintaining
+appropriate data backups before, during, and after use.
+
+This software is provided under the
+[GNU Affero General Public License v3 (AGPLv3)](LICENSE), without any
+warranty. Use at your own risk.

@@ -178,7 +178,8 @@ Electrode layouts are defined in SVG files. Metadata is parsed from SVG path ele
 
 ## Key Documentation Files
 
-- `src/README.md` — documentation guide & tech-selection rationale (why Envisage/Redis/Dramatiq)
+- `src/README.md` — user-facing front page (getting started, architecture overview, plugin links, developer workflow)
+- `src/docs/DESIGN_HISTORY.md` — archived pre-development research & tech-selection rationale (why Envisage/Redis/Dramatiq)
 - `ENVISAGE_TRAITS_GUIDE.md` (in this same `docs/` folder) — Envisage/Traits/TraitsUI framework guide + how this repo uses them
 - `src/MESSAGES.md` — complete pub/sub topic map (who sends/receives what)
 - `src/DRAMATIQ_DOCS.md` — Dramatiq broker/encoder/actor API notes
