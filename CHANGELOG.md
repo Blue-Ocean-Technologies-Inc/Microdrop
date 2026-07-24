@@ -1,3 +1,19 @@
+## v1.4.3 (2026-07-24)
+
+### Fix
+
+- **examples**: update imports for relocated demo packages
+
+### Refactor
+
+- **examples**: group demos and style examples into subdirs
+
+### Docs
+
+- **readme**: point launcher section at microdrop-launcher repo
+- **readme**: rewrite README as user-facing front page
+- archive pre-dev research to docs/DESIGN_HISTORY.md
+
 ## v1.4.2 (2026-07-23)
 
 ### Refactor
