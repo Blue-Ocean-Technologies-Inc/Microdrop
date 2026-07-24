@@ -317,6 +317,85 @@ def test_iter_execution_group_repetitions_expand(manager):
     assert names == ["A", "B", "A", "B"]
 
 
+# --- scoped execution ("Run Selected Steps", issue #558) ---
+
+
+@pytest.fixture
+def nested_manager(manager):
+    """Root: [A, Wash(reps=3){B, C}, D]."""
+    manager.add_step(values={"name": "A"})
+    g = manager.add_group(name="Wash")
+    setattr(manager.get_row(g), "repetitions", 3)
+    manager.add_step(parent_path=g, values={"name": "B"})
+    manager.add_step(parent_path=g, values={"name": "C"})
+    manager.add_step(values={"name": "D"})
+    return manager
+
+
+def test_run_scope_roots_drops_descendants_of_selected_rows(nested_manager):
+    # Selecting the group AND a child inside it: the child is already covered.
+    roots = nested_manager.run_scope_roots([(1,), (1, 0)])
+    assert roots == [(1,)]
+
+
+def test_run_scope_roots_sorts_into_tree_order(nested_manager):
+    assert nested_manager.run_scope_roots([(2,), (0,), (1, 1)]) \
+        == [(0,), (1, 1), (2,)]
+
+
+def test_run_scope_roots_skips_stale_paths(nested_manager):
+    # (9,) never existed; it must not raise, just drop out.
+    assert nested_manager.run_scope_roots([(0,), (9,)]) == [(0,)]
+
+
+def test_scoped_run_ignores_ancestor_repetitions(nested_manager):
+    """A step selected inside a 3x group runs ONCE — ancestors outside the
+    selection contribute no repetitions (issue #558)."""
+    names = [r.name for r in nested_manager.iter_execution_steps([(1, 0)])]
+    assert names == ["B"]
+
+
+def test_scoped_run_honors_the_selected_rows_own_repetitions(nested_manager):
+    setattr(nested_manager.get_row((0,)), "repetitions", 4)
+    names = [r.name for r in nested_manager.iter_execution_steps([(0,)])]
+    assert names == ["A"] * 4
+
+
+def test_scoped_run_on_a_group_honors_that_groups_repetitions(nested_manager):
+    """Selecting the group itself re-introduces its own repeat loop."""
+    names = [r.name for r in nested_manager.iter_execution_steps([(1,)])]
+    assert names == ["B", "C"] * 3
+
+
+def test_scoped_run_covers_non_contiguous_selection_in_tree_order(nested_manager):
+    names = [r.name for r in nested_manager.iter_execution_steps([(2,), (0,)])]
+    assert names == ["A", "D"]
+
+
+def test_scoped_run_reports_rep_chain_relative_to_the_selection(nested_manager):
+    """The selected group is the outermost repeating scope, so it appears in
+    the chain; nothing above it does."""
+    chains = [chain for _row, chain in
+              nested_manager.iter_execution_frames([(1,)])]
+    assert chains[0] == (("Wash", 1, 3),)
+    assert chains[-1] == (("Wash", 3, 3),)
+
+
+def test_empty_scope_yields_no_frames(nested_manager):
+    """An empty list is a real empty scope — distinct from None, which means
+    'run the whole protocol'."""
+    assert list(nested_manager.iter_execution_frames([])) == []
+    assert len(list(nested_manager.iter_execution_frames(None))) == 8
+
+
+def test_scope_of_an_empty_group_yields_no_frames(manager):
+    """Normalizes to a root, but expands to nothing — this is the case the
+    tree's menu-entry guard has to catch."""
+    g = manager.add_group(name="Empty")
+    assert manager.run_scope_roots([g]) == [g]
+    assert list(manager.iter_execution_frames([g])) == []
+
+
 # --- slicing ---
 
 import pandas as pd
