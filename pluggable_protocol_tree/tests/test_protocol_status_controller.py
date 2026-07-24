@@ -9,9 +9,11 @@ from pluggable_protocol_tree.services.protocol_status_controller import (
 
 
 class _Executor:
-    """Minimal executor stand-in: the controller reads .signals off it."""
-    def __init__(self, signals):
+    """Minimal executor stand-in: the controller reads .signals off it, and
+    ``run_paths`` for the active run's selection scope (issue #558)."""
+    def __init__(self, signals, run_paths=None):
         self.signals = signals
+        self.run_paths = run_paths
 
 
 class _Row:
@@ -21,10 +23,15 @@ class _Row:
 
 
 class _Manager:
-    def __init__(self, rows):
+    def __init__(self, rows, scoped_rows=None):
         self._rows = rows
+        # Rows the manager would yield for a scoped run; keyed by nothing —
+        # the fake just checks that a scope was asked for at all.
+        self._scoped_rows = scoped_rows
 
-    def iter_execution_steps(self):
+    def iter_execution_steps(self, scope_paths=None):
+        if scope_paths is not None and self._scoped_rows is not None:
+            return iter(list(self._scoped_rows))
         return iter(list(self._rows))
 
 
@@ -43,6 +50,21 @@ def test_protocol_started_counts_steps():
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started = True
     assert ctrl.model.step_total == 2
+
+
+def test_step_counts_follow_the_active_run_scope():
+    """A "Run Selected" run reads "Step n/N" against the subset, not the
+    whole protocol (issue #558). The scope is read off the executor, so the
+    controller keeps no copy of its own."""
+    rows = [_Row("A", (0,)), _Row("B", (1,)), _Row("C", (2,))]
+    sigs = ExecutorSignals()
+    ctrl = ProtocolStatusController(
+        executor=_Executor(sigs, run_paths=[(1,)]),
+        manager=_Manager(rows, scoped_rows=[rows[1]]),
+        clock=lambda: 0.0,
+    )
+    sigs.protocol_started = True
+    assert ctrl.model.step_total == 1
     assert ctrl.model.running is True
 
 
@@ -161,6 +183,7 @@ class _StubExecutor:
     def __init__(self):
         self.seek_calls = []
         self.signals = None    # this test drives seek_to directly, no events
+        self.run_paths = None  # whole-protocol scope (issue #558)
 
     def seek(self, step_path, phase_index):
         self.seek_calls.append((tuple(step_path), phase_index))
@@ -188,7 +211,7 @@ def test_seek_to_calls_executor_and_updates_model():
                repeat_duration=0.0, repeat_duration_controls=False,
                linear_repeats=False, route_repetitions=1, duration_s=1.0)
     manager = SimpleNamespace(
-        iter_execution_steps=lambda: iter([row]),
+        iter_execution_steps=lambda scope_paths=None: iter([row]),
     )
     ex = _StubExecutor()
     c = ProtocolStatusController(signals=None, manager=manager, executor=ex,

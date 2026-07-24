@@ -164,12 +164,22 @@ class ProtocolStatusController(HasTraits):
 
     # --- helpers (need manager) ---
 
+    def _run_scope(self):
+        """The active run's selection scope, or None for a whole-protocol run
+        (issue #558). Read off the executor rather than cached here so there
+        is one source of truth; the executor clears it when the run ends."""
+        return getattr(self.executor, "run_paths", None)
+
     def _distinct_steps(self):
         """Step rows in execution order with repetitions collapsed (one entry
-        per row), so the status bar counts steps -- not per-rep frames."""
+        per row), so the status bar counts steps -- not per-rep frames.
+
+        Scoped to the active run's selection, so a "Run Selected" run reads
+        "Step 2/3" against the subset rather than against the whole protocol.
+        """
         seen = set()
         out = []
-        for row in self.manager.iter_execution_steps():
+        for row in self.manager.iter_execution_steps(self._run_scope()):
             key = tuple(row.path)
             if key in seen:
                 continue
@@ -184,7 +194,9 @@ class ProtocolStatusController(HasTraits):
             return 0
 
     def _next_name(self, current):
-        steps = self.manager.iter_execution_steps()
+        # Scoped like _distinct_steps: during a selected-subset run the "Next
+        # Step" label should name the next step that will actually run.
+        steps = self.manager.iter_execution_steps(self._run_scope())
         cur_path = tuple(current.path)
         for row in steps:
             if tuple(row.path) == cur_path:
