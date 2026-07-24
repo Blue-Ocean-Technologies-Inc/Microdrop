@@ -5,12 +5,12 @@ import sys
 def main(BROKER):
 
     # import the MainWindow and MainWindowController classes from the dramatiq_ui module
-    from examples.dramatiq_pub_sub_ui.dramatiq_ui import MainWindow, MainWindowController
+    from examples.demos.dramatiq_pub_sub_ui.dramatiq_ui import MainWindow, MainWindowController
 
     # import relevant services, this would be done via plugin registering with envsiage in a real application
     # this is done to make these actors name visible to the broker
 
-    from examples.dramatiq_pub_sub_ui.backend_service import print_ui_message, TOPICS_OF_INTEREST
+    from examples.demos.dramatiq_pub_sub_ui.backend_service import print_ui_message, TOPICS_OF_INTEREST
 
     # initialize the pub sub message router. Again this would be done via plugin registering with envsiage
     from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor

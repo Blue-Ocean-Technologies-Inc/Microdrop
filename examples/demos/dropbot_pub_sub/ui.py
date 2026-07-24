@@ -8,7 +8,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from examples.dropbot_pub_sub.dropbot_searcher import check_dropbot_devices_available
+from examples.demos.dropbot_pub_sub.dropbot_searcher import check_dropbot_devices_available
 from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 
