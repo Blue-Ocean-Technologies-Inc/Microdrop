@@ -40,17 +40,17 @@ diagnostics.
 
 Highlights:
 
-- 🧪 **Interactive device viewer** — click electrodes on an SVG chip layout to
+- **Interactive device viewer** — click electrodes on an SVG chip layout to
   actuate them, watch droplets move with live capacitance feedback
-- 📋 **Protocol editor** — compose, run, and repeat multi-step droplet
+- **Protocol editor** — compose, run, and repeat multi-step droplet
   protocols
-- 🔌 **Everything is a plugin** — built on the
+- **Everything is a plugin** — built on the
   [Envisage](https://docs.enthought.com/envisage/) framework; peripherals
   (heater, magnet, fluorescence imaging) ship as separate installable plugins
-- 🌐 **Fully decoupled frontend/backend** — GUI and hardware controller talk
+- **Fully decoupled frontend/backend** — GUI and hardware controller talk
   over a Redis message bus, so they can run on the same machine or across a
   network
-- 🖥️ **Cross-platform** — Windows, Linux, and macOS
+- **Cross-platform** — Windows, Linux, and macOS
 
 Supported hardware:
 
@@ -66,24 +66,35 @@ There are three ways to get MicroDrop running, from easiest to most manual.
 
 ### Option 1 — MicroDrop Launcher (recommended)
 
-The one-file setup & launcher lives in the
-[pixi-microdrop](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop)
-repo: [`microdrop_setup.py`](https://github.com/Blue-Ocean-Technologies-Inc/pixi-microdrop/blob/master/microdrop_setup.py).
-It needs only a standard Python installation (stdlib only) and takes care of
-everything else:
+The [MicroDrop Launcher](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher)
+is a standalone setup tool that bootstraps everything before any project
+environment exists. Only **git** is required — pixi installs automatically.
 
-- installs [pixi](https://pixi.sh) and clones the project if needed, then
-  prefetches the environment
-- lets you configure **launch profiles** — device (DropBot / OpenDrop / mock),
-  mode (full app / frontend-only / backend-only), optional plugins, Redis
-  host/port
-- creates **desktop shortcuts** that launch a saved profile directly
-- keeps the repos updated on launch (configurable)
+Permanent links to the latest release:
 
-```bash
-# download microdrop_setup.py, then:
-python microdrop_setup.py
-```
+| OS | Download |
+|---|---|
+| Windows x64 | [microdrop_setup.exe](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup.exe) |
+| Linux x64 | [microdrop_setup-linux-x86_64](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup-linux-x86_64) |
+| macOS Apple Silicon | [Microdrop-Launcher-macos-arm64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-arm64.dmg) |
+| macOS Intel | [Microdrop-Launcher-macos-x86_64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-x86_64.dmg) |
+
+The launcher operates in two stages:
+
+1. **Setup** — installs [pixi](https://pixi.sh) if needed, clones
+   pixi-microdrop with its Microdrop submodule, and prefetches the
+   environment.
+2. **Launcher** — a tabbed GUI for selecting launch modes, devices, and
+   plugins; managing branches; editing server settings like the Redis
+   configuration; and creating desktop shortcuts that launch a saved profile
+   directly.
+
+Platform notes: on Linux, make the file executable first
+(`chmod +x microdrop_setup-linux-x86_64`); on macOS, drag the app to
+Applications and approve it in System Settings.
+
+These download links are also available from inside the app under
+**Help → Download MicroDrop Launcher**.
 
 ### Option 2 — pixi-microdrop (developers)
 
@@ -178,15 +189,15 @@ and the hardware backend are fully decoupled:
 
 ```mermaid
 flowchart LR
-    subgraph FE["🖥️ Frontend — PySide6 GUI"]
+    subgraph FE["Frontend — PySide6 GUI"]
         DV["Device Viewer<br/>(SVG electrode layout)"]
         PG["Protocol Editor"]
         DP["Status & Controls<br/>dock panes"]
     end
-    subgraph BUS["📨 Message Bus"]
+    subgraph BUS["Message Bus"]
         R[("Redis + Dramatiq<br/>MQTT-style topics")]
     end
-    subgraph BE["⚙️ Backend — Hardware"]
+    subgraph BE["Backend — Hardware"]
         DC["Device Controllers<br/>(DropBot / OpenDrop / peripherals)"]
         HW[["USB serial RPC<br/>→ firmware"]]
     end
@@ -200,7 +211,7 @@ backend worker, which translates it into a serial RPC call to the firmware;
 capacitance feedback flows back the same way to update the GUI. Plugins never
 call each other directly — every interaction is a published message.
 
-**📽️ Want the full tour?** The interactive
+**Want the full tour?** The interactive
 [**MicroDrop Architecture presentation**](user_help_plugin/resources/microdrop-architecture.html)
 walks through the three-layer design, the plugin system, the message bus, and
 the DropBot API with diagrams and code examples. It's also available inside
@@ -229,9 +240,9 @@ to [prefix.dev/microdrop-plugins](https://prefix.dev/channels/microdrop-plugins)
 
 | Plugin | Repo | What it does |
 |---|---|---|
-| 🌡️ Heater | [heater-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/heater-microdrop-plugin-py) | Multi-channel heater/TEC control with PID loops, live telemetry plots, sensor configuration, and firmware upload |
-| 🧲 Magnet | [magnet-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/magnet-microdrop-plugin-py) | Magnet engage/disengage control for bead-based protocols |
-| 🔬 Fluorescence | [fluorescence-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py) | Fluorescence imaging & measurement (ZWO ASI camera + illumination board) |
+| Heater | [heater-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/heater-microdrop-plugin-py) | Multi-channel heater/TEC control with PID loops, live telemetry plots, sensor configuration, and firmware upload |
+| Magnet | [magnet-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/magnet-microdrop-plugin-py) | Magnet engage/disengage control for bead-based protocols |
+| Fluorescence | [fluorescence-microdrop-plugin-py](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py) | Fluorescence imaging & measurement (ZWO ASI camera + illumination board) |
 
 Want to write your own? Start with
 [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md).
