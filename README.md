@@ -17,6 +17,10 @@
   device viewer, build droplet-handling protocols, and extend it all with plugins.
 </p>
 
+<p align="center">
+  <img src="docs/images/microdrop_app.jpg" alt="MicroDrop running a protocol: DropBot status, protocol editor, device viewer with live camera feed, and the fluorescence and heater plugin panes with live temperature plots" width="900">
+</p>
+
 ---
 
 ## Table of Contents
