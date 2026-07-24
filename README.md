@@ -36,11 +36,10 @@
 
 ## What is MicroDrop?
 
-MicroDrop is the next generation of the open-source MicroDrop application by
-[Sci-Bots](https://sci-bots.com/): a graphical user interface for **digital
-microfluidics** control systems, which move tiny droplets across an electrode
+MicroDrop is an open-source, plugin-based application for controlling [digital microfluidic](https://www.linkedin.com/pulse/digital-microfluidics-principles-practicalities-applications-ac4oc) devices, which are used to move tiny droplets across an electrode
 array using electric fields — lab-on-a-chip for biology, chemistry, and
-diagnostics.
+diagnostics. Use its interactive device viewer to actuate electrodes, create and run droplet-handling protocols, monitor compatible hardware, and add support for peripherals through installable plugins.
+MicroDrop was built for **DropBot** by [Sci-Bots](https://sci-bots.com/), but also supports OpenDrop, and a simulated device for development and demonstrations.
 
 Highlights:
 
