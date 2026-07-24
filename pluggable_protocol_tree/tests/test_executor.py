@@ -758,3 +758,77 @@ def test_wait_pre_protocol_freezes_while_paused():
     assert time.monotonic() - t0 >= 0.1  # paused time did not count down
 
 
+
+
+# --- scoped runs ("Run Selected Steps", issue #558) ---
+
+
+def _scoped_executor():
+    """Executor over Root: [A, Wash(reps=3){B, C}, D]."""
+    ex = _make_executor()
+    rm = ex.row_manager
+    rm.add_step(values={"name": "A"})
+    g = rm.add_group(name="Wash")
+    setattr(rm.get_row(g), "repetitions", 3)
+    rm.add_step(parent_path=g, values={"name": "B"})
+    rm.add_step(parent_path=g, values={"name": "C"})
+    rm.add_step(values={"name": "D"})
+    return ex
+
+
+def _names_of_run(ex, **start_kwargs):
+    started = []
+    ex.signals.observe(lambda event: started.append(event.new[0].name),
+                       "step_started")
+    ex.start(**start_kwargs)
+    assert ex.wait(timeout=10) is True
+    return started
+
+
+def test_run_paths_defaults_to_none_for_a_whole_protocol_run():
+    ex = _scoped_executor()
+    assert _names_of_run(ex) == ["A", "B", "C", "B", "C", "B", "C", "D"]
+    assert ex.run_paths is None
+
+
+def test_run_paths_restricts_the_run_to_the_selection():
+    ex = _scoped_executor()
+    assert _names_of_run(ex, run_paths=[(0,), (2,)]) == ["A", "D"]
+
+
+def test_run_paths_ignores_ancestor_repetitions():
+    """A step selected inside the 3x group runs once."""
+    ex = _scoped_executor()
+    assert _names_of_run(ex, run_paths=[(1, 0)]) == ["B"]
+
+
+def test_run_paths_reports_step_totals_against_the_subset():
+    """The (row, index, total) tuple the status bar reads must count the
+    scoped frames, not the protocol's."""
+    ex = _scoped_executor()
+    seen = []
+    ex.signals.observe(lambda event: seen.append(event.new[1:]), "step_started")
+    ex.start(run_paths=[(0,), (2,)])
+    assert ex.wait(timeout=10) is True
+    assert seen == [(1, 2), (2, 2)]
+
+
+def test_repeats_loops_the_scoped_sequence():
+    ex = _scoped_executor()
+    assert _names_of_run(ex, run_paths=[(0,)], repeats=3) == ["A", "A", "A"]
+
+
+def test_run_paths_is_cleared_once_the_run_terminates():
+    """Idle-state consumers (status counts, navigation) must go back to
+    answering against the whole protocol."""
+    ex = _scoped_executor()
+    _names_of_run(ex, run_paths=[(0,)])
+    assert ex.run_paths is None
+
+
+def test_empty_run_paths_runs_nothing_but_still_terminates():
+    ex = _scoped_executor()
+    finished = []
+    ex.signals.observe(lambda event: finished.append(True), "protocol_finished")
+    assert _names_of_run(ex, run_paths=[]) == []
+    assert finished == [True]

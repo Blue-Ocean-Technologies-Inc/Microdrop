@@ -79,6 +79,12 @@ class ProtocolExecutor(HasTraits):
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
     _start_step_path = Union(None, Tuple)
+    # Selection scope for the current run (issue #558). None runs the whole
+    # protocol; a list of row paths runs only those subtrees. Public so the
+    # status controller can scope its step counts off a single source of
+    # truth rather than keeping its own copy. Set by start(), cleared once
+    # the run terminates.
+    run_paths = Union(None, List)
     # Live ProtocolContext for the current run; seek() drives its cursor.
     # None between runs.
     _active_proto_ctx = Any
@@ -142,6 +148,7 @@ class ProtocolExecutor(HasTraits):
         preview_mode: bool = False,
         advanced_mode: bool = False,
         repeats: int = 1,
+        run_paths: Optional[list] = None,
     ) -> None:
         """Spawn a worker thread and call run() on it. Idempotent —
         a second call while already running is ignored.
@@ -167,6 +174,11 @@ class ProtocolExecutor(HasTraits):
         loops the step sequence that many times inside a single run(),
         firing on_pre_protocol_start / on_post_protocol_end once around
         the whole thing.
+
+        ``run_paths`` narrows the run to a selection of rows (issue #558):
+        only those subtrees execute, each as an independent execution root
+        (see ``RowManager.iter_execution_frames``). ``repeats`` still loops
+        the whole scoped sequence. None runs the entire protocol.
         """
         if self._thread is not None and self._thread.is_alive():
             return
@@ -175,6 +187,9 @@ class ProtocolExecutor(HasTraits):
         self._error = None
         self._start_step_path = (
             tuple(start_step_path) if start_step_path is not None else None
+        )
+        self.run_paths = (
+            [tuple(p) for p in run_paths] if run_paths is not None else None
         )
         self._preview_mode = bool(preview_mode)
         self._advanced_mode = bool(advanced_mode)
@@ -330,6 +345,12 @@ class ProtocolExecutor(HasTraits):
                 f"{time.monotonic() - proto_started_at:.2f}s"
             )
             self._active_proto_ctx = None
+            # Back to whole-protocol scope so idle-state consumers (status
+            # counts, step navigation) don't keep answering against the
+            # selection a finished run used. Cleared AFTER the terminal
+            # signal: the status controller observes it with the default
+            # dispatch, so its handler has already run on this thread.
+            self.run_paths = None
             # threading.Thread terminates naturally when run() returns;
             # nothing to quit() here. start() checks is_alive() to make
             # sure a previous run has completed before starting a new one.
@@ -340,7 +361,7 @@ class ProtocolExecutor(HasTraits):
         """Run one repetition. Honors stop_event, pause_event (step + phase
         checkpoints), skip_until (start-of-run), and the cursor's resume target
         (#471 mid-run seek)."""
-        frames = list(self.row_manager.iter_execution_frames())
+        frames = list(self.row_manager.iter_execution_frames(self.run_paths))
         frame_paths = [tuple(row.path) for row, _ in frames]
         cursor = proto_ctx.cursor
 
