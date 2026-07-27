@@ -1,3 +1,22 @@
+## v1.5.0 (2026-07-27)
+
+### Feat
+
+- **microdrop-utils**: draggable width grip for table row headers
+- **protocol-tree**: wire up the Run Selected action
+- **protocol-tree**: add Run Selected Steps to the tree
+- **protocol-tree**: scope status counts to the run
+- **protocol-tree**: add a run scope to the executor
+- **protocol-tree**: scope frames to a selection
+
+### Fix
+
+- **device_viewer**: make route table spacing user-resizable
+
+### Docs
+
+- **protocol-tree**: add the run-selected design spec
+
 ## v1.4.3 (2026-07-24)
 
 ### Fix
