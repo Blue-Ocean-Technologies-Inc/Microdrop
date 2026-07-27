@@ -3,12 +3,12 @@ import math
 
 from PySide6.QtWidgets import QToolButton
 from pyface.qt.QtCore import (
-    Qt, QSize, QPoint, QPointF, QRectF,
+    Qt, QSize, QPoint, QPointF, QRectF, QObject, QEvent,
     QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
     Slot, Property as QtProperty,   # aliased: traits.api.Property (below) shadows it
 )
 from pyface.qt.QtGui import (
-    QColor, QFont, QShortcut, QKeySequence, QPixmap,
+    QColor, QCursor, QFont, QShortcut, QKeySequence, QPixmap,
     QBrush, QPaintEvent, QPen, QPainter,
 )
 from pyface.qt.QtWidgets import (
@@ -37,6 +37,12 @@ logger = get_logger(__name__)
 DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
 
 DEFAULT_GLYPH_POINT_SIZE_PX = 16
+
+# Drag grip for resizing a table's row-number header (see
+# make_table_row_header_resizable): grip strip width along the header's
+# right edge, and the narrowest the user can drag the header down to.
+TABLE_ROW_HEADER_RESIZE_GRIP_PX = 4
+TABLE_ROW_HEADER_MINIMUM_WIDTH_PX = 12
 
 
 class TableColumn(TableColumn_):
@@ -544,6 +550,65 @@ class DictFloatTableEditor(BasicEditorFactory):
     allow_infinity = Bool(False)
     infinity_value = Float(-1.0)
     infinity_text = Str("∞")
+
+class _RowLabelHeaderResizer(QObject):
+    """Event filter that lets the user drag the right edge of a QTableView's
+    vertical (row-number) header to change its width.
+
+    Qt only supports dragging section *heights* on a vertical header — its
+    width comes from a style hint the user can't adjust. This turns the strip
+    along the header's right edge into a horizontal drag grip."""
+
+    def __init__(self, vertical_header):
+        super().__init__(vertical_header)
+        self._vertical_header = vertical_header
+        self._dragging = False
+
+    def _in_grip_zone(self, event):
+        distance_to_right_edge = self._vertical_header.width() - event.position().x()
+        return 0 <= distance_to_right_edge <= TABLE_ROW_HEADER_RESIZE_GRIP_PX
+
+    def eventFilter(self, watched, event):
+        event_type = event.type()
+
+        if (event_type == QEvent.Type.MouseButtonPress
+                and event.button() == Qt.LeftButton
+                and self._in_grip_zone(event)):
+            self._dragging = True
+            return True
+
+        if event_type == QEvent.Type.MouseMove:
+            if self._dragging:
+                self._vertical_header.setFixedWidth(
+                    max(TABLE_ROW_HEADER_MINIMUM_WIDTH_PX, round(event.position().x()))
+                )
+                return True
+            if self._in_grip_zone(event):
+                watched.setCursor(QCursor(Qt.SplitHCursor))
+            else:
+                watched.unsetCursor()
+            return False
+
+        if event_type == QEvent.Type.MouseButtonRelease and self._dragging:
+            self._dragging = False
+            return True
+
+        if event_type == QEvent.Type.Leave:
+            watched.unsetCursor()
+
+        return False
+
+
+def make_table_row_header_resizable(table_view):
+    """Let the user drag the right edge of ``table_view``'s row-number header
+    to set its width, like an interactive column."""
+    vertical_header = table_view.verticalHeader()
+    # Parented to the header, so the filter lives exactly as long as it does
+    resizer = _RowLabelHeaderResizer(vertical_header)
+    vertical_header.viewport().installEventFilter(resizer)
+    # Hover move events are needed for the grip-zone cursor feedback
+    vertical_header.viewport().setMouseTracking(True)
+
 
 class SafeCancelTableHandler(Handler):
     """
