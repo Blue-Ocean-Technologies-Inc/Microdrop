@@ -1,3 +1,4 @@
+from PySide6.QtWidgets import QApplication
 from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label, RangeEditor
 from traitsui.key_bindings import KeyBindings, KeyBinding
 
@@ -5,7 +6,7 @@ from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 from device_viewer.models.route import RouteLayer
 
 from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn, CustomCheckboxColumn, \
-    SafeCancelTableHandler, DoubleSpinBoxEditor
+    SafeCancelTableHandler, DoubleSpinBoxEditor, make_table_row_header_resizable
 
 from logger.logger_service import get_logger
 
@@ -14,6 +15,15 @@ logger = get_logger(__name__)
 class RouteLayerTableHandler(SafeCancelTableHandler):
     # For these handlers, info is as usual, and rows is a list of rows that the action is acting on
     # In the case of the right click menu, always a list of size 1 with the affected row
+
+    def init(self, info: UIInfo):
+        """Runs once when the UI is generated."""
+        super().init(info)
+
+        # Columns are interactive; extend that to the row-number header too
+        make_table_row_header_resizable(info.layers.table_view)
+
+        return True
 
     def execute_path(self, info: UIInfo, rows: list[RouteLayer]):
         """Request execution of the selected path via the RouteLayerManager event."""
@@ -66,20 +76,20 @@ class RunColumn(CustomCheckboxColumn):
 
 layer_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="Path", resize_mode="stretch", editable=False),
+        ObjectColumn(name="name", label="Path", resize_mode="interactive", editable=False),
         VisibleColumn(
             name="visible",
             label="",
             editable=False,
             horizontal_alignment="center",
-            width=16,
+            resize_mode="interactive",
         ),
         RunColumn(
             name="selected_for_run",
             label="Run",
             editable=False,
             horizontal_alignment="center",
-            width=16,
+            resize_mode="interactive",
         ),
     ],
     menu=RouteLayerMenu,
@@ -230,3 +240,55 @@ RouteLayerView = View(
         ),
     )
 )
+
+if __name__ == "__main__":
+    # demo view
+    import sys
+
+    from traits.api import HasTraits, Bool, DelegatesTo, Instance, Str, observe
+
+    from device_viewer.models.route import Route, RouteLayerManager
+    from microdrop_style.helpers import style_app
+
+    class RouteSelectionDemoModel(HasTraits):
+        """Stand-in for DeviceViewMainModel exposing only the traits
+        RouteLayerView / ExecutionSettingsView bind to."""
+
+        routes = Instance(RouteLayerManager, ())
+
+        # Execution state (normally driven by RouteExecutionService)
+        route_execution_service_executing = Bool(False)
+        route_execution_service_paused = Bool(False)
+        execution_status = Str("")
+
+        protocol_running = Bool(False)
+
+        # Top-level mirrors for enabled_when bindings (nested paths like
+        # `object.routes.commit_enabled` don't re-evaluate reliably)
+        routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
+        routes_repeats_frozen = DelegatesTo("routes", prefix="repeats_frozen")
+
+        @observe("routes.execute_path_requested")
+        def _log_execute_path_requested(self, event):
+            logger.info(f"Execute path requested for layers: {event.new}")
+
+    demo_model = RouteSelectionDemoModel()
+
+    # A few sample layers: a linear path, a loop, and a short path
+    demo_model.routes.add_layer(Route(route=["a", "b", "c"]))
+    demo_model.routes.add_layer(Route(route=["d", "e", "f", "d"]))
+    demo_model.routes.add_layer(Route(route=["g", "h"]))
+
+    # channel_map: channel id -> list of electrode ids
+    demo_channel_map = {channel: [electrode_id] for channel, electrode_id in enumerate("abcdefgh")}
+    for demo_layer in demo_model.routes.layers:
+        demo_layer.name = demo_layer.route.get_name(demo_channel_map)
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    style_app(app)
+
+    # Same pattern as the device viewer dock pane: both views edit one model
+    layer_ui = demo_model.edit_traits(view=RouteLayerView)
+    execution_settings_ui = demo_model.edit_traits(view=ExecutionSettingsView)
+
+    sys.exit(app.exec())
