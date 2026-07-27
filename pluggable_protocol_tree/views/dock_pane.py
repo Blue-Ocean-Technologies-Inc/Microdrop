@@ -227,8 +227,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 experiment_dir_provider=(
                     lambda: self.experiment_manager.get_experiment_directory()
                 ),
+                # Scoped to the active run (issue #558) so a "Run Selected"
+                # run logs the subset's step count, not the protocol's. The
+                # provider is called during on_pre_protocol_start, while
+                # executor.run_paths is still set.
                 n_steps_provider=(
-                    lambda: sum(1 for _ in self.manager.iter_execution_frames())
+                    lambda: sum(1 for _ in self.manager.iter_execution_frames(
+                        self.executor.run_paths))
                 ),
             ),
         ]
@@ -298,6 +303,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
+        pane.run_selected_requested.connect(self._on_run_selected)
 
         def _conditional_stop():
             self.executor.pause()
@@ -780,15 +786,34 @@ class PluggableProtocolDockPane(TraitsDockPane):
             preview_mode=self._pane.navigation_bar.is_preview_mode(),
         )
 
-    def _start_protocol_run(self, preview_mode):
+    def _on_run_selected(self, paths):
+        """Run only the rows the user selected in the tree (issue #558).
+
+        The tree gates its own menu entry and shortcut on the structural-edit
+        lock, but that is a view-layer flag; the executor state is the
+        authority, so re-check it here before starting."""
+        if self._start_pending or self._is_protocol_active():
+            logger.info("Run Selected ignored — a run is already in progress")
+            return
+        if not paths:
+            return
+        self._start_protocol_run(
+            preview_mode=self._pane.navigation_bar.is_preview_mode(),
+            run_paths=[tuple(p) for p in paths],
+        )
+
+    def _start_protocol_run(self, preview_mode, run_paths=None):
         repeats = self._pane.status_bar.edit_repeat_protocol.value()
         self._current_run_preview_mode = preview_mode
         advanced_mode = is_advanced_mode()
-        start_path = self._pane.selected_step_path()
+        # "Play from the selected step" and "run only the selected rows" are
+        # mutually exclusive readings of the same selection: a scoped run
+        # already starts at its first frame, so no skip-until target applies.
+        start_path = None if run_paths else self._pane.selected_step_path()
         logger.info(
             f"Protocol run starting: {repeats} rep(s), "
             f"preview={preview_mode}, advanced={advanced_mode}, "
-            f"start_step={start_path}"
+            f"start_step={start_path}, run_paths={run_paths}"
         )
         # Realtime-mode prep + settle and logging start are once-per-run
         # executor lifecycle hooks (RealtimeModeHandler / LoggingHandler, wired
@@ -802,6 +827,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             preview_mode=preview_mode,
             advanced_mode=advanced_mode,
             repeats=repeats,
+            run_paths=run_paths,
         )
 
     def _toggle_pause(self):

@@ -486,16 +486,48 @@ class RowManager(HasTraits):
 
     # --- execution iteration ---
 
-    def iter_execution_steps(self) -> Iterator[BaseRow]:
+    def run_scope_roots(self, scope_paths: List[Path]) -> List[Path]:
+        """Normalize a selection into the roots a scoped run executes.
+
+        Paths that no longer resolve to a row are skipped, paths that are
+        descendants of another selected path are dropped (the ancestor's
+        subtree already covers them), and the result is sorted into tree
+        order. Drives ``iter_execution_frames(scope_paths=...)``; also usable
+        on its own to ask whether a selection is runnable at all.
+        """
+        candidates = []
+        for path in {tuple(p) for p in scope_paths}:
+            try:
+                self.get_row(path)
+            except (IndexError, KeyError):
+                continue
+            candidates.append(path)
+        return sorted(
+            p for p in candidates
+            if not any(self._is_ancestor(a, p) for a in candidates if a != p)
+        )
+
+    def iter_execution_steps(self, scope_paths: Optional[List[Path]] = None
+                             ) -> Iterator[BaseRow]:
         """Yield rows in execution order, flattening groups and expanding
         repetitions. Backward-compat shim — delegates to the richer
         ``iter_execution_frames``.
         """
-        for row, _rep_chain in self.iter_execution_frames():
+        for row, _rep_chain in self.iter_execution_frames(scope_paths):
             yield row
 
-    def iter_execution_frames(self) -> Iterator[tuple]:
+    def iter_execution_frames(self, scope_paths: Optional[List[Path]] = None
+                              ) -> Iterator[tuple]:
         """Yield ``(row, rep_chain)`` tuples in execution order.
+
+        ``scope_paths`` narrows the run to a selection (issue #558). ``None``
+        walks the whole protocol. Otherwise each normalized selection root
+        (see ``run_scope_roots``) is expanded as an INDEPENDENT execution
+        root: the selected row's own ``repetitions`` — and any inside its
+        subtree — expand normally, while repetitions of ancestors outside
+        the selection contribute nothing. Selecting a step inside a 3x group
+        therefore runs it once; selecting the group runs its children 3x. An
+        empty list is a legitimate empty scope and yields no frames.
 
         ``rep_chain`` is a tuple of ``(name, rep_idx_1based, rep_total)``
         triples, ordered outermost-first, covering ancestors with
@@ -511,7 +543,11 @@ class RowManager(HasTraits):
         Repetitions contract: any row may have an integer attribute
         named ``repetitions``. Missing attribute defaults to 1.
         """
-        yield from self._expand_frames(self.root, prefix=(), is_root=True)
+        if scope_paths is None:
+            yield from self._expand_frames(self.root, prefix=(), is_root=True)
+            return
+        for path in self.run_scope_roots(scope_paths):
+            yield from self._expand_frames(self.get_row(path), prefix=())
 
     @classmethod
     def _expand_frames(cls, node, prefix, is_root=False) -> Iterator[tuple]:

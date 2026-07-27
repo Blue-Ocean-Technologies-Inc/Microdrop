@@ -107,6 +107,10 @@ class ProtocolTreePane(QWidget):
     # QuickActionsController listens to both to drive button enabled state.
     protocol_running_changed = Signal(bool)
     selection_changed = Signal()
+    # Relayed from the tree widget: the user asked to run only the selected
+    # rows (issue #558). Carries the normalized selection roots. The dock
+    # pane owns run control and connects to this.
+    run_selected_requested = Signal(list)
 
     def __init__(
         self,
@@ -158,6 +162,11 @@ class ProtocolTreePane(QWidget):
         self.widget.tree.selectionModel().selectionChanged.connect(
             lambda *_: self.selection_changed.emit()
         )
+
+        # Relay the tree's run-selected request up to whoever owns the
+        # executor (the dock pane in the full app; nothing in the demos,
+        # where the signal simply goes unconnected).
+        self.widget.run_selected_requested.connect(self.run_selected_requested)
 
         self._build_status_bar()
         self._build_navigation_bar()
