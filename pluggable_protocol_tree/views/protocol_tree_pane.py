@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import filecmp
 import json
-import os
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -29,7 +28,7 @@ from pyface.qt.QtWidgets import (
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    CANCEL, NO, YES, choose, confirm, error as error_dialog,
+    NO, YES, choose, confirm, error as error_dialog,
     information as information_dialog, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
@@ -713,9 +712,7 @@ class ProtocolTreePane(QWidget):
             device_svg_path, device_name)
         device_name = legacy_device_display_name(device_svg_path)
 
-        if not self._confirm_legacy_device_match(
-                electrode_to_channel, device_svg_path):
-            return
+        self._offer_switch_to_matching_device(device_svg_path, device_name)
 
         try:
             legacy_protocol = read_legacy_protocol(protocol_path)
@@ -843,57 +840,49 @@ class ProtocolTreePane(QWidget):
             return None
         return str(path)
 
-    def _confirm_legacy_device_match(self, electrode_to_channel,
-                                     device_svg_path) -> bool:
-        """True when the import should proceed.
+    def _offer_switch_to_matching_device(self, device_svg_path: str,
+                                         device_name: str) -> None:
+        """Offer to load the imported protocol's device when the Device
+        viewer currently shows a different one (or none).
 
-        A protocol stores electrode *ids* and actuates them via whatever
-        channel the device currently wires them to, so a mismatch on
-        either front makes the import meaningless (or worse, actuates
-        the wrong physical electrodes): electrodes the loaded device
-        doesn't have at all, and electrodes both devices share but wire
-        to different channels. Offers to switch the Device viewer to the
-        legacy device over pub/sub; YES loads it, NO imports anyway
-        (dropping the unknown electrodes and keeping the live channel
-        assignments for conflicting ones), CANCEL aborts."""
-        if self.device_viewer_sync is None:
-            return True
-        loaded = dict(self.device_viewer_sync.electrode_ids_channels_map)
-        if not loaded:
-            return True
-        missing = set(electrode_to_channel) - set(loaded)
-        conflicting = {
-            electrode_id for electrode_id, channel in electrode_to_channel.items()
-            if electrode_id in loaded and loaded[electrode_id] != channel
-        }
-        if not missing and not conflicting:
-            return True
-        problems = []
-        if missing:
-            problems.append(
-                f"{len(missing)} electrode(s) the loaded device does not have")
-        if conflicting:
-            problems.append(
-                f"{len(conflicting)} electrode(s) wired to a different "
-                f"channel on the loaded device")
-        choice = confirm(
-            self,
-            f"The loaded device does not match the legacy device: "
-            f"{'; '.join(problems)}.\n\n"
-            f"Load {os.path.basename(device_svg_path)} into the Device "
-            f"viewer first?\n\n"
-            f"Choosing No imports anyway, dropping the unknown electrodes "
-            f"and keeping the loaded device's channel assignments for the "
-            f"conflicting ones.",
-            title="Device mismatch",
-            cancel=True,
-        )
-        if choice == CANCEL:
-            return False
-        if choice == YES:
+        A legacy protocol stores electrode ids that only mean anything on
+        the device it was authored for, so a mismatch actuates the wrong
+        physical electrodes. Compares against the active SVG path the
+        device viewer publishes to app_globals -- durable state, unlike
+        the geometry-sync electrode map, which stays empty until a
+        geometry message happens to arrive after this pane attaches (the
+        reason an earlier map-based check could skip this prompt
+        entirely). YES loads the matched device over pub/sub; NO keeps
+        the current one."""
+        try:
+            active_svg = str(app_globals.get(DEVICE_SVG_PATH_KEY,
+                                             NO_DEVICE_SVG_SENTINEL))
+        except Exception as e:
+            logger.debug(f"active device svg unavailable: {e}")
+            return
+        device_loaded = active_svg not in ("", "None", NO_DEVICE_SVG_SENTINEL)
+        if device_loaded:
+            try:
+                if filecmp.cmp(active_svg, device_svg_path, shallow=False):
+                    return
+            except OSError as e:
+                logger.debug(f"could not compare device SVGs: {e}")
+            question = (
+                f"This protocol was authored for device '{device_name}', "
+                f"but the loaded device is "
+                f"'{Path(active_svg).stem}'.\n\n"
+                f"Switch to '{device_name}'? Choosing No keeps the loaded "
+                f"device, whose channel wiring may not match this "
+                f"protocol's electrodes.")
+        else:
+            question = (
+                f"This protocol was authored for device '{device_name}', "
+                f"and no device is currently loaded.\n\n"
+                f"Load '{device_name}' into the Device viewer?")
+        if confirm(self, question, title="Device mismatch",
+                   cancel=False) == YES:
             publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
                             message=device_svg_path)
-        return True
 
     # --- experiment-bar handlers ------------------------------------
     @attempt_func_execution_with_error_dialog
