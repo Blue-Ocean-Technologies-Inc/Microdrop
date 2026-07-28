@@ -88,7 +88,7 @@ case where the user has a different device loaded.
 | `mr_box_plugin` `Magnet` / `zika_box_plugin` `Magnet` | bool | `set_magnet` = True, `magnet_on` = value | height left at its "Default" sentinel |
 | `zika_box_plugin` `Heater` | bool | `set_temperature` | direct |
 | `zika_box_plugin` `Heater_temperature` | float | `target_temperature_c` | direct; `tolerance_c` left at default |
-| `Protocol.n_repeats` | int | root group `repetitions` | only written when > 1 |
+| `Protocol.n_repeats` | int | `repetitions` on a wrapper group | see below; only when > 1 |
 
 Voltage and frequency are `Int` end-to-end in the new system while the legacy format
 stores them as floats, hence the rounding. `volume_threshold` changes units: legacy is a
@@ -105,8 +105,9 @@ Group rows by `route_i`, sort each group by `transition_i`, and take the `electr
 column — that ordered list of electrode ids is one route. The result is the
 `List[List[str]]` the new `routes` column expects.
 
-Routes are not a rare edge case: they are empty throughout Duo Fluo but **85 Zika steps
-carry real multi-electrode routes**, so this path needs test coverage.
+Routes are not a rare edge case: they are empty throughout Duo Fluo but **145 steps
+across the samples carry real multi-electrode routes** (2,639 route rows in total), so
+this path needs test coverage.
 
 ### 2.3 Dropped, with a report
 
@@ -140,7 +141,10 @@ The converter drops such ids from the step's `electrodes` / `routes`, counts the
 reports them. It does not fail the import.
 
 **Protocol-level repeats are used.** `n_repeats` is 120 in one sample and 15 in another,
-so it cannot be ignored.
+so it cannot be ignored. It cannot be stored on the tree's root, though: the root carries
+no `repetitions` attribute and `serialize_tree` walks with `skip_root=True`, so a value
+set there is silently discarded. A repeated protocol therefore gets one wrapper group
+holding the repeat count, with its steps nested inside; an unrepeated protocol stays flat.
 
 ## 4. Architecture
 
@@ -159,6 +163,12 @@ own `consts.py`, per the subpackage-owns-its-constants convention.
   Loads with `encoding="latin1"`, the standard Python 2 pickle compatibility setting.
   Exposes `is_legacy_protocol_file(path) -> bool` for dropdown filtering and
   `read_legacy_protocol(path) -> LegacyProtocol` for conversion.
+
+  `find_class` must also remap `pandas.core.indexes.numeric.Int64Index` (and its
+  `Float64Index` / `UInt64Index` siblings) to `pandas.Index`. Those classes were removed
+  in pandas 2.x, and without the remap 11 sample steps fail to unpickle their
+  `drop_routes` DataFrame — silently losing route data. With it, all 145 route-bearing
+  steps (2,639 route rows) across the samples parse cleanly.
 - `device_svg_channel_map.py` — parses a `device.svg` into `{electrode_id: channel}` by
   scanning `<path>` elements for `id` and `data-channels`. Deliberately a local XML
   scan rather than an import of `device_viewer`'s `SVGProcessor`: importing another
@@ -222,6 +232,13 @@ All dialogs go through `microdrop_application.dialogs.pyface_wrapper`.
    disagree, `confirm(...)` offers loading the legacy `device.svg`; the user may proceed
    anyway or cancel. The wrapper's `YES` / `NO` / `CANCEL` results are used directly —
    no new decision constants.
+
+   Loading it requires a new `DEVICE_VIEWER_LOAD_SVG_REQUEST` topic on `device_viewer`:
+   that plugin currently publishes its geometry but subscribes to nothing that loads a
+   device, and reaching into its dock pane from here is forbidden. The existing
+   `GAMEPAD_CAPTURE_REQUEST` topic is the precedent to follow. Because the load is
+   asynchronous, step 6 validates against the *legacy* device's map rather than the live
+   sync map, which is still the old device when validation runs.
 4. **Convert.** `protocol_converter` produces step dicts and a `ConversionReport`.
 5. **Reconcile against live columns.** Build a `RowManager` seeded with the live column
    set, `add_step(values=...)` per converted step filtered to attributes the dynamic row
@@ -259,7 +276,8 @@ Nothing is written to disk by the import itself.
 
 Unit tests against the sample folders, all Qt-free:
 
-- `legacy_pickle_reader` loads all 57 sample protocols; rejects the `.7z` file.
+- `legacy_pickle_reader` loads all 57 sample protocols; rejects the `.7z` file; parses
+  every nested plugin blob with zero failures (guards the pandas index remap).
 - `device_svg_channel_map` extracts the expected electrode count for each of the four
   devices: Duo Fluo 126, DMF-90-pin-array 92, Zika-4d Mirror 87, Quanterix 71.
 - Electrode resolution: every id used by Duo Fluo and Zika resolves; the two known
@@ -292,4 +310,7 @@ New, under `pluggable_protocol_tree/views/`: the import dialog model and view.
 
 Modified: `pluggable_protocol_tree/menus.py` (action factory),
 `pluggable_protocol_tree/views/protocol_tree_pane.py` (import method following
-`load_from_dialog`), and the dock pane's delegating method.
+`load_from_dialog`), and `pluggable_protocol_tree/views/dock_pane.py` (delegating method).
+
+Modified in `device_viewer`: `consts.py` and `views/device_view_dock_pane.py`, to add and
+handle `DEVICE_VIEWER_LOAD_SVG_REQUEST`.
