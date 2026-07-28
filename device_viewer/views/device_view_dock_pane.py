@@ -1,5 +1,6 @@
 # Site package imports
 import json
+import os
 import traceback
 from pathlib import Path
 import dramatiq
@@ -255,6 +256,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         svc = self._gamepad_interaction_service()
         if svc is not None and hasattr(svc, "reconnect_gamepad"):
             svc.reconnect_gamepad()
+
+    def _on_load_svg_request_triggered(self, message):
+        """Load the SVG at ``message`` (a file path) into the device view.
+
+        Lets another plugin switch devices over pub/sub instead of reaching
+        into this pane."""
+        svg_path = str(message or "").strip()
+        if not svg_path or not os.path.isfile(svg_path):
+            logger.warning(f"load-svg request for missing file: {svg_path!r}")
+            return
+        try:
+            self._set_device_view_from_svg(svg_path)
+        except Exception as e:
+            logger.warning(
+                f"could not load requested device svg {svg_path!r}: {e}",
+                exc_info=True)
 
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")

@@ -55,6 +55,9 @@ GAMEPAD_CAPTURE_REQUEST        = "ui/device_viewer/gamepad_capture_request"
 # controller acquisition from the UI after an unplug/replug. Dispatches to
 # _on_gamepad_reconnect_request_triggered.
 GAMEPAD_RECONNECT_REQUEST      = "ui/device_viewer/gamepad_reconnect_request"
+# Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
+# protocol import) switch devices without reaching into this one.
+DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
 
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
 # imported from protocol_grid.consts) to avoid the circular import that would otherwise form
@@ -92,6 +95,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_TREE_DISPLAY_STATE,
         GAMEPAD_CAPTURE_REQUEST,
         GAMEPAD_RECONNECT_REQUEST,
+        DEVICE_VIEWER_LOAD_SVG_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
         # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
