@@ -114,6 +114,7 @@ CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map" # channel areas
 FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
 LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
 DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
+DEVICE_REPO_DIR_KEY = "microdrop.device_repo.dir" # the user device-SVG repo directory
 MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
 DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live video-recording state
 
@@ -126,7 +127,8 @@ recording_state_model = RecordingStateModel(globals_key=DEVICE_VIEWER_RECORDING_
 media_capture_event_model = MediaCaptureEventModel()
 
 APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
-                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
+                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY,
+                    DEVICE_REPO_DIR_KEY]
 
 # ---------------------------------------------------------------------------
 # Capture file layout (under the experiment directory). Other plugins may

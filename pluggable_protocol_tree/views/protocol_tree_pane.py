@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -38,13 +39,16 @@ from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY, DEVICE_VIEWER_LOAD_SVG_REQUEST
+from device_viewer.consts import (
+    DEVICE_REPO_DIR_KEY, DEVICE_SVG_PATH_KEY, DEVICE_VIEWER_LOAD_SVG_REQUEST,
+)
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, PROTOCOL_FILE_DIALOG_FILTER)
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.legacy_protocol_import import (
     build_protocol_payload, convert_legacy_protocol,
-    read_device_svg_channel_map, read_legacy_protocol,
+    legacy_device_display_name, read_device_svg_channel_map,
+    read_legacy_protocol,
 )
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
@@ -667,8 +671,10 @@ class ProtocolTreePane(QWidget):
     def import_legacy_protocol_dialog(self):
         """Convert a Python 2 MicroDrop protocol into this tree.
 
-        The result is left unsaved on purpose: the user reviews the
-        conversion report, then chooses Save As."""
+        The converted protocol is saved into the protocol repo under the
+        legacy device's name, and that device's SVG is copied into the
+        device repo when absent, so both are findable through the normal
+        Load menus afterwards."""
         if not self._confirm_proceed_or_abort():
             return
         dialog = LegacyImportDialog(parent=self)
@@ -696,6 +702,12 @@ class ProtocolTreePane(QWidget):
                                  f"with channel assignments.")
             return
 
+        device_name = legacy_device_display_name(device_svg_path)
+        # Prefer the repo copy from here on: the mismatch dialog's YES then
+        # loads the same file Device > Load would offer later.
+        device_svg_path = self._import_device_into_repo(
+            device_svg_path, device_name)
+
         if not self._confirm_legacy_device_match(
                 electrode_to_channel, device_svg_path):
             return
@@ -720,18 +732,85 @@ class ProtocolTreePane(QWidget):
                 return
         self.manager.set_state_from_json(
             payload, columns=columns, report_findings=False)
-        # The import deliberately leaves the tree unsaved -- it does not
-        # record the imported payload as a known on-disk file -- but the
-        # tracker still points at whatever file was open before the
-        # import. Without this reset, a plain Save (not Save As) would
-        # silently overwrite that previous file with the imported
-        # protocol.
-        self.protocol_state_tracker.reset()
+
+        saved_path = self._save_imported_protocol(protocol_path, device_name)
+        if saved_path:
+            self.protocol_state_tracker.set_loaded(saved_path)
+            self.protocol_state_tracker.reseed_baseline(self.manager)
+            saved_note = f"Saved to: {saved_path}"
+        else:
+            # Fall back to the unsaved state, clearing the tracker so a
+            # plain Save cannot overwrite whatever file was open before
+            # the import.
+            self.protocol_state_tracker.reset()
+            saved_note = ("Could not save into the protocol repo -- "
+                          "use Save As to keep this protocol.")
 
         information_dialog(
             parent=self, title="Legacy protocol imported", cancel=False,
             message=f"Imported {len(converted.step_values)} steps.",
-            detail=converted.report.render())
+            detail=f"{saved_note}\n\n{converted.report.render()}")
+
+    def _import_device_into_repo(self, device_svg_path: str,
+                                 device_name: str) -> str:
+        """Copy the legacy device SVG into the device repo as
+        ``<device_name>.svg`` so Device > Load can find it later.
+
+        Returns the repo copy's path when one exists or was created, else
+        the original path. Best-effort: no Redis (headless), no published
+        repo dir, or a name collision with a *different* device leaves the
+        original path in use rather than failing the import."""
+        try:
+            repo_dir = app_globals.get(DEVICE_REPO_DIR_KEY)
+        except Exception as e:
+            logger.debug(f"device repo dir unavailable: {e}")
+            return device_svg_path
+        if not repo_dir:
+            return device_svg_path
+        source = Path(device_svg_path)
+        destination = Path(repo_dir) / f"{device_name}.svg"
+        try:
+            if destination.exists():
+                if destination.read_bytes() == source.read_bytes():
+                    return str(destination)
+                logger.warning(
+                    f"device repo already has a different "
+                    f"{destination.name}; keeping {source} for this import")
+                return device_svg_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            logger.info(f"imported legacy device into repo: {destination}")
+            return str(destination)
+        except Exception as e:
+            logger.warning(f"could not import device into repo: {e}",
+                           exc_info=True)
+            return device_svg_path
+
+    def _save_imported_protocol(self, legacy_protocol_path: str,
+                                device_name: str):
+        """Write the just-imported tree to
+        ``PROTOCOL_REPO_DIR/<device_name>/<legacy name>.json``.
+
+        Existing files are never overwritten -- a numeric suffix is added
+        instead, since re-importing must not clobber an earlier import the
+        user may have edited. Returns the saved path, or None when the
+        repo dir is unavailable or the write fails (the caller falls back
+        to the unsaved state)."""
+        try:
+            target_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / device_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning(f"protocol repo dir unavailable: {e}")
+            return None
+        stem = Path(legacy_protocol_path).stem or "Imported protocol"
+        path = target_dir / f"{stem}.json"
+        suffix = 2
+        while path.exists():
+            path = target_dir / f"{stem} ({suffix}).json"
+            suffix += 1
+        if not self._write_protocol_json(str(path), parent=self):
+            return None
+        return str(path)
 
     def _confirm_legacy_device_match(self, electrode_to_channel,
                                      device_svg_path) -> bool:

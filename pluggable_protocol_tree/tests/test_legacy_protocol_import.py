@@ -14,24 +14,32 @@ from pluggable_protocol_tree.services.legacy_protocol_import.consts import (
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
 
-# Sample Device Folders used by these tests; absent on most machines, in
+# Roots that hold sample Device Folders; absent on most machines, in
 # which case the tests that depend on them skip (see `_device` below).
 # Developer-machine paths -- deliberately not in the package's consts.py,
-# which ships as part of the runtime package.
-LEGACY_SAMPLE_DEVICE_FOLDERS = (
+# which ships as part of the runtime package. Folders are discovered by
+# globbing rather than listed by exact name, so renaming a sample folder
+# (which has happened) narrows a prefix match instead of silently turning
+# the tests into skips.
+_LEGACY_SAMPLE_ROOTS = (
     "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/August 2022 Quanterix test",
-    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/Duo Fluo v2 28x",
-    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/Zika-4d Mirror",
-    "C:/Users/Info/Documents/MicroDrop/devices/DMF-90-pin-array",
+    "legacy_protocols",
+    "C:/Users/Info/Documents/MicroDrop/devices",
+)
+
+LEGACY_SAMPLE_DEVICE_FOLDERS = tuple(
+    folder
+    for root in _LEGACY_SAMPLE_ROOTS
+    for folder in sorted(glob.glob(os.path.join(root, "*")))
+    if os.path.isfile(os.path.join(folder, DEVICE_SVG_FILENAME))
 )
 
 
 def _device(folder_name):
+    """The sample folder whose name starts with ``folder_name`` (prefix
+    match survives suffix renames like 'Zika-4d Mirror' -> '... test')."""
     for folder in LEGACY_SAMPLE_DEVICE_FOLDERS:
-        if os.path.basename(folder) == folder_name and os.path.isdir(folder):
+        if os.path.basename(folder).startswith(folder_name):
             return folder
     pytest.skip(f"sample folder {folder_name!r} not present")
 

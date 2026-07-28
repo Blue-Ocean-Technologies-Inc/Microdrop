@@ -32,6 +32,18 @@ def _is_device_folder(path: str) -> bool:
     return os.path.isfile(os.path.join(path, DEVICE_SVG_FILENAME))
 
 
+def legacy_device_display_name(device_svg_path: str) -> str:
+    """The device name a legacy SVG path implies.
+
+    Inside a Device Folder the SVG is always literally ``device.svg`` and
+    the folder carries the device's name, so use the parent directory. A
+    hand-picked SVG named anything else names the device itself."""
+    path = os.path.normpath(device_svg_path)
+    if os.path.basename(path) == DEVICE_SVG_FILENAME:
+        return os.path.basename(os.path.dirname(path))
+    return os.path.splitext(os.path.basename(path))[0]
+
+
 def _protocol_paths_in(device_dir: str) -> list[str]:
     """Every file under ``protocols/`` that actually reads as a legacy
     protocol. Directory listings really do contain unrelated files."""
