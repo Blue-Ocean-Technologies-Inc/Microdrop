@@ -40,3 +40,63 @@ LEGACY_SAMPLE_DEVICE_FOLDERS = (
     "legacy_protocols/Zika-4d Mirror",
     "C:/Users/Info/Documents/MicroDrop/devices/DMF-90-pin-array",
 )
+
+# --- new-format column / compound-field ids written by the converter ---
+NAME_COLUMN_ID = "name"
+VOLTAGE_COLUMN_ID = "voltage"
+FREQUENCY_COLUMN_ID = "frequency"
+DURATION_COLUMN_ID = "duration_s"
+ELECTRODES_COLUMN_ID = "electrodes"
+ROUTES_COLUMN_ID = "routes"
+ROUTE_REPETITIONS_COLUMN_ID = "route_repetitions"
+REPEAT_DURATION_COLUMN_ID = "repeat_duration"
+REPEAT_DURATION_CONTROLS_FLAG = "repeat_duration_controls"
+TRAIL_LENGTH_COLUMN_ID = "trail_length"
+MESSAGE_PROMPT_COLUMN_ID = "message_prompt"
+VOLUME_THRESHOLD_COLUMN_ID = "volume_threshold"
+VIDEO_COLUMN_ID = "video"
+REPETITIONS_COLUMN_ID = "repetitions"
+SET_MAGNET_FIELD_ID = "set_magnet"
+MAGNET_ON_FIELD_ID = "magnet_on"
+SET_TEMPERATURE_FIELD_ID = "set_temperature"
+TARGET_TEMPERATURE_FIELD_ID = "target_temperature_c"
+
+# --- legacy field names, as they appear inside each plugin's value dict ---
+LEGACY_VOLTAGE_FIELD = "Voltage (V)"
+LEGACY_FREQUENCY_FIELD = "Frequency (Hz)"
+LEGACY_DURATION_FIELD = "Duration (s)"
+LEGACY_ELECTRODE_STATES_FIELD = "electrode_states"
+LEGACY_DROP_ROUTES_FIELD = "drop_routes"
+LEGACY_ROUTE_REPEATS_FIELD = "route_repeats"
+LEGACY_REPEAT_DURATION_FIELD = "repeat_duration_s"
+LEGACY_TRAIL_LENGTH_FIELD = "trail_length"
+LEGACY_LABEL_FIELD = "label"
+LEGACY_MESSAGE_FIELD = "message"
+LEGACY_VOLUME_THRESHOLD_FIELD = "volume_threshold"
+LEGACY_VIDEO_ENABLED_FIELD = "video_enabled"
+LEGACY_MAGNET_FIELD = "Magnet"
+LEGACY_HEATER_FIELD = "Heater"
+LEGACY_HEATER_TEMPERATURE_FIELD = "Heater_temperature"
+
+# --- drop_routes DataFrame columns ---
+LEGACY_ROUTE_INDEX_COLUMN = "route_i"
+LEGACY_ROUTE_ELECTRODE_COLUMN = "electrode_i"
+LEGACY_ROUTE_TRANSITION_COLUMN = "transition_i"
+
+# --- legacy fields with no equivalent; recorded in the report and dropped ---
+DROPPED_LEGACY_FIELDS = {
+    MR_BOX_PLUGIN: (
+        "Pump", "Pump_frequency_(hz)", "Pump_duration_(s)", "Measure_PMT",
+        "Measurement_duration_(s)", "Auto pump electrode",
+        "Magnet_height(mm)",
+    ),
+    USER_PROMPT_PLUGIN: ("schema",),
+    PLATEAU_DETECTION_PLUGIN: (
+        "Plateau Detection", "Check Split", "Calibrate Threshold",
+    ),
+}
+
+# --- volume_threshold: legacy 0-1 fraction -> new 0-100 integer percent ---
+VOLUME_THRESHOLD_PERCENT_SCALE = 100
+VOLUME_THRESHOLD_MIN_PERCENT = 0
+VOLUME_THRESHOLD_MAX_PERCENT = 100
