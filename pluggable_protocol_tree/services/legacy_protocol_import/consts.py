@@ -100,3 +100,6 @@ DROPPED_LEGACY_FIELDS = {
 VOLUME_THRESHOLD_PERCENT_SCALE = 100
 VOLUME_THRESHOLD_MIN_PERCENT = 0
 VOLUME_THRESHOLD_MAX_PERCENT = 100
+
+# --- name of the wrapper group that carries a repeated protocol's n_repeats ---
+IMPORTED_PROTOCOL_GROUP_NAME = "Imported protocol"

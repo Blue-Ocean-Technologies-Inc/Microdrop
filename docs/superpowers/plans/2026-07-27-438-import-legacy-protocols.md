@@ -905,7 +905,9 @@ The full mapping is section 2 of the spec. Points that are easy to get wrong:
 - `drop_routes` is a DataFrame with `route_i`, `electrode_i`, `transition_i`. Group by `route_i`, sort each group by `transition_i`, take `electrode_i`. Apply the same unresolved-id filtering. Skip a route entirely if filtering empties it.
 - `step_label_plugin.label` is usually blank; fall back to `Step {index + 1}`.
 - Magnet comes from either `mr_box_plugin` or `zika_box_plugin`. When both are present, `zika_box_plugin` wins and the shadowed one is recorded as dropped.
-- `set_magnet` / `set_temperature` are the compound gates. Legacy always commanded the peripheral, so set the gate True whenever the source plugin is present on the step.
+- The two compound gates behave **differently**, because their columns differ:
+  - **Magnet** has three fields — `set_magnet` (gate), `magnet_on` (engaged or not), `magnet_height_mm`. The gate goes True whenever the source plugin is present, and the legacy `Magnet` boolean goes into `magnet_on`.
+  - **Heater** has only `set_temperature` (gate), `target_temperature_c`, `tolerance_c` — there is **no** `heater_on` field. So the legacy `Heater` boolean maps *directly onto the gate*: `set_temperature = bool(Heater)`. Do NOT force the gate True whenever `zika_box_plugin` is present. Doing so would drive the heater to `Heater_temperature` on all 446 steps where `Heater` is False — and those setpoints are not all ambient (170 steps carry 40 °C, 44 carry 41 °C, 14 carry 65 °C), so it would actively heat samples on steps whose protocol had the heater off.
 - Everything in `DROPPED_LEGACY_FIELDS` is recorded per step and not mapped.
 
 - [ ] **Step 1: Add the mapping tables to consts.py**

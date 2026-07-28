@@ -86,7 +86,7 @@ case where the user has a different device loaded.
 | `dropbot_plugin` `volume_threshold` | float 0–1 | `volume_threshold` | `round(v * 100)`, clamped 0–100 |
 | `dmf_device_ui_plugin` `video_enabled` | bool | `video` | direct |
 | `mr_box_plugin` `Magnet` / `zika_box_plugin` `Magnet` | bool | `set_magnet` = True, `magnet_on` = value | height left at its "Default" sentinel |
-| `zika_box_plugin` `Heater` | bool | `set_temperature` | direct |
+| `zika_box_plugin` `Heater` | bool | `set_temperature` | direct — the heater column has no `heater_on` field, so the gate itself carries on/off |
 | `zika_box_plugin` `Heater_temperature` | float | `target_temperature_c` | direct; `tolerance_c` left at default |
 | `Protocol.n_repeats` | int | `repetitions` on a wrapper group | see below; only when > 1 |
 
