@@ -29,13 +29,14 @@ from pyface.qt.QtWidgets import (
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    CANCEL, NO, YES, confirm, error as error_dialog,
+    CANCEL, NO, YES, choose, confirm, error as error_dialog,
     information as information_dialog, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
+from microdrop_utils.file_handler import next_free_numbered_path
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
@@ -704,9 +705,13 @@ class ProtocolTreePane(QWidget):
 
         device_name = legacy_device_display_name(device_svg_path)
         # Prefer the repo copy from here on: the mismatch dialog's YES then
-        # loads the same file Device > Load would offer later.
+        # loads the same file Device > Load would offer later. Re-derive the
+        # name from the result -- a collision rename (e.g. "Name (2).svg")
+        # must also rename the protocol folder, which the save/load dialogs
+        # later locate by the active SVG's stem.
         device_svg_path = self._import_device_into_repo(
             device_svg_path, device_name)
+        device_name = legacy_device_display_name(device_svg_path)
 
         if not self._confirm_legacy_device_match(
                 electrode_to_channel, device_svg_path):
@@ -757,9 +762,14 @@ class ProtocolTreePane(QWidget):
         ``<device_name>.svg`` so Device > Load can find it later.
 
         Returns the repo copy's path when one exists or was created, else
-        the original path. Best-effort: no Redis (headless), no published
-        repo dir, or a name collision with a *different* device leaves the
-        original path in use rather than failing the import."""
+        the original path. When the repo already holds a *different*
+        device under the same name, the user chooses between saving under
+        a numbered rename and not saving this device at all -- two
+        genuinely different physical devices can share a Device Folder
+        name, and clobbering the repo copy would corrupt the other one.
+        Best-effort otherwise: no Redis (headless) or no published repo
+        dir leaves the original path in use rather than failing the
+        import."""
         try:
             repo_dir = app_globals.get(DEVICE_REPO_DIR_KEY)
         except Exception as e:
@@ -773,10 +783,10 @@ class ProtocolTreePane(QWidget):
             if destination.exists():
                 if destination.read_bytes() == source.read_bytes():
                     return str(destination)
-                logger.warning(
-                    f"device repo already has a different "
-                    f"{destination.name}; keeping {source} for this import")
-                return device_svg_path
+                destination = self._choose_device_collision_rename(
+                    source, destination)
+                if destination is None:
+                    return device_svg_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             logger.info(f"imported legacy device into repo: {destination}")
@@ -785,6 +795,28 @@ class ProtocolTreePane(QWidget):
             logger.warning(f"could not import device into repo: {e}",
                            exc_info=True)
             return device_svg_path
+
+    def _choose_device_collision_rename(self, source: Path,
+                                        destination: Path):
+        """Ask how to handle a repo entry of the same name but different
+        content. Returns the numbered rename to save under, or None to
+        skip saving this device (Cancel and closing the dialog also
+        skip)."""
+        renamed = next_free_numbered_path(destination)
+        save_choice = f"Save as {renamed.name}"
+        skip_choice = "Don't save this device"
+        choice = choose(
+            parent=self,
+            title="Device already exists",
+            message=f"The device repo already has a different "
+                    f"{destination.name}.",
+            informative=f"Two devices can share a folder name. Saving "
+                        f"{source} over the existing repo copy would "
+                        f"corrupt the other device, so it can be saved "
+                        f"under a new name instead.",
+            choices=(save_choice, skip_choice),
+        )
+        return renamed if choice == save_choice else None
 
     def _save_imported_protocol(self, legacy_protocol_path: str,
                                 device_name: str):
@@ -803,11 +835,7 @@ class ProtocolTreePane(QWidget):
             logger.warning(f"protocol repo dir unavailable: {e}")
             return None
         stem = Path(legacy_protocol_path).stem or "Imported protocol"
-        path = target_dir / f"{stem}.json"
-        suffix = 2
-        while path.exists():
-            path = target_dir / f"{stem} ({suffix}).json"
-            suffix += 1
+        path = next_free_numbered_path(target_dir / f"{stem}.json")
         if not self._write_protocol_json(str(path), parent=self):
             return None
         return str(path)
