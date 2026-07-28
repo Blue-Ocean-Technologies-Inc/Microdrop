@@ -14,9 +14,9 @@ PPT-10.1 for the full wiring rules.
 
 from __future__ import annotations
 
+import filecmp
 import json
 import os
-import shutil
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -36,7 +36,7 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
-from microdrop_utils.file_handler import next_free_numbered_path
+from microdrop_utils.file_handler import next_free_numbered_path, safe_copy_file
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
@@ -781,14 +781,14 @@ class ProtocolTreePane(QWidget):
         destination = Path(repo_dir) / f"{device_name}.svg"
         try:
             if destination.exists():
-                if destination.read_bytes() == source.read_bytes():
+                if filecmp.cmp(destination, source, shallow=False):
                     return str(destination)
                 destination = self._choose_device_collision_rename(
                     source, destination)
                 if destination is None:
                     return device_svg_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+            safe_copy_file(source, destination)
             logger.info(f"imported legacy device into repo: {destination}")
             return str(destination)
         except Exception as e:
@@ -796,26 +796,29 @@ class ProtocolTreePane(QWidget):
                            exc_info=True)
             return device_svg_path
 
-    def _choose_device_collision_rename(self, source: Path,
+    @staticmethod
+    def _choose_device_collision_rename(source: Path,
                                         destination: Path):
         """Ask how to handle a repo entry of the same name but different
         content. Returns the numbered rename to save under, or None to
         skip saving this device (Cancel and closing the dialog also
         skip)."""
         renamed = next_free_numbered_path(destination)
-        save_choice = f"Save as {renamed.name}"
-        skip_choice = "Don't save this device"
+
+        save_choice = "Save Copy"
+        skip_choice = "Don't Save"
+
         choice = choose(
-            parent=self,
-            title="Device already exists",
-            message=f"The device repo already has a different "
-                    f"{destination.name}.",
-            informative=f"Two devices can share a folder name. Saving "
-                        f"{source} over the existing repo copy would "
-                        f"corrupt the other device, so it can be saved "
-                        f"under a new name instead.",
+            parent=None,
+            title="Device Name Conflict",
+            message=(
+                f"A different device named <b>{destination.name}</b> already exists in the device repository.<br><br>"
+                f"Overwriting it could break existing protocols. To safely save your "
+                f"<a href='{source.as_uri()}' style='color: #0078d7;'>{source}</a>, we can save a renamed copy <b>{renamed.name}</b>."
+            ),
             choices=(save_choice, skip_choice),
         )
+
         return renamed if choice == save_choice else None
 
     def _save_imported_protocol(self, legacy_protocol_path: str,
