@@ -15,6 +15,7 @@ PPT-10.1 for the full wiring rules.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from pyface.qt.QtCore import (
@@ -22,23 +23,29 @@ from pyface.qt.QtCore import (
 )
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel,
-    QProgressDialog, QToolButton, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout,
+    QLabel, QProgressDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, YES, confirm, error as error_dialog, success,
+    CANCEL, NO, YES, confirm, error as error_dialog,
+    information as information_dialog, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY
+from device_viewer.consts import DEVICE_SVG_PATH_KEY, DEVICE_VIEWER_LOAD_SVG_REQUEST
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, PROTOCOL_FILE_DIALOG_FILTER)
 from pluggable_protocol_tree.models.row import GroupRow
+from pluggable_protocol_tree.services.legacy_protocol_import import (
+    build_protocol_payload, convert_legacy_protocol,
+    read_device_svg_channel_map, read_legacy_protocol,
+)
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
@@ -49,6 +56,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
+from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
 from pluggable_protocol_tree.views.protocol_validator_presenter import (
     confirm_report,
 )
@@ -654,6 +662,98 @@ class ProtocolTreePane(QWidget):
         if path:
             self.protocol_state_tracker.set_loaded(path)
             self.protocol_state_tracker.reseed_baseline(self.manager)
+
+    @attempt_func_execution_with_error_dialog
+    def import_legacy_protocol_dialog(self):
+        """Convert a Python 2 MicroDrop protocol into this tree.
+
+        The result is left unsaved on purpose: the user reviews the
+        conversion report, then chooses Save As."""
+        if not self._confirm_proceed_or_abort():
+            return
+        dialog = LegacyImportDialog(parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        device_svg_path, protocol_path = dialog.selected_paths()
+        if not device_svg_path or not protocol_path:
+            error_dialog(parent=self, title="Import error",
+                         message="Select both a device SVG and a protocol "
+                                 "file.")
+            return
+
+        try:
+            electrode_to_channel = read_device_svg_channel_map(
+                device_svg_path)
+        except Exception as e:
+            error_dialog(parent=self, title="Import error",
+                         message=f"Could not read {device_svg_path}:\n{e}")
+            return
+        if not electrode_to_channel:
+            error_dialog(parent=self, title="Import error",
+                         message=f"{device_svg_path} contains no electrodes "
+                                 f"with channel assignments.")
+            return
+
+        if not self._confirm_legacy_device_match(
+                electrode_to_channel, device_svg_path):
+            return
+
+        try:
+            legacy_protocol = read_legacy_protocol(protocol_path)
+        except Exception as e:
+            error_dialog(parent=self, title="Import error",
+                         message=f"Could not read {protocol_path}:\n{e}")
+            return
+
+        converted = convert_legacy_protocol(
+            legacy_protocol, electrode_to_channel)
+        columns = list(self.manager.columns)
+        payload = build_protocol_payload(converted, columns)
+
+        # The legacy device's own map is authoritative for this protocol,
+        # and a device load requested above has not landed yet.
+        report = validate_protocol(payload, columns, electrode_to_channel)
+        if not report.is_empty:
+            if confirm_report(report, parent=self) != YES:
+                return
+        self.manager.set_state_from_json(
+            payload, columns=columns, report_findings=False)
+
+        information_dialog(parent=self, title="Legacy protocol imported",
+                            message=converted.report.render())
+
+    def _confirm_legacy_device_match(self, electrode_to_channel,
+                                      device_svg_path) -> bool:
+        """True when the import should proceed.
+
+        A protocol stores electrode *ids*, so a mismatched device makes the
+        import meaningless. Offers to switch the Device viewer to the
+        legacy device over pub/sub; YES loads it, NO imports anyway
+        (dropping the unknown electrodes), CANCEL aborts."""
+        if self.device_viewer_sync is None:
+            return True
+        loaded = set(self.device_viewer_sync.electrode_ids_channels_map)
+        if not loaded:
+            return True
+        unknown = set(electrode_to_channel) - loaded
+        if not unknown:
+            return True
+        choice = confirm(
+            self,
+            f"The loaded device does not have {len(unknown)} of the legacy "
+            f"device's electrodes.\n\n"
+            f"Load {os.path.basename(device_svg_path)} into the Device "
+            f"viewer first?\n\n"
+            f"Choosing No imports anyway and drops the unknown electrodes.",
+            title="Device mismatch",
+            cancel=True,
+        )
+        if choice == CANCEL:
+            return False
+        if choice == YES:
+            publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
+                             message=device_svg_path)
+        return True
 
     # --- experiment-bar handlers ------------------------------------
     @attempt_func_execution_with_error_dialog
