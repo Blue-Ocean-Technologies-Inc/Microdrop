@@ -25,7 +25,12 @@
 - Constants live in the subpackage's own `consts.py` in `UPPER_SNAKE_CASE`. Never define a constant mid-file.
 - Descriptive names throughout; spell out units (`target_temperature_c`, not `temp`).
 - Commit messages follow commitizen: imperative subject ~50 chars including the prefix, body explaining why.
-- **Testing scope:** unit tests cover the Qt-free service package only (Tasks 1–6). Do **not** write Qt/GUI tests for Tasks 7–9 — the GUI is tested manually. Do not run the full test suite; run only the test file for the task at hand.
+- **Testing scope — READ THIS BEFORE ANY TASK.** The user tests this feature through the GUI and has asked for minimal test effort. This overrides the per-task test steps written below:
+  - **Ignore every "Write the failing test" step and every `pytest`-based verification step in Tasks 1–5.** Do not create `test_legacy_pickle_reader.py`, `test_device_svg_channel_map.py`, `test_device_folder_scanner.py`, `test_protocol_converter.py`, or `test_legacy_payload_builder.py`. The test code in those steps remains in this document only as an executable specification of expected behaviour — read it to understand what the code must do, then implement the code and move on.
+  - **Each of Tasks 1–5 is verified by a smoke check instead:** a single `python -c` invocation that imports the new module and exercises it once against a real sample file, printing the result. Each task's steps give the exact command.
+  - **Task 6 writes the one and only test file,** `pluggable_protocol_tree/tests/test_legacy_protocol_import.py`, holding roughly six end-to-end assertions over the real sample folders. That file is the whole automated safety net.
+  - **Tasks 7–9 get no automated tests at all** — import and construction smoke checks only, then the manual GUI checklist at the end of Task 9.
+  - Never run the full test suite. Run only `test_legacy_protocol_import.py` when it exists.
 
 **Sample data.** Tests read real legacy files from these paths, and must **skip** (not fail) when a path is absent:
 
@@ -2256,3 +2261,215 @@ Launch the app and check:
 8. With a *different* device loaded, importing warns about the mismatch. Choosing Yes switches the Device viewer to the legacy device (Task 8's topic); choosing No imports anyway and the report lists the dropped electrodes; choosing Cancel aborts with the tree untouched.
 9. Importing `droplet movement` (whose `n_repeats` is 120) yields one group named "Imported protocol" with Reps 120 and its steps nested inside.
 10. Importing a Zika protocol with the heater plugin *disabled* still succeeds, and the report lists `set_temperature` / `target_temperature_c` as dropped.
+
+---
+
+## Appendix A: Reduced verification (authoritative over Tasks 1–9's test steps)
+
+The user tests through the GUI, so automated coverage is deliberately thin. Use the smoke
+commands below in place of each task's `pytest` steps. Every command assumes the prefix:
+
+```
+cd "C:/Users/Info/PycharmProjects/pixi-microdrop/microdrop-py" && pixi run bash -c "cd src && <command>"
+```
+
+Sample root, referred to below as `<SAMPLES>`:
+`C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/legacy_protocols`
+
+**Task 1 smoke** — reads a real protocol and every nested blob. Expect `steps 11 version
+0.2.0`, a list of plugin names, and `is_legacy True`:
+
+```python
+from pluggable_protocol_tree.services.legacy_protocol_import.legacy_pickle_reader import (
+    is_legacy_protocol_file, read_legacy_protocol)
+path = "<SAMPLES>/Duo Fluo v2 28x/protocols/Feb6"
+protocol = read_legacy_protocol(path)
+print("steps", len(protocol.steps), "version", protocol.version)
+print("plugins", sorted(protocol.steps[0].plugin_data))
+print("is_legacy", is_legacy_protocol_file(path))
+```
+
+**Task 2 smoke** — expect `126 53`:
+
+```python
+from pluggable_protocol_tree.services.legacy_protocol_import.device_svg_channel_map import (
+    read_device_svg_channel_map)
+channel_map = read_device_svg_channel_map("<SAMPLES>/Duo Fluo v2 28x/device.svg")
+print(len(channel_map), channel_map.get("path609"))
+```
+
+**Task 3 smoke** — expect three devices; the Quanterix one must exclude the `.7z`
+(31 protocols, not 32):
+
+```python
+from pluggable_protocol_tree.services.legacy_protocol_import.device_folder_scanner import (
+    scan_for_device_folders)
+for device in scan_for_device_folders("<SAMPLES>"):
+    print(device.name, len(device.protocol_paths))
+```
+
+**Task 4 smoke** — construct a `ConversionReport(step_count=3)`, call `record_dropped`
+twice with the same field name, and print `render()`. Expect the dropped section to show
+that field with a count of 2.
+
+**Task 5 smoke** — converts a real protocol end to end. Expect `voltage` 120 as an `int`,
+`frequency` 10000 as an `int`, a populated `electrodes` list, and a report naming the
+dropped `mr_box_plugin` fields:
+
+```python
+from pluggable_protocol_tree.services.legacy_protocol_import.device_svg_channel_map import (
+    read_device_svg_channel_map)
+from pluggable_protocol_tree.services.legacy_protocol_import.legacy_pickle_reader import (
+    read_legacy_protocol)
+from pluggable_protocol_tree.services.legacy_protocol_import.protocol_converter import (
+    convert_legacy_protocol)
+root = "<SAMPLES>/Duo Fluo v2 28x"
+converted = convert_legacy_protocol(
+    read_legacy_protocol(root + "/protocols/Feb6"),
+    read_device_svg_channel_map(root + "/device.svg"))
+print(converted.step_values[0])
+print(converted.report.render())
+```
+
+**Task 6** — write `pluggable_protocol_tree/tests/test_legacy_protocol_import.py` with
+exactly these six tests, and no others:
+
+```python
+"""End-to-end checks for legacy protocol import, against the real samples."""
+import glob
+import os
+
+import pytest
+
+from pluggable_protocol_tree.consts import ELECTRODE_TO_CHANNEL_KEY
+from pluggable_protocol_tree.services.legacy_protocol_import import (
+    build_protocol_payload, convert_legacy_protocol, is_legacy_protocol_file,
+    read_device_svg_channel_map, read_legacy_protocol, scan_for_device_folders,
+)
+from pluggable_protocol_tree.services.legacy_protocol_import.consts import (
+    DEVICE_SVG_FILENAME, LEGACY_SAMPLE_DEVICE_FOLDERS, PROTOCOLS_DIR_NAME,
+)
+from pluggable_protocol_tree.services.protocol_validator import validate_protocol
+
+
+def _device(folder_name):
+    for folder in LEGACY_SAMPLE_DEVICE_FOLDERS:
+        if os.path.basename(folder) == folder_name and os.path.isdir(folder):
+            return folder
+    pytest.skip(f"sample folder {folder_name!r} not present")
+
+
+def _columns():
+    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+    from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.message_prompt_column import (
+        make_message_prompt_column,
+    )
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.repeat_duration_column import (
+        make_repeat_duration_column,
+    )
+    from pluggable_protocol_tree.builtins.repetitions_column import (
+        make_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.route_repetitions_column import (
+        make_route_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.trail_length_column import (
+        make_trail_length_column,
+    )
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    return [make_type_column(), make_id_column(), make_name_column(),
+            make_duration_column(), make_electrodes_column(),
+            make_routes_column(), make_repetitions_column(),
+            make_route_repetitions_column(), make_repeat_duration_column(),
+            make_trail_length_column(), make_message_prompt_column()]
+
+
+def _convert_all_in(folder_name):
+    folder = _device(folder_name)
+    channel_map = read_device_svg_channel_map(
+        os.path.join(folder, DEVICE_SVG_FILENAME))
+    converted_all = []
+    for path in sorted(glob.glob(
+            os.path.join(folder, PROTOCOLS_DIR_NAME, "*"))):
+        if os.path.isfile(path) and is_legacy_protocol_file(path):
+            converted_all.append(convert_legacy_protocol(
+                read_legacy_protocol(path), channel_map))
+    return converted_all
+
+
+def test_every_sample_protocol_converts():
+    """Nothing in the real corpus raises, and every protocol yields steps."""
+    total = 0
+    for folder in LEGACY_SAMPLE_DEVICE_FOLDERS:
+        if not os.path.isdir(folder):
+            continue
+        for converted in _convert_all_in(os.path.basename(folder)):
+            assert converted.step_values
+            total += 1
+    if not total:
+        pytest.skip("no sample folders present")
+
+
+def test_scanner_excludes_non_protocol_files():
+    root = os.path.dirname(_device("August 2022 Quanterix test"))
+    quanterix = next(device for device in scan_for_device_folders(root)
+                     if device.name == "August 2022 Quanterix test")
+    assert all(not path.lower().endswith(".7z")
+               for path in quanterix.protocol_paths)
+
+
+def test_scalar_fields_convert_with_the_right_types_and_units():
+    folder = _device("Duo Fluo v2 28x")
+    converted = convert_legacy_protocol(
+        read_legacy_protocol(os.path.join(folder, PROTOCOLS_DIR_NAME, "Feb6")),
+        read_device_svg_channel_map(
+            os.path.join(folder, DEVICE_SVG_FILENAME)))
+    values = converted.step_values[0]
+    assert isinstance(values["voltage"], int) and values["voltage"] == 120
+    assert isinstance(values["frequency"], int)
+    assert values["frequency"] == 10000
+    assert 0 <= values["volume_threshold"] <= 100
+    assert values["electrodes"]
+
+
+def test_zika_protocols_produce_routes():
+    """Routes are absent from Duo Fluo, so this folder is the one that catches
+    a broken route conversion."""
+    steps_with_routes = sum(
+        1 for converted in _convert_all_in("Zika-4d Mirror")
+        for values in converted.step_values if values.get("routes"))
+    assert steps_with_routes > 0
+
+
+def test_dangling_electrodes_are_reported_not_raised():
+    """This device really did lose two electrodes its protocols still name."""
+    unresolved = set()
+    for converted in _convert_all_in("August 2022 Quanterix test"):
+        unresolved.update(converted.report.unresolved_electrode_ids)
+    assert {"path1651", "path1752"} <= unresolved
+
+
+def test_payload_round_trips_and_validates():
+    folder = _device("Duo Fluo v2 28x")
+    channel_map = read_device_svg_channel_map(
+        os.path.join(folder, DEVICE_SVG_FILENAME))
+    converted = convert_legacy_protocol(
+        read_legacy_protocol(os.path.join(folder, PROTOCOLS_DIR_NAME, "Feb6")),
+        channel_map)
+    columns = _columns()
+    payload = build_protocol_payload(converted, columns)
+    assert payload["protocol_metadata"][ELECTRODE_TO_CHANNEL_KEY] == channel_map
+    assert len(payload["rows"]) == len(converted.step_values)
+    assert validate_protocol(payload, columns, channel_map).is_empty
+```
+
+Run: `pytest pluggable_protocol_tree/tests/test_legacy_protocol_import.py -v`. Expect 6
+passing (or skipped when the sample folders are absent).
+
+**Tasks 7–9** — keep the import/construction smoke checks already written in those tasks
+(they are `python -c` invocations, not pytest) plus the Task 9 manual GUI checklist. Add
+no automated tests.
