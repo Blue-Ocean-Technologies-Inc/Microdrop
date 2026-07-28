@@ -6,6 +6,13 @@ DEVICE_SVG_FILENAME = "device.svg"
 PROTOCOLS_DIR_NAME = "protocols"
 DEVICES_DIR_NAME = "devices"
 
+# --- default root path offered by the import dialog ---
+DEFAULT_MICRODROP_DIR_NAME = "MicroDrop"
+DEFAULT_DOCUMENTS_DIR_NAME = "Documents"
+
+# --- import dialog: sentinel for "nothing selected" in a combo box ---
+NO_SELECTION_INDEX = -1
+
 # --- legacy plugin names, as they appear in Step.plugin_data ---
 ELECTRODE_CONTROLLER_PLUGIN = "microdrop.electrode_controller_plugin"
 DROPLET_PLANNING_PLUGIN = "droplet_planning_plugin"
@@ -30,16 +37,11 @@ REMOVED_PANDAS_INDEX_CLASSES = frozenset(
 # --- the legacy protocol format version this importer understands ---
 SUPPORTED_LEGACY_PROTOCOL_VERSION = "0.2.0"
 
-# --- sample Device Folders used by the unit tests; absent on most machines ---
-LEGACY_SAMPLE_DEVICE_FOLDERS = (
-    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/August 2022 Quanterix test",
-    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/Duo Fluo v2 28x",
-    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
-    "legacy_protocols/Zika-4d Mirror",
-    "C:/Users/Info/Documents/MicroDrop/devices/DMF-90-pin-array",
-)
+# --- probe unpickling (is_legacy_protocol_file): module prefixes allowed to
+# resolve during a directory-scan probe, beyond the stubbed legacy prefixes.
+# Keeps merely browsing to a folder from executing arbitrary __reduce__
+# payloads in unrelated files that happen to sit in a protocols/ directory. ---
+LEGACY_PROBE_ALLOWED_MODULE_PREFIXES = ("pandas", "numpy", "builtins")
 
 # --- new-format column / compound-field ids written by the converter ---
 NAME_COLUMN_ID = "name"

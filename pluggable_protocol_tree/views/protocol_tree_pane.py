@@ -673,8 +673,10 @@ class ProtocolTreePane(QWidget):
             return
         dialog = LegacyImportDialog(parent=self)
         if dialog.exec() != QDialog.Accepted:
+            dialog.deleteLater()
             return
         device_svg_path, protocol_path = dialog.selected_paths()
+        dialog.deleteLater()
         if not device_svg_path or not protocol_path:
             error_dialog(parent=self, title="Import error",
                          message="Select both a device SVG and a protocol "
@@ -718,33 +720,61 @@ class ProtocolTreePane(QWidget):
                 return
         self.manager.set_state_from_json(
             payload, columns=columns, report_findings=False)
+        # The import deliberately leaves the tree unsaved -- it does not
+        # record the imported payload as a known on-disk file -- but the
+        # tracker still points at whatever file was open before the
+        # import. Without this reset, a plain Save (not Save As) would
+        # silently overwrite that previous file with the imported
+        # protocol.
+        self.protocol_state_tracker.reset()
 
-        information_dialog(parent=self, title="Legacy protocol imported",
-                            message=converted.report.render())
+        information_dialog(
+            parent=self, title="Legacy protocol imported", cancel=False,
+            message=f"Imported {len(converted.step_values)} steps.",
+            detail=converted.report.render())
 
     def _confirm_legacy_device_match(self, electrode_to_channel,
-                                      device_svg_path) -> bool:
+                                     device_svg_path) -> bool:
         """True when the import should proceed.
 
-        A protocol stores electrode *ids*, so a mismatched device makes the
-        import meaningless. Offers to switch the Device viewer to the
+        A protocol stores electrode *ids* and actuates them via whatever
+        channel the device currently wires them to, so a mismatch on
+        either front makes the import meaningless (or worse, actuates
+        the wrong physical electrodes): electrodes the loaded device
+        doesn't have at all, and electrodes both devices share but wire
+        to different channels. Offers to switch the Device viewer to the
         legacy device over pub/sub; YES loads it, NO imports anyway
-        (dropping the unknown electrodes), CANCEL aborts."""
+        (dropping the unknown electrodes and keeping the live channel
+        assignments for conflicting ones), CANCEL aborts."""
         if self.device_viewer_sync is None:
             return True
-        loaded = set(self.device_viewer_sync.electrode_ids_channels_map)
+        loaded = dict(self.device_viewer_sync.electrode_ids_channels_map)
         if not loaded:
             return True
-        unknown = set(electrode_to_channel) - loaded
-        if not unknown:
+        missing = set(electrode_to_channel) - set(loaded)
+        conflicting = {
+            electrode_id for electrode_id, channel in electrode_to_channel.items()
+            if electrode_id in loaded and loaded[electrode_id] != channel
+        }
+        if not missing and not conflicting:
             return True
+        problems = []
+        if missing:
+            problems.append(
+                f"{len(missing)} electrode(s) the loaded device does not have")
+        if conflicting:
+            problems.append(
+                f"{len(conflicting)} electrode(s) wired to a different "
+                f"channel on the loaded device")
         choice = confirm(
             self,
-            f"The loaded device does not have {len(unknown)} of the legacy "
-            f"device's electrodes.\n\n"
+            f"The loaded device does not match the legacy device: "
+            f"{'; '.join(problems)}.\n\n"
             f"Load {os.path.basename(device_svg_path)} into the Device "
             f"viewer first?\n\n"
-            f"Choosing No imports anyway and drops the unknown electrodes.",
+            f"Choosing No imports anyway, dropping the unknown electrodes "
+            f"and keeping the loaded device's channel assignments for the "
+            f"conflicting ones.",
             title="Device mismatch",
             cancel=True,
         )
@@ -752,7 +782,7 @@ class ProtocolTreePane(QWidget):
             return False
         if choice == YES:
             publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
-                             message=device_svg_path)
+                            message=device_svg_path)
         return True
 
     # --- experiment-bar handlers ------------------------------------

@@ -261,17 +261,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         """Load the SVG at ``message`` (a file path) into the device view.
 
         Lets another plugin switch devices over pub/sub instead of reaching
-        into this pane."""
+        into this pane. This handler runs on the Dramatiq listener's worker
+        thread, but rebuilding the electrode scene touches Qt, so the actual
+        work is marshalled to the GUI thread via ``GUI.invoke_later``.
+        ``_set_device_view_from_svg`` already handles and reports its own
+        exceptions, so there is nothing left to catch here."""
         svg_path = str(message or "").strip()
         if not svg_path or not os.path.isfile(svg_path):
             logger.warning(f"load-svg request for missing file: {svg_path!r}")
             return
-        try:
-            self._set_device_view_from_svg(svg_path)
-        except Exception as e:
-            logger.warning(
-                f"could not load requested device svg {svg_path!r}: {e}",
-                exc_info=True)
+        GUI.invoke_later(self._set_device_view_from_svg, svg_path)
 
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")

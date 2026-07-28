@@ -19,12 +19,11 @@ from logger.logger_service import get_logger
 from pluggable_protocol_tree.services.legacy_protocol_import import (
     LegacyDeviceFolder, scan_for_device_folders,
 )
+from pluggable_protocol_tree.services.legacy_protocol_import.consts import (
+    DEFAULT_DOCUMENTS_DIR_NAME, DEFAULT_MICRODROP_DIR_NAME, NO_SELECTION_INDEX,
+)
 
 logger = get_logger(__name__)
-
-DEFAULT_MICRODROP_DIR_NAME = "MicroDrop"
-DEFAULT_DOCUMENTS_DIR_NAME = "Documents"
-NO_SELECTION_INDEX = -1
 
 
 def default_legacy_root_path() -> str:

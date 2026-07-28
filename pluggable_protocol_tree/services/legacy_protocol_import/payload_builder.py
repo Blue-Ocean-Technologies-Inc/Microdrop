@@ -33,15 +33,20 @@ def _repeats_group_path(manager, converted):
     ``n_repeats`` cannot live on the root: the root carries no
     ``repetitions`` attribute and ``serialize_tree`` skips it, so the value
     would vanish. A repeated protocol therefore gets one wrapper group that
-    does serialize; an unrepeated one stays flat, matching the legacy shape."""
+    does serialize; an unrepeated one stays flat, matching the legacy shape.
+
+    When this build's column set has no repetitions column at all, the
+    group type carries no ``repetitions`` attribute either -- a wrapper
+    group would then be a pointless one-child group with nowhere to put
+    the repeat count. Skip creating it and just record the drop."""
     if converted.protocol_repeats <= 1:
+        return ()
+    if REPETITIONS_COLUMN_ID not in manager.group_type.class_trait_names():
+        converted.report.record_dropped(REPETITIONS_COLUMN_ID)
         return ()
     group_path = manager.add_group(name=IMPORTED_PROTOCOL_GROUP_NAME)
     group_row = manager.get_row(group_path)
-    if hasattr(group_row, REPETITIONS_COLUMN_ID):
-        setattr(group_row, REPETITIONS_COLUMN_ID, converted.protocol_repeats)
-    else:
-        converted.report.record_dropped(REPETITIONS_COLUMN_ID)
+    setattr(group_row, REPETITIONS_COLUMN_ID, converted.protocol_repeats)
     return group_path
 
 

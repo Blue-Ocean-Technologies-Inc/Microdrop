@@ -191,6 +191,12 @@ def convert_legacy_protocol(protocol, electrode_to_channel: dict):
             report.record_step_failure(f"Step {index + 1}: {e}")
             values = {NAME_COLUMN_ID: f"Step {index + 1}"}
         for column_id in values:
+            # A row flag (consumed by payload_builder to set
+            # repeat_duration_controls on the row), not a column -- would
+            # otherwise show up as a bogus entry on the report's "Mapped:"
+            # line.
+            if column_id == REPEAT_DURATION_CONTROLS_FLAG:
+                continue
             report.record_mapped(column_id)
         step_values.append(values)
     return ConvertedProtocol(

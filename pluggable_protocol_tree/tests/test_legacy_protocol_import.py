@@ -10,9 +10,23 @@ from pluggable_protocol_tree.services.legacy_protocol_import import (
     read_device_svg_channel_map, read_legacy_protocol, scan_for_device_folders,
 )
 from pluggable_protocol_tree.services.legacy_protocol_import.consts import (
-    DEVICE_SVG_FILENAME, LEGACY_SAMPLE_DEVICE_FOLDERS, PROTOCOLS_DIR_NAME,
+    DEVICE_SVG_FILENAME, PROTOCOLS_DIR_NAME,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
+
+# Sample Device Folders used by these tests; absent on most machines, in
+# which case the tests that depend on them skip (see `_device` below).
+# Developer-machine paths -- deliberately not in the package's consts.py,
+# which ships as part of the runtime package.
+LEGACY_SAMPLE_DEVICE_FOLDERS = (
+    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
+    "legacy_protocols/August 2022 Quanterix test",
+    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
+    "legacy_protocols/Duo Fluo v2 28x",
+    "C:/Users/Info/AppData/Roaming/JetBrains/PyCharm2025.2/scratches/"
+    "legacy_protocols/Zika-4d Mirror",
+    "C:/Users/Info/Documents/MicroDrop/devices/DMF-90-pin-array",
+)
 
 
 def _device(folder_name):
@@ -65,13 +79,19 @@ def _convert_all_in(folder_name):
 
 
 def test_every_sample_protocol_converts():
-    """Nothing in the real corpus raises, and every protocol yields steps."""
+    """Nothing in the real corpus raises, and every protocol yields steps
+    that actually carry converted data -- not just non-empty *placeholder*
+    dicts (e.g. a converter emitting ``[{}, {}, {}]`` would satisfy a bare
+    "truthy step_values" check but hold nothing usable)."""
     total = 0
     for folder in LEGACY_SAMPLE_DEVICE_FOLDERS:
         if not os.path.isdir(folder):
             continue
         for converted in _convert_all_in(os.path.basename(folder)):
             assert converted.step_values
+            for values in converted.step_values:
+                assert values
+                assert values.get("name")
             total += 1
     if not total:
         pytest.skip("no sample folders present")
