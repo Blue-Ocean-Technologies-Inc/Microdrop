@@ -521,7 +521,10 @@ def read_device_svg_channel_map(svg_path: str) -> dict:
     annotations are not importable electrodes."""
     root = ElementTree.parse(svg_path).getroot()
     channel_map = {}
-    for element in root.iter(_PATH_ELEMENT_TAG):
+    # Element.iter() treats its argument as a literal tag and does NOT
+    # honour the {*} namespace wildcard; find/iterfind do. Using iter()
+    # here silently yields zero electrodes.
+    for element in root.iterfind(f".//{_PATH_ELEMENT_TAG}"):
         electrode_id = element.attrib.get("id")
         raw_channel = element.attrib.get(_CHANNEL_ATTRIBUTE)
         if not electrode_id or not raw_channel:
