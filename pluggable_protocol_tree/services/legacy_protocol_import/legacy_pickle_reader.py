@@ -19,13 +19,14 @@ unpickles them eagerly -- callers only ever see plain dicts.
 
 import io
 import pickle
+import pickletools
 
 import pandas as pd
 
 from logger.logger_service import get_logger
 
 from .consts import (
-    LEGACY_PROBE_ALLOWED_MODULE_PREFIXES, LEGACY_STUBBED_MODULE_PREFIXES,
+    LEGACY_STUBBED_MODULE_PREFIXES, MICRODROP_PROTOCOL_MODULE,
     REMOVED_PANDAS_INDEX_CLASSES, REMOVED_PANDAS_INDEX_MODULE,
     SUPPORTED_LEGACY_PROTOCOL_VERSION,
 )
@@ -59,27 +60,6 @@ class _LegacyUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-class _ProbeUnpickler(_LegacyUnpickler):
-    """Strict unpickler used only to *probe* whether a file looks like a
-    legacy protocol (``is_legacy_protocol_file``).
-
-    The directory scanner calls that probe on every file it finds in a
-    ``protocols/`` folder, not just the one the user picked -- so unlike
-    ``_LegacyUnpickler`` (used to actually read the chosen file), this one
-    must not defer arbitrary modules to the real ``find_class``, which
-    would import and construct whatever class an unrelated file names,
-    running its ``__reduce__``/``__setstate__`` merely to populate a
-    dropdown."""
-
-    def find_class(self, module, name):
-        if (module.startswith(LEGACY_STUBBED_MODULE_PREFIXES)
-                or module.startswith(LEGACY_PROBE_ALLOWED_MODULE_PREFIXES)):
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(
-            f"probe unpickler refuses module {module!r} outside the "
-            f"legacy/pandas/numpy/builtins allowlist")
-
-
 def _loads(blob) -> object:
     """Unpickle a nested per-plugin blob. Latin-1 round-trips the bytes that
     came in as a Python 2 ``str``."""
@@ -105,9 +85,9 @@ class LegacyProtocol:
         self.steps = steps
 
 
-def _read_raw_protocol(path: str, unpickler_cls=_LegacyUnpickler):
+def _read_raw_protocol(path: str):
     with open(path, "rb") as handle:
-        return unpickler_cls(handle, encoding="latin1").load()
+        return _LegacyUnpickler(handle, encoding="latin1").load()
 
 
 def read_legacy_protocol(path: str) -> LegacyProtocol:
@@ -148,17 +128,32 @@ def read_legacy_protocol(path: str) -> LegacyProtocol:
 
 
 def is_legacy_protocol_file(path: str) -> bool:
-    """True when ``path`` unpickles into something that looks like a legacy
-    protocol. Used to filter directory listings, which in practice contain
+    """True when ``path``'s pickle opcode stream names a class from
+    ``microdrop.protocol`` (``Protocol``, or a future ``Step``-first
+    layout). Used to filter directory listings, which in practice contain
     unrelated files (a 7-Zip archive sits in one real protocols folder).
 
-    Uses ``_ProbeUnpickler``, not the full ``_LegacyUnpickler``: the
-    directory scanner runs this over *every* file in a ``protocols/``
-    folder just to populate a dropdown, so it must not resolve/construct
-    arbitrary classes from files the user never chose."""
+    A purely structural scan via ``pickletools.genops``, not an unpickle:
+    ``genops`` walks the opcode stream without importing a single module,
+    without calling ``find_class``, and without running any
+    REDUCE/``__setstate__``. The directory scanner runs this over *every*
+    file in a ``protocols/`` folder just to populate a dropdown, so it
+    must execute nothing from files the user never chose -- unlike
+    ``read_legacy_protocol``, which unpickles for real because the user
+    explicitly picked that one file."""
     try:
-        raw = _read_raw_protocol(path, unpickler_cls=_ProbeUnpickler)
+        with open(path, "rb") as handle:
+            for opcode, arg, _pos in pickletools.genops(handle):
+                if opcode.name != "GLOBAL":
+                    continue
+                # GLOBAL's argument is "<module> <name>" for pickle
+                # protocols 0-2 (space-joined by pickletools; some
+                # encodings keep the raw newline) -- normalise before
+                # comparing.
+                module = str(arg).replace("\n", " ").split(" ", 1)[0]
+                if module == MICRODROP_PROTOCOL_MODULE:
+                    return True
     except Exception as e:
         logger.debug(f"{path!r} is not a legacy protocol: {e}")
         return False
-    return isinstance(getattr(raw, "steps", None), list)
+    return False

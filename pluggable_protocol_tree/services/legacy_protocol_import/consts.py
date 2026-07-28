@@ -29,6 +29,13 @@ LEGACY_STUBBED_MODULE_PREFIXES = (
     "microdrop", "microdrop_utility", "flatland", "pygtkhelpers",
 )
 
+# --- module a legacy protocol's top-level pickled object (Protocol, or a
+# future Step-first layout) is a GLOBAL reference into. Used by the
+# structural is_legacy_protocol_file probe (pickletools.genops opcode scan,
+# not an unpickle) to recognise a legacy protocol file without executing
+# anything from it. ---
+MICRODROP_PROTOCOL_MODULE = "microdrop.protocol"
+
 # --- pandas index classes removed in pandas 2.x, remapped to pandas.Index ---
 REMOVED_PANDAS_INDEX_MODULE = "pandas.core.indexes.numeric"
 REMOVED_PANDAS_INDEX_CLASSES = frozenset(
@@ -36,12 +43,6 @@ REMOVED_PANDAS_INDEX_CLASSES = frozenset(
 
 # --- the legacy protocol format version this importer understands ---
 SUPPORTED_LEGACY_PROTOCOL_VERSION = "0.2.0"
-
-# --- probe unpickling (is_legacy_protocol_file): module prefixes allowed to
-# resolve during a directory-scan probe, beyond the stubbed legacy prefixes.
-# Keeps merely browsing to a folder from executing arbitrary __reduce__
-# payloads in unrelated files that happen to sit in a protocols/ directory. ---
-LEGACY_PROBE_ALLOWED_MODULE_PREFIXES = ("pandas", "numpy", "builtins")
 
 # --- new-format column / compound-field ids written by the converter ---
 NAME_COLUMN_ID = "name"
