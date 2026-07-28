@@ -32,14 +32,18 @@ def _is_device_folder(path: str) -> bool:
     return os.path.isfile(os.path.join(path, DEVICE_SVG_FILENAME))
 
 
-def _protocol_paths_in(device_dir: str) -> list:
+def _protocol_paths_in(device_dir: str) -> list[str]:
     """Every file under ``protocols/`` that actually reads as a legacy
     protocol. Directory listings really do contain unrelated files."""
     protocols_dir = os.path.join(device_dir, PROTOCOLS_DIR_NAME)
     if not os.path.isdir(protocols_dir):
         return []
-    candidates = sorted(os.path.join(protocols_dir, entry)
-                        for entry in os.listdir(protocols_dir))
+    try:
+        entries = os.listdir(protocols_dir)
+    except OSError as error:
+        logger.warning(f"Could not list {protocols_dir!r}: {error}")
+        return []
+    candidates = sorted(os.path.join(protocols_dir, entry) for entry in entries)
     return [path for path in candidates
             if os.path.isfile(path) and is_legacy_protocol_file(path)]
 
@@ -52,14 +56,18 @@ def _as_device_folder(device_dir: str) -> LegacyDeviceFolder:
     )
 
 
-def _child_device_folders(parent_dir: str) -> list:
-    children = sorted(os.path.join(parent_dir, entry)
-                      for entry in os.listdir(parent_dir))
+def _child_device_folders(parent_dir: str) -> list[LegacyDeviceFolder]:
+    try:
+        entries = os.listdir(parent_dir)
+    except OSError as error:
+        logger.warning(f"Could not list {parent_dir!r}: {error}")
+        return []
+    children = sorted(os.path.join(parent_dir, entry) for entry in entries)
     return [_as_device_folder(child) for child in children
             if os.path.isdir(child) and _is_device_folder(child)]
 
 
-def scan_for_device_folders(root_path: str) -> list:
+def scan_for_device_folders(root_path: str) -> list[LegacyDeviceFolder]:
     """Device Folders reachable from ``root_path``, sorted by name.
 
     Returns an empty list rather than raising when the path is missing or
