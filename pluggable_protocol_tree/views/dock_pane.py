@@ -1058,6 +1058,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def load_protocol_dialog(self):
         self._pane.load_protocol_dialog()
 
+    def import_legacy_protocol_dialog(self):
+        self._pane.import_legacy_protocol_dialog()
+
     def save_protocol_dialog(self):
         self._pane.save_protocol_dialog()
 

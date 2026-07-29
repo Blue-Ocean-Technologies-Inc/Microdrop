@@ -11,7 +11,7 @@ from .route import RouteLayerManager
 from .electrodes import Electrodes
 from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key, default_alphas, \
     default_visibility
-from ..consts import DEVICE_SVG_PATH_KEY
+from ..consts import DEVICE_REPO_DIR_KEY, DEVICE_SVG_PATH_KEY
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
 
@@ -326,6 +326,12 @@ class DeviceViewMainModel(HasTraits):
             # Full path published to globals, so consumers (e.g. the protocol logger's device
             # heatmap) can load the file without reaching into this model.
             app_globals[DEVICE_SVG_PATH_KEY] = str(filename)
+            # Repo dir published alongside it, so consumers (e.g. the legacy
+            # protocol import) can place a device SVG where Device > Load
+            # will find it without reaching into this plugin's preferences.
+            if self.preferences is not None:
+                app_globals[DEVICE_REPO_DIR_KEY] = str(
+                    self.preferences.DEVICE_REPO_DIR)
         else:
             logger.warning("Unable to push svg filename to globals yet. Need svg_model to fully initialize.")
 

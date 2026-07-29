@@ -24,6 +24,21 @@ def open_html_in_browser(file_path):
         logger.error(f"File not found: {path}")
 
 
+def next_free_numbered_path(path: Union[Path, str]) -> Path:
+    """``path`` itself when nothing sits there, else the first free
+    ``<stem> (N)<suffix>`` sibling (N starting at 2) -- the conventional
+    don't-clobber rename for a second copy of the same name."""
+    path = Path(path)
+    if not path.exists():
+        return path
+    number = 2
+    while True:
+        candidate = path.with_name(f"{path.stem} ({number}){path.suffix}")
+        if not candidate.exists():
+            return candidate
+        number += 1
+
+
 def safe_copy_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
     try:
         copy2(src_file, dst_file)

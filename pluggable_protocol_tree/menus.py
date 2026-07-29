@@ -1,5 +1,5 @@
 """DockPaneAction factories for the pluggable protocol tree's
-``&Protocol`` file menu (New / Load / Save / Save As).
+``&Protocol`` file menu (New / Load / Import Legacy / Save / Save As).
 
 Each action targets a method on ``PluggableProtocolDockPane`` which
 delegates to the hosted ``ProtocolTreePane``.
@@ -40,6 +40,15 @@ def load_dialog_factory():
     )
 
 
+def import_legacy_dialog_factory():
+    return DockPaneAction(
+        id=f"{PKG}.import_legacy_protocol_dialog",
+        dock_pane_id=_DOCK_PANE_ID,
+        name="&Import Legacy Protocol...",
+        method="import_legacy_protocol_dialog",
+    )
+
+
 def save_dialog_factory():
     return DockPaneAction(
         id=f"{PKG}.save_protocol_dialog",
@@ -62,6 +71,7 @@ def protocol_menu_factory():
     return SMenu(
         new_protocol_factory(),
         load_dialog_factory(),
+        import_legacy_dialog_factory(),
         save_dialog_factory(),
         save_as_dialog_factory(),
         id=f"{PKG}.protocol_menu",

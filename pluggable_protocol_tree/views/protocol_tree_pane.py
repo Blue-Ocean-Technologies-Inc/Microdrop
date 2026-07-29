@@ -14,6 +14,7 @@ PPT-10.1 for the full wiring rules.
 
 from __future__ import annotations
 
+import filecmp
 import json
 from pathlib import Path
 
@@ -22,23 +23,33 @@ from pyface.qt.QtCore import (
 )
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel,
-    QProgressDialog, QToolButton, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout,
+    QLabel, QProgressDialog, QToolButton, QVBoxLayout, QWidget,
 )
 
 from microdrop_application.dialogs.pyface_wrapper import (
-    NO, YES, confirm, error as error_dialog, success,
+    NO, YES, choose, confirm, error as error_dialog,
+    information as information_dialog, success,
 )
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
+from microdrop_utils.file_handler import next_free_numbered_path, safe_copy_file
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import LoadingOverlay
 
-from device_viewer.consts import DEVICE_SVG_PATH_KEY
+from device_viewer.consts import (
+    DEVICE_REPO_DIR_KEY, DEVICE_SVG_PATH_KEY, DEVICE_VIEWER_LOAD_SVG_REQUEST,
+)
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED, PROTOCOL_FILE_DIALOG_FILTER)
 from pluggable_protocol_tree.models.row import GroupRow
+from pluggable_protocol_tree.services.legacy_protocol_import import (
+    build_protocol_payload, convert_legacy_protocol,
+    legacy_device_display_name, read_device_svg_channel_map,
+    read_legacy_protocol,
+)
 from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
@@ -49,6 +60,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
+from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
 from pluggable_protocol_tree.views.protocol_validator_presenter import (
     confirm_report,
 )
@@ -654,6 +666,227 @@ class ProtocolTreePane(QWidget):
         if path:
             self.protocol_state_tracker.set_loaded(path)
             self.protocol_state_tracker.reseed_baseline(self.manager)
+
+    @attempt_func_execution_with_error_dialog
+    def import_legacy_protocol_dialog(self):
+        """Convert a Python 2 MicroDrop protocol into this tree.
+
+        The converted protocol is saved into the protocol repo under the
+        legacy device's name, and that device's SVG is copied into the
+        device repo when absent, so both are findable through the normal
+        Load menus afterwards."""
+        if not self._confirm_proceed_or_abort():
+            return
+        dialog = LegacyImportDialog(parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            dialog.deleteLater()
+            return
+        device_svg_path, protocol_path = dialog.selected_paths()
+        dialog.deleteLater()
+        if not device_svg_path or not protocol_path:
+            error_dialog(parent=self, title="Import error",
+                         message="Select both a device SVG and a protocol "
+                                 "file.")
+            return
+
+        try:
+            electrode_to_channel = read_device_svg_channel_map(
+                device_svg_path)
+        except Exception as e:
+            error_dialog(parent=self, title="Import error",
+                         message=f"Could not read {device_svg_path}:\n{e}")
+            return
+        if not electrode_to_channel:
+            error_dialog(parent=self, title="Import error",
+                         message=f"{device_svg_path} contains no electrodes "
+                                 f"with channel assignments.")
+            return
+
+        device_name = legacy_device_display_name(device_svg_path)
+        # Prefer the repo copy from here on: the mismatch dialog's YES then
+        # loads the same file Device > Load would offer later. Re-derive the
+        # name from the result -- a collision rename (e.g. "Name (2).svg")
+        # must also rename the protocol folder, which the save/load dialogs
+        # later locate by the active SVG's stem.
+        device_svg_path = self._import_device_into_repo(
+            device_svg_path, device_name)
+        device_name = legacy_device_display_name(device_svg_path)
+
+        self._offer_switch_to_matching_device(device_svg_path, device_name)
+
+        try:
+            legacy_protocol = read_legacy_protocol(protocol_path)
+        except Exception as e:
+            error_dialog(parent=self, title="Import error",
+                         message=f"Could not read {protocol_path}:\n{e}")
+            return
+
+        converted = convert_legacy_protocol(
+            legacy_protocol, electrode_to_channel)
+        columns = list(self.manager.columns)
+        payload = build_protocol_payload(converted, columns)
+
+        # The legacy device's own map is authoritative for this protocol,
+        # and a device load requested above has not landed yet.
+        report = validate_protocol(payload, columns, electrode_to_channel)
+        if not report.is_empty:
+            if confirm_report(report, parent=self) != YES:
+                return
+        self.manager.set_state_from_json(
+            payload, columns=columns, report_findings=False)
+
+        saved_path = self._save_imported_protocol(protocol_path, device_name)
+        if saved_path:
+            self.protocol_state_tracker.set_loaded(saved_path)
+            self.protocol_state_tracker.reseed_baseline(self.manager)
+            saved_note = f"Saved to: {saved_path}"
+        else:
+            # Fall back to the unsaved state, clearing the tracker so a
+            # plain Save cannot overwrite whatever file was open before
+            # the import.
+            self.protocol_state_tracker.reset()
+            saved_note = ("Could not save into the protocol repo -- "
+                          "use Save As to keep this protocol.")
+
+        information_dialog(
+            parent=self, title="Legacy protocol imported", cancel=False,
+            message=f"Imported {len(converted.step_values)} steps.",
+            detail=f"{saved_note}\n\n{converted.report.render()}")
+
+    def _import_device_into_repo(self, device_svg_path: str,
+                                 device_name: str) -> str:
+        """Copy the legacy device SVG into the device repo as
+        ``<device_name>.svg`` so Device > Load can find it later.
+
+        Returns the repo copy's path when one exists or was created, else
+        the original path. When the repo already holds a *different*
+        device under the same name, the user chooses between saving under
+        a numbered rename and not saving this device at all -- two
+        genuinely different physical devices can share a Device Folder
+        name, and clobbering the repo copy would corrupt the other one.
+        Best-effort otherwise: no Redis (headless) or no published repo
+        dir leaves the original path in use rather than failing the
+        import."""
+        try:
+            repo_dir = app_globals.get(DEVICE_REPO_DIR_KEY)
+        except Exception as e:
+            logger.debug(f"device repo dir unavailable: {e}")
+            return device_svg_path
+        if not repo_dir:
+            return device_svg_path
+        source = Path(device_svg_path)
+        destination = Path(repo_dir) / f"{device_name}.svg"
+        try:
+            if destination.exists():
+                if filecmp.cmp(destination, source, shallow=False):
+                    return str(destination)
+                destination = self._choose_device_collision_rename(
+                    source, destination)
+                if destination is None:
+                    return device_svg_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            safe_copy_file(source, destination)
+            logger.info(f"imported legacy device into repo: {destination}")
+            return str(destination)
+        except Exception as e:
+            logger.warning(f"could not import device into repo: {e}",
+                           exc_info=True)
+            return device_svg_path
+
+    @staticmethod
+    def _choose_device_collision_rename(source: Path,
+                                        destination: Path):
+        """Ask how to handle a repo entry of the same name but different
+        content. Returns the numbered rename to save under, or None to
+        skip saving this device (Cancel and closing the dialog also
+        skip)."""
+        renamed = next_free_numbered_path(destination)
+
+        save_choice = "Save Copy"
+        skip_choice = "Don't Save"
+
+        choice = choose(
+            parent=None,
+            title="Device Name Conflict",
+            message=(
+                f"A different device named <b>{destination.name}</b> already exists in the device repository.<br><br>"
+                f"Overwriting it could break existing protocols. To safely save your "
+                f"<a href='{source.as_uri()}' style='color: #0078d7;'>{source}</a>, we can save a renamed copy <b>{renamed.name}</b>."
+            ),
+            choices=(save_choice, skip_choice),
+        )
+
+        return renamed if choice == save_choice else None
+
+    def _save_imported_protocol(self, legacy_protocol_path: str,
+                                device_name: str):
+        """Write the just-imported tree to
+        ``PROTOCOL_REPO_DIR/<device_name>/<legacy name>.json``.
+
+        Existing files are never overwritten -- a numeric suffix is added
+        instead, since re-importing must not clobber an earlier import the
+        user may have edited. Returns the saved path, or None when the
+        repo dir is unavailable or the write fails (the caller falls back
+        to the unsaved state)."""
+        try:
+            target_dir = Path(self.preferences.PROTOCOL_REPO_DIR) / device_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning(f"protocol repo dir unavailable: {e}")
+            return None
+        stem = Path(legacy_protocol_path).stem or "Imported protocol"
+        path = next_free_numbered_path(target_dir / f"{stem}.json")
+        if not self._write_protocol_json(str(path), parent=self):
+            return None
+        return str(path)
+
+    def _offer_switch_to_matching_device(self, device_svg_path: str,
+                                         device_name: str) -> None:
+        """Offer to load the imported protocol's device when the Device
+        viewer currently shows a different one (or none).
+
+        A legacy protocol stores electrode ids that only mean anything on
+        the device it was authored for, so a mismatch actuates the wrong
+        physical electrodes. Compares against the active SVG path the
+        device viewer publishes to app_globals -- durable state, unlike
+        the geometry-sync electrode map, which stays empty until a
+        geometry message happens to arrive after this pane attaches (the
+        reason an earlier map-based check could skip this prompt
+        entirely). YES loads the matched device over pub/sub; NO keeps
+        the current one."""
+        try:
+            active_svg = str(app_globals.get(DEVICE_SVG_PATH_KEY,
+                                             NO_DEVICE_SVG_SENTINEL))
+        except Exception as e:
+            logger.debug(f"active device svg unavailable: {e}")
+            return
+        device_loaded = active_svg not in ("", "None", NO_DEVICE_SVG_SENTINEL)
+        new_device_html = f"<a href='{Path(device_svg_path).as_uri()}' style='color: #0078d7;'>{device_name}</a>"
+        if device_loaded:
+            try:
+                if filecmp.cmp(active_svg, device_svg_path, shallow=False):
+                    return
+            except OSError as e:
+                logger.debug(f"could not compare device SVGs: {e}")
+
+            active_svg = Path(active_svg)
+
+            question = (
+                f"This protocol was authored for device {new_device_html}, "
+                f"but the loaded device is "
+                f"<a href='{active_svg.as_uri()}' style='color: #0078d7;'>{active_svg.stem}</a> <br><br>"
+                f"Switch to {new_device_html}? Choosing No keeps the loaded "
+                f"device, whose channel wiring may not match this "
+                f"protocol's electrodes.")
+        else:
+            question = (
+                f"This protocol was authored for device {new_device_html}, "
+                f"and no device is currently loaded.<br><br>"
+                f"Load {new_device_html} into the Device viewer?")
+        if confirm(parent=None, message=question, title="Device mismatch",
+                   cancel=False) == YES:
+            publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
+                            message=device_svg_path)
 
     # --- experiment-bar handlers ------------------------------------
     @attempt_func_execution_with_error_dialog

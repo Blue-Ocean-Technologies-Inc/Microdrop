@@ -1,5 +1,6 @@
 # Site package imports
 import json
+import os
 import traceback
 from pathlib import Path
 import dramatiq
@@ -255,6 +256,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         svc = self._gamepad_interaction_service()
         if svc is not None and hasattr(svc, "reconnect_gamepad"):
             svc.reconnect_gamepad()
+
+    def _on_load_svg_request_triggered(self, message):
+        """Load the SVG at ``message`` (a file path) into the device view.
+
+        Lets another plugin switch devices over pub/sub instead of reaching
+        into this pane. This handler runs on the Dramatiq listener's worker
+        thread, but rebuilding the electrode scene touches Qt, so the actual
+        work is marshalled to the GUI thread via ``GUI.invoke_later``.
+        ``_set_device_view_from_svg`` already handles and reports its own
+        exceptions, so there is nothing left to catch here."""
+        svg_path = str(message or "").strip()
+        if not svg_path or not os.path.isfile(svg_path):
+            logger.warning(f"load-svg request for missing file: {svg_path!r}")
+            return
+        GUI.invoke_later(self._set_device_view_from_svg, svg_path)
 
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")

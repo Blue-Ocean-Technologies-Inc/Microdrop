@@ -8,6 +8,7 @@ from pyface.tasks.action.api import DockPaneAction, SMenu
 
 from pluggable_protocol_tree.consts import PKG
 from pluggable_protocol_tree.menus import (
+    import_legacy_dialog_factory,
     load_dialog_factory,
     new_protocol_factory,
     protocol_menu_factory,
@@ -19,18 +20,19 @@ from pluggable_protocol_tree.menus import (
 _DOCK_PANE_ID = f"{PKG}.dock_pane"
 
 
-def test_protocol_menu_factory_returns_smenu_with_four_items():
+def test_protocol_menu_factory_returns_smenu_with_five_items():
     menu = protocol_menu_factory()
     assert isinstance(menu, SMenu)
     assert menu.name == "&Protocol"
     items = list(menu.items)
-    assert len(items) == 4
+    assert len(items) == 5
     assert all(isinstance(item, DockPaneAction) for item in items)
 
 
 def test_each_action_targets_pluggable_dock_pane():
     for factory in (new_protocol_factory, load_dialog_factory,
-                    save_dialog_factory, save_as_dialog_factory):
+                    import_legacy_dialog_factory, save_dialog_factory,
+                    save_as_dialog_factory):
         action = factory()
         assert action.dock_pane_id == _DOCK_PANE_ID
 
@@ -39,6 +41,7 @@ def test_action_method_and_name_pairs():
     expected = {
         "new_protocol": "&Create New",
         "load_protocol_dialog": "&Load",
+        "import_legacy_protocol_dialog": "&Import Legacy Protocol...",
         "save_protocol_dialog": "&Save",
         "save_as_protocol_dialog": "Save &as",
     }

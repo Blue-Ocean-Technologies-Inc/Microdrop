@@ -55,6 +55,9 @@ GAMEPAD_CAPTURE_REQUEST        = "ui/device_viewer/gamepad_capture_request"
 # controller acquisition from the UI after an unplug/replug. Dispatches to
 # _on_gamepad_reconnect_request_triggered.
 GAMEPAD_RECONNECT_REQUEST      = "ui/device_viewer/gamepad_reconnect_request"
+# Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
+# protocol import) switch devices without reaching into this one.
+DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
 
 # Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
 # imported from protocol_grid.consts) to avoid the circular import that would otherwise form
@@ -92,6 +95,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_TREE_DISPLAY_STATE,
         GAMEPAD_CAPTURE_REQUEST,
         GAMEPAD_RECONNECT_REQUEST,
+        DEVICE_VIEWER_LOAD_SVG_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
         # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
@@ -110,6 +114,7 @@ CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map" # channel areas
 FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
 LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
 DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
+DEVICE_REPO_DIR_KEY = "microdrop.device_repo.dir" # the user device-SVG repo directory
 MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
 DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live video-recording state
 
@@ -122,7 +127,8 @@ recording_state_model = RecordingStateModel(globals_key=DEVICE_VIEWER_RECORDING_
 media_capture_event_model = MediaCaptureEventModel()
 
 APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
-                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY]
+                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY,
+                    DEVICE_REPO_DIR_KEY]
 
 # ---------------------------------------------------------------------------
 # Capture file layout (under the experiment directory). Other plugins may
