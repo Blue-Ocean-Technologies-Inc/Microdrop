@@ -861,25 +861,29 @@ class ProtocolTreePane(QWidget):
             logger.debug(f"active device svg unavailable: {e}")
             return
         device_loaded = active_svg not in ("", "None", NO_DEVICE_SVG_SENTINEL)
+        new_device_html = f"<a href='{Path(device_svg_path).as_uri()}' style='color: #0078d7;'>{device_name}</a>"
         if device_loaded:
             try:
                 if filecmp.cmp(active_svg, device_svg_path, shallow=False):
                     return
             except OSError as e:
                 logger.debug(f"could not compare device SVGs: {e}")
+
+            active_svg = Path(active_svg)
+
             question = (
-                f"This protocol was authored for device '{device_name}', "
+                f"This protocol was authored for device {new_device_html}, "
                 f"but the loaded device is "
-                f"'{Path(active_svg).stem}'.\n\n"
-                f"Switch to '{device_name}'? Choosing No keeps the loaded "
+                f"<a href='{active_svg.as_uri()}' style='color: #0078d7;'>{active_svg.stem}</a> <br><br>"
+                f"Switch to {new_device_html}? Choosing No keeps the loaded "
                 f"device, whose channel wiring may not match this "
                 f"protocol's electrodes.")
         else:
             question = (
-                f"This protocol was authored for device '{device_name}', "
-                f"and no device is currently loaded.\n\n"
-                f"Load '{device_name}' into the Device viewer?")
-        if confirm(self, question, title="Device mismatch",
+                f"This protocol was authored for device {new_device_html}, "
+                f"and no device is currently loaded.<br><br>"
+                f"Load {new_device_html} into the Device viewer?")
+        if confirm(parent=None, message=question, title="Device mismatch",
                    cancel=False) == YES:
             publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
                             message=device_svg_path)
