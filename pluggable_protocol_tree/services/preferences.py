@@ -102,6 +102,15 @@ class ProtocolPreferences(PreferencesHelper):
     # added since) keep their natural position at the end on restore.
     protocol_tree_column_order = List(Str)
 
+    # Programmatic preferences (no Settings-dialog item): the last values
+    # the user confirmed in the Import Legacy Protocol dialog, restored as
+    # its initial state on the next open. Written on dialog accept, so
+    # they persist even when the import itself is later cancelled or
+    # fails validation.
+    legacy_import_root_path = Str()
+    legacy_import_device_svg_path = Str()
+    legacy_import_protocol_path = Str()
+
     # {col_id: seconds} acknowledgement-wait time per wait-capable column
     # (issue #427), keyed by the stable col_id (base_id for compounds),
     # NOT the display col_name — the same key handlers resolve at run

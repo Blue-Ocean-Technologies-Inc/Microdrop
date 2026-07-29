@@ -24,7 +24,6 @@ from PySide6.QtGui import (
     QPainter,
     QPainterPath,
     QPixmap,
-    QTextDocument,
     QDesktopServices,
 )
 from PySide6.QtWidgets import (
@@ -354,15 +353,12 @@ class BaseMessageDialog(QDialog):
             content_width = 500
         content_width = max(200, content_width)
 
-        doc = QTextDocument()
-        doc.setDefaultFont(self.message_label.font())
-        if self.message_label.textFormat() == Qt.TextFormat.RichText:
-            doc.setHtml(self.message_text)
-        else:
-            doc.setPlainText(self.message_text)
-        doc.setTextWidth(content_width)
-
-        message_height = int(doc.size().height()) + 2
+        # Ask the label that will actually render the text, rather than
+        # re-deriving its format here: a message left at the default
+        # AutoText renders as rich text when it looks like markup, but a
+        # `textFormat() == RichText` test misses that and measures the raw
+        # HTML source, sizing the dialog for markup it never displays.
+        message_height = self.message_label.heightForWidth(content_width) + 2
         self.message_label.setMinimumHeight(message_height)
         self.adjustSize()
         self.setMinimumSize(
