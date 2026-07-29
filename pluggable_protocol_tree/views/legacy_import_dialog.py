@@ -34,6 +34,11 @@ def default_legacy_root_path() -> str:
     return candidate if os.path.isdir(candidate) else ""
 
 
+def _normalized(path: str) -> str:
+    """Comparison form of a path (case- and separator-insensitive)."""
+    return os.path.normcase(os.path.normpath(path))
+
+
 class LegacyImportDialogModel(HasTraits):
     """Selection state for the legacy import dialog."""
 
@@ -81,6 +86,33 @@ class LegacyImportDialogModel(HasTraits):
             return
         self.protocol_path = device.protocol_paths[index]
 
+    def restore_selection(self, device_svg_path: str,
+                          protocol_path: str) -> None:
+        """Re-apply a previously used selection after the root scan.
+
+        A path that matches a scanned dropdown entry restores that
+        dropdown; one that doesn't (a manual override last time) lands
+        back in the editable path field. Files that no longer exist are
+        ignored, leaving the scan's own defaults in place."""
+        if device_svg_path and os.path.isfile(device_svg_path):
+            wanted = _normalized(device_svg_path)
+            for index, device in enumerate(self.device_folders):
+                if _normalized(device.device_svg_path) == wanted:
+                    self.selected_device_index = index
+                    break
+            else:
+                self.device_svg_path = device_svg_path
+        if protocol_path and os.path.isfile(protocol_path):
+            wanted = _normalized(protocol_path)
+            device = self.selected_device()
+            paths = device.protocol_paths if device else []
+            for index, path in enumerate(paths):
+                if _normalized(path) == wanted:
+                    self.selected_protocol_index = index
+                    break
+            else:
+                self.protocol_path = protocol_path
+
     def selected_device(self):
         if 0 <= self.selected_device_index < len(self.device_folders):
             return self.device_folders[self.selected_device_index]
@@ -96,18 +128,25 @@ class LegacyImportDialogModel(HasTraits):
 class LegacyImportDialog(QDialog):
     """Root directory -> device -> protocol, with editable path overrides."""
 
-    def __init__(self, parent=None, initial_root_path=""):
+    def __init__(self, parent=None, initial_root_path="",
+                 initial_device_svg_path="", initial_protocol_path=""):
         super().__init__(parent)
         self.setWindowTitle("Import Legacy Protocol")
         self.model = LegacyImportDialogModel()
         self._build_widgets()
         self._connect_widgets()
         self.model.observe(self._refresh_devices, "device_folders")
-        self.model.observe(self._refresh_protocols, "selected_device_index")
+        self.model.observe(self._refresh_selected_device,
+                           "selected_device_index")
+        self.model.observe(self._refresh_selected_protocol,
+                           "selected_protocol_index")
         self.model.observe(self._refresh_paths,
                            "device_svg_path,protocol_path")
         self.model.root_path = initial_root_path or default_legacy_root_path()
         self._root_edit.setText(self.model.root_path)
+        if initial_device_svg_path or initial_protocol_path:
+            self.model.restore_selection(
+                initial_device_svg_path, initial_protocol_path)
 
     def _build_widgets(self):
         layout = QVBoxLayout(self)
@@ -171,6 +210,21 @@ class LegacyImportDialog(QDialog):
         self._device_combo.setCurrentIndex(self.model.selected_device_index)
         self._device_combo.blockSignals(False)
         self._refresh_protocols()
+
+    def _refresh_selected_device(self, event=None):
+        # Keeps the device combo in step with programmatic index changes
+        # (e.g. restoring the last-used selection) -- user-driven changes
+        # come *from* the combo, which then shows the value already.
+        self._device_combo.blockSignals(True)
+        self._device_combo.setCurrentIndex(self.model.selected_device_index)
+        self._device_combo.blockSignals(False)
+        self._refresh_protocols()
+
+    def _refresh_selected_protocol(self, event=None):
+        self._protocol_combo.blockSignals(True)
+        self._protocol_combo.setCurrentIndex(
+            self.model.selected_protocol_index)
+        self._protocol_combo.blockSignals(False)
 
     def _refresh_protocols(self, event=None):
         self._protocol_combo.blockSignals(True)

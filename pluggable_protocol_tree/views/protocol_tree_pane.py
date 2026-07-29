@@ -677,11 +677,23 @@ class ProtocolTreePane(QWidget):
         Load menus afterwards."""
         if not self._confirm_proceed_or_abort():
             return
-        dialog = LegacyImportDialog(parent=self)
+        dialog = LegacyImportDialog(
+            parent=self,
+            initial_root_path=self.preferences.legacy_import_root_path,
+            initial_device_svg_path=(
+                self.preferences.legacy_import_device_svg_path),
+            initial_protocol_path=self.preferences.legacy_import_protocol_path,
+        )
         if dialog.exec() != QDialog.Accepted:
             dialog.deleteLater()
             return
         device_svg_path, protocol_path = dialog.selected_paths()
+        # Remember the confirmed selection for the next open -- on accept,
+        # not on a successful import, so a conversion that fails still
+        # reopens where the user left off.
+        self.preferences.legacy_import_root_path = dialog.model.root_path
+        self.preferences.legacy_import_device_svg_path = device_svg_path
+        self.preferences.legacy_import_protocol_path = protocol_path
         dialog.deleteLater()
         if not device_svg_path or not protocol_path:
             error_dialog(parent=self, title="Import error",
