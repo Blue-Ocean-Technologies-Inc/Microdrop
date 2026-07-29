@@ -1,3 +1,38 @@
+## v1.6.0 (2026-07-29)
+
+### Feat
+
+- ask before renaming a colliding device import
+- save imported protocol and device into repos
+- add Import Legacy Protocol menu action
+- add device SVG load request topic
+- build protocol payload from converted steps
+- map legacy protocol steps to column values
+- add legacy conversion report model
+- scan legacy MicroDrop device folders
+- map device SVG electrodes to channels
+- read Python 2 MicroDrop protocol pickles
+
+### Fix
+
+- prompt reliably on imported-device mismatch
+- probe legacy protocol files structurally, not by unpickling
+- address final review gate on legacy protocol import
+- resolve legacy import path traits without relying on notify
+- guard os.listdir against unreadable device dirs
+
+### Refactor
+
+- style device mismatch dialog like conflict one
+- polish device name conflict dialog
+
+### Docs
+
+- fix SVG iteration in the import plan
+- cut test scope for legacy import plan
+- add implementation plan for legacy import (#438)
+- add design for legacy protocol import (#438)
+
 ## v1.5.0 (2026-07-27)
 
 ### Feat
