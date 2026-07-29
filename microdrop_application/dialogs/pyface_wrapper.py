@@ -83,7 +83,11 @@ def _prepare_dialog(
 
     # When both informative and detail are provided, disable scrolling for
     # main message so informative stays in non-scrollable area
-    disable_main_scrolling = informative is not None and detail is not None
+    # except when its given in kwargs.
+    disable_main_scrolling = kwargs.pop(
+        "disable_main_scrolling",
+        informative is not None and detail is not None,
+    )
 
     # Create the dialog
     dialog = dialog_factory(parent=parent, title=title, message=main_message, disable_main_scrolling=disable_main_scrolling, **kwargs)
