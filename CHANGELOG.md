@@ -1,3 +1,14 @@
+## v1.7.0 (2026-07-29)
+
+### Feat
+
+- remember the legacy import dialog's last selection
+
+### Fix
+
+- size dialogs by rendered text, not raw markup
+- let callers override disable_main_scrolling
+
 ## v1.6.0 (2026-07-29)
 
 ### Feat
