@@ -86,6 +86,10 @@ class DeviceViewMainModel(HasTraits):
     step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
     step_label = Instance(str, allow_none=True) # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
+    # Idle phase-navigation mode (#493): step through the selected step's
+    # route phases while no protocol runs. Synced with the protocol tree
+    # over PHASE_NAVIGATION_MODE.
+    phase_navigation_mode = Bool(False)
     protocol_running = Bool(False)  # is protocol running
     realtime_mode = Bool(False)
     connected = Bool(False) # is dropbot connected

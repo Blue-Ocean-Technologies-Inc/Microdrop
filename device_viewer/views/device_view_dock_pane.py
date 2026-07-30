@@ -73,7 +73,8 @@ from microdrop_utils.pyside_helpers import (
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
 from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED, FILLER_CAPACITANCE_KEY, \
-    LIQUID_CAPACITANCE_KEY, CALIBRATION_DATA, STEP_PARAMS_COMMIT
+    LIQUID_CAPACITANCE_KEY, CALIBRATION_DATA, STEP_PARAMS_COMMIT, \
+    PHASE_NAVIGATION_MODE
 from ..models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
@@ -150,6 +151,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     # Variables
     _undoing = Bool(False, desc="Used to prevent changes made in undo() and redo() from being added to the undo stack")
     _disable_state_messages = Bool(False, desc="Used to disable state messages when the model is being updated, to prevent infinite loops")
+    _applying_phase_nav_message = Bool(False, desc="True while applying an inbound PHASE_NAVIGATION_MODE message, so the publish observer doesn't rebroadcast it")
     _last_applied_step_id = Instance(str, desc="None means no step applied yet", allow_none=True)
     _last_published_id_to_channel = Instance(dict, allow_none=True, desc="None means geometry never published yet")
     message_buffer = Str(desc="Buffer to hold the message to be sent when the debounce timer expires")
@@ -240,6 +242,19 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_realtime_mode_updated_triggered(self, message):
         if self.model:
             self.model.realtime_mode = message.lower() == "true"
+
+    def _on_phase_navigation_mode_triggered(self, message):
+        GUI.invoke_later(
+            self._apply_phase_navigation_mode, message.lower() == "true")
+
+    def _apply_phase_navigation_mode(self, enabled):
+        if self.model is None:
+            return
+        self._applying_phase_nav_message = True
+        try:
+            self.model.phase_navigation_mode = enabled
+        finally:
+            self._applying_phase_nav_message = False
 
     def _gamepad_interaction_service(self):
         """The live interaction service that owns the gamepad poll loop, if any."""
@@ -597,6 +612,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"Buffering message for device viewer state change: {self.message_buffer}"
         )
         publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
+
+    @observe("model.phase_navigation_mode")
+    def _publish_phase_navigation_mode(self, event):
+        # User toggled the sidebar checkbox (or the mode was force-exited):
+        # broadcast so the protocol tree's checkbox follows. Inbound messages
+        # set _applying_phase_nav_message so they are not re-broadcast.
+        if not self._applying_phase_nav_message:
+            publish_message(topic=PHASE_NAVIGATION_MODE, message=str(event.new))
+
+    @observe("model.protocol_running")
+    def _exit_phase_navigation_on_run(self, event):
+        # A protocol run owns the hardware: force the idle mode off (this
+        # publishes "False" via the observer above, unchecking both UIs).
+        if event.new and self.model.phase_navigation_mode:
+            self.model.phase_navigation_mode = False
 
     def _publish_geometry_if_changed(self):
         """Publish DEVICE_VIEWER_GEOMETRY_CHANGED if id_to_channel differs

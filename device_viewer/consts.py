@@ -39,6 +39,18 @@ DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 ROUTES_EXECUTING               = "ui/device_viewer/routes_executing"
 CALIBRATION_DATA               = "ui/calibration_data"
 
+# Idle phase-navigation mode (#493): opt-in checkbox synced between the DV
+# sidebar and the protocol tree. Payload "True"/"False". Published by
+# whichever UI the user toggled; both subscribe (applying an equal value is
+# a trait no-op, so echoes are harmless).
+PHASE_NAVIGATION_MODE          = "ui/phase_navigation_mode"
+# Tree -> DV: navigate while idle-stepping. JSON payload:
+# {"action": "prev" | "next" | "goto", "index": <int, goto only>}.
+PHASE_NAVIGATION_REQUEST       = "ui/device_viewer/phase_navigation_request"
+# DV -> tree: current idle-nav position. JSON payload:
+# {"phase_index": <0-based int>, "phase_total": <int>}; total 0 = no plan.
+PHASE_NAVIGATION_STATE         = "ui/device_viewer/phase_navigation_state"
+
 # Sidebar route-executor execution params -> the selected protocol step.
 # Published by the DV commit button; consumed by the active protocol widget
 # (pluggable_protocol_tree sync controller; protocol_grid keeps its own
@@ -96,6 +108,8 @@ ACTOR_TOPIC_DICT = {
         GAMEPAD_CAPTURE_REQUEST,
         GAMEPAD_RECONNECT_REQUEST,
         DEVICE_VIEWER_LOAD_SVG_REQUEST,
+        PHASE_NAVIGATION_MODE,
+        PHASE_NAVIGATION_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
         # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
