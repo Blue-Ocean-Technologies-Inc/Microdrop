@@ -32,7 +32,13 @@ class IRouteExecutionService(Interface):
         """Resume a paused route execution."""
 
     def goto_prev_phase(self):
-        """Navigate to the previous phase (only while paused)."""
+        """Navigate to the previous phase (paused playback or idle nav)."""
 
     def goto_next_phase(self):
-        """Navigate to the next phase (only while paused)."""
+        """Navigate to the next phase (paused playback or idle nav)."""
+
+    def goto_phase(self, index):
+        """Jump to absolute 0-based phase ``index`` (paused or idle nav)."""
+
+    def rebuild_phase_navigation(self):
+        """(Re)build the idle phase-navigation plan (#493)."""
