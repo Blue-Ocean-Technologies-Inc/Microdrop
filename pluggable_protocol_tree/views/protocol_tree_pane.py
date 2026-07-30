@@ -332,6 +332,11 @@ class ProtocolTreePane(QWidget):
         layout.addWidget(self.timeline_phase_rep_label)
         layout.addWidget(self.timeline_phase_rep_combo)
         layout.addWidget(self.timeline_show_full_check)
+        self.phase_nav_check = QCheckBox("Phase navigation")
+        self.phase_nav_check.setToolTip(
+            "Step through the selected step's route phases without running "
+            "the protocol (synced with the device viewer sidebar)")
+        layout.addWidget(self.phase_nav_check)
         layout.addStretch()
         row.setVisible(False)
         return row

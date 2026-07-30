@@ -23,6 +23,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
     REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER, ELECTRODES_STATE_CHANGE,
+    PHASE_NAVIGATION_MODE, PHASE_NAVIGATION_REQUEST,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
@@ -300,6 +301,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         pane.timeline_step_rep_combo.currentIndexChanged.connect(self._on_timeline_step_rep_selected)
         pane.timeline_phase_rep_combo.currentIndexChanged.connect(self._on_timeline_phase_rep_selected)
         pane.timeline_show_full_check.toggled.connect(self._on_timeline_show_full_toggled)
+        pane.phase_nav_check.toggled.connect(self._on_phase_nav_check_toggled)
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
         nb.btn_resume.clicked.connect(self._toggle_pause)
@@ -456,9 +458,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
     # --- pause-time phase navigation ---------------------------------
 
     def _on_prev_phase(self):
+        if self._idle_nav_active():
+            self._publish_phase_nav_request({"action": "prev"})
+            return
         self._seek_relative_phase(-1)
 
     def _on_next_phase(self):
+        if self._idle_nav_active():
+            self._publish_phase_nav_request({"action": "next"})
+            return
         self._seek_relative_phase(+1)
 
     def _seek_to_phase(self, target0):
@@ -518,6 +526,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._select_step(row)
 
     def _on_timeline_phase_seek(self, phase_index):
+        if self._idle_nav_active():
+            # Idle nav shows the full materialized plan (no rep collapse), so
+            # the bar's 0-based index maps 1:1 onto the DV plan.
+            self._publish_phase_nav_request(
+                {"action": "goto", "index": int(phase_index)})
+            return
         # The bar emits a 0-based phase index within whatever it is showing.
         # When collapsed, that is an index into the base loop -> map it into the
         # current repetition; otherwise it is already the absolute phase.
@@ -551,6 +565,23 @@ class PluggableProtocolDockPane(TraitsDockPane):
             cur = self._current_step_in(rows)
         # Phase collapse + rep combo are driven by the distinct current step.
         current_row = self._current_step_row()
+        if self._idle_nav_active():
+            # Idle phase navigation (#493): the DV engine owns the position.
+            # Full materialized plan on the phase track — no rep collapse.
+            self._timeline_can_collapse = False
+            self._timeline_base_count = 0
+            self._timeline_base_index = 0
+            self._timeline_cur_rep = 1
+            total = int(self.sync.phase_nav_total)
+            tb.set_position(cur if cur is not None else -1, len(rows),
+                            int(self.sync.phase_nav_index),
+                            total if total > 1 else 0)
+            tb.set_idle_cell(None)
+            self._update_timeline_controls(
+                current_row,
+                collapse_phase_view(total, int(self.sync.phase_nav_index),
+                                    total, 1, False))
+            return
         full_count = 0
         full_index = 0
         rep_count = 1
@@ -612,7 +643,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         step_possible = step_total > 1
         self._fill_rep_combo(pane.timeline_step_rep_combo, pane.timeline_step_rep_label,
                              step_possible, step_total, step_cur)
-        controls.setVisible(phase_possible or step_possible)
+        nav_available = not bool(model.running) if model else True
+        self._pane.phase_nav_check.setVisible(nav_available)
+        controls.setVisible(phase_possible or step_possible or nav_available)
         check.blockSignals(True)
         check.setChecked(self._timeline_show_full)
         check.blockSignals(False)
@@ -774,6 +807,23 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # One source of truth shared with non-view collaborators — kept in
         # lockstep with the button state machine, which sets it.
         return self.protocol_state_tracker.is_active
+
+    def _idle_nav_active(self):
+        """Idle phase navigation drives the phase controls: mode checkbox on
+        and no run in progress (a paused run keeps the #471 seek stack)."""
+        return bool(self.sync.phase_nav_mode) and not self._is_protocol_active()
+
+    def _on_phase_nav_check_toggled(self, checked):
+        # Broadcast only — the checkbox state itself follows the topic echo
+        # (single source of truth), same as the DV sidebar checkbox.
+        publish_message(topic=PHASE_NAVIGATION_MODE, message=str(bool(checked)))
+
+    def _publish_phase_nav_request(self, request):
+        try:
+            publish_message(topic=PHASE_NAVIGATION_REQUEST,
+                            message=json.dumps(request))
+        except Exception as e:
+            logger.warning(f"phase-navigation request publish failed: {e}")
 
     def _on_play_clicked(self):
         if self._start_pending:
@@ -1251,6 +1301,37 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if ctx is not None:
             ctx.advanced_mode = bool(event.new)
         self._recompute_tree_editable()
+
+    @observe("sync:phase_nav_mode", dispatch="ui", post_init=True)
+    def _on_phase_nav_mode_changed(self, event):
+        """Mode checkbox toggled anywhere (DV sidebar, this pane, force-exit
+        on run start): sync the checkbox, the nav-bar phase buttons and the
+        timeline."""
+        active = self._idle_nav_active()
+        check = getattr(self._pane, "phase_nav_check", None)
+        if check is not None:
+            check.blockSignals(True)
+            check.setChecked(bool(self.sync.phase_nav_mode))
+            check.blockSignals(False)
+        self._pane.navigation_bar.show_idle_phase_controls(active)
+        if active:
+            self._update_idle_phase_nav_buttons()
+        self._refresh_timeline_position()
+
+    @observe("sync:[phase_nav_index, phase_nav_total]", dispatch="ui", post_init=True)
+    def _on_phase_nav_state_changed(self, event):
+        if not self._idle_nav_active():
+            return
+        self._update_idle_phase_nav_buttons()
+        self._refresh_timeline_position()
+
+    def _update_idle_phase_nav_buttons(self):
+        total = int(self.sync.phase_nav_total)
+        index = int(self.sync.phase_nav_index)
+        self._pane.navigation_bar.set_phase_navigation_enabled(
+            total > 0 and index > 0,
+            total > 0 and index < total - 1,
+        )
 
     ######### Helpers ###################
     def _recompute_tree_editable(self):

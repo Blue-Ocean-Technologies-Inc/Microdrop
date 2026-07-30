@@ -336,6 +336,18 @@ class NavigationBar(QWidget):
         self.play_phase_container.update()
         self.update()
 
+    def show_idle_phase_controls(self, visible):
+        """Show the Prev/Next-phase buttons around the Play button for idle
+        phase navigation (#493). Unlike split_play_button_to_phase_controls,
+        Play stays visible and no Resume appears — there is no paused
+        executor to resume. No-op while the paused-run cluster is active."""
+        if self._phase_navigation_active:
+            return
+        self.btn_prev_phase.setVisible(bool(visible))
+        self.btn_next_phase.setVisible(bool(visible))
+        self.play_phase_container.update()
+        self.update()
+
     def set_phase_navigation_enabled(self, prev_enabled, next_enabled):
         self.btn_prev_phase.setEnabled(prev_enabled)
         self.btn_next_phase.setEnabled(next_enabled)
