@@ -97,12 +97,16 @@ There is also a handler for "dropbot/signals/warnings/*" called _on_show_warning
 
 Receiving: (Via handlers)
 - SETUP_SUCCESS "dropbot/signals/setup_success"
+- PHASE_NAVIGATION_MODE "ui/phase_navigation_mode" (** also self-published)
+- PHASE_NAVIGATION_REQUEST "ui/device_viewer/phase_navigation_request"
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
 - START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring"
 - DEVICE_VIEWER_STATE_CHANGED "ui/device_viewer/state_changed"
 - STEP_PARAMS_COMMIT "ui/device_viewer/step_params_commit"
+- ** PHASE_NAVIGATION_MODE "ui/phase_navigation_mode"
+- PHASE_NAVIGATION_STATE "ui/device_viewer/phase_navigation_state" (via route_execution_service)
 
 ---
 
@@ -157,6 +161,27 @@ live route sync so step cells only mutate on deliberate user action.
 **Companion addition (pull direction)**
 - The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
 - The tree publishes that same-step refresh in two cases: the post-commit echo (above), and any tree-originated edit to an execution-param cell on the selected step (`_republish_on_param_cell_change`, gated on `DV_EXECUTION_PARAM_COL_IDS`) — protocol values supersede the sidebar, including uncommitted sidebar edits.
+
+### Device Viewer ↔ Protocol Tree: idle phase navigation (#493)
+
+Opt-in mode letting the user step through a route's phases without running the protocol. Three topics: a shared mode toggle synced between both UIs, a request the tree sends to move the DV's position, and a state echo the DV sends back to drive the tree's own controls.
+
+**Topics**
+- `PHASE_NAVIGATION_MODE = "ui/phase_navigation_mode"` — defined in `device_viewer/consts.py`. Payload `"True"`/`"False"`.
+- `PHASE_NAVIGATION_REQUEST = "ui/device_viewer/phase_navigation_request"` — defined in `device_viewer/consts.py`. JSON `{"action": "prev" | "next" | "goto", "index": <int, goto only>}`.
+- `PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"` — defined in `device_viewer/consts.py`. JSON `{"phase_index": <0-based int>, "phase_total": <int>}` (`phase_total` 0 = no plan).
+
+**Publisher/subscriber side (device_viewer)**
+- `device_viewer/views/device_view_dock_pane.py` — `_publish_phase_navigation_mode` sends `PHASE_NAVIGATION_MODE` when the sidebar checkbox is toggled; `_on_phase_navigation_mode_triggered` applies the tree's toggle (and any external `"False"`, e.g. force-exit on protocol run start); `_on_phase_navigation_request_triggered` applies an incoming `PHASE_NAVIGATION_REQUEST` via `RouteExecutionService`. Both handlers are registered on the DV's `ACTOR_TOPIC_DICT` listener.
+- `device_viewer/services/route_execution_service.py` — `_publish_phase_nav_state` sends `PHASE_NAVIGATION_STATE` whenever the idle-nav position or plan size changes (including the no-plan `phase_total=0` case).
+
+**Publisher/subscriber side (pluggable_protocol_tree)**
+- `pluggable_protocol_tree/views/dock_pane.py` — `_on_phase_nav_check_toggled` publishes `PHASE_NAVIGATION_MODE` when the tree's "Phase navigation" checkbox is ticked; `_publish_phase_nav_request` sends `PHASE_NAVIGATION_REQUEST` from the nav-bar Prev/Next buttons and the timeline's phase track.
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_listener_routine` branches on `PHASE_NAVIGATION_MODE` (mirrors the checkbox) and `PHASE_NAVIGATION_STATE` (drives the timeline/button enablement); subscriptions declared in `pluggable_protocol_tree/consts.py` alongside `device_viewer/consts.py`'s `ACTOR_TOPIC_DICT` entries.
+
+**Notes**
+- `PHASE_NAVIGATION_MODE` is published by whichever UI the user toggled and consumed by both (applying an equal value is a trait no-op, so the echo is harmless).
+- Mode is force-exited (`PHASE_NAVIGATION_MODE` published `"False"`) when a protocol run starts; the paused-run phase-seeking flow (#471) is untouched and gated separately.
 
 ### Backend → Microdrop task: shorts detected
 
