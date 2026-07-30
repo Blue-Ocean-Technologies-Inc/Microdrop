@@ -170,6 +170,7 @@ ExecutionSettingsView = View(
 # pause / executing trait names from main model
 paused = "object.route_execution_service_paused"
 executing = "object.route_execution_service_executing"
+nav_mode = "object.phase_navigation_mode"
 
 run_controls = HGroup(
     UItem(
@@ -181,7 +182,7 @@ run_controls = HGroup(
     UItem(
         "object.routes.prev_phase_btn",
         tooltip="Previous phase",
-        visible_when=paused,
+        visible_when=f"{paused} or ({nav_mode} and not {executing})",
         springy=True,
     ),  # previous phase
     UItem(
@@ -199,7 +200,7 @@ run_controls = HGroup(
     UItem(
         "object.routes.next_phase_btn",
         tooltip="Next phase",
-        visible_when=paused,
+        visible_when=f"{paused} or ({nav_mode} and not {executing})",
         springy=True,
     ),  # next phase
     UItem(
@@ -215,12 +216,19 @@ run_controls = HGroup(
         visible_when=f"not {executing}",
         springy=True,
     ),  # commit to step
+    Item(
+        "phase_navigation_mode",
+        label="Phases",
+        tooltip="Step through route phases without running the protocol "
+                "(synced with the protocol tree)",
+        visible_when=f"not {executing}",
+    ),  # idle phase-navigation mode (#493)
     enabled_when="not object.protocol_running",
 )
 
 execution_status_bar = HGroup(
     Item('execution_status', style='readonly', show_label=False),
-    visible_when=executing,
+    visible_when=f"{executing} or {nav_mode}",
     # style_sheet='* { font-size: 15px; }',
 )
 
@@ -262,6 +270,7 @@ if __name__ == "__main__":
         execution_status = Str("")
 
         protocol_running = Bool(False)
+        phase_navigation_mode = Bool(False)
 
         # Top-level mirrors for enabled_when bindings (nested paths like
         # `object.routes.commit_enabled` don't re-evaluate reliably)

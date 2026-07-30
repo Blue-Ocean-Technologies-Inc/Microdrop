@@ -256,6 +256,30 @@ class DeviceViewerDockPane(TraitsDockPane):
         finally:
             self._applying_phase_nav_message = False
 
+    def _on_phase_navigation_request_triggered(self, message):
+        # Nav requests drive the route-execution service (actuated_channels +
+        # its QTimer), so marshal onto the GUI thread.
+        GUI.invoke_later(self._apply_phase_navigation_request, message)
+
+    def _apply_phase_navigation_request(self, message):
+        service = self.model.route_execution_service if self.model else None
+        if service is None:
+            return
+        try:
+            request = json.loads(message)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Bad phase-navigation request {message!r}: {e}")
+            return
+        action = request.get("action")
+        if action == "prev":
+            service.goto_prev_phase()
+        elif action == "next":
+            service.goto_next_phase()
+        elif action == "goto":
+            service.goto_phase(int(request.get("index", 0)))
+        else:
+            logger.warning(f"Unknown phase-navigation action: {action!r}")
+
     def _gamepad_interaction_service(self):
         """The live interaction service that owns the gamepad poll loop, if any."""
         return getattr(getattr(self, "scene", None), "interaction_service", None)
@@ -554,6 +578,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Publish geometry if the electrode-to-channel mapping changed.
         self._publish_geometry_if_changed()
 
+        # Idle phase navigation follows the newly applied step (#493). Runs
+        # after _disable_state_messages is cleared so phase 0's actuation
+        # publishes (realtime-gated) like any other nav step.
+        if self.model.phase_navigation_mode and not self.model.protocol_running:
+            self.model.route_execution_service.rebuild_phase_navigation()
+
     def _check_unsaved_execution_params(self):
         # ask user if they want to save changes if there are any before moving on
         if not self.model.protocol_running:
@@ -659,7 +689,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             return
         if self.model.realtime_mode and self.model.connected:
 
-            if (not self.model.protocol_running and self.model.free_mode) or (
+            if (not self.model.protocol_running
+                    and (self.model.free_mode or self.model.phase_navigation_mode)) or (
                     self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
@@ -674,6 +705,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("model.protocol_running")
     @observe("model.free_mode")
+    @observe("model.phase_navigation_mode")
     @observe("model.realtime_mode")
     @observe("model.connected")
     def _actuation_publish_disabled_log_message(self, event):
@@ -681,8 +713,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model.protocol_running:
             reason += "Protocol running; "
 
-        if not self.model.free_mode:
-            reason += "Not in free mode; "
+        if not self.model.free_mode and not self.model.phase_navigation_mode:
+            reason += "Not in free mode or phase navigation; "
 
         if not self.model.realtime_mode:
             reason += "Realtime mode; "
