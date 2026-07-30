@@ -199,6 +199,7 @@ class RouteExecutionService(HasTraits):
         if self.model.route_execution_service_executing:
             return  # timed playback owns the display; nothing to restore
         if self._execution_plan:
+            self._capture_user_changes()
             # Drop the applied phase, keep what the user toggled themselves.
             self.model.electrodes.actuated_channels = self._user_toggled_channels
         self._execution_plan = []
@@ -216,6 +217,7 @@ class RouteExecutionService(HasTraits):
         if not self._nav_active():
             return
         if self._execution_plan:
+            self._capture_user_changes()
             # Restore the user baseline before re-snapshotting it, so the
             # previous plan's phase electrodes don't leak into the new plan.
             self.model.electrodes.actuated_channels = self._user_toggled_channels
@@ -431,7 +433,10 @@ class RouteExecutionService(HasTraits):
         if not self._execution_plan:
             return
 
-        self._navigated_while_paused = True
+        if self.model.route_execution_service_paused:
+            # Only paused playback replays from scratch on resume; idle-nav
+            # has no timer to replay and must not set this flag (#493).
+            self._navigated_while_paused = True
         self._capture_user_changes()
 
         target = max(0, min(int(index), len(self._execution_plan) - 1))
