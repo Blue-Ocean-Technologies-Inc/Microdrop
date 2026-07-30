@@ -20,6 +20,7 @@ the former Qt QObject signal bridge.
 from __future__ import annotations
 
 from collections import defaultdict
+import json
 
 import dramatiq
 
@@ -52,6 +53,7 @@ from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
     PROTOCOL_TREE_ADD_STEP, PROTOCOL_TREE_DISPLAY_STATE,
     PROTOCOL_TREE_SET_CELL, SYNC_LISTENER_NAME,
+    PHASE_NAVIGATION_MODE, PHASE_NAVIGATION_STATE,
     protocol_tree_row_selected_publisher,
 )
 from pluggable_protocol_tree.models.cell_sync import (
@@ -208,6 +210,14 @@ class DeviceViewerSyncController(HasTraits):
     # starts with Advanced Mode already on must not read a stale False.
     advanced_mode = Bool()
 
+    # Idle phase navigation (#493): mode checkbox state synced over
+    # PHASE_NAVIGATION_MODE; position published by the DV engine over
+    # PHASE_NAVIGATION_STATE. Written from the dramatiq worker thread —
+    # the dock pane observes all three with dispatch="ui".
+    phase_nav_mode = Bool(False)
+    phase_nav_index = Int(0)
+    phase_nav_total = Int(0)
+
     # Events fired by the worker-thread dramatiq listener; observed below so
     # the per-topic work runs on a trait notification instead of a Qt signal
     # bridge. The row-mutating ones use dispatch="ui" to marshal onto the GUI
@@ -361,6 +371,17 @@ class DeviceViewerSyncController(HasTraits):
             self._set_cell_request_event = message
         elif topic == PROTOCOL_TREE_ADD_STEP:
             self._add_step_request_event = message
+        elif topic == PHASE_NAVIGATION_MODE:
+            self.phase_nav_mode = (message.casefold() == "true")
+        elif topic == PHASE_NAVIGATION_STATE:
+            try:
+                state = json.loads(message)
+                self.trait_set(
+                    phase_nav_index=int(state.get("phase_index", 0)),
+                    phase_nav_total=int(state.get("phase_total", 0)),
+                )
+            except (ValueError, TypeError) as e:
+                logger.warning(f"bad phase-navigation state {message!r}: {e}")
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = (message.casefold() == "true")
         elif topic == DROPBOT_DISCONNECTED:
