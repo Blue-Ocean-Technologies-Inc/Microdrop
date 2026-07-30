@@ -270,13 +270,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         except (ValueError, TypeError) as e:
             logger.warning(f"Bad phase-navigation request {message!r}: {e}")
             return
+        if not isinstance(request, dict):
+            logger.warning(f"Bad phase-navigation request {message!r}: not an object")
+            return
         action = request.get("action")
         if action == "prev":
             service.goto_prev_phase()
         elif action == "next":
             service.goto_next_phase()
         elif action == "goto":
-            service.goto_phase(int(request.get("index", 0)))
+            try:
+                index = int(request.get("index", 0))
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Bad phase-navigation index in {message!r}: {e}")
+                return
+            service.goto_phase(index)
         else:
             logger.warning(f"Unknown phase-navigation action: {action!r}")
 
