@@ -376,10 +376,13 @@ class DeviceViewerSyncController(HasTraits):
         elif topic == PHASE_NAVIGATION_STATE:
             try:
                 state = json.loads(message)
-                self.trait_set(
-                    phase_nav_index=int(state.get("phase_index", 0)),
-                    phase_nav_total=int(state.get("phase_total", 0)),
-                )
+                if not isinstance(state, dict):
+                    logger.warning(f"bad phase-navigation state {message!r}: not an object")
+                else:
+                    self.trait_set(
+                        phase_nav_index=int(state.get("phase_index", 0)),
+                        phase_nav_total=int(state.get("phase_total", 0)),
+                    )
             except (ValueError, TypeError) as e:
                 logger.warning(f"bad phase-navigation state {message!r}: {e}")
         elif topic == REALTIME_MODE_UPDATED:

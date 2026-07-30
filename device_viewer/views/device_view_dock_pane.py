@@ -517,6 +517,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         # visibly blinking off in between (the per-phase flicker).
         self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
         self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
+        # Suspend the play-checkbox/param-edit rebuild observer while the new
+        # step's params/routes are being written below — otherwise it fires
+        # mid-apply against the OLD step's execution plan / baseline and
+        # corrupts the phase-nav state (#493 review F2). The explicit
+        # rebuild_phase_navigation() call at the end of this method performs
+        # the single rebuild against the fully-applied new step.
+        self.model.route_execution_service.suspend_nav_rebuild = True
 
         # Apply step ID
         self.model.step_id = message_model.step_id
@@ -581,6 +588,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self._disable_state_messages = False  # Re-enable state messages after reset
         self._undoing = False
+        self.model.route_execution_service.suspend_nav_rebuild = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         # Publish geometry if the electrode-to-channel mapping changed.

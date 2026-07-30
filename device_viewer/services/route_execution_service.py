@@ -36,6 +36,11 @@ class RouteExecutionService(HasTraits):
     _phases_per_rep = Int(1)
     _displayed_phase = Int(0)
 
+    #: Set by the dock pane while applying an inbound step message, so the
+    #: play-checkbox/param-edit rebuild observer doesn't fire mid-apply on
+    #: stale (old-step) execution-plan state (#493 review F2).
+    suspend_nav_rebuild = Bool(False)
+
     def __phase_timer_default(self):
         timer = PausableTimer()
         timer.setSingleShot(True)
@@ -186,9 +191,12 @@ class RouteExecutionService(HasTraits):
             self.stop_phase_navigation()
 
     def _nav_active(self):
-        """Idle phase navigation is in charge: mode on, no timed playback."""
+        """Idle phase navigation is in charge: mode on, no timed playback,
+        no protocol run (kept local rather than relying solely on the dock
+        pane's force-exit observer ordering, #493 review F4)."""
         return (self.model.phase_navigation_mode
-                and not self.model.route_execution_service_executing)
+                and not self.model.route_execution_service_executing
+                and not self.model.protocol_running)
 
     def start_phase_navigation(self):
         if self.model.route_execution_service_executing:
@@ -202,6 +210,12 @@ class RouteExecutionService(HasTraits):
             self._capture_user_changes()
             # Drop the applied phase, keep what the user toggled themselves.
             self.model.electrodes.actuated_channels = self._user_toggled_channels
+            # The mode trait is already False by the time this observer runs,
+            # so the dock pane's publish_electrode_update gate (which requires
+            # free_mode or phase_navigation_mode while idle) is closed and
+            # would silently drop this restore — publish explicitly instead,
+            # same reason _cleanup does (#493 review F1).
+            electrode_state_change_publisher.publish(self._user_toggled_channels)
         self._execution_plan = []
         self._current_phase_index = 0
         self._last_set_channels = set()
@@ -215,6 +229,8 @@ class RouteExecutionService(HasTraits):
         and on play-checkbox / execution-param edits. No-op unless idle
         navigation is in charge."""
         if not self._nav_active():
+            return
+        if self.suspend_nav_rebuild:
             return
         if self._execution_plan:
             self._capture_user_changes()
@@ -283,6 +299,11 @@ class RouteExecutionService(HasTraits):
 
         # Schedule next phase
         self._phase_timer.start(duration_ms)
+
+        # Keep the tree's phase position current during sidebar playback too
+        # (#493 review F3): otherwise it freezes as soon as Run takes over.
+        if self.model.phase_navigation_mode:
+            self._publish_phase_nav_state()
 
     def _apply_phase(self, plan_item):
         """Apply a single phase: update display + hardware."""
@@ -447,5 +468,10 @@ class RouteExecutionService(HasTraits):
         self._current_phase_index += 1  # advance past the displayed phase
         self._phase_timer.stop()  # clear any remaining time from interrupted phase
 
-        if self._nav_active():
+        # Publish whenever the mode is on, regardless of whether idle nav or
+        # timed playback currently owns the display, so the tree's phase
+        # position tracks playback too (#493 review F3). _publish_phase_nav_state
+        # computes displayed = _current_phase_index - 1, which is correct in
+        # both contexts.
+        if self.model.phase_navigation_mode:
             self._publish_phase_nav_state()
