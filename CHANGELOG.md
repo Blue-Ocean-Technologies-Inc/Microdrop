@@ -1,3 +1,27 @@
+## v1.8.0 (2026-07-30)
+
+### Feat
+
+- **protocol-tree**: idle phase-nav checkbox, buttons, timeline (#493)
+- **protocol-tree**: subscribe to phase-navigation topics (#493)
+- **device-viewer**: sidebar phase-nav checkbox and idle actuation gate (#493)
+- **device-viewer**: idle phase stepping in RouteExecutionService (#493)
+- **device-viewer**: phase-navigation topics and synced mode trait (#493)
+
+### Fix
+
+- **phase-nav**: harden idle phase navigation after branch review (#493)
+- **protocol-tree**: resync idle phase-nav buttons on run-state change (#493)
+- **device-viewer**: guard phase-navigation request content, not just JSON syntax (#493)
+- **device-viewer**: stop navigated-flag leak and toggle loss in idle phase nav (#493)
+
+### Docs
+
+- record phase-0 rebuild decision in idle phase-nav spec (#493)
+- document phase-navigation topics (#493)
+- add idle phase navigation implementation plan (#493)
+- add idle phase navigation design spec (#493)
+
 ## v1.7.0 (2026-07-29)
 
 ### Feat
