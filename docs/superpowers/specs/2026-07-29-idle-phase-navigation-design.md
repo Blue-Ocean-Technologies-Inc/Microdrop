@@ -78,8 +78,9 @@ view and actuated on hardware when realtime mode is enabled. Default behaviour
   their `visible_when` beyond executing/paused playback).
 - Rebuild triggers:
   - Step selection change → rebuild plan, reset to phase 0.
-  - Route play-checkbox toggle or execution-param edit → rebuild plan, clamp the
-    current index into the new plan's range.
+  - Route play-checkbox toggle or execution-param edit → rebuild plan, reset to
+    phase 0 (simpler and predictable; a clamped index into a differently-shaped
+    plan is rarely the same droplet position).
 - Mode-off (or forced exit) → restore the step's normal display: static actuated
   electrodes and route lines, exactly as a fresh step selection renders today.
 
