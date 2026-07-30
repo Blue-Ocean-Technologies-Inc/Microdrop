@@ -1278,6 +1278,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if tb is not None:
             tb.set_running(bool(event.new))
             self._refresh_timeline_position()  # show/hide rep controls
+        # Idle phase-nav buttons follow the run state directly: the DV's
+        # force-exit echo (PHASE_NAVIGATION_MODE "False") arrives over Redis
+        # a beat later, and the buttons must not stay up during a run (#493).
+        self._pane.navigation_bar.show_idle_phase_controls(self._idle_nav_active())
         sched = self._protocol_poll_scheduler
         if sched is None:
             return
