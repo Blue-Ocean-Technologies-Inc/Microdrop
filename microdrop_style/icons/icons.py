@@ -53,3 +53,5 @@ ICON_CIRCLE          = "circle"       # draw circular ROI
 ICON_RECTANGLE       = "rectangle"    # draw rectangular ROI
 ICON_SHOW_CHART      = "show_chart"   # calculate & plot intensities
 ICON_DELETE_SWEEP    = "delete_sweep" # clear all ROIs
+ICON_CHEVRON_LEFT    = "chevron_left"  # collapse a sidebar leftward
+ICON_CHEVRON_RIGHT   = "chevron_right" # reveal a collapsed sidebar
