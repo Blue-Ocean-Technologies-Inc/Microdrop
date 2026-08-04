@@ -1034,6 +1034,10 @@ class _InPlaceToggleEditor(QtEditor):
                 font-weight: bold;
                 max-width: 100px;
             }}
+            QPushButton:disabled {{
+                background-color: {GREY["light"]};
+                color: {GREY["dark"]};
+            }}
         """)
 
     def _on_click(self):
