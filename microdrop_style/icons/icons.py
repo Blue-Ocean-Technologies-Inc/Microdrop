@@ -52,6 +52,7 @@ ICON_ARCHIVE         = "folder_zip"  # select a .zip firmware bundle
 ICON_CIRCLE          = "circle"       # draw circular ROI
 ICON_RECTANGLE       = "rectangle"    # draw rectangular ROI
 ICON_CAPSULE         = "pill"         # draw capsule (spherocylinder) ROI
+ICON_CONTOUR         = "pentagon"     # trace a contour (polygon) ROI
 ICON_SHOW_CHART      = "show_chart"   # calculate & plot intensities
 ICON_DELETE_SWEEP    = "delete_sweep" # clear all ROIs
 ICON_CHEVRON_LEFT    = "chevron_left"  # collapse a sidebar leftward
