@@ -1010,6 +1010,10 @@ class _InPlaceToggleEditor(QtEditor):
         self.control.setChecked(self.value)
         self.control.clicked.connect(self._on_click)
         self.control.setMaximumWidth(self.factory.max_width)
+        # TraitsUI hands the Item's tooltip= to the editor as its
+        # description, but only applies it when the editor asks:
+        # Item("flag", editor=InPlaceToggleEditor(...), tooltip="...").
+        self.set_tooltip()
 
         # Apply initial label + styling, and keep them in sync on every toggle
         # (click included; the trait-driven update_editor() does not fire on a
