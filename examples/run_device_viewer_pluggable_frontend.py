@@ -28,6 +28,12 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # Required before anything spawns a process on Windows,
+    # and a no-op elsewhere.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the frontend device viewer plugins.")

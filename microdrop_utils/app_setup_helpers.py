@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import shutil
 import subprocess
@@ -51,8 +52,15 @@ def self_update_source_repo(repo_root=PROJECT_ROOT,
     - every failure is a logged warning, never a blocked launch.
 
     Skipped when ``MICRODROP_SKIP_GIT_UPDATE`` is set, when git or the
-    ``.git`` link is absent (frozen/tarball installs), or on any error.
+    ``.git`` link is absent (frozen/tarball installs), in a spawned
+    worker process, or on any error.
     """
+    if multiprocessing.parent_process() is not None:
+        # A spawned child re-imports the launcher, so without this every
+        # worker in a pool would run its own git pull — the app's own
+        # ROI batch once produced one per CPU.
+        logger.debug("source self-update skipped: worker process")
+        return
     if os.environ.get(SKIP_GIT_UPDATE_ENV_VAR):
         logger.info(f"source self-update skipped ({SKIP_GIT_UPDATE_ENV_VAR} is set)")
         return
