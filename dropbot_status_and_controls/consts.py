@@ -38,6 +38,7 @@ DIELECTRIC_MATERIALS = {
     "Parylene D": 2.84,
     "PDMS": 2.7,
     "Si3N4": 7.5,
+    "Kapton": 3.4
 }
 
 # Status colors
