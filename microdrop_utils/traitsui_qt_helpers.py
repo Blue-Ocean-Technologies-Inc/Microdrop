@@ -1174,6 +1174,56 @@ class IconButtonEditor(BasicEditorFactory):
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
 
 
+class _IconModeButtonEditor(_IconButtonEditor):
+    """An icon button that also shows, checked, whether the mode it arms
+    is the one currently active. The click still just fires the trait —
+    which mode results is the controller's business, so a tool that
+    refuses to arm (or disarms on a second click) stays honest."""
+
+    def init(self, parent):
+        super().init(parent)
+        self.control.setCheckable(True)
+        self.control.setChecked(self._armed())
+        self.object.observe(self._on_mode_changed, self.factory.mode_trait)
+
+    def _armed(self):
+        return (getattr(self.object, self.factory.mode_trait)
+                == self.factory.mode)
+
+    def _on_click(self):
+        # Qt has already flipped the check state on its own; the mode
+        # trait is the authority, so put it back and let whatever the
+        # click triggers set it.
+        self.control.setChecked(self._armed())
+        super()._on_click()
+
+    def _on_mode_changed(self, event):
+        self.control.setChecked(self._armed())
+
+    def dispose(self):
+        self.object.observe(self._on_mode_changed, self.factory.mode_trait,
+                            remove=True)
+        super().dispose()
+
+
+class IconModeButtonEditor(IconButtonEditor):
+    """Factory for a Button trait that arms a mode, rendered as a glyph
+    button that lights up while that mode is active::
+
+        UItem("draw_ellipse_button", editor=IconModeButtonEditor(
+            glyph=ICON_CIRCLE, mode="draw_ellipse",
+            mode_trait="interaction_mode", tooltip="Draw an ellipse"))
+
+    ``mode_trait`` names a trait on the same object as the button.
+    """
+
+    klass = _IconModeButtonEditor
+
+    #: The value of ``mode_trait`` this button represents.
+    mode = Str()
+    mode_trait = Str("interaction_mode")
+
+
 def _has_group_box_ancestor(layout):
     """True if ``layout`` lives inside a QGroupBox (i.e. it lays out a section's
     contents rather than arranging the section boxes themselves)."""
