@@ -59,3 +59,5 @@ ICON_DELETE_SWEEP    = "delete_sweep" # clear all ROIs
 ICON_CHEVRON_LEFT    = "chevron_left"  # collapse a sidebar leftward
 ICON_CHEVRON_RIGHT   = "chevron_right" # reveal a collapsed sidebar
 ICON_FUNCTION        = "function"      # fit equations table
+ICON_COPY            = "content_copy"  # copy the selected ROI
+ICON_PASTE           = "content_paste" # paste a copied ROI
