@@ -5,6 +5,8 @@ import time
 
 import serial
 from serial.tools.list_ports import grep
+from traits.api import Any, HasTraits, Str
+
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -100,9 +102,36 @@ def device_id_from_whoami_output(text) -> str | None:
     return None
 
 
-def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S):
-    """``device_id`` string, ``None`` (opened, no identity — older firmware),
-    or ``PORT_BUSY`` (could not open). Probes are serialized in-process.
+class ClaimedPort(HasTraits):
+    """A port claimed for a device, with the serial handle that has been
+    open since the whoami probe identified it. Handing this handle to the
+    device's proxy makes probe→connect atomic: the port is never released
+    between identification and ownership, so nothing can grab it in
+    between (and Windows' USB-CDC close→reopen latency never applies).
+    """
+
+    port = Str(desc="Serial port name, e.g. COM7")
+    serial = Any(
+        desc="serial.Serial handle open since the whoami probe identified "
+             "the board")
+
+    def __str__(self):
+        return self.port
+
+    def close(self):
+        try:
+            self.serial.close()
+        except Exception:
+            pass
+
+
+def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S,
+                keep_open=False):
+    """``(result, handle)``: result is a ``device_id`` string, ``None``
+    (opened, no identity — older firmware), or ``PORT_BUSY`` (could not
+    open). ``handle`` is the still-open serial port when ``keep_open`` and
+    the board identified, else None (port closed). Probes are serialized
+    in-process.
 
     Reads line by line until a WHOAMI frame parses or ``timeout_s`` elapses,
     so a reply that arrives late (board busy streaming) or lands split
@@ -113,7 +142,8 @@ def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S):
             probe = serial.Serial(port, baudrate, timeout=0.2, write_timeout=2)
         except Exception as e:
             logger.debug(f"whoami probe: cannot open {port}: {e}")
-            return PORT_BUSY
+            return PORT_BUSY, None
+        keep = False
         try:
             probe.reset_input_buffer()
             probe.write(b"whoami\n")
@@ -125,16 +155,18 @@ def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S):
                 device_id = device_id_from_whoami_output(
                     buf.decode(errors="replace"))
                 if device_id is not None:
-                    return device_id
+                    keep = keep_open
+                    return device_id, (probe if keep_open else None)
         except Exception as e:
             logger.debug(f"whoami probe: read failed on {port}: {e}")
-            return None
+            return None, None
         finally:
-            try:
-                probe.close()
-            except Exception:
-                pass
-    return None
+            if not keep:
+                try:
+                    probe.close()
+                except Exception:
+                    pass
+    return None, None
 
 
 def probe_port_device_id(port, baudrate=115200) -> str | None:
@@ -145,7 +177,7 @@ def probe_port_device_id(port, baudrate=115200) -> str | None:
     monitors tell apart boards that share a VID:PID (the heater and
     fluorescence boards are both Pico 2E8A:0005) before claiming a port.
     """
-    result = _probe_port(port, baudrate)
+    result, _ = _probe_port(port, baudrate)
     return None if result is PORT_BUSY else result
 
 
@@ -184,10 +216,14 @@ def _prune_unidentified_state(device_id_fragment, seen_ports):
             del _unidentified_miss_counts[key]
 
 
-def find_port_by_device_id(hwids, device_id_fragment, *,
-                           min_unidentified_scans=1) -> str:
-    """The port of the board whose whoami ``device_id`` contains
-    ``device_id_fragment``, searching all ports matching ``hwids`` by VID:PID.
+def claim_port_by_device_id(hwids, device_id_fragment, *,
+                            min_unidentified_scans=1) -> ClaimedPort:
+    """Claim the port of the board whose whoami ``device_id`` contains
+    ``device_id_fragment``, searching all ports matching ``hwids`` by
+    VID:PID. Returns a ClaimedPort whose serial handle has been open since
+    the identifying probe — hand it to the device proxy so the port is
+    never released (and up for grabs) between identification and
+    connection.
 
     Ports that identify as some OTHER device are never claimed. Ports that
     cannot be OPENED are skipped entirely (busy: the other plugin's board or
@@ -199,10 +235,9 @@ def find_port_by_device_id(hwids, device_id_fragment, *,
 
     ``min_unidentified_scans`` gates that fallback: a port is only claimed
     once it has stayed unidentified across that many consecutive calls for
-    this ``device_id_fragment``. The default of 1 keeps one-shot semantics
-    (the firmware uploader's probe); the periodic peripheral monitors pass
-    a higher value so one missed probe window on a busy board doesn't hand
-    it to the wrong plugin.
+    this ``device_id_fragment``. The default of 1 keeps one-shot semantics;
+    the periodic peripheral monitors pass a higher value so one missed
+    probe window on a busy board doesn't hand it to the wrong plugin.
     """
     unidentified = []
     seen_ports = set()
@@ -210,7 +245,7 @@ def find_port_by_device_id(hwids, device_id_fragment, *,
         for port_info in grep(hwid):
             port = str(port_info.device)
             seen_ports.add(port)
-            result = _probe_port(port, 115200)
+            result, handle = _probe_port(port, 115200, keep_open=True)
             if result is PORT_BUSY:
                 logger.debug(f"Port {port} busy; skipping this scan")
             elif result is None:
@@ -218,25 +253,54 @@ def find_port_by_device_id(hwids, device_id_fragment, *,
             elif device_id_fragment in result:
                 _note_port_identified(device_id_fragment, port)
                 logger.info(f"Board '{result}' matched on port {port}")
-                return port
+                return ClaimedPort(port=port, serial=handle)
             else:
                 _note_port_identified(device_id_fragment, port)
                 logger.debug(
                     f"Port {port} identifies as '{result}' — not a "
                     f"'{device_id_fragment}' board; skipping")
+                try:
+                    handle.close()
+                except Exception:
+                    pass
     _prune_unidentified_state(device_id_fragment, seen_ports)
     for port in unidentified:
         misses = _note_port_unidentified(device_id_fragment, port)
-        if misses >= min_unidentified_scans:
-            logger.warning(
-                f"No port identified as a '{device_id_fragment}' board; "
-                f"falling back to port {port} after {misses} scans with no "
-                f"whoami reply (older firmware?)")
-            return port
-        logger.debug(
-            f"Port {port} unidentified for {misses}/{min_unidentified_scans} "
-            f"scans; not yet eligible for the '{device_id_fragment}' fallback")
+        if misses < min_unidentified_scans:
+            logger.debug(
+                f"Port {port} unidentified for "
+                f"{misses}/{min_unidentified_scans} scans; not yet eligible "
+                f"for the '{device_id_fragment}' fallback")
+            continue
+        # The probe closed this port (only identified ports stay open), so
+        # the fallback reopens it here. A failure just skips this scan: the
+        # miss count is kept and the next scan retries.
+        try:
+            handle = serial.Serial(port, 115200, timeout=2, write_timeout=2)
+        except Exception as e:
+            logger.debug(f"Fallback could not reopen {port}: {e}")
+            continue
+        logger.warning(
+            f"No port identified as a '{device_id_fragment}' board; falling "
+            f"back to port {port} after {misses} scans with no whoami reply "
+            f"(older firmware?)")
+        return ClaimedPort(port=port, serial=handle)
     raise Exception(f"No '{device_id_fragment}' board found for hwids {hwids}")
+
+
+def find_port_by_device_id(hwids, device_id_fragment, *,
+                           min_unidentified_scans=1) -> str:
+    """The port NAME of the board whose whoami ``device_id`` contains
+    ``device_id_fragment`` (see claim_port_by_device_id for the search and
+    fallback rules). The claimed handle is closed before returning — for
+    one-shot callers like the firmware uploader that need the port free;
+    the periodic monitors use claim_port_by_device_id instead to hand the
+    open port straight to the proxy."""
+    claimed = claim_port_by_device_id(
+        hwids, device_id_fragment,
+        min_unidentified_scans=min_unidentified_scans)
+    claimed.close()
+    return claimed.port
 
 
 if __name__ == "__main__":
