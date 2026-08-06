@@ -32,16 +32,34 @@ def test_no_frame_or_bad_json_gives_none():
 
 # --- port selection --------------------------------------------------------------
 
+class _FakeSerial:
+    """Stands in for the probe's kept-open handle and the fallback reopen."""
+
+    def __init__(self, *args, **kwargs):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
 @pytest.fixture
 def ports(monkeypatch):
-    """Fake the VID:PID port listing and per-port probe results."""
+    """Fake the VID:PID port listing, per-port probe results, and the
+    fallback's reopen."""
     state = {"ports": [], "ids": {}}
     monkeypatch.setattr(
         helpers, "grep",
         lambda hwid: [SimpleNamespace(device=p) for p in state["ports"]])
-    monkeypatch.setattr(
-        helpers, "_probe_port",
-        lambda port, baudrate: state["ids"].get(port))
+
+    def fake_probe(port, baudrate, timeout_s=None, keep_open=False):
+        result = state["ids"].get(port)
+        handle = _FakeSerial() if (keep_open and isinstance(result, str)) else None
+        return result, handle
+
+    monkeypatch.setattr(helpers, "_probe_port", fake_probe)
+    monkeypatch.setattr(helpers.serial, "Serial", _FakeSerial)
+    # Consecutive-miss fallback state is module-level; isolate each test.
+    helpers._unidentified_miss_counts.clear()
     return state
 
 
@@ -90,3 +108,27 @@ def test_busy_port_skipped_but_open_unidentified_still_falls_back(ports):
     ports["ports"] = ["COM3", "COM4"]
     ports["ids"] = {"COM3": PORT_BUSY, "COM4": None}
     assert find_port_by_device_id(HWIDS, "heater") == "COM4"
+
+
+# --- port claiming ----------------------------------------------------------------
+
+def test_claim_hands_over_the_open_probe_handle(ports):
+    # The handle opened by the identifying probe is passed on, still open —
+    # the port is never released between identification and connection.
+    ports["ports"] = ["COM4"]
+    ports["ids"] = {"COM4": "heater_board"}
+    claimed = helpers.claim_port_by_device_id(HWIDS, "heater")
+    assert str(claimed) == "COM4"
+    assert isinstance(claimed.serial, _FakeSerial)
+    assert not claimed.serial.closed
+
+
+def test_fallback_needs_consecutive_unidentified_scans(ports):
+    ports["ports"] = ["COM5"]
+    ports["ids"] = {"COM5": None}
+    with pytest.raises(Exception, match="No 'heater' board found"):
+        helpers.claim_port_by_device_id(HWIDS, "heater",
+                                        min_unidentified_scans=2)
+    claimed = helpers.claim_port_by_device_id(HWIDS, "heater",
+                                              min_unidentified_scans=2)
+    assert str(claimed) == "COM5"
