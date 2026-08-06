@@ -973,8 +973,8 @@ class SlidingToggleEditor(BasicEditorFactory):
     klass = _SlidingToggleEditor
 
     #: Trait values the checked / unchecked states map to.
-    on_value = Any()
-    off_value = Any()
+    on_value = Any(default_value=True)
+    off_value = Any(default_value=False)
     #: Toggle widget colours (hex string or Qt colour).
     bar_color = Any(Qt.gray)         # unchecked bar
     checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
