@@ -61,3 +61,5 @@ ICON_CHEVRON_RIGHT   = "chevron_right" # reveal a collapsed sidebar
 ICON_FUNCTION        = "function"      # fit equations table
 ICON_COPY            = "content_copy"  # copy the selected ROI
 ICON_PASTE           = "content_paste" # paste a copied ROI
+ICON_TONALITY        = "tonality"      # rolling-ball flattening
+ICON_ADJUST          = "adjust"        # show the ball at its size
