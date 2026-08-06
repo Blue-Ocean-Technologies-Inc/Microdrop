@@ -1,3 +1,9 @@
+## v1.9.0 (2026-08-05)
+
+### Feat
+
+- **dropbot consts**: Add kapton to dielectric constants
+
 ## v1.8.0 (2026-07-30)
 
 ### Feat
