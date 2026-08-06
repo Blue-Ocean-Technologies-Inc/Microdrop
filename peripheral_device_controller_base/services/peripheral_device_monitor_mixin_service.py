@@ -1,6 +1,6 @@
 import json
 
-from traits.api import provides, HasTraits, Bool, Instance, Str, List, observe, Event
+from traits.api import provides, HasTraits, Bool, Instance, Int, Str, List, observe, Event
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_SHUTDOWN
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -8,7 +8,9 @@ from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUS
 
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
+from microdrop_utils.hardware_device_monitoring_helpers import (
+    check_devices_available, find_port_by_device_id,
+)
 from logger.logger_service import get_logger
 
 from ..interfaces.i_peripheral_device_control_mixin_service import IPeripheralDeviceControlMixinService
@@ -27,8 +29,14 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
     Subclasses customize the device by overriding:
         ``_default_hwids`` — HWIDs to scan for when no payload is supplied.
         ``_make_proxy(port_name)`` — build and return the device's serial proxy.
-        ``_find_port(hwids)`` — locate the serial port (defaults to a USB-serial
-            HWID grep); override when the device's port description differs.
+        ``_device_id_fragment`` — set when the device shares its VID:PID with
+            other peripherals (e.g. the Pico-based boards): each candidate
+            port is then probed for a whoami ``device_id`` containing this
+            fragment before it is claimed.
+        ``_find_port(hwids)`` — locate the serial port (defaults to a
+            device-id probe when ``_device_id_fragment`` is set, else a
+            USB-serial HWID grep); override when the device's port discovery
+            differs entirely.
     """
     id = Str("peripheral_device_monitor_mixin_service")
     name = Str("Peripheral Device Monitor Mixin")
@@ -37,6 +45,12 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         desc="An AP scheduler job to periodically look for connected ports.")
 
     _default_hwids = List(Str)
+    _device_id_fragment = Str(
+        desc="whoami device_id substring identifying this device's boards; "
+             "empty disables identity probing")
+    _unidentified_fallback_scans = Int(
+        3, desc="consecutive scans a port must stay unidentified before the "
+                "older-firmware fallback may claim it")
     _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
     _searching = Event(desc="Is the monitor thread actively scanning right now?")
 
@@ -52,7 +66,14 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         raise NotImplementedError
 
     def _find_port(self, hwids):
-        """Return the serial port for a device matching one of ``hwids``."""
+        """Return the serial port for a device matching one of ``hwids``.
+        With ``_device_id_fragment`` set, candidates are disambiguated by
+        their whoami identity (needed when several peripherals share one
+        VID:PID)."""
+        if self._device_id_fragment:
+            return find_port_by_device_id(
+                hwids, self._device_id_fragment,
+                min_unidentified_scans=self._unidentified_fallback_scans)
         return check_devices_available(hwids)
 
     ######################################## Methods to Expose #############################################
