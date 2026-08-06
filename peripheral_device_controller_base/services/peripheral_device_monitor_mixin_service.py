@@ -9,7 +9,7 @@ from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUS
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.hardware_device_monitoring_helpers import (
-    check_devices_available, find_port_by_device_id,
+    ClaimedPort, check_devices_available, claim_port_by_device_id,
 )
 from logger.logger_service import get_logger
 
@@ -69,9 +69,12 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         """Return the serial port for a device matching one of ``hwids``.
         With ``_device_id_fragment`` set, candidates are disambiguated by
         their whoami identity (needed when several peripherals share one
-        VID:PID)."""
+        VID:PID) and returned as a ClaimedPort whose handle has stayed open
+        since the identifying probe — _make_proxy hands it to the proxy so
+        the port is never up for grabs between identification and
+        connection."""
         if self._device_id_fragment:
-            return find_port_by_device_id(
+            return claim_port_by_device_id(
                 hwids, self._device_id_fragment,
                 min_unidentified_scans=self._unidentified_fallback_scans)
         return check_devices_available(hwids)
@@ -219,8 +222,11 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
         self.monitor_scheduler.pause()
         logger.debug(f"Paused {self._device_name} monitor")
         self.port_name = str(event.retval)
-        logger.info(f'Attempting to connect to {self._device_name} on port: %s', self.port_name)
-        self._connect_to_device(port_name=self.port_name)
+        logger.info(f'Attempting to connect to {self._device_name} on port: {self.port_name}')
+        # Pass the finder's retval itself: a ClaimedPort carries the serial
+        # handle held open since the identifying probe, which _make_proxy
+        # hands to the proxy.
+        self._connect_to_device(port_name=event.retval)
         self._error_shown = False  # Reset error state when device is found
 
     def _connect_to_device(self, port_name):
@@ -240,6 +246,10 @@ class PeripheralDeviceMonitorMixinService(HasTraits):
 
             except Exception as e:
                 logger.error(f"An unexpected error occurred with {self._device_name}: {e}", exc_info=True)
+                # Don't leak the claimed handle: release the port so the
+                # next scan (or the rightful monitor) can reach it.
+                if isinstance(port_name, ClaimedPort):
+                    port_name.close()
 
             finally:
                 # If the connection is not active, the 'try' block failed: run disconnect routine.
