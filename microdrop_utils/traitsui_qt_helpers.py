@@ -17,7 +17,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
+from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float, Callable
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_, Controller,
                           UIInfo, Handler, RangeEditor, EnumEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
@@ -43,6 +43,29 @@ DEFAULT_GLYPH_POINT_SIZE_PX = 16
 # right edge, and the narrowest the user can drag the header down to.
 TABLE_ROW_HEADER_RESIZE_GRIP_PX = 4
 TABLE_ROW_HEADER_MINIMUM_WIDTH_PX = 12
+
+
+def toggle_editor_default_style_sheet_factory(checked, border="none",
+                                              border_radius="4px", padding="8px 16px",
+                                              font_weight="bold", max_width="100px", other="" ):
+    background = SUCCESS_COLOR if checked else GREY["lighter"]
+    foreground = "white" if checked else "#333333"
+    return f"""
+            QPushButton {{
+                background-color: {background};
+                color: {foreground};
+                border: {border};
+                border-radius: {border_radius};
+                padding: {padding};
+                font-weight: {font_weight};
+                max-width: {max_width};
+                {other}
+            }}
+            QPushButton:disabled {{
+                background-color: {GREY["light"]};
+                color: {GREY["dark"]};
+            }}
+        """
 
 
 class TableColumn(TableColumn_):
@@ -1015,6 +1038,9 @@ class _InPlaceToggleEditor(QtEditor):
         # Item("flag", editor=InPlaceToggleEditor(...), tooltip="...").
         self.set_tooltip()
 
+        if not self.factory.custom_style_sheet_factory:
+            self.factory.custom_style_sheet_factory = toggle_editor_default_style_sheet_factory
+
         # Apply initial label + styling, and keep them in sync on every toggle
         # (click included; the trait-driven update_editor() does not fire on a
         # user click).
@@ -1026,23 +1052,8 @@ class _InPlaceToggleEditor(QtEditor):
         checked = self.control.isChecked()
         self.control.setText(
             self.factory.on_label if checked else self.factory.off_label)
-        background = SUCCESS_COLOR if checked else GREY["lighter"]
-        foreground = "white" if checked else "#333333"
-        self.control.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {background};
-                color: {foreground};
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-                max-width: 100px;
-            }}
-            QPushButton:disabled {{
-                background-color: {GREY["light"]};
-                color: {GREY["dark"]};
-            }}
-        """)
+
+        self.control.setStyleSheet(self.factory.custom_style_sheet_factory(checked))
 
     def _on_click(self):
         # Read the button state rather than inverting self.value, so the
@@ -1073,6 +1084,7 @@ class InPlaceToggleEditor(BasicEditorFactory):
     off_label = Str("Off")
 
     max_width = Int(100)
+    custom_style_sheet_factory = Callable(desc='Override default style sheet for the inplace toggle editor')
 
 
 class _IconToggleEditor(QtEditor):
