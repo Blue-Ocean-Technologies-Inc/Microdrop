@@ -17,7 +17,7 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float
+from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float, Callable
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_, Controller,
                           UIInfo, Handler, RangeEditor, EnumEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
@@ -43,6 +43,29 @@ DEFAULT_GLYPH_POINT_SIZE_PX = 16
 # right edge, and the narrowest the user can drag the header down to.
 TABLE_ROW_HEADER_RESIZE_GRIP_PX = 4
 TABLE_ROW_HEADER_MINIMUM_WIDTH_PX = 12
+
+
+def toggle_editor_default_style_sheet_factory(checked, border="none",
+                                              border_radius="4px", padding="8px 16px",
+                                              font_weight="bold", max_width="100px", other="" ):
+    background = SUCCESS_COLOR if checked else GREY["lighter"]
+    foreground = "white" if checked else "#333333"
+    return f"""
+            QPushButton {{
+                background-color: {background};
+                color: {foreground};
+                border: {border};
+                border-radius: {border_radius};
+                padding: {padding};
+                font-weight: {font_weight};
+                max-width: {max_width};
+                {other}
+            }}
+            QPushButton:disabled {{
+                background-color: {GREY["light"]};
+                color: {GREY["dark"]};
+            }}
+        """
 
 
 class TableColumn(TableColumn_):
@@ -973,8 +996,8 @@ class SlidingToggleEditor(BasicEditorFactory):
     klass = _SlidingToggleEditor
 
     #: Trait values the checked / unchecked states map to.
-    on_value = Any()
-    off_value = Any()
+    on_value = Any(default_value=True)
+    off_value = Any(default_value=False)
     #: Toggle widget colours (hex string or Qt colour).
     bar_color = Any(Qt.gray)         # unchecked bar
     checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
@@ -1010,6 +1033,13 @@ class _InPlaceToggleEditor(QtEditor):
         self.control.setChecked(self.value)
         self.control.clicked.connect(self._on_click)
         self.control.setMaximumWidth(self.factory.max_width)
+        # TraitsUI hands the Item's tooltip= to the editor as its
+        # description, but only applies it when the editor asks:
+        # Item("flag", editor=InPlaceToggleEditor(...), tooltip="...").
+        self.set_tooltip()
+
+        if not self.factory.custom_style_sheet_factory:
+            self.factory.custom_style_sheet_factory = toggle_editor_default_style_sheet_factory
 
         # Apply initial label + styling, and keep them in sync on every toggle
         # (click included; the trait-driven update_editor() does not fire on a
@@ -1022,19 +1052,8 @@ class _InPlaceToggleEditor(QtEditor):
         checked = self.control.isChecked()
         self.control.setText(
             self.factory.on_label if checked else self.factory.off_label)
-        background = SUCCESS_COLOR if checked else GREY["lighter"]
-        foreground = "white" if checked else "#333333"
-        self.control.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {background};
-                color: {foreground};
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-                max-width: 100px;
-            }}
-        """)
+
+        self.control.setStyleSheet(self.factory.custom_style_sheet_factory(checked))
 
     def _on_click(self):
         # Read the button state rather than inverting self.value, so the
@@ -1065,6 +1084,7 @@ class InPlaceToggleEditor(BasicEditorFactory):
     off_label = Str("Off")
 
     max_width = Int(100)
+    custom_style_sheet_factory = Callable(desc='Override default style sheet for the inplace toggle editor')
 
 
 class _IconToggleEditor(QtEditor):
@@ -1164,6 +1184,56 @@ class IconButtonEditor(BasicEditorFactory):
 
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
+
+
+class _IconModeButtonEditor(_IconButtonEditor):
+    """An icon button that also shows, checked, whether the mode it arms
+    is the one currently active. The click still just fires the trait —
+    which mode results is the controller's business, so a tool that
+    refuses to arm (or disarms on a second click) stays honest."""
+
+    def init(self, parent):
+        super().init(parent)
+        self.control.setCheckable(True)
+        self.control.setChecked(self._armed())
+        self.object.observe(self._on_mode_changed, self.factory.mode_trait)
+
+    def _armed(self):
+        return (getattr(self.object, self.factory.mode_trait)
+                == self.factory.mode)
+
+    def _on_click(self):
+        # Qt has already flipped the check state on its own; the mode
+        # trait is the authority, so put it back and let whatever the
+        # click triggers set it.
+        self.control.setChecked(self._armed())
+        super()._on_click()
+
+    def _on_mode_changed(self, event):
+        self.control.setChecked(self._armed())
+
+    def dispose(self):
+        self.object.observe(self._on_mode_changed, self.factory.mode_trait,
+                            remove=True)
+        super().dispose()
+
+
+class IconModeButtonEditor(IconButtonEditor):
+    """Factory for a Button trait that arms a mode, rendered as a glyph
+    button that lights up while that mode is active::
+
+        UItem("draw_ellipse_button", editor=IconModeButtonEditor(
+            glyph=ICON_CIRCLE, mode="draw_ellipse",
+            mode_trait="interaction_mode", tooltip="Draw an ellipse"))
+
+    ``mode_trait`` names a trait on the same object as the button.
+    """
+
+    klass = _IconModeButtonEditor
+
+    #: The value of ``mode_trait`` this button represents.
+    mode = Str()
+    mode_trait = Str("interaction_mode")
 
 
 def _has_group_box_ancestor(layout):
