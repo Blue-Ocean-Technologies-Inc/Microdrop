@@ -1,3 +1,29 @@
+## v1.10.0 (2026-08-07)
+
+### Feat
+
+- **style**: add glyphs for the rolling-ball controls
+- **traitsui**: add a mode-aware icon button editor
+- **style**: add copy and paste glyphs
+- **dropbot_consts**: add kapton to dielectric constants
+- **icons**: add the scale-calibration ruler glyph
+- **icons**: add the contour ROI glyph
+- **icons**: add the capsule ROI glyph
+- **style**: add function icon for fit equations
+- **style**: add chevron sidebar-toggle icon constants
+- **icons**: add ROI analysis glyphs
+
+### Fix
+
+- **traits_editors**: Sliding toggle editor needs on/off defaults. Now its True / False.
+- **setup**: keep the git self-update out of worker processes
+- **utils**: apply the Item tooltip to an in-place toggle
+- **utils**: grey out a disabled in-place toggle
+
+### Refactor
+
+- **traitsui**: overridable stylesheet for the in-place toggle
+
 ## v1.9.0 (2026-08-05)
 
 ### Feat
