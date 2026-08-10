@@ -59,6 +59,16 @@ def _format_elapsed(delta: timedelta) -> str:
     return f"{h}:{m:02d}:{s:02d}"
 
 
+def _parse_dict_payload(message):
+    """JSON-decode a listener payload, returning the dict or None when the
+    payload is malformed or not an object (lenient, legacy parity)."""
+    try:
+        data = json.loads(message)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _capacitance_per_unit_area(liquid, filler):
     """liquid - filler (pF/mm^2), or None when invalid. Mirrors the legacy
     ForceCalculationService.calculate_capacitance_per_unit_area: both
@@ -261,11 +271,8 @@ class ProtocolLoggingController(HasTraits):
         ing = self._ingestion
         if ing is None:
             return
-        try:
-            data = json.loads(message)
-        except (ValueError, TypeError):
-            return
-        if not isinstance(data, dict):
+        data = _parse_dict_payload(message)
+        if data is None:
             return
         channels = data.get("channels", []) or []
         areas = getattr(self._device_context, "channel_areas", {}) or {}
@@ -289,17 +296,37 @@ class ProtocolLoggingController(HasTraits):
         ing = self._ingestion
         if ing is None:
             return
-        try:
-            data = json.loads(message)
-        except (ValueError, TypeError):
-            return
-        if not isinstance(data, dict):
+        data = _parse_dict_payload(message)
+        if data is None:
             return
         cpa = _capacitance_per_unit_area(
             data.get(LIQUID_CAPACITANCE_KEY),
             data.get(FILLER_CAPACITANCE_KEY))
         if cpa is not None:
             ing.update_capacitance_per_unit_area(cpa)
+
+    def on_metadata_contribution(self, message) -> None:
+        """PROTOCOL_LOGGING_METADATA_CONTRIBUTION payload --> report
+        Metadata table. Lets any plugin merge extra key/value rows into
+        the report without coupling to the logger."""
+        ing = self._ingestion
+        if ing is None:
+            return
+        data = _parse_dict_payload(message)
+        if data is not None:
+            ing.log_metadata(data)
+
+    def on_data_contribution(self, message) -> None:
+        """PROTOCOL_LOGGING_DATA_CONTRIBUTION payload --> one data row.
+        Numeric columns automatically flow into the report's Data Summary
+        / Data Trends sections and the persisted data files; the current
+        step context is stamped when the payload omits it."""
+        ing = self._ingestion
+        if ing is None:
+            return
+        data = _parse_dict_payload(message)
+        if data is not None:
+            ing.log_contributed_data(data)
 
     def update_capacitance_per_unit_area(self, value) -> None:
         ing = self._ingestion

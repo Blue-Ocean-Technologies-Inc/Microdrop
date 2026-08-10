@@ -59,6 +59,16 @@ class LoggingIngestion(HasTraits):
         with self._lock:
             self.metadata.update(entry)
 
+    def log_contributed_data(self, entry: dict) -> None:
+        """Append a data row contributed by an external plugin (via the
+        PROTOCOL_LOGGING_DATA_CONTRIBUTION topic). The current step context
+        is stamped when the payload omits it, so contributed rows group
+        under the step that was running when they arrived (step_idx 0 =
+        before any step started)."""
+        stamped = {"step_idx": self._step_idx, "step_id": self._step_id}
+        stamped.update(entry)
+        self.log_data(stamped)
+
     def log_media(self, model) -> None:
         type_obj = getattr(model, "type", None)
         bucket = getattr(type_obj, "value", None) or type_obj or "other"
