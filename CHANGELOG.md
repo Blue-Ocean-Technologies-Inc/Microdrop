@@ -1,3 +1,44 @@
+## v1.10.0 (2026-08-10)
+
+### Feat
+
+- **protocol logging**: validated publishers for the contribution topics
+- **protocol logging**: route contribution topics to the active logger
+- **protocol logging**: accept externally contributed metadata + data rows
+- **protocol logging**: add report-contribution topics for external plugins
+- **style**: add glyphs for the rolling-ball controls
+- **traitsui**: add a mode-aware icon button editor
+- **style**: add copy and paste glyphs
+- **dropbot_consts**: add kapton to dielectric constants
+- **icons**: add the scale-calibration ruler glyph
+- **icons**: add the contour ROI glyph
+- **icons**: add the capsule ROI glyph
+- **style**: add function icon for fit equations
+- **style**: add chevron sidebar-toggle icon constants
+- **icons**: add ROI analysis glyphs
+
+### Fix
+
+- **traits_editors**: Sliding toggle editor needs on/off defaults. Now its True / False.
+- **setup**: keep the git self-update out of worker processes
+- **utils**: apply the Item tooltip to an in-place toggle
+- **utils**: grey out a disabled in-place toggle
+
+### Refactor
+
+- **traitsui**: overridable stylesheet for the in-place toggle
+
+### Docs
+
+- point demo + MESSAGES.md at the validated contribution publishers
+- **demos**: headless demo for protocol-report contribution topics
+- **messages**: detail the protocol-tree run-logging flow + contribution topics
+
+### Test
+
+- **protocol logging**: cover contribution message contracts + publishers
+- **protocol logging**: cover contribution topics end to end
+
 ## v1.9.0 (2026-08-05)
 
 ### Feat
