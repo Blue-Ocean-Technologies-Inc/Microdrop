@@ -385,6 +385,43 @@ def test_report_failure_callback_fires_when_requested_report_fails(tmp_path):
     assert "render boom" in failures[0]
 
 
+# --- externally contributed metadata / data rows (contribution topics) -----
+
+def test_on_metadata_contribution_merges_into_report_metadata(tmp_path):
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c.on_metadata_contribution(json.dumps({"Heater Firmware": "v2.1.0"}))
+    assert c._ingestion.metadata["Heater Firmware"] == "v2.1.0"
+    c.on_metadata_contribution("not json")     # malformed -> must not raise
+    c.on_metadata_contribution("[1, 2]")       # valid JSON, non-dict -> ignored
+    assert "Heater Firmware" in c._ingestion.metadata
+    c.stop_logging(generate_report=False)
+
+
+def test_on_data_contribution_appends_row_with_step_context(tmp_path):
+    from types import SimpleNamespace
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.start_logging(_ctx(tmp_path), n_steps=1, preview_mode=False)
+    c._on_step_started(SimpleNamespace(new=(_FakeRow(), 0, 1)))
+    c.on_data_contribution(json.dumps({"Temperature (C)": 64.5}))
+    e = c._ingestion.entries[-1]
+    assert e["Temperature (C)"] == 64.5
+    assert e["step_idx"] == 1
+    assert e["step_id"] == "row-uuid"
+    c.on_data_contribution("not json")         # malformed -> must not raise
+    assert len(c._ingestion.entries) == 1
+    c.stop_logging(generate_report=False)
+
+
+def test_contribution_handlers_noop_without_active_run():
+    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
+                                  flush_scheduler=_immediate)
+    c.on_metadata_contribution(json.dumps({"k": "v"}))   # must not raise
+    c.on_data_contribution(json.dumps({"k": 1}))         # must not raise
+
+
 def test_report_failure_callback_silent_when_report_not_requested(tmp_path):
     failures = []
     c = ProtocolLoggingController(

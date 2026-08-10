@@ -57,3 +57,36 @@ def test_calibration_topic_registered_in_consts():
     from pluggable_protocol_tree.consts import ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME
     from device_viewer.consts import CALIBRATION_DATA
     assert CALIBRATION_DATA in ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]
+
+
+def test_route_contribution_topics_dispatch():
+    from pluggable_protocol_tree.consts import (
+        PROTOCOL_LOGGING_DATA_CONTRIBUTION,
+        PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
+    )
+
+    class _ContribSink:
+        def __init__(self):
+            self.calls = []
+        def on_metadata_contribution(self, m): self.calls.append(("meta", m))
+        def on_data_contribution(self, m): self.calls.append(("data", m))
+
+    sink = _ContribSink()
+    L.set_active_logger(sink)
+    try:
+        L.route_to_active_logger(PROTOCOL_LOGGING_METADATA_CONTRIBUTION, "metamsg")
+        L.route_to_active_logger(PROTOCOL_LOGGING_DATA_CONTRIBUTION, "datamsg")
+    finally:
+        L.clear_active_logger()
+    assert sink.calls == [("meta", "metamsg"), ("data", "datamsg")]
+
+
+def test_contribution_topics_registered_in_consts():
+    from pluggable_protocol_tree.consts import (
+        ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME,
+        PROTOCOL_LOGGING_DATA_CONTRIBUTION,
+        PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
+    )
+    topics = ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]
+    assert PROTOCOL_LOGGING_METADATA_CONTRIBUTION in topics
+    assert PROTOCOL_LOGGING_DATA_CONTRIBUTION in topics
