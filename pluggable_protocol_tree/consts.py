@@ -19,6 +19,10 @@ from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedPublisher, ProtocolTreeSetCellPublisher,
     ProtocolTreeAddStepPublisher,
 )
+from pluggable_protocol_tree.models.report_contributions import (
+    ProtocolLoggingDataContributionPublisher,
+    ProtocolLoggingMetadataContributionPublisher,
+)
 
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -110,6 +114,15 @@ PROTOCOL_TREE_ADD_STEP = "ui/protocol_tree/add_step"
 # payload omits them.
 PROTOCOL_LOGGING_METADATA_CONTRIBUTION = f"{PROTOCOL_TOPIC_PREFIX}/logging/metadata"
 PROTOCOL_LOGGING_DATA_CONTRIBUTION = f"{PROTOCOL_TOPIC_PREFIX}/logging/data"
+
+# Public endpoints for contributing plugins (validated flat-mapping
+# payloads; contracts in models/report_contributions.py).
+protocol_logging_metadata_contribution_publisher = \
+    ProtocolLoggingMetadataContributionPublisher(
+        topic=PROTOCOL_LOGGING_METADATA_CONTRIBUTION)
+protocol_logging_data_contribution_publisher = \
+    ProtocolLoggingDataContributionPublisher(
+        topic=PROTOCOL_LOGGING_DATA_CONTRIBUTION)
 
 protocol_tree_row_selected_publisher = ProtocolTreeRowSelectedPublisher(
     topic=PROTOCOL_TREE_ROW_SELECTED)
