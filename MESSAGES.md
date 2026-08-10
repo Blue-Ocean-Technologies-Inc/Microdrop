@@ -204,3 +204,24 @@ One topic carries both the spontaneous hardware shorts signal and the answer to 
 - `task._on_shorts_detected_triggered` validates the payload and hands off to the UI thread.
 - `task._on_shorts_detected_dialog`: with shorts → a `confirm` offering to keep the channels enabled; declining publishes them via `disabled_channels_changed_publisher`. Without shorts → the "No Shorts Detected" info dialog, unconditionally when `show_window` is set, otherwise only when the `suppress_no_shorts_information` preference is unset (that dialog carries the "do not show again" checkbox which writes the preference).
 
+### Protocol tree run logging: report data collection + external contributions
+
+Everything a protocol run's HTML report contains flows through one dramatiq listener into a per-run collector. A single active-logger registry gates all of it: `ProtocolLoggingController.start_logging` registers the controller (`listener.set_active_logger`), `stop_logging` clears it, and any message arriving outside a run is dropped silently.
+
+**Listener + routing**
+- Actor `protocol_tree_logging_listener` at `pluggable_protocol_tree/services/logging/listener.py` — `route_to_active_logger()` branches on topic and forwards to the active `ProtocolLoggingController` (`services/logging/controller.py`); subscriptions declared in `ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]` in `pluggable_protocol_tree/consts.py`.
+
+**Core topics (owned by other plugins, consumed by the logger)**
+- `CAPACITANCE_UPDATED` (`dropbot_controller/consts.py`) → one data row per sample, stamped with the current step + actuation phase; capacitance/voltage parsed leniently, force derived from capacitance-per-unit-area.
+- `ELECTRODES_STATE_CHANGE` (`electrode_controller/consts.py`) → updates the current actuation context (channels + summed electrode area) stamped onto subsequent capacitance rows.
+- `DEVICE_VIEWER_MEDIA_CAPTURED` (`device_viewer/consts.py`) → media bucket for the report's Media Captures section. Note: the camera capture path also caches into `app_globals["media_captures"]` without publishing this topic, so `_flush` additionally drains that bucket.
+- `CALIBRATION_DATA` (`device_viewer/consts.py`) → live capacitance-per-unit-area update so the Force column populates mid-run.
+
+**Contribution topics (any plugin → report)**
+- `PROTOCOL_LOGGING_METADATA_CONTRIBUTION = "microdrop/protocol_tree/logging/metadata"` and `PROTOCOL_LOGGING_DATA_CONTRIBUTION = "microdrop/protocol_tree/logging/data"` — defined in `pluggable_protocol_tree/consts.py`.
+- Payloads are flat scalar-valued JSON objects. Publish through `protocol_logging_metadata_contribution_publisher` / `protocol_logging_data_contribution_publisher` in `pluggable_protocol_tree/consts.py` (RootModel contracts in `pluggable_protocol_tree/models/report_contributions.py` — validated publishers that serialize to the bare object). Subscribers stay lenient: malformed / non-object payloads are ignored, matching the other listener handlers.
+- Metadata → `controller.on_metadata_contribution` merges the object into the report's Metadata table (`LoggingIngestion.log_metadata`).
+- Data → `controller.on_data_contribution` appends the object as a data row (`LoggingIngestion.log_contributed_data`); `step_idx`/`step_id` are stamped from the currently running step unless the payload carries its own. Numeric columns automatically get a Data Summary row and a per-step Data Trends chart in the report, and every column lands in the persisted `data_<t>.json`/`.csv`.
+- Timing: contributions are accepted from `start_logging` until the post-`stop_logging` settling flush, so messages published shortly after the run ends still make the report.
+- Demo: `examples/demos/protocol_report_contribution_demo.py` runs the whole pipeline headlessly over redis and prints the generated report path.
+

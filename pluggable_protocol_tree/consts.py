@@ -19,6 +19,10 @@ from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedPublisher, ProtocolTreeSetCellPublisher,
     ProtocolTreeAddStepPublisher,
 )
+from pluggable_protocol_tree.models.report_contributions import (
+    ProtocolLoggingDataContributionPublisher,
+    ProtocolLoggingMetadataContributionPublisher,
+)
 
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -100,6 +104,26 @@ PROTOCOL_TREE_ROW_SELECTED = "ui/protocol_tree/row_selected"
 PROTOCOL_TREE_SET_CELL = "ui/protocol_tree/set_cell"
 PROTOCOL_TREE_ADD_STEP = "ui/protocol_tree/add_step"
 
+# Report-contribution topics: any plugin may publish extra report content
+# while a protocol run is logging (dropped silently outside a run).
+# Metadata payload: flat JSON object merged into the report's Metadata
+# table. Data payload: flat JSON object appended as a data row — numeric
+# columns automatically get a Data Summary row + a per-step Data Trends
+# chart, and every column lands in the persisted data_<t>.json/.csv;
+# step_idx/step_id are stamped from the currently running step when the
+# payload omits them.
+PROTOCOL_LOGGING_METADATA_CONTRIBUTION = f"{PROTOCOL_TOPIC_PREFIX}/logging/metadata"
+PROTOCOL_LOGGING_DATA_CONTRIBUTION = f"{PROTOCOL_TOPIC_PREFIX}/logging/data"
+
+# Public endpoints for contributing plugins (validated flat-mapping
+# payloads; contracts in models/report_contributions.py).
+protocol_logging_metadata_contribution_publisher = \
+    ProtocolLoggingMetadataContributionPublisher(
+        topic=PROTOCOL_LOGGING_METADATA_CONTRIBUTION)
+protocol_logging_data_contribution_publisher = \
+    ProtocolLoggingDataContributionPublisher(
+        topic=PROTOCOL_LOGGING_DATA_CONTRIBUTION)
+
 protocol_tree_row_selected_publisher = ProtocolTreeRowSelectedPublisher(
     topic=PROTOCOL_TREE_ROW_SELECTED)
 protocol_tree_set_cell_publisher = ProtocolTreeSetCellPublisher(
@@ -131,6 +155,8 @@ ACTOR_TOPIC_DICT = {
         ELECTRODES_STATE_CHANGE,
         DEVICE_VIEWER_MEDIA_CAPTURED,
         CALIBRATION_DATA,
+        PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
+        PROTOCOL_LOGGING_DATA_CONTRIBUTION,
     ]
 }
 

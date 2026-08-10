@@ -11,6 +11,7 @@ from dropbot_controller.consts import CAPACITANCE_UPDATED
 from device_viewer.consts import DEVICE_VIEWER_MEDIA_CAPTURED, CALIBRATION_DATA
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_CHANGE, LOGGING_LISTENER_NAME,
+    PROTOCOL_LOGGING_DATA_CONTRIBUTION, PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
 )
 from logger.logger_service import get_logger
 
@@ -53,6 +54,10 @@ def route_to_active_logger(topic: str, payload) -> None:
             sink.on_media(payload)
         elif topic == CALIBRATION_DATA:
             sink.on_calibration(payload)
+        elif topic == PROTOCOL_LOGGING_METADATA_CONTRIBUTION:
+            sink.on_metadata_contribution(payload)
+        elif topic == PROTOCOL_LOGGING_DATA_CONTRIBUTION:
+            sink.on_data_contribution(payload)
     except Exception as e:                     # pragma: no cover - defensive
         logger.error(f"logging route failed for {topic}: {e}")
 

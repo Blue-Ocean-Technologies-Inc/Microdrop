@@ -18,6 +18,28 @@ def test_log_metadata_merges():
     assert ing.metadata == {"x": 9, "y": 2}
 
 
+def test_log_contributed_data_stamps_current_step_context():
+    ing = LoggingIngestion()
+    ing.set_step(step_id="uuid-1", step_idx=2)
+    ing.log_contributed_data({"Temperature (C)": 64.5})
+    e = ing.entries[-1]
+    assert e["step_idx"] == 2
+    assert e["step_id"] == "uuid-1"
+    assert e["Temperature (C)"] == 64.5
+    assert "Temperature (C)" in ing.columns
+
+
+def test_log_contributed_data_payload_step_fields_win():
+    """A contributor that knows its own step attribution keeps it — the
+    stamp only fills in what the payload omits."""
+    ing = LoggingIngestion()
+    ing.set_step(step_id="uuid-1", step_idx=2)
+    ing.log_contributed_data({"step_idx": 7, "step_id": "explicit", "v": 1})
+    e = ing.entries[-1]
+    assert e["step_idx"] == 7
+    assert e["step_id"] == "explicit"
+
+
 def test_calculate_force_formula():
     ing = LoggingIngestion()
     ing.update_capacitance_per_unit_area(2.0)
