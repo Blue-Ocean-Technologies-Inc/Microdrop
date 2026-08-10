@@ -9,7 +9,9 @@ without the GUI:
 2. starts a logging run and simulates two protocol steps with a few
    CAPACITANCE_UPDATED samples (the logger's core data),
 3. plays the part of an external "heater plugin" publishing report
-   metadata (firmware version, sample id) and per-step temperature rows,
+   metadata (firmware version, sample id) and per-step temperature rows
+   through the validated contribution publishers in
+   pluggable_protocol_tree.consts,
 4. stops the run and prints the generated HTML report path.
 
 In the report: the contributed metadata appears in the Metadata table, and
@@ -45,7 +47,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import (
 )
 from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT, LOGGING_LISTENER_NAME,
-    PROTOCOL_LOGGING_DATA_CONTRIBUTION, PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
+    protocol_logging_data_contribution_publisher,
+    protocol_logging_metadata_contribution_publisher,
 )
 import pluggable_protocol_tree.services.logging.listener  # noqa: F401 — registers the logging_listener actor
 from pluggable_protocol_tree.services.logging.controller import (
@@ -109,10 +112,8 @@ def main():
     controller.start_logging(context, n_steps=N_STEPS, preview_mode=False)
 
     # --- external "heater plugin" contributes report metadata -------------
-    publish_message(
-        message=json.dumps({"Heater Firmware": "v2.1.0",
-                            "Sample ID": "S-042"}),
-        topic=PROTOCOL_LOGGING_METADATA_CONTRIBUTION)
+    protocol_logging_metadata_contribution_publisher.publish(
+        {"Heater Firmware": "v2.1.0", "Sample ID": "S-042"})
 
     # --- simulated run: core capacitance + contributed temperature rows ---
     instrument_time_us = 0
@@ -134,10 +135,8 @@ def main():
                     "reception_time": int(time.time()),
                 }),
                 topic=CAPACITANCE_UPDATED)
-            publish_message(
-                message=json.dumps(
-                    {"Temperature (C)": 60.0 + step_number + 0.2 * sample}),
-                topic=PROTOCOL_LOGGING_DATA_CONTRIBUTION)
+            protocol_logging_data_contribution_publisher.publish(
+                {"Temperature (C)": 60.0 + step_number + 0.2 * sample})
         time.sleep(ROUTING_DRAIN_SECONDS)
 
     controller.stop_logging()

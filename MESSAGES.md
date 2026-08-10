@@ -219,7 +219,7 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 
 **Contribution topics (any plugin → report)**
 - `PROTOCOL_LOGGING_METADATA_CONTRIBUTION = "microdrop/protocol_tree/logging/metadata"` and `PROTOCOL_LOGGING_DATA_CONTRIBUTION = "microdrop/protocol_tree/logging/data"` — defined in `pluggable_protocol_tree/consts.py`.
-- Payloads are flat JSON objects (no Pydantic model; malformed / non-object payloads are ignored, matching the other listener handlers).
+- Payloads are flat scalar-valued JSON objects. Publish through `protocol_logging_metadata_contribution_publisher` / `protocol_logging_data_contribution_publisher` in `pluggable_protocol_tree/consts.py` (RootModel contracts in `pluggable_protocol_tree/models/report_contributions.py` — validated publishers that serialize to the bare object). Subscribers stay lenient: malformed / non-object payloads are ignored, matching the other listener handlers.
 - Metadata → `controller.on_metadata_contribution` merges the object into the report's Metadata table (`LoggingIngestion.log_metadata`).
 - Data → `controller.on_data_contribution` appends the object as a data row (`LoggingIngestion.log_contributed_data`); `step_idx`/`step_id` are stamped from the currently running step unless the payload carries its own. Numeric columns automatically get a Data Summary row and a per-step Data Trends chart in the report, and every column lands in the persisted `data_<t>.json`/`.csv`.
 - Timing: contributions are accepted from `start_logging` until the post-`stop_logging` settling flush, so messages published shortly after the run ends still make the report.
