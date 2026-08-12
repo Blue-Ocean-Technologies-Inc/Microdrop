@@ -135,6 +135,13 @@ class PortableDropbotMonitorMixinService(HasTraits):
                                    baudrate=int(self.preferences.baud_rate),
                                    autodetect=autodetect):
                 raise ConnectionError("login handshake failed")
+            if not session.connected:
+                # The driver's single-rate connect returns True as
+                # soon as the port OPENS (legacy behavior) — an
+                # onboard UART "connects" that way while both login
+                # commands time out. Only an answered login counts.
+                raise ConnectionError(
+                    "port opened but neither board answered login")
             self.proxy = session
             self.portable_dropbot_connection_active = True
             # Alarms stream in unsolicited; hand them straight to the

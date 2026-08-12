@@ -51,8 +51,10 @@ def find_port(baud):
     for port in ordered:
         probe = DropletBotSession()
         try:
+            # connect(autodetect=False) returns True on port OPEN
+            # (legacy driver behavior); .connected is the login truth.
             if probe.connect(port=port, baudrate=baud,
-                             autodetect=False):
+                             autodetect=False) and probe.connected:
                 probe.disconnect()
                 return port
         except Exception:
@@ -96,10 +98,17 @@ def main():
     print(f"Using port: {port}")
 
     session = DropletBotSession()
-    connected = step("connect (login handshake)", lambda: session.connect(
-        port=port, baudrate=args.baud,
-        autodetect=not args.no_autodetect))
-    if not connected:
+
+    def _connect():
+        session.connect(port=port, baudrate=args.baud,
+                        autodetect=not args.no_autodetect)
+        if not session.connected:
+            raise ConnectionError(
+                "port opened but neither board answered login")
+        return f"signal={session.uart.sig_board_connected} " \
+               f"motor={session.uart.motor_board_connected}"
+
+    if not step("connect (login handshake)", _connect):
         return 1
 
     step("firmware versions", lambda: session.version)
