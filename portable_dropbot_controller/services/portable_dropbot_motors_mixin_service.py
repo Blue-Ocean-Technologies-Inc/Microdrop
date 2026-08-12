@@ -53,13 +53,16 @@ class PortableDropbotMotorsMixinService(HasTraits):
             logger.warning(f"Filter position out of range: {position}")
             return
         self._proxy_call(f"filter {position}",
-                         lambda: self.proxy.setFilter(position))
+                         lambda: self.proxy.uart.setFilter(position))
         self._publish_status_snapshot()
 
     def on_set_pogo_request(self, message):
         engaged = str(message) == "True"
-        self._proxy_call(f"pogo {'down' if engaged else 'up'}",
-                         lambda: self.proxy.setPogo(engaged))
+        # Driver convention: 0 = press (pads down on the chip),
+        # 1 = release — inverted from the message's True=engaged.
+        self._proxy_call(f"pogo {'press' if engaged else 'release'}",
+                         lambda: self.proxy.uart.setPogo(
+                             0 if engaged else 1))
         self._publish_status_snapshot()
 
     def on_lock_chip_request(self, message):

@@ -15,7 +15,6 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from .consts import (
     ALARM_RAISED,
     ERROR_RAISED,
-    MOTOR_IDS,
     MOTORS_UPDATED,
     PKG,
     PORTABLE_DROPBOT_CONNECTED,
@@ -183,17 +182,18 @@ class PortableDropbotControllerBase(HasTraits):
         self._publish_motors(mechanisms=status.get("motor", {}))
 
     def _publish_motors(self, mechanisms=None):
-        ok, positions = self._proxy_call(
+        # Both driver calls answer {motor_name: value} dicts — or
+        # False/None when the motor board is not answering, which the
+        # isinstance guard treats as "nothing to report".
+        _ok, positions = self._proxy_call(
             "motor positions", lambda: self.proxy.uart.getMotorPositions())
-        ok_homed, homed = self._proxy_call(
+        _ok, homed = self._proxy_call(
             "motor homed flags",
-            lambda: self.proxy.uart.getMotorHomedStatus())
+            lambda: self.proxy.uart.queryMotorHomed())
         payload = {
-            "positions": {name: positions[index]
-                          for name, index in MOTOR_IDS.items()
-                          if ok and positions is not None
-                          and index < len(positions)},
-            "homed": dict(homed) if ok_homed and homed else {},
+            "positions": (dict(positions)
+                          if isinstance(positions, dict) else {}),
+            "homed": dict(homed) if isinstance(homed, dict) else {},
             "mechanisms": mechanisms if mechanisms is not None else {},
         }
         publish_message(topic=MOTORS_UPDATED, message=json.dumps(payload))
