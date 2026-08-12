@@ -28,6 +28,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
              "while connected.",
     )
     _error_shown = Bool(False)
+    #: A probe round is running: ticks fire every MONITOR_INTERVAL_S
+    #: but a multi-port round can outlast one, and two rounds fighting
+    #: over the same ports produce interleaved half-logins.
+    _probing = Bool(False)
     portable_dropbot_connection_active = Bool(False)
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
@@ -85,29 +89,51 @@ class PortableDropbotMonitorMixinService(HasTraits):
         return self._candidate_ports()
 
     def _candidate_ports(self):
-        """The preference hint first — the hardware has no VID:PID
-        identity, so beyond the hint every present port is a
-        candidate the login handshake filters."""
-        ports = [port.device for port in list_ports.comports()]
+        """The preference hint first, then USB-style ports (the usual
+        transport), then the rest — the hardware has no VID:PID
+        identity, so the login handshake is the filter. Onboard UARTs
+        (a Pi's /dev/ttyAMA*) land last: they always exist and never
+        answer."""
+        present = [port.device for port in list_ports.comports()]
+        usb_like = [port for port in present
+                    if "USB" in port.upper() or "ACM" in port.upper()
+                    or port.upper().startswith("COM")]
+        others = [port for port in present if port not in usb_like]
+        ports = usb_like + others
         hint = str(self.preferences.port_hint or "").strip()
         if hint:
             ports = [hint] + [port for port in ports if port != hint]
         return ports
 
     def _on_ports_discovered(self, event):
-        if self.portable_dropbot_connection_active:
+        if self.portable_dropbot_connection_active or self._probing:
             return
-        for port_name in (event.retval or []):
-            if self._attempt_connect(port_name):
-                return
+        self._probing = True
+        try:
+            hint = str(self.preferences.port_hint or "").strip()
+            for port_name in (event.retval or []):
+                if self.portable_dropbot_connection_active:
+                    return
+                # The full 4-rate autodetect ladder costs seconds and
+                # a dozen warning lines per silent port; while
+                # scanning, one login at the configured baud is the
+                # filter. Only the hinted port earns the ladder (a
+                # board provisioned to a non-default rate is a board
+                # the user knows the port of).
+                if self._attempt_connect(port_name,
+                                         autodetect=port_name == hint):
+                    return
+        finally:
+            self._probing = False
 
-    def _attempt_connect(self, port_name: str) -> bool:
+    def _attempt_connect(self, port_name: str,
+                         autodetect: bool = False) -> bool:
         session = None
         try:
             session = DropletBotSession()
             if not session.connect(port=port_name,
                                    baudrate=int(self.preferences.baud_rate),
-                                   autodetect=True):
+                                   autodetect=autodetect):
                 raise ConnectionError("login handshake failed")
             self.proxy = session
             self.portable_dropbot_connection_active = True
