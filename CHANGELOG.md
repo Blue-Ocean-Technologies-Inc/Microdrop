@@ -1,3 +1,21 @@
+## v1.11.0 (2026-08-12)
+
+### Feat
+
+- **touch-assist**: keyboard modifiers, arrow auto-repeat, key colors
+- **touch-assist**: hold latch on the virtual mouse
+- **touch-assist**: the virtual mouse
+- **touch-assist**: virtual numpad and keyboard pads
+- **touch-assist**: Tools menu group and widget manager
+
+### Docs
+
+- spec for the Touch Assist tools
+
+### Chore
+
+- **preferences**: quieten startup logs, name the default svg
+
 ## v1.10.0 (2026-08-10)
 
 ### Feat
