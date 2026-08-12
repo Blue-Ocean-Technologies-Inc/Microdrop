@@ -1,4 +1,4 @@
-from microdrop_style.icons.icons import ICON_DROP_EC, ICON_RESET_WRENCH
+from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import (
     RealtimeModeIconMixin,
@@ -46,7 +46,12 @@ class PortableDropbotMotorsDockPane(BaseStatusDockPane):
     name = f"{PKG_name} Motors"
 
     view = MotorsView
-    status_bar_icon_glyph = ICON_RESET_WRENCH
+
+    def _populate_status_bar(self, event=None):
+        """No status-bar icon of its own: the portable is one
+        instrument with one connection, and the status pane's icon
+        already shows it. Undecorated on purpose — dropping the base
+        observer is how a pane opts out (see the base docstring)."""
 
     def _create_model(self):
         return PortableDropbotMotorsModel()
