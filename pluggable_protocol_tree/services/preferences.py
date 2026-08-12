@@ -158,7 +158,7 @@ class ProtocolPreferences(PreferencesHelper):
 
         default_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Default repo directory is: {default_dir}")
+        logger.debug(f"Default repo directory is: {default_dir}")
 
         return default_dir
 
