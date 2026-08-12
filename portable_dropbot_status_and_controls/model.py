@@ -1,5 +1,8 @@
-from traits.api import Int, Str
+from traits.api import Int, Range, Str
 
+from portable_dropbot_controller.consts import (
+    DEFAULT_LIGHT_INTENSITY, LIGHT_INTENSITY_BOUNDS,
+)
 from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import PORTABLE_DROPBOT_IMAGE
@@ -17,6 +20,9 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     # ---- HV setpoints (Int end-to-end, published by the controller) --
     voltage = Int(100, desc="HV amplitude setpoint (V)")
     frequency = Int(10_000, desc="HV frequency setpoint (Hz)")
+    light_intensity = Range(*LIGHT_INTENSITY_BOUNDS,
+                            DEFAULT_LIGHT_INTENSITY, mode="spinner",
+                            desc="Illumination LED brightness (%)")
 
     # ---- Readouts written by the message handler ---------------------
     chip_status_text = Str("No Chip Detected")

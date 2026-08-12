@@ -21,8 +21,8 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     magnet_disengage_button = Button("Disengage")
     magnet_press_button = Button("Press")
     magnet_release_button = Button("Release")
-    pogo_down_button = Button("Pogo Down")
-    pogo_up_button = Button("Pogo Up")
+    lock_chip_button = Button("Lock Chip")
+    unlock_chip_button = Button("Unlock Chip")
     home_all_button = Button("Home All")
     #: Fluorescence filter wheel position; publishing on change.
     filter_position = Enum(*FILTER_POSITIONS)

@@ -14,6 +14,11 @@ DEFAULT_NUM_CHANNELS = 200
 DEFAULT_VOLTAGE = 100
 DEFAULT_FREQUENCY = 10_000
 
+#: Illumination LED brightness (%), applied on connect and from the
+#: status pane's spinner.
+LIGHT_INTENSITY_BOUNDS = (0, 100)
+DEFAULT_LIGHT_INTENSITY = 50
+
 #: The driver's fixed motor roster: name -> motor id.
 MOTOR_IDS = {"tray": 0, "pmt": 1, "magnet": 2, "filter": 3,
              "pogo_left": 4, "pogo_right": 5}
@@ -47,6 +52,10 @@ MOVE_TRAY = "portable_dropbot/requests/move_tray"
 MOVE_MAGNET = "portable_dropbot/requests/move_magnet"
 SET_FILTER = "portable_dropbot/requests/set_filter"
 SET_POGO = "portable_dropbot/requests/set_pogo"
+#: Chip lock IS the pogo pads pressing the chip; its own topic so
+#: protocol steps and panes can say what they mean.
+LOCK_CHIP = "portable_dropbot/requests/lock_chip"
+SET_LIGHT_INTENSITY = "portable_dropbot/requests/set_light_intensity"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
 MOTOR_STOP = "portable_dropbot/requests/motor_stop"

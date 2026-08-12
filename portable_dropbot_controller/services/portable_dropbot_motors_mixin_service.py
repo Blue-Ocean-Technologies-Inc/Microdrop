@@ -62,6 +62,13 @@ class PortableDropbotMotorsMixinService(HasTraits):
                          lambda: self.proxy.setPogo(engaged))
         self._publish_status_snapshot()
 
+    def on_lock_chip_request(self, message):
+        """Chip lock IS the pogo pads pressing the chip; a topic of
+        its own so panes and protocol steps say what they mean. The
+        snapshot afterwards lets chip_on_pad report the result rather
+        than assuming it."""
+        self.on_set_pogo_request(message)
+
     def on_home_all_request(self, message):
         # The full homing sequence runs tens of seconds; it executes
         # here on the worker thread, so the GUI stays live and the

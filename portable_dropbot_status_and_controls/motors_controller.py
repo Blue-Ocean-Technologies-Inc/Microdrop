@@ -7,13 +7,13 @@ from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
     HOME_ALL,
+    LOCK_CHIP,
     MOTOR_HOME,
     MOTOR_MOVE,
     MOTOR_STOP,
     MOVE_MAGNET,
     MOVE_TRAY,
     SET_FILTER,
-    SET_POGO,
 )
 
 logger = get_logger(__name__)
@@ -47,13 +47,13 @@ class MotorsController(Controller):
     def _magnet_release(self, event):
         publish_message(topic=MOVE_MAGNET, message="release")
 
-    @observe("model:pogo_down_button")
-    def _pogo_down(self, event):
-        publish_message(topic=SET_POGO, message="True")
+    @observe("model:lock_chip_button")
+    def _lock_chip(self, event):
+        publish_message(topic=LOCK_CHIP, message="True")
 
-    @observe("model:pogo_up_button")
-    def _pogo_up(self, event):
-        publish_message(topic=SET_POGO, message="False")
+    @observe("model:unlock_chip_button")
+    def _unlock_chip(self, event):
+        publish_message(topic=LOCK_CHIP, message="False")
 
     @observe("model:home_all_button")
     def _home_all(self, event):

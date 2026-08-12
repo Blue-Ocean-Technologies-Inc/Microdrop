@@ -42,6 +42,7 @@ class PortableDropbotControllerBase(HasTraits):
     realtime_mode = Bool(False)
     voltage = Int()
     frequency = Int()
+    light_intensity = Int()
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     listener_name = Str(f"{PKG}_listener")
@@ -203,6 +204,13 @@ class PortableDropbotControllerBase(HasTraits):
             "set actuation",
             lambda: self.proxy.set_actuation(int(self.voltage),
                                              int(self.frequency)))
+
+    def _apply_light_intensity(self):
+        """Push the illumination LED brightness (%) to the device."""
+        self._proxy_call(
+            "set light intensity",
+            lambda: self.proxy.uart.setLEDIntensity(
+                int(self.light_intensity), fluorescence=False))
 
     # ------------------------------------------------------------------ #
     # Shared-signal handlers                                               #

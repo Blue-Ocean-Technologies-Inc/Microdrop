@@ -35,3 +35,13 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         self._apply_actuation()
         logger.info(f"Portable Dropbot frequency set to "
                     f"{self.frequency} Hz")
+
+    def on_set_light_intensity_request(self, message):
+        self.light_intensity = int(float(str(message)))
+        self._apply_light_intensity()
+        if self.preferences is not None:
+            # Persisted as the next connect's default, as before.
+            self.preferences.default_light_intensity = \
+                self.light_intensity
+        logger.info(f"Portable Dropbot light intensity set to "
+                    f"{self.light_intensity} %")

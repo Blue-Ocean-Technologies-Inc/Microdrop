@@ -116,7 +116,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
             session.uart.on_alarm = self._publish_alarm
             self.voltage = int(self.preferences.default_voltage)
             self.frequency = int(self.preferences.default_frequency)
+            self.light_intensity = int(
+                self.preferences.default_light_intensity)
             self._apply_actuation()
+            self._apply_light_intensity()
             self._publish_connected()
             self._publish_status_snapshot()
             logger.info(f"Connected to Portable Dropbot on {port_name}")

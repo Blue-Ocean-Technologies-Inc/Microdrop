@@ -2,7 +2,9 @@ from traits.api import observe
 
 from logger.logger_service import get_logger
 from microdrop_utils.decorators import debounce
-from portable_dropbot_controller.consts import SET_FREQUENCY, SET_VOLTAGE
+from portable_dropbot_controller.consts import (
+    SET_FREQUENCY, SET_LIGHT_INTENSITY, SET_VOLTAGE,
+)
 from template_status_and_controls.base_controller import (
     BaseStatusController,
 )
@@ -34,3 +36,13 @@ class ControlsController(BaseStatusController):
         if self._publish_or_queue(topic=SET_FREQUENCY,
                                   message=str(int(event.new))):
             logger.debug(f"Frequency --> {event.new} Hz")
+
+    @debounce(wait_seconds=0.3)
+    def light_intensity_setattr(self, info, obj, traitname, value):
+        return super().setattr(info, obj, traitname, value)
+
+    @observe("model:light_intensity")
+    def _on_light_intensity_changed(self, event):
+        if self._publish_or_queue(topic=SET_LIGHT_INTENSITY,
+                                  message=str(int(event.new))):
+            logger.debug(f"Light intensity --> {event.new} %")
