@@ -116,7 +116,7 @@ class CameraPreferences(PreferencesHelper):
     def _refresh_qt_supported_video_codecs(self, event=None):
         codec_names = supported_qt_video_codec_names(self.qt_video_format)
         self.qt_supported_video_codecs_ = codec_names
-        logger.info(f"Video codecs supported for {self.qt_video_format}: "
+        logger.debug(f"Video codecs supported for {self.qt_video_format}: "
                     f"{codec_names}")
         if codec_names and self.qt_video_codec not in codec_names:
             if "H264" in codec_names:

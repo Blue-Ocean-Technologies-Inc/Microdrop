@@ -137,7 +137,7 @@ class DeviceViewerPreferences(PreferencesHelper):
 
         default_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Default repo directory is: {default_dir}")
+        logger.debug(f"Default repo directory is: {default_dir}")
 
         # Seed the repo with the bundled device files on first run. Only copy a
         # file that is missing so user-modified copies are never clobbered.
@@ -154,15 +154,15 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     def _DEFAULT_SVG_FILE_default(self):
         # --- Define Master File Path (local to the script) ---
-        logger.debug(f"Master svg file is located at: {MASTER_SVG_FILE}")
+        logger.debug(f"Master default device svg is located at: {MASTER_SVG_FILE}")
 
         if not MASTER_SVG_FILE.exists():
-            logger.error("Master file not found!.")
-            raise FileNotFoundError("Master file not found!.")
+            logger.error("Master default device svg not found!.")
+            raise FileNotFoundError("Master default device svg not found!.")
 
         # --- Ensure User's File is a Copy of Master on First Run ---
         default_user_file = Path(self.DEVICE_REPO_DIR) / MASTER_SVG_FILE.name
-        logger.debug(f"Checking for user's default file: {default_user_file}")
+        logger.debug(f"Checking for user's default device svg file: {default_user_file}")
 
         should_overwrite = True
 
@@ -170,16 +170,16 @@ class DeviceViewerPreferences(PreferencesHelper):
             # If the user's file exists, check if it's different from master
 
             if filecmp.cmp(MASTER_SVG_FILE, default_user_file, shallow=False):
-                logger.info("User's file already exists and matches master.")
+                logger.info("User's default device svg file already exists and matches master.")
                 should_overwrite = False
 
             else:
                 logger.info(
-                    "User's default svg file exists but is different from master. Overwriting..."
+                    "User's default device svg file exists but is different from master. Overwriting..."
                 )
 
         else:
-            logger.info("User's default svg file not found, creating it from master...")
+            logger.info("User's default device svg file not found, creating it from master...")
 
         if should_overwrite:
             default_user_file = safe_copy_file(
