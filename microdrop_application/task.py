@@ -26,6 +26,7 @@ from logger.logger_service import get_logger
 from .dialogs.pyface_wrapper import information, confirm, YES
 from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
+from .touch_assist.actions import touch_assist_menu
 
 logger = get_logger(__name__)
 
@@ -80,7 +81,7 @@ class MicrodropTask(Task):
 
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
 
-        SMenu(id="Tools", name="&Tools"),
+        SMenu(touch_assist_menu(), id="Tools", name="&Tools"),
 
         SMenu(TaskToggleGroup(), id="View", name="&View"),
 
