@@ -80,6 +80,10 @@ class VirtualMouse(QWidget):
         self._wheel_sent = 0        # notches already sent this drag
         self._wheel_target = None   # resolved once per wheel gesture
         self._last_click = (0.0, None)  # (time, zone) for dbl-click
+        #: Widget holding a latched left press (the Hold pill), or
+        #: None. While set, dragging the body streams MouseMove
+        #: events to it — a click-drag in slow motion.
+        self._held_target = None
 
     # -- lifecycle ----------------------------------------------------
     def setVisible(self, visible):
@@ -105,6 +109,7 @@ class VirtualMouse(QWidget):
     def moveEvent(self, event):
         super().moveEvent(event)
         self._place_tip()
+        self._stream_held_move()
 
     def _place_tip(self):
         self._tip.move(
@@ -113,10 +118,12 @@ class VirtualMouse(QWidget):
 
     # -- zones ---------------------------------------------------------
     def _zone_at(self, pos):
-        """'left' / 'right' / 'wheel' / 'close' / 'body' for a point
-        in widget coordinates."""
+        """'left' / 'right' / 'wheel' / 'hold' / 'close' / 'body' for
+        a point in widget coordinates."""
         if self._close_rect().contains(pos):
             return "close"
+        if self._hold_rect().contains(pos):
+            return "hold"
         button_zone = self.height() * _BUTTON_ZONE_FRACTION
         wheel_left = (self.width() - MOUSE_WHEEL_WIDTH_PX) // 2
         if pos.y() <= button_zone:
@@ -127,6 +134,9 @@ class VirtualMouse(QWidget):
 
     def _close_rect(self):
         return QRect(self.width() - 22, self.height() - 22, 18, 18)
+
+    def _hold_rect(self):
+        return QRect(4, self.height() - 24, 44, 20)
 
     # -- interaction ----------------------------------------------------
     def mousePressEvent(self, event):
@@ -160,10 +170,18 @@ class VirtualMouse(QWidget):
         if travelled > MOUSE_TAP_SLOP_PX:
             return                  # it was a drag, not a tap
         if zone == "close":
+            self._release_hold()
             self.hide()
             self._tip.hide()
             if self.closed_by_user is not None:
                 self.closed_by_user()
+            return
+        if zone == "hold":
+            self._toggle_hold()
+            return
+        if zone == "left" and self._held_target is not None:
+            # A left tap while holding IS the release click.
+            self._release_hold()
             return
         self._send_click(Qt.MouseButton.LeftButton if zone == "left"
                          else Qt.MouseButton.RightButton, zone)
@@ -245,6 +263,52 @@ class VirtualMouse(QWidget):
                                 local_pos.toPoint(),
                                 self._tip.hotspot()))
 
+    # -- the Hold latch -----------------------------------------------
+    def _toggle_hold(self):
+        if self._held_target is not None:
+            self._release_hold()
+            return
+        resolved = self._target()
+        if resolved is None:
+            return
+        target, local, global_pos = resolved
+        QApplication.sendEvent(target, QMouseEvent(
+            QEvent.Type.MouseButtonPress, local, local, global_pos,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier))
+        self._held_target = target
+        self.update()
+
+    def _release_hold(self):
+        target, self._held_target = self._held_target, None
+        self.update()
+        if target is None or not shiboken6.isValid(target):
+            return
+        global_pos = QPointF(self._tip.hotspot())
+        local = QPointF(target.mapFromGlobal(self._tip.hotspot()))
+        QApplication.sendEvent(target, QMouseEvent(
+            QEvent.Type.MouseButtonRelease, local, local, global_pos,
+            Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier))
+
+    def _stream_held_move(self):
+        """While holding, aiming IS dragging: every body move sends a
+        MouseMove (left button down) to the held widget, mapped to
+        the tip — outside its bounds too, exactly as a real grab
+        delivers them."""
+        target = self._held_target
+        if target is None:
+            return
+        if not shiboken6.isValid(target):
+            self._held_target = None
+            return
+        global_pos = QPointF(self._tip.hotspot())
+        local = QPointF(target.mapFromGlobal(self._tip.hotspot()))
+        QApplication.sendEvent(target, QMouseEvent(
+            QEvent.Type.MouseMove, local, local, global_pos,
+            Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier))
+
     def _send_wheel(self, notches):
         # Resolved once per gesture (the tip is not moving while the
         # strip is dragged) so the hide-probe fallback cannot flicker
@@ -295,6 +359,14 @@ class VirtualMouse(QWidget):
         painter.drawText(left_zone, Qt.AlignCenter, "L")
         painter.drawText(right_zone, Qt.AlignCenter, "R")
         painter.drawText(self._close_rect(), Qt.AlignCenter, "✕")
+        # The Hold pill: lit while a left press is latched.
+        held = self._held_target is not None
+        painter.setBrush(QColor(PRIMARY_COLOR) if held
+                         else QColor(GREY["lighter"]))
+        painter.setPen(QPen(QColor(GREY["dark"]), 1))
+        painter.drawRoundedRect(self._hold_rect(), 8, 8)
+        painter.setPen(QPen(QColor(WHITE if held else GREY["dark"])))
+        painter.drawText(self._hold_rect(), Qt.AlignCenter, "hold")
         painter.setPen(QPen(QColor(WHITE)))
         painter.drawText(
             QRect(body.left(), split_y, body.width(),
