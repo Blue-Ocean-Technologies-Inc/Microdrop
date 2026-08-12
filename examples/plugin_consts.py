@@ -10,6 +10,9 @@ from microdrop_application.plugin import MicrodropPlugin
 from microdrop_status_bar.plugin import StatusBarPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
+from portable_dropbot_status_and_controls.plugin import (
+    PortableDropbotStatusAndControlsPlugin,
+)
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.plugin import PluginManagementPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
@@ -25,6 +28,7 @@ from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
 from volume_threshold_protocol_controls.plugin import VolumeThresholdProtocolControlsPlugin
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
+from portable_dropbot_controller.plugin import PortableDropbotControllerPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
 from ssh_controls.plugin import SSHControlsPlugin
@@ -94,6 +98,10 @@ OPENDROP_FRONTEND_PLUGINS = [
     OpendropStatusAndControlsPlugin
 ]
 
+PORTABLE_DROPBOT_FRONTEND_PLUGINS = [
+    PortableDropbotStatusAndControlsPlugin,
+]
+
 
 BACKEND_PLUGINS = [
     ElectrodeControllerPlugin,
@@ -101,6 +109,10 @@ BACKEND_PLUGINS = [
 
 OPENDROP_BACKEND_PLUGINS = [
     OpenDropControllerPlugin,
+]
+
+PORTABLE_DROPBOT_BACKEND_PLUGINS = [
+    PortableDropbotControllerPlugin,
 ]
 
 DROPBOT_BACKEND_PLUGINS = [

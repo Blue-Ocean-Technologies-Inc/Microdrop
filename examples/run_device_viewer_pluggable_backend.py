@@ -16,6 +16,8 @@ def main(args):
         plugins += DROPBOT_BACKEND_PLUGINS
     elif args.device == "opendrop":
         plugins += OPENDROP_BACKEND_PLUGINS
+    elif args.device == "portable":
+        plugins += PORTABLE_DROPBOT_BACKEND_PLUGINS
 
     run_device_viewer_pluggable(
         plugins=plugins,
@@ -39,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        choices=["dropbot", "opendrop"],
+        choices=["dropbot", "opendrop", "portable"],
         default="dropbot",  # Sets a default if the user doesn't provide the flag
         help="Specify the device to use: 'dropbot' or 'opendrop'"
     )
