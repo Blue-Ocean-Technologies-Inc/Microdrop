@@ -13,6 +13,12 @@ TOOL_MOUSE = "mouse"
 PAD_KEY_SIZE_PX = 44
 PAD_KEY_SPACING_PX = 4
 
+#: Held-key auto-repeat (the numpad's ▲/▼): how long a hold waits
+#: before repeating, then the repeat cadence — a spinbox climbs
+#: steadily without racing away.
+PAD_KEY_REPEAT_DELAY_MS = 400
+PAD_KEY_REPEAT_INTERVAL_MS = 80
+
 #: The virtual mouse's proportions: the body, the wheel strip inside
 #: it, and the gap between the body and the crosshair pointer tip
 #: floating above (the offset that keeps the finger off the target).

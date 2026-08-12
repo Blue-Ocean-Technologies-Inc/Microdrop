@@ -59,10 +59,12 @@ buttons.
 
 ### Virtual Keyboard (`input_pads.py`)
 
-Compact QWERTY: letter rows, digit row, Shift (latching, one shot),
-Space, Backspace, Enter, close button. Shift shifts letters and
-sends the shifted key text; no symbols layer in v1 beyond what
-Shift+digit provides.
+Compact QWERTY: letter rows, digit row, Space, Backspace, Enter,
+close button, and three one-shot latching modifiers — Shift, Ctrl,
+Alt. Each arms the NEXT key and then releases: Shift uppercases
+letters and turns the digit row into its symbols; Ctrl/Alt send a
+shortcut chord (Ctrl+A, Ctrl+C…) with no typed text. No further
+symbols layer in v1.
 
 ### Virtual Mouse (`virtual_mouse.py`)
 
@@ -81,8 +83,13 @@ finger stays below the target (the classic assistive offset).
   angle delta proportional to finger travel, so whatever is under
   the pointer scrolls as with a real wheel.
 - Scope is the Microdrop application only (Qt event synthesis, not
-  an OS-level mouse). Press-and-hold / drag latching is explicitly
-  out of v1.
+  an OS-level mouse).
+- A **Hold pill** on the body latches a left press at the tip:
+  while lit, dragging the body streams MouseMove events (left
+  button down) to the held widget — sliders, ROI drags and text
+  selection in slow motion. Tapping Hold again, or the L zone,
+  releases at the current tip position; closing the widget releases
+  first.
 - Guards: no widget under the tip → the tap does nothing; targets
   re-resolved per event so a widget destroyed mid-gesture cannot be
   dereferenced.

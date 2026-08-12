@@ -11,9 +11,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from microdrop_style.colors import GREY, PRIMARY_COLOR, WHITE
+from microdrop_style.colors import BLACK, GREY, PRIMARY_COLOR, WHITE
 
-from .consts import PAD_KEY_SIZE_PX, PAD_KEY_SPACING_PX
+from .consts import (
+    PAD_KEY_REPEAT_DELAY_MS, PAD_KEY_REPEAT_INTERVAL_MS,
+    PAD_KEY_SIZE_PX, PAD_KEY_SPACING_PX,
+)
 
 #: (label, Qt key, text) rows of the numpad. Text is what lands in
 #: the field; the key code is what spinboxes and shortcuts read.
@@ -31,6 +34,9 @@ _NUMPAD_ROWS = (
 #: Keyboard letter rows; digits get their own row above.
 _KEYBOARD_LETTER_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
 
+#: What the digit row types while Shift is latched.
+_SHIFTED_DIGITS = str.maketrans("1234567890", "!@#$%^&*()")
+
 _PAD_STYLE = f"""
     QWidget#touch_pad {{
         background: {GREY["dark"]};
@@ -40,6 +46,7 @@ _PAD_STYLE = f"""
     QLabel {{ color: {WHITE}; font-weight: bold; }}
     QPushButton {{
         background: {WHITE};
+        color: {BLACK};
         border: 1px solid #999;
         border-radius: 4px;
         font-size: 15px;
@@ -113,11 +120,16 @@ class FloatingPad(QWidget):
 
     # -- key delivery ------------------------------------------------
     def add_key(self, label, key, text, row, column, *, width=1,
-                modifiers=Qt.KeyboardModifier.NoModifier, span_px=None):
+                modifiers=Qt.KeyboardModifier.NoModifier, span_px=None,
+                repeat=False):
         button = QPushButton(label)
         button.setFocusPolicy(Qt.NoFocus)
         button.setFixedHeight(PAD_KEY_SIZE_PX)
         button.setMinimumWidth(span_px or PAD_KEY_SIZE_PX)
+        if repeat:                  # a held key keeps firing
+            button.setAutoRepeat(True)
+            button.setAutoRepeatDelay(PAD_KEY_REPEAT_DELAY_MS)
+            button.setAutoRepeatInterval(PAD_KEY_REPEAT_INTERVAL_MS)
         button.clicked.connect(
             lambda *_: self.send_key(key, text, modifiers))
         self.body.addWidget(button, row, column, 1, width)
@@ -144,51 +156,75 @@ class VirtualNumpad(FloatingPad):
         super().__init__("Numpad")
         for row, keys in enumerate(_NUMPAD_ROWS):
             for column, (label, key, text) in enumerate(keys):
-                self.add_key(label, key, text, row, column)
+                self.add_key(label, key, text, row, column,
+                             repeat=key in (Qt.Key_Up, Qt.Key_Down))
 
 
 class VirtualKeyboard(FloatingPad):
-    """Compact QWERTY with a digit row and a one-shot Shift. Shift
-    uppercases the NEXT letter (and ships the Shift modifier), then
-    releases — the usual touch-keyboard behaviour."""
+    """Compact QWERTY with a digit row and one-shot latching
+    modifiers: Shift, Ctrl and Alt each arm the NEXT key (uppercase
+    or symbol for Shift, a shortcut chord like Ctrl+A for the
+    others), then release — the usual touch-keyboard behaviour."""
 
     def __init__(self):
         super().__init__("Keyboard")
         self._letter_buttons = []
-        self._shift = None
+        self._modifier_buttons = {}
         for column, digit in enumerate("1234567890"):
             self.add_key(digit, getattr(Qt, f"Key_{digit}"), digit,
                          0, column)
         for row, letters in enumerate(_KEYBOARD_LETTER_ROWS, start=1):
             offset = row - 1        # stagger like a real keyboard
             for column, letter in enumerate(letters):
-                button = self.add_key(
+                self._letter_buttons.append(self.add_key(
                     letter, getattr(Qt, f"Key_{letter.upper()}"),
-                    letter, row, column + offset)
-                button.clicked.disconnect()
-                button.clicked.connect(
-                    lambda *_, l=letter: self._send_letter(l))
-                self._letter_buttons.append(button)
-        self._shift = self.add_key("⇧", Qt.Key_Shift, "", 3, 9)
-        self._shift.setCheckable(True)
-        self._shift.clicked.disconnect()
-        self._shift.clicked.connect(self._update_letter_case)
+                    letter, row, column + offset))
+        self._shift = self._add_modifier(
+            "⇧", Qt.KeyboardModifier.ShiftModifier, 3, 9)
         self.add_key("⌫", Qt.Key_Backspace, "", 1, 10)
         self.add_key("⏎", Qt.Key_Return, "\r", 2, 10)
+        self._add_modifier("ctrl", Qt.KeyboardModifier.ControlModifier,
+                           4, 0)
+        self._add_modifier("alt", Qt.KeyboardModifier.AltModifier,
+                           4, 1)
         self.add_key("space", Qt.Key_Space, " ", 4, 2, width=5)
         self.add_key(".", Qt.Key_Period, ".", 4, 7)
         self.add_key("_", Qt.Key_Underscore, "_", 4, 8,
                      modifiers=Qt.KeyboardModifier.ShiftModifier)
 
-    def _send_letter(self, letter):
-        shifted = self._shift.isChecked()
-        self.send_key(
-            getattr(Qt, f"Key_{letter.upper()}"),
-            letter.upper() if shifted else letter,
-            Qt.KeyboardModifier.ShiftModifier if shifted
-            else Qt.KeyboardModifier.NoModifier)
-        if shifted:                 # one-shot, like a touch keyboard
-            self._shift.setChecked(False)
+    def _add_modifier(self, label, flag, row, column):
+        """A latching key: checked arms the flag for the next real
+        key, which consumes it (see send_key)."""
+        button = self.add_key(label, Qt.Key_unknown, "", row, column)
+        button.clicked.disconnect()
+        button.setCheckable(True)
+        button.clicked.connect(self._update_letter_case)
+        self._modifier_buttons[flag] = button
+        return button
+
+    def _latched_modifiers(self):
+        latched = Qt.KeyboardModifier.NoModifier
+        for flag, button in self._modifier_buttons.items():
+            if button.isChecked():
+                latched |= flag
+        return latched
+
+    def send_key(self, key, text, modifiers=None):
+        """Every key passes through here: latched modifiers join the
+        chord, shape the text (uppercase/symbols for Shift, none for
+        a Ctrl/Alt shortcut), and release afterwards."""
+        latched = self._latched_modifiers()
+        combined = ((modifiers if modifiers is not None
+                     else Qt.KeyboardModifier.NoModifier) | latched)
+        if combined & (Qt.KeyboardModifier.ControlModifier
+                       | Qt.KeyboardModifier.AltModifier):
+            text = ""               # a chord types nothing
+        elif latched & Qt.KeyboardModifier.ShiftModifier and text:
+            text = text.upper().translate(_SHIFTED_DIGITS)
+        super().send_key(key, text, combined)
+        if latched:                 # one-shot, like a touch keyboard
+            for button in self._modifier_buttons.values():
+                button.setChecked(False)
             self._update_letter_case()
 
     def _update_letter_case(self, *_):
