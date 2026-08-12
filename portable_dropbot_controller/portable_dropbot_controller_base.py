@@ -16,6 +16,7 @@ from .consts import (
     ALARM_RAISED,
     ERROR_RAISED,
     MOTORS_UPDATED,
+    STATUS_FAILURE_DISCONNECT_LIMIT,
     PKG,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
@@ -46,6 +47,10 @@ class PortableDropbotControllerBase(HasTraits):
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     listener_name = Str(f"{PKG}_listener")
     timestamps = Instance(dict, args=())
+
+    #: Consecutive status polls with no board answering (see
+    #: _publish_status_snapshot); reset by any successful read.
+    _status_failures = Int(0)
 
     def __del__(self):
         self.cleanup()
@@ -170,8 +175,23 @@ class PortableDropbotControllerBase(HasTraits):
         units here, so the panes never learn the wire encoding."""
         ok, status = self._proxy_call("status read",
                                       lambda: self.proxy.status)
-        if not ok or not isinstance(status, dict):
+        if not ok or not isinstance(status, dict) or not status:
+            # The driver answers {} when neither board replied — a
+            # timeout per command, seconds per poll. A link that dead
+            # for several polls in a row is a disconnect, not a blip:
+            # declare it and let the scanner take over, instead of
+            # polling a silent board forever behind an "Active" label.
+            self._status_failures += 1
+            if self._status_failures >= STATUS_FAILURE_DISCONNECT_LIMIT:
+                logger.warning(
+                    f"Portable Dropbot status unanswered "
+                    f"{self._status_failures} polls in a row — "
+                    f"treating the link as lost.")
+                self._status_failures = 0
+                self._publish_disconnected()
+                self.on_disconnected_signal("")
             return
+        self._status_failures = 0
         signal = dict(status.get("signal", {}))
         for field in self._SCALED_STATUS_FIELDS:
             if field in signal:

@@ -30,6 +30,13 @@ FILTER_POSITIONS = (0, 1, 2, 3, 4)
 #: status poll (published to the panes) while connected.
 MONITOR_INTERVAL_S = 2
 
+#: Consecutive status polls with neither board answering before the
+#: link is declared dead and scanning resumes. Without this a silent
+#: board is polled forever — every poll a stack of command timeouts
+#: that overruns the tick and floods the log — while the UI says
+#: "Active".
+STATUS_FAILURE_DISCONNECT_LIMIT = 3
+
 # Shared hardware topics (same strings every device backend uses; the
 # backend with a live proxy is the one that acts).
 PORTABLE_DROPBOT_CONNECTED = "hardware/signals/connected"
