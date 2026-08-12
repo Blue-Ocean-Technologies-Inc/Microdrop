@@ -158,16 +158,27 @@ class PortableDropbotControllerBase(HasTraits):
     # ------------------------------------------------------------------ #
     # Status / motor snapshots                                             #
     # ------------------------------------------------------------------ #
+    #: Raw u16 status fields carried as value × 100 on the wire (the
+    #: driver's own SysStatusSignalBoard.to_dict scaling).
+    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "hv_vol",
+                             "dev_temp", "dev_hum")
+
     def _publish_status_snapshot(self):
         """One driver status read fans out to both panes: the signal
         board's readings (HV, temps, chip detect...) on STATUS_UPDATED
-        and the motor picture on MOTORS_UPDATED."""
+        and the motor picture on MOTORS_UPDATED. Scaled to engineering
+        units here, so the panes never learn the wire encoding."""
         ok, status = self._proxy_call("status read",
                                       lambda: self.proxy.status)
         if not ok or not isinstance(status, dict):
             return
-        publish_message(topic=STATUS_UPDATED,
-                        message=json.dumps(status.get("signal", {})))
+        signal = dict(status.get("signal", {}))
+        for field in self._SCALED_STATUS_FIELDS:
+            if field in signal:
+                signal[field] = signal[field] / 100.0
+        if "chip_on_pad" in signal:
+            signal["chip_on_pad"] = signal["chip_on_pad"] == 1
+        publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
         self._publish_motors(mechanisms=status.get("motor", {}))
 
     def _publish_motors(self, mechanisms=None):
