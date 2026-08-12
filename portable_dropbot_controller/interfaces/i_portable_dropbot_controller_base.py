@@ -10,9 +10,8 @@ class IPortableDropbotControllerBase(IDramatiqControllerBase):
     Interface for the Portable Dropbot controller service.
     """
 
-    # Any rather than an Instance of the driver class: the
-    # portable_dropbot package is an optional dependency, and the
-    # interface must import without it.
+    # Any rather than an Instance of the driver class, so importing
+    # the interface never drags in the vendored serial stack.
     proxy = Any(desc="DropletBotSession for the Portable Dropbot "
                      "hardware; None while disconnected.")
     portable_dropbot_connection_active = Bool(

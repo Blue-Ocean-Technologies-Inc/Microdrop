@@ -10,14 +10,10 @@ from traits.api import Bool, HasTraits, Instance, Str, provides
 from logger.logger_service import get_logger
 
 from ..consts import MONITOR_INTERVAL_S
+from ..driver.session import DropletBotSession
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
-
-try:
-    from portable_dropbot.session import DropletBotSession
-except ImportError:
-    DropletBotSession = None
 
 logger = get_logger(__name__)
 
@@ -35,13 +31,6 @@ class PortableDropbotMonitorMixinService(HasTraits):
     portable_dropbot_connection_active = Bool(False)
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
-        if DropletBotSession is None:
-            logger.error(
-                "The portable_dropbot package is not installed — "
-                "install the packaged python-driver "
-                "(pip install -e <python-driver checkout>) to use the "
-                "Portable Dropbot backend.")
-            return
         if self.portable_dropbot_connection_active \
                 and self.proxy is not None:
             self._publish_connected()

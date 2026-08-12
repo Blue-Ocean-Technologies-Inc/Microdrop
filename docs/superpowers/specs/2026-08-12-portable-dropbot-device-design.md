@@ -24,20 +24,19 @@ implements `on_electrodes_state_change_request` receives it.
 
 ## Components
 
-### A. Driver packaging (python-driver repo)
+### A. Driver (vendored bare minimum)
 
-The repo is not installable (flat modules, hyphenated folder, no
-pyproject). Restructure: core modules (`__init__`, `session`,
-`portable_dropbot_service`, `commands`, `commands_generated`,
-`proxy`, `utils`) move into a `portable_dropbot/` package; scripts
-and `full_test_ui/` stay at the root importing it; a
-`pyproject.toml` names the distribution `portable-dropbot`
-(import `portable_dropbot`). Driver logic unchanged.
-
-Microdrop imports the package lazily and reports a clear error if
-missing; for development it is installed editable into the pixi env
-(`pixi run pip install -e ...`). Pinning it as a pixi dependency
-waits until the packaging branch is merged.
+The private python-driver repo stays private and un-pushed; the
+backend vendors only what it uses into
+`portable_dropbot_controller/driver/`: `session.py` (the
+DropletBotSession API), `portable_dropbot_service.py` (the serial
+protocol layer) and `commands.py` (the command tables) — copied
+verbatim, provenance recorded in the driver package docstring. The
+bench tools, generated proxies and tests are left behind; updates
+are a re-copy of the three modules ("deal with updates later on",
+per the user). The driver repo also carries a local-only packaging
+branch (`feat/package-as-portable-dropbot`) from an earlier
+consumption approach; it is not required by this design.
 
 ### B. Backend — `portable_dropbot_controller/`
 
