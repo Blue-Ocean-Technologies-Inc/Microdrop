@@ -169,7 +169,8 @@ class SSHService(HasTraits):
         config = json.loads(config)
         pub_key = config.get("generated_pub_key")
         if not pub_key:
-            publish_message("No key has been generated or read yet.")
+            publish_message("No key has been generated or read yet.",
+                            SSH_KEY_UPLOAD_ERROR)
             return
 
         if not all([config["host"], config["port"], config["username"], config["password"]]):

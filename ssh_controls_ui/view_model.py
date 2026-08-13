@@ -165,8 +165,12 @@ class SSHControlViewModel(HasTraits):
         self.view_signals.enable_upload_button.emit(True)
 
     def _on_ssh_key_upload_error_triggered(self, message):
-        message = json.loads(message)
-        title, text = message.get("title"), message.get("text")
+        # The service publishes upload errors as plain text (see
+        # _on_key_upload_request) — json.loads here made every upload
+        # failure crash the handler and leave the dialog stuck on
+        # "Starting key upload...".
+        text = str(message)
         self.view_signals.key_upload_status_text_changed.emit(f"Error: {text}")
-        self.view_signals.show_message_box.emit("error", title, text)
+        self.view_signals.show_message_box.emit("error",
+                                                "Key Upload Error", text)
         self.view_signals.enable_upload_button.emit(True)
