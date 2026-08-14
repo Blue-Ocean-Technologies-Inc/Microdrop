@@ -5,11 +5,11 @@ without relearning anything — plus the portable's extras: the
 COM-port picker, light intensity, temperatures, humidity,
 mechanisms, and alarms."""
 from traitsui.api import (
-    EnumEditor, HGroup, Item, Spring, UItem, VGrid, VGroup, View,
+    EnumEditor, HGroup, Item, Label, Spring, UItem, VGrid, VGroup, View,
 )
 
 from microdrop_utils.traitsui_qt_helpers import (
-    InPlaceToggleEditor, StatusIconEditorFactory,
+    IconToggleEditor, InPlaceToggleEditor, StatusIconEditorFactory,
 )
 
 left = HGroup(
@@ -59,7 +59,15 @@ grid = VGrid(
           enabled_when="connected and free_mode and "
                        "not protocol_running"),
     Item("light_display", style="readonly", label="Light"),
-    UItem("light_intensity", enabled_when="connected"),
+    HGroup(
+        UItem("light_intensity",
+              enabled_when="connected and light_on"),
+        UItem("light_on",
+              style="custom",
+              editor=InPlaceToggleEditor(on_label="Light On",
+                                         off_label="Light Off"),
+              enabled_when="connected"),
+    ),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("chip_temp_display", style="readonly", label="Chip Temp"),
@@ -91,8 +99,26 @@ board_grid = VGrid(
     id="board_grid",
 )
 
+# Chevron-collapsed extras from the vendor UI's Temp/Lighting tab
+# (same header structure as the fluorescence controls pane).
+advanced_lighting = VGroup(
+    HGroup(
+        UItem("show_advanced_lighting", editor=IconToggleEditor()),
+        Label("Advanced Lighting"),
+    ),
+    VGroup(
+        Item("rgb_light", label="RGB LED",
+             enabled_when="connected"),
+        Item("fluorescence_led_intensity",
+             label="Fluorescence LED (%)",
+             enabled_when="connected"),
+        visible_when="show_advanced_lighting",
+    ),
+)
+
 UnifiedView = View(
-    HGroup(left, "15", grid, "15", board_grid),
+    HGroup(left, "15", VGroup(grid, advanced_lighting), "15",
+           board_grid),
     resizable=True,
     # Let the dock pane shrink below the grids' natural size — the
     # content then scrolls instead of pinning the pane width.

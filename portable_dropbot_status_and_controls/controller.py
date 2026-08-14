@@ -4,8 +4,9 @@ from logger.logger_service import get_logger
 from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
-    CONNECT_TO_PORT, MOVE_TRAY, REFRESH_PORTS, SET_FREQUENCY,
-    SET_LIGHT_INTENSITY, SET_VOLTAGE,
+    CONNECT_TO_PORT, MOVE_TRAY, REFRESH_PORTS, SET_FLUORESCENCE_LED,
+    SET_FREQUENCY, SET_LIGHT_INTENSITY, SET_LIGHT_ON, SET_RGB_LIGHT,
+    SET_VOLTAGE,
 )
 from template_status_and_controls.base_controller import (
     BaseStatusController,
@@ -71,8 +72,31 @@ class ControlsController(BaseStatusController):
     def light_intensity_setattr(self, info, obj, traitname, value):
         return super().setattr(info, obj, traitname, value)
 
+    # Lighting is not actuation, so none of it queues behind realtime
+    # mode — every change publishes straight to the hardware.
     @observe("model:light_intensity")
     def _on_light_intensity_changed(self, event):
-        if self._publish_or_queue(topic=SET_LIGHT_INTENSITY,
-                                  message=str(int(event.new))):
-            logger.debug(f"Light intensity --> {event.new} %")
+        publish_message(topic=SET_LIGHT_INTENSITY,
+                        message=str(int(event.new)))
+        logger.debug(f"Light intensity --> {event.new} %")
+
+    @observe("model:light_on")
+    def _on_light_on_changed(self, event):
+        publish_message(topic=SET_LIGHT_ON, message=str(bool(event.new)))
+        logger.debug(f"Light --> {'on' if event.new else 'off'}")
+
+    @observe("model:rgb_light")
+    def _on_rgb_light_changed(self, event):
+        publish_message(topic=SET_RGB_LIGHT, message=str(event.new))
+        logger.debug(f"RGB light --> {event.new}")
+
+    @debounce(wait_seconds=0.3)
+    def fluorescence_led_intensity_setattr(self, info, obj, traitname,
+                                           value):
+        return super().setattr(info, obj, traitname, value)
+
+    @observe("model:fluorescence_led_intensity")
+    def _on_fluorescence_led_changed(self, event):
+        publish_message(topic=SET_FLUORESCENCE_LED,
+                        message=str(int(event.new)))
+        logger.debug(f"Fluorescence LED --> {event.new} %")

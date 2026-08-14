@@ -122,9 +122,11 @@ def main():
     step("motors homed", lambda: session.uart.queryMotorHomed())
 
     if args.light is not None:
+        # setLEDIntensity takes the firmware's raw 0-255 byte.
         step(f"light intensity {args.light}%",
-             lambda: session.uart.setLEDIntensity(int(args.light),
-                                                  fluorescence=False))
+             lambda: session.uart.setLEDIntensity(
+                 round(int(args.light) * 255 / 100),
+                 fluorescence=False))
 
     if args.actuate:
         step(f"set actuation {args.voltage} V @ {args.frequency} Hz",

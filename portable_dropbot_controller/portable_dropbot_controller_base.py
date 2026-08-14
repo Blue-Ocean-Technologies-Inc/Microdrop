@@ -17,6 +17,7 @@ from .consts import (
     ALARM_RAISED,
     CONNECT_TO_PORT,
     ERROR_RAISED,
+    LIGHT_INTENSITY_RAW_MAX,
     MOTORS_UPDATED,
     REFRESH_PORTS,
     STATUS_FAILURE_DISCONNECT_LIMIT,
@@ -46,6 +47,9 @@ class PortableDropbotControllerBase(HasTraits):
     voltage = Int()
     frequency = Int()
     light_intensity = Int()
+    #: Illumination switch: off drives the LED to 0 while keeping the
+    #: % setpoint for the next on.
+    light_on = Bool(True)
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     listener_name = Str(f"{PKG}_listener")
@@ -242,11 +246,16 @@ class PortableDropbotControllerBase(HasTraits):
                                              int(self.frequency)))
 
     def _apply_light_intensity(self):
-        """Push the illumination LED brightness (%) to the device."""
+        """Push the illumination LED brightness to the device: the %
+        setpoint scaled to the firmware's raw 0-255 byte, or 0 while
+        the light is switched off."""
+        raw = (round(int(self.light_intensity)
+                     * LIGHT_INTENSITY_RAW_MAX / 100)
+               if self.light_on else 0)
         self._proxy_call(
             "set light intensity",
-            lambda: self.proxy.uart.setLEDIntensity(
-                int(self.light_intensity), fluorescence=False))
+            lambda: self.proxy.uart.setLEDIntensity(raw,
+                                                    fluorescence=False))
 
     # ------------------------------------------------------------------ #
     # Shared-signal handlers                                               #

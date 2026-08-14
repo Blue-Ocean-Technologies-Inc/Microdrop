@@ -2,6 +2,7 @@ from traits.api import HasTraits, Str, provides
 
 from logger.logger_service import get_logger
 
+from ..consts import FLUORESCENCE_LED_RAW_MAX, RGB_LIGHT_STATES
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -45,3 +46,28 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
                 self.light_intensity
         logger.info(f"Portable Dropbot light intensity set to "
                     f"{self.light_intensity} %")
+
+    def on_set_light_on_request(self, message):
+        self.light_on = str(message) == "True"
+        self._apply_light_intensity()
+        logger.info(f"Portable Dropbot illumination "
+                    f"{'on' if self.light_on else 'off'}")
+
+    def on_set_rgb_light_request(self, message):
+        color = str(message).strip().lower()
+        if color not in RGB_LIGHT_STATES:
+            logger.warning(f"Unknown RGB light state: {color!r}")
+            return
+        self._proxy_call(f"rgb light {color}",
+                         lambda: self.proxy.uart.setBoxLight(color))
+        logger.info(f"Portable Dropbot RGB light set to {color}")
+
+    def on_set_fluorescence_led_request(self, message):
+        percent = min(max(0, int(float(str(message)))), 100)
+        raw = percent * FLUORESCENCE_LED_RAW_MAX // 100
+        self._proxy_call(
+            f"fluorescence LED {percent} %",
+            lambda: self.proxy.uart.setLEDIntensity(raw,
+                                                    fluorescence=True))
+        logger.info(f"Portable Dropbot fluorescence LED set to "
+                    f"{percent} %")

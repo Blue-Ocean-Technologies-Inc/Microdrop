@@ -19,9 +19,17 @@ VOLTAGE_BOUNDS = (30, 200)
 FREQUENCY_BOUNDS = (50, 60_000)
 
 #: Illumination LED brightness (%), applied on connect and from the
-#: status pane's spinner.
+#: status pane's spinner. The firmware takes a raw 0-255 byte.
 LIGHT_INTENSITY_BOUNDS = (0, 100)
 DEFAULT_LIGHT_INTENSITY = 50
+LIGHT_INTENSITY_RAW_MAX = 255
+
+#: RGB indicator LED states the signal board knows.
+RGB_LIGHT_STATES = ("off", "red", "green", "yellow")
+
+#: The fluorescence LED's raw 16-bit brightness ceiling (the panel
+#: exposes it as a %).
+FLUORESCENCE_LED_RAW_MAX = 65_535
 
 #: The driver's fixed motor roster: name -> motor id.
 MOTOR_IDS = {"tray": 0, "pmt": 1, "magnet": 2, "filter": 3,
@@ -75,6 +83,10 @@ SET_POGO = "portable_dropbot/requests/set_pogo"
 #: protocol steps and panes can say what they mean.
 LOCK_CHIP = "portable_dropbot/requests/lock_chip"
 SET_LIGHT_INTENSITY = "portable_dropbot/requests/set_light_intensity"
+#: Illumination on/off without losing the % setpoint.
+SET_LIGHT_ON = "portable_dropbot/requests/set_light_on"
+SET_RGB_LIGHT = "portable_dropbot/requests/set_rgb_light"
+SET_FLUORESCENCE_LED = "portable_dropbot/requests/set_fluorescence_led"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
 MOTOR_SET_SPEED = "portable_dropbot/requests/motor_set_speed"

@@ -2514,15 +2514,26 @@ class DropletBotUart:
         return None
 
     def setLEDIntensity(self, intensity: int = 0, fluorescence=True):
-        """Set LED brightness. fluorescence=True for fluorescence LED, False for illumination."""
+        """Set LED brightness, in RAW firmware units: fluorescence=True
+        drives the fluorescence LED (16-bit, 0-65535); False drives the
+        illumination LED (single byte, 0-255).
+
+        Local patch (not in upstream cf15ac0): the old body clamped to
+        0-100 and sent a 2-byte payload of intensity/2 — but the
+        firmware's illumination handler (0x1222) reads a single 0-255
+        byte, so it always saw the payload's high byte (0x00) and the
+        light never changed. Both branches now match the vendor
+        proxy's wire formats (illumination_ctrl '>B', fluorescence_ctrl
+        '>H') and raw ranges.
+        """
         if not self.sig_board_connected:
             return False
         if fluorescence:
             cmd = SignalBoard.FLUORESCENCE_CTRL
+            buf = struct.pack('>H', min(max(0, intensity), 65535))
         else:
             cmd = SignalBoard.ILLUMINATION_CTRL
-        intensity = min(max(0, intensity), 100)
-        buf = struct.pack('>H', int(intensity/2))
+            buf = struct.pack('>B', min(max(0, intensity), 255))
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
 

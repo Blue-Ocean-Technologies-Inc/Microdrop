@@ -1,11 +1,12 @@
-from traits.api import Button, Event, List, Range, Str
+from traits.api import Bool, Button, Enum, Event, List, Range, Str
 
 from microdrop_utils.traitsui_qt_helpers import (
     RangeWithSteppedSpinViewHint,
 )
 from portable_dropbot_controller.consts import (
     DEFAULT_FREQUENCY, DEFAULT_LIGHT_INTENSITY, DEFAULT_VOLTAGE,
-    FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS, VOLTAGE_BOUNDS,
+    FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS, RGB_LIGHT_STATES,
+    VOLTAGE_BOUNDS,
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -32,6 +33,18 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     light_intensity = Range(*LIGHT_INTENSITY_BOUNDS,
                             DEFAULT_LIGHT_INTENSITY, mode="spinner",
                             desc="Illumination LED brightness (%)")
+    light_on = Bool(True, desc="Illumination switch; off drives the "
+                               "LED to 0 keeping the % setpoint")
+
+    # ---- Advanced lighting (chevron-collapsed, like the vendor
+    # UI's Temp/Lighting tab extras) -----------------------------------
+    show_advanced_lighting = Bool(False)
+    rgb_light = Enum(*RGB_LIGHT_STATES,
+                     desc="RGB indicator LED on the box")
+    fluorescence_led_intensity = Range(
+        0, 100, 0, mode="spinner",
+        desc="Fluorescence LED brightness (%), scaled to the "
+             "firmware's 16-bit range")
 
     #: Fired by clicking the device picture: eject the tray, click
     #: again to bring it back in (the original pane's gesture).
