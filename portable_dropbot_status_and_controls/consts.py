@@ -2,9 +2,9 @@ import os
 
 from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from portable_dropbot_controller.consts import (
-    MOTORS_UPDATED,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
+    STATUS_UPDATED,
 )
 
 # This module's package.
@@ -30,8 +30,37 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_GRID_DISPLAY_STATE,
     ],
     MOTORS_LISTENER: [
-        MOTORS_UPDATED,
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
+        #: chip_on_pad gates the magnet macros — the firmware only
+        #: moves the magnet with a chip on the pad.
+        STATUS_UPDATED,
     ],
+}
+
+#: The motor firmware moves in 0.001 mm integer units; the panel's
+#: Manual Move fields take mm, like the driver's own test UI.
+MM_TO_FIRMWARE_UNITS = 1000
+
+#: The signal board's rgy_state status field, decoded as the vendor
+#: UI does.
+RGY_STATE_NAMES = {0: "off", 1: "red", 2: "green", 3: "yellow"}
+
+#: Macro-button labels per target motor for the motor panel, in the
+#: original portable pane's dynamic-button style: the buttons relabel
+#: as the selection changes, and an empty label hides its button
+#: (pmt has no macros — only Home and manual moves apply).
+#: The pogo pushpads move as a coordinated pair — the hardware has no
+#: per-side mechanism command (a single pad moves only via the raw
+#: per-motor manual moves/home), so either pogo selection offers the
+#: same Press/Release pair, labeled as the vendor's own test UI does.
+#: (The driver's magnet press/release are pure aliases of
+#: engage/disengage, so only the latter appear here.)
+MOTOR_MACRO_LABELS = {
+    "tray": ("In", "Out"),
+    "pmt": ("", ""),
+    "magnet": ("Engage", "Disengage"),
+    "filter": ("Prev Pos", "Next Pos"),
+    "pogo_left": ("Press (both)", "Release (both)"),
+    "pogo_right": ("Press (both)", "Release (both)"),
 }

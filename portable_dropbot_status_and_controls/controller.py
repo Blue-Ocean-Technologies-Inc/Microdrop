@@ -2,8 +2,10 @@ from traits.api import observe
 
 from logger.logger_service import get_logger
 from microdrop_utils.decorators import debounce
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
-    SET_FREQUENCY, SET_LIGHT_INTENSITY, SET_VOLTAGE,
+    CONNECT_TO_PORT, MOVE_TRAY, REFRESH_PORTS, SET_FREQUENCY,
+    SET_LIGHT_INTENSITY, SET_VOLTAGE,
 )
 from template_status_and_controls.base_controller import (
     BaseStatusController,
@@ -16,6 +18,34 @@ class ControlsController(BaseStatusController):
     """Portable Dropbot controls controller: voltage and frequency
     edits publish to the portable backend (queued while realtime mode
     is off, exactly as the DropBot pane does)."""
+
+    def init(self, info):
+        # Populate the port picker as soon as the pane opens; the
+        # backend answers on PORTS_UPDATED.
+        publish_message(topic=REFRESH_PORTS, message="")
+        return super().init(info)
+
+    @observe("model:refresh_ports_button")
+    def _on_refresh_ports(self, event):
+        publish_message(topic=REFRESH_PORTS, message="")
+
+    @observe("model:connect_button")
+    def _on_connect_to_port(self, event):
+        # Straight publish, never queued: connecting is exactly what
+        # must work while the device is offline.
+        port_name = self.model.selected_port.strip()
+        if port_name:
+            publish_message(topic=CONNECT_TO_PORT, message=port_name)
+            logger.info(f"Requested Portable Dropbot connect on "
+                        f"{port_name}")
+
+    @observe("model:tray_toggle_clicked")
+    def _on_tray_toggle_clicked(self, event):
+        # The device picture is the tray button: the backend reads the
+        # current tray position and moves it the other way.
+        if self.model.connected:
+            publish_message(topic=MOVE_TRAY, message="toggle")
+            logger.info("Device picture clicked: toggling tray")
 
     @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, obj, traitname, value):
