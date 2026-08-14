@@ -1,47 +1,53 @@
+"""The motor panel laid out like the original portable pane:
+Select Motor / Macros / Manual Move, with macro buttons that
+relabel (and hide) as the target motor changes."""
 from traitsui.api import (
-    HGroup, Item, Readonly, Spring, UItem, VGroup, View,
+    ButtonEditor, HGroup, Item, UItem, VGroup, View,
 )
 
-mechanisms = VGroup(
-    HGroup(UItem("tray_in_button"), UItem("tray_out_button"),
-           Readonly("tray_state", label="State"), label="Tray",
-           show_border=True),
-    HGroup(UItem("magnet_engage_button"),
-           UItem("magnet_disengage_button"),
-           UItem("magnet_press_button"), UItem("magnet_release_button"),
-           Readonly("magnet_state", label="State"), label="Magnet",
-           show_border=True),
-    HGroup(Item("filter_position", label="Position"),
-           Readonly("filter_state", label="State"), label="Filter",
-           show_border=True),
-    HGroup(UItem("lock_chip_button"), UItem("unlock_chip_button"),
-           Readonly("pogo_state", label="L/R"),
-           label="Chip lock (pogo pads)",
-           show_border=True),
-    HGroup(UItem("home_all_button"), Spring(),
-           Readonly("homed_display", label="Homed")),
-    label="Mechanisms",
-    enabled_when="connected",
-)
-
-advanced = VGroup(
-    HGroup(Item("selected_motor", label="Motor"),
-           Item("move_mode", label="Mode"),
-           Item("move_steps", label="Steps")),
-    HGroup(UItem("move_button"), UItem("stop_button"),
-           UItem("home_button")),
-    Readonly("positions_display", label="Positions"),
-    label="Advanced (steps)",
+select_motor = VGroup(
+    Item("selected_motor", label="Target Motor"),
+    label="Select Motor",
     show_border=True,
     enabled_when="connected",
-    visible_when="show_advanced",
+)
+
+#: The firmware only moves the magnet while a chip sits on the pad
+#: (chip_on_pad), so the magnet macros grey out without one instead
+#: of silently doing nothing.
+_MAGNET_NEEDS_CHIP = "selected_motor != 'magnet' or chip_inserted"
+
+macros = VGroup(
+    HGroup(
+        UItem("macro_button_1",
+              editor=ButtonEditor(label_value="macro_button_1_label"),
+              visible_when="macro_button_1_label",
+              enabled_when=_MAGNET_NEEDS_CHIP),
+        UItem("macro_button_2",
+              editor=ButtonEditor(label_value="macro_button_2_label"),
+              visible_when="macro_button_2_label",
+              enabled_when=_MAGNET_NEEDS_CHIP),
+        UItem("home_button"),
+        UItem("home_all_button"),
+    ),
+    label="Macros",
+    show_border=True,
+    enabled_when="connected",
+)
+
+manual_move = VGroup(
+    HGroup(Item("move_by_mm", label="Move By (mm)"),
+           UItem("move_by_button")),
+    HGroup(Item("move_to_mm", label="Move To (mm)"),
+           UItem("move_to_button")),
+    HGroup(Item("speed_um_per_s", label="Speed (μm/s)"),
+           UItem("set_speed_button")),
+    label="Manual Move",
+    show_border=True,
+    enabled_when="connected",
 )
 
 MotorsView = View(
-    VGroup(
-        mechanisms,
-        Item("show_advanced", label="Show advanced motor controls"),
-        advanced,
-    ),
+    VGroup(select_motor, macros, manual_move),
     resizable=True,
 )

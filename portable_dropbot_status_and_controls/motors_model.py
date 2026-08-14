@@ -1,46 +1,45 @@
-from traits.api import Button, Enum, Int, Str
+from traits.api import Button, Enum, Float, Int, Str
 
-from portable_dropbot_controller.consts import FILTER_POSITIONS, MOTOR_IDS
+from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import PORTABLE_DROPBOT_IMAGE
+from .consts import MOTOR_MACRO_LABELS, PORTABLE_DROPBOT_IMAGE
 
 
 class PortableDropbotMotorsModel(BaseStatusModel):
-    """Qt-free state for the motor panel: mechanism buttons, the
-    advanced per-motor move inputs, and the readouts the message
-    handler fills from motors_updated signals. Mutated only on the
-    GUI thread."""
+    """Qt-free state for the motor panel, shaped like the original
+    portable pane: a target-motor selector, macro buttons that
+    relabel per motor (see MOTOR_MACRO_LABELS), and manual moves in
+    steps. Mutated only on the GUI thread."""
 
     DEFAULT_ICON_PATH = PORTABLE_DROPBOT_IMAGE
 
-    # ---- Mechanisms ---------------------------------------------------
-    tray_in_button = Button("Tray In")
-    tray_out_button = Button("Tray Out")
-    magnet_engage_button = Button("Engage")
-    magnet_disengage_button = Button("Disengage")
-    magnet_press_button = Button("Press")
-    magnet_release_button = Button("Release")
-    lock_chip_button = Button("Lock Chip")
-    unlock_chip_button = Button("Unlock Chip")
-    home_all_button = Button("Home All")
-    #: Fluorescence filter wheel position; publishing on change.
-    filter_position = Enum(*FILTER_POSITIONS)
-
-    # ---- Advanced per-motor moves (steps, Int) ------------------------
+    # ---- Select Motor -------------------------------------------------
     selected_motor = Enum(*MOTOR_IDS)
-    move_mode = Enum("absolute", "relative")
-    move_steps = Int(0)
-    move_button = Button("Move")
-    stop_button = Button("Stop")
-    home_button = Button("Home")
-    #: Collapsible-state of the advanced group (display state only).
-    show_advanced = Enum(False, True)
 
-    # ---- Readouts -----------------------------------------------------
-    tray_state = Str("-")
-    magnet_state = Str("-")
-    filter_state = Str("-")
-    pogo_state = Str("-")
-    positions_display = Str("-", desc="Per-motor positions (steps)")
-    homed_display = Str("-", desc="Which motors report homed")
+    # ---- Macros (labels driven by the selection; "" hides) ------------
+    macro_button_1 = Button()
+    macro_button_2 = Button()
+    macro_button_1_label = Str(MOTOR_MACRO_LABELS["tray"][0])
+    macro_button_2_label = Str(MOTOR_MACRO_LABELS["tray"][1])
+    home_button = Button("Home")
+    #: The coordinated resets (cabin+mag, pushpads, filter, PMT) —
+    #: mechanism macros are silently rejected until these have run
+    #: after a motor-board power-up; the per-motor Home above does
+    #: NOT initialize that motion coordinator.
+    home_all_button = Button("Home All")
+
+    # ---- Manual Move (mm; converted to the firmware's 0.001 mm
+    # units when published) ---------------------------------------------
+    move_by_mm = Float(1.0)
+    move_by_button = Button("Go")
+    move_to_mm = Float(0.0)
+    move_to_button = Button("Go")
+    #: Runtime-only per-motor run speed; reverts to the flashed
+    #: default on reboot.
+    speed_um_per_s = Int(1000)
+    set_speed_button = Button("Set Speed")
+
+    #: Local Prev/Next cycle position for the filter wheel, exactly
+    #: like the original pane; Home resets it.
+    filter_cycle_index = Int(0)
