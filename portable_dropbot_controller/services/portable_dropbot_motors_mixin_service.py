@@ -33,15 +33,20 @@ class PortableDropbotMotorsMixinService(HasTraits):
         direction = str(message).strip().lower()
         if direction == "toggle":
             # The status pane's device picture: one click ejects, the
-            # next brings it back. getTray answers the setTray
-            # vocabulary — 0 = in, 1 = out.
-            ok, tray_state = self._proxy_call(
-                "tray read", lambda: self.proxy.uart.getTray())
-            if not ok or tray_state is None:
+            # next brings it back. Read the cabin state from the motor
+            # STATUS (byte 1) — the CHIP_CABIN_READ blob goes
+            # undecoded even in the vendor UI, but STATUS answers
+            # reliably (it feeds the mechanisms readout) and its state
+            # mirrors the ctrl vocabulary (0 = in, 1 = out), the same
+            # way mag reports 1 while engaged.
+            ok, motor_status = self._proxy_call(
+                "motor status read",
+                lambda: self.proxy.uart.GetBoardStatus("motor"))
+            if not ok or not motor_status or len(motor_status) < 2:
                 logger.warning("Tray toggle ignored: current tray "
                                "position unknown.")
                 return
-            direction = "in" if tray_state == 1 else "out"
+            direction = "in" if motor_status[1] == 1 else "out"
         if direction not in _TRAY_ACTIONS:
             logger.warning(f"Unknown tray direction: {direction!r}")
             return
