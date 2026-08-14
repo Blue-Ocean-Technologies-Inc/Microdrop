@@ -1,3 +1,10 @@
+## v1.11.1 (2026-08-14)
+
+### Fix
+
+- **ssh-controls**: upload errors reach the dialog
+- **ssh-controls-ui**: survive menu rebuilds with one portal session
+
 ## v1.11.0 (2026-08-12)
 
 ### Feat
