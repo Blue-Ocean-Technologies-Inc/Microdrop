@@ -17,7 +17,7 @@ from .consts import (
     ALARM_RAISED,
     CONNECT_TO_PORT,
     ERROR_RAISED,
-    LIGHT_INTENSITY_RAW_MAX,
+    FLUORESCENCE_LED_RAW_MAX,
     MOTORS_UPDATED,
     REFRESH_PORTS,
     STATUS_FAILURE_DISCONNECT_LIMIT,
@@ -246,16 +246,17 @@ class PortableDropbotControllerBase(HasTraits):
                                              int(self.frequency)))
 
     def _apply_light_intensity(self):
-        """Push the illumination LED brightness to the device: the %
-        setpoint scaled to the firmware's raw 0-255 byte, or 0 while
-        the light is switched off."""
+        """Push the light brightness to the device: the % setpoint
+        scaled to the fluorescence LED's 16-bit range — that is the
+        LED that actually lights this instrument — or 0 while the
+        light is switched off."""
         raw = (round(int(self.light_intensity)
-                     * LIGHT_INTENSITY_RAW_MAX / 100)
+                     * FLUORESCENCE_LED_RAW_MAX / 100)
                if self.light_on else 0)
         self._proxy_call(
             "set light intensity",
             lambda: self.proxy.uart.setLEDIntensity(raw,
-                                                    fluorescence=False))
+                                                    fluorescence=True))
 
     # ------------------------------------------------------------------ #
     # Shared-signal handlers                                               #

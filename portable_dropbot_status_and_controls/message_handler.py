@@ -48,9 +48,15 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             self.model.voltage_readback_display = f"{hv_vol:g} V"
         if hv_freq is not None:
             self.model.frequency_display = f"{hv_freq:g} Hz"
-        light = data.get("light_led_bright")
-        if light is not None:
-            self.model.light_display = f"{light:g} %"
+        # The Light control drives the fluorescence LED on this
+        # instrument, so its readback is flu_led_bright; the
+        # illumination LED's own report shows in the board grid.
+        flu_led = data.get("flu_led_bright")
+        if flu_led is not None:
+            self.model.light_display = f"{flu_led:g} ‰"
+        illumination = data.get("light_led_bright")
+        if illumination is not None:
+            self.model.illumination_display = f"{illumination:g}"
         chip_cap = data.get("chip_cap")
         if chip_cap is not None:
             self.model.capacitance_display = f"{chip_cap:g} pF"
@@ -77,9 +83,6 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         if rgy_state is not None:
             self.model.rgy_led_display = RGY_STATE_NAMES.get(
                 rgy_state, str(rgy_state))
-        flu_led = data.get("flu_led_bright")
-        if flu_led is not None:
-            self.model.flu_led_display = f"{flu_led:g} ‰"
         pmt = data.get("pmt")
         if pmt is not None:
             self.model.pmt_display = f"{pmt:g}"

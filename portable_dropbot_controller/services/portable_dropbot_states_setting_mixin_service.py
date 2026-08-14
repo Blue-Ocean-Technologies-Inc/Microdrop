@@ -2,7 +2,9 @@ from traits.api import HasTraits, Str, provides
 
 from logger.logger_service import get_logger
 
-from ..consts import FLUORESCENCE_LED_RAW_MAX, RGB_LIGHT_STATES
+from ..consts import (
+    FLUORESCENCE_LED_RAW_MAX, LIGHT_INTENSITY_RAW_MAX, RGB_LIGHT_STATES,
+)
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -62,12 +64,25 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
                          lambda: self.proxy.uart.setBoxLight(color))
         logger.info(f"Portable Dropbot RGB light set to {color}")
 
-    def on_set_fluorescence_led_request(self, message):
-        percent = min(max(0, int(float(str(message)))), 100)
-        raw = percent * FLUORESCENCE_LED_RAW_MAX // 100
+    def on_set_illumination_raw_request(self, message):
+        """Vendor-style raw illumination brightness, 0-255 straight
+        to the firmware — no % scaling."""
+        raw = min(max(0, int(float(str(message)))),
+                  LIGHT_INTENSITY_RAW_MAX)
         self._proxy_call(
-            f"fluorescence LED {percent} %",
+            f"illumination raw {raw}",
+            lambda: self.proxy.uart.setLEDIntensity(raw,
+                                                    fluorescence=False))
+        logger.info(f"Portable Dropbot illumination raw set to {raw}")
+
+    def on_set_fluorescence_led_raw_request(self, message):
+        """Vendor-style raw fluorescence LED brightness, 16-bit
+        0-65535 straight to the firmware."""
+        raw = min(max(0, int(float(str(message)))),
+                  FLUORESCENCE_LED_RAW_MAX)
+        self._proxy_call(
+            f"fluorescence LED raw {raw}",
             lambda: self.proxy.uart.setLEDIntensity(raw,
                                                     fluorescence=True))
-        logger.info(f"Portable Dropbot fluorescence LED set to "
-                    f"{percent} %")
+        logger.info(f"Portable Dropbot fluorescence LED raw set to "
+                    f"{raw}")
