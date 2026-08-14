@@ -13,6 +13,45 @@ from .sync_dialog.model import SyncDialogModel
 from .sync_dialog.view_model import SyncDialogViewModel, SyncDialogViewModelSignals
 from .sync_dialog.widget import SyncDialogView
 
+# ---------------------------------------------------------------------------
+# One view-model + listener per dialog, shared by every Action instance.
+#
+# The menu bar is REBUILT whenever plugin groups hot-mount, recreating
+# these Actions — but a dramatiq listener name can register only once,
+# so the first registration's view-model receives every message
+# forever. An Action that built its own view-model would show a window
+# wired to signals the listener never fires (the "stuck on Starting…"
+# portal). The session below outlives the Actions, so every rebuild's
+# windows connect to the very view-model the listener drives.
+# ---------------------------------------------------------------------------
+_key_portal_session = None
+_sync_session = None
+
+
+def key_portal_view_model():
+    global _key_portal_session
+    if _key_portal_session is None:
+        view_model = SSHControlViewModel(
+            model=SSHControlModel(),
+            prefs=SSHControlPreferences(),
+            view_signals=SSHControlViewModelSignals(),
+        )
+        _key_portal_session = (view_model,
+                               SSHControlUIListener(ui=view_model))
+    return _key_portal_session[0]
+
+
+def sync_view_model():
+    global _sync_session
+    if _sync_session is None:
+        view_model = SyncDialogViewModel(
+            model=SyncDialogModel(),
+            prefs=SSHControlPreferences(),
+            view_signals=SyncDialogViewModelSignals(),
+        )
+        _sync_session = (view_model, SyncDialogListener(ui=view_model))
+    return _sync_session[0]
+
 
 class SshKeyUploaderApp(QMainWindow):
     """Main window for the SSH Key Portal dialog."""
@@ -32,14 +71,9 @@ class ShowSshKeyUploaderAction(Action):
 
     def traits_init(self, *args, **kwargs):
         self._window = None
-        self.prefs = SSHControlPreferences()
-        self.model = SSHControlModel()
-        self.view_model = SSHControlViewModel(
-            model=self.model,
-            prefs=self.prefs,
-            view_signals=SSHControlViewModelSignals(),
-        )
-        self.listener = SSHControlUIListener(ui=self.view_model)
+        self.view_model = key_portal_view_model()
+        self.prefs = self.view_model.prefs
+        self.model = self.view_model.model
 
     def perform(self, event):
         if self._window is not None:
@@ -79,14 +113,9 @@ class ShowSyncRemoteExperimentsAction(Action):
 
     def traits_init(self, *args, **kwargs):
         self._window = None
-        self.prefs = SSHControlPreferences()
-        self.model = SyncDialogModel()
-        self.view_model = SyncDialogViewModel(
-            model=self.model,
-            prefs=self.prefs,
-            view_signals=SyncDialogViewModelSignals(),
-        )
-        self.listener = SyncDialogListener(ui=self.view_model)
+        self.view_model = sync_view_model()
+        self.prefs = self.view_model.prefs
+        self.model = self.view_model.model
 
     def perform(self, event):
         if self._window is not None:
