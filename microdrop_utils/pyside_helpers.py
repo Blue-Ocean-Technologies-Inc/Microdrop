@@ -845,6 +845,20 @@ class _ScalingPixmapLabel(QLabel):
             self.setPixmap(scaled)
 
 
+class _ClickablePixmapLabel(_ScalingPixmapLabel):
+    """_ScalingPixmapLabel that emits ``clicked`` on a left-button
+    release inside the label — for device pictures that double as a
+    button (e.g. the Portable Dropbot photo toggling its tray)."""
+
+    clicked = QtCore.Signal()
+
+    def mouseReleaseEvent(self, event):
+        if (event.button() == Qt.MouseButton.LeftButton
+                and self.rect().contains(event.position().toPoint())):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+
 def markdown_text_to_html(markdown_text: str) -> str:
     """Render markdown to a standalone HTML document via QTextDocument.
 

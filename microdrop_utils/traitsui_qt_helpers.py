@@ -26,7 +26,9 @@ from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, GREY, SUCCESS_COLOR
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
-from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
+from microdrop_utils.pyside_helpers import (
+    _ClickablePixmapLabel, _ScalingPixmapLabel, MarqueeComboBox,
+)
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -689,10 +691,19 @@ class StatusIconEditor(QtEditor):
 
     The editor value is bound to `icon_path` (str path to the image).
     It also observes `icon_color` on the model to update the background color.
+
+    With the factory's ``fire`` option set, the icon is clickable
+    (pointing-hand cursor) and a click sets the named Event/Bool trait
+    on the model — the ``GlyphActionColumn(fire=...)`` pattern.
     """
 
     def init(self, parent):
-        self.control = _ScalingPixmapLabel()
+        if self.factory.fire:
+            self.control = _ClickablePixmapLabel()
+            self.control.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self.control.clicked.connect(self._on_icon_clicked)
+        else:
+            self.control = _ScalingPixmapLabel()
 
         # Load initial image
         self._load_pixmap(self.value)
@@ -700,6 +711,9 @@ class StatusIconEditor(QtEditor):
         # Observe icon_color on the model for background color updates
         self.object.observe(self._on_icon_color_changed, "icon_color")
         self._apply_background_color(self.object.icon_color)
+
+    def _on_icon_clicked(self):
+        setattr(self.object, self.factory.fire, True)
 
     def _load_pixmap(self, path):
         pixmap = QPixmap(path)
@@ -728,6 +742,9 @@ class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
     border_radius = Int(4)
+    #: Name of an Event/Bool trait on the model set True when the icon
+    #: is clicked; empty (the default) leaves the icon inert.
+    fire = Str()
 
 
 class _HtmlLabelEditor(QtEditor):
