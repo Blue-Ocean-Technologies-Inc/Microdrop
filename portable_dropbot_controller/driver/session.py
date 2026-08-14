@@ -106,7 +106,14 @@ class DropletBotSession:
         else:
             if not self._uart.init(p, baudrate):
                 raise DropletBotError(f"Failed to open {p}")
-            self._uart.BoardLogin("signal")
+            # Local patch (not in upstream cf15ac0): the same settle +
+            # login retry init_autodetect() applies — a freshly opened
+            # FTDI/USB-serial port misses the first login reply without
+            # it, so the single-rate path never connected over COM-port
+            # adapters even at the correct baud.
+            time.sleep(0.8)
+            if not self._uart.BoardLogin("signal"):
+                self._uart.BoardLogin("signal")
         self._uart.BoardLogin("motor")
 
         if self.load_cap_cal():
@@ -142,15 +149,20 @@ class DropletBotSession:
         result = {}
         sig = self._uart.GetBoardStatus("signal")
         if sig and len(sig) >= 34:
+            # Local patch (not in upstream cf15ac0): the vendor UI's
+            # STATUS decode carries an 18th field, temp_onoff (heater
+            # enable), missing here; unpack as many of the known
+            # fields as the firmware actually sent.
             fields = [
                 "cur_temp", "target_temp", "out_power", "rgy_state",
                 "light_led_bright", "flu_led_bright", "chip_on_pad",
                 "chip_cap", "chip_short_circuit", "chip_res",
                 "dev_temp", "dev_hum", "fan_duty", "pmt",
-                "hv_vol", "hv_freq", "cap_match",
+                "hv_vol", "hv_freq", "cap_match", "temp_onoff",
             ]
-            values = struct.unpack(f">{len(fields)}H", sig[:len(fields) * 2])
-            result["signal"] = dict(zip(fields, values))
+            count = min(len(fields), len(sig) // 2)
+            values = struct.unpack(f">{count}H", sig[:count * 2])
+            result["signal"] = dict(zip(fields[:count], values))
         mot = self._uart.GetBoardStatus("motor")
         if mot and len(mot) >= 7:
             fields = ["rst", "cabin", "mag", "flu", "lpush", "rpush", "pmt"]

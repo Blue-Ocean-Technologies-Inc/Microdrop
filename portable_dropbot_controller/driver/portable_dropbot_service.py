@@ -1031,6 +1031,16 @@ class DropletBotUart:
         if not self._w(wbuf):
             return None  # Write failed
 
+        return self._wait_response(cmd, timeout_s)
+
+    def _wait_response(self, cmd: int, timeout_s: float = 1.0):
+        """Waits for a response to a `cmd` frame already in flight.
+
+        Local patch (not in upstream cf15ac0): split out of _wr() so a
+        caller that received a STALE same-cmd reply (one orphaned by an
+        earlier timeout) can drain it and keep waiting for its own
+        without re-sending — see queryMotorPosition().
+        """
         max_busy_s = 60.0  # absolute maximum wait even if device keeps reporting busy
         absolute_start = time.time()
         start_time = absolute_start
@@ -2580,14 +2590,23 @@ class DropletBotUart:
         buf = struct.pack('B', motor.id)
         packet = self._make_cmd_packet(cmd, buf)
         response = self._wr(packet, cmd, timeout_s=5)
+        # Local patch (not in upstream cf15ac0): all per-motor position
+        # queries share this one command code, so a single timed-out
+        # query leaves an orphan reply that answers the NEXT query
+        # instantly — and every later request/response pairing stays
+        # shifted by one (a permanent "Motor ID mismatch" lockstep).
+        # A reply naming the wrong motor IS that orphan: drain it and
+        # keep waiting for our own, which re-synchronises the stream.
+        while (response is not None and len(response) == 5
+               and response[0] != motor.id):
+            log.warning(f"Stale position reply for motor {response[0]} "
+                        f"while querying motor {motor.id}; draining "
+                        f"and re-waiting")
+            response = self._wait_response(cmd, timeout_s=5)
         if response is not None:
             # response is 5 bytes long, 1 byte motor id, 4 bytes position
             if len(response) != 5:
                 log.error(f"Motor position response length is too short: {len(response)}")
-                return None
-            motor_id = response[0]
-            if motor_id != motor.id:
-                log.error(f"Motor ID mismatch: {motor_id} != {motor.id}")
                 return None
             motor.position = struct.unpack('>i', response[1:5])[0]
             if motor.position <= -10000000:
@@ -2755,11 +2774,17 @@ class DropletBotUart:
             return None
 
     def setMagnet(self, state: bool):
-        """Control magnet. state: 0=disengage (retract), 1=engage (press chip). Returns error status."""
+        """Control magnet. state: 0=disengage (retract), 1=engage (press chip). Returns error status.
+
+        Local patch (not in upstream cf15ac0): timeout raised 5 -> 30 s
+        to match the vendor proxy (0x1122) — the magnet Z move outlasts
+        5 s, so every engage/disengage timed out mid-move and its late
+        reply orphaned into the next same-cmd request.
+        """
         cmd = MotorBoard.MAG_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        response = self._wr(packet, cmd, timeout_s=5)
+        response = self._wr(packet, cmd, timeout_s=30)
         if response is not None:
             return response
         else:
@@ -2777,11 +2802,22 @@ class DropletBotUart:
             return None
 
     def setPogo(self, state: bool):
-        """Control pogo pin plates. state: 0=press, 1=release. Returns error status."""
+        """Control pogo pin plates, both pads as a coordinated pair.
+
+        state: 1=press (engage), 0=release (disengage). Returns error
+        status.
+
+        Local patch (not in upstream cf15ac0): the original docstring
+        claimed the opposite mapping (0=press) — the vendor's own test
+        UI sends pushpad_ctrl(1) for PRESS, hardware-confirmed. Also
+        timeout raised 5 -> 30 s to match the vendor proxy (0x1124);
+        the mechanical move outlasts 5 s and a timed-out reply orphans
+        into the next same-cmd request.
+        """
         cmd = MotorBoard.PUSHPAD_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        response = self._wr(packet, cmd, timeout_s=5)
+        response = self._wr(packet, cmd, timeout_s=30)
         if response is not None:
             return response
         else:
@@ -2799,11 +2835,17 @@ class DropletBotUart:
             return None
 
     def setFilter(self, pos: int):
-        """Set fluorescence filter position (0-4). Returns error status."""
+        """Set fluorescence filter position (0-4). Returns error status.
+
+        Local patch (not in upstream cf15ac0): timeout raised 5 -> 60 s
+        to match the vendor proxy (0x1126) — the wheel move can outlast
+        5 s, and a timed-out reply orphans into the next same-cmd
+        request.
+        """
         cmd = MotorBoard.FLUORESCENCE_CTRL
         buf = struct.pack('B', pos & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        response = self._wr(packet, cmd, timeout_s=5)
+        response = self._wr(packet, cmd, timeout_s=60)
         if response is not None:
             return response
         else:
