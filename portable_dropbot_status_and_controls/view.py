@@ -8,8 +8,10 @@ from traitsui.api import (
     EnumEditor, HGroup, Item, Label, Spring, UItem, VGrid, VGroup, View,
 )
 
+from microdrop_style.icons.icons import ICON_REFRESH
 from microdrop_utils.traitsui_qt_helpers import (
-    IconToggleEditor, InPlaceToggleEditor, StatusIconEditorFactory,
+    IconButtonEditor, IconToggleEditor, InPlaceToggleEditor,
+    StatusIconEditorFactory,
 )
 
 left = HGroup(
@@ -32,17 +34,31 @@ left = HGroup(
             Item("selected_port", label="Port",
                  editor=EnumEditor(name="available_ports"),
                  enabled_when="not connected"),
-            UItem("refresh_ports_button"),
-            UItem("connect_button",
-                  enabled_when="not connected and selected_port"),
+            UItem("refresh_ports_button",
+                  editor=IconButtonEditor(glyph=ICON_REFRESH,
+                                          tooltip="Refresh ports")),
+            UItem("connect_toggle",
+                  style="custom",
+                  editor=InPlaceToggleEditor(on_label="Disconnect",
+                                             off_label="Connect"),
+                  enabled_when="connected or selected_port"),
         ),
         Spring("8"),
-        UItem(
-            "realtime_mode",
-            style="custom",
-            editor=InPlaceToggleEditor(on_label="Realtime On",
-                                       off_label="Realtime Off"),
-            enabled_when="connected and not protocol_running",
+        HGroup(
+            UItem(
+                "realtime_mode",
+                style="custom",
+                editor=InPlaceToggleEditor(on_label="Realtime On",
+                                           off_label="Realtime Off"),
+                enabled_when="connected and not protocol_running",
+            ),
+            UItem(
+                "light_on",
+                style="custom",
+                editor=InPlaceToggleEditor(on_label="Light On",
+                                           off_label="Light Off"),
+                enabled_when="connected",
+            ),
         ),
         Spring("10"),
     ),
@@ -59,15 +75,7 @@ grid = VGrid(
           enabled_when="connected and free_mode and "
                        "not protocol_running"),
     Item("light_display", style="readonly", label="Light"),
-    HGroup(
-        UItem("light_intensity",
-              enabled_when="connected and light_on"),
-        UItem("light_on",
-              style="custom",
-              editor=InPlaceToggleEditor(on_label="Light On",
-                                         off_label="Light Off"),
-              enabled_when="connected"),
-    ),
+    UItem("light_intensity", enabled_when="connected and light_on"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("chip_temp_display", style="readonly", label="Chip Temp"),
@@ -91,7 +99,8 @@ board_grid = VGrid(
     Item("heater_on_display", style="readonly", label="Heater"),
     Item("fan_duty_display", style="readonly", label="Fan Duty"),
     Item("rgy_led_display", style="readonly", label="Status LED"),
-    Item("flu_led_display", style="readonly", label="Fluor. LED"),
+    Item("illumination_display", style="readonly",
+         label="Illumination"),
     Item("pmt_display", style="readonly", label="PMT"),
     Item("chip_short_display", style="readonly", label="Chip Short"),
     Item("chip_res_display", style="readonly", label="Chip Res."),
@@ -109,9 +118,15 @@ advanced_lighting = VGroup(
     VGroup(
         Item("rgb_light", label="RGB LED",
              enabled_when="connected"),
-        Item("fluorescence_led_intensity",
-             label="Fluorescence LED (%)",
+        Item("illumination_raw", label="Illumination (raw 0-255)",
              enabled_when="connected"),
+        HGroup(
+            Item("fluorescence_led_raw",
+                 label="Fluorescence LED (16-bit)",
+                 enabled_when="connected"),
+            UItem("fluorescence_led_default_button",
+                  enabled_when="connected"),
+        ),
         visible_when="show_advanced_lighting",
     ),
 )

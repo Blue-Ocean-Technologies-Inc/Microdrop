@@ -1,12 +1,14 @@
-from traits.api import Bool, Button, Enum, Event, List, Range, Str
+from traits.api import (
+    Bool, Button, Enum, Event, List, Range, Str, observe,
+)
 
 from microdrop_utils.traitsui_qt_helpers import (
     RangeWithSteppedSpinViewHint,
 )
 from portable_dropbot_controller.consts import (
     DEFAULT_FREQUENCY, DEFAULT_LIGHT_INTENSITY, DEFAULT_VOLTAGE,
-    FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS, RGB_LIGHT_STATES,
-    VOLTAGE_BOUNDS,
+    FLUORESCENCE_LED_RAW_MAX, FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS,
+    LIGHT_INTENSITY_RAW_MAX, RGB_LIGHT_STATES, VOLTAGE_BOUNDS,
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -32,19 +34,26 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
         suffix=" Hz", desc="HV frequency setpoint (Hz)")
     light_intensity = Range(*LIGHT_INTENSITY_BOUNDS,
                             DEFAULT_LIGHT_INTENSITY, mode="spinner",
-                            desc="Illumination LED brightness (%)")
-    light_on = Bool(True, desc="Illumination switch; off drives the "
-                               "LED to 0 keeping the % setpoint")
+                            desc="Light brightness (%), driving the "
+                                 "fluorescence LED — the LED that "
+                                 "lights this instrument")
+    light_on = Bool(True, desc="Light switch; off drives the LED to "
+                               "0 keeping the % setpoint")
 
     # ---- Advanced lighting (chevron-collapsed, like the vendor
     # UI's Temp/Lighting tab extras) -----------------------------------
     show_advanced_lighting = Bool(False)
     rgb_light = Enum(*RGB_LIGHT_STATES,
                      desc="RGB indicator LED on the box")
-    fluorescence_led_intensity = Range(
-        0, 100, 0, mode="spinner",
-        desc="Fluorescence LED brightness (%), scaled to the "
-             "firmware's 16-bit range")
+    # Vendor-style raw controls, exactly as the Temp/Lighting tab
+    # sends them — no scaling anywhere in between.
+    illumination_raw = Range(
+        0, LIGHT_INTENSITY_RAW_MAX, 0, mode="spinner",
+        desc="Illumination LED raw brightness byte (0-255)")
+    fluorescence_led_raw = Range(
+        0, FLUORESCENCE_LED_RAW_MAX, 0, mode="spinner",
+        desc="Fluorescence LED raw 16-bit brightness (0-65535)")
+    fluorescence_led_default_button = Button("Default (0)")
 
     #: Fired by clicking the device picture: eject the tray, click
     #: again to bring it back in (the original pane's gesture).
@@ -56,7 +65,14 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     available_ports = List(Str, desc="Serial ports the backend reported")
     selected_port = Str(desc="Port chosen for an explicit connect")
     refresh_ports_button = Button("Refresh Ports")
-    connect_button = Button("Connect")
+    #: Connect/Disconnect toggle: mirrors the actual connection state
+    #: (see _sync_connect_toggle); a click that contradicts it is the
+    #: user's request, which the controller publishes.
+    connect_toggle = Bool(False)
+
+    @observe("connected")
+    def _sync_connect_toggle(self, event):
+        self.connect_toggle = bool(event.new)
 
     # ---- Readouts written by the message handler ---------------------
     # Named like the DropBot pane's displays so the two panes read the
@@ -65,8 +81,8 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     voltage_readback_display = Str("-", desc="HV amplitude the board "
                                              "reports")
     frequency_display = Str("-", desc="HV frequency the board reports")
-    light_display = Str("-", desc="Illumination LED brightness the "
-                                  "board reports")
+    light_display = Str("-", desc="Light brightness the board reports "
+                                  "(the fluorescence LED, in ‰)")
     capacitance_display = Str("-", desc="Chip capacitance reading")
     chip_temp_display = Str("-", desc="Heater current/target (°C)")
     device_temp_display = Str("-", desc="Instrument internal "
@@ -83,7 +99,8 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     fan_duty_display = Str("-", desc="Cooling fan duty (%)")
     rgy_led_display = Str("-", desc="Status LED state "
                                     "(off/red/green/yellow)")
-    flu_led_display = Str("-", desc="Fluorescence LED brightness (‰)")
+    illumination_display = Str("-", desc="Illumination LED brightness "
+                                         "the board reports")
     pmt_display = Str("-", desc="PMT reading")
     chip_short_display = Str("-", desc="Chip short-circuit flag")
     chip_res_display = Str("-", desc="Chip resistance reading")

@@ -73,6 +73,9 @@ RETRY_CONNECTION = "portable_dropbot/requests/retry_connection"
 CONNECT_TO_PORT = "portable_dropbot/requests/connect_to_port"
 #: Ask the backend to publish its current port list (PORTS_UPDATED).
 REFRESH_PORTS = "portable_dropbot/requests/refresh_ports"
+#: User-requested disconnect; pauses the port scanner so the board
+#: is not immediately re-acquired.
+DISCONNECT = "portable_dropbot/requests/disconnect"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
 MOVE_TRAY = "portable_dropbot/requests/move_tray"
@@ -86,7 +89,11 @@ SET_LIGHT_INTENSITY = "portable_dropbot/requests/set_light_intensity"
 #: Illumination on/off without losing the % setpoint.
 SET_LIGHT_ON = "portable_dropbot/requests/set_light_on"
 SET_RGB_LIGHT = "portable_dropbot/requests/set_rgb_light"
-SET_FLUORESCENCE_LED = "portable_dropbot/requests/set_fluorescence_led"
+#: Raw firmware-unit variants, mirroring the vendor UI's
+#: Temp/Lighting tab (illumination 0-255, fluorescence 0-65535).
+SET_ILLUMINATION_RAW = "portable_dropbot/requests/set_illumination_raw"
+SET_FLUORESCENCE_LED_RAW = \
+    "portable_dropbot/requests/set_fluorescence_led_raw"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
 MOTOR_SET_SPEED = "portable_dropbot/requests/motor_set_speed"

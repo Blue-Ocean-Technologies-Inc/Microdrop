@@ -37,6 +37,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
     #: over the same ports produce interleaved half-logins.
     _probing = Bool(False)
     portable_dropbot_connection_active = Bool(False)
+    #: The user asked to disconnect: keep the scanner paused instead
+    #: of re-acquiring the board on the next tick; any connect/retry
+    #: request clears it.
+    _user_disconnected = Bool(False)
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
         if self.portable_dropbot_connection_active \
@@ -76,12 +80,35 @@ class PortableDropbotMonitorMixinService(HasTraits):
         publish_message(topic=PORTS_UPDATED,
                         message=json.dumps(self._candidate_ports()))
 
+    def on_disconnect_request(self, message):
+        """User-requested disconnect: drop the link and leave the
+        scanner paused, so the board stays disconnected until the
+        user connects again."""
+        if not self.portable_dropbot_connection_active:
+            return
+        logger.info("Portable Dropbot disconnect requested; pausing "
+                    "the port scan.")
+        self._user_disconnected = True
+        if isinstance(self.monitor_scheduler, BackgroundScheduler) \
+                and self.monitor_scheduler.state == STATE_RUNNING:
+            self.monitor_scheduler.pause()
+        self.portable_dropbot_connection_active = False
+        if self.proxy is not None:
+            try:
+                self.proxy.disconnect()
+            except Exception as exc:
+                logger.debug(f"Error closing the session on user "
+                             f"disconnect: {exc}")
+            self.proxy = None
+        self._publish_disconnected()
+
     def on_connect_to_port_request(self, message):
         """Explicit user-chosen serial port from the status pane's
         port picker. A named port earns the full autodetect baud
         ladder, exactly like the preference hint, and a failure is
         surfaced as an error signal instead of the scanner's silent
         debug line."""
+        self._user_disconnected = False
         port_name = str(message or "").strip()
         if not port_name:
             self.on_retry_connection_request(message)
@@ -107,6 +134,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
             self._probing = False
 
     def on_retry_connection_request(self, message):
+        self._user_disconnected = False
         if self.portable_dropbot_connection_active:
             logger.info("Retry ignored: Portable Dropbot already "
                         "connected.")
@@ -247,6 +275,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
         if self.portable_dropbot_connection_active:
             self._publish_disconnected()
         self.portable_dropbot_connection_active = False
+        if self._user_disconnected:
+            # Deliberate disconnect: the scanner stays paused until
+            # the user connects/retries again.
+            return
         if self.monitor_scheduler is not None:
             if self.monitor_scheduler.state == STATE_PAUSED:
                 self.monitor_scheduler.resume()
