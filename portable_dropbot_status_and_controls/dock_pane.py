@@ -43,7 +43,7 @@ class PortableDropbotMotorsDockPane(BaseStatusDockPane):
     macros plus the advanced per-motor moves."""
 
     id = PKG + ".motors_dock_pane"
-    name = f"{PKG_name} Motors"
+    name = "Portable Dropbot Motors"
 
     view = MotorsView
 

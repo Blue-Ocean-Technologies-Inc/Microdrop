@@ -42,6 +42,14 @@ ACTOR_TOPIC_DICT = {
 #: Manual Move fields take mm, like the driver's own test UI.
 MM_TO_FIRMWARE_UNITS = 1000
 
+#: Manual Move bounds (mm) — the vendor test UI's distance spin-box
+#: range (negative = the other direction on relative moves).
+MOVE_DISTANCE_MM_BOUNDS = (-1000.0, 1000.0)
+
+#: Runtime run-speed bounds (µm/s): the driver measured ~40 mm/s as
+#: the clean ceiling (42 mm/s stalls); the vendor UI defaults to 1000.
+MOTOR_SPEED_UM_PER_S_BOUNDS = (0, 40_000)
+
 #: The signal board's rgy_state status field, decoded as the vendor
 #: UI does.
 RGY_STATE_NAMES = {0: "off", 1: "red", 2: "green", 3: "yellow"}

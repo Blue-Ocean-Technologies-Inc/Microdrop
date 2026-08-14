@@ -1,9 +1,12 @@
-from traits.api import Button, Enum, Float, Int, Str
+from traits.api import Button, Enum, Int, Range, Str
 
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import MOTOR_MACRO_LABELS, PORTABLE_DROPBOT_IMAGE
+from .consts import (
+    MOTOR_MACRO_LABELS, MOTOR_SPEED_UM_PER_S_BOUNDS,
+    MOVE_DISTANCE_MM_BOUNDS, PORTABLE_DROPBOT_IMAGE,
+)
 
 
 class PortableDropbotMotorsModel(BaseStatusModel):
@@ -30,14 +33,15 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     home_all_button = Button("Home All")
 
     # ---- Manual Move (mm; converted to the firmware's 0.001 mm
-    # units when published) ---------------------------------------------
-    move_by_mm = Float(1.0)
+    # units when published; spin boxes in the view for touch use) -------
+    move_by_mm = Range(*MOVE_DISTANCE_MM_BOUNDS, 1.0)
     move_by_button = Button("Go")
-    move_to_mm = Float(0.0)
+    move_to_mm = Range(*MOVE_DISTANCE_MM_BOUNDS, 0.0)
     move_to_button = Button("Go")
     #: Runtime-only per-motor run speed; reverts to the flashed
     #: default on reboot.
-    speed_um_per_s = Int(1000)
+    speed_um_per_s = Range(*MOTOR_SPEED_UM_PER_S_BOUNDS, 1000,
+                           mode="spinner")
     set_speed_button = Button("Set Speed")
 
     #: Local Prev/Next cycle position for the filter wheel, exactly

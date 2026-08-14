@@ -5,6 +5,17 @@ from traitsui.api import (
     ButtonEditor, HGroup, Item, UItem, VGroup, View,
 )
 
+from microdrop_utils.traitsui_qt_helpers import DoubleSpinBoxEditor
+
+from .consts import MOVE_DISTANCE_MM_BOUNDS
+
+#: Touch-friendly mm spin box (the vendor UI's 3-decimal distance
+#: spin), stepping a whole mm per tap.
+_mm_spin_box = DoubleSpinBoxEditor(
+    low=MOVE_DISTANCE_MM_BOUNDS[0], high=MOVE_DISTANCE_MM_BOUNDS[1],
+    decimals=3, step=1.0,
+)
+
 select_motor = VGroup(
     Item("selected_motor", label="Target Motor"),
     label="Select Motor",
@@ -36,9 +47,11 @@ macros = VGroup(
 )
 
 manual_move = VGroup(
-    HGroup(Item("move_by_mm", label="Move By (mm)"),
+    HGroup(Item("move_by_mm", label="Move By (mm)",
+                editor=_mm_spin_box),
            UItem("move_by_button")),
-    HGroup(Item("move_to_mm", label="Move To (mm)"),
+    HGroup(Item("move_to_mm", label="Move To (mm)",
+                editor=_mm_spin_box),
            UItem("move_to_button")),
     HGroup(Item("speed_um_per_s", label="Speed (μm/s)"),
            UItem("set_speed_button")),
