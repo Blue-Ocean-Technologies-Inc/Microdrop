@@ -31,6 +31,17 @@ class PortableDropbotMotorsMixinService(HasTraits):
     # ------------------------------------------------------------------ #
     def on_move_tray_request(self, message):
         direction = str(message).strip().lower()
+        if direction == "toggle":
+            # The status pane's device picture: one click ejects, the
+            # next brings it back. getTray answers the setTray
+            # vocabulary — 0 = in, 1 = out.
+            ok, tray_state = self._proxy_call(
+                "tray read", lambda: self.proxy.uart.getTray())
+            if not ok or tray_state is None:
+                logger.warning("Tray toggle ignored: current tray "
+                               "position unknown.")
+                return
+            direction = "in" if tray_state == 1 else "out"
         if direction not in _TRAY_ACTIONS:
             logger.warning(f"Unknown tray direction: {direction!r}")
             return
@@ -57,12 +68,14 @@ class PortableDropbotMotorsMixinService(HasTraits):
         self._publish_status_snapshot()
 
     def on_set_pogo_request(self, message):
+        # Hardware truth (vendor test UI, HW-confirmed): 1 = press
+        # (engage), 0 = release. Acts on BOTH pads as a coordinated
+        # pair — no per-side mechanism command exists; a single pad
+        # moves only via the raw per-motor moves/home.
         engaged = str(message) == "True"
-        # Driver convention: 0 = press (pads down on the chip),
-        # 1 = release — inverted from the message's True=engaged.
         self._proxy_call(f"pogo {'press' if engaged else 'release'}",
                          lambda: self.proxy.uart.setPogo(
-                             0 if engaged else 1))
+                             1 if engaged else 0))
         self._publish_status_snapshot()
 
     def on_lock_chip_request(self, message):
@@ -80,7 +93,7 @@ class PortableDropbotMotorsMixinService(HasTraits):
         self._publish_status_snapshot()
 
     # ------------------------------------------------------------------ #
-    # Advanced per-motor moves (steps, Int)                                #
+    # Per-motor moves (µm — the firmware's 0.001 mm move units)           #
     # ------------------------------------------------------------------ #
     def _motor_id(self, name):
         motor_id = MOTOR_IDS.get(str(name).strip().lower())
@@ -90,7 +103,7 @@ class PortableDropbotMotorsMixinService(HasTraits):
 
     def on_motor_move_request(self, message):
         """JSON {"motor": name, "mode": "absolute"|"relative",
-        "value": steps}."""
+        "value": distance in µm (the firmware's 0.001 mm units)}."""
         payload = json.loads(str(message))
         motor_id = self._motor_id(payload.get("motor"))
         if motor_id is None:
@@ -108,6 +121,20 @@ class PortableDropbotMotorsMixinService(HasTraits):
                 lambda: self.proxy.uart.motorAbsoluteMove(motor_id,
                                                           value))
         self._publish_motors()
+
+    def on_motor_set_speed_request(self, message):
+        """JSON {"motor": name, "value": run speed in µm/s}. Runtime
+        only — the flashed default returns on reboot, and homing
+        shares this speed, so keep bumps temporary (see the driver's
+        setMotorSpeed notes)."""
+        payload = json.loads(str(message))
+        motor_id = self._motor_id(payload.get("motor"))
+        if motor_id is None:
+            return
+        speed = int(payload.get("value", 0))
+        self._proxy_call(
+            f"motor {payload['motor']} speed {speed}",
+            lambda: self.proxy.uart.setMotorSpeed(motor_id, speed))
 
     def on_motor_stop_request(self, message):
         motor_id = self._motor_id(message)

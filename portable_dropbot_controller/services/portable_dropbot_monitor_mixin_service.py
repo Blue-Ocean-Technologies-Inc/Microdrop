@@ -1,3 +1,6 @@
+import json
+import time
+
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import (
@@ -8,8 +11,9 @@ from serial.tools import list_ports
 from traits.api import Bool, HasTraits, Instance, Str, provides
 
 from logger.logger_service import get_logger
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from ..consts import MONITOR_INTERVAL_S
+from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
 from ..driver.session import DropletBotSession
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -63,6 +67,44 @@ class PortableDropbotMonitorMixinService(HasTraits):
         self.monitor_scheduler = scheduler
         self.monitor_scheduler.start()
         logger.info("Portable Dropbot monitor started.")
+
+    def on_refresh_ports_request(self, *args, **kwargs):
+        """The frontend can run on a different machine than the
+        hardware, so the backend owns port enumeration: answer with
+        the scanner's own candidate ordering (preference hint first,
+        USB-style ports next)."""
+        publish_message(topic=PORTS_UPDATED,
+                        message=json.dumps(self._candidate_ports()))
+
+    def on_connect_to_port_request(self, message):
+        """Explicit user-chosen serial port from the status pane's
+        port picker. A named port earns the full autodetect baud
+        ladder, exactly like the preference hint, and a failure is
+        surfaced as an error signal instead of the scanner's silent
+        debug line."""
+        port_name = str(message or "").strip()
+        if not port_name:
+            self.on_retry_connection_request(message)
+            return
+        if self.portable_dropbot_connection_active:
+            logger.info(f"Connect to {port_name} ignored: Portable "
+                        f"Dropbot already connected.")
+            self._publish_connected()
+            return
+        # Claim the probe guard so the next scheduled scan round does
+        # not fight this attempt over the same port.
+        self._probing = True
+        try:
+            if self._attempt_connect(port_name, autodetect=True):
+                # A port the user pointed at is the best possible
+                # hint for the next scan.
+                self.preferences.port_hint = port_name
+            else:
+                self._publish_error(
+                    f"connect to {port_name}",
+                    "no Portable Dropbot answered the login handshake")
+        finally:
+            self._probing = False
 
     def on_retry_connection_request(self, message):
         if self.portable_dropbot_connection_active:
@@ -142,6 +184,25 @@ class PortableDropbotMonitorMixinService(HasTraits):
                 # commands time out. Only an answered login counts.
                 raise ConnectionError(
                     "port opened but neither board answered login")
+            if not session.uart.motor_board_connected:
+                # connect() gives the motor board a single login try,
+                # easy to lose right after the baud ladder — and an
+                # unlogged motor board makes every motor call return a
+                # silent False. Retry before giving up on it.
+                for _ in range(2):
+                    time.sleep(0.3)
+                    if session.uart.BoardLogin("motor"):
+                        break
+            logger.info(
+                f"Portable Dropbot boards on {port_name}: signal="
+                f"{'yes' if session.uart.sig_board_connected else 'no'}"
+                f", motor="
+                f"{'yes' if session.uart.motor_board_connected else 'no'}")
+            if not session.uart.motor_board_connected:
+                self._publish_error(
+                    "motor board login",
+                    "the motor board did not answer; motor controls "
+                    "stay dead until a reconnect reaches it")
             self.proxy = session
             self.portable_dropbot_connection_active = True
             # Alarms stream in unsolicited; hand them straight to the

@@ -1,4 +1,5 @@
 import json
+import threading
 from datetime import datetime
 
 import dramatiq
@@ -14,8 +15,10 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from .consts import (
     ALARM_RAISED,
+    CONNECT_TO_PORT,
     ERROR_RAISED,
     MOTORS_UPDATED,
+    REFRESH_PORTS,
     STATUS_FAILURE_DISCONNECT_LIMIT,
     PKG,
     PORTABLE_DROPBOT_CONNECTED,
@@ -52,6 +55,16 @@ class PortableDropbotControllerBase(HasTraits):
     #: _publish_status_snapshot); reset by any successful read.
     _status_failures = Int(0)
 
+    #: Serializes all driver calls: the monitor's poll thread and the
+    #: Dramatiq worker threads otherwise interleave requests on one
+    #: serial link whose replies are matched by command code alone —
+    #: two in-flight queries with the same code corrupt each other's
+    #: answers (RLock: a request handler may nest _proxy_call).
+    _proxy_lock = Any()
+
+    def __proxy_lock_default(self):
+        return threading.RLock()
+
     def __del__(self):
         self.cleanup()
 
@@ -83,7 +96,9 @@ class PortableDropbotControllerBase(HasTraits):
             self.portable_dropbot_connection_active = False
             requested_method = f"on_{specific_sub_topic}_signal"
 
-        elif topic == RETRY_CONNECTION:
+        elif topic in (RETRY_CONNECTION, CONNECT_TO_PORT, REFRESH_PORTS):
+            # Connection-establishing requests are exactly the ones
+            # that must run while disconnected.
             requested_method = f"on_{specific_sub_topic}_request"
 
         elif primary_sub_topic == "requests":
@@ -150,7 +165,8 @@ class PortableDropbotControllerBase(HasTraits):
                            f"ignoring {context}.")
             return False, None
         try:
-            return True, call()
+            with self._proxy_lock:
+                return True, call()
         except OSError as error:
             logger.warning(f"Portable Dropbot vanished during "
                            f"{context}: {error}")

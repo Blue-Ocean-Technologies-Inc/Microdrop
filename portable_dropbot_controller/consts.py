@@ -10,9 +10,13 @@ DEFAULT_BAUD_RATE = 115200
 #: own board detection (120 or 200) has answered.
 DEFAULT_NUM_CHANNELS = 200
 
-#: HV actuation defaults (both Int end-to-end, like every device).
+#: HV actuation defaults (both Int end-to-end, like every device) and
+#: UI setpoint bounds, carried over from the original portable pane
+#: (which drove this same hardware).
 DEFAULT_VOLTAGE = 100
 DEFAULT_FREQUENCY = 10_000
+VOLTAGE_BOUNDS = (30, 200)
+FREQUENCY_BOUNDS = (50, 60_000)
 
 #: Illumination LED brightness (%), applied on connect and from the
 #: status pane's spinner.
@@ -47,12 +51,20 @@ REALTIME_MODE_UPDATED = "hardware/signals/realtime_mode_updated"
 
 # Signals published by this plugin.
 STATUS_UPDATED = "portable_dropbot/signals/status_updated"
+#: Serial ports present on the machine that owns the hardware — the
+#: frontend can be remote, so the backend enumerates and publishes.
+PORTS_UPDATED = "portable_dropbot/signals/ports_updated"
 MOTORS_UPDATED = "portable_dropbot/signals/motors_updated"
 ALARM_RAISED = "portable_dropbot/signals/alarm"
 ERROR_RAISED = "portable_dropbot/signals/error"
 
 # Request topics handled by this plugin.
 RETRY_CONNECTION = "portable_dropbot/requests/retry_connection"
+#: Explicit user-chosen serial port (e.g. COM5) to connect on, from
+#: the status pane's port picker; empty message = resume scanning.
+CONNECT_TO_PORT = "portable_dropbot/requests/connect_to_port"
+#: Ask the backend to publish its current port list (PORTS_UPDATED).
+REFRESH_PORTS = "portable_dropbot/requests/refresh_ports"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
 MOVE_TRAY = "portable_dropbot/requests/move_tray"
@@ -65,6 +77,7 @@ LOCK_CHIP = "portable_dropbot/requests/lock_chip"
 SET_LIGHT_INTENSITY = "portable_dropbot/requests/set_light_intensity"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
+MOTOR_SET_SPEED = "portable_dropbot/requests/motor_set_speed"
 MOTOR_STOP = "portable_dropbot/requests/motor_stop"
 MOTOR_HOME = "portable_dropbot/requests/motor_home"
 REFRESH_MOTORS = "portable_dropbot/requests/refresh_motors"
