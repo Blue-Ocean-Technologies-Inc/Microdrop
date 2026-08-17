@@ -279,6 +279,17 @@ class SignalBoard:
         HEAD << 8
     ) | 0x34  # Capacitance detection progress: data[0]=index, data[1]=value
     CAP_SHORT_DETECT = (HEAD << 8) | 0x30    # Capacitor short detect → resp u8 (0=ok, 1=short)
+    # Vendored from upstream proxy.py (not in upstream commands.py, which
+    # hardcodes the codes at the call sites). HV_ENABLE shares 0x34 with the
+    # unsolicited CAP_PROGRESS_REPORT above — the request direction is HV
+    # enable, per the working vendor UI.
+    HV_ENABLE = (HEAD << 8) | 0x34           # u8 enable, u8 bypass → resp u8 status
+    CAL_CAPS_GET = (HEAD << 8) | 0x48        # → resp u8 reference-cap count (3 or 5)
+    CAL_CAPS_SET = (HEAD << 8) | 0x49        # u8 count (3|5, EF-persisted) → resp u8 echo
+    CAP_CALIBRATE_ML = (HEAD << 8) | 0x4A    # u16 hv_mv → resp u8 status (blocking ~6 s)
+    CAP_ML_GET = (HEAD << 8) | 0x4B          # u8 level (0=HIGH,1=MED,2=LOW) → fit blob
+    CAP_ML_REALTIME = (HEAD << 8) | 0x4E     # u8 mode (255=query) → resp u8 current
+    CAP_ELEC_GAIN = (HEAD << 8) | 0x4F       # u16 permille (0=query) → resp u16 current
     LOADED_SHORT_DETECT = (
         HEAD << 8
     ) | 0xAC  # Chip load status & short detection → returns u8 chip loaded (0/1), u8 short(0/1)

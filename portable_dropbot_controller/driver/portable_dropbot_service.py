@@ -2285,12 +2285,18 @@ class DropletBotUart:
 
     # --- PMT (Signal Board) ---
     def pmt_acquire(self):
-        """Start PMT ADC sampling. Returns packet count or None."""
+        """Start PMT ADC sampling. Returns packet count or None.
+
+        Local patch (not in upstream cf15ac0): the firmware replies
+        only when sampling COMPLETES, and a full-buffer run is 10240
+        samples at 1 kHz (~10.3 s) — upstream's own newer proxy uses a
+        longer timeout for exactly this reason; 10 s guaranteed a
+        timeout on every full acquisition."""
         if not self.sig_board_connected:
             return None
         cmd = SignalBoard.PMT_ACQUIRE_START
         packet = self._make_cmd_packet(cmd)
-        resp = self._wr(packet, cmd, timeout_s=10.0)
+        resp = self._wr(packet, cmd, timeout_s=30.0)
         if resp and len(resp) >= 2:
             return struct.unpack('<H', resp[:2])[0]
         return None
@@ -2382,6 +2388,87 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
         return True
+
+    # --- ML capacitance calibration / HV interlock (Signal Board) ---
+    # Vendored from upstream proxy.py (post-cf15ac0): same wire formats
+    # and timeouts as the hardware-validated vendor UI.
+    def hv_enable(self, enable: int, bypass: int = 0):
+        """Master HV output enable (pad-sensor interlock). HV only
+        energizes with a device on the pads unless bypass=1 (test/cal
+        only). Returns the status byte or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.HV_ENABLE
+        buf = struct.pack('>BB', enable, bypass)
+        packet = self._make_cmd_packet(cmd, buf)
+        resp = self._wr(packet, cmd, timeout_s=2.0)
+        if resp and len(resp) >= 1:
+            return resp[0]
+        return None
+
+    def cal_caps_get(self):
+        """Get the multi-slope reference-cap count (3 or 5), or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.CAL_CAPS_GET
+        packet = self._make_cmd_packet(cmd)
+        resp = self._wr(packet, cmd, timeout_s=2.0)
+        if resp and len(resp) >= 1:
+            return resp[0]
+        return None
+
+    def cal_caps_set(self, cal_caps: int):
+        """Provision the reference-cap count (3 or 5, EF-persisted).
+        Returns the echoed count or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.CAL_CAPS_SET
+        buf = struct.pack('>B', cal_caps)
+        packet = self._make_cmd_packet(cmd, buf)
+        resp = self._wr(packet, cmd, timeout_s=2.0)
+        if resp and len(resp) >= 1:
+            return resp[0]
+        return None
+
+    def cap_calibrate_ml(self, hv_mv: int = 0):
+        """Run the multi-slope 3-level calibration (enable HV routing
+        first; blocking ~6 s). Returns the status byte or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.CAP_CALIBRATE_ML
+        buf = struct.pack('>H', hv_mv)
+        packet = self._make_cmd_packet(cmd, buf)
+        resp = self._wr(packet, cmd, timeout_s=30.0)
+        if resp and len(resp) >= 1:
+            return resp[0]
+        return None
+
+    def cap_ml_realtime(self, mode: int = 255):
+        """Get/set the ML-fitted realtime cap path (255 = query only).
+        Returns the current mode byte or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.CAP_ML_REALTIME
+        buf = struct.pack('>B', mode)
+        packet = self._make_cmd_packet(cmd, buf)
+        resp = self._wr(packet, cmd, timeout_s=2.0)
+        if resp and len(resp) >= 1:
+            return resp[0]
+        return None
+
+    def cap_elec_gain(self, permille: int = 0):
+        """Get/set the electrode-path gain in permille (0 = query
+        only; EF-persisted, HW-benchmark default 692). Returns the
+        current permille or None."""
+        if not self.sig_board_connected:
+            return None
+        cmd = SignalBoard.CAP_ELEC_GAIN
+        buf = struct.pack('>H', permille)
+        packet = self._make_cmd_packet(cmd, buf)
+        resp = self._wr(packet, cmd, timeout_s=2.0)
+        if resp and len(resp) >= 2:
+            return struct.unpack('>H', resp[:2])[0]
+        return None
 
     # --- Capacitance & Short Detection (Signal Board) ---
     def cap_short_detect(self):
