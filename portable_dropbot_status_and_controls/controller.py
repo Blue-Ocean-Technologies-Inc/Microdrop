@@ -5,8 +5,8 @@ from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
     CONNECT_TO_PORT, DISCONNECT, MOVE_TRAY, REFRESH_PORTS,
-    SET_FLUORESCENCE_LED_RAW, SET_FREQUENCY, SET_ILLUMINATION_RAW,
-    SET_LIGHT_INTENSITY, SET_LIGHT_ON, SET_RGB_LIGHT, SET_VOLTAGE,
+    SET_FREQUENCY, SET_LIGHT_INTENSITY, SET_LIGHT_ON, SET_RGB_LIGHT,
+    SET_VOLTAGE,
 )
 from template_status_and_controls.base_controller import (
     BaseStatusController,
@@ -49,6 +49,23 @@ class ControlsController(BaseStatusController):
         # Snap back to the real state; the backend's
         # connected/disconnected signal is what flips the toggle.
         self.model.connect_toggle = self.model.connected
+
+    @observe("model:icon_color")
+    def _sync_rgb_led_to_status(self, event):
+        # The box's RGB indicator LED mirrors the status icon: yellow
+        # while connected without a chip, green with one, red on a
+        # halt. Nothing to send while disconnected (the link is gone,
+        # and the board's own power-down handles its LED).
+        if not self.model.connected:
+            return
+        color = {
+            self.model.CONNECTED_COLOR: "green",
+            self.model.CONNECTED_NO_DEVICE_COLOR: "yellow",
+            self.model.HALTED_COLOR: "red",
+        }.get(event.new)
+        if color:
+            publish_message(topic=SET_RGB_LIGHT, message=color)
+            logger.debug(f"RGB LED synced to status --> {color}")
 
     @observe("model:tray_toggle_clicked")
     def _on_tray_toggle_clicked(self, event):
@@ -94,36 +111,3 @@ class ControlsController(BaseStatusController):
     def _on_light_on_changed(self, event):
         publish_message(topic=SET_LIGHT_ON, message=str(bool(event.new)))
         logger.debug(f"Light --> {'on' if event.new else 'off'}")
-
-    @observe("model:rgb_light")
-    def _on_rgb_light_changed(self, event):
-        publish_message(topic=SET_RGB_LIGHT, message=str(event.new))
-        logger.debug(f"RGB light --> {event.new}")
-
-    @debounce(wait_seconds=0.3)
-    def illumination_raw_setattr(self, info, obj, traitname, value):
-        return super().setattr(info, obj, traitname, value)
-
-    @observe("model:illumination_raw")
-    def _on_illumination_raw_changed(self, event):
-        publish_message(topic=SET_ILLUMINATION_RAW,
-                        message=str(int(event.new)))
-        logger.debug(f"Illumination raw --> {event.new}")
-
-    @debounce(wait_seconds=0.3)
-    def fluorescence_led_raw_setattr(self, info, obj, traitname,
-                                     value):
-        return super().setattr(info, obj, traitname, value)
-
-    @observe("model:fluorescence_led_raw")
-    def _on_fluorescence_led_raw_changed(self, event):
-        publish_message(topic=SET_FLUORESCENCE_LED_RAW,
-                        message=str(int(event.new)))
-        logger.debug(f"Fluorescence LED raw --> {event.new}")
-
-    @observe("model:fluorescence_led_default_button")
-    def _on_fluorescence_led_default(self, event):
-        # The vendor tab's "Default (0)": zero the spinner and send it
-        # regardless (the trait observer stays quiet when already 0).
-        self.model.fluorescence_led_raw = 0
-        publish_message(topic=SET_FLUORESCENCE_LED_RAW, message="0")

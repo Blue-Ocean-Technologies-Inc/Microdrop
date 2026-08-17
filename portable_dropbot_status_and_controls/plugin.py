@@ -15,8 +15,22 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         return PortableDropbotStatusAndControls
 
     def _get_extra_dock_pane_classes(self):
-        from .dock_pane import PortableDropbotMotorsDockPane
-        return [PortableDropbotMotorsDockPane]
+        from .dock_pane import (
+            PortableDropbotCalibrationDockPane,
+            PortableDropbotMotorParamsDockPane,
+            PortableDropbotMotorsDockPane,
+            PortableDropbotPmtDockPane,
+            PortableDropbotPowerSystemDockPane,
+            PortableDropbotTempLightingDockPane,
+        )
+        return [
+            PortableDropbotMotorsDockPane,
+            PortableDropbotCalibrationDockPane,
+            PortableDropbotTempLightingDockPane,
+            PortableDropbotPmtDockPane,
+            PortableDropbotPowerSystemDockPane,
+            PortableDropbotMotorParamsDockPane,
+        ]
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT

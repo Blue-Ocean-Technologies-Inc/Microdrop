@@ -1,10 +1,15 @@
 import os
 
 from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
+from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from portable_dropbot_controller.consts import (
+    CALIBRATION_UPDATED,
+    MOTOR_PARAMS_UPDATED,
+    PMT_UPDATED,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
     STATUS_UPDATED,
+    TEMP_UPDATED,
 )
 
 # This module's package.
@@ -17,9 +22,14 @@ current_folder_path = os.path.dirname(os.path.abspath(__file__))
 PORTABLE_DROPBOT_IMAGE = os.path.join(current_folder_path, "images",
                                       "portable_dropbot.png")
 
-#: The motors pane's listener, separate from the status pane's so the
-#: two panes mount and unmount independently.
+#: Each pane gets its own listener so the panes mount and unmount
+#: independently.
 MOTORS_LISTENER = f"{PKG}_motors_listener"
+CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
+TEMP_LIGHTING_LISTENER = f"{PKG}_temp_lighting_listener"
+PMT_LISTENER = f"{PKG}_pmt_listener"
+POWER_SYSTEM_LISTENER = f"{PKG}_power_system_listener"
+MOTOR_PARAMS_LISTENER = f"{PKG}_motor_params_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -35,6 +45,37 @@ ACTOR_TOPIC_DICT = {
         #: chip_on_pad gates the magnet macros — the firmware only
         #: moves the magnet with a chip on the pad.
         STATUS_UPDATED,
+    ],
+    CALIBRATION_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        CALIBRATION_UPDATED,
+    ],
+    TEMP_LIGHTING_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        TEMP_UPDATED,
+        #: Seeds the lighting controls from the board's reported
+        #: state on the first snapshot after a connect.
+        STATUS_UPDATED,
+    ],
+    PMT_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        PMT_UPDATED,
+    ],
+    #: The advanced-only panes also track the Edit-menu Advanced Mode
+    #: toggle, which is what unlocks their controls.
+    POWER_SYSTEM_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        ADVANCED_MODE_CHANGE,
+    ],
+    MOTOR_PARAMS_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        MOTOR_PARAMS_UPDATED,
+        ADVANCED_MODE_CHANGE,
     ],
 }
 

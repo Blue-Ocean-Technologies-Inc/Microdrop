@@ -1,9 +1,12 @@
 """The Portable Dropbot status pane, laid out exactly like the
 DropBot one (device photo + connection column on the left, a
 readback/setter grid on the right) so users move between the two
-without relearning anything — plus the portable's extras: the
-COM-port picker, light intensity, temperatures, humidity,
-mechanisms, and alarms."""
+without relearning anything. The portable's many extra readouts are
+folded into chevron-collapsed groups — Environment, Board Status —
+so the pane shows only the actuation essentials until the user opens
+them; deeper controls each have their own pane (calibration, temp &
+lighting, PMT, and the advanced-mode power-system / motor-params
+panes)."""
 from traitsui.api import (
     EnumEditor, HGroup, Item, Label, Spring, UItem, VGrid, VGroup, View,
 )
@@ -65,6 +68,8 @@ left = HGroup(
     id="status_controls",
 )
 
+# The actuation essentials stay in sight; everything else lives in
+# the chevron-collapsed groups below.
 grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
     UItem("voltage",
@@ -78,62 +83,56 @@ grid = VGrid(
     UItem("light_intensity", enabled_when="connected and light_on"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
-    Item("chip_temp_display", style="readonly", label="Chip Temp"),
-    UItem(""),
-    Item("device_temp_display", style="readonly", label="Device Temp"),
-    UItem(""),
-    Item("device_humidity_display", style="readonly",
-         label="Device Humidity"),
-    UItem(""),
-    Item("mechanisms_display", style="readonly", label="Mechanisms"),
-    UItem(""),
     Item("last_alarm", style="readonly", label="Last Alarm"),
     UItem(""),
     id="data_grid",
 )
 
-# The remaining signal-board STATUS fields, like the vendor UI's
-# Connection/Status tab shows them.
-board_grid = VGrid(
-    Item("out_power_display", style="readonly", label="Heater Power"),
-    Item("heater_on_display", style="readonly", label="Heater"),
-    Item("fan_duty_display", style="readonly", label="Fan Duty"),
-    Item("rgy_led_display", style="readonly", label="Status LED"),
-    Item("illumination_display", style="readonly",
-         label="Illumination"),
-    Item("pmt_display", style="readonly", label="PMT"),
-    Item("chip_short_display", style="readonly", label="Chip Short"),
-    Item("chip_res_display", style="readonly", label="Chip Res."),
-    Item("cap_match_display", style="readonly", label="Cap Match"),
-    id="board_grid",
+# Temperatures, humidity, and the heater/fan that regulate them.
+environment = VGroup(
+    HGroup(
+        UItem("show_environment", editor=IconToggleEditor()),
+        Label("Environment"),
+    ),
+    VGrid(
+        Item("chip_temp_display", style="readonly", label="Chip Temp"),
+        Item("device_temp_display", style="readonly",
+             label="Device Temp"),
+        Item("device_humidity_display", style="readonly",
+             label="Device Humidity"),
+        Item("out_power_display", style="readonly",
+             label="Heater Power"),
+        Item("heater_on_display", style="readonly", label="Heater"),
+        Item("fan_duty_display", style="readonly", label="Fan Duty"),
+        visible_when="show_environment",
+    ),
 )
 
-# Chevron-collapsed extras from the vendor UI's Temp/Lighting tab
-# (same header structure as the fluorescence controls pane).
-advanced_lighting = VGroup(
+# The remaining signal-board STATUS fields, like the vendor UI's
+# Connection/Status tab shows them.
+board_status = VGroup(
     HGroup(
-        UItem("show_advanced_lighting", editor=IconToggleEditor()),
-        Label("Advanced Lighting"),
+        UItem("show_board_status", editor=IconToggleEditor()),
+        Label("Board Status"),
     ),
-    VGroup(
-        Item("rgb_light", label="RGB LED",
-             enabled_when="connected"),
-        Item("illumination_raw", label="Illumination (raw 0-255)",
-             enabled_when="connected"),
-        HGroup(
-            Item("fluorescence_led_raw",
-                 label="Fluorescence LED (16-bit)",
-                 enabled_when="connected"),
-            UItem("fluorescence_led_default_button",
-                  enabled_when="connected"),
-        ),
-        visible_when="show_advanced_lighting",
+    VGrid(
+        Item("mechanisms_display", style="readonly",
+             label="Mechanisms"),
+        Item("rgy_led_display", style="readonly", label="Status LED"),
+        Item("illumination_display", style="readonly",
+             label="Illumination"),
+        Item("pmt_display", style="readonly", label="PMT"),
+        Item("chip_short_display", style="readonly",
+             label="Chip Short"),
+        Item("chip_res_display", style="readonly", label="Chip Res."),
+        Item("cap_match_display", style="readonly", label="Cap Match"),
+        visible_when="show_board_status",
     ),
 )
 
 UnifiedView = View(
-    HGroup(left, "15", VGroup(grid, advanced_lighting), "15",
-           board_grid),
+    HGroup(left, "15",
+           VGroup(grid, environment, board_status)),
     resizable=True,
     # Let the dock pane shrink below the grids' natural size — the
     # content then scrolls instead of pinning the pane width.

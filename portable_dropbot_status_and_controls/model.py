@@ -1,5 +1,5 @@
 from traits.api import (
-    Bool, Button, Enum, Event, List, Range, Str, observe,
+    Bool, Button, Event, List, Range, Str, observe,
 )
 
 from microdrop_utils.traitsui_qt_helpers import (
@@ -7,8 +7,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 from portable_dropbot_controller.consts import (
     DEFAULT_FREQUENCY, DEFAULT_LIGHT_INTENSITY, DEFAULT_VOLTAGE,
-    FLUORESCENCE_LED_RAW_MAX, FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS,
-    LIGHT_INTENSITY_RAW_MAX, RGB_LIGHT_STATES, VOLTAGE_BOUNDS,
+    FREQUENCY_BOUNDS, LIGHT_INTENSITY_BOUNDS, VOLTAGE_BOUNDS,
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -40,20 +39,11 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     light_on = Bool(True, desc="Light switch; off drives the LED to "
                                "0 keeping the % setpoint")
 
-    # ---- Advanced lighting (chevron-collapsed, like the vendor
-    # UI's Temp/Lighting tab extras) -----------------------------------
-    show_advanced_lighting = Bool(False)
-    rgb_light = Enum(*RGB_LIGHT_STATES,
-                     desc="RGB indicator LED on the box")
-    # Vendor-style raw controls, exactly as the Temp/Lighting tab
-    # sends them — no scaling anywhere in between.
-    illumination_raw = Range(
-        0, LIGHT_INTENSITY_RAW_MAX, 0, mode="spinner",
-        desc="Illumination LED raw brightness byte (0-255)")
-    fluorescence_led_raw = Range(
-        0, FLUORESCENCE_LED_RAW_MAX, 0, mode="spinner",
-        desc="Fluorescence LED raw 16-bit brightness (0-65535)")
-    fluorescence_led_default_button = Button("Default (0)")
+    # ---- Chevron-collapsed group toggles: only the actuation
+    # essentials stay visible; the rest opens on demand (the raw
+    # lighting controls live in the Temp & Lighting pane) --------------
+    show_environment = Bool(False)
+    show_board_status = Bool(False)
 
     #: Fired by clicking the device picture: eject the tray, click
     #: again to bring it back in (the original pane's gesture).

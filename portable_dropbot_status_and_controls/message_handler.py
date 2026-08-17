@@ -42,6 +42,7 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_status_updated_triggered(self, body):
         data = json.loads(str(body))
+        logger.debug(data)
         self.model.chip_inserted = bool(data.get("chip_on_pad", False))
         hv_vol, hv_freq = data.get("hv_vol"), data.get("hv_freq")
         if hv_vol is not None:
