@@ -13,6 +13,9 @@ from .interfaces.i_portable_dropbot_control_mixin_service import (
 )
 from .portable_dropbot_controller_base import PortableDropbotControllerBase
 from .preferences import PortableDropbotPreferences
+from .services.portable_dropbot_calibration_mixin_service import (
+    PortableDropbotCalibrationMixinService,
+)
 from .services.portable_dropbot_electrodes_mixin_service import (
     PortableDropbotElectrodesMixinService,
 )
@@ -22,8 +25,17 @@ from .services.portable_dropbot_monitor_mixin_service import (
 from .services.portable_dropbot_motors_mixin_service import (
     PortableDropbotMotorsMixinService,
 )
+from .services.portable_dropbot_pmt_mixin_service import (
+    PortableDropbotPmtMixinService,
+)
 from .services.portable_dropbot_states_setting_mixin_service import (
     PortableDropbotStatesSettingMixinService,
+)
+from .services.portable_dropbot_system_mixin_service import (
+    PortableDropbotSystemMixinService,
+)
+from .services.portable_dropbot_temp_mixin_service import (
+    PortableDropbotTempMixinService,
 )
 
 logger = get_logger(__name__)
@@ -47,6 +59,14 @@ class PortableDropbotControllerPlugin(Plugin):
                          factory=self._create_electrodes_service),
             ServiceOffer(protocol=IPortableDropbotControlMixinService,
                          factory=self._create_motors_service),
+            ServiceOffer(protocol=IPortableDropbotControlMixinService,
+                         factory=self._create_calibration_service),
+            ServiceOffer(protocol=IPortableDropbotControlMixinService,
+                         factory=self._create_temp_service),
+            ServiceOffer(protocol=IPortableDropbotControlMixinService,
+                         factory=self._create_pmt_service),
+            ServiceOffer(protocol=IPortableDropbotControlMixinService,
+                         factory=self._create_system_service),
         ]
 
     @staticmethod
@@ -64,6 +84,22 @@ class PortableDropbotControllerPlugin(Plugin):
     @staticmethod
     def _create_motors_service(*args, **kwargs):
         return PortableDropbotMotorsMixinService
+
+    @staticmethod
+    def _create_calibration_service(*args, **kwargs):
+        return PortableDropbotCalibrationMixinService
+
+    @staticmethod
+    def _create_temp_service(*args, **kwargs):
+        return PortableDropbotTempMixinService
+
+    @staticmethod
+    def _create_pmt_service(*args, **kwargs):
+        return PortableDropbotPmtMixinService
+
+    @staticmethod
+    def _create_system_service(*args, **kwargs):
+        return PortableDropbotSystemMixinService
 
     def start(self):
         services = self.application.get_services(
