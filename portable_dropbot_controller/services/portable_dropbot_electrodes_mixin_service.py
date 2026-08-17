@@ -34,6 +34,15 @@ class PortableDropbotElectrodesMixinService(HasTraits):
                            "electrode state change request.")
             return
 
+        if not self.realtime_mode:
+            # Same hard gate as the regular DropBot backend: the
+            # frontend already withholds clicks outside realtime mode,
+            # but the hardware must not actuate on a stray request
+            # either.
+            logger.warning("Cannot process actuations since realtime "
+                           "mode is disabled.")
+            return
+
         model = ElectrodeChannelsRequest.model_validate_json(
             message,
             context={"max_channels": self._board_channels()},
