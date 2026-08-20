@@ -42,8 +42,12 @@ python -m examples.demos.branching_flowchart --smoke
 2. **The ＋ plug under a step** opens the shape palette: one decision per
    contributing column (greyed once placed) and the AND / OR operators.
    Placed decisions are shapes tethered to their step; delete or
-   reconfigure them via right-click (Always prompt / Prompt first N
-   times / Auto). Right-click an operator to convert AND ⇄ OR.
+   reconfigure them via right-click. Four prompt policies: *Always
+   prompt*, **Auto first N times then prompt** (silent auto-retries
+   before the user is forced to decide — the seeded Volume check
+   auto-retries twice, then asks, and the prompt says so), *Prompt first
+   N times then auto*, and *Auto (never prompt)*; the auto answer is
+   picked when configuring. Right-click an operator to convert AND ⇄ OR.
 3. **Drag ports.** From a decision's colored outcome port to a step or
    group (route that answer), onto an AND/OR shape (feed the combiner),
    onto **another decision of the same step** (a dashed *chain* edge:
@@ -93,9 +97,13 @@ python -m examples.demos.branching_flowchart --smoke
 * An op only combines outcomes from one step's decisions, and chains
   only link decisions of the same step (both enforced on drop); an op
   with no wired target is inert.
-* "Auto after N" counts per (step, decision) per run; the auto answer is
-  the provider's `default_outcome` unless the user picked one via "don't
-  ask again".
+* Prompt policies count occurrences per (step, decision): "prompt first
+  N then auto" suppresses the dialog after N asks; "auto first N then
+  prompt" answers silently N times (auto-retry) and then escalates to
+  the user. Counters reset when the step is departed, so each retry
+  *streak* gets its own budget. The auto answer is the provider's
+  `default_outcome` unless the user picked one (in the policy dialog or
+  via "don't ask again").
 * A jump re-enters the target step fresh; a group target means its first
   step. Completion self-loops are blocked (retries belong to decision
   outcomes); a decision outcome dragged back onto its own step is the

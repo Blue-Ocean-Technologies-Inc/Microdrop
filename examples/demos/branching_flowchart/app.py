@@ -228,7 +228,12 @@ class MainWindow(QMainWindow):
         # skips the corrective mix when everything checks out.
         dn_vol = p.add_decision_node(dispense.id, "volume_check", (0, 0))
         dn_vol.routes["retry"] = dispense.id       # orange self-loop
-        dn_vol.auto_after = 3
+        # Auto-retry twice before escalating to the user: the first two
+        # failed volume checks silently take Retry; the third failure
+        # prompts.
+        dn_vol.mode = "auto_first"
+        dn_vol.auto_after = 2
+        dn_vol.auto_outcome = "retry"
         dn_op = p.add_decision_node(dispense.id, "operator_check", (0, 0))
         dn_vol.routes["continue"] = dn_op.id       # chain: then ask operator
         op = p.add_op_node((0, 0))
@@ -470,15 +475,21 @@ class MainWindow(QMainWindow):
         a1.setChecked(dn.mode == "prompt" and dn.auto_after is None)
         a1.triggered.connect(
             lambda _=False: self._set_decision_mode(dn, "prompt", None))
-        a2 = menu.addAction("Prompt first N times, then auto…")
+        a2 = menu.addAction("Auto first N times, then prompt…")
         a2.setCheckable(True)
-        a2.setChecked(dn.mode == "prompt" and dn.auto_after is not None)
-        a2.triggered.connect(lambda _=False: self._ask_auto_after(dn))
-        a3 = menu.addAction("Auto (never prompt)")
+        a2.setChecked(dn.mode == "auto_first")
+        a2.triggered.connect(
+            lambda _=False: self._ask_auto_policy(dn, "auto_first"))
+        a3 = menu.addAction("Prompt first N times, then auto…")
         a3.setCheckable(True)
-        a3.setChecked(dn.mode == "auto")
+        a3.setChecked(dn.mode == "prompt" and dn.auto_after is not None)
         a3.triggered.connect(
-            lambda _=False: self._set_decision_mode(dn, "auto", None))
+            lambda _=False: self._ask_auto_policy(dn, "prompt"))
+        a4 = menu.addAction("Auto (never prompt)")
+        a4.setCheckable(True)
+        a4.setChecked(dn.mode == "auto")
+        a4.triggered.connect(
+            lambda _=False: self._pick_auto_outcome(dn, "auto", None))
         menu.addSeparator()
         menu.addAction(
             "Delete shape",
@@ -491,14 +502,37 @@ class MainWindow(QMainWindow):
         dn.auto_after = auto_after
         self.rebuild()
 
-    def _ask_auto_after(self, dn):
+    def _ask_auto_policy(self, dn, mode):
+        """Ask for N, then which outcome the auto answer should be."""
+        if mode == "auto_first":
+            caption = ("Answer automatically the first N times per run,\n"
+                       "then start prompting the user:")
+        else:
+            caption = ("Prompt this many times per run, then answer\n"
+                       "automatically:")
         n, ok = QInputDialog.getInt(
-            self, "Auto after N prompts",
-            "Prompt this many times per run, then answer automatically\n"
-            "with the default outcome:",
-            dn.auto_after or 3, 1, 99)
-        if ok:
-            self._set_decision_mode(dn, "prompt", n)
+            self, "Auto policy", caption, dn.auto_after or 3, 1, 99)
+        if not ok:
+            return
+        self._pick_auto_outcome(dn, mode, n)
+
+    def _pick_auto_outcome(self, dn, mode, auto_after):
+        spec = self.protocol.spec_by_id(dn.decision_id)
+        if spec is not None:
+            labels = [o.label for o in spec.outcomes]
+            current = dn.auto_outcome or spec.default_outcome
+            current_ix = next(
+                (k for k, o in enumerate(spec.outcomes)
+                 if o.id == current), 0)
+            label, ok = QInputDialog.getItem(
+                self, "Auto answer",
+                "Outcome to pick automatically:",
+                labels, current_ix, False)
+            if not ok:
+                return
+            dn.auto_outcome = next(
+                o.id for o in spec.outcomes if o.label == label)
+        self._set_decision_mode(dn, mode, auto_after)
 
     def op_menu(self, op_id, screen_pos):
         op = self.protocol.op_node_by_id(op_id)

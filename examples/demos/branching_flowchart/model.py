@@ -118,9 +118,17 @@ class DecisionNode:
         self.decision_id = decision_id
         self.pos = tuple(pos)
         self.routes = {}              # outcome_id -> target
-        self.mode = "prompt"          # "prompt" | "auto"
+        # Prompt policy:
+        #   "prompt"      — always ask (auto_after=N: ask the first N
+        #                   times, then answer automatically)
+        #   "auto_first"  — answer automatically the first N times
+        #                   (auto_after=N), THEN start asking — the
+        #                   "auto-retry before escalating to the user"
+        #                   behaviour
+        #   "auto"        — never ask
+        self.mode = "prompt"
         self.auto_after: Optional[int] = None
-        self.auto_outcome: Optional[str] = None
+        self.auto_outcome: Optional[str] = None   # None -> spec default
 
     def to_dict(self):
         return {"id": self.id, "step_id": self.step_id,

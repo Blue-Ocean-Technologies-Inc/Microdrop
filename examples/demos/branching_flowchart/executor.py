@@ -285,6 +285,13 @@ class DemoExecutor:
 
             verdict = self._resolve_routing(step, step_ctx, i, occurrences)
             if verdict[0] == "jump":
+                if verdict[1] != i:
+                    # Leaving the step ends the retry streak: its
+                    # decision counters reset, so a later revisit gets
+                    # fresh auto-retries before prompting again.
+                    for key in [k for k in occurrences
+                                if k[0] == step.id]:
+                        del occurrences[key]
                 i = verdict[1]
             elif verdict[0] == "end":
                 break
@@ -391,18 +398,31 @@ class DemoExecutor:
         occurrences[(step.id, spec.id)] += 1
         seen = occurrences[(step.id, spec.id)]
         mode = dn.mode if dn else "prompt"
-        auto_after = dn.auto_after if dn else None
-        auto = (mode == "auto"
-                or (auto_after is not None and seen > auto_after))
+        n = dn.auto_after if dn else None
+        if mode == "auto":
+            auto, why = True, "auto mode"
+        elif mode == "auto_first":
+            # Auto-resolve the first N occurrences (silent retries),
+            # then escalate to the user.
+            auto = n is not None and seen <= n
+            why = f"auto {seen}/{n} before prompting"
+        else:
+            auto = n is not None and seen > n
+            why = f"auto after {n} prompts"
         if auto:
             outcome_id = ((dn.auto_outcome if dn else None)
                           or spec.default_outcome)
-            why = ("auto mode" if mode == "auto"
-                   else f"auto after {auto_after} prompts")
             step_ctx.log(
                 f"Decision {spec.title!r} -> "
                 f"{spec.outcome_by_id(outcome_id).label} ({why})")
         else:
+            if mode == "auto_first" and n:
+                label = spec.outcome_by_id(
+                    (dn.auto_outcome if dn else None)
+                    or spec.default_outcome).label
+                note = (f"Auto-answered {label!r} {n}× already — "
+                        f"your call now.")
+                message = f"{message}\n{note}" if message else note
             outcome_id = self._answer_for(step, spec, dn, message)
             if outcome_id is None:
                 return None

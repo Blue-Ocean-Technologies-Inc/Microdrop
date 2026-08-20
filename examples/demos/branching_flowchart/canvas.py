@@ -658,8 +658,10 @@ class FlowchartScene(QGraphicsScene):
                 badge = ""
                 if dn.mode == "auto":
                     badge = "[auto]"
+                elif dn.mode == "auto_first" and dn.auto_after is not None:
+                    badge = f"[auto ×{dn.auto_after} → ask]"
                 elif dn.auto_after is not None:
-                    badge = f"[auto after {dn.auto_after}]"
+                    badge = f"[ask ×{dn.auto_after} → auto]"
                 item = DecisionShapeItem(self, dn, spec, active, badge)
                 self.addItem(item)
                 self.dec_items[dn.id] = item
