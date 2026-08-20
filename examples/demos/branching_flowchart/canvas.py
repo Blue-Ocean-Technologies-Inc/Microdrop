@@ -643,43 +643,91 @@ class DecisionShapeItem(_AnchoredRectItem):
 
 
 class OpNodeItem(_AnchoredRectItem):
-    """A logic combiner shape (AND / OR)."""
+    """A logic combiner card (AND / OR) that summarizes its operation in
+    text: a header line, one line per connected input —
+    ``Volume check: Continue`` / ``& Operator check: Yes`` — each in its
+    outcome color, and a target line (``→ group 'Mix cycle'`` or
+    ``⚠ not wired``)."""
+
+    PAD = 8
+    MAX_W = 280
 
     def __init__(self, scene_ref, opnode):
-        super().__init__(OP_W, OP_H, scene_ref, OP_FILL)
+        proto = scene_ref.protocol
+        color = OP_COLORS.get(opnode.kind, OP_COLORS["and"])
+        sym = "&" if opnode.kind == "and" else "∥"
+
+        header = opnode.kind.upper()
+        if opnode.priority != opnode.DEFAULT_PRIORITY:
+            header += f"  [p{opnode.priority}]"
+        header_font = QFont()
+        header_font.setPointSizeF(8.5)
+        header_font.setBold(True)
+        line_font = QFont()
+        line_font.setPointSizeF(7.5)
+
+        # (text, color, font) per rendered line.
+        rows = [(header, color, header_font)]
+        for k, (dn_id, oid) in enumerate(opnode.inputs):
+            dn = proto.decision_node_by_id(dn_id)
+            spec = proto.spec_by_id(dn.decision_id) if dn else None
+            if dn is None or spec is None:
+                continue
+            try:
+                outcome = spec.outcome_by_id(oid)
+            except KeyError:
+                continue
+            prefix = "" if k == 0 else f"{sym} "
+            rows.append((f"{prefix}{spec.title}: {dn.label_for(outcome)}",
+                         KIND_COLORS.get(outcome.kind,
+                                         KIND_COLORS["neutral"]),
+                         line_font))
+        if len(rows) == 1:
+            rows.append(("drag outcome ports here…", DIM_TEXT, line_font))
+        if opnode.target is not None:
+            rows.append((f"→ {proto.describe_target(opnode.target)}",
+                         DIM_TEXT, line_font))
+        else:
+            rows.append(("⚠ not wired to a target", QColor("#fbbf24"),
+                         line_font))
+
+        # Measure to size the card, then create the text children.
+        probe = QGraphicsSimpleTextItem()
+        widths, heights = [], []
+        for text, _c, font in rows:
+            probe.setFont(font)
+            probe.setText(text)
+            widths.append(probe.boundingRect().width())
+            heights.append(probe.boundingRect().height() + 2)
+        w = min(self.MAX_W, max(widths) + 2 * self.PAD + 6)
+        h = sum(heights) + 2 * self.PAD
+
+        super().__init__(w, h, scene_ref, OP_FILL)
         self.opnode = opnode
         self.setPos(*opnode.pos)
         self.setZValue(1)
-        color = OP_COLORS.get(opnode.kind, OP_COLORS["and"])
-        self._base_pen = QPen(color, 1.4)
+        wired = opnode.inputs and opnode.target is not None
+        self._base_pen = QPen(color, 1.4,
+                              Qt.SolidLine if wired else Qt.DashLine)
         self.setPen(self._base_pen)
 
-        text = QGraphicsSimpleTextItem(opnode.kind.upper(), self)
-        text.setBrush(QBrush(NODE_TEXT))
-        f = QFont()
-        f.setPointSizeF(9.0)
-        f.setBold(True)
-        text.setFont(f)
-        br = text.boundingRect()
-        text.setPos((OP_W - br.width()) / 2, (OP_H - br.height()) / 2)
+        y = self.PAD
+        for text, row_color, font in rows:
+            item = QGraphicsSimpleTextItem(text, self)
+            item.setBrush(QBrush(row_color))
+            item.setFont(font)
+            while (item.boundingRect().width() > w - 2 * self.PAD
+                   and len(item.text()) > 4):
+                item.setText(item.text()[:-2].rstrip() + "…")
+            item.setPos(self.PAD, y)
+            y += item.boundingRect().height() + 2
 
         self.out_port = PortItem(self, "opout", QPointF(1, 0), color)
-        self.out_port.setPos(OP_W, OP_H / 2)
+        self.out_port.setPos(w, h / 2)
         quant = "ALL" if opnode.kind == "and" else "ANY"
         self.out_port.setToolTip(
-            f"Combined route: fires when {quant} connected outcome(s) are "
-            f"chosen in the same round. Drag to a step/group or ⏹/▦.")
-        # Inert combiners (no inputs or no target) are called out.
-        if not opnode.inputs or opnode.target is None:
-            self._base_pen = QPen(color, 1.4, Qt.DashLine)
-            self.setPen(self._base_pen)
-            why = ("no inputs" if not opnode.inputs else "no target")
-            warn = QGraphicsSimpleTextItem(f"⚠ unwired ({why})", self)
-            warn.setBrush(QBrush(QColor("#fbbf24")))
-            wf = QFont()
-            wf.setPointSizeF(7.0)
-            warn.setFont(wf)
-            warn.setPos(0, OP_H + 3)
+            f"Combined route: fires when {quant} of the listed outcome(s) "
+            f"are chosen in the same round. Drag to a step/group or ⏹/▦.")
 
     def contextMenuEvent(self, event):
         self._scene_ref.window.op_menu(self.opnode.id, event.screenPos())

@@ -64,6 +64,10 @@ python -m examples.demos.branching_flowchart --smoke
    auto-retries twice, then asks, and the prompt says so), *Prompt first
    N times then auto*, and *Auto (never prompt)*; the auto answer is
    picked when configuring. Right-click an operator to convert AND ⇄ OR.
+   Operator shapes are self-describing cards that summarize their
+   operation in text — `Volume check: Continue  &  Operator check: Yes
+   → group 'Mix cycle'` — each input line colored by its outcome, with
+   the priority in the header and a ⚠ note while unwired.
    Prompts open **next to the deciding shape** with its edges highlighted
    — the buttons and the drawn edges are the same choices. Keys 1..n
    answer; Esc takes the provider default; the toolbar's **Unattended**
