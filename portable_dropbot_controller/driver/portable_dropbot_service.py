@@ -852,7 +852,7 @@ class DropletBotUart:
                 else:
                     self._dispatch(cmd, data)
             elif ftype == Frame.RESP_FAIL:
-                # print(f"Error ftype: {Frame.to_str(ftype)} for cmd: {cmd:X}")
+                log.warning(f"Device replied RESP_FAIL for cmd 0x{cmd:04X}")
                 self.response_map[cmd] = None
                 if self.on_error:
                     self.on_error(ftype,
@@ -870,10 +870,10 @@ class DropletBotUart:
                 with self.response_lock:
                     self.response_map[Frame.RESP_BUSY] = cmd
             else:
-                # print(f"cmd: {cmd:X} > data: {data.hex(' ')}")
+                log.warning(f"Unexpected frame type {Frame.to_str(ftype)} "
+                            f"for cmd 0x{cmd:04X}")
                 self.response_map[cmd] = None
                 self._ack(cmd, msg_idx, cmd_idx)
-                # print(f"Error ftype: {Frame.to_str(ftype)} for cmd: {cmd:X}")
                 if self.on_error:
                     self.on_error(ftype,
                                   f"Device responded with error `{Frame.to_str(ftype)}` for cmd {cmd:X}")
@@ -1111,12 +1111,15 @@ class DropletBotUart:
         response = self._wr(packet, cmd, timeout_s=timeout_s)
         if response is not None:
             connected = self._update_board_connected(board, response[0] == 0)
+            log.info(f"{board} board login "
+                     f"{'ok' if connected else 'refused by board'}")
             if board == 'signal' and connected:
                 # Auto-adapt to the provisioned channel count right after
                 # login; board_channels/board_n_chips remain available even
                 # if this particular query fails (lazy retry on next access).
                 self._query_board_channels()
             return connected
+        log.debug(f"{board} board login: no reply")
         return self._update_board_connected(board, False)
 
     def _query_board_channels(self) -> None:
@@ -1138,6 +1141,8 @@ class DropletBotUart:
             self._board_channels = channels
             self._board_n_chips = n_chips
             self._legacy_fw = False
+            log.info(f"Board reports {channels} channels "
+                     f"({n_chips} chips/chain)")
         else:
             log.warning("BOARD_CHANNELS_GET timed out/failed; "
                         "assuming legacy 120-channel board (8 chips/chain)")
@@ -1206,6 +1211,8 @@ class DropletBotUart:
                 if channels == n:
                     self._board_channels = channels
                     self._board_n_chips = n_chips
+                    log.info(f"Board provisioned to {n} channels "
+                             f"({n_chips} chips/chain)")
                     return True
             if attempt + 1 < retries:
                 log.warning(f"set_board_channels({n}) unconfirmed "
@@ -1342,6 +1349,7 @@ class DropletBotUart:
             cmd = MotorBoard.HW_RESET
         else:
             return None
+        log.info(f"Hardware reset sent to {board} board")
         packet = self._make_cmd_packet(cmd)
         self._w(packet)
         return True
@@ -1356,12 +1364,17 @@ class DropletBotUart:
             self.motor_board_connected = False
         else:
             return None
+        log.info(f"Rebooting {board} board (re-login in ~3 s)")
         packet = self._make_cmd_packet(cmd)
         self._w(packet)
 
         time.sleep(3)
         # attempt to login again
-        return self.BoardLogin(board, timeout_s=5)
+        logged_in = self.BoardLogin(board, timeout_s=5)
+        log.info(f"{board} board "
+                 f"{'back online' if logged_in else 'did not answer login'} "
+                 f"after reboot")
+        return logged_in
 
     # --- Convenience Functions ---
     def login(self):
@@ -1731,8 +1744,9 @@ class DropletBotUart:
         # voltage is a 8-bit value (unsigned char)
         buf = struct.pack('>B', min(max(voltage, 0), 255))
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"HV voltage -> {voltage}: {'ok' if ok else 'no reply'}")
+        return ok
 
     @property
     def voltage(self) -> int | None:
@@ -1754,8 +1768,10 @@ class DropletBotUart:
         # frequency is a 16-bit value (unsigned short) in big-endian
         buf = struct.pack('>H', min(max(frequency, 0), 65535))
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"HV frequency -> {frequency} Hz: "
+                  f"{'ok' if ok else 'no reply'}")
+        return ok
 
     @property
     def frequency(self) -> int | None:
@@ -1822,6 +1838,7 @@ class DropletBotUart:
         else:
             packed = packed[:n_bytes]
 
+        log.debug(f"Electrode states -> {int(states_arr.sum())}/{n} active")
         legacy = self._legacy_fw and n == 120
         if not legacy:
             cmd = CMD_ELECTRODE_STATE_CH
@@ -2104,7 +2121,10 @@ class DropletBotUart:
         cmd = SignalBoard.BUZZER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"Buzzer -> {'on' if on else 'off'}: "
+                  f"{'ok' if ok else 'no reply'}")
+        return ok
 
     def setFan(self, on: bool = True, board: str = 'motor'):
         """Control fan on specified board.
@@ -2117,16 +2137,16 @@ class DropletBotUart:
             if not self.sig_board_connected:
                 return False
             cmd = SignalBoard.FAN_CTRL
-            buf = struct.pack('>B', 1 if on else 0)
-            packet = self._make_cmd_packet(cmd, buf)
-            return self._wr(packet, cmd, timeout_s=2.0) is not None
         else:
             if not self.motor_board_connected:
                 return False
             cmd = MotorBoard.FAN_CTRL
-            buf = struct.pack('>B', 1 if on else 0)
-            packet = self._make_cmd_packet(cmd, buf)
-            return self._wr(packet, cmd, timeout_s=2.0) is not None
+        buf = struct.pack('>B', 1 if on else 0)
+        packet = self._make_cmd_packet(cmd, buf)
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"{board} fan -> {'on' if on else 'off'}: "
+                  f"{'ok' if ok else 'no reply'}")
+        return ok
 
     def setPower(self, on: bool = True):
         """Control system power pin. on=True enables, on=False disables."""
@@ -2135,7 +2155,10 @@ class DropletBotUart:
         cmd = SignalBoard.POWER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.info(f"System power pin -> {'on' if on else 'off'}: "
+                 f"{'ok' if ok else 'no reply'}")
+        return ok
 
     def readAdcData(self):
         """Read 8-channel ADC data. Returns raw response bytes (8x u16 BE, mV*100)."""
@@ -2223,8 +2246,10 @@ class DropletBotUart:
         temp_val = int(target_c * 100)
         buf = struct.pack('>Bh', channel, temp_val)
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"Heater ch{channel} target -> {target_c} C: "
+                  f"{'ok' if ok else 'no reply'}")
+        return ok
 
     def set_temp_control(self, on: bool, channel: int = 0):
         """Enable or disable heater control."""
@@ -2233,8 +2258,10 @@ class DropletBotUart:
         cmd = SignalBoard.TEMP_START_STOP
         buf = struct.pack('>BB', channel, 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"Heater ch{channel} control -> "
+                  f"{'on' if on else 'off'}: {'ok' if ok else 'no reply'}")
+        return ok
 
     def get_temp_info(self, channel: int = 0):
         """Read current temperature, target, and heater output.
@@ -2270,8 +2297,10 @@ class DropletBotUart:
         cmd = SignalBoard.TEMP_SET_PARAMS
         buf = struct.pack('>Bhhhh', channel, int(kp * 100), int(ki * 100), int(kd * 100), period_ms)
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"Heater ch{channel} PID -> kp={kp} ki={ki} kd={kd} "
+                  f"period={period_ms} ms: {'ok' if ok else 'no reply'}")
+        return ok
 
     def setTempHeatPWMDebug(self, heat1_percent: int = 0, heat2_percent: int = 0):
         """Directly set heater PWM duty cycles (debug). 0-100%."""
@@ -2308,8 +2337,9 @@ class DropletBotUart:
         cmd = SignalBoard.PMT_GAIN_SET
         buf = struct.pack('>B', min(max(gain, 0), 255))
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"PMT gain -> {gain}: {'ok' if ok else 'no reply'}")
+        return ok
 
     def pmt_power(self, on: bool):
         """Control PMT power supply. Returns actual power state or None."""
@@ -2320,7 +2350,10 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=3.0)
         if resp and len(resp) >= 1:
+            log.debug(f"PMT power -> {'on' if on else 'off'} "
+                      f"(board reports {'on' if resp[0] == 1 else 'off'})")
             return resp[0] == 1
+        log.warning(f"PMT power -> {'on' if on else 'off'}: no reply")
         return None
 
     def pmt_start_debug(self, sample_limit: int = 1000):
@@ -2363,9 +2396,12 @@ class DropletBotUart:
         cmd = MotorBoard.PMT_CTRL
         buf = struct.pack('>B', position)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"PMT motor -> position {position} (blocking move)")
         resp = self._wr(packet, cmd, timeout_s=30.0)
         if resp and len(resp) >= 1:
+            log.info(f"PMT motor move done (at position {resp[0]})")
             return resp[0]
+        log.warning(f"PMT motor move to {position}: no reply")
         return None
 
     def pmt_motor_read(self):
@@ -2403,7 +2439,10 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=2.0)
         if resp and len(resp) >= 1:
+            log.info(f"HV enable={enable} bypass={bypass} -> "
+                     f"status {resp[0]}")
             return resp[0]
+        log.warning(f"HV enable={enable} bypass={bypass}: no reply")
         return None
 
     def cal_caps_get(self):
@@ -2427,7 +2466,10 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=2.0)
         if resp and len(resp) >= 1:
+            log.debug(f"Reference-cap count -> {cal_caps} "
+                      f"(board echoed {resp[0]})")
             return resp[0]
+        log.warning(f"Reference-cap count -> {cal_caps}: no reply")
         return None
 
     def cap_calibrate_ml(self, hv_mv: int = 0):
@@ -2438,9 +2480,14 @@ class DropletBotUart:
         cmd = SignalBoard.CAP_CALIBRATE_ML
         buf = struct.pack('>H', hv_mv)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info("Multi-slope ML capacitance calibration started "
+                 "(blocking ~6 s)")
         resp = self._wr(packet, cmd, timeout_s=30.0)
         if resp and len(resp) >= 1:
+            log.info(f"Multi-slope ML calibration finished: "
+                     f"status {resp[0]}")
             return resp[0]
+        log.warning("Multi-slope ML calibration: no reply")
         return None
 
     def cap_ml_realtime(self, mode: int = 255):
@@ -2453,7 +2500,11 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=2.0)
         if resp and len(resp) >= 1:
+            if mode != 255:
+                log.debug(f"ML realtime cap path -> {mode} "
+                          f"(board reports {resp[0]})")
             return resp[0]
+        log.warning(f"ML realtime cap path (mode={mode}): no reply")
         return None
 
     def cap_elec_gain(self, permille: int = 0):
@@ -2467,7 +2518,12 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=2.0)
         if resp and len(resp) >= 2:
+            if permille != 0:
+                log.debug(f"Electrode-path gain -> {permille} permille "
+                          f"(board reports "
+                          f"{struct.unpack('>H', resp[:2])[0]})")
             return struct.unpack('>H', resp[:2])[0]
+        log.warning(f"Electrode-path gain (permille={permille}): no reply")
         return None
 
     # --- Capacitance & Short Detection (Signal Board) ---
@@ -2542,7 +2598,10 @@ class DropletBotUart:
             return False
         buf = alarm_code[:5].encode('ascii').ljust(5, b'\x00')
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.info(f"Clear alarm {alarm_code!r} on {board} board: "
+                 f"{'ok' if ok else 'no reply'}")
+        return ok
 
     def presetParams(self, board: str = 'signal', param_name: str = None):
         """Save parameter(s) to flash (persist across reboots).
@@ -2584,7 +2643,9 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=3.0)
         if resp and len(resp) >= 4:
+            log.debug(f"Event streaming mask -> 0x{mask:08X}")
             return struct.unpack('>I', resp[:4])[0]
+        log.warning(f"Event streaming mask -> 0x{mask:08X}: no reply")
         return None
 
     def set_report_interval(self, interval_ms: int):
@@ -2622,7 +2683,10 @@ class DropletBotUart:
             cmd = SignalBoard.ILLUMINATION_CTRL
             buf = struct.pack('>B', min(max(0, intensity), 255))
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"{'Fluorescence' if fluorescence else 'Illumination'} "
+                  f"LED -> {intensity}: {'ok' if ok else 'no reply'}")
+        return ok
 
     def setBoxLight(self, state: str = "off"):
         """Control RGB indicator light. state: color code."""
@@ -2633,7 +2697,10 @@ class DropletBotUart:
         cmd = SignalBoard.RGB_LIGHT_CTRL
         buf = struct.pack('>B', states.get(state, 0))
         packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
+        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
+        log.debug(f"RGB indicator light -> {state}: "
+                  f"{'ok' if ok else 'no reply'}")
+        return ok
 
     # # --- Motor Control ---
     def queryMotorOptoSensors(self):
@@ -2735,6 +2802,7 @@ class DropletBotUart:
         if motor is None:
             raise ValueError(f"Motor not found: {motor_id}")
 
+        action_name = action
         if action == 'relative':
             action = MotorBoard.MOTOR_ACTION_RELATIVE
         elif action == 'absolute':
@@ -2746,6 +2814,7 @@ class DropletBotUart:
         else:
             raise ValueError(f"Invalid action: {action}")
 
+        log.info(f"Motor {motor.name} {action_name} {distance}")
         cmd = MotorBoard.MOTOR_CONTROL
         buf = struct.pack('>BBi', motor.id, action, distance)
         packet = self._make_cmd_packet(cmd, buf)
@@ -2763,16 +2832,24 @@ class DropletBotUart:
             motor.position = struct.unpack('>i', response[2:6])[0]
             if motor.position <= -10000000:
                 motor.error = f"Position outside of allowed range: {motor.position}"
+                log.warning(f"Motor {motor.name} {action_name}: {motor.error}")
                 return motor.error
             else:
                 motor.error = None
             if motor.status == "Normal":
+                log.info(f"Motor {motor.name} {action_name} done at "
+                         f"position {motor.position}")
                 return motor.position
             else:
                 if motor.status == "Error":
+                    log.warning(f"Motor {motor.name} {action_name} FAILED: "
+                                f"{motor.error}")
                     return motor.error
                 else:
+                    log.warning(f"Motor {motor.name} {action_name} ended "
+                                f"with status {motor.status}")
                     return motor.status
+        log.warning(f"Motor {motor.name} {action_name}: no reply")
         return None
 
     def motorRelativeMove(self, motor_id: str|int, distance:int):
@@ -2844,7 +2921,11 @@ class DropletBotUart:
                 log.error(f"Motor ID mismatch: {motor_id} != {motor.id}")
                 return None
             motor.speed = struct.unpack('>i', response[1:5])[0]
+            log.info(f"Motor {motor.name} run speed -> {speed} um/s "
+                     f"(accepted {motor.speed})")
             return motor.speed
+        log.warning(f"Motor {motor.name} run speed -> {speed} um/s: "
+                    f"no reply")
         return None
 
     # --- Motor Macros ---
@@ -2853,11 +2934,20 @@ class DropletBotUart:
         cmd = MotorBoard.CHIP_CABIN_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"Tray -> {'out' if state else 'in'} (blocking move)")
         response = self._wr(packet, cmd, timeout_s=300)
         if response is not None:
             if len(response) > MOTOR_STATUS_INDEX:
-                return response[MOTOR_STATUS_INDEX] == 0xFF # False:ok True:error
+                error = response[MOTOR_STATUS_INDEX] == 0xFF
+                if error:
+                    log.warning(f"Tray move ({'out' if state else 'in'}) "
+                                f"reported an error status")
+                else:
+                    log.info(f"Tray move ({'out' if state else 'in'}) done")
+                return error  # False:ok True:error
+            log.warning(f"Tray move: short reply ({len(response)} bytes)")
         else:
+            log.warning(f"Tray move ({'out' if state else 'in'}): no reply")
             return False
 
     def getTray(self):
@@ -2882,10 +2972,16 @@ class DropletBotUart:
         cmd = MotorBoard.MAG_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"Magnet -> {'engage' if state else 'disengage'} "
+                 f"(blocking move)")
         response = self._wr(packet, cmd, timeout_s=30)
         if response is not None:
+            log.info(f"Magnet move "
+                     f"({'engage' if state else 'disengage'}) done")
             return response
         else:
+            log.warning(f"Magnet move "
+                        f"({'engage' if state else 'disengage'}): no reply")
             return False
 
     def getMagnet(self):
@@ -2915,10 +3011,16 @@ class DropletBotUart:
         cmd = MotorBoard.PUSHPAD_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"Pogo pads -> {'press' if state else 'release'} "
+                 f"(blocking move)")
         response = self._wr(packet, cmd, timeout_s=30)
         if response is not None:
+            log.info(f"Pogo pads move "
+                     f"({'press' if state else 'release'}) done")
             return response
         else:
+            log.warning(f"Pogo pads move "
+                        f"({'press' if state else 'release'}): no reply")
             return False
 
     def getPogo(self):
@@ -2943,10 +3045,13 @@ class DropletBotUart:
         cmd = MotorBoard.FLUORESCENCE_CTRL
         buf = struct.pack('B', pos & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"Fluorescence filter -> position {pos} (blocking move)")
         response = self._wr(packet, cmd, timeout_s=60)
         if response is not None:
+            log.info(f"Fluorescence filter move to {pos} done")
             return response
         else:
+            log.warning(f"Fluorescence filter move to {pos}: no reply")
             return False
 
     def getFilter(self):
@@ -2970,6 +3075,8 @@ class DropletBotUart:
         cmd = MotorBoard.POWER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
+        log.info(f"Motor board power -> "
+                 f"{'on (reset)' if on else 'off'}")
         self._w(packet)
         return True
 
@@ -2980,7 +3087,11 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.CABIN_MAG_RESET
         packet = self._make_cmd_packet(cmd)
-        return self._wr(packet, cmd, timeout_s=60.0) is not None
+        log.info("Homing chip tray and magnet (blocking)...")
+        ok = self._wr(packet, cmd, timeout_s=60.0) is not None
+        log.info(f"Chip tray and magnet homing "
+                 f"{'done' if ok else 'got no reply'}")
+        return ok
 
     def resetPMTMotor(self):
         """Reset PMT motor to home position."""
@@ -2988,7 +3099,10 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.PMT_RESET
         packet = self._make_cmd_packet(cmd)
-        return self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info("Homing PMT motor (blocking)...")
+        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info(f"PMT motor homing {'done' if ok else 'got no reply'}")
+        return ok
 
     def resetFluorescenceFilter(self):
         """Reset fluorescence filter motor to home position."""
@@ -2996,7 +3110,11 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.FLU_RESET
         packet = self._make_cmd_packet(cmd)
-        return self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info("Homing fluorescence filter motor (blocking)...")
+        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info(f"Fluorescence filter homing "
+                 f"{'done' if ok else 'got no reply'}")
+        return ok
 
     def resetPogoPlates(self):
         """Reset pogo pin plate motors to home position."""
@@ -3004,7 +3122,10 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.PUSHPAD_RESET
         packet = self._make_cmd_packet(cmd)
-        return self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info("Homing pogo pin plates (blocking)...")
+        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
+        log.info(f"Pogo pin plate homing {'done' if ok else 'got no reply'}")
+        return ok
 
     # --- Firmware Upgrade ---
     def performFirmwareUpgrade(self, board: str = 'signal',
