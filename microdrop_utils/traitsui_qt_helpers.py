@@ -712,6 +712,8 @@ class StatusIconEditor(QtEditor):
         self.object.observe(self._on_icon_color_changed, "icon_color")
         self._apply_background_color(self.object.icon_color)
 
+        self.control.setMinimumSize(self.factory.min_size, self.factory.min_size)
+
     def _on_icon_clicked(self):
         setattr(self.object, self.factory.fire, True)
 
@@ -745,6 +747,7 @@ class StatusIconEditorFactory(BasicEditorFactory):
     #: Name of an Event/Bool trait on the model set True when the icon
     #: is clicked; empty (the default) leaves the icon inert.
     fire = Str()
+    min_size = Int(120)
 
 
 class _HtmlLabelEditor(QtEditor):
