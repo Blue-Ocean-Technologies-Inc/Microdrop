@@ -73,6 +73,15 @@ class ColumnHandler:
     def on_protocol_end(self, ctx): pass
     def on_post_protocol_end(self, ctx): pass
 
+    # -- group hooks (proposed addition) --------------------------------
+    # Fired only on a FORMAL group entry/exit: sequential fall-through
+    # into the group, or a route targeting the group node itself. A route
+    # into one of the group's steps skips these (and the group repeats) —
+    # that is the practical difference between wiring an outcome to a
+    # group vs. to its first step.
+    def on_group_enter(self, group, ctx): pass
+    def on_group_exit(self, group, ctx): pass
+
 
 class Column:
     """Composite: wires handler.model like the real Column.traits_init."""
@@ -94,6 +103,11 @@ class VoltageHandler(ColumnHandler):
         v = self.model.get_value(step)
         ctx.log(f"Applying {v:.0f} V")
         ctx.sleep(0.15)
+
+    def on_group_enter(self, group, ctx):
+        # Demo of a group-scoped hook: something a provider does once per
+        # formal group entry (per pass budget), not per step.
+        ctx.log(f"Pre-charging electrodes for group {group.name!r}")
 
 
 class DurationHandler(ColumnHandler):
@@ -152,6 +166,51 @@ class VolumeCheckHandler(ColumnHandler):
             ctx.log(f"Volume check passed ({measured:.0f}% of target)")
 
 
+DROPLET_DETECT = DecisionSpec(
+    id="droplet_detect",
+    title="Droplet detect",
+    question="No droplet detected at the sensor. What should happen?",
+    outcomes=(
+        Outcome("restart", "Restart", kind="negative"),
+        Outcome("continue", "Continue", kind="positive"),
+        Outcome("abort", "Abort", kind="danger"),
+    ),
+    # Route 'Restart' to a GROUP node to replay the whole group (entry
+    # hooks + repeats); to the group's first STEP to just re-run the
+    # sequence without the group ceremony.
+    default_routes={"restart": SELF, "continue": NEXT, "abort": ABORT},
+    default_outcome="continue",
+    provider_col_id="detect_fail",
+)
+
+
+class DropletDetectHandler(ColumnHandler):
+    """Simulates an end-of-sequence droplet-presence sensor. The
+    ``detect_fail`` cell is the chance (0-100) the droplet is missing and
+    the decision fires. 0 disables the check for that step."""
+
+    priority = 50  # after the volume check
+
+    def decision_specs(self):
+        return [DROPLET_DETECT]
+
+    def is_decision_active(self, spec, step) -> bool:
+        return int(self.model.get_value(step) or 0) > 0
+
+    def on_post_step(self, step, ctx):
+        fail_pct = int(self.model.get_value(step) or 0)
+        if fail_pct <= 0:
+            return
+        if random.random() * 100.0 < fail_pct:
+            ctx.log("Droplet detect FAILED (no droplet at sensor)")
+            ctx.request_decision(
+                DROPLET_DETECT,
+                message="The capacitance sensor saw no droplet where one "
+                        "was expected.")
+        else:
+            ctx.log("Droplet detected")
+
+
 OPERATOR_CHECK = DecisionSpec(
     id="operator_check",
     title="Operator check",
@@ -195,6 +254,9 @@ def make_demo_columns():
         Column(ColumnModel("fail_pct", "Fail chance", 0, kind="int",
                            minimum=0, maximum=100, suffix=" %"),
                VolumeCheckHandler()),
+        Column(ColumnModel("detect_fail", "Detect fail", 0, kind="int",
+                           minimum=0, maximum=100, suffix=" %"),
+               DropletDetectHandler()),
         Column(ColumnModel("op_check", "Operator check", False, kind="bool"),
                OperatorCheckHandler()),
     ]

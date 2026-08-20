@@ -346,8 +346,12 @@ class StepNodeItem(_AnchoredRectItem):
         self.setPos(*row.pos)
         self.setZValue(1)
 
-        title = (f"▣ {row.name}" if row.is_group
-                 else f"{order_label} · {row.name}")
+        if row.is_group:
+            title = f"▣ {row.name}"
+            if row.repetitions > 1:
+                title += f"  ×{row.repetitions}"
+        else:
+            title = f"{order_label} · {row.name}"
         text = QGraphicsSimpleTextItem(title, self)
         text.setBrush(QBrush(NODE_TEXT))
         f = QFont()

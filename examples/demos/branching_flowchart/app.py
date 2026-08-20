@@ -213,37 +213,42 @@ class MainWindow(QMainWindow):
         p.add_step("Prime reservoir", {"voltage": 90.0, "duration_s": 0.8})
         dispense = p.add_step(
             "Dispense droplet",
-            {"voltage": 110.0, "duration_s": 1.0, "fail_pct": 40,
-             "op_check": True})
-        mix = p.add_step("Corrective mix 4×",
-                         {"voltage": 120.0, "duration_s": 1.5})
+            {"voltage": 110.0, "duration_s": 1.0, "fail_pct": 40})
+        detect = p.add_step(
+            "Droplet detect",
+            {"voltage": 0.0, "duration_s": 0.4, "detect_fail": 35})
+        mix_l = p.add_step("Mix left", {"voltage": 120.0, "duration_s": 0.6})
+        mix_r = p.add_step("Mix right", {"voltage": 120.0, "duration_s": 0.6})
         p.add_step("Operator inspect",
                    {"voltage": 0.0, "duration_s": 0.3, "op_check": True})
-        collect = p.add_step("Collect to waste",
-                             {"voltage": 100.0, "duration_s": 0.8})
+        p.add_step("Collect to waste",
+                   {"voltage": 100.0, "duration_s": 0.8})
 
-        # Placed shapes on Dispense: both its decisions, resolved SERIALLY
-        # (volume first; the operator check is only asked when the volume
-        # answer is Continue — the dashed chain edge), plus an AND that
-        # skips the corrective mix when everything checks out.
+        # Two groups: "Dispense & verify" ends with the droplet-detect
+        # step; "Mix cycle" repeats twice per formal entry.
+        grp_dispense = p.group_rows([dispense.id, detect.id],
+                                    name="Dispense & verify")
+        grp_mix = p.group_rows([mix_l.id, mix_r.id], name="Mix cycle")
+        grp_mix.repetitions = 2
+
+        # Volume check on Dispense: silent auto-retry twice, then prompt.
         dn_vol = p.add_decision_node(dispense.id, "volume_check", (0, 0))
         dn_vol.routes["retry"] = dispense.id       # orange self-loop
-        # Auto-retry twice before escalating to the user: the first two
-        # failed volume checks silently take Retry; the third failure
-        # prompts.
         dn_vol.mode = "auto_first"
         dn_vol.auto_after = 2
         dn_vol.auto_outcome = "retry"
-        dn_op = p.add_decision_node(dispense.id, "operator_check", (0, 0))
-        dn_vol.routes["continue"] = dn_op.id       # chain: then ask operator
-        op = p.add_op_node((0, 0))
-        op.inputs = [(dn_vol.id, "continue"), (dn_op.id, "yes")]
-        op.target = collect.id
+
+        # THE group scenario: droplet detect fails at the END of the
+        # group -> Restart is routed to the GROUP NODE, so the whole
+        # group formally re-enters (group-entry hooks fire, repeat budget
+        # restarts). Routing it to 'Dispense droplet' instead would just
+        # re-run the steps with none of that — try rerouting the edge to
+        # feel the difference.
+        dn_det = p.add_decision_node(detect.id, "droplet_detect", (0, 0))
+        dn_det.routes["restart"] = grp_dispense.id
+
         # "Operator inspect" keeps its decision UNplaced — it still
         # prompts, with the provider defaults (yes→next, no→retry).
-
-        # A starter group so the concept is visible out of the box.
-        p.group_rows([dispense.id, mix.id], name="Droplet prep")
 
     # ------------------------------------------------------------------
     # canvas callbacks — palette, drops, menus, deletion
@@ -454,6 +459,8 @@ class MainWindow(QMainWindow):
                     lambda: self.open_shape_palette(
                         row_id, screen_pos, None))
         else:
+            menu.addAction("Repetitions…",
+                           lambda: self._ask_group_reps(row))
             menu.addAction("Ungroup",
                            lambda: (self.protocol.ungroup(row_id),
                                     self.rebuild()))
@@ -464,6 +471,16 @@ class MainWindow(QMainWindow):
                      self.scene.row_items[row_id].setSelected(True),
                      self.delete_selected()))
         menu.exec(screen_pos)
+
+    def _ask_group_reps(self, row):
+        n, ok = QInputDialog.getInt(
+            self, "Group repetitions",
+            "Passes scheduled by a formal group entry\n"
+            "(fall-through or a route to the group node):",
+            row.repetitions, 1, 99)
+        if ok:
+            row.repetitions = n
+            self.rebuild()
 
     def decision_menu(self, dn_id, screen_pos):
         dn = self.protocol.decision_node_by_id(dn_id)

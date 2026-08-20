@@ -62,10 +62,23 @@ python -m examples.demos.branching_flowchart --smoke
 4. **"Operator inspect" has no placed shape** — it still prompts, using
    the provider defaults. Ticking *"Don't ask again this run"* in a
    prompt mints/updates the shape with the auto answer.
-5. **Group / ungroup:** rubber-band a contiguous run of steps and press
-   Group (or right-click blank canvas). Groups are jump targets too —
-   routing to one enters its first step.
-6. Rename (double-click), Arrange V/H, Fit, save/load the whole graph
+5. **Groups are real, not just visual.** The seed has two: "Dispense &
+   verify" (Dispense + Droplet detect) and "Mix cycle ×2" (right-click a
+   group → *Repetitions…*). A **formal group entry** — sequential
+   fall-through, or a route drawn to the **group node** — fires the
+   providers' `on_group_enter` hooks (watch the "Pre-charging
+   electrodes…" log line) and schedules the group's repeat passes; the
+   run log narrates every enter / repeat-pass / leave. A route drawn to
+   a **step inside the group** is an informal jump: no entry hooks, no
+   repeat restart — the log says so when it happens. The seeded
+   droplet-detect scenario shows why the distinction matters: Droplet
+   detect is the *last* step of its group, and its *Restart* outcome is
+   routed to the group node, so a missing droplet formally re-enters the
+   whole group (hooks + fresh pass budget). Drag that edge onto
+   "Dispense droplet" instead to feel the other behavior.
+6. **Group / ungroup:** rubber-band a contiguous run of steps and press
+   Group (or right-click blank canvas).
+7. Rename (double-click), Arrange V/H, Fit, save/load the whole graph
    (tree + shapes + routes + positions) as JSON. Parameters are edited
    only in the table, which stays selection-synced with the canvas.
 
@@ -104,9 +117,17 @@ python -m examples.demos.branching_flowchart --smoke
   *streak* gets its own budget. The auto answer is the provider's
   `default_outcome` unless the user picked one (in the policy dialog or
   via "don't ask again").
-* A jump re-enters the target step fresh; a group target means its first
-  step. Completion self-loops are blocked (retries belong to decision
-  outcomes); a decision outcome dragged back onto its own step is the
-  retry loop.
+* A jump re-enters the target step fresh. Completion self-loops are
+  blocked (retries belong to decision outcomes); a decision outcome
+  dragged back onto its own step is the retry loop.
+* **Group targets differ from first-step targets.** Routing to a group
+  node is a formal entry: `on_group_enter`/`on_group_exit` hooks fire
+  and the group's `repetitions` budget (re)starts — including when the
+  route comes from inside the group (restart). Routing to a step inside
+  the group jumps into the sequence with no hooks and no repeat
+  restart. Sequential fall-through into a group counts as formal;
+  fall-through past a group's last step replays the group while passes
+  remain (innermost group first); explicit drawn routes override
+  remaining repeats.
 * Route/wiring edits are allowed mid-run (read at resolve time);
   adding/deleting/regrouping steps mid-run is blocked.

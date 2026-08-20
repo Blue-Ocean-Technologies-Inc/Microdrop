@@ -87,12 +87,16 @@ class Row:
         # Completion route (steps only): where execution goes when the
         # step finishes and no decision redirected it. NEXT = tree order.
         self.next_target = NEXT
+        # Groups: how many passes a FORMAL group entry schedules (the
+        # analogue of GroupRow.repetitions in the real app).
+        self.repetitions = 1
         # Canvas position, persisted with the protocol.
         self.pos = (0.0, 0.0)
 
     def to_dict(self):
         d = {"id": self.id, "name": self.name, "values": dict(self.values),
-             "next_target": self.next_target, "pos": list(self.pos)}
+             "next_target": self.next_target, "pos": list(self.pos),
+             "repetitions": self.repetitions}
         if self.is_group:
             d["children"] = [c.to_dict() for c in self.children]
         return d
@@ -102,6 +106,7 @@ class Row:
         row = cls(d["name"], d.get("values"), row_id=d["id"],
                   is_group="children" in d)
         row.next_target = d.get("next_target", NEXT)
+        row.repetitions = int(d.get("repetitions", 1) or 1)
         row.pos = tuple(d.get("pos", (0.0, 0.0)))
         if row.is_group:
             row.children = [cls.from_dict(c) for c in d["children"]]
@@ -213,6 +218,22 @@ class Protocol:
                         return found
             return None, None
         return search(self.rows)
+
+    def group_chain_of(self, row_id):
+        """Groups containing the row, outermost first."""
+        chain = []
+
+        def walk(rows, stack):
+            for r in rows:
+                if r.id == row_id:
+                    chain.extend(stack)
+                    return True
+                if r.is_group and walk(r.children, stack + [r]):
+                    return True
+            return False
+
+        walk(self.rows, [])
+        return chain
 
     def leaf_index(self, row_id) -> Optional[int]:
         """Execution index for a route target: a step's own index, or a

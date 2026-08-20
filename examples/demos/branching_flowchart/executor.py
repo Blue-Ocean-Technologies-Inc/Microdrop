@@ -107,6 +107,9 @@ class ProtocolContext:
         self.pause_event = pause_event
         self.scratch = {}
 
+    def log(self, msg):
+        self.signals.log.emit(msg)
+
 
 class StepContext:
     """Per-step context handed to hooks (mirror of the real StepContext,
@@ -257,13 +260,58 @@ class DemoExecutor:
     # ------- step walk: sequential fall-through + decision routing -------
 
     def _run_steps(self, handlers, proto_ctx):
-        steps = self.protocol.leaves()
+        proto = self.protocol
+        steps = proto.leaves()
+        if not steps:
+            return
+        # Group chain (outermost first) per leaf, for entry/exit/repeat
+        # bookkeeping.
+        chains = [proto.group_chain_of(leaf.id) for leaf in steps]
         # times each (step_id, decision_id) has fired this run — drives
         # the "stop prompting after N retries" behaviour.
         occurrences = defaultdict(int)
+        # group_id -> current pass number. Present only for groups that
+        # were FORMALLY entered (fall-through or a route to the group
+        # node); an informal jump into a group's step seeds the counter
+        # exhausted, so no repeats get scheduled.
+        passes = {}
+
+        def transition(from_idx, to_idx, formal, reenter=frozenset()):
+            """Fire group exits/entries for a move between leaves.
+            ``reenter`` forces exit+entry for a group present on both
+            sides (routing to the group node you're already inside =
+            restart it)."""
+            from_chain = chains[from_idx] if from_idx is not None else []
+            to_chain = chains[to_idx] if to_idx is not None else []
+            from_ids = {g.id for g in from_chain}
+            to_ids = {g.id for g in to_chain}
+            for g in reversed(from_chain):          # innermost first
+                if g.id not in to_ids or g.id in reenter:
+                    self.signals.log.emit(f"Leaving group {g.name!r}")
+                    self._run_hooks("on_group_exit", handlers,
+                                    proto_ctx, g)
+                    passes.pop(g.id, None)
+            for g in to_chain:                       # outermost first
+                if g.id not in from_ids or g.id in reenter:
+                    if formal:
+                        passes[g.id] = 1
+                        reps = (f" — pass 1/{g.repetitions}"
+                                if g.repetitions > 1 else "")
+                        self.signals.log.emit(
+                            f"Entering group {g.name!r}{reps} "
+                            f"(group-entry hooks fire)")
+                        self._run_hooks("on_group_enter", handlers,
+                                        proto_ctx, g)
+                    else:
+                        passes[g.id] = g.repetitions
+                        self.signals.log.emit(
+                            f"Jumped into group {g.name!r} mid-sequence "
+                            f"— no formal entry: group hooks and repeats "
+                            f"are NOT restarted")
 
         i = 0
         step_no = 0
+        transition(None, 0, formal=True)
         while 0 <= i < len(steps):
             if self.stop_event.is_set():
                 break
@@ -284,20 +332,51 @@ class DemoExecutor:
             self.signals.step_finished.emit(step.id)
 
             verdict = self._resolve_routing(step, step_ctx, i, occurrences)
-            if verdict[0] == "jump":
-                if verdict[1] != i:
-                    # Leaving the step ends the retry streak: its
-                    # decision counters reset, so a later revisit gets
-                    # fresh auto-retries before prompting again.
-                    for key in [k for k in occurrences
-                                if k[0] == step.id]:
-                        del occurrences[key]
-                i = verdict[1]
-            elif verdict[0] == "end":
-                break
-            else:  # "abort"
+            if verdict[0] == "abort":
                 self.stop_event.set()
                 break
+
+            # Fall-through exits honor group repeats: the innermost group
+            # being left with passes remaining replays from its first
+            # leaf. Explicit routes (drawn edges) override repeats.
+            fallthrough = ((verdict[0] == "jump" and verdict[2] == "next")
+                           or (verdict[0] == "end" and verdict[1]))
+            if fallthrough:
+                to_ids = ({g.id for g in chains[verdict[1]]}
+                          if verdict[0] == "jump" else set())
+                for g in reversed(chains[i]):
+                    if g.id in to_ids:
+                        continue
+                    k = passes.get(g.id, 1)
+                    if k < g.repetitions:
+                        first_leaf = proto.leaf_index(g.id)
+                        if first_leaf is not None:
+                            passes[g.id] = k + 1
+                            self.signals.log.emit(
+                                f"Group {g.name!r} — repeat pass "
+                                f"{k + 1}/{g.repetitions}")
+                            verdict = ("jump", first_leaf, "next", None)
+                            break
+
+            if verdict[0] == "end":
+                transition(i, None, formal=True)
+                break
+            new_i, kind, gid = verdict[1], verdict[2], verdict[3]
+            # Routing to the group node you're already inside restarts
+            # it: exit + formal re-entry, fresh pass budget.
+            reenter = (frozenset({gid})
+                       if kind == "group"
+                       and gid in {g.id for g in chains[i]}
+                       else frozenset())
+            if new_i != i or reenter:
+                # Leaving the step (or restarting its group) ends the
+                # retry streak: decision counters reset so a later
+                # revisit gets fresh auto-retries before prompting.
+                for key in [k for k in occurrences if k[0] == step.id]:
+                    del occurrences[key]
+                transition(i, new_i, formal=kind in ("next", "group"),
+                           reenter=reenter)
+            i = new_i
 
     def _resolve_routing(self, step, step_ctx, i, occurrences):
         """Turn the step's pending decisions + completion route into the
@@ -434,23 +513,32 @@ class DemoExecutor:
         return outcome_id
 
     def _verdict_for(self, step, target, i):
+        """("jump", idx, kind, group_id) | ("end", was_fallthrough) |
+        ("abort",). kind: "next" (fall-through), "self" (retry), "step"
+        (explicit step route), "group" (explicit group route — formal
+        entry with hooks + repeats)."""
         proto = self.protocol
         n_leaves = len(proto.leaves())
         if target == SELF:
-            return ("jump", i)
+            return ("jump", i, "self", None)
         if target == END:
-            return ("end",)
+            return ("end", False)
         if target == ABORT:
             return ("abort",)
         if target == NEXT:
-            return ("jump", i + 1) if i + 1 < n_leaves else ("end",)
+            return (("jump", i + 1, "next", None) if i + 1 < n_leaves
+                    else ("end", True))
+        row = proto.row_by_id(target)
         idx = proto.leaf_index(target)
         if idx is None:
             self.signals.log.emit(
                 f"[{step.name}] Route target missing — falling through "
                 f"to next step")
-            return ("jump", i + 1) if i + 1 < n_leaves else ("end",)
-        return ("jump", idx)
+            return (("jump", i + 1, "next", None) if i + 1 < n_leaves
+                    else ("end", True))
+        if row is not None and row.is_group:
+            return ("jump", idx, "group", row.id)
+        return ("jump", idx, "step", None)
 
     def _answer_for(self, step, spec, dn, message):
         """Hand a PendingDecision to the GUI thread and block (stop-aware)
