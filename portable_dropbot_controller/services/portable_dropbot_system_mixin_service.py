@@ -30,10 +30,12 @@ class PortableDropbotSystemMixinService(HasTraits):
     # ------------------------------------------------------------------ #
     def on_set_buzzer_request(self, message):
         on = str(message) == "True"
-        self._proxy_call("buzzer",
-                         lambda: self.proxy.uart.setBuzzer(on))
+        ok, result = self._proxy_call(
+            "buzzer",
+            lambda: self.proxy.uart.setBuzzer(on))
         logger.info(f"Portable Dropbot buzzer --> "
-                    f"{'on' if on else 'off'}")
+                    f"{'on' if on else 'off'}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     def on_set_fan_request(self, message):
         data = json.loads(str(message))
@@ -42,11 +44,12 @@ class PortableDropbotSystemMixinService(HasTraits):
             logger.warning(f"Unknown fan board: {board!r}")
             return
         on = bool(data["on"])
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"{board} fan",
             lambda: self.proxy.uart.setFan(on, board=board))
         logger.info(f"Portable Dropbot {board} fan --> "
-                    f"{'on' if on else 'off'}")
+                    f"{'on' if on else 'off'}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     # ------------------------------------------------------------------ #
     # Motor mechanical params                                              #
