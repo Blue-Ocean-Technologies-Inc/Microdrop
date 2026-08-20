@@ -334,6 +334,11 @@ class Protocol:
                                if dn.id != node_id]
         for op in self.op_nodes:
             op.inputs = [i for i in op.inputs if i[0] != node_id]
+        # Chain routes pointing at the removed shape fall back to defaults.
+        for dn in self.decision_nodes:
+            for oid, target in list(dn.routes.items()):
+                if target == node_id:
+                    del dn.routes[oid]
 
     def add_op_node(self, pos, kind="and") -> OpNode:
         op = OpNode(kind, pos)
@@ -386,10 +391,15 @@ class Protocol:
         if target in SENTINEL_LABELS:
             return SENTINEL_LABELS[target]
         row = self.row_by_id(target)
-        if row is None:
-            return "next step (missing target)"
-        return (f"group {row.name!r}" if row.is_group
-                else f"step {row.name!r}")
+        if row is not None:
+            return (f"group {row.name!r}" if row.is_group
+                    else f"step {row.name!r}")
+        dn = self.decision_node_by_id(target)
+        if dn is not None:
+            spec = self.spec_by_id(dn.decision_id)
+            title = spec.title if spec else dn.decision_id
+            return f"then resolve {title!r}"
+        return "next step (missing target)"
 
     # -- persistence ----------------------------------------------------
 

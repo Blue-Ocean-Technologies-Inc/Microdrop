@@ -74,7 +74,7 @@ KIND_COLORS = {
     "neutral": QColor("#94a3b8"),
 }
 FLOW_COLOR = QColor("#3b82f6")
-OP_COLOR = QColor("#8b5cf6")
+OP_COLORS = {"and": QColor("#8b5cf6"), "or": QColor("#14b8a6")}
 
 # --- obstacle-avoiding edge routing (ported from flow_graph_dialog) ---
 
@@ -434,8 +434,9 @@ class DecisionShapeItem(_AnchoredRectItem):
                       else "default")
             self.ports[outcome.id].setToolTip(
                 f"{outcome.label} → {protocol.describe_target(target)} "
-                f"({origin})\nDrag to a step, a group, an AND shape, or "
-                f"blank space.")
+                f"({origin})\nDrag to a step/group (route), an AND/OR "
+                f"shape (feed), another decision of this step (resolve "
+                f"serially), or blank space (new step).")
 
     def contextMenuEvent(self, event):
         self._scene_ref.window.decision_menu(self.dnode.id,
@@ -444,14 +445,15 @@ class DecisionShapeItem(_AnchoredRectItem):
 
 
 class OpNodeItem(_AnchoredRectItem):
-    """The AND combiner shape."""
+    """A logic combiner shape (AND / OR)."""
 
     def __init__(self, scene_ref, opnode):
         super().__init__(OP_W, OP_H, scene_ref, OP_FILL)
         self.opnode = opnode
         self.setPos(*opnode.pos)
         self.setZValue(1)
-        self._base_pen = QPen(OP_COLOR, 1.4)
+        color = OP_COLORS.get(opnode.kind, OP_COLORS["and"])
+        self._base_pen = QPen(color, 1.4)
         self.setPen(self._base_pen)
 
         text = QGraphicsSimpleTextItem(opnode.kind.upper(), self)
@@ -463,11 +465,12 @@ class OpNodeItem(_AnchoredRectItem):
         br = text.boundingRect()
         text.setPos((OP_W - br.width()) / 2, (OP_H - br.height()) / 2)
 
-        self.out_port = PortItem(self, "opout", QPointF(1, 0), OP_COLOR)
+        self.out_port = PortItem(self, "opout", QPointF(1, 0), color)
         self.out_port.setPos(OP_W, OP_H / 2)
+        quant = "ALL" if opnode.kind == "and" else "ANY"
         self.out_port.setToolTip(
-            "Combined route: fires when ALL connected outcomes are chosen "
-            "in the same round. Drag to a step/group.")
+            f"Combined route: fires when {quant} connected outcome(s) are "
+            f"chosen in the same round. Drag to a step/group.")
 
     def contextMenuEvent(self, event):
         self._scene_ref.window.op_menu(self.opnode.id, event.screenPos())
@@ -498,9 +501,11 @@ class EdgeItem(QGraphicsPathItem):
             width, style = 1.0, Qt.DashLine
         elif kind == "tether":
             width, style = 1.0, Qt.DotLine
+        elif kind == "chain":
+            style = Qt.DashLine
         self.setPen(QPen(color, width, style))
         self.setZValue(-1 if kind not in ("spine", "tether") else -3)
-        if kind in ("flow", "outcome", "feed", "op"):
+        if kind in ("flow", "outcome", "feed", "op", "chain"):
             self.setFlag(QGraphicsItem.ItemIsSelectable, True)
 
         self._label = None
@@ -593,7 +598,7 @@ class EdgeItem(QGraphicsPathItem):
             painter.drawPolygon(self._arrow)
 
     def contextMenuEvent(self, event):
-        if self.kind in ("flow", "outcome", "feed", "op"):
+        if self.kind in ("flow", "outcome", "feed", "op", "chain"):
             self._scene_ref.window.edge_menu(self, event.screenPos())
             event.accept()
         else:
@@ -706,13 +711,25 @@ class FlowchartScene(QGraphicsScene):
                                    TETHER_COLOR))
             for outcome in dec_item.spec.outcomes:
                 target = dn.routes.get(outcome.id)
-                dst = self.row_items.get(target) if target else None
+                if not target:
+                    continue
+                color = KIND_COLORS.get(outcome.kind,
+                                        KIND_COLORS["neutral"])
+                dst = self.row_items.get(target)
                 if dst is not None:
-                    color = KIND_COLORS.get(outcome.kind,
-                                            KIND_COLORS["neutral"])
                     self._add(EdgeItem(
                         self, "outcome", dec_item, dst, color,
                         label=outcome.label,
+                        src_port=dec_item.ports[outcome.id],
+                        payload=("outcome", dn.id, outcome.id)))
+                    continue
+                # Chain: outcome routed to a sibling decision shape —
+                # "then resolve that decision" (serial resolution).
+                chain_dst = self.dec_items.get(target)
+                if chain_dst is not None:
+                    self._add(EdgeItem(
+                        self, "chain", dec_item, chain_dst, color,
+                        label=f"{outcome.label} → then",
                         src_port=dec_item.ports[outcome.id],
                         payload=("outcome", dn.id, outcome.id)))
         # Outcome → AND feeds and AND → target routes.
@@ -736,7 +753,8 @@ class FlowchartScene(QGraphicsScene):
                 dst = self.row_items.get(op.target)
                 if dst is not None:
                     self._add(EdgeItem(
-                        self, "op", op_item, dst, OP_COLOR,
+                        self, "op", op_item, dst,
+                        OP_COLORS.get(op.kind, OP_COLORS["and"]),
                         label=op.kind.upper(),
                         src_port=op_item.out_port,
                         payload=("op", op.id)))
@@ -834,6 +852,7 @@ class FlowchartScene(QGraphicsScene):
         pools = [self.row_items.values()]
         if port.role == "outcome":
             pools.append(self.op_items.values())
+            pools.append(self.dec_items.values())   # chain targets
         for pool in pools:
             for item in pool:
                 # A done-port can't target its own step (retries belong to

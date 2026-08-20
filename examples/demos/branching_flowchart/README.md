@@ -40,15 +40,21 @@ python -m examples.demos.branching_flowchart --smoke
    to "Collect to waste". Otherwise the individual outcome routes apply
    (the *Retry* self-loop stops prompting after 3 tries).
 2. **The ＋ plug under a step** opens the shape palette: one decision per
-   contributing column (greyed once placed) and an AND operator. Placed
-   decisions are shapes tethered to their step; delete or reconfigure
-   them via right-click (Always prompt / Prompt first N times / Auto).
+   contributing column (greyed once placed) and the AND / OR operators.
+   Placed decisions are shapes tethered to their step; delete or
+   reconfigure them via right-click (Always prompt / Prompt first N
+   times / Auto). Right-click an operator to convert AND ⇄ OR.
 3. **Drag ports.** From a decision's colored outcome port to a step or
-   group (route that answer), onto an AND shape (feed the combiner), or
-   onto blank space — a "＋ New step" ghost appears and releasing mints a
-   pre-routed step. The blue done-port routes step completion the same
-   way. Edges snap to the node under the cursor (cyan glow) and wrap
-   around boxes that sit in the way.
+   group (route that answer), onto an AND/OR shape (feed the combiner),
+   onto **another decision of the same step** (a dashed *chain* edge:
+   resolve serially — that decision is only asked when this outcome was
+   chosen), or onto blank space — a "＋ New step" ghost appears and
+   releasing mints a pre-routed step. The blue done-port routes step
+   completion the same way. Edges snap to the node under the cursor
+   (cyan glow) and wrap around boxes that sit in the way. The seeded
+   protocol chains Volume check → Operator check on "Dispense droplet",
+   so the operator is only consulted when the volume answer is
+   *Continue*.
 4. **"Operator inspect" has no placed shape** — it still prompts, using
    the provider defaults. Ticking *"Don't ask again this run"* in a
    prompt mints/updates the shape with the auto answer.
@@ -75,13 +81,18 @@ python -m examples.demos.branching_flowchart --smoke
 
 ### Semantics chosen (up for debate)
 
-* All of a step's decisions resolve first (prompt or auto, in provider
-  priority order). Routing then evaluates: **AND ops first** (all input
-  outcomes chosen this round → the op's route wins), then the individual
-  outcome routes (first non-"next" wins), then the step's completion
-  route, then table order.
-* An AND only combines outcomes from one step's decisions (enforced on
-  drop); an op with no wired target is inert.
+* Decisions with no incoming chain edge resolve together first, in
+  provider-priority order. An outcome routed to a sibling decision shape
+  is a **chain**: choosing it activates that decision, which resolves
+  next (serial). A chained decision whose activating outcome wasn't
+  chosen — or that never fired — is skipped that round.
+* Routing then evaluates: **logic ops first** (AND = all input outcomes
+  chosen this round, OR = any of them; creation order, first match
+  wins), then the individual outcome routes in resolution order (first
+  non-"next" wins), then the step's completion route, then table order.
+* An op only combines outcomes from one step's decisions, and chains
+  only link decisions of the same step (both enforced on drop); an op
+  with no wired target is inert.
 * "Auto after N" counts per (step, decision) per run; the auto answer is
   the provider's `default_outcome` unless the user picked one via "don't
   ask again".

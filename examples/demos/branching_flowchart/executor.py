@@ -296,67 +296,122 @@ class DemoExecutor:
         """Turn the step's pending decisions + completion route into the
         next frame index. Returns ("jump", idx) | ("end",) | ("abort",).
 
-        All of the step's decisions resolve first (prompt or auto), THEN
-        routing is evaluated: an AND op whose input outcomes were all
-        chosen wins first; otherwise the decisions' own outcome routes in
-        provider-priority order (first non-NEXT wins); otherwise the
-        step's completion route."""
+        Resolution order: decisions with no incoming chain edge resolve
+        first, together, in provider-priority order. An outcome whose
+        route targets another decision shape of the same step is a CHAIN:
+        choosing it activates that decision, which resolves next — serial
+        resolution. A chained decision whose activating outcome was not
+        chosen (or that never fired) is skipped this round.
+
+        Routing then evaluates: logic ops first (AND = every input
+        outcome chosen this round, OR = any of them), in creation order;
+        then the resolved decisions' own outcome routes in resolution
+        order (chains excluded; first non-NEXT wins); then the step's
+        completion route; then table order."""
         proto = self.protocol
         requests = step_ctx.pending_decisions()
-        chosen = []                    # [(spec, decision_node|None, outcome_id)]
-        for spec, message in requests:
-            if self.stop_event.is_set():
-                return ("abort",)
-            dn = proto.decision_node_for(step.id, spec.id)
-            occurrences[(step.id, spec.id)] += 1
-            seen = occurrences[(step.id, spec.id)]
+        fired = {spec.id: (spec, message) for spec, message in requests}
+        step_dns = {dn.decision_id: dn for dn in proto.decision_nodes
+                    if dn.step_id == step.id}
+        dn_by_id = {dn.id: dn for dn in step_dns.values()}
+        chained_dn_ids = {target for dn in step_dns.values()
+                          for target in dn.routes.values()
+                          if target in dn_by_id}
 
-            mode = dn.mode if dn else "prompt"
-            auto_after = dn.auto_after if dn else None
-            auto = (mode == "auto"
-                    or (auto_after is not None and seen > auto_after))
-            if auto:
-                outcome_id = ((dn.auto_outcome if dn else None)
-                              or spec.default_outcome)
-                why = ("auto mode" if mode == "auto"
-                       else f"auto after {auto_after} prompts")
-                step_ctx.log(
-                    f"Decision {spec.title!r} -> "
-                    f"{spec.outcome_by_id(outcome_id).label} ({why})")
-            else:
-                outcome_id = self._answer_for(step, spec, dn, message)
-                if outcome_id is None:      # stopped while waiting
+        # Roots: fired decisions not waiting on a chain activation.
+        queue = [(spec, message) for spec, message in requests
+                 if not (spec.id in step_dns
+                         and step_dns[spec.id].id in chained_dn_ids)]
+        resolved = []          # [(spec, dn|None, outcome_id)] in order
+        resolved_ids = set()
+        activated = set()
+        qi = 0
+        while qi < len(queue):
+            spec, message = queue[qi]
+            qi += 1
+            if spec.id in resolved_ids or self.stop_event.is_set():
+                if self.stop_event.is_set():
                     return ("abort",)
-                step_ctx.log(
-                    f"Decision {spec.title!r} -> "
-                    f"{spec.outcome_by_id(outcome_id).label} (user)")
-            self.signals.decision_resolved.emit(step.id, spec.id,
-                                                outcome_id, auto)
-            chosen.append((spec, dn, outcome_id))
+                continue
+            dn = step_dns.get(spec.id)
+            outcome_id = self._resolve_one(step, step_ctx, spec, dn,
+                                           message, occurrences)
+            if outcome_id is None:          # stopped while waiting
+                return ("abort",)
+            resolved.append((spec, dn, outcome_id))
+            resolved_ids.add(spec.id)
+            # Chain: this outcome's route targets a sibling decision
+            # shape -> activate it (once).
+            if dn is not None:
+                target = dn.routes.get(outcome_id)
+                tdn = dn_by_id.get(target)
+                if tdn is not None and target not in activated:
+                    activated.add(target)
+                    if (tdn.decision_id in fired
+                            and tdn.decision_id not in resolved_ids):
+                        queue.append(fired[tdn.decision_id])
+                    else:
+                        step_ctx.log(
+                            f"Chained decision for {tdn.decision_id!r} "
+                            f"didn't fire this round — skipped")
 
-        # 1. AND ops: every input outcome chosen this round -> its route.
-        chosen_endpoints = {(dn.id, oid) for _spec, dn, oid in chosen
+        # 1. Logic ops (creation order): AND = all inputs chosen,
+        #    OR = any input chosen.
+        chosen_endpoints = {(dn.id, oid) for _spec, dn, oid in resolved
                             if dn is not None}
         for op in proto.ops_for_step(step.id):
-            if op.target is None:
+            if op.target is None or not op.inputs:
                 continue
-            if all(pair in chosen_endpoints for pair in op.inputs):
+            hits = [pair in chosen_endpoints for pair in op.inputs]
+            matched = all(hits) if op.kind == "and" else any(hits)
+            if matched:
                 step_ctx.log(
                     f"{op.kind.upper()} op matched "
-                    f"({len(op.inputs)} outcomes) -> "
+                    f"({sum(hits)}/{len(op.inputs)} outcomes) -> "
                     f"{proto.describe_target(op.target)}")
                 return self._verdict_for(step, op.target, i)
 
-        # 2. Individual outcome routes, provider-priority order.
-        for spec, dn, outcome_id in chosen:
+        # 2. Individual outcome routes, resolution order. Chain targets
+        #    were consumed above; they never jump.
+        for spec, dn, outcome_id in resolved:
             routes = dn.routes if dn else {}
             target = routes.get(outcome_id,
                                 spec.default_routes.get(outcome_id, NEXT))
+            if target in dn_by_id:
+                continue
             if target != NEXT:
                 return self._verdict_for(step, target, i)
 
         # 3. No decision redirected: the step's completion route.
         return self._verdict_for(step, step.next_target, i)
+
+    def _resolve_one(self, step, step_ctx, spec, dn, message, occurrences):
+        """Resolve one decision (prompt or auto). Returns the outcome_id,
+        or None when the run was stopped mid-prompt."""
+        occurrences[(step.id, spec.id)] += 1
+        seen = occurrences[(step.id, spec.id)]
+        mode = dn.mode if dn else "prompt"
+        auto_after = dn.auto_after if dn else None
+        auto = (mode == "auto"
+                or (auto_after is not None and seen > auto_after))
+        if auto:
+            outcome_id = ((dn.auto_outcome if dn else None)
+                          or spec.default_outcome)
+            why = ("auto mode" if mode == "auto"
+                   else f"auto after {auto_after} prompts")
+            step_ctx.log(
+                f"Decision {spec.title!r} -> "
+                f"{spec.outcome_by_id(outcome_id).label} ({why})")
+        else:
+            outcome_id = self._answer_for(step, spec, dn, message)
+            if outcome_id is None:
+                return None
+            step_ctx.log(
+                f"Decision {spec.title!r} -> "
+                f"{spec.outcome_by_id(outcome_id).label} (user)")
+        self.signals.decision_resolved.emit(step.id, spec.id,
+                                            outcome_id, auto)
+        return outcome_id
 
     def _verdict_for(self, step, target, i):
         proto = self.protocol

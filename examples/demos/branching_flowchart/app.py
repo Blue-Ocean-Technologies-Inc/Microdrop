@@ -132,9 +132,10 @@ class MainWindow(QMainWindow):
         self.rebuild()
         self.view.fit_all()
         self.statusBar().showMessage(
-            "＋ on a step: add decision/AND shapes · drag a port to a "
-            "node: route (drop on blank space to mint a step) · drag a "
-            "selection box + Group · Ctrl+wheel: zoom · middle-drag: pan")
+            "＋ on a step: add decision/AND/OR shapes · drag a port to a "
+            "node: route (onto a sibling decision: resolve serially; onto "
+            "blank space: mint a step) · drag a selection box + Group · "
+            "Ctrl+wheel: zoom · middle-drag: pan")
 
     # ------------------------------------------------------------------
     # toolbar
@@ -221,12 +222,15 @@ class MainWindow(QMainWindow):
         collect = p.add_step("Collect to waste",
                              {"voltage": 100.0, "duration_s": 0.8})
 
-        # Placed shapes on Dispense: both its decisions, plus an AND that
+        # Placed shapes on Dispense: both its decisions, resolved SERIALLY
+        # (volume first; the operator check is only asked when the volume
+        # answer is Continue — the dashed chain edge), plus an AND that
         # skips the corrective mix when everything checks out.
         dn_vol = p.add_decision_node(dispense.id, "volume_check", (0, 0))
         dn_vol.routes["retry"] = dispense.id       # orange self-loop
         dn_vol.auto_after = 3
         dn_op = p.add_decision_node(dispense.id, "operator_check", (0, 0))
+        dn_vol.routes["continue"] = dn_op.id       # chain: then ask operator
         op = p.add_op_node((0, 0))
         op.inputs = [(dn_vol.id, "continue"), (dn_op.id, "yes")]
         op.target = collect.id
@@ -262,8 +266,10 @@ class MainWindow(QMainWindow):
             placed_any = True
         if placed_any:
             menu.addSeparator()
-        menu.addAction("◇ AND operator",
-                       lambda: self._place_op(step))
+        menu.addAction("◇ AND operator — all connected outcomes chosen",
+                       lambda: self._place_op(step, "and"))
+        menu.addAction("◇ OR operator — any connected outcome chosen",
+                       lambda: self._place_op(step, "or"))
         menu.exec(screen_pos.toPoint() if hasattr(screen_pos, "toPoint")
                   else screen_pos)
 
@@ -275,9 +281,10 @@ class MainWindow(QMainWindow):
             (step.pos[0] + NODE_W + 90, step.pos[1] - 10 + k * 78))
         self.rebuild()
 
-    def _place_op(self, step):
+    def _place_op(self, step, kind="and"):
         self.protocol.add_op_node(
-            (step.pos[0] + NODE_W + 90 + DEC_W + 70, step.pos[1] + 40))
+            (step.pos[0] + NODE_W + 90 + DEC_W + 70, step.pos[1] + 40),
+            kind=kind)
         self.rebuild()
 
     def commit_port_drop(self, port, target):
@@ -295,6 +302,16 @@ class MainWindow(QMainWindow):
                 self._append_log(
                     f"Routed {port.owner.spec.title} / {port.outcome_id} → "
                     f"{proto.describe_target(target.row.id)}")
+            elif isinstance(target, DecisionShapeItem):
+                if target.dnode.step_id != dn.step_id:
+                    self.statusBar().showMessage(
+                        "Decisions can only chain to another decision of "
+                        "the same step.", 6000)
+                    return
+                dn.routes[port.outcome_id] = target.dnode.id
+                self._append_log(
+                    f"Chained {port.owner.spec.title} / {port.outcome_id} "
+                    f"→ then resolve {target.spec.title!r}")
             elif isinstance(target, OpNodeItem):
                 op = target.opnode
                 owners = {d.step_id for i in op.inputs
@@ -484,7 +501,15 @@ class MainWindow(QMainWindow):
             self._set_decision_mode(dn, "prompt", n)
 
     def op_menu(self, op_id, screen_pos):
+        op = self.protocol.op_node_by_id(op_id)
+        if op is None:
+            return
         menu = QMenu(self)
+        other = "or" if op.kind == "and" else "and"
+        menu.addAction(
+            f"Convert to {other.upper()}",
+            lambda: (setattr(op, "kind", other), self.rebuild()))
+        menu.addSeparator()
         menu.addAction(
             "Delete shape",
             lambda: (self.protocol.remove_op_node(op_id), self.rebuild()))
