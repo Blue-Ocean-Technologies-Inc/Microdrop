@@ -11,7 +11,7 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .calibration_model import PortableDropbotCalibrationModel
+from ..models.calibration_model import PortableDropbotCalibrationModel
 
 
 class PortableDropbotCalibrationMessageHandler(BaseMessageHandler):

@@ -4,7 +4,7 @@ from microdrop_application.menus import is_advanced_mode
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import PORTABLE_DROPBOT_IMAGE
+from ..consts import PORTABLE_DROPBOT_IMAGE
 
 
 class PortableDropbotMotorParamsModel(BaseStatusModel):

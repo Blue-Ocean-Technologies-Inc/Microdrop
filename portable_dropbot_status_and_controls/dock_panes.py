@@ -4,47 +4,55 @@ from template_status_and_controls.realtime_mode_icon_mixin import (
     RealtimeModeIconMixin,
 )
 
-from .calibration_controller import CalibrationController
-from .calibration_message_handler import (
-    PortableDropbotCalibrationMessageHandler,
-)
-from .calibration_model import PortableDropbotCalibrationModel
-from .calibration_view import CalibrationView
 from .consts import (
     CALIBRATION_LISTENER, MOTOR_PARAMS_LISTENER, MOTORS_LISTENER,
     PKG, PKG_name, PMT_LISTENER, POWER_SYSTEM_LISTENER,
     TEMP_LIGHTING_LISTENER,
 )
-from .controller import ControlsController
-from .message_handler import PortableDropbotStatusAndControlsMessageHandler
-from .model import PortableDropbotStatusAndControlsModel
-from .motor_params_controller import MotorParamsController
-from .motor_params_message_handler import (
+from .controllers.calibration_controller import CalibrationController
+from .controllers.status_controls_pane_controller import (
+    PortableDropbotStatusAndControlsController,
+)
+from .controllers.motor_params_controller import MotorParamsController
+from .controllers.motors_controller import MotorsController
+from .controllers.pmt_controller import PmtController
+from .controllers.power_system_controller import PowerSystemController
+from .controllers.temp_lighting_controller import TempLightingController
+from .message_handlers.calibration_message_handler import (
+    PortableDropbotCalibrationMessageHandler,
+)
+from .message_handlers.message_handler import (
+    PortableDropbotStatusAndControlsMessageHandler,
+)
+from .message_handlers.motor_params_message_handler import (
     PortableDropbotMotorParamsMessageHandler,
 )
-from .motor_params_model import PortableDropbotMotorParamsModel
-from .motor_params_view import MotorParamsView
-from .motors_controller import MotorsController
-from .motors_message_handler import PortableDropbotMotorsMessageHandler
-from .motors_model import PortableDropbotMotorsModel
-from .motors_view import MotorsView
-from .pmt_controller import PmtController
-from .pmt_message_handler import PortableDropbotPmtMessageHandler
-from .pmt_model import PortableDropbotPmtModel
-from .pmt_view import PmtView
-from .power_system_controller import PowerSystemController
-from .power_system_message_handler import (
+from .message_handlers.motors_message_handler import (
+    PortableDropbotMotorsMessageHandler,
+)
+from .message_handlers.pmt_message_handler import (
+    PortableDropbotPmtMessageHandler,
+)
+from .message_handlers.power_system_message_handler import (
     PortableDropbotPowerSystemMessageHandler,
 )
-from .power_system_model import PortableDropbotPowerSystemModel
-from .power_system_view import PowerSystemView
-from .temp_lighting_controller import TempLightingController
-from .temp_lighting_message_handler import (
+from .message_handlers.temp_lighting_message_handler import (
     PortableDropbotTempLightingMessageHandler,
 )
-from .temp_lighting_model import PortableDropbotTempLightingModel
-from .temp_lighting_view import TempLightingView
-from .view import UnifiedView
+from .models.calibration_model import PortableDropbotCalibrationModel
+from .models.model import PortableDropbotStatusAndControlsModel
+from .models.motor_params_model import PortableDropbotMotorParamsModel
+from .models.motors_model import PortableDropbotMotorsModel
+from .models.pmt_model import PortableDropbotPmtModel
+from .models.power_system_model import PortableDropbotPowerSystemModel
+from .models.temp_lighting_model import PortableDropbotTempLightingModel
+from .views.calibration_view import CalibrationView
+from .views.motor_params_view import MotorParamsView
+from .views.motors_view import MotorsView
+from .views.pmt_view import PmtView
+from .views.power_system_view import PowerSystemView
+from .views.temp_lighting_view import TempLightingView
+from .views.view import UnifiedView
 
 
 class PortableDropbotStatusAndControls(RealtimeModeIconMixin,
@@ -61,7 +69,7 @@ class PortableDropbotStatusAndControls(RealtimeModeIconMixin,
         return PortableDropbotStatusAndControlsModel()
 
     def _create_controller(self):
-        return ControlsController(self.model)
+        return PortableDropbotStatusAndControlsController(self.model)
 
     def _create_message_handler(self):
         return PortableDropbotStatusAndControlsMessageHandler(

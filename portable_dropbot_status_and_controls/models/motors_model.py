@@ -3,7 +3,7 @@ from traits.api import Button, Enum, Int, Range, Str
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import (
+from ..consts import (
     MOTOR_MACRO_LABELS, MOTOR_SPEED_UM_PER_S_BOUNDS,
     MOVE_DISTANCE_MM_BOUNDS, PORTABLE_DROPBOT_IMAGE,
 )

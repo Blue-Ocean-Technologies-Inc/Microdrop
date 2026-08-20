@@ -11,11 +11,11 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
     name = f"{PKG_name} Plugin"
 
     def _get_dock_pane_class(self):
-        from .dock_pane import PortableDropbotStatusAndControls
+        from .dock_panes import PortableDropbotStatusAndControls
         return PortableDropbotStatusAndControls
 
     def _get_extra_dock_pane_classes(self):
-        from .dock_pane import (
+        from .dock_panes import (
             PortableDropbotCalibrationDockPane,
             PortableDropbotMotorParamsDockPane,
             PortableDropbotMotorsDockPane,

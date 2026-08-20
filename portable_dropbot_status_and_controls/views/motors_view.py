@@ -7,7 +7,7 @@ from traitsui.api import (
 
 from microdrop_utils.traitsui_qt_helpers import DoubleSpinBoxEditor
 
-from .consts import MOVE_DISTANCE_MM_BOUNDS
+from ..consts import MOVE_DISTANCE_MM_BOUNDS
 
 #: Touch-friendly mm spin box (the vendor UI's 3-decimal distance
 #: spin), stepping a whole mm per tap.

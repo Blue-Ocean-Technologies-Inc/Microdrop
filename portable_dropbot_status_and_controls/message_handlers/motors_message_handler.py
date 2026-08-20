@@ -6,7 +6,7 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .motors_model import PortableDropbotMotorsModel
+from ..models.motors_model import PortableDropbotMotorsModel
 
 
 class PortableDropbotMotorsMessageHandler(BaseMessageHandler):

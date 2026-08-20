@@ -6,7 +6,7 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .pmt_model import PortableDropbotPmtModel
+from ..models.pmt_model import PortableDropbotPmtModel
 
 
 class PortableDropbotPmtMessageHandler(BaseMessageHandler):

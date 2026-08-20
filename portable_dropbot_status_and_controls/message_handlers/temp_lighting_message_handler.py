@@ -10,8 +10,8 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .consts import RGY_STATE_NAMES
-from .temp_lighting_model import PortableDropbotTempLightingModel
+from ..consts import RGY_STATE_NAMES
+from ..models.temp_lighting_model import PortableDropbotTempLightingModel
 
 
 class PortableDropbotTempLightingMessageHandler(BaseMessageHandler):

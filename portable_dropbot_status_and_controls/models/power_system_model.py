@@ -3,7 +3,7 @@ from traits.api import Bool
 from microdrop_application.menus import is_advanced_mode
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import PORTABLE_DROPBOT_IMAGE
+from ..consts import PORTABLE_DROPBOT_IMAGE
 
 
 class PortableDropbotPowerSystemModel(BaseStatusModel):

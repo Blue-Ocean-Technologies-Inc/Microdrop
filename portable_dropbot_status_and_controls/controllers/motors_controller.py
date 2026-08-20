@@ -17,7 +17,7 @@ from portable_dropbot_controller.consts import (
     SET_FILTER,
 )
 
-from .consts import MM_TO_FIRMWARE_UNITS, MOTOR_MACRO_LABELS
+from ..consts import MM_TO_FIRMWARE_UNITS, MOTOR_MACRO_LABELS
 
 logger = get_logger(__name__)
 

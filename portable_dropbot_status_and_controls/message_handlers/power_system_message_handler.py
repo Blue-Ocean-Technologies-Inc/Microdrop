@@ -4,7 +4,7 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .power_system_model import PortableDropbotPowerSystemModel
+from ..models.power_system_model import PortableDropbotPowerSystemModel
 
 
 class PortableDropbotPowerSystemMessageHandler(BaseMessageHandler):

@@ -5,7 +5,7 @@ from portable_dropbot_controller.consts import (
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .consts import PORTABLE_DROPBOT_IMAGE
+from ..consts import PORTABLE_DROPBOT_IMAGE
 
 
 class PortableDropbotPmtModel(BaseStatusModel):

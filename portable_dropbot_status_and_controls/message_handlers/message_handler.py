@@ -7,8 +7,8 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from .consts import RGY_STATE_NAMES
-from .model import PortableDropbotStatusAndControlsModel
+from ..consts import RGY_STATE_NAMES
+from ..models.model import PortableDropbotStatusAndControlsModel
 
 logger = get_logger(__name__)
 

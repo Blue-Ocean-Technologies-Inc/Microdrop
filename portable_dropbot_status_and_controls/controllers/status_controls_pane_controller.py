@@ -15,7 +15,7 @@ from template_status_and_controls.base_controller import (
 logger = get_logger(__name__)
 
 
-class ControlsController(BaseStatusController):
+class PortableDropbotStatusAndControlsController(BaseStatusController):
     """Portable Dropbot controls controller: voltage and frequency
     edits publish to the portable backend (queued while realtime mode
     is off, exactly as the DropBot pane does)."""
