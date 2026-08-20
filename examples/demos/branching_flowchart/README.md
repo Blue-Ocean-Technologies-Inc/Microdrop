@@ -80,9 +80,10 @@ python -m examples.demos.branching_flowchart --smoke
    releasing mints a pre-routed step. The blue done-port routes step
    completion the same way. Edges snap to the node under the cursor
    (cyan glow) and wrap around boxes that sit in the way.
-4. **"Operator inspect" has no placed shape** — it still prompts, using
-   the provider defaults. Ticking *"Don't ask again this run"* in a
-   prompt mints/updates the shape with the auto answer.
+4. **Unplaced decisions still prompt** with provider defaults — tick
+   *Operator check* on any step without a placed shape to see it.
+   Ticking *"Don't ask again this run"* in a prompt mints/updates the
+   shape with the auto answer.
 4b. **Watch the run on the canvas, not just the log.** The edge the
    executor follows flashes bright and the last few stay warm (a
    decaying trail); the active step glows blue with the previous ones
