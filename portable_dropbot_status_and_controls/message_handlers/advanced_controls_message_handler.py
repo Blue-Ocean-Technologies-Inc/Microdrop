@@ -6,15 +6,17 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from ..models.motor_params_model import PortableDropbotMotorParamsModel
+from ..models.advanced_controls_model import (
+    PortableDropbotAdvancedControlsModel,
+)
 
 
-class PortableDropbotMotorParamsMessageHandler(BaseMessageHandler):
+class PortableDropbotAdvancedControlsMessageHandler(BaseMessageHandler):
     """Connection greying (inherited), the Advanced Mode toggle that
     unlocks the pane, and the MOTOR_PARAMS_UPDATED stream: read-back
     field values and write/preset/reboot outcomes."""
 
-    model = Instance(PortableDropbotMotorParamsModel)
+    model = Instance(PortableDropbotAdvancedControlsModel)
 
     def _on_advanced_mode_change_triggered(self, body):
         self.model.advanced_mode = str(body).lower() == "true"

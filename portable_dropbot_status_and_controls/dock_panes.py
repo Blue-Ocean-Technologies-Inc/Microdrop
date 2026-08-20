@@ -5,53 +5,44 @@ from template_status_and_controls.realtime_mode_icon_mixin import (
 )
 
 from .consts import (
-    CALIBRATION_LISTENER, MOTOR_PARAMS_LISTENER, MOTORS_LISTENER,
-    PKG, PKG_name, PMT_LISTENER, POWER_SYSTEM_LISTENER,
-    TEMP_LIGHTING_LISTENER,
+    ADVANCED_CONTROLS_LISTENER, CALIBRATION_LISTENER,
+    MORE_CONTROLS_LISTENER, MOTORS_LISTENER, PKG, PKG_name,
+)
+from .controllers.advanced_controls_controller import (
+    AdvancedControlsController,
 )
 from .controllers.calibration_controller import CalibrationController
+from .controllers.more_controls_controller import MoreControlsController
+from .controllers.motors_controller import MotorsController
 from .controllers.status_controls_pane_controller import (
     PortableDropbotStatusAndControlsController,
 )
-from .controllers.motor_params_controller import MotorParamsController
-from .controllers.motors_controller import MotorsController
-from .controllers.pmt_controller import PmtController
-from .controllers.power_system_controller import PowerSystemController
-from .controllers.temp_lighting_controller import TempLightingController
+from .message_handlers.advanced_controls_message_handler import (
+    PortableDropbotAdvancedControlsMessageHandler,
+)
 from .message_handlers.calibration_message_handler import (
     PortableDropbotCalibrationMessageHandler,
 )
 from .message_handlers.message_handler import (
     PortableDropbotStatusAndControlsMessageHandler,
 )
-from .message_handlers.motor_params_message_handler import (
-    PortableDropbotMotorParamsMessageHandler,
+from .message_handlers.more_controls_message_handler import (
+    PortableDropbotMoreControlsMessageHandler,
 )
 from .message_handlers.motors_message_handler import (
     PortableDropbotMotorsMessageHandler,
 )
-from .message_handlers.pmt_message_handler import (
-    PortableDropbotPmtMessageHandler,
-)
-from .message_handlers.power_system_message_handler import (
-    PortableDropbotPowerSystemMessageHandler,
-)
-from .message_handlers.temp_lighting_message_handler import (
-    PortableDropbotTempLightingMessageHandler,
+from .models.advanced_controls_model import (
+    PortableDropbotAdvancedControlsModel,
 )
 from .models.calibration_model import PortableDropbotCalibrationModel
 from .models.model import PortableDropbotStatusAndControlsModel
-from .models.motor_params_model import PortableDropbotMotorParamsModel
+from .models.more_controls_model import PortableDropbotMoreControlsModel
 from .models.motors_model import PortableDropbotMotorsModel
-from .models.pmt_model import PortableDropbotPmtModel
-from .models.power_system_model import PortableDropbotPowerSystemModel
-from .models.temp_lighting_model import PortableDropbotTempLightingModel
+from .views.advanced_controls_view import AdvancedControlsView
 from .views.calibration_view import CalibrationView
-from .views.motor_params_view import MotorParamsView
+from .views.more_controls_view import MoreControlsView
 from .views.motors_view import MotorsView
-from .views.pmt_view import PmtView
-from .views.power_system_view import PowerSystemView
-from .views.temp_lighting_view import TempLightingView
 from .views.view import UnifiedView
 
 
@@ -133,88 +124,49 @@ class PortableDropbotCalibrationDockPane(PortableDropbotSecondaryDockPane):
         )
 
 
-class PortableDropbotTempLightingDockPane(PortableDropbotSecondaryDockPane):
-    """Dock pane for per-channel heater control (with PID tuning) and
-    the vendor's raw lighting controls."""
+class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
+    """Dock pane for everything beyond the everyday status-pane
+    controls, one collapsible group per subsystem: per-channel heater
+    control (with PID tuning), the vendor's raw lighting controls,
+    and the PMT (power, gain, acquire)."""
 
-    id = PKG + ".temp_lighting_dock_pane"
-    name = "Portable Dropbot Temp & Lighting"
+    id = PKG + ".more_controls_dock_pane"
+    name = "More Portable Dropbot Controls"
 
-    view = TempLightingView
+    view = MoreControlsView
 
     def _create_model(self):
-        return PortableDropbotTempLightingModel()
+        return PortableDropbotMoreControlsModel()
 
     def _create_controller(self):
-        return TempLightingController(self.model)
+        return MoreControlsController(self.model)
 
     def _create_message_handler(self):
-        return PortableDropbotTempLightingMessageHandler(
+        return PortableDropbotMoreControlsMessageHandler(
             model=self.model,
-            name=TEMP_LIGHTING_LISTENER,
+            name=MORE_CONTROLS_LISTENER,
         )
 
 
-class PortableDropbotPmtDockPane(PortableDropbotSecondaryDockPane):
-    """Dock pane for the PMT: power, gain, and the acquire macro."""
+class PortableDropbotAdvancedControlsDockPane(
+        PortableDropbotSecondaryDockPane):
+    """Dock pane for the advanced-mode-locked controls: the
+    power-system buzzer and per-motor mechanical param tuning (read /
+    RAM write / flash preset / reboot)."""
 
-    id = PKG + ".pmt_dock_pane"
-    name = "Portable Dropbot PMT"
+    id = PKG + ".advanced_controls_dock_pane"
+    name = "Advanced Portable Dropbot Controls"
 
-    view = PmtView
-
-    def _create_model(self):
-        return PortableDropbotPmtModel()
-
-    def _create_controller(self):
-        return PmtController(self.model)
-
-    def _create_message_handler(self):
-        return PortableDropbotPmtMessageHandler(
-            model=self.model,
-            name=PMT_LISTENER,
-        )
-
-
-class PortableDropbotPowerSystemDockPane(PortableDropbotSecondaryDockPane):
-    """Dock pane for fan and buzzer control; unlocked only in
-    Advanced Mode."""
-
-    id = PKG + ".power_system_dock_pane"
-    name = "Portable Dropbot Power System"
-
-    view = PowerSystemView
+    view = AdvancedControlsView
 
     def _create_model(self):
-        return PortableDropbotPowerSystemModel()
+        return PortableDropbotAdvancedControlsModel()
 
     def _create_controller(self):
-        return PowerSystemController(self.model)
+        return AdvancedControlsController(self.model)
 
     def _create_message_handler(self):
-        return PortableDropbotPowerSystemMessageHandler(
+        return PortableDropbotAdvancedControlsMessageHandler(
             model=self.model,
-            name=POWER_SYSTEM_LISTENER,
-        )
-
-
-class PortableDropbotMotorParamsDockPane(PortableDropbotSecondaryDockPane):
-    """Dock pane for per-motor mechanical param tuning (read / RAM
-    write / flash preset / reboot); unlocked only in Advanced Mode."""
-
-    id = PKG + ".motor_params_dock_pane"
-    name = "Portable Dropbot Motor Params"
-
-    view = MotorParamsView
-
-    def _create_model(self):
-        return PortableDropbotMotorParamsModel()
-
-    def _create_controller(self):
-        return MotorParamsController(self.model)
-
-    def _create_message_handler(self):
-        return PortableDropbotMotorParamsMessageHandler(
-            model=self.model,
-            name=MOTOR_PARAMS_LISTENER,
+            name=ADVANCED_CONTROLS_LISTENER,
         )

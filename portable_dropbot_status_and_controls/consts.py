@@ -26,10 +26,8 @@ PORTABLE_DROPBOT_IMAGE = os.path.join(current_folder_path, "images",
 #: independently.
 MOTORS_LISTENER = f"{PKG}_motors_listener"
 CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
-TEMP_LIGHTING_LISTENER = f"{PKG}_temp_lighting_listener"
-PMT_LISTENER = f"{PKG}_pmt_listener"
-POWER_SYSTEM_LISTENER = f"{PKG}_power_system_listener"
-MOTOR_PARAMS_LISTENER = f"{PKG}_motor_params_listener"
+MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
+ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -51,27 +49,15 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         CALIBRATION_UPDATED,
     ],
-    TEMP_LIGHTING_LISTENER: [
+    MORE_CONTROLS_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
         TEMP_UPDATED,
-        #: Seeds the lighting controls from the board's reported
-        #: state on the first snapshot after a connect.
-        STATUS_UPDATED,
-    ],
-    PMT_LISTENER: [
-        PORTABLE_DROPBOT_CONNECTED,
-        PORTABLE_DROPBOT_DISCONNECTED,
         PMT_UPDATED,
     ],
-    #: The advanced-only panes also track the Edit-menu Advanced Mode
-    #: toggle, which is what unlocks their controls.
-    POWER_SYSTEM_LISTENER: [
-        PORTABLE_DROPBOT_CONNECTED,
-        PORTABLE_DROPBOT_DISCONNECTED,
-        ADVANCED_MODE_CHANGE,
-    ],
-    MOTOR_PARAMS_LISTENER: [
+    #: The advanced-only pane also tracks the Edit-menu Advanced Mode
+    #: toggle, which is what unlocks its controls.
+    ADVANCED_CONTROLS_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
         MOTOR_PARAMS_UPDATED,
@@ -90,10 +76,6 @@ MOVE_DISTANCE_MM_BOUNDS = (-1000.0, 1000.0)
 #: Runtime run-speed bounds (µm/s): the driver measured ~40 mm/s as
 #: the clean ceiling (42 mm/s stalls); the vendor UI defaults to 1000.
 MOTOR_SPEED_UM_PER_S_BOUNDS = (0, 40_000)
-
-#: The signal board's rgy_state status field, decoded as the vendor
-#: UI does.
-RGY_STATE_NAMES = {0: "off", 1: "red", 2: "green", 3: "yellow"}
 
 #: Macro-button labels per target motor for the motor panel, in the
 #: original portable pane's dynamic-button style: the buttons relabel

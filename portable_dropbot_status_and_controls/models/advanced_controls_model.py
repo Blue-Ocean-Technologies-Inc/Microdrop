@@ -7,12 +7,13 @@ from template_status_and_controls.base_model import BaseStatusModel
 from ..consts import PORTABLE_DROPBOT_IMAGE
 
 
-class PortableDropbotMotorParamsModel(BaseStatusModel):
-    """Qt-free state for the motor-params pane: one motor's mechanical
-    tuning struct (MOTOR_PARAM_FIELDS wire order), read from the board
-    into the field traits below, written back to RAM, presetted to
-    flash, and made effective by a motor-board reboot. Unlocked only
-    in Advanced Mode."""
+class PortableDropbotAdvancedControlsModel(BaseStatusModel):
+    """Qt-free state for the Advanced Controls pane: the power-system
+    buzzer plus one motor's mechanical tuning struct
+    (MOTOR_PARAM_FIELDS wire order), read from the board into the
+    field traits below, written back to RAM, presetted to flash, and
+    made effective by a motor-board reboot. Unlocked only in Advanced
+    Mode."""
 
     DEFAULT_ICON_PATH = PORTABLE_DROPBOT_IMAGE
 
@@ -23,6 +24,13 @@ class PortableDropbotMotorParamsModel(BaseStatusModel):
     def _advanced_mode_default(self):
         return is_advanced_mode()
 
+    # ---- Power system ------------------------------------------------
+    #: Requested buzzer state, not read back from the device — the
+    #: toggle shows what was last asked for. (The MCU fan toggle lives
+    #: in the main status pane's mechanism quick controls.)
+    buzzer_state = Bool()
+
+    # ---- Motor params ------------------------------------------------
     selected_motor = Enum(*MOTOR_IDS)
 
     # ---- The param struct fields, named exactly as on the wire ------

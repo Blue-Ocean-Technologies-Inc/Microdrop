@@ -9,16 +9,28 @@ from microdrop_application.dialogs.pyface_wrapper import confirm
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
     MOTOR_PARAMS_PRESET, MOTOR_PARAMS_READ, MOTOR_PARAMS_WRITE,
-    REBOOT_MOTOR_BOARD,
+    REBOOT_MOTOR_BOARD, SET_BUZZER,
 )
 
 logger = get_logger(__name__)
 
 
-class MotorParamsController(Controller):
-    """Buttons -> request topics. Flash persistence and the reboot are
-    behind confirms — both outlive the session."""
+class AdvancedControlsController(Controller):
+    """Toggles and buttons -> request topics. Flash persistence and
+    the reboot are behind confirms — both outlive the session."""
 
+    # ------------------------------------------------------------------ #
+    # Power system                                                          #
+    # ------------------------------------------------------------------ #
+    @observe("model:buzzer_state")
+    def _buzzer_state_change(self, event):
+        publish_message(topic=SET_BUZZER, message=str(event.new))
+        logger.debug(f"Buzzer state change to {event.new} requested: "
+                     f"published to {SET_BUZZER}")
+
+    # ------------------------------------------------------------------ #
+    # Motor params                                                          #
+    # ------------------------------------------------------------------ #
     @observe("model:selected_motor")
     def _on_motor_changed(self, event):
         # The fields on screen belong to the previous motor now:

@@ -1,12 +1,24 @@
-"""The motor-params pane: per-motor mechanical tuning, unlocked only
-in Advanced Mode (Edit menu). Workflow: Read → edit → Write (RAM
-only) → Preset to Flash → Reboot Motor Board to make flashed params
-take effect (then Home All from the motor panel)."""
+"""The Advanced Controls pane, unlocked only in Advanced Mode (Edit
+menu): the power-system buzzer, and per-motor mechanical tuning.
+Params workflow: Read → edit → Write (RAM only) → Preset to Flash →
+Reboot Motor Board to make flashed params take effect (then Home All
+from the motor panel)."""
 from traitsui.api import HGroup, Item, Label, UItem, VGrid, VGroup, View
 
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
+
 locked_hint = VGroup(
-    Label("Enable Advanced Mode (Edit menu) to edit motor params."),
+    Label("Enable Advanced Mode (Edit menu) to use the advanced "
+          "controls."),
     visible_when="not advanced_mode",
+)
+
+buzzer = HGroup(
+    UItem("buzzer_state",
+          editor=InPlaceToggleEditor(on_label="Buzzer On",
+                                     off_label="Buzzer Off")),
+    label="Buzzer",
+    show_border=True,
 )
 
 #: Plain text fields on purpose: these are expert tuning values with
@@ -26,7 +38,7 @@ fields = VGrid(
     enabled_when="params_loaded",
 )
 
-controls = VGroup(
+motor_params = VGroup(
     HGroup(
         Item("selected_motor", label="Motor"),
         UItem("read_button"),
@@ -39,11 +51,18 @@ controls = VGroup(
     Label("Write is RAM-only; Preset persists to flash; the board "
           "runs flashed params after a reboot. The pads lose homing "
           "across a reboot — Home All from the motor panel after."),
+    label="Motor Params",
+    show_border=True,
+)
+
+controls = VGroup(
+    buzzer,
+    motor_params,
     visible_when="advanced_mode",
     enabled_when="connected",
 )
 
-MotorParamsView = View(
+AdvancedControlsView = View(
     VGroup(locked_hint, controls),
     resizable=True,
     scrollable=True,
