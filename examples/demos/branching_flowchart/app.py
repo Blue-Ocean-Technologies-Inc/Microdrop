@@ -13,20 +13,23 @@ release only if something actually moved.
 
 import json
 
-from PySide6.QtCore import QPoint, Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
+from PySide6.QtGui import (
+    QAction, QBrush, QColor, QFont, QImage, QKeySequence, QPainter, QPen,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QMainWindow, QMenu, QPlainTextEdit, QPushButton,
-    QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QToolBar,
+    QSpinBox, QSplitter, QToolBar, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
 
 from .canvas import (
-    DEC_W, FLOW_COLOR, KIND_COLORS, NODE_W, OP_COLORS, SPINE_COLOR,
-    TETHER_COLOR, DecisionShapeItem, EdgeItem, FlowchartScene,
-    FlowchartView, GroupFrameItem, OpNodeItem, StepNodeItem,
-    TerminalNodeItem,
+    BG_COLOR, DEC_W, FLOW_COLOR, KIND_COLORS, NODE_W, OP_COLORS,
+    SPINE_COLOR, TETHER_COLOR, DecisionShapeItem, EdgeItem,
+    FlowchartScene, FlowchartView, GroupFrameItem, OpNodeItem,
+    StepNodeItem, TerminalNodeItem,
 )
 from .columns import make_demo_columns
 from .executor import DemoExecutor
@@ -59,9 +62,10 @@ class DecisionDialog(QDialog):
             layout.addWidget(m)
 
         buttons = QHBoxLayout()
-        for idx, (outcome, target, desc) in enumerate(pending.options):
+        for idx, (outcome, target, desc, label) in enumerate(
+                pending.options):
             color = KIND_COLORS.get(outcome.kind).name()
-            btn = QPushButton(f"{outcome.label}  [{idx + 1}]\n→ {desc}")
+            btn = QPushButton(f"{label}  [{idx + 1}]\n→ {desc}")
             btn.setShortcut(QKeySequence(str(idx + 1)))
             btn.setStyleSheet(
                 f"QPushButton {{ background: {color}; color: #111827; "
@@ -83,7 +87,10 @@ class DecisionDialog(QDialog):
             dn = pending.decision_node
             self._auto_id = ((dn.auto_outcome if dn else None)
                              or pending.spec.default_outcome)
-            auto_label = pending.spec.outcome_by_id(self._auto_id).label
+            auto_label = next(
+                (label for outcome, _t, _d, label in pending.options
+                 if outcome.id == self._auto_id),
+                pending.spec.outcome_by_id(self._auto_id).label)
             self._countdown = countdown_s
             self._cd_label = QLabel()
             self._cd_label.setStyleSheet("color: #f59e0b;")
@@ -197,9 +204,21 @@ class MainWindow(QMainWindow):
         self.scene.selectionChanged.connect(self._on_scene_selection)
         self._recent_steps = []
 
-        self.table = QTableWidget()
+        # The parameter grid mirrors the protocol TREE: groups are parent
+        # rows (with their Reps editable), steps are children — same
+        # structure as the real protocol tree. Expanding/collapsing a
+        # group here collapses its frame on the canvas and vice versa.
+        self.table = QTreeWidget()
+        self.table.setIndentation(16)
+        self.table.setUniformRowHeights(True)
         self.table.itemChanged.connect(self._on_table_edit)
         self.table.itemSelectionChanged.connect(self._on_table_selection)
+        self.table.itemExpanded.connect(
+            lambda it: self._on_tree_toggled(it, False))
+        self.table.itemCollapsed.connect(
+            lambda it: self._on_tree_toggled(it, True))
+        self._tree_items = {}
+        self._running_row_id = None
         self._updating_table = False
         self._syncing_selection = False
 
@@ -348,6 +367,10 @@ class MainWindow(QMainWindow):
         add = QAction("＋ Add step", self)
         add.triggered.connect(lambda _=False: self._on_add_step())
         tb.addAction(add)
+        dup = QAction("⧉ Duplicate", self)
+        dup.setShortcut(QKeySequence("Ctrl+D"))
+        dup.triggered.connect(lambda _=False: self.duplicate_selected())
+        tb.addAction(dup)
         delete = QAction("🗑 Delete", self)
         delete.setShortcut(QKeySequence.Delete)
         delete.triggered.connect(lambda _=False: self.delete_selected())
@@ -383,6 +406,10 @@ class MainWindow(QMainWindow):
         load = QAction("Load…", self)
         load.triggered.connect(lambda _=False: self._on_load())
         tb.addAction(load)
+        export = QAction("📷 Export…", self)
+        export.setToolTip("Export the flowchart as a PNG image")
+        export.triggered.connect(lambda _=False: self._on_export())
+        tb.addAction(export)
 
     def _place_legend(self):
         if not self.legend.isVisible():
@@ -406,6 +433,7 @@ class MainWindow(QMainWindow):
             "Droplet detect",
             {"voltage": 0.0, "duration_s": 0.4, "detect_fail": 35})
         mix_l = p.add_step("Mix left", {"voltage": 120.0, "duration_s": 0.6})
+        mix_l.repetitions = 2      # per-STEP repeats, editable in the table
         mix_r = p.add_step("Mix right", {"voltage": 120.0, "duration_s": 0.6})
         p.add_step("Operator inspect",
                    {"voltage": 0.0, "duration_s": 0.3, "op_check": True})
@@ -671,11 +699,42 @@ class MainWindow(QMainWindow):
 
     def edge_menu(self, edge, screen_pos):
         menu = QMenu(self)
+        # Outcome-carrying edges can rename their button/edge label.
+        if edge.payload[0] == "outcome":
+            menu.addAction(
+                "Rename button label…",
+                lambda: self.edit_outcome_label(edge.payload[1],
+                                                edge.payload[2]))
+        elif edge.payload[0] == "feed":
+            menu.addAction(
+                "Rename button label…",
+                lambda: self.edit_outcome_label(edge.payload[2],
+                                                edge.payload[3]))
         menu.addAction(
             "Delete route",
             lambda: (self.push_undo(), self._reset_edge(edge),
                      self.rebuild()))
         menu.exec(screen_pos)
+
+    def edit_outcome_label(self, dn_id, outcome_id):
+        dn = self.protocol.decision_node_by_id(dn_id)
+        spec = self.protocol.spec_by_id(dn.decision_id) if dn else None
+        if dn is None or spec is None:
+            return
+        outcome = spec.outcome_by_id(outcome_id)
+        text, ok = QInputDialog.getText(
+            self, "Button label",
+            f"Custom label for {outcome.label!r}\n"
+            f"(shown on the prompt button and the edge; empty resets):",
+            text=dn.labels.get(outcome_id, ""))
+        if not ok:
+            return
+        self.push_undo()
+        if text.strip():
+            dn.labels[outcome_id] = text.strip()
+        else:
+            dn.labels.pop(outcome_id, None)
+        self.rebuild()
 
     def rename_row(self, row_id):
         row = self.protocol.row_by_id(row_id)
@@ -706,6 +765,10 @@ class MainWindow(QMainWindow):
             menu.addAction(
                 "Add shape…",
                 lambda: self.open_shape_palette(row_id, screen_pos, None))
+            menu.addAction("Duplicate",
+                           lambda: self._duplicate_one(row))
+            menu.addAction("Repetitions…",
+                           lambda: self._ask_group_reps(row))
         else:
             menu.addAction("Expand" if row.collapsed else "Collapse",
                            lambda: self.toggle_group_collapse(row_id))
@@ -719,12 +782,24 @@ class MainWindow(QMainWindow):
         menu.addAction("Delete", lambda: self.delete_row(row_id))
         menu.exec(screen_pos)
 
+    def _duplicate_one(self, row):
+        if self.executor.is_running():
+            self.statusBar().showMessage(
+                "Can't duplicate while the protocol is running.", 5000)
+            return
+        self.push_undo()
+        self._duplicate_step(row)
+        self.rebuild()
+
     def _ask_group_reps(self, row):
+        if row.is_group:
+            caption = ("Passes scheduled by a formal group entry\n"
+                       "(fall-through or a route to the group node):")
+        else:
+            caption = ("Times this step runs in place on fall-through\n"
+                       "(explicit routes override):")
         n, ok = QInputDialog.getInt(
-            self, "Group repetitions",
-            "Passes scheduled by a formal group entry\n"
-            "(fall-through or a route to the group node):",
-            row.repetitions, 1, 99)
+            self, "Repetitions", caption, row.repetitions, 1, 99)
         if ok and n != row.repetitions:
             self.push_undo()
             row.repetitions = n
@@ -756,6 +831,14 @@ class MainWindow(QMainWindow):
         a4.triggered.connect(
             lambda _=False: self._pick_auto_outcome(dn, "auto", None))
         menu.addSeparator()
+        spec = self.protocol.spec_by_id(dn.decision_id)
+        if spec is not None:
+            labels = menu.addMenu("Button labels")
+            for outcome in spec.outcomes:
+                labels.addAction(
+                    f"{dn.label_for(outcome)}…",
+                    lambda oid=outcome.id: self.edit_outcome_label(
+                        dn_id, oid))
         menu.addAction(
             "Delete shape",
             lambda: (self.push_undo(),
@@ -910,6 +993,82 @@ class MainWindow(QMainWindow):
             step.pos = (prev.pos[0], prev.pos[1] + 90)
         self.rebuild()
 
+    def add_step_at(self, pos):
+        """Double-click on blank canvas: add a step right there (appended
+        at the end of the sequence)."""
+        if self.executor.is_running():
+            self.statusBar().showMessage(
+                "Can't add steps while the protocol is running.", 5000)
+            return
+        self.push_undo()
+        leaves = self.protocol.leaves()
+        step = self.protocol.add_step(
+            f"Step {len(leaves) + 1}",
+            after_id=leaves[-1].id if leaves else None)
+        step.pos = pos
+        self.rebuild()
+
+    def duplicate_selected(self):
+        if self.executor.is_running():
+            self.statusBar().showMessage(
+                "Can't duplicate while the protocol is running.", 5000)
+            return
+        steps = [row for rid in self.scene.selected_row_ids()
+                 for row in [self.protocol.row_by_id(rid)]
+                 if row is not None and not row.is_group]
+        if not steps:
+            self.statusBar().showMessage(
+                "Select one or more steps to duplicate "
+                "(groups can't be duplicated yet).", 5000)
+            return
+        self.push_undo()
+        for row in steps:
+            self._duplicate_step(row)
+        self.rebuild()
+
+    def _duplicate_step(self, row):
+        """Copy a step with its values, repetitions, and decision shapes
+        (routes remapped so self-loops and chains follow the copy)."""
+        proto = self.protocol
+        new = proto.add_step(f"{row.name} (copy)", dict(row.values),
+                             after_id=row.id)
+        new.repetitions = row.repetitions
+        new.pos = (row.pos[0] + 40, row.pos[1] + 56)
+        mapping = {}
+        for dn in [d for d in proto.decision_nodes
+                   if d.step_id == row.id]:
+            c = proto.add_decision_node(
+                new.id, dn.decision_id, (dn.pos[0] + 40, dn.pos[1] + 56))
+            c.mode = dn.mode
+            c.auto_after = dn.auto_after
+            c.auto_outcome = dn.auto_outcome
+            c.labels = dict(dn.labels)
+            c.routes = dict(dn.routes)
+            mapping[dn.id] = c.id
+        for new_id in mapping.values():
+            c = proto.decision_node_by_id(new_id)
+            c.routes = {k: (new.id if v == row.id else mapping.get(v, v))
+                        for k, v in c.routes.items()}
+
+    def _on_export(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export flowchart", "protocol_flowchart.png",
+            "PNG (*.png)")
+        if not path:
+            return
+        rect = self.scene.itemsBoundingRect().adjusted(-40, -40, 40, 40)
+        scale = 2  # crisp on hi-dpi screens
+        img = QImage(int(rect.width() * scale), int(rect.height() * scale),
+                     QImage.Format_ARGB32)
+        img.fill(BG_COLOR)
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        self.scene.clearSelection()
+        self.scene.render(painter, QRectF(img.rect()), rect)
+        painter.end()
+        img.save(path)
+        self.statusBar().showMessage(f"Exported {path}", 5000)
+
     def _arrange(self, orientation, rebuild=True):
         """Clean layout: rows in tree order (indented by depth), each
         step's decision shapes in a column beside/below it, AND/OR shapes
@@ -986,6 +1145,7 @@ class MainWindow(QMainWindow):
 
     def _on_terminal(self, what):
         self.scene.clear_run_states()
+        self._clear_running_row()
         self._recent_steps = []
         self.run_action.setEnabled(True)
         self.pause_action.setEnabled(False)
@@ -1004,6 +1164,7 @@ class MainWindow(QMainWindow):
         for rid in self._recent_steps[3:]:
             self.scene.set_row_state(rid, None)
         del self._recent_steps[3:]
+        self._mark_running_row(step_id)
         step = self.protocol.row_by_id(step_id)
         if step:
             self.statusBar().showMessage(
@@ -1064,68 +1225,168 @@ class MainWindow(QMainWindow):
     # table <-> model <-> canvas sync (leaves only)
     # ------------------------------------------------------------------
 
+    #: fixed columns before the contributed value columns
+    _COL_NUM, _COL_NAME, _COL_REPS = 0, 1, 2
+
     def _rebuild_table(self):
         self._updating_table = True
         try:
             cols = self.columns
-            leaves = self.protocol.leaves()
             self.table.clear()
-            self.table.setColumnCount(1 + len(cols))
-            self.table.setHorizontalHeaderLabels(
-                ["Step"] + [c.model.col_name for c in cols])
-            self.table.setRowCount(len(leaves))
-            for r, step in enumerate(leaves):
-                self.table.setItem(r, 0, QTableWidgetItem(step.name))
-                for c, col in enumerate(cols, start=1):
-                    v = col.model.get_value(step)
-                    if col.model.kind == "bool":
-                        item = QTableWidgetItem()
-                        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable
-                                      | Qt.ItemIsUserCheckable)
-                        item.setCheckState(
-                            Qt.Checked if v else Qt.Unchecked)
+            self._tree_items = {}
+            self.table.setColumnCount(3 + len(cols))
+            self.table.setHeaderLabels(
+                ["#", "Step / Group", "Reps"]
+                + [c.model.col_name for c in cols])
+            group_font = QFont()
+            group_font.setBold(True)
+
+            def build(rows, parent, prefix):
+                for idx, row in enumerate(rows, 1):
+                    number = f"{prefix}{idx}"
+                    item = QTreeWidgetItem()
+                    item.setData(0, Qt.UserRole, row.id)
+                    item.setText(self._COL_NUM, number)
+                    item.setText(self._COL_NAME, row.name)
+                    item.setText(self._COL_REPS, str(row.repetitions))
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    if row.is_group:
+                        item.setFont(self._COL_NAME, group_font)
+                        for c in range(self.table.columnCount()):
+                            item.setForeground(c, QBrush(QColor("#9db4d8")))
                     else:
-                        item = QTableWidgetItem(str(v))
-                    self.table.setItem(r, c, item)
-            self.table.resizeColumnsToContents()
+                        for c, col in enumerate(cols, start=3):
+                            v = col.model.get_value(row)
+                            if col.model.kind == "bool":
+                                item.setCheckState(
+                                    c, Qt.Checked if v else Qt.Unchecked)
+                            else:
+                                item.setText(c, str(v))
+                    if parent is None:
+                        self.table.addTopLevelItem(item)
+                    else:
+                        parent.addChild(item)
+                    self._tree_items[row.id] = item
+                    if row.is_group:
+                        build(row.children, item, number + ".")
+                        item.setExpanded(not row.collapsed)
+
+            build(self.protocol.rows, None, "")
+            for c in range(self.table.columnCount()):
+                self.table.resizeColumnToContents(c)
+            if self._running_row_id is not None:
+                self._mark_running_row(self._running_row_id)
         finally:
             self._updating_table = False
 
-    def _on_table_edit(self, item):
+    def _on_tree_toggled(self, item, collapsed):
+        """Expanding/collapsing a group row mirrors the canvas frame."""
         if self._updating_table:
             return
-        leaves = self.protocol.leaves()
-        r, c = item.row(), item.column()
-        if r >= len(leaves):
+        row = self.protocol.row_by_id(item.data(0, Qt.UserRole))
+        if row is None or not row.is_group or row.collapsed == collapsed:
             return
-        step = leaves[r]
-        self.push_undo()
-        if c == 0:
-            if item.text().strip():
-                step.name = item.text().strip()
-            self.scene.rebuild()
+        row.collapsed = collapsed
+        self.scene.rebuild()
+
+    def _on_table_edit(self, item, column):
+        if self._updating_table:
             return
-        col = self.columns[c - 1]
+        row = self.protocol.row_by_id(item.data(0, Qt.UserRole))
+        if row is None:
+            return
+
+        def revert():
+            self._updating_table = True
+            self._rebuild_table()
+            self._updating_table = False
+
+        if column == self._COL_NUM:
+            revert()                      # numbering is derived
+            return
+        if column == self._COL_NAME:
+            name = item.text(column).strip()
+            if name and name != row.name:
+                self.push_undo()
+                row.name = name
+                self.rebuild()
+            else:
+                revert()
+            return
+        if column == self._COL_REPS:
+            try:
+                n = max(1, int(float(item.text(column))))
+            except ValueError:
+                revert()
+                return
+            if n != row.repetitions:
+                self.push_undo()
+                row.repetitions = n
+                self.rebuild()
+            else:
+                revert()
+            return
+        # Value columns apply to steps only.
+        if row.is_group:
+            revert()
+            return
+        col = self.columns[column - 3]
         if col.model.kind == "bool":
-            col.model.set_value(step, item.checkState() == Qt.Checked)
+            new = item.checkState(column) == Qt.Checked
+            if bool(col.model.get_value(row)) == new:
+                return
+            self.push_undo()
+            col.model.set_value(row, new)
         else:
             try:
-                value = (int(float(item.text()))
+                value = (int(float(item.text(column)))
                          if col.model.kind == "int"
-                         else float(item.text()))
+                         else float(item.text(column)))
             except ValueError:
-                self._undo_stack.pop()      # nothing changed
-                self._updating_table = True
-                item.setText(str(col.model.get_value(step)))
-                self._updating_table = False
+                revert()
                 return
             value = min(max(value, col.model.minimum), col.model.maximum)
-            col.model.set_value(step, value)
+            if value == col.model.get_value(row):
+                revert()
+                return
+            self.push_undo()
+            col.model.set_value(row, value)
             self._updating_table = True
-            item.setText(str(value))
+            item.setText(column, str(value))
             self._updating_table = False
         # Values can flip a decision active/inactive — refresh shapes.
         self.scene.rebuild()
+
+    def _mark_running_row(self, row_id):
+        # setBackground emits itemChanged — shield the edit handler.
+        was = self._updating_table
+        self._updating_table = True
+        try:
+            prev = self._tree_items.get(self._running_row_id)
+            if prev is not None and self._running_row_id != row_id:
+                for c in range(self.table.columnCount()):
+                    prev.setBackground(c, QBrush())
+            self._running_row_id = row_id
+            item = self._tree_items.get(row_id)
+            if item is not None:
+                tint = QBrush(QColor(59, 130, 246, 70))
+                for c in range(self.table.columnCount()):
+                    item.setBackground(c, tint)
+                self.table.scrollToItem(item)
+        finally:
+            self._updating_table = was
+
+    def _clear_running_row(self):
+        was = self._updating_table
+        self._updating_table = True
+        try:
+            item = self._tree_items.get(self._running_row_id)
+            if item is not None:
+                for c in range(self.table.columnCount()):
+                    item.setBackground(c, QBrush())
+        finally:
+            self._updating_table = was
+        self._running_row_id = None
 
     def _on_scene_selection(self):
         if self._syncing_selection:
@@ -1133,25 +1394,19 @@ class MainWindow(QMainWindow):
         ids = self.scene.selected_row_ids()
         if not ids:
             return
-        leaves = self.protocol.leaves()
-        for i, leaf in enumerate(leaves):
-            if leaf.id == ids[0]:
-                self._syncing_selection = True
-                self.table.selectRow(i)
-                self._syncing_selection = False
-                return
+        item = self._tree_items.get(ids[0])
+        if item is not None:
+            self._syncing_selection = True
+            self.table.setCurrentItem(item)
+            self._syncing_selection = False
 
     def _on_table_selection(self):
         if self._syncing_selection:
             return
-        rows = {i.row() for i in self.table.selectedIndexes()}
-        if len(rows) != 1:
+        item = self.table.currentItem()
+        if item is None:
             return
-        leaves = self.protocol.leaves()
-        row = rows.pop()
-        if row >= len(leaves):
-            return
-        node = self.scene.display_for(leaves[row].id)
+        node = self.scene.display_for(item.data(0, Qt.UserRole))
         if node is not None:
             self._syncing_selection = True
             self.scene.clearSelection()

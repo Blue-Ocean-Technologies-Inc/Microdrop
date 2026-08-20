@@ -241,6 +241,20 @@ class _AnchoredRectItem(QGraphicsRectItem):
         if movable:
             self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+        self.setAcceptHoverEvents(True)
+
+    def _hover_eligible(self):
+        return True
+
+    def hoverEnterEvent(self, event):
+        if self._hover_eligible() and self._scene_ref is not None:
+            self._scene_ref.set_hover_item(self, True)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        if self._scene_ref is not None:
+            self._scene_ref.set_hover_item(self, False)
+        super().hoverLeaveEvent(event)
 
     def center(self):
         return self.mapToScene(self.rect().center())
@@ -362,8 +376,10 @@ class StepNodeItem(_AnchoredRectItem):
         self.setPos(*row.pos)
         self.setZValue(1)
 
-        text = QGraphicsSimpleTextItem(
-            f"{order_label} · {row.name}", self)
+        title = f"{order_label} · {row.name}"
+        if row.repetitions > 1:
+            title += f"  ×{row.repetitions}"
+        text = QGraphicsSimpleTextItem(title, self)
         text.setBrush(QBrush(NODE_TEXT))
         f = QFont()
         f.setPointSizeF(9.0)
@@ -418,6 +434,11 @@ class GroupFrameItem(_AnchoredRectItem):
         self._drag_last = None
         if self.collapsed:
             self.setPos(*row.pos)
+
+    def _hover_eligible(self):
+        # Expanded frames cover a large area — hover-lighting their
+        # edges constantly would be noise; chips behave like nodes.
+        return self.collapsed
 
     # -- text helpers ---------------------------------------------------
 
@@ -565,7 +586,7 @@ class DecisionShapeItem(_AnchoredRectItem):
         for k, outcome in enumerate(spec.outcomes):
             x = DEC_W * (k + 1) / (n + 1)
             color = KIND_COLORS.get(outcome.kind, KIND_COLORS["neutral"])
-            label_text = outcome.label
+            label_text = dnode.label_for(outcome)
             if outcome.id not in dnode.routes:
                 default = spec.default_routes.get(outcome.id, NEXT)
                 glyph = SENTINEL_GLYPHS.get(default, "↦")
@@ -590,7 +611,8 @@ class DecisionShapeItem(_AnchoredRectItem):
             origin = ("custom" if outcome.id in self.dnode.routes
                       else "default")
             self.ports[outcome.id].setToolTip(
-                f"{outcome.label} → {protocol.describe_target(target)} "
+                f"{self.dnode.label_for(outcome)} → "
+                f"{protocol.describe_target(target)} "
                 f"({origin})\nDrag to a step/group (route), an AND/OR "
                 f"shape (feed), another decision of this step (resolve "
                 f"serially), ⏹/▦ (abort/finish), or blank space "
@@ -629,6 +651,17 @@ class OpNodeItem(_AnchoredRectItem):
         self.out_port.setToolTip(
             f"Combined route: fires when {quant} connected outcome(s) are "
             f"chosen in the same round. Drag to a step/group or ⏹/▦.")
+        # Inert combiners (no inputs or no target) are called out.
+        if not opnode.inputs or opnode.target is None:
+            self._base_pen = QPen(color, 1.4, Qt.DashLine)
+            self.setPen(self._base_pen)
+            why = ("no inputs" if not opnode.inputs else "no target")
+            warn = QGraphicsSimpleTextItem(f"⚠ unwired ({why})", self)
+            warn.setBrush(QBrush(QColor("#fbbf24")))
+            wf = QFont()
+            wf.setPointSizeF(7.0)
+            warn.setFont(wf)
+            warn.setPos(0, OP_H + 3)
 
     def contextMenuEvent(self, event):
         self._scene_ref.window.op_menu(self.opnode.id, event.screenPos())
@@ -681,6 +714,7 @@ class EdgeItem(QGraphicsPathItem):
         self._color = color
         self._arrow = QPolygonF()
         self._heat = 0
+        self._hover = False
 
         width = 1.8
         style = Qt.SolidLine
@@ -707,6 +741,11 @@ class EdgeItem(QGraphicsPathItem):
     def set_heat(self, level):
         if self._heat != level:
             self._heat = level
+            self.update()
+
+    def set_hover(self, on):
+        if self._hover != on:
+            self._hover = on
             self.update()
 
     def update_path(self):
@@ -803,6 +842,9 @@ class EdgeItem(QGraphicsPathItem):
             pen.setWidthF(3.4)
         elif self._heat == 1:
             pen.setWidthF(2.6)
+        elif self._hover:
+            pen.setColor(self._color.lighter(135))
+            pen.setWidthF(pen.widthF() + 1.0)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(self.path())
@@ -1078,14 +1120,14 @@ class FlowchartScene(QGraphicsScene):
                                         KIND_COLORS["neutral"])
                 port = dec_item.ports.get(outcome.id) if dec_item else None
                 kind = "outcome"
-                label = outcome.label
+                label = dn.label_for(outcome)
                 dst = self._terminal_for(target)
                 if dst is None:
                     tdn = proto.decision_node_by_id(target)
                     if tdn is not None:
                         dst = self._display_for_decision(tdn)
                         kind = "chain"
-                        label = f"{outcome.label} → then"
+                        label = f"{label} → then"
                     else:
                         dst = disp(target)
                 if dst is None or dst is src:
@@ -1112,7 +1154,8 @@ class FlowchartScene(QGraphicsScene):
                                         KIND_COLORS["neutral"])
                 port = dec_item.ports.get(oid) if dec_item else None
                 self._add(EdgeItem(self, "feed", src, op_item, color,
-                                   label=outcome.label, src_port=port,
+                                   label=dn.label_for(outcome),
+                                   src_port=port,
                                    payload=("feed", op.id, dn_id, oid)))
             if op.target is not None:
                 dst = (self._terminal_for(op.target)
@@ -1232,6 +1275,12 @@ class FlowchartScene(QGraphicsScene):
             self._toasts.remove(t)
             if t.scene() is self:
                 self.removeItem(t)
+
+    def set_hover_item(self, item, on):
+        """Light up the edges touching a hovered node/shape."""
+        for e in self.edges:
+            if e.src_item is item or e.dst_item is item:
+                e.set_hover(on)
 
     def highlight_decision(self, dn_id, on):
         item = self.dec_items.get(dn_id)
@@ -1421,6 +1470,14 @@ class FlowchartScene(QGraphicsScene):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if not self.items(event.scenePos()):
+            self.window.add_step_at(
+                (event.scenePos().x(), event.scenePos().y()))
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def contextMenuEvent(self, event):
         if self.items(event.scenePos()):

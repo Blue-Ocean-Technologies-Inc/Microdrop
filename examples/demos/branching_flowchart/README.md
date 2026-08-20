@@ -97,9 +97,22 @@ python -m examples.demos.branching_flowchart --smoke
    ▦ finish) so unrouted behaviour is visible without hovering.
 6. **Group / ungroup:** rubber-band a contiguous run of steps and press
    Group (or right-click blank canvas).
-7. Rename (double-click), Arrange V/H, Fit, save/load the whole graph
-   (tree + shapes + routes + positions) as JSON. Parameters are edited
-   only in the table, which stays selection-synced with the canvas.
+7. **The parameter grid is the protocol TREE**, not a flat list: groups
+   are parent rows (bold, with dotted numbering — 2.1, 2.2 …) and the
+   **Reps** column is editable on both groups (passes per formal entry)
+   and steps (in-place repeats on fall-through; ×N shows on the slab).
+   Collapsing a group row in the grid collapses its frame on the canvas
+   and vice versa; the running step's row is highlighted live.
+8. **Custom button labels:** right-click an outcome edge (or a decision
+   shape → *Button labels*) to rename an answer — the prompt button, the
+   edge label, and the port all use it (e.g. rename *Retry* to
+   *Re-dispense*).
+9. Rename (double-click), duplicate steps with their shapes (Ctrl+D),
+   double-click blank canvas to add a step there, hover a node to light
+   up its connected edges, unwired AND/OR shapes call themselves out,
+   Arrange V/H, Fit, 📷 export the chart as PNG, and save/load the whole
+   graph (tree + shapes + routes + positions) as JSON. The grid stays
+   selection-synced with the canvas.
 
 ## How it maps onto the real app
 

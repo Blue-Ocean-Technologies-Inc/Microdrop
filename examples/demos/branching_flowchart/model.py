@@ -128,6 +128,9 @@ class DecisionNode:
         self.decision_id = decision_id
         self.pos = tuple(pos)
         self.routes = {}              # outcome_id -> target
+        # Optional user overrides for the outcome button/edge labels
+        # (outcome_id -> text); missing keys use the provider's label.
+        self.labels = {}
         # Prompt policy:
         #   "prompt"      — always ask (auto_after=N: ask the first N
         #                   times, then answer automatically)
@@ -140,12 +143,16 @@ class DecisionNode:
         self.auto_after: Optional[int] = None
         self.auto_outcome: Optional[str] = None   # None -> spec default
 
+    def label_for(self, outcome) -> str:
+        return self.labels.get(outcome.id, outcome.label)
+
     def to_dict(self):
         return {"id": self.id, "step_id": self.step_id,
                 "decision_id": self.decision_id, "pos": list(self.pos),
                 "routes": dict(self.routes), "mode": self.mode,
                 "auto_after": self.auto_after,
-                "auto_outcome": self.auto_outcome}
+                "auto_outcome": self.auto_outcome,
+                "labels": dict(self.labels)}
 
     @classmethod
     def from_dict(cls, d):
@@ -155,6 +162,7 @@ class DecisionNode:
         n.mode = d.get("mode", "prompt")
         n.auto_after = d.get("auto_after")
         n.auto_outcome = d.get("auto_outcome")
+        n.labels = dict(d.get("labels", {}))
         return n
 
 

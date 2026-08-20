@@ -345,11 +345,24 @@ class DemoExecutor:
                 self.stop_event.set()
                 break
 
-            # Fall-through exits honor group repeats: the innermost group
+            # Fall-through honors repetitions, innermost first: the step's
+            # own repetitions replay it in place; then the innermost group
             # being left with passes remaining replays from its first
             # leaf. Explicit routes (drawn edges) override repeats.
             fallthrough = ((verdict[0] == "jump" and verdict[2] == "next")
                            or (verdict[0] == "end" and verdict[1]))
+            if fallthrough:
+                step_reps = max(1, int(step.repetitions or 1))
+                k = passes.get(("leaf", step.id), 1)
+                if k < step_reps:
+                    passes[("leaf", step.id)] = k + 1
+                    self.signals.log.emit(
+                        f"Step {step.name!r} — repeat {k + 1}/{step_reps}")
+                    self.signals.canvas_note.emit(
+                        step.id, f"repeat {k + 1}/{step_reps}")
+                    # Replay in place: no group transition, streak kept.
+                    verdict = ("jump", i, "step", None)
+                    fallthrough = False
             if fallthrough:
                 to_ids = ({g.id for g in chains[verdict[1]]}
                           if verdict[0] == "jump" else set())
@@ -383,10 +396,11 @@ class DemoExecutor:
                        else frozenset())
             if new_i != i or reenter:
                 # Leaving the step (or restarting its group) ends the
-                # retry streak: decision counters reset so a later
-                # revisit gets fresh auto-retries before prompting.
+                # retry streak: decision counters and the step's own
+                # repeat counter reset so a later revisit starts fresh.
                 for key in [k for k in occurrences if k[0] == step.id]:
                     del occurrences[key]
+                passes.pop(("leaf", step.id), None)
                 transition(i, new_i, formal=kind in ("next", "group"),
                            reenter=reenter)
             i = new_i
@@ -572,8 +586,9 @@ class DemoExecutor:
         for outcome in spec.outcomes:
             target = routes.get(outcome.id,
                                 spec.default_routes.get(outcome.id, NEXT))
+            label = dn.label_for(outcome) if dn else outcome.label
             options.append((outcome, target,
-                            self.protocol.describe_target(target)))
+                            self.protocol.describe_target(target), label))
         pending = PendingDecision(step, spec, dn, message, options)
         self.signals.decision_pending.emit(pending)
         while not pending.answered.wait(0.1):
