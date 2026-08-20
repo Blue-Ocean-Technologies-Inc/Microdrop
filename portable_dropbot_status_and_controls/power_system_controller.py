@@ -11,33 +11,18 @@ logger = get_logger(__name__)
 
 
 class PowerSystemController(Controller):
-    """Buttons -> request topics, nothing else."""
+    """Toggles -> request topics, nothing else."""
 
-    @observe("model:buzzer_on_button")
-    def _buzzer_on(self, event):
-        publish_message(topic=SET_BUZZER, message="True")
+    @observe("model:buzzer_state")
+    def _buzzer_state_change(self, event):
+        publish_message(topic=SET_BUZZER, message=str(event.new))
+        logger.debug(f"Buzzer state change to {event.new} requested: "
+                     f"published to {SET_BUZZER}")
 
-    @observe("model:buzzer_off_button")
-    def _buzzer_off(self, event):
-        publish_message(topic=SET_BUZZER, message="False")
-
-    def _fan(self, board, on):
+    @observe("model:mcu_fan_state")
+    def _mcu_fan_state_change(self, event):
         publish_message(topic=SET_FAN,
-                        message=json.dumps({"board": board, "on": on}))
-        logger.info(f"{board} fan --> {'on' if on else 'off'}")
-
-    @observe("model:mcu_fan_on_button")
-    def _mcu_fan_on(self, event):
-        self._fan("signal", True)
-
-    @observe("model:mcu_fan_off_button")
-    def _mcu_fan_off(self, event):
-        self._fan("signal", False)
-
-    @observe("model:motor_fan_on_button")
-    def _motor_fan_on(self, event):
-        self._fan("motor", True)
-
-    @observe("model:motor_fan_off_button")
-    def _motor_fan_off(self, event):
-        self._fan("motor", False)
+                        message=json.dumps({"board": "signal",
+                                            "on": event.new}))
+        logger.debug(f"MCU fan state change to {event.new} requested: "
+                     f"published to {SET_FAN}")

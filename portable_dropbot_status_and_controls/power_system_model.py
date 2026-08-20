@@ -1,4 +1,4 @@
-from traits.api import Bool, Button
+from traits.api import Bool
 
 from microdrop_application.menus import is_advanced_mode
 from template_status_and_controls.base_model import BaseStatusModel
@@ -20,11 +20,7 @@ class PortableDropbotPowerSystemModel(BaseStatusModel):
     def _advanced_mode_default(self):
         return is_advanced_mode()
 
-    # Explicit On/Off buttons, exactly like the vendor UI — none of
-    # these states are read back, so a toggle would just be optimism.
-    buzzer_on_button = Button("Buzzer On")
-    buzzer_off_button = Button("Buzzer Off")
-    mcu_fan_on_button = Button("MCU Fan On")
-    mcu_fan_off_button = Button("MCU Fan Off")
-    motor_fan_on_button = Button("Motor Fan On")
-    motor_fan_off_button = Button("Motor Fan Off")
+    # Requested states, not read back from the device — the toggles
+    # show what was last asked for.
+    buzzer_state = Bool()
+    mcu_fan_state = Bool()
