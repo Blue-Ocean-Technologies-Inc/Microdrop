@@ -3,33 +3,43 @@
 Layout: flowchart canvas (left) | parameter table + run log (right).
 The table plays the role of today's protocol grid — it only sets step
 parameters (steps = the tree's leaves); the canvas owns the flow: step
-order, groups, placed decision shapes, AND combiners, and all routes.
+order, group frames, placed decision shapes, AND/OR combiners, terminal
+Stop/Finish nodes, and all routes.
+
+Every model mutation snapshots the protocol first (Ctrl+Z / Ctrl+Shift+Z
+undo/redo); node drags stage their snapshot on press and commit it on
+release only if something actually moved.
 """
 
 import json
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtGui import QAction, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
-    QMainWindow, QMenu, QPlainTextEdit, QPushButton, QSpinBox, QSplitter,
-    QTableWidget, QTableWidgetItem, QToolBar, QVBoxLayout,
+    QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
+    QInputDialog, QLabel, QMainWindow, QMenu, QPlainTextEdit, QPushButton,
+    QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QToolBar,
+    QVBoxLayout, QWidget,
 )
 
 from .canvas import (
-    DEC_W, KIND_COLORS, NODE_W, DecisionShapeItem, EdgeItem, FlowchartScene,
-    FlowchartView, OpNodeItem, StepNodeItem,
+    DEC_W, FLOW_COLOR, KIND_COLORS, NODE_W, OP_COLORS, SPINE_COLOR,
+    TETHER_COLOR, DecisionShapeItem, EdgeItem, FlowchartScene,
+    FlowchartView, GroupFrameItem, OpNodeItem, StepNodeItem,
+    TerminalNodeItem,
 )
 from .columns import make_demo_columns
 from .executor import DemoExecutor
-from .model import NEXT, Protocol
+from .model import ABORT, END, NEXT, Protocol
 
 
 class DecisionDialog(QDialog):
-    """The runtime prompt: question + one colored button per outcome, each
-    showing where the protocol will go, plus 'don't ask again this run'."""
+    """The runtime prompt: question + one colored button per outcome
+    (keyboard 1..n; Esc = provider default), an optional unattended
+    countdown that auto-picks the decision's auto answer, and 'don't ask
+    again this run'."""
 
-    def __init__(self, pending, parent=None):
+    def __init__(self, pending, parent=None, countdown_s=0):
         super().__init__(parent)
         self.pending = pending
         self.chosen = None
@@ -49,9 +59,10 @@ class DecisionDialog(QDialog):
             layout.addWidget(m)
 
         buttons = QHBoxLayout()
-        for outcome, target, desc in pending.options:
+        for idx, (outcome, target, desc) in enumerate(pending.options):
             color = KIND_COLORS.get(outcome.kind).name()
-            btn = QPushButton(f"{outcome.label}\n→ {desc}")
+            btn = QPushButton(f"{outcome.label}  [{idx + 1}]\n→ {desc}")
+            btn.setShortcut(QKeySequence(str(idx + 1)))
             btn.setStyleSheet(
                 f"QPushButton {{ background: {color}; color: #111827; "
                 f"font-weight: bold; padding: 8px 14px; "
@@ -66,13 +77,90 @@ class DecisionDialog(QDialog):
             "Don't ask again this run (auto-pick my answer)")
         layout.addWidget(self.remember)
 
+        self._countdown = 0
+        self._timer = None
+        if countdown_s > 0:
+            dn = pending.decision_node
+            self._auto_id = ((dn.auto_outcome if dn else None)
+                             or pending.spec.default_outcome)
+            auto_label = pending.spec.outcome_by_id(self._auto_id).label
+            self._countdown = countdown_s
+            self._cd_label = QLabel()
+            self._cd_label.setStyleSheet("color: #f59e0b;")
+            layout.addWidget(self._cd_label)
+            self._auto_label = auto_label
+            self._tick()
+            self._timer = QTimer(self)
+            self._timer.timeout.connect(self._tick)
+            self._timer.start(1000)
+
+    def _tick(self):
+        if self._countdown <= 0:
+            self._pick(self._auto_id)
+            return
+        self._cd_label.setText(
+            f"⏱ Unattended: auto-answering {self._auto_label!r} "
+            f"in {self._countdown}s")
+        self._countdown -= 1
+
     def _pick(self, outcome_id):
+        if self._timer is not None:
+            self._timer.stop()
         self.chosen = outcome_id
         self.accept()
 
     def outcome(self):
         # Esc / close = provider default, never a hang.
         return self.chosen or self.pending.spec.default_outcome
+
+
+class _LineSample(QWidget):
+    """A tiny line swatch for the legend."""
+
+    def __init__(self, color, style=Qt.SolidLine, width=2.0):
+        super().__init__()
+        self.setFixedSize(30, 12)
+        self._pen = QPen(color, width, style)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setPen(self._pen)
+        p.drawLine(2, self.height() // 2, self.width() - 2,
+                   self.height() // 2)
+        p.end()
+
+
+class LegendWidget(QFrame):
+    """Collapsible key for the canvas's visual vocabulary."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(
+            "LegendWidget { background: rgba(17, 24, 39, 235); "
+            "border: 1px solid #3b5b8a; border-radius: 6px; }"
+            "QLabel { color: #cbd5e1; font-size: 11px; }")
+        grid = QGridLayout(self)
+        grid.setContentsMargins(10, 8, 10, 8)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(4)
+        rows = [
+            (_LineSample(SPINE_COLOR, Qt.DashLine, 1.4), "table order (default)"),
+            (_LineSample(FLOW_COLOR), "completion route"),
+            (_LineSample(KIND_COLORS["positive"]),
+             "outcome route (color = answer)"),
+            (_LineSample(KIND_COLORS["negative"], Qt.DashLine),
+             "chain — resolve that decision next"),
+            (_LineSample(OP_COLORS["and"]), "AND / OR combined route"),
+            (_LineSample(TETHER_COLOR, Qt.DotLine, 1.2),
+             "decision shape ↔ its step"),
+            (None, "defaults:  ↻ retry   → next   ⏹ abort   ▦ finish"),
+            (None, "bright edge = route just taken (trail)"),
+        ]
+        for r, (sample, text) in enumerate(rows):
+            if sample is not None:
+                grid.addWidget(sample, r, 0)
+            grid.addWidget(QLabel(text), r, 1)
 
 
 class MainWindow(QMainWindow):
@@ -86,6 +174,10 @@ class MainWindow(QMainWindow):
         self.protocol = Protocol(self.columns)
         self._seed_protocol()
 
+        self._undo_stack = []
+        self._redo_stack = []
+        self._staged_move = None
+
         self.executor = DemoExecutor(self.protocol)
         s = self.executor.signals
         s.protocol_started.connect(self._on_started)
@@ -96,11 +188,14 @@ class MainWindow(QMainWindow):
         s.protocol_resumed.connect(lambda: self._sync_pause(False))
         s.step_started.connect(self._on_step_started)
         s.decision_pending.connect(self._on_decision_pending)
+        s.route_taken.connect(lambda key: self.scene.flash_route(key))
+        s.canvas_note.connect(lambda tid, txt: self.scene.toast(tid, txt))
         s.log.connect(self._append_log)
 
         self.scene = FlowchartScene(self, self.protocol)
         self.view = FlowchartView(self.scene)
         self.scene.selectionChanged.connect(self._on_scene_selection)
+        self._recent_steps = []
 
         self.table = QTableWidget()
         self.table.itemChanged.connect(self._on_table_edit)
@@ -128,14 +223,71 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._active_dialog = None
 
+        self.legend = LegendWidget(self.view)
+        self.view.on_resized = self._place_legend
+
+        QShortcut(QKeySequence.Undo, self, self.undo)
+        QShortcut(QKeySequence.Redo, self, self.redo)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self.redo)
+
         self._arrange("vertical", rebuild=False)
         self.rebuild()
         self.view.fit_all()
+        self._place_legend()
         self.statusBar().showMessage(
             "＋ on a step: add decision/AND/OR shapes · drag a port to a "
-            "node: route (onto a sibling decision: resolve serially; onto "
-            "blank space: mint a step) · drag a selection box + Group · "
-            "Ctrl+wheel: zoom · middle-drag: pan")
+            "node, group frame, or ⏹/▦ · drag the ▾ title bar to move a "
+            "group · Ctrl+Z undo · Ctrl+wheel zoom · middle-drag pan")
+
+    # ------------------------------------------------------------------
+    # undo / redo
+    # ------------------------------------------------------------------
+
+    def _snapshot(self):
+        return json.dumps(self.protocol.to_dict())
+
+    def push_undo(self, snap=None):
+        self._undo_stack.append(snap if snap is not None
+                                else self._snapshot())
+        del self._undo_stack[:-80]
+        self._redo_stack.clear()
+
+    def stage_move_undo(self):
+        self._staged_move = self._snapshot()
+
+    def commit_move_undo(self):
+        if self._staged_move is not None:
+            self.push_undo(self._staged_move)
+            self._staged_move = None
+
+    def discard_move_undo(self):
+        self._staged_move = None
+
+    def undo(self):
+        if self.executor.is_running():
+            self.statusBar().showMessage(
+                "Can't undo while the protocol is running.", 4000)
+            return
+        if not self._undo_stack:
+            self.statusBar().showMessage("Nothing to undo.", 3000)
+            return
+        self._redo_stack.append(self._snapshot())
+        self._restore(self._undo_stack.pop())
+        self.statusBar().showMessage("Undo", 2000)
+
+    def redo(self):
+        if self.executor.is_running():
+            return
+        if not self._redo_stack:
+            self.statusBar().showMessage("Nothing to redo.", 3000)
+            return
+        self._undo_stack.append(self._snapshot())
+        self._restore(self._redo_stack.pop())
+        self.statusBar().showMessage("Redo", 2000)
+
+    def _restore(self, snap):
+        self.protocol.load_dict(json.loads(snap))
+        self.rebuild()
 
     # ------------------------------------------------------------------
     # toolbar
@@ -162,11 +314,35 @@ class MainWindow(QMainWindow):
             lambda _=False: self.executor.stop())
         tb.addAction(self.stop_action)
 
-        tb.addSeparator()
         tb.addWidget(QLabel(" Repeats: "))
         self.repeats = QSpinBox()
         self.repeats.setRange(1, 99)
         tb.addWidget(self.repeats)
+
+        self.follow_action = QAction("◎ Follow", self)
+        self.follow_action.setCheckable(True)
+        self.follow_action.setChecked(True)
+        self.follow_action.setToolTip(
+            "Keep the running step centered in the view")
+        tb.addAction(self.follow_action)
+
+        tb.addWidget(QLabel(" Unattended: "))
+        self.unattended = QSpinBox()
+        self.unattended.setRange(0, 600)
+        self.unattended.setSuffix(" s")
+        self.unattended.setSpecialValueText("off")
+        self.unattended.setToolTip(
+            "When set, prompts auto-answer their default after this many "
+            "seconds — the run never stalls unattended")
+        tb.addWidget(self.unattended)
+
+        tb.addSeparator()
+        undo_a = QAction("↶ Undo", self)
+        undo_a.triggered.connect(lambda _=False: self.undo())
+        tb.addAction(undo_a)
+        redo_a = QAction("↷ Redo", self)
+        redo_a.triggered.connect(lambda _=False: self.redo())
+        tb.addAction(redo_a)
 
         tb.addSeparator()
         add = QAction("＋ Add step", self)
@@ -176,8 +352,6 @@ class MainWindow(QMainWindow):
         delete.setShortcut(QKeySequence.Delete)
         delete.triggered.connect(lambda _=False: self.delete_selected())
         tb.addAction(delete)
-
-        tb.addSeparator()
         group = QAction("▣ Group", self)
         group.triggered.connect(lambda _=False: self.group_selected())
         tb.addAction(group)
@@ -195,6 +369,12 @@ class MainWindow(QMainWindow):
         fit = QAction("⤢ Fit", self)
         fit.triggered.connect(lambda _=False: self.view.fit_all())
         tb.addAction(fit)
+        self.legend_action = QAction("🗺 Legend", self)
+        self.legend_action.setCheckable(True)
+        self.legend_action.setChecked(True)
+        self.legend_action.toggled.connect(
+            lambda on: (self.legend.setVisible(on), self._place_legend()))
+        tb.addAction(self.legend_action)
 
         tb.addSeparator()
         save = QAction("Save…", self)
@@ -203,6 +383,14 @@ class MainWindow(QMainWindow):
         load = QAction("Load…", self)
         load.triggered.connect(lambda _=False: self._on_load())
         tb.addAction(load)
+
+    def _place_legend(self):
+        if not self.legend.isVisible():
+            return
+        self.legend.adjustSize()
+        self.legend.move(
+            self.view.viewport().width() - self.legend.width() - 12,
+            self.view.viewport().height() - self.legend.height() - 12)
 
     # ------------------------------------------------------------------
     # seed protocol
@@ -242,8 +430,7 @@ class MainWindow(QMainWindow):
         # group -> Restart is routed to the GROUP NODE, so the whole
         # group formally re-enters (group-entry hooks fire, repeat budget
         # restarts). Routing it to 'Dispense droplet' instead would just
-        # re-run the steps with none of that — try rerouting the edge to
-        # feel the difference.
+        # re-run the steps with none of that.
         dn_det = p.add_decision_node(detect.id, "droplet_detect", (0, 0))
         dn_det.routes["restart"] = grp_dispense.id
 
@@ -283,41 +470,71 @@ class MainWindow(QMainWindow):
         menu.exec(screen_pos.toPoint() if hasattr(screen_pos, "toPoint")
                   else screen_pos)
 
+    def _free_shape_pos(self, step, width=DEC_W, height=60):
+        """A spot near the step that doesn't overlap existing shapes."""
+        base_x = step.pos[0] + NODE_W + 90
+        base_y = step.pos[1] - 10
+        taken = ([tuple(d.pos) for d in self.protocol.decision_nodes]
+                 + [tuple(o.pos) for o in self.protocol.op_nodes])
+        for k in range(12):
+            candidate = (base_x, base_y + k * 82)
+            if all(abs(candidate[0] - t[0]) > width * 0.6
+                   or abs(candidate[1] - t[1]) > height
+                   for t in taken):
+                return candidate
+        return (base_x + 40, base_y + 12 * 82)
+
     def _place_decision(self, step, spec):
-        k = len([d for d in self.protocol.decision_nodes
-                 if d.step_id == step.id])
-        self.protocol.add_decision_node(
-            step.id, spec.id,
-            (step.pos[0] + NODE_W + 90, step.pos[1] - 10 + k * 78))
+        self.push_undo()
+        dn = self.protocol.add_decision_node(
+            step.id, spec.id, self._free_shape_pos(step))
         self.rebuild()
+        item = self.scene.dec_items.get(dn.id)
+        if item is not None:
+            self.scene.clearSelection()
+            item.setSelected(True)
 
     def _place_op(self, step, kind="and"):
+        self.push_undo()
         self.protocol.add_op_node(
-            (step.pos[0] + NODE_W + 90 + DEC_W + 70, step.pos[1] + 40),
-            kind=kind)
+            self._free_shape_pos(step, width=80), kind=kind)
         self.rebuild()
 
     def commit_port_drop(self, port, target):
         proto = self.protocol
-        if port.role == "done" and isinstance(target, StepNodeItem):
+        # Resolve the drop target to a route target id/sentinel.
+        if isinstance(target, TerminalNodeItem):
+            target_id = ABORT if target.kind == "stop" else END
+        elif isinstance(target, GroupFrameItem):
+            target_id = target.row.id
+        elif isinstance(target, StepNodeItem):
+            target_id = target.row.id
+        else:
+            target_id = None    # DecisionShapeItem / OpNodeItem handled below
+
+        if port.role == "done":
+            if target_id is None:
+                return
             step = port.owner.row
-            step.next_target = target.row.id
+            if target_id == step.id:
+                self.statusBar().showMessage(
+                    "A step's completion route can't loop onto itself — "
+                    "use a decision outcome for retries.", 5000)
+                return
+            self.push_undo()
+            step.next_target = target_id
             self._append_log(
                 f"Routed completion of {step.name!r} → "
-                f"{proto.describe_target(target.row.id)}")
+                f"{proto.describe_target(target_id)}")
         elif port.role == "outcome":
             dn = port.owner.dnode
-            if isinstance(target, StepNodeItem):
-                dn.routes[port.outcome_id] = target.row.id
-                self._append_log(
-                    f"Routed {port.owner.spec.title} / {port.outcome_id} → "
-                    f"{proto.describe_target(target.row.id)}")
-            elif isinstance(target, DecisionShapeItem):
+            if isinstance(target, DecisionShapeItem):
                 if target.dnode.step_id != dn.step_id:
                     self.statusBar().showMessage(
                         "Decisions can only chain to another decision of "
                         "the same step.", 6000)
                     return
+                self.push_undo()
                 dn.routes[port.outcome_id] = target.dnode.id
                 self._append_log(
                     f"Chained {port.owner.spec.title} / {port.outcome_id} "
@@ -329,21 +546,34 @@ class MainWindow(QMainWindow):
                           if d is not None}
                 if owners and owners != {dn.step_id}:
                     self.statusBar().showMessage(
-                        "An AND can only combine outcomes from the same "
-                        "step's decisions.", 6000)
+                        "An operator can only combine outcomes from the "
+                        "same step's decisions.", 6000)
                     return
                 pair = (dn.id, port.outcome_id)
-                if pair not in op.inputs:
-                    op.inputs.append(pair)
+                if pair in op.inputs:
+                    return
+                self.push_undo()
+                op.inputs.append(pair)
                 self._append_log(
                     f"Fed {port.owner.spec.title} / {port.outcome_id} "
                     f"into {op.kind.upper()}")
-        elif port.role == "opout" and isinstance(target, StepNodeItem):
+            elif target_id is not None:
+                self.push_undo()
+                dn.routes[port.outcome_id] = target_id
+                self._append_log(
+                    f"Routed {port.owner.spec.title} / {port.outcome_id} "
+                    f"→ {proto.describe_target(target_id)}")
+            else:
+                return
+        elif port.role == "opout":
+            if target_id is None:
+                return
+            self.push_undo()
             op = port.owner.opnode
-            op.target = target.row.id
+            op.target = target_id
             self._append_log(
                 f"Routed {op.kind.upper()} → "
-                f"{proto.describe_target(target.row.id)}")
+                f"{proto.describe_target(target_id)}")
         else:
             return
         self.rebuild()
@@ -368,6 +598,7 @@ class MainWindow(QMainWindow):
                 dn = proto.decision_node_by_id(op.inputs[0][0])
                 if dn is not None:
                     anchor = proto.row_by_id(dn.step_id)
+        self.push_undo()
         new_step = proto.add_step(
             f"Step {len(proto.leaves()) + 1}",
             after_id=anchor.id if anchor is not None else None)
@@ -389,14 +620,14 @@ class MainWindow(QMainWindow):
                 if isinstance(i, DecisionShapeItem)]
         ops = [i.opnode.id for i in self.scene.selectedItems()
                if isinstance(i, OpNodeItem)]
-        rows = [i.row.id for i in self.scene.selectedItems()
-                if isinstance(i, StepNodeItem)]
+        rows = self.scene.selected_row_ids()
         if rows and self.executor.is_running():
             self.statusBar().showMessage(
                 "Can't delete steps while the protocol is running.", 5000)
             rows = []
         if not (edges or decs or ops or rows):
             return
+        self.push_undo()
         for e in edges:
             self._reset_edge(e)
         for dn_id in decs:
@@ -405,6 +636,15 @@ class MainWindow(QMainWindow):
             proto.remove_op_node(op_id)
         if rows:
             proto.remove_rows(rows)
+        self.rebuild()
+
+    def delete_row(self, row_id):
+        if self.executor.is_running():
+            self.statusBar().showMessage(
+                "Can't delete steps while the protocol is running.", 5000)
+            return
+        self.push_undo()
+        self.protocol.remove_rows([row_id])
         self.rebuild()
 
     def _reset_edge(self, edge):
@@ -431,8 +671,10 @@ class MainWindow(QMainWindow):
 
     def edge_menu(self, edge, screen_pos):
         menu = QMenu(self)
-        menu.addAction("Delete route",
-                       lambda: (self._reset_edge(edge), self.rebuild()))
+        menu.addAction(
+            "Delete route",
+            lambda: (self.push_undo(), self._reset_edge(edge),
+                     self.rebuild()))
         menu.exec(screen_pos)
 
     def rename_row(self, row_id):
@@ -441,9 +683,18 @@ class MainWindow(QMainWindow):
             return
         name, ok = QInputDialog.getText(
             self, "Rename", "Name:", text=row.name)
-        if ok and name.strip():
+        if ok and name.strip() and name.strip() != row.name:
+            self.push_undo()
             row.name = name.strip()
             self.rebuild()
+
+    def toggle_group_collapse(self, row_id):
+        row = self.protocol.row_by_id(row_id)
+        if row is None or not row.is_group:
+            return
+        self.push_undo()
+        row.collapsed = not row.collapsed
+        self.rebuild()
 
     def row_menu(self, row_id, screen_pos):
         row = self.protocol.row_by_id(row_id)
@@ -452,24 +703,20 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction("Rename…", lambda: self.rename_row(row_id))
         if not row.is_group:
-            node = self.scene.row_items.get(row_id)
-            if node is not None and node.plus is not None:
-                menu.addAction(
-                    "Add shape…",
-                    lambda: self.open_shape_palette(
-                        row_id, screen_pos, None))
+            menu.addAction(
+                "Add shape…",
+                lambda: self.open_shape_palette(row_id, screen_pos, None))
         else:
+            menu.addAction("Expand" if row.collapsed else "Collapse",
+                           lambda: self.toggle_group_collapse(row_id))
             menu.addAction("Repetitions…",
                            lambda: self._ask_group_reps(row))
-            menu.addAction("Ungroup",
-                           lambda: (self.protocol.ungroup(row_id),
-                                    self.rebuild()))
+            menu.addAction(
+                "Ungroup",
+                lambda: (self.push_undo(), self.protocol.ungroup(row_id),
+                         self.rebuild()))
         menu.addSeparator()
-        menu.addAction(
-            "Delete",
-            lambda: (self.scene.clearSelection(),
-                     self.scene.row_items[row_id].setSelected(True),
-                     self.delete_selected()))
+        menu.addAction("Delete", lambda: self.delete_row(row_id))
         menu.exec(screen_pos)
 
     def _ask_group_reps(self, row):
@@ -478,7 +725,8 @@ class MainWindow(QMainWindow):
             "Passes scheduled by a formal group entry\n"
             "(fall-through or a route to the group node):",
             row.repetitions, 1, 99)
-        if ok:
+        if ok and n != row.repetitions:
+            self.push_undo()
             row.repetitions = n
             self.rebuild()
 
@@ -510,11 +758,13 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction(
             "Delete shape",
-            lambda: (self.protocol.remove_decision_node(dn_id),
+            lambda: (self.push_undo(),
+                     self.protocol.remove_decision_node(dn_id),
                      self.rebuild()))
         menu.exec(screen_pos)
 
     def _set_decision_mode(self, dn, mode, auto_after):
+        self.push_undo()
         dn.mode = mode
         dn.auto_after = auto_after
         self.rebuild()
@@ -559,11 +809,13 @@ class MainWindow(QMainWindow):
         other = "or" if op.kind == "and" else "and"
         menu.addAction(
             f"Convert to {other.upper()}",
-            lambda: (setattr(op, "kind", other), self.rebuild()))
+            lambda: (self.push_undo(), setattr(op, "kind", other),
+                     self.rebuild()))
         menu.addSeparator()
         menu.addAction(
             "Delete shape",
-            lambda: (self.protocol.remove_op_node(op_id), self.rebuild()))
+            lambda: (self.push_undo(), self.protocol.remove_op_node(op_id),
+                     self.rebuild()))
         menu.exec(screen_pos)
 
     def blank_menu(self, screen_pos):
@@ -596,12 +848,8 @@ class MainWindow(QMainWindow):
             self, "Group selected rows", "Group name:", text="Group")
         if not ok:
             return
-        members = [self.protocol.row_by_id(i) for i in ids]
-        cx = sum(m.pos[0] for m in members) / len(members)
-        cy = sum(m.pos[1] for m in members) / len(members)
-        group = self.protocol.group_rows(ids, name=(name.strip() or "Group"))
-        if group is not None:
-            group.pos = (cx - 30, cy - 30)
+        self.push_undo()
+        self.protocol.group_rows(ids, name=(name.strip() or "Group"))
         self.rebuild()
 
     def ungroup_selected(self):
@@ -610,17 +858,17 @@ class MainWindow(QMainWindow):
                 "Can't regroup while the protocol is running.", 5000)
             return
         ids = self.scene.selected_row_ids()
-        done = False
-        for rid in ids:
-            row = self.protocol.row_by_id(rid)
-            if row is not None and row.is_group:
-                self.protocol.ungroup(rid)
-                done = True
-        if done:
-            self.rebuild()
-        else:
+        groups = [rid for rid in ids
+                  for row in [self.protocol.row_by_id(rid)]
+                  if row is not None and row.is_group]
+        if not groups:
             self.statusBar().showMessage(
-                "Select a group node to ungroup.", 5000)
+                "Select a group to ungroup.", 5000)
+            return
+        self.push_undo()
+        for rid in groups:
+            self.protocol.ungroup(rid)
+        self.rebuild()
 
     # ------------------------------------------------------------------
     # toolbar handlers
@@ -630,6 +878,8 @@ class MainWindow(QMainWindow):
         if self.executor.is_running():
             return
         self.log.clear()
+        self.scene.clear_run_states()
+        self._recent_steps = []
         self.executor.start(repeats=self.repeats.value())
 
     def _on_pause_toggled(self, checked):
@@ -650,6 +900,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 "Can't add steps while the protocol is running.", 5000)
             return
+        self.push_undo()
         leaves = self.protocol.leaves()
         step = self.protocol.add_step(
             f"Step {len(leaves) + 1}",
@@ -661,13 +912,15 @@ class MainWindow(QMainWindow):
 
     def _arrange(self, orientation, rebuild=True):
         """Clean layout: rows in tree order (indented by depth), each
-        step's decision shapes in a column beside/below it, AND shapes
-        one lane further out."""
+        step's decision shapes in a column beside/below it, AND/OR shapes
+        one lane further out. Group frames auto-fit their members."""
+        if rebuild:
+            self.push_undo()
         proto = self.protocol
         shape_count = {}
         if orientation == "vertical":
             for i, (row, depth) in enumerate(proto.iter_rows()):
-                row.pos = (60 + depth * 46, 40 + i * (36 + 30))
+                row.pos = (60 + depth * 46, 40 + i * (36 + 34))
             for dn in proto.decision_nodes:
                 step = proto.row_by_id(dn.step_id)
                 if step is None:
@@ -694,6 +947,7 @@ class MainWindow(QMainWindow):
                 cx = sum(d.pos[0] for d in dns) / len(dns)
                 cy = sum(d.pos[1] for d in dns) / len(dns)
                 op.pos = (cx + DEC_W + 90, cy + 20)
+        proto.terminal_pos = {}    # re-derive default spots
         if rebuild:
             self.rebuild()
             self.view.fit_all()
@@ -715,6 +969,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Load protocol", "", "JSON (*.json)")
         if path:
+            self.push_undo()
             with open(path) as f:
                 self.protocol.load_dict(json.load(f))
             self.rebuild()
@@ -731,6 +986,7 @@ class MainWindow(QMainWindow):
 
     def _on_terminal(self, what):
         self.scene.clear_run_states()
+        self._recent_steps = []
         self.run_action.setEnabled(True)
         self.pause_action.setEnabled(False)
         self._sync_pause(False)
@@ -740,30 +996,66 @@ class MainWindow(QMainWindow):
             self._active_dialog.reject()
 
     def _on_step_started(self, step_id, n, total):
-        self.scene.clear_run_states()
+        # Decaying trail: the previous few steps stay faintly marked.
+        for rid in self._recent_steps:
+            self.scene.set_row_state(rid, "recent")
         self.scene.set_row_state(step_id, "active")
+        self._recent_steps.insert(0, step_id)
+        for rid in self._recent_steps[3:]:
+            self.scene.set_row_state(rid, None)
+        del self._recent_steps[3:]
         step = self.protocol.row_by_id(step_id)
         if step:
             self.statusBar().showMessage(
                 f"Running step {n}/{total}: {step.name}")
+        if self.follow_action.isChecked():
+            item = self.scene.display_for(step_id)
+            if item is not None:
+                self.view.centerOn(item)
 
     def _on_decision_pending(self, pending):
         dn = pending.decision_node
+        anchor_item = None
         if dn is not None:
+            self.scene.highlight_decision(dn.id, True)
             self.scene.set_decision_state(dn.id, True)
+            anchor_item = (self.scene.dec_items.get(dn.id)
+                           or self.scene.display_for(pending.step.id))
         else:
             self.scene.set_row_state(pending.step.id, "deciding")
-        dialog = DecisionDialog(pending, self)
+            anchor_item = self.scene.display_for(pending.step.id)
+        if anchor_item is not None:
+            self.view.centerOn(anchor_item)
+
+        dialog = DecisionDialog(pending, self,
+                                countdown_s=self.unattended.value())
+        self._position_dialog(dialog, anchor_item)
         self._active_dialog = dialog
         dialog.exec()
         self._active_dialog = None
         remember = dialog.remember.isChecked()
         pending.resolve(dialog.outcome(), remember)
         if dn is not None:
+            self.scene.highlight_decision(dn.id, False)
             self.scene.set_decision_state(dn.id, False)
         self.scene.set_row_state(pending.step.id, "active")
         if remember:
             self.scene.rebuild()   # shape (possibly minted) shows [auto]
+
+    def _position_dialog(self, dialog, item):
+        """Open the prompt next to the shape it belongs to, so the
+        candidate edges stay visible around it."""
+        if item is None:
+            return
+        rect = self.view.mapFromScene(
+            item.sceneBoundingRect()).boundingRect()
+        top_right = self.view.viewport().mapToGlobal(rect.topRight())
+        dialog.adjustSize()
+        screen = self.screen().availableGeometry()
+        x = min(top_right.x() + 16, screen.right() - dialog.width() - 8)
+        y = min(max(screen.top() + 8, top_right.y() - 24),
+                screen.bottom() - dialog.height() - 8)
+        dialog.move(QPoint(x, y))
 
     def _append_log(self, msg):
         self.log.appendPlainText(msg)
@@ -807,6 +1099,7 @@ class MainWindow(QMainWindow):
         if r >= len(leaves):
             return
         step = leaves[r]
+        self.push_undo()
         if c == 0:
             if item.text().strip():
                 step.name = item.text().strip()
@@ -821,6 +1114,7 @@ class MainWindow(QMainWindow):
                          if col.model.kind == "int"
                          else float(item.text()))
             except ValueError:
+                self._undo_stack.pop()      # nothing changed
                 self._updating_table = True
                 item.setText(str(col.model.get_value(step)))
                 self._updating_table = False
@@ -857,7 +1151,7 @@ class MainWindow(QMainWindow):
         row = rows.pop()
         if row >= len(leaves):
             return
-        node = self.scene.row_items.get(leaves[row].id)
+        node = self.scene.display_for(leaves[row].id)
         if node is not None:
             self._syncing_selection = True
             self.scene.clearSelection()

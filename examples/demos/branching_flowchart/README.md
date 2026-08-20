@@ -33,12 +33,15 @@ python -m examples.demos.branching_flowchart --smoke
 
 ## Things to try
 
+0. **Editing is safe:** every change — routes, shapes, groups, deletes,
+   moves, table edits — is undoable (Ctrl+Z / Ctrl+Shift+Z, or the
+   toolbar ↶ ↷). A collapsible legend (bottom-right) keys the visual
+   vocabulary.
 1. **Press ▶ Run.** The active step glows blue. "Dispense droplet" has a
-   40% simulated volume-check failure plus an operator check; each poses
-   its prompt with routed buttons. The seeded AND shape fires when the
-   answers are *Continue* + *Yes* — skipping the corrective mix straight
-   to "Collect to waste". Otherwise the individual outcome routes apply
-   (the *Retry* self-loop stops prompting after 3 tries).
+   40% simulated volume-check failure (auto-retries twice, then asks);
+   "Droplet detect" fails 35% of the time and its *Restart* is wired to
+   the group frame; "Operator inspect" always prompts. Answer the
+   prompts and watch the flow follow your drawn edges.
 2. **The ＋ plug under a step** opens the shape palette: one decision per
    contributing column (greyed once placed) and the AND / OR operators.
    Placed decisions are shapes tethered to their step; delete or
@@ -48,6 +51,10 @@ python -m examples.demos.branching_flowchart --smoke
    auto-retries twice, then asks, and the prompt says so), *Prompt first
    N times then auto*, and *Auto (never prompt)*; the auto answer is
    picked when configuring. Right-click an operator to convert AND ⇄ OR.
+   Prompts open **next to the deciding shape** with its edges highlighted
+   — the buttons and the drawn edges are the same choices. Keys 1..n
+   answer; Esc takes the provider default; the toolbar's **Unattended**
+   timer auto-answers after N seconds so an unwatched run never stalls.
 3. **Drag ports.** From a decision's colored outcome port to a step or
    group (route that answer), onto an AND/OR shape (feed the combiner),
    onto **another decision of the same step** (a dashed *chain* edge:
@@ -55,14 +62,21 @@ python -m examples.demos.branching_flowchart --smoke
    chosen), or onto blank space — a "＋ New step" ghost appears and
    releasing mints a pre-routed step. The blue done-port routes step
    completion the same way. Edges snap to the node under the cursor
-   (cyan glow) and wrap around boxes that sit in the way. The seeded
-   protocol chains Volume check → Operator check on "Dispense droplet",
-   so the operator is only consulted when the volume answer is
-   *Continue*.
+   (cyan glow) and wrap around boxes that sit in the way.
 4. **"Operator inspect" has no placed shape** — it still prompts, using
    the provider defaults. Ticking *"Don't ask again this run"* in a
    prompt mints/updates the shape with the auto answer.
-5. **Groups are real, not just visual.** The seed has two: "Dispense &
+4b. **Watch the run on the canvas, not just the log.** The edge the
+   executor follows flashes bright and the last few stay warm (a
+   decaying trail); the active step glows blue with the previous ones
+   faintly marked; **◎ Follow** keeps the running step centered. Silent
+   auto-answers and group repeat passes pop a toast next to the
+   responsible shape.
+5. **Groups render as frames** — a container outline around their
+   members. Drag the title bar to move the whole subtree; click ▾ to
+   collapse a group to a chip (edges into its interior re-aim at the
+   chip; wholly-internal edges hide). **Groups are real, not just
+   visual.** The seed has two: "Dispense &
    verify" (Dispense + Droplet detect) and "Mix cycle ×2" (right-click a
    group → *Repetitions…*). A **formal group entry** — sequential
    fall-through, or a route drawn to the **group node** — fires the
@@ -73,9 +87,14 @@ python -m examples.demos.branching_flowchart --smoke
    repeat restart — the log says so when it happens. The seeded
    droplet-detect scenario shows why the distinction matters: Droplet
    detect is the *last* step of its group, and its *Restart* outcome is
-   routed to the group node, so a missing droplet formally re-enters the
+   routed to the group frame, so a missing droplet formally re-enters the
    whole group (hooks + fresh pass budget). Drag that edge onto
    "Dispense droplet" instead to feel the other behavior.
+5b. **Terminal nodes and default glyphs.** ⏹ Stop and ▦ Finish are
+   always on the canvas: drop any port on them to route abort/finish
+   explicitly (drawn as real edges). Outcomes still on their provider
+   default show a glyph after the label (↻ retry · → next · ⏹ abort ·
+   ▦ finish) so unrouted behaviour is visible without hovering.
 6. **Group / ungroup:** rubber-band a contiguous run of steps and press
    Group (or right-click blank canvas).
 7. Rename (double-click), Arrange V/H, Fit, save/load the whole graph

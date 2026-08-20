@@ -90,6 +90,9 @@ class Row:
         # Groups: how many passes a FORMAL group entry schedules (the
         # analogue of GroupRow.repetitions in the real app).
         self.repetitions = 1
+        # Groups: collapsed to a single chip on the canvas (view state,
+        # persisted so a saved protocol reopens the same way).
+        self.collapsed = False
         # Canvas position, persisted with the protocol.
         self.pos = (0.0, 0.0)
 
@@ -99,6 +102,7 @@ class Row:
              "repetitions": self.repetitions}
         if self.is_group:
             d["children"] = [c.to_dict() for c in self.children]
+            d["collapsed"] = self.collapsed
         return d
 
     @classmethod
@@ -110,6 +114,7 @@ class Row:
         row.pos = tuple(d.get("pos", (0.0, 0.0)))
         if row.is_group:
             row.children = [cls.from_dict(c) for c in d["children"]]
+            row.collapsed = bool(d.get("collapsed", False))
         return row
 
 
@@ -185,6 +190,9 @@ class Protocol:
         self.rows = []                 # top-level rows (tree)
         self.decision_nodes = []       # list[DecisionNode]
         self.op_nodes = []             # list[OpNode]
+        # Canvas positions of the ⏹ Stop / ▦ Finish terminal nodes
+        # ({kind: [x, y]}); None until the user moves them.
+        self.terminal_pos = {}
 
     # -- tree walking ---------------------------------------------------
 
@@ -437,6 +445,8 @@ class Protocol:
             "rows": [r.to_dict() for r in self.rows],
             "decision_nodes": [d.to_dict() for d in self.decision_nodes],
             "op_nodes": [o.to_dict() for o in self.op_nodes],
+            "terminal_pos": {k: list(v)
+                             for k, v in self.terminal_pos.items()},
         }
 
     def load_dict(self, d) -> None:
@@ -444,6 +454,8 @@ class Protocol:
         self.decision_nodes = [DecisionNode.from_dict(x)
                                for x in d.get("decision_nodes", [])]
         self.op_nodes = [OpNode.from_dict(x) for x in d.get("op_nodes", [])]
+        self.terminal_pos = {k: tuple(v) for k, v in
+                             d.get("terminal_pos", {}).items()}
         # Seed any column values missing from the file (new columns since
         # save).
         for row, _ in self.iter_rows():

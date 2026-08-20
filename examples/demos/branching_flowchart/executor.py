@@ -50,6 +50,13 @@ class ExecutorSignals(QObject):
     step_finished = Signal(str)                         # step_id
     decision_pending = Signal(object)                   # PendingDecision
     decision_resolved = Signal(str, str, str, bool)     # step_id, decision_id, outcome_id, was_auto
+    # Edge-identifying tuple for the route the executor just followed —
+    # ("op", op_id) | ("outcome", dn_id, outcome_id) | ("flow", step_id)
+    # | ("next", step_id). The canvas flashes the matching edge.
+    route_taken = Signal(object)
+    # (row_or_shape_id, text): a short note the canvas shows as a toast
+    # next to the item (silent auto answers, group repeat passes, ...).
+    canvas_note = Signal(str, str)
     log = Signal(str)
 
 
@@ -308,6 +315,8 @@ class DemoExecutor:
                             f"Jumped into group {g.name!r} mid-sequence "
                             f"— no formal entry: group hooks and repeats "
                             f"are NOT restarted")
+                        self.signals.canvas_note.emit(
+                            g.id, "no formal entry")
 
         i = 0
         step_no = 0
@@ -355,9 +364,13 @@ class DemoExecutor:
                             self.signals.log.emit(
                                 f"Group {g.name!r} — repeat pass "
                                 f"{k + 1}/{g.repetitions}")
+                            self.signals.canvas_note.emit(
+                                g.id, f"pass {k + 1}/{g.repetitions}")
                             verdict = ("jump", first_leaf, "next", None)
                             break
 
+            if verdict[0] == "jump" and verdict[2] == "next":
+                self.signals.route_taken.emit(("next", step.id))
             if verdict[0] == "end":
                 transition(i, None, formal=True)
                 break
@@ -455,6 +468,7 @@ class DemoExecutor:
                     f"{op.kind.upper()} op matched "
                     f"({sum(hits)}/{len(op.inputs)} outcomes) -> "
                     f"{proto.describe_target(op.target)}")
+                self.signals.route_taken.emit(("op", op.id))
                 return self._verdict_for(step, op.target, i)
 
         # 2. Individual outcome routes, resolution order. Chain targets
@@ -466,9 +480,14 @@ class DemoExecutor:
             if target in dn_by_id:
                 continue
             if target != NEXT:
+                if dn is not None:
+                    self.signals.route_taken.emit(
+                        ("outcome", dn.id, outcome_id))
                 return self._verdict_for(step, target, i)
 
         # 3. No decision redirected: the step's completion route.
+        if step.next_target != NEXT:
+            self.signals.route_taken.emit(("flow", step.id))
         return self._verdict_for(step, step.next_target, i)
 
     def _resolve_one(self, step, step_ctx, spec, dn, message, occurrences):
@@ -491,9 +510,14 @@ class DemoExecutor:
         if auto:
             outcome_id = ((dn.auto_outcome if dn else None)
                           or spec.default_outcome)
+            label = spec.outcome_by_id(outcome_id).label
             step_ctx.log(
-                f"Decision {spec.title!r} -> "
-                f"{spec.outcome_by_id(outcome_id).label} ({why})")
+                f"Decision {spec.title!r} -> {label} ({why})")
+            self.signals.canvas_note.emit(
+                dn.id if dn else step.id,
+                f"auto → {label}"
+                + (f"  ({seen}/{n})" if mode == "auto_first" and n
+                   else ""))
         else:
             if mode == "auto_first" and n:
                 label = spec.outcome_by_id(
