@@ -37,11 +37,24 @@ python -m examples.demos.branching_flowchart --smoke
    moves, table edits — is undoable (Ctrl+Z / Ctrl+Shift+Z, or the
    toolbar ↶ ↷). A collapsible legend (bottom-right) keys the visual
    vocabulary.
-1. **Press ▶ Run.** The active step glows blue. "Dispense droplet" has a
-   40% simulated volume-check failure (auto-retries twice, then asks);
-   "Droplet detect" fails 35% of the time and its *Restart* is wired to
-   the group frame; "Operator inspect" always prompts. Answer the
-   prompts and watch the flow follow your drawn edges.
+1. **Press ▶ Run.** The active step glows blue, and the seed exercises
+   every construct:
+   * *Serial chain* — on "Dispense droplet", the volume check
+     auto-retries twice, then asks; answering **Continue** activates the
+     chained operator confirm (the dashed "Continue → then" edge). The
+     operator is never asked unless the volume check escalated first.
+   * *AND* — volume **Continue** + operator **Yes** ("manually
+     verified") fires the violet AND: skip the droplet-detect sensor
+     step and formally enter the "Mix cycle" group (its ×2 passes
+     apply).
+   * *Group restart* — "Droplet detect" fails 35% of the time; its
+     **Restart** is wired to the "Dispense & verify" group frame, so the
+     whole group re-enters formally.
+   * *OR* — "Operator inspect" poses two independent checks in the same
+     round (contrast with the chained pair); if EITHER the operator says
+     **No** OR the sensor sees no droplet (**Redo prep** — a custom
+     button label), the teal OR sends the run back to redo the whole
+     "Dispense & verify" group.
 2. **The ＋ plug under a step** opens the shape palette: one decision per
    contributing column (greyed once placed) and the AND / OR operators.
    Placed decisions are shapes tethered to their step; delete or

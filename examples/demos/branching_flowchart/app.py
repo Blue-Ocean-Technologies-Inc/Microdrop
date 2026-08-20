@@ -428,15 +428,18 @@ class MainWindow(QMainWindow):
         p.add_step("Prime reservoir", {"voltage": 90.0, "duration_s": 0.8})
         dispense = p.add_step(
             "Dispense droplet",
-            {"voltage": 110.0, "duration_s": 1.0, "fail_pct": 40})
+            {"voltage": 110.0, "duration_s": 1.0, "fail_pct": 40,
+             "op_check": True})
         detect = p.add_step(
             "Droplet detect",
             {"voltage": 0.0, "duration_s": 0.4, "detect_fail": 35})
         mix_l = p.add_step("Mix left", {"voltage": 120.0, "duration_s": 0.6})
         mix_l.repetitions = 2      # per-STEP repeats, editable in the table
         mix_r = p.add_step("Mix right", {"voltage": 120.0, "duration_s": 0.6})
-        p.add_step("Operator inspect",
-                   {"voltage": 0.0, "duration_s": 0.3, "op_check": True})
+        inspect = p.add_step(
+            "Operator inspect",
+            {"voltage": 0.0, "duration_s": 0.3, "op_check": True,
+             "detect_fail": 30})
         p.add_step("Collect to waste",
                    {"voltage": 100.0, "duration_s": 0.8})
 
@@ -447,23 +450,45 @@ class MainWindow(QMainWindow):
         grp_mix = p.group_rows([mix_l.id, mix_r.id], name="Mix cycle")
         grp_mix.repetitions = 2
 
-        # Volume check on Dispense: silent auto-retry twice, then prompt.
+        # --- Dispense droplet: serial CHAIN + AND -----------------------
+        # Volume check: silent auto-retry twice, then prompt.
         dn_vol = p.add_decision_node(dispense.id, "volume_check", (0, 0))
         dn_vol.routes["retry"] = dispense.id       # orange self-loop
         dn_vol.mode = "auto_first"
         dn_vol.auto_after = 2
         dn_vol.auto_outcome = "retry"
+        # CHAIN (serial resolution): the operator confirm is only asked
+        # AFTER a failed volume check is answered Continue — the dashed
+        # "Continue → then" edge.
+        dn_op = p.add_decision_node(dispense.id, "operator_check", (0, 0))
+        dn_vol.routes["continue"] = dn_op.id
+        # AND: volume Continue + operator Yes = manually verified — skip
+        # the droplet-detect sensor check and enter the Mix group
+        # formally (its ×2 passes still apply).
+        op_and = p.add_op_node((0, 0), kind="and")
+        op_and.inputs = [(dn_vol.id, "continue"), (dn_op.id, "yes")]
+        op_and.target = grp_mix.id
 
-        # THE group scenario: droplet detect fails at the END of the
-        # group -> Restart is routed to the GROUP NODE, so the whole
-        # group formally re-enters (group-entry hooks fire, repeat budget
-        # restarts). Routing it to 'Dispense droplet' instead would just
+        # --- Droplet detect: the group-restart scenario -----------------
+        # Restart is routed to the GROUP NODE, so a missing droplet
+        # formally re-enters the whole group (entry hooks + fresh pass
+        # budget). Routing it to 'Dispense droplet' instead would just
         # re-run the steps with none of that.
         dn_det = p.add_decision_node(detect.id, "droplet_detect", (0, 0))
         dn_det.routes["restart"] = grp_dispense.id
 
-        # "Operator inspect" keeps its decision UNplaced — it still
-        # prompts, with the provider defaults (yes→next, no→retry).
+        # --- Operator inspect: OR over two independent checks -----------
+        # Both decisions fire in the same round (parallel — contrast with
+        # the chained pair on Dispense). If EITHER the operator says No
+        # OR the sensor sees no droplet, redo the whole dispense group.
+        dn_iop = p.add_decision_node(inspect.id, "operator_check", (0, 0))
+        dn_idet = p.add_decision_node(inspect.id, "droplet_detect", (0, 0))
+        dn_idet.labels["restart"] = "Redo prep"    # custom button label
+        op_or = p.add_op_node((0, 0), kind="or")
+        op_or.inputs = [(dn_iop.id, "no"), (dn_idet.id, "restart")]
+        op_or.target = grp_dispense.id
+        # Tip: tick 'Operator check' on any OTHER step to see an
+        # UNplaced decision — it still prompts with provider defaults.
 
     # ------------------------------------------------------------------
     # canvas callbacks — palette, drops, menus, deletion
@@ -1078,16 +1103,19 @@ class MainWindow(QMainWindow):
         proto = self.protocol
         shape_count = {}
         if orientation == "vertical":
-            for i, (row, depth) in enumerate(proto.iter_rows()):
-                row.pos = (60 + depth * 46, 40 + i * (36 + 34))
+            # Each row is given enough vertical room for its decision
+            # shapes, so shapes never overlap and group frames don't
+            # collide with the next group.
+            by_step = {}
             for dn in proto.decision_nodes:
-                step = proto.row_by_id(dn.step_id)
-                if step is None:
-                    continue
-                k = shape_count.get(dn.step_id, 0)
-                shape_count[dn.step_id] = k + 1
-                dn.pos = (step.pos[0] + NODE_W + 150,
-                          step.pos[1] - 8 + k * 78)
+                by_step.setdefault(dn.step_id, []).append(dn)
+            y = 40
+            for row, depth in proto.iter_rows():
+                row.pos = (60 + depth * 46, y)
+                shapes = by_step.get(row.id, [])
+                for k, dn in enumerate(shapes):
+                    dn.pos = (row.pos[0] + NODE_W + 150, y - 8 + k * 82)
+                y += max(70, len(shapes) * 82 + 10)
         else:
             for i, (row, depth) in enumerate(proto.iter_rows()):
                 row.pos = (60 + i * (NODE_W + 90), 60 + depth * 70)
