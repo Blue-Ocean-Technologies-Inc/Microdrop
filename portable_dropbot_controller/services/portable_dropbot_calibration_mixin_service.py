@@ -36,7 +36,11 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         the pogos always come back down; each step's outcome streams
         to the pane."""
         if self.proxy is None:
+            logger.warning("Portable Dropbot not connected: ignoring "
+                           "capacitance calibration request.")
             return
+        logger.info("Portable Dropbot ML capacitance calibration macro "
+                    "started")
         uart = self.proxy.uart
 
         def clear_electrodes():
@@ -70,6 +74,8 @@ class PortableDropbotCalibrationMixinService(HasTraits):
                 logger.info(f"Calibration step {stage!r}: "
                             f"{'ok' if ok else 'FAILED'}")
         self._publish_calibration(stage="done", ok=all_ok)
+        logger.info(f"Portable Dropbot ML capacitance calibration macro "
+                    f"--> {'ok' if all_ok else 'FAILED'}")
 
     def on_set_ml_realtime_request(self, message):
         on = str(message) == "True"
@@ -78,7 +84,8 @@ class PortableDropbotCalibrationMixinService(HasTraits):
             lambda: self.proxy.uart.cap_ml_realtime(1 if on else 0))
         if ok and mode is not None:
             self._publish_calibration(ml_realtime=mode == 1)
-        logger.info(f"Portable Dropbot ML realtime path --> {on}")
+        logger.info(f"Portable Dropbot ML realtime path --> {on}: "
+                    f"{'ok' if ok and mode is not None else 'FAILED'}")
 
     def on_read_electrode_gain_request(self, message):
         ok, gain = self._proxy_call(
@@ -86,6 +93,8 @@ class PortableDropbotCalibrationMixinService(HasTraits):
             lambda: self.proxy.uart.cap_elec_gain(0))
         if ok and gain is not None:
             self._publish_calibration(electrode_gain=int(gain))
+        else:
+            logger.warning("Portable Dropbot electrode gain read FAILED")
 
     def on_set_electrode_gain_request(self, message):
         permille = int(float(str(message)))
@@ -95,13 +104,16 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         if ok and gain is not None:
             self._publish_calibration(electrode_gain=int(gain))
         logger.info(f"Portable Dropbot electrode gain --> {permille} "
-                    f"permille")
+                    f"permille: "
+                    f"{'ok' if ok and gain is not None else 'FAILED'}")
 
     def on_read_cal_caps_request(self, message):
         ok, n = self._proxy_call("read cal caps",
                                  lambda: self.proxy.uart.cal_caps_get())
         if ok and n is not None:
             self._publish_calibration(cal_caps=int(n))
+        else:
+            logger.warning("Portable Dropbot cal-caps read FAILED")
 
     def on_set_cal_caps_request(self, message):
         n = int(str(message))
@@ -113,4 +125,5 @@ class PortableDropbotCalibrationMixinService(HasTraits):
             lambda: self.proxy.uart.cal_caps_set(n))
         if ok and echoed is not None:
             self._publish_calibration(cal_caps=int(echoed))
-        logger.info(f"Portable Dropbot cal caps --> {n}")
+        logger.info(f"Portable Dropbot cal caps --> {n}: "
+                    f"{'ok' if ok and echoed is not None else 'FAILED'}")

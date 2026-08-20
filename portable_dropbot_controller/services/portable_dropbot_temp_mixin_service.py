@@ -24,27 +24,31 @@ class PortableDropbotTempMixinService(HasTraits):
         data = json.loads(str(message))
         channel = int(data["channel"])
         target_c = float(data["target_c"])
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"temp target ch{channel}",
             lambda: self.proxy.uart.set_temp_target(target_c, channel))
         logger.info(f"Portable Dropbot temp ch{channel} target --> "
-                    f"{target_c} °C")
+                    f"{target_c} °C: {'ok' if ok and result else 'FAILED'}")
 
     def on_temp_control_request(self, message):
         data = json.loads(str(message))
         channel = int(data["channel"])
         on = bool(data["on"])
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"temp control ch{channel}",
             lambda: self.proxy.uart.set_temp_control(on, channel))
         logger.info(f"Portable Dropbot temp control ch{channel} --> "
-                    f"{'on' if on else 'off'}")
+                    f"{'on' if on else 'off'}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     def on_temp_read_info_request(self, message):
         channel = int(str(message))
         ok, info = self._proxy_call(
             f"temp info ch{channel}",
             lambda: self.proxy.uart.get_temp_info(channel))
+        if not ok or info is None:
+            logger.warning(f"Portable Dropbot temp info ch{channel} read "
+                           f"FAILED")
         if ok and info is not None:
             current_c, target_c, output_pct = info
             publish_message(topic=TEMP_UPDATED, message=json.dumps({
@@ -59,6 +63,9 @@ class PortableDropbotTempMixinService(HasTraits):
         ok, pid = self._proxy_call(
             f"temp PID ch{channel}",
             lambda: self.proxy.uart.get_temp_params(channel))
+        if not ok or pid is None:
+            logger.warning(f"Portable Dropbot temp PID ch{channel} read "
+                           f"FAILED")
         if ok and pid is not None:
             publish_message(topic=TEMP_UPDATED, message=json.dumps(
                 {"channel": channel, "pid": pid}))
@@ -66,11 +73,12 @@ class PortableDropbotTempMixinService(HasTraits):
     def on_temp_set_pid_request(self, message):
         data = json.loads(str(message))
         channel = int(data["channel"])
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"temp PID ch{channel}",
             lambda: self.proxy.uart.set_temp_params(
                 float(data["kp"]), float(data["ki"]),
                 float(data["kd"]), int(data["period_ms"]), channel))
         logger.info(f"Portable Dropbot temp ch{channel} PID --> "
                     f"kp={data['kp']} ki={data['ki']} kd={data['kd']} "
-                    f"period={data['period_ms']} ms")
+                    f"period={data['period_ms']} ms: "
+                    f"{'ok' if ok and result else 'FAILED'}")

@@ -116,8 +116,10 @@ class PortableDropbotControllerBase(HasTraits):
         if requested_method:
             if self.timestamps.get(topic, datetime.min) \
                     > timestamped_message.timestamp_dt:
+                logger.debug(f"Stale message on {topic} ignored.")
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
+            logger.debug(f"Handling {topic} --> {requested_method}")
             err_msg = invoke_class_method(self, requested_method,
                                           timestamped_message)
             if err_msg:
@@ -240,6 +242,8 @@ class PortableDropbotControllerBase(HasTraits):
 
     def _apply_actuation(self):
         """Push the current HV setpoints (both Int) to the device."""
+        logger.debug(f"Applying actuation setpoints: {self.voltage} V, "
+                     f"{self.frequency} Hz")
         self._proxy_call(
             "set actuation",
             lambda: self.proxy.set_actuation(int(self.voltage),
@@ -253,6 +257,9 @@ class PortableDropbotControllerBase(HasTraits):
         raw = (round(int(self.light_intensity)
                      * FLUORESCENCE_LED_RAW_MAX / 100)
                if self.light_on else 0)
+        logger.debug(f"Applying light intensity: {self.light_intensity} % "
+                     f"(raw {raw}, light "
+                     f"{'on' if self.light_on else 'off'})")
         self._proxy_call(
             "set light intensity",
             lambda: self.proxy.uart.setLEDIntensity(raw,

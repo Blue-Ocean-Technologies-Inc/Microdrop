@@ -34,19 +34,24 @@ class PortableDropbotPmtMixinService(HasTraits):
         if ok and actual is not None:
             self._publish_pmt(power=bool(actual))
         logger.info(f"Portable Dropbot PMT power --> "
-                    f"{'on' if on else 'off'}")
+                    f"{'on' if on else 'off'}: "
+                    f"{'ok' if ok and actual is not None else 'FAILED'}")
 
     def on_pmt_set_gain_request(self, message):
         gain = min(max(PMT_GAIN_BOUNDS[0], int(float(str(message)))),
                    PMT_GAIN_BOUNDS[1])
-        self._proxy_call(f"PMT gain {gain}",
-                         lambda: self.proxy.uart.pmt_set_gain(gain))
-        logger.info(f"Portable Dropbot PMT gain --> {gain}")
+        ok, result = self._proxy_call(
+            f"PMT gain {gain}",
+            lambda: self.proxy.uart.pmt_set_gain(gain))
+        logger.info(f"Portable Dropbot PMT gain --> {gain}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     def on_pmt_acquire_request(self, message):
         if self.proxy is None:
             return
         gain = int(json.loads(str(message)).get("gain", -1))
+        logger.info(f"Portable Dropbot PMT acquire started "
+                    f"(gain={'unchanged' if gain < 0 else gain})")
         uart = self.proxy.uart
         self._publish_pmt(acquiring=True)
         # One lock for the whole macro so the status poll cannot

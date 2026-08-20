@@ -60,29 +60,32 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         if color not in RGB_LIGHT_STATES:
             logger.warning(f"Unknown RGB light state: {color!r}")
             return
-        self._proxy_call(f"rgb light {color}",
-                         lambda: self.proxy.uart.setBoxLight(color))
-        logger.info(f"Portable Dropbot RGB light set to {color}")
+        ok, result = self._proxy_call(
+            f"rgb light {color}",
+            lambda: self.proxy.uart.setBoxLight(color))
+        logger.info(f"Portable Dropbot RGB light --> {color}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     def on_set_illumination_raw_request(self, message):
         """Vendor-style raw illumination brightness, 0-255 straight
         to the firmware — no % scaling."""
         raw = min(max(0, int(float(str(message)))),
                   LIGHT_INTENSITY_RAW_MAX)
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"illumination raw {raw}",
             lambda: self.proxy.uart.setLEDIntensity(raw,
                                                     fluorescence=False))
-        logger.info(f"Portable Dropbot illumination raw set to {raw}")
+        logger.info(f"Portable Dropbot illumination raw --> {raw}: "
+                    f"{'ok' if ok and result else 'FAILED'}")
 
     def on_set_fluorescence_led_raw_request(self, message):
         """Vendor-style raw fluorescence LED brightness, 16-bit
         0-65535 straight to the firmware."""
         raw = min(max(0, int(float(str(message)))),
                   FLUORESCENCE_LED_RAW_MAX)
-        self._proxy_call(
+        ok, result = self._proxy_call(
             f"fluorescence LED raw {raw}",
             lambda: self.proxy.uart.setLEDIntensity(raw,
                                                     fluorescence=True))
-        logger.info(f"Portable Dropbot fluorescence LED raw set to "
-                    f"{raw}")
+        logger.info(f"Portable Dropbot fluorescence LED raw --> {raw}: "
+                    f"{'ok' if ok and result else 'FAILED'}")

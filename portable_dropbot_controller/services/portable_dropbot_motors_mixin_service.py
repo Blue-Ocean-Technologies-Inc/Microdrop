@@ -50,8 +50,13 @@ class PortableDropbotMotorsMixinService(HasTraits):
         if direction not in _TRAY_ACTIONS:
             logger.warning(f"Unknown tray direction: {direction!r}")
             return
-        self._proxy_call(f"tray {direction}",
-                         lambda: self.proxy.move_tray(direction))
+        logger.info(f"Portable Dropbot tray {direction} requested")
+        # move_tray returns the driver error flag: True means the move
+        # reported an error status.
+        ok, error_flag = self._proxy_call(
+            f"tray {direction}", lambda: self.proxy.move_tray(direction))
+        logger.info(f"Portable Dropbot tray {direction} --> "
+                    f"{'ok' if ok and error_flag is not True else 'FAILED'}")
         self._publish_status_snapshot()
 
     def on_move_magnet_request(self, message):
@@ -59,8 +64,11 @@ class PortableDropbotMotorsMixinService(HasTraits):
         if action not in _MAGNET_ACTIONS:
             logger.warning(f"Unknown magnet action: {action!r}")
             return
-        self._proxy_call(f"magnet {action}",
-                         lambda: self.proxy.move_magnet(action))
+        logger.info(f"Portable Dropbot magnet {action} requested")
+        ok, result = self._proxy_call(f"magnet {action}",
+                                      lambda: self.proxy.move_magnet(action))
+        logger.info(f"Portable Dropbot magnet {action} --> "
+                    f"{'ok' if ok and result not in (None, False) else 'FAILED'}")
         self._publish_status_snapshot()
 
     def on_set_filter_request(self, message):
@@ -68,8 +76,12 @@ class PortableDropbotMotorsMixinService(HasTraits):
         if position not in FILTER_POSITIONS:
             logger.warning(f"Filter position out of range: {position}")
             return
-        self._proxy_call(f"filter {position}",
-                         lambda: self.proxy.uart.setFilter(position))
+        logger.info(f"Portable Dropbot filter position {position} requested")
+        ok, result = self._proxy_call(
+            f"filter {position}",
+            lambda: self.proxy.uart.setFilter(position))
+        logger.info(f"Portable Dropbot filter --> {position}: "
+                    f"{'ok' if ok and result not in (None, False) else 'FAILED'}")
         self._publish_status_snapshot()
 
     def on_set_pogo_request(self, message):
@@ -78,9 +90,13 @@ class PortableDropbotMotorsMixinService(HasTraits):
         # pair — no per-side mechanism command exists; a single pad
         # moves only via the raw per-motor moves/home.
         engaged = str(message) == "True"
-        self._proxy_call(f"pogo {'press' if engaged else 'release'}",
-                         lambda: self.proxy.uart.setPogo(
-                             1 if engaged else 0))
+        action = "press" if engaged else "release"
+        logger.info(f"Portable Dropbot pogo {action} requested")
+        ok, result = self._proxy_call(
+            f"pogo {action}",
+            lambda: self.proxy.uart.setPogo(1 if engaged else 0))
+        logger.info(f"Portable Dropbot pogo {action} --> "
+                    f"{'ok' if ok and result not in (None, False) else 'FAILED'}")
         self._publish_status_snapshot()
 
     def on_lock_chip_request(self, message):
@@ -94,7 +110,11 @@ class PortableDropbotMotorsMixinService(HasTraits):
         # The full homing sequence runs tens of seconds; it executes
         # here on the worker thread, so the GUI stays live and the
         # snapshot lands when the hardware is truly home.
-        self._proxy_call("home all", lambda: self.proxy.home_all())
+        logger.info("Portable Dropbot home-all requested (runs tens of "
+                    "seconds)")
+        ok, _ = self._proxy_call("home all", lambda: self.proxy.home_all())
+        logger.info(f"Portable Dropbot home-all --> "
+                    f"{'finished' if ok else 'FAILED'}")
         self._publish_status_snapshot()
 
     # ------------------------------------------------------------------ #
@@ -116,15 +136,20 @@ class PortableDropbotMotorsMixinService(HasTraits):
         mode = str(payload.get("mode", "absolute"))
         value = int(payload.get("value", 0))
         if mode == "relative":
-            self._proxy_call(
+            ok, result = self._proxy_call(
                 f"motor {payload['motor']} relative {value}",
                 lambda: self.proxy.uart.motorRelativeMove(motor_id,
                                                           value))
         else:
-            self._proxy_call(
+            ok, result = self._proxy_call(
                 f"motor {payload['motor']} absolute {value}",
                 lambda: self.proxy.uart.motorAbsoluteMove(motor_id,
                                                           value))
+        # motorAction returns the final position on success, an error
+        # string or status otherwise.
+        logger.info(f"Portable Dropbot motor {payload['motor']} {mode} "
+                    f"move {value} um --> "
+                    f"{result if ok and result is not None else 'FAILED'}")
         self._publish_motors()
 
     def on_motor_set_speed_request(self, message):
@@ -137,24 +162,33 @@ class PortableDropbotMotorsMixinService(HasTraits):
         if motor_id is None:
             return
         speed = int(payload.get("value", 0))
-        self._proxy_call(
+        ok, accepted = self._proxy_call(
             f"motor {payload['motor']} speed {speed}",
             lambda: self.proxy.uart.setMotorSpeed(motor_id, speed))
+        logger.info(f"Portable Dropbot motor {payload['motor']} speed "
+                    f"{speed} um/s --> "
+                    f"{accepted if ok and accepted is not None else 'FAILED'}")
 
     def on_motor_stop_request(self, message):
         motor_id = self._motor_id(message)
         if motor_id is None:
             return
-        self._proxy_call(f"motor {message} stop",
-                         lambda: self.proxy.uart.motorStop(motor_id))
+        ok, result = self._proxy_call(
+            f"motor {message} stop",
+            lambda: self.proxy.uart.motorStop(motor_id))
+        logger.info(f"Portable Dropbot motor {message} stop --> "
+                    f"{result if ok and result is not None else 'FAILED'}")
         self._publish_motors()
 
     def on_motor_home_request(self, message):
         motor_id = self._motor_id(message)
         if motor_id is None:
             return
-        self._proxy_call(f"motor {message} home",
-                         lambda: self.proxy.uart.motorHome(motor_id))
+        ok, result = self._proxy_call(
+            f"motor {message} home",
+            lambda: self.proxy.uart.motorHome(motor_id))
+        logger.info(f"Portable Dropbot motor {message} home --> "
+                    f"{result if ok and result is not None else 'FAILED'}")
         self._publish_motors()
 
     def on_refresh_motors_request(self, message):

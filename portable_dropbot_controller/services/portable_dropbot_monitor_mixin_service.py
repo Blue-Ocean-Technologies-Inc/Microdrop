@@ -77,8 +77,9 @@ class PortableDropbotMonitorMixinService(HasTraits):
         hardware, so the backend owns port enumeration: answer with
         the scanner's own candidate ordering (preference hint first,
         USB-style ports next)."""
-        publish_message(topic=PORTS_UPDATED,
-                        message=json.dumps(self._candidate_ports()))
+        ports = self._candidate_ports()
+        logger.debug(f"Port refresh requested; candidates: {ports}")
+        publish_message(topic=PORTS_UPDATED, message=json.dumps(ports))
 
     def on_disconnect_request(self, message):
         """User-requested disconnect: drop the link and leave the

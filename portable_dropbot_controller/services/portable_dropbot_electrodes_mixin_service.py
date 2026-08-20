@@ -48,6 +48,8 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             context={"max_channels": self._board_channels()},
         )
         channels = [int(channel) for channel in model.channels]
+        logger.debug(f"Electrode state change requested: "
+                     f"{len(channels)} active channel(s) {channels}")
         ok, _ = self._proxy_call(
             "electrode actuation",
             lambda: self.proxy.actuate_channels(channels))
@@ -55,3 +57,6 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             app_globals["last_channel_states_requested"] = str(message)
             logger.info(f"Portable Dropbot electrode update applied: "
                         f"{len(channels)} active")
+        else:
+            logger.warning(f"Portable Dropbot electrode update FAILED "
+                           f"({len(channels)} active requested)")
