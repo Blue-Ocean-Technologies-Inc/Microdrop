@@ -122,6 +122,10 @@ class DecisionNode:
     """A placed decision shape: binds (step, contributed decision) and
     holds the user's routing + prompt policy for it."""
 
+    #: Route-arbitration defaults: LOWER wins. Ops beat outcome edges
+    #: unless the user raises an edge above them.
+    DEFAULT_EDGE_PRIORITY = 20
+
     def __init__(self, step_id, decision_id, pos=(0.0, 0.0), node_id=None):
         self.id = node_id or _new_id()
         self.step_id = step_id
@@ -131,6 +135,9 @@ class DecisionNode:
         # Optional user overrides for the outcome button/edge labels
         # (outcome_id -> text); missing keys use the provider's label.
         self.labels = {}
+        # Per-edge route priority (outcome_id -> int, lower wins);
+        # missing keys use DEFAULT_EDGE_PRIORITY.
+        self.route_priority = {}
         # Prompt policy:
         #   "prompt"      — always ask (auto_after=N: ask the first N
         #                   times, then answer automatically)
@@ -146,13 +153,18 @@ class DecisionNode:
     def label_for(self, outcome) -> str:
         return self.labels.get(outcome.id, outcome.label)
 
+    def priority_for(self, outcome_id) -> int:
+        return self.route_priority.get(outcome_id,
+                                       self.DEFAULT_EDGE_PRIORITY)
+
     def to_dict(self):
         return {"id": self.id, "step_id": self.step_id,
                 "decision_id": self.decision_id, "pos": list(self.pos),
                 "routes": dict(self.routes), "mode": self.mode,
                 "auto_after": self.auto_after,
                 "auto_outcome": self.auto_outcome,
-                "labels": dict(self.labels)}
+                "labels": dict(self.labels),
+                "route_priority": dict(self.route_priority)}
 
     @classmethod
     def from_dict(cls, d):
@@ -163,12 +175,18 @@ class DecisionNode:
         n.auto_after = d.get("auto_after")
         n.auto_outcome = d.get("auto_outcome")
         n.labels = dict(d.get("labels", {}))
+        n.route_priority = dict(d.get("route_priority", {}))
         return n
 
 
 class OpNode:
     """A logic shape. kind "and": fires when every input outcome was
-    chosen in the owning step's resolution round; its route then wins."""
+    chosen in the owning step's resolution round; "or": any of them.
+    A matched op's route competes with the chosen outcomes' own routes
+    by priority (lower wins; ops default below edges, so they win ties
+    unless an edge is raised above them)."""
+
+    DEFAULT_PRIORITY = 10
 
     def __init__(self, kind="and", pos=(0.0, 0.0), node_id=None):
         self.id = node_id or _new_id()
@@ -176,17 +194,19 @@ class OpNode:
         self.pos = tuple(pos)
         self.inputs = []              # [(decision_node_id, outcome_id)]
         self.target = None            # sentinel or row id; None = unwired
+        self.priority = self.DEFAULT_PRIORITY
 
     def to_dict(self):
         return {"id": self.id, "kind": self.kind, "pos": list(self.pos),
                 "inputs": [list(i) for i in self.inputs],
-                "target": self.target}
+                "target": self.target, "priority": self.priority}
 
     @classmethod
     def from_dict(cls, d):
         n = cls(d.get("kind", "and"), d.get("pos", (0, 0)), node_id=d["id"])
         n.inputs = [tuple(i) for i in d.get("inputs", [])]
         n.target = d.get("target")
+        n.priority = int(d.get("priority", cls.DEFAULT_PRIORITY))
         return n
 
 

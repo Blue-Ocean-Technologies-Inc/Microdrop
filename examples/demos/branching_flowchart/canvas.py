@@ -602,18 +602,36 @@ class DecisionShapeItem(_AnchoredRectItem):
                             outcome_id=outcome.id)
             port.setPos(x, DEC_HEADER_H + DEC_PORTS_H - 4)
             self.ports[outcome.id] = port
+        # Amber ring on the current auto answer (used by auto policies,
+        # 'don't ask again', and the Unattended timer). Double-clicking a
+        # port moves it.
+        auto_id = dnode.auto_outcome or spec.default_outcome
+        auto_port = self.ports.get(auto_id)
+        if auto_port is not None:
+            ring = QGraphicsEllipseItem(
+                -PORT_R - 3, -PORT_R - 3,
+                2 * (PORT_R + 3), 2 * (PORT_R + 3), auto_port)
+            ring.setPen(QPen(QColor("#fbbf24"), 1.4))
+            ring.setBrush(QBrush(Qt.NoBrush))
 
     def refresh_port_tooltips(self, protocol):
+        auto_id = self.dnode.auto_outcome or self.spec.default_outcome
         for outcome in self.spec.outcomes:
             target = self.dnode.routes.get(
                 outcome.id,
                 self.spec.default_routes.get(outcome.id))
             origin = ("custom" if outcome.id in self.dnode.routes
                       else "default")
+            prio = self.dnode.priority_for(outcome.id)
+            if prio != self.dnode.DEFAULT_EDGE_PRIORITY:
+                origin += f", p{prio}"
+            auto_note = ("\n● ringed = current auto answer."
+                         if outcome.id == auto_id else "")
             self.ports[outcome.id].setToolTip(
                 f"{self.dnode.label_for(outcome)} → "
                 f"{protocol.describe_target(target)} "
-                f"({origin})\nDrag to a step/group (route), an AND/OR "
+                f"({origin}){auto_note}\nDouble-click: make this the "
+                f"auto answer. Drag to a step/group (route), an AND/OR "
                 f"shape (feed), another decision of this step (resolve "
                 f"serially), ⏹/▦ (abort/finish), or blank space "
                 f"(new step).")
@@ -974,13 +992,18 @@ class FlowchartScene(QGraphicsScene):
                      if c.model.col_id == spec.provider_col_id), None)
                 active = (handler.is_decision_active(spec, step)
                           if handler else True)
+                try:
+                    auto_label = dn.label_for(spec.outcome_by_id(
+                        dn.auto_outcome or spec.default_outcome))
+                except KeyError:
+                    auto_label = "?"
                 badge = ""
                 if dn.mode == "auto":
-                    badge = "[auto]"
+                    badge = f"[auto → {auto_label}]"
                 elif dn.mode == "auto_first" and dn.auto_after is not None:
-                    badge = f"[auto ×{dn.auto_after} → ask]"
+                    badge = f"[auto {auto_label} ×{dn.auto_after} → ask]"
                 elif dn.auto_after is not None:
-                    badge = f"[ask ×{dn.auto_after} → auto]"
+                    badge = f"[ask ×{dn.auto_after} → auto {auto_label}]"
                 item = DecisionShapeItem(self, dn, spec, active, badge)
                 self.addItem(item)
                 self.dec_items[dn.id] = item
@@ -1121,6 +1144,9 @@ class FlowchartScene(QGraphicsScene):
                 port = dec_item.ports.get(outcome.id) if dec_item else None
                 kind = "outcome"
                 label = dn.label_for(outcome)
+                prio = dn.priority_for(outcome.id)
+                if prio != dn.DEFAULT_EDGE_PRIORITY:
+                    label += f" [p{prio}]"
                 dst = self._terminal_for(target)
                 if dst is None:
                     tdn = proto.decision_node_by_id(target)
@@ -1161,10 +1187,13 @@ class FlowchartScene(QGraphicsScene):
                 dst = (self._terminal_for(op.target)
                        or disp(op.target))
                 if dst is not None and dst is not op_item:
+                    op_label = op.kind.upper()
+                    if op.priority != op.DEFAULT_PRIORITY:
+                        op_label += f" [p{op.priority}]"
                     self._add(EdgeItem(
                         self, "op", op_item, dst,
                         OP_COLORS.get(op.kind, OP_COLORS["and"]),
-                        label=op.kind.upper(),
+                        label=op_label,
                         src_port=op_item.out_port,
                         payload=("op", op.id)))
 
@@ -1472,7 +1501,16 @@ class FlowchartScene(QGraphicsScene):
         super().keyPressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
-        if not self.items(event.scenePos()):
+        items = self.items(event.scenePos())
+        # Double-click an outcome port: make it the decision's auto
+        # answer (the amber ring), right on the flowchart.
+        for item in items:
+            if isinstance(item, PortItem) and item.role == "outcome":
+                self.window.toggle_auto_outcome(
+                    item.owner.dnode.id, item.outcome_id)
+                event.accept()
+                return
+        if not items:
             self.window.add_step_at(
                 (event.scenePos().x(), event.scenePos().y()))
             event.accept()

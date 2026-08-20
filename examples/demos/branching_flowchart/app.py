@@ -162,6 +162,8 @@ class LegendWidget(QFrame):
             (_LineSample(TETHER_COLOR, Qt.DotLine, 1.2),
              "decision shape ↔ its step"),
             (None, "defaults:  ↻ retry   → next   ⏹ abort   ▦ finish"),
+            (None, "ringed port = auto answer (double-click to set)"),
+            (None, "[pN] = route priority — lower beats (ops p10, edges p20)"),
             (None, "bright edge = route just taken (trail)"),
         ]
         for r, (sample, text) in enumerate(rows):
@@ -726,20 +728,71 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         # Outcome-carrying edges can rename their button/edge label.
         if edge.payload[0] == "outcome":
+            dn_id, oid = edge.payload[1], edge.payload[2]
             menu.addAction(
                 "Rename button label…",
-                lambda: self.edit_outcome_label(edge.payload[1],
-                                                edge.payload[2]))
+                lambda: self.edit_outcome_label(dn_id, oid))
+            dn = self.protocol.decision_node_by_id(dn_id)
+            if dn is not None and edge.kind == "outcome":
+                menu.addAction(
+                    f"Priority… (p{dn.priority_for(oid)})",
+                    lambda: self._ask_route_priority(
+                        dn.priority_for(oid),
+                        lambda n: dn.route_priority.__setitem__(oid, n)))
         elif edge.payload[0] == "feed":
             menu.addAction(
                 "Rename button label…",
                 lambda: self.edit_outcome_label(edge.payload[2],
                                                 edge.payload[3]))
+        elif edge.payload[0] == "op":
+            op = self.protocol.op_node_by_id(edge.payload[1])
+            if op is not None:
+                menu.addAction(
+                    f"Priority… (p{op.priority})",
+                    lambda: self._ask_route_priority(
+                        op.priority,
+                        lambda n: setattr(op, "priority", n)))
         menu.addAction(
             "Delete route",
             lambda: (self.push_undo(), self._reset_edge(edge),
                      self.rebuild()))
         menu.exec(screen_pos)
+
+    def _ask_route_priority(self, current, apply):
+        n, ok = QInputDialog.getInt(
+            self, "Route priority",
+            "Lower wins the round. Defaults: operators p10,\n"
+            "outcome edges p20 (so operators beat edges unless\n"
+            "an edge is raised above them):",
+            current, 1, 99)
+        if ok and n != current:
+            self.push_undo()
+            apply(n)
+            self.rebuild()
+
+    def toggle_auto_outcome(self, dn_id, outcome_id):
+        """Double-click on an outcome port: make it the decision's auto
+        answer (double-click the ringed one to reset to the provider
+        default)."""
+        dn = self.protocol.decision_node_by_id(dn_id)
+        spec = self.protocol.spec_by_id(dn.decision_id) if dn else None
+        if dn is None or spec is None:
+            return
+        self.push_undo()
+        if dn.auto_outcome == outcome_id:
+            dn.auto_outcome = None
+            chosen = spec.default_outcome
+            note = "provider default"
+        else:
+            dn.auto_outcome = outcome_id
+            chosen = outcome_id
+            note = "set here"
+        label = dn.label_for(spec.outcome_by_id(chosen))
+        self.statusBar().showMessage(
+            f"Auto answer for {spec.title!r}: {label} ({note}) — used by "
+            f"auto policies, 'don't ask again', and the Unattended timer.",
+            7000)
+        self.rebuild()
 
     def edit_outcome_label(self, dn_id, outcome_id):
         dn = self.protocol.decision_node_by_id(dn_id)
@@ -919,6 +972,10 @@ class MainWindow(QMainWindow):
             f"Convert to {other.upper()}",
             lambda: (self.push_undo(), setattr(op, "kind", other),
                      self.rebuild()))
+        menu.addAction(
+            f"Priority… (p{op.priority})",
+            lambda: self._ask_route_priority(
+                op.priority, lambda n: setattr(op, "priority", n)))
         menu.addSeparator()
         menu.addAction(
             "Delete shape",

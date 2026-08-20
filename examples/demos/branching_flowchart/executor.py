@@ -468,36 +468,56 @@ class DemoExecutor:
                             f"Chained decision for {tdn.decision_id!r} "
                             f"didn't fire this round — skipped")
 
-        # 1. Logic ops (creation order): AND = all inputs chosen,
-        #    OR = any input chosen.
+        # 1+2. Route arbitration by per-edge priority (lower wins; ties
+        # keep the old order: matched ops in creation order, then the
+        # chosen outcomes' routes in resolution order). Ops default to
+        # priority 10 and outcome edges to 20, so ops win unless the
+        # user raises an edge above them.
         chosen_endpoints = {(dn.id, oid) for _spec, dn, oid in resolved
                             if dn is not None}
+        candidates = []      # (priority, tiebreak, tag, target, describe)
+        order = 0
         for op in proto.ops_for_step(step.id):
             if op.target is None or not op.inputs:
                 continue
             hits = [pair in chosen_endpoints for pair in op.inputs]
             matched = all(hits) if op.kind == "and" else any(hits)
             if matched:
-                step_ctx.log(
-                    f"{op.kind.upper()} op matched "
-                    f"({sum(hits)}/{len(op.inputs)} outcomes) -> "
-                    f"{proto.describe_target(op.target)}")
-                self.signals.route_taken.emit(("op", op.id))
-                return self._verdict_for(step, op.target, i)
-
-        # 2. Individual outcome routes, resolution order. Chain targets
-        #    were consumed above; they never jump.
+                candidates.append((
+                    op.priority, order, ("op", op.id), op.target,
+                    f"{op.kind.upper()} op "
+                    f"({sum(hits)}/{len(op.inputs)} outcomes)"))
+                order += 1
         for spec, dn, outcome_id in resolved:
             routes = dn.routes if dn else {}
             target = routes.get(outcome_id,
                                 spec.default_routes.get(outcome_id, NEXT))
-            if target in dn_by_id:
-                continue
-            if target != NEXT:
-                if dn is not None:
-                    self.signals.route_taken.emit(
-                        ("outcome", dn.id, outcome_id))
-                return self._verdict_for(step, target, i)
+            if target in dn_by_id or target == NEXT:
+                continue    # chains were consumed during resolution
+            outcome = spec.outcome_by_id(outcome_id)
+            label = dn.label_for(outcome) if dn else outcome.label
+            prio = (dn.priority_for(outcome_id) if dn
+                    else 20)
+            tag = (("outcome", dn.id, outcome_id) if dn is not None
+                   else None)
+            candidates.append((prio, order, tag, target,
+                               f"outcome {label!r}"))
+            order += 1
+        if candidates:
+            candidates.sort(key=lambda c: (c[0], c[1]))
+            prio, _t, tag, target, desc = candidates[0]
+            if len(candidates) > 1:
+                losers = ", ".join(f"{c[4]} (p{c[0]})"
+                                   for c in candidates[1:])
+                step_ctx.log(
+                    f"Route arbitration: {desc} (p{prio}) -> "
+                    f"{proto.describe_target(target)} — beat {losers}")
+            else:
+                step_ctx.log(
+                    f"{desc} -> {proto.describe_target(target)}")
+            if tag is not None:
+                self.signals.route_taken.emit(tag)
+            return self._verdict_for(step, target, i)
 
         # 3. No decision redirected: the step's completion route.
         if step.next_target != NEXT:

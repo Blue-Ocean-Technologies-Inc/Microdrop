@@ -148,10 +148,20 @@ python -m examples.demos.branching_flowchart --smoke
   is a **chain**: choosing it activates that decision, which resolves
   next (serial). A chained decision whose activating outcome wasn't
   chosen — or that never fired — is skipped that round.
-* Routing then evaluates: **logic ops first** (AND = all input outcomes
-  chosen this round, OR = any of them; creation order, first match
-  wins), then the individual outcome routes in resolution order (first
-  non-"next" wins), then the step's completion route, then table order.
+* Routing then arbitrates all matched candidates by **per-edge
+  priority** (lower wins): matched AND/OR ops (all/any input outcomes
+  chosen this round) default to p10, outcome edges to p20 — so ops beat
+  edges unless an edge is raised above them (edge context menu →
+  *Priority…*; non-default priorities show as `[pN]` on the edge). Ties
+  keep op-creation order, then resolution order. If nothing matched:
+  the step's completion route, then table order. The run log narrates
+  each arbitration ("X (p5) beat Y (p10)").
+* The **auto answer** — used by auto policies, "don't ask again", and
+  the Unattended timer — is visible and settable on the flowchart:
+  the ringed outcome port is the current auto pick; double-click a port
+  to make it the auto answer (double-click the ringed one to reset to
+  the provider default). Decision badges show it, e.g.
+  `[auto Retry ×2 → ask]`.
 * An op only combines outcomes from one step's decisions, and chains
   only link decisions of the same step (both enforced on drop); an op
   with no wired target is inert.
