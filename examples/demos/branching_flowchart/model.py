@@ -2,25 +2,33 @@
 
 Mirrors the real app's concepts without traits:
 
-  * A Step is what a BaseRow is in ``pluggable_protocol_tree`` — a bag of
-    per-column values keyed by col_id, plus (new here) its routing state.
-  * A DecisionSpec is what a column provider would contribute alongside its
-    IColumn trio: a question, a set of outcomes, and default routes so the
-    protocol runs even if the user never customizes anything.
-  * A RouteConfig is the user's per-(step, decision) customization, edited
-    graphically on the canvas: where each outcome goes, and whether the
-    prompt is shown or auto-answered (optionally only after N occurrences).
+  * A Row is a step or a group (a group owns children, like GroupRow in
+    ``pluggable_protocol_tree``). Execution walks the leaf steps in tree
+    order. Rows carry their canvas position so the drawing persists.
+  * A DecisionSpec is what a column provider contributes alongside its
+    IColumn trio: a question, a set of outcomes, and default routes so
+    the protocol runs even if the user never customizes anything.
+  * A DecisionNode is a *placed shape* on the canvas binding one step to
+    one contributed decision — added from the step's ＋ palette. It holds
+    the user's routing (outcome -> target) and prompt policy
+    (prompt / auto / auto-after-N). With no shape placed, the provider
+    defaults apply and the prompt still shows.
+  * An OpNode is a logic shape (AND): its inputs are outcome endpoints of
+    decision shapes belonging to ONE step; when every input outcome was
+    chosen in that step's resolution round, the op's own route wins over
+    the individual outcome routes.
 
-Route targets are either one of the sentinels below or a concrete step id.
+Route targets are either one of the sentinels below or a row id (a group
+id means "jump to the group's first step").
 """
 
-import uuid
-from dataclasses import dataclass, field
+import uuid as _uuid
+from dataclasses import dataclass
 from typing import Optional
 
 # ---- route target sentinels ------------------------------------------------
 
-NEXT = "__next__"     # fall through to the next step in table order
+NEXT = "__next__"     # fall through to the next leaf step in tree order
 SELF = "__self__"     # re-run the current step (retry)
 END = "__end__"       # finish the protocol (this repetition) cleanly
 ABORT = "__abort__"   # abort the whole run
@@ -31,6 +39,10 @@ SENTINEL_LABELS = {
     END: "finish protocol",
     ABORT: "abort protocol",
 }
+
+
+def _new_id():
+    return _uuid.uuid4().hex[:8]
 
 
 @dataclass(frozen=True)
@@ -44,15 +56,15 @@ class Outcome:
 
 @dataclass(frozen=True)
 class DecisionSpec:
-    """Contributed by a column provider: a question the running protocol may
-    pose, its possible outcomes, and provider defaults for where each
+    """Contributed by a column provider: a question the running protocol
+    may pose, its possible outcomes, and provider defaults for where each
     outcome routes. ``default_outcome`` is the answer picked when the
     prompt is suppressed (auto mode / auto-after-N)."""
     id: str
     title: str
     question: str
     outcomes: tuple
-    default_routes: dict          # outcome_id -> target (sentinel or step id)
+    default_routes: dict          # outcome_id -> target (sentinel or row id)
     default_outcome: str
     provider_col_id: str = ""
 
@@ -63,114 +75,305 @@ class DecisionSpec:
         raise KeyError(outcome_id)
 
 
-@dataclass
-class RouteConfig:
-    """User customization for one (step, decision) pair."""
-    # outcome_id -> target; falls back to spec.default_routes when absent.
-    routes: dict = field(default_factory=dict)
-    # "prompt": always ask. "auto": never ask, pick auto_outcome.
-    mode: str = "prompt"
-    # If set (and mode == "prompt"), ask the first N times this decision
-    # fires for this step in a run, then switch to auto silently.
-    auto_after: Optional[int] = None
-    # Outcome picked in auto mode; None -> spec.default_outcome.
-    auto_outcome: Optional[str] = None
+class Row:
+    """One protocol row: a step (leaf) or a group (owns children)."""
 
-    def to_dict(self):
-        return {"routes": dict(self.routes), "mode": self.mode,
-                "auto_after": self.auto_after, "auto_outcome": self.auto_outcome}
-
-    @classmethod
-    def from_dict(cls, d):
-        return cls(routes=dict(d.get("routes", {})), mode=d.get("mode", "prompt"),
-                   auto_after=d.get("auto_after"), auto_outcome=d.get("auto_outcome"))
-
-
-class Step:
-    """One protocol step: named, with per-column values and routing state."""
-
-    def __init__(self, name, values=None, step_id=None):
-        self.id = step_id or uuid.uuid4().hex[:8]
+    def __init__(self, name, values=None, row_id=None, is_group=False):
+        self.id = row_id or _new_id()
         self.name = name
+        self.is_group = is_group
+        self.children = [] if is_group else None
         self.values = dict(values or {})
-        # Completion route: where execution goes when the step finishes and
-        # no decision redirected it. NEXT = table order (the implicit edge).
+        # Completion route (steps only): where execution goes when the
+        # step finishes and no decision redirected it. NEXT = tree order.
         self.next_target = NEXT
-        # decision_id -> RouteConfig
-        self.decision_cfgs = {}
         # Canvas position, persisted with the protocol.
         self.pos = (0.0, 0.0)
 
-    def cfg_for(self, decision_id) -> RouteConfig:
-        """Get-or-create the RouteConfig for a decision on this step."""
-        cfg = self.decision_cfgs.get(decision_id)
-        if cfg is None:
-            cfg = RouteConfig()
-            self.decision_cfgs[decision_id] = cfg
-        return cfg
-
     def to_dict(self):
-        return {
-            "id": self.id, "name": self.name, "values": dict(self.values),
-            "next_target": self.next_target, "pos": list(self.pos),
-            "decision_cfgs": {k: v.to_dict() for k, v in self.decision_cfgs.items()},
-        }
+        d = {"id": self.id, "name": self.name, "values": dict(self.values),
+             "next_target": self.next_target, "pos": list(self.pos)}
+        if self.is_group:
+            d["children"] = [c.to_dict() for c in self.children]
+        return d
 
     @classmethod
     def from_dict(cls, d):
-        s = cls(d["name"], d.get("values"), step_id=d["id"])
-        s.next_target = d.get("next_target", NEXT)
-        s.pos = tuple(d.get("pos", (0.0, 0.0)))
-        s.decision_cfgs = {
-            k: RouteConfig.from_dict(v)
-            for k, v in d.get("decision_cfgs", {}).items()
-        }
-        return s
+        row = cls(d["name"], d.get("values"), row_id=d["id"],
+                  is_group="children" in d)
+        row.next_target = d.get("next_target", NEXT)
+        row.pos = tuple(d.get("pos", (0.0, 0.0)))
+        if row.is_group:
+            row.children = [cls.from_dict(c) for c in d["children"]]
+        return row
+
+
+class DecisionNode:
+    """A placed decision shape: binds (step, contributed decision) and
+    holds the user's routing + prompt policy for it."""
+
+    def __init__(self, step_id, decision_id, pos=(0.0, 0.0), node_id=None):
+        self.id = node_id or _new_id()
+        self.step_id = step_id
+        self.decision_id = decision_id
+        self.pos = tuple(pos)
+        self.routes = {}              # outcome_id -> target
+        self.mode = "prompt"          # "prompt" | "auto"
+        self.auto_after: Optional[int] = None
+        self.auto_outcome: Optional[str] = None
+
+    def to_dict(self):
+        return {"id": self.id, "step_id": self.step_id,
+                "decision_id": self.decision_id, "pos": list(self.pos),
+                "routes": dict(self.routes), "mode": self.mode,
+                "auto_after": self.auto_after,
+                "auto_outcome": self.auto_outcome}
+
+    @classmethod
+    def from_dict(cls, d):
+        n = cls(d["step_id"], d["decision_id"], d.get("pos", (0, 0)),
+                node_id=d["id"])
+        n.routes = dict(d.get("routes", {}))
+        n.mode = d.get("mode", "prompt")
+        n.auto_after = d.get("auto_after")
+        n.auto_outcome = d.get("auto_outcome")
+        return n
+
+
+class OpNode:
+    """A logic shape. kind "and": fires when every input outcome was
+    chosen in the owning step's resolution round; its route then wins."""
+
+    def __init__(self, kind="and", pos=(0.0, 0.0), node_id=None):
+        self.id = node_id or _new_id()
+        self.kind = kind
+        self.pos = tuple(pos)
+        self.inputs = []              # [(decision_node_id, outcome_id)]
+        self.target = None            # sentinel or row id; None = unwired
+
+    def to_dict(self):
+        return {"id": self.id, "kind": self.kind, "pos": list(self.pos),
+                "inputs": [list(i) for i in self.inputs],
+                "target": self.target}
+
+    @classmethod
+    def from_dict(cls, d):
+        n = cls(d.get("kind", "and"), d.get("pos", (0, 0)), node_id=d["id"])
+        n.inputs = [tuple(i) for i in d.get("inputs", [])]
+        n.target = d.get("target")
+        return n
 
 
 class Protocol:
-    """Ordered steps + the column set that defines their parameters."""
+    """A tree of rows + the placed decision/op shapes + the column set."""
 
     def __init__(self, columns):
         self.columns = list(columns)   # list[Column] from columns.py
-        self.steps = []
+        self.rows = []                 # top-level rows (tree)
+        self.decision_nodes = []       # list[DecisionNode]
+        self.op_nodes = []             # list[OpNode]
 
-    # -- step management ------------------------------------------------
+    # -- tree walking ---------------------------------------------------
 
-    def add_step(self, name, values=None, index=None) -> Step:
-        seeded = {c.model.col_id: c.model.default_value for c in self.columns}
-        seeded.update(values or {})
-        step = Step(name, seeded)
-        if index is None:
-            self.steps.append(step)
-        else:
-            self.steps.insert(index, step)
-        return step
+    def iter_rows(self):
+        """(row, depth) in tree order."""
+        def walk(rows, depth):
+            for row in rows:
+                yield row, depth
+                if row.is_group:
+                    yield from walk(row.children, depth + 1)
+        yield from walk(self.rows, 0)
 
-    def remove_step(self, step_id) -> None:
-        self.steps = [s for s in self.steps if s.id != step_id]
-        # Scrub dangling routes that pointed at the removed step.
-        for s in self.steps:
-            if s.next_target == step_id:
-                s.next_target = NEXT
-            for cfg in s.decision_cfgs.values():
-                for oid, target in list(cfg.routes.items()):
-                    if target == step_id:
-                        del cfg.routes[oid]
+    def leaves(self):
+        return [r for r, _ in self.iter_rows() if not r.is_group]
 
-    def index_of(self, step_id) -> Optional[int]:
-        for i, s in enumerate(self.steps):
-            if s.id == step_id:
+    def row_by_id(self, row_id) -> Optional[Row]:
+        for row, _ in self.iter_rows():
+            if row.id == row_id:
+                return row
+        return None
+
+    def parent_list_of(self, row_id):
+        """(container_list, index) holding the row, or (None, None)."""
+        def search(rows):
+            for i, row in enumerate(rows):
+                if row.id == row_id:
+                    return rows, i
+                if row.is_group:
+                    found = search(row.children)
+                    if found[0] is not None:
+                        return found
+            return None, None
+        return search(self.rows)
+
+    def leaf_index(self, row_id) -> Optional[int]:
+        """Execution index for a route target: a step's own index, or a
+        group's first leaf. None for unknown/empty targets."""
+        row = self.row_by_id(row_id)
+        if row is None:
+            return None
+        if row.is_group:
+            for leaf in _subtree_leaves(row):
+                row = leaf
+                break
+            else:
+                return None
+        for i, leaf in enumerate(self.leaves()):
+            if leaf.id == row.id:
                 return i
         return None
 
-    def step_by_id(self, step_id) -> Optional[Step]:
-        i = self.index_of(step_id)
-        return self.steps[i] if i is not None else None
+    # -- row management -------------------------------------------------
 
-    # -- decision specs available on a step (from its columns) ----------
+    def add_step(self, name, values=None, after_id=None) -> Row:
+        seeded = {c.model.col_id: c.model.default_value
+                  for c in self.columns}
+        seeded.update(values or {})
+        step = Row(name, seeded)
+        container, index = (self.parent_list_of(after_id)
+                            if after_id else (None, None))
+        if container is None:
+            self.rows.append(step)
+        else:
+            container.insert(index + 1, step)
+        return step
 
-    def decision_specs(self):
+    def remove_rows(self, row_ids) -> None:
+        removed_steps = set()
+        for rid in row_ids:
+            container, index = self.parent_list_of(rid)
+            if container is None:
+                continue
+            row = container.pop(index)
+            removed_steps.update(
+                r.id for r in ([row] if not row.is_group
+                               else _subtree_rows(row)))
+        self._scrub_targets(removed_steps)
+
+    def _scrub_targets(self, removed_ids):
+        removed_dn = {dn.id for dn in self.decision_nodes
+                      if dn.step_id in removed_ids}
+        self.decision_nodes = [dn for dn in self.decision_nodes
+                               if dn.step_id not in removed_ids]
+        for op in self.op_nodes:
+            op.inputs = [i for i in op.inputs if i[0] not in removed_dn]
+            if op.target in removed_ids:
+                op.target = None
+        self.op_nodes = [op for op in self.op_nodes if op.inputs
+                         or op.target]
+        for row, _ in self.iter_rows():
+            if row.next_target in removed_ids:
+                row.next_target = NEXT
+        for dn in self.decision_nodes:
+            for oid, target in list(dn.routes.items()):
+                if target in removed_ids:
+                    del dn.routes[oid]
+
+    # -- grouping -------------------------------------------------------
+
+    def can_group(self, row_ids) -> bool:
+        """Selected rows must be a contiguous run of siblings."""
+        if not row_ids:
+            return False
+        containers = []
+        indices = []
+        for rid in row_ids:
+            container, index = self.parent_list_of(rid)
+            if container is None:
+                return False
+            containers.append(id(container))
+            indices.append(index)
+        if len(set(containers)) != 1:
+            return False
+        indices.sort()
+        return indices == list(range(indices[0], indices[0] + len(indices)))
+
+    def group_rows(self, row_ids, name="Group") -> Optional[Row]:
+        if not self.can_group(row_ids):
+            return None
+        container, _ = self.parent_list_of(row_ids[0])
+        indices = sorted(container.index(self.row_by_id(rid))
+                         for rid in row_ids)
+        members = [container[i] for i in indices]
+        group = Row(name, is_group=True)
+        group.children = members
+        group.pos = members[0].pos
+        container[indices[0]:indices[-1] + 1] = [group]
+        return group
+
+    def ungroup(self, group_id) -> bool:
+        row = self.row_by_id(group_id)
+        if row is None or not row.is_group:
+            return False
+        container, index = self.parent_list_of(group_id)
+        container[index:index + 1] = row.children
+        self._scrub_targets({group_id})
+        return True
+
+    # -- shapes ---------------------------------------------------------
+
+    def decision_node_for(self, step_id, decision_id):
+        for dn in self.decision_nodes:
+            if dn.step_id == step_id and dn.decision_id == decision_id:
+                return dn
+        return None
+
+    def decision_node_by_id(self, node_id):
+        for dn in self.decision_nodes:
+            if dn.id == node_id:
+                return dn
+        return None
+
+    def add_decision_node(self, step_id, decision_id, pos) -> DecisionNode:
+        dn = DecisionNode(step_id, decision_id, pos)
+        self.decision_nodes.append(dn)
+        return dn
+
+    def remove_decision_node(self, node_id) -> None:
+        self.decision_nodes = [dn for dn in self.decision_nodes
+                               if dn.id != node_id]
+        for op in self.op_nodes:
+            op.inputs = [i for i in op.inputs if i[0] != node_id]
+
+    def add_op_node(self, pos, kind="and") -> OpNode:
+        op = OpNode(kind, pos)
+        self.op_nodes.append(op)
+        return op
+
+    def op_node_by_id(self, node_id):
+        for op in self.op_nodes:
+            if op.id == node_id:
+                return op
+        return None
+
+    def remove_op_node(self, node_id) -> None:
+        self.op_nodes = [op for op in self.op_nodes if op.id != node_id]
+
+    def ops_for_step(self, step_id):
+        """Op nodes all of whose inputs come from this step's decision
+        shapes (an op with no inputs belongs to no step)."""
+        out = []
+        for op in self.op_nodes:
+            if not op.inputs:
+                continue
+            owners = {dn.step_id
+                      for i in op.inputs
+                      for dn in [self.decision_node_by_id(i[0])]
+                      if dn is not None}
+            if owners == {step_id}:
+                out.append(op)
+        return out
+
+    # -- decision specs available (from the column set) -----------------
+
+    def spec_by_id(self, decision_id) -> Optional[DecisionSpec]:
+        for col in self.columns:
+            for spec in col.handler.decision_specs():
+                if spec.id == decision_id:
+                    return spec
+        return None
+
+    def all_specs(self):
         specs = []
         for col in sorted(self.columns, key=lambda c: (c.handler.priority,
                                                        c.model.col_id)):
@@ -178,19 +381,47 @@ class Protocol:
         return specs
 
     def describe_target(self, target) -> str:
+        if target is None:
+            return "not wired"
         if target in SENTINEL_LABELS:
             return SENTINEL_LABELS[target]
-        step = self.step_by_id(target)
-        return f"step {step.name!r}" if step else "next step (missing target)"
+        row = self.row_by_id(target)
+        if row is None:
+            return "next step (missing target)"
+        return (f"group {row.name!r}" if row.is_group
+                else f"step {row.name!r}")
 
     # -- persistence ----------------------------------------------------
 
     def to_dict(self):
-        return {"steps": [s.to_dict() for s in self.steps]}
+        return {
+            "rows": [r.to_dict() for r in self.rows],
+            "decision_nodes": [d.to_dict() for d in self.decision_nodes],
+            "op_nodes": [o.to_dict() for o in self.op_nodes],
+        }
 
     def load_dict(self, d) -> None:
-        self.steps = [Step.from_dict(sd) for sd in d.get("steps", [])]
-        # Seed any column values missing from the file (new columns since save).
-        for s in self.steps:
-            for c in self.columns:
-                s.values.setdefault(c.model.col_id, c.model.default_value)
+        self.rows = [Row.from_dict(rd) for rd in d.get("rows", [])]
+        self.decision_nodes = [DecisionNode.from_dict(x)
+                               for x in d.get("decision_nodes", [])]
+        self.op_nodes = [OpNode.from_dict(x) for x in d.get("op_nodes", [])]
+        # Seed any column values missing from the file (new columns since
+        # save).
+        for row, _ in self.iter_rows():
+            if not row.is_group:
+                for c in self.columns:
+                    row.values.setdefault(c.model.col_id,
+                                          c.model.default_value)
+
+
+def _subtree_rows(row):
+    yield row
+    if row.is_group:
+        for child in row.children:
+            yield from _subtree_rows(child)
+
+
+def _subtree_leaves(row):
+    for r in _subtree_rows(row):
+        if not r.is_group:
+            yield r

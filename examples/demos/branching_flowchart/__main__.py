@@ -31,13 +31,14 @@ def main():
         return app.exec()
 
     # -- smoke: auto-answer every decision, run fast, assert we finish --
-    for step in win.protocol.steps:
+    for step in win.protocol.leaves():
         step.values["duration_s"] = 0.05
-        for node_decisions in [win.scene.node_by_id[step.id].decisions]:
-            for handler, spec in node_decisions:
-                cfg = step.cfg_for(spec.id)
-                cfg.mode = "auto"
-                cfg.auto_outcome = spec.default_outcome
+        for spec in win.protocol.all_specs():
+            dn = (win.protocol.decision_node_for(step.id, spec.id)
+                  or win.protocol.add_decision_node(
+                      step.id, spec.id, (step.pos[0] + 60, step.pos[1] + 90)))
+            dn.mode = "auto"
+            dn.auto_outcome = spec.default_outcome
 
     result = {"code": 1}
 

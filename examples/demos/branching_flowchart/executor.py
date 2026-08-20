@@ -82,10 +82,10 @@ class PendingDecision:
     ``decision_pending``; the dialog calls :meth:`resolve` and the worker
     thread (blocked in ``_answer_for``) picks the answer up."""
 
-    def __init__(self, step, spec, cfg, message, options):
+    def __init__(self, step, spec, decision_node, message, options):
         self.step = step
         self.spec = spec
-        self.cfg = cfg
+        self.decision_node = decision_node   # placed shape, or None
         self.message = message
         # list[(Outcome, target, target_description)] in button order
         self.options = options
@@ -257,7 +257,7 @@ class DemoExecutor:
     # ------- step walk: sequential fall-through + decision routing -------
 
     def _run_steps(self, handlers, proto_ctx):
-        steps = self.protocol.steps
+        steps = self.protocol.leaves()
         # times each (step_id, decision_id) has fired this run — drives
         # the "stop prompting after N retries" behaviour.
         occurrences = defaultdict(int)
@@ -296,28 +296,35 @@ class DemoExecutor:
         """Turn the step's pending decisions + completion route into the
         next frame index. Returns ("jump", idx) | ("end",) | ("abort",).
 
-        Decisions resolve in provider-priority order; the first one whose
-        outcome routes anywhere other than NEXT wins and later requests
-        from the same step are skipped (logged)."""
+        All of the step's decisions resolve first (prompt or auto), THEN
+        routing is evaluated: an AND op whose input outcomes were all
+        chosen wins first; otherwise the decisions' own outcome routes in
+        provider-priority order (first non-NEXT wins); otherwise the
+        step's completion route."""
+        proto = self.protocol
         requests = step_ctx.pending_decisions()
-        for n, (spec, message) in enumerate(requests):
+        chosen = []                    # [(spec, decision_node|None, outcome_id)]
+        for spec, message in requests:
             if self.stop_event.is_set():
                 return ("abort",)
-            cfg = step.cfg_for(spec.id)
+            dn = proto.decision_node_for(step.id, spec.id)
             occurrences[(step.id, spec.id)] += 1
             seen = occurrences[(step.id, spec.id)]
 
-            auto = (cfg.mode == "auto"
-                    or (cfg.auto_after is not None and seen > cfg.auto_after))
+            mode = dn.mode if dn else "prompt"
+            auto_after = dn.auto_after if dn else None
+            auto = (mode == "auto"
+                    or (auto_after is not None and seen > auto_after))
             if auto:
-                outcome_id = cfg.auto_outcome or spec.default_outcome
-                why = ("auto mode" if cfg.mode == "auto"
-                       else f"auto after {cfg.auto_after} prompts")
+                outcome_id = ((dn.auto_outcome if dn else None)
+                              or spec.default_outcome)
+                why = ("auto mode" if mode == "auto"
+                       else f"auto after {auto_after} prompts")
                 step_ctx.log(
                     f"Decision {spec.title!r} -> "
                     f"{spec.outcome_by_id(outcome_id).label} ({why})")
             else:
-                outcome_id = self._answer_for(step, spec, cfg, message)
+                outcome_id = self._answer_for(step, spec, dn, message)
                 if outcome_id is None:      # stopped while waiting
                     return ("abort",)
                 step_ctx.log(
@@ -325,23 +332,35 @@ class DemoExecutor:
                     f"{spec.outcome_by_id(outcome_id).label} (user)")
             self.signals.decision_resolved.emit(step.id, spec.id,
                                                 outcome_id, auto)
+            chosen.append((spec, dn, outcome_id))
 
-            target = cfg.routes.get(outcome_id,
-                                    spec.default_routes.get(outcome_id, NEXT))
-            if target == NEXT:
-                continue  # no redirect — let remaining decisions weigh in
-            if requests[n + 1:]:
+        # 1. AND ops: every input outcome chosen this round -> its route.
+        chosen_endpoints = {(dn.id, oid) for _spec, dn, oid in chosen
+                            if dn is not None}
+        for op in proto.ops_for_step(step.id):
+            if op.target is None:
+                continue
+            if all(pair in chosen_endpoints for pair in op.inputs):
                 step_ctx.log(
-                    f"{len(requests) - n - 1} later decision(s) skipped — "
-                    f"{spec.title!r} already redirected the flow")
-            return self._verdict_for(step, target, i)
+                    f"{op.kind.upper()} op matched "
+                    f"({len(op.inputs)} outcomes) -> "
+                    f"{proto.describe_target(op.target)}")
+                return self._verdict_for(step, op.target, i)
 
-        # No decision redirected: follow the step's completion route.
-        return self._verdict_for(step, step.next_target, i,
-                                 completion=True)
+        # 2. Individual outcome routes, provider-priority order.
+        for spec, dn, outcome_id in chosen:
+            routes = dn.routes if dn else {}
+            target = routes.get(outcome_id,
+                                spec.default_routes.get(outcome_id, NEXT))
+            if target != NEXT:
+                return self._verdict_for(step, target, i)
 
-    def _verdict_for(self, step, target, i, completion=False):
+        # 3. No decision redirected: the step's completion route.
+        return self._verdict_for(step, step.next_target, i)
+
+    def _verdict_for(self, step, target, i):
         proto = self.protocol
+        n_leaves = len(proto.leaves())
         if target == SELF:
             return ("jump", i)
         if target == END:
@@ -349,32 +368,39 @@ class DemoExecutor:
         if target == ABORT:
             return ("abort",)
         if target == NEXT:
-            return ("jump", i + 1) if i + 1 < len(proto.steps) else ("end",)
-        idx = proto.index_of(target)
+            return ("jump", i + 1) if i + 1 < n_leaves else ("end",)
+        idx = proto.leaf_index(target)
         if idx is None:
             self.signals.log.emit(
                 f"[{step.name}] Route target missing — falling through "
                 f"to next step")
-            return ("jump", i + 1) if i + 1 < len(proto.steps) else ("end",)
+            return ("jump", i + 1) if i + 1 < n_leaves else ("end",)
         return ("jump", idx)
 
-    def _answer_for(self, step, spec, cfg, message):
+    def _answer_for(self, step, spec, dn, message):
         """Hand a PendingDecision to the GUI thread and block (stop-aware)
         until it's answered. Returns the outcome_id, or None on stop."""
+        routes = dn.routes if dn else {}
         options = []
         for outcome in spec.outcomes:
-            target = cfg.routes.get(outcome.id,
-                                    spec.default_routes.get(outcome.id, NEXT))
+            target = routes.get(outcome.id,
+                                spec.default_routes.get(outcome.id, NEXT))
             options.append((outcome, target,
                             self.protocol.describe_target(target)))
-        pending = PendingDecision(step, spec, cfg, message, options)
+        pending = PendingDecision(step, spec, dn, message, options)
         self.signals.decision_pending.emit(pending)
         while not pending.answered.wait(0.1):
             if self.stop_event.is_set():
                 return None
         if pending.remember_auto:
-            cfg.mode = "auto"
-            cfg.auto_outcome = pending.answer
+            # "Don't ask again this run": stored on the placed shape —
+            # minted next to the step if the user never placed one.
+            if dn is None:
+                dn = self.protocol.add_decision_node(
+                    step.id, spec.id,
+                    (step.pos[0] + 60, step.pos[1] + 90))
+            dn.mode = "auto"
+            dn.auto_outcome = pending.answer
         return pending.answer
 
     # ------- hook fan-out (mirror of ProtocolExecutor._run_hooks) -------

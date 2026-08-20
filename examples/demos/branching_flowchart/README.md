@@ -3,9 +3,18 @@
 A self-contained prototype for testing one idea: **the protocol's flow is
 drawn graphically on a node canvas, while the table only sets step
 parameters.** Column providers contribute *Decision* objects (a question +
-possible answers with default routes); at run time a decision fires a
-prompt dialog, and the clicked answer sends execution down the edge the
-user drew — or the provider's default if they drew nothing.
+possible answers with default routes); the user places them as shapes from
+a step's ＋ palette, wires their outcomes to other steps — or combines
+outcomes through an AND operator — and at run time the clicked answer
+sends execution down the drawn edge (or the provider default when nothing
+was drawn).
+
+The canvas look and interactions follow the
+`claude/protocol-controls-branching-xuhkrc` branch's flow view
+(`pluggable_protocol_tree/views/flow_graph_dialog.py`): dark theme, slim
+node slabs, obstacle-avoiding routed edges, snap-to-node glow, the
+"＋ New step" ghost on blank-space drops, group/ungroup, Ctrl+wheel zoom
+and middle-mouse pan.
 
 ## Run it
 
@@ -24,25 +33,31 @@ python -m examples.demos.branching_flowchart --smoke
 
 ## Things to try
 
-1. **Press ▶ Run.** Steps light up blue as they execute. "Dispense
-   droplet" has a 50% simulated volume-check failure — when it fails you
-   get the prompt with **Retry / Continue / Abort** buttons, each showing
-   where it will route. The seeded protocol has *Retry* drawn as an orange
-   self-loop and is configured "auto after 3", so after 3 prompts it stops
-   asking and silently takes the default.
-2. **"Operator inspect"** always prompts (its *Operator check* cell is
-   ticked). *No* is pre-wired back to "Dispense droplet" — a cross-edge
-   drawn on the canvas.
-3. **Reroute while looking at it:** drag from any colored outcome port (or
-   the dark ▸ done-port) and drop on another step. Delete a selected edge
-   to fall back to the provider default / table order.
-4. **Right-click a node** → per-decision "Always prompt / Prompt first N
-   times / Auto". Or tick *"Don't ask again this run"* inside the prompt
-   itself.
-5. **Edit the table** — values repaint on the nodes immediately; set *Fail
-   chance* to 0 and the Volume-check strip greys out (decision dormant).
-6. Add/rename/delete steps, auto-layout, save/load the whole graph as
-   JSON (routes + positions included).
+1. **Press ▶ Run.** The active step glows blue. "Dispense droplet" has a
+   40% simulated volume-check failure plus an operator check; each poses
+   its prompt with routed buttons. The seeded AND shape fires when the
+   answers are *Continue* + *Yes* — skipping the corrective mix straight
+   to "Collect to waste". Otherwise the individual outcome routes apply
+   (the *Retry* self-loop stops prompting after 3 tries).
+2. **The ＋ plug under a step** opens the shape palette: one decision per
+   contributing column (greyed once placed) and an AND operator. Placed
+   decisions are shapes tethered to their step; delete or reconfigure
+   them via right-click (Always prompt / Prompt first N times / Auto).
+3. **Drag ports.** From a decision's colored outcome port to a step or
+   group (route that answer), onto an AND shape (feed the combiner), or
+   onto blank space — a "＋ New step" ghost appears and releasing mints a
+   pre-routed step. The blue done-port routes step completion the same
+   way. Edges snap to the node under the cursor (cyan glow) and wrap
+   around boxes that sit in the way.
+4. **"Operator inspect" has no placed shape** — it still prompts, using
+   the provider defaults. Ticking *"Don't ask again this run"* in a
+   prompt mints/updates the shape with the auto answer.
+5. **Group / ungroup:** rubber-band a contiguous run of steps and press
+   Group (or right-click blank canvas). Groups are jump targets too —
+   routing to one enters its first step.
+6. Rename (double-click), Arrange V/H, Fit, save/load the whole graph
+   (tree + shapes + routes + positions) as JSON. Parameters are edited
+   only in the table, which stays selection-synced with the canvas.
 
 ## How it maps onto the real app
 
@@ -50,27 +65,29 @@ python -m examples.demos.branching_flowchart --smoke
 |---|---|
 | `columns.py` `ColumnModel`/`ColumnHandler`/`Column` | `pluggable_protocol_tree/interfaces/i_column.py` model/view/handler trio |
 | `ColumnHandler.decision_specs()` + `ctx.request_decision()` | the proposed extension to `IColumnHandler` / `StepContext` |
-| `executor.py` `DemoExecutor` | `pluggable_protocol_tree/execution/executor.py` — same worker thread, priority-bucket hook fan-out (parallel within a bucket, first exception sets `stop_event`), pause-at-step-boundaries, stop semantics, terminal-signal precedence |
-| `_resolve_routing` / `_verdict_for` | the ONE structural change: `_run_steps` consults a route resolver instead of `i += 1`. Steps without decisions fall through unchanged. |
+| `model.py` `Row` tree, groups | `RowManager`'s `BaseRow`/`GroupRow` |
+| `DecisionNode` / `OpNode` shapes | new per-protocol data, serialized like `protocol_metadata`'s `flow_view` layout in the xuhkrc branch |
+| `executor.py` `DemoExecutor` | `pluggable_protocol_tree/execution/executor.py` — same worker thread, priority-bucket hook fan-out (parallel within a bucket, first exception sets `stop_event`), pause-at-step-boundaries, stop semantics, error>aborted>finished terminal precedence |
+| `_resolve_routing` | the ONE structural change: `_run_steps` consults a routing resolver after `on_post_step` instead of `i += 1`. Steps without decisions fall through unchanged. |
 | Qt signals on `ExecutorSignals` | Traits `Event`s observed with `dispatch="ui"` |
-| `canvas.py` Graphics View scene/view | same idioms as `device_viewer`'s `electrode_scene.py` / `video_canvas.py` |
+| `canvas.py` routing/ghost/groups | ported from `flow_graph_dialog.py` (xuhkrc branch) |
 | Parameter table | the existing protocol tree (parameters only) |
-
-Route data is tiny and serializes with the protocol: per step a
-`next_target` (completion route) plus `{decision_id: {routes, mode,
-auto_after, auto_outcome}}`. Targets are step ids or the sentinels
-next / self / end / abort.
 
 ### Semantics chosen (up for debate)
 
-* Decisions resolve after `on_post_step`, in provider-priority order; the
-  first outcome that routes anywhere other than "next" wins and later
-  decisions from the same step are skipped (logged).
+* All of a step's decisions resolve first (prompt or auto, in provider
+  priority order). Routing then evaluates: **AND ops first** (all input
+  outcomes chosen this round → the op's route wins), then the individual
+  outcome routes (first non-"next" wins), then the step's completion
+  route, then table order.
+* An AND only combines outcomes from one step's decisions (enforced on
+  drop); an op with no wired target is inert.
 * "Auto after N" counts per (step, decision) per run; the auto answer is
   the provider's `default_outcome` unless the user picked one via "don't
   ask again".
-* A jump re-enters the target step fresh. Completion self-loops are
-  blocked (retries belong to decision outcomes); decision self-loops are
-  the retry mechanism.
-* Route edits and table edits are allowed mid-run (read at resolve time);
-  adding/deleting steps mid-run is blocked.
+* A jump re-enters the target step fresh; a group target means its first
+  step. Completion self-loops are blocked (retries belong to decision
+  outcomes); a decision outcome dragged back onto its own step is the
+  retry loop.
+* Route/wiring edits are allowed mid-run (read at resolve time);
+  adding/deleting/regrouping steps mid-run is blocked.
