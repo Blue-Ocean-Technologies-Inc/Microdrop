@@ -64,6 +64,32 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     def _sync_connect_toggle(self, event):
         self.connect_toggle = bool(event.new)
 
+    # ---- Mechanism quick controls ------------------------------------
+    #: Requested MCU fan state; the board does not read it back.
+    mcu_fan_state = Bool()
+    # The mechanism toggles mirror what the motor snapshot reports
+    # (the *_reported traits, written by the message handler); a click
+    # CONTRADICTING the reported state is the user's request, which
+    # the controller publishes — same scheme as connect_toggle.
+    chip_locked = Bool()
+    chip_locked_reported = Bool()
+    tray_out = Bool()
+    tray_out_reported = Bool()
+    magnet_engaged = Bool()
+    magnet_engaged_reported = Bool()
+
+    @observe("chip_locked_reported")
+    def _sync_chip_locked_toggle(self, event):
+        self.chip_locked = bool(event.new)
+
+    @observe("tray_out_reported")
+    def _sync_tray_out_toggle(self, event):
+        self.tray_out = bool(event.new)
+
+    @observe("magnet_engaged_reported")
+    def _sync_magnet_toggle(self, event):
+        self.magnet_engaged = bool(event.new)
+
     # ---- Readouts written by the message handler ---------------------
     # Named like the DropBot pane's displays so the two panes read the
     # same; each sits beside its setter in the view's grid.
@@ -87,8 +113,6 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     out_power_display = Str("-", desc="Heater output power (%)")
     heater_on_display = Str("-", desc="Heater enable flag (temp_onoff)")
     fan_duty_display = Str("-", desc="Cooling fan duty (%)")
-    rgy_led_display = Str("-", desc="Status LED state "
-                                    "(off/red/green/yellow)")
     illumination_display = Str("-", desc="Illumination LED brightness "
                                          "the board reports")
     pmt_display = Str("-", desc="PMT reading")

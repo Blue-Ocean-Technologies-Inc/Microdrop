@@ -11,28 +11,77 @@ from traitsui.api import (
     EnumEditor, HGroup, Item, Label, Spring, UItem, VGrid, VGroup, View,
 )
 
-from microdrop_style.icons.icons import ICON_REFRESH
+from microdrop_style.icons.icons import (
+    ICON_ARROW_DOWNWARD, ICON_ARROW_UPWARD, ICON_EJECT, ICON_INPUT,
+    ICON_LIGHT_OFF, ICON_LIGHTBULB, ICON_LINK, ICON_LINK_OFF,
+    ICON_LOCK, ICON_LOCK_OPEN, ICON_MODE_FAN, ICON_MODE_FAN_OFF,
+    ICON_REFRESH,
+)
 from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor, IconToggleEditor, InPlaceToggleEditor,
     StatusIconEditorFactory,
 )
 
+# Mechanism quick controls: a glyph toolbar (fluorescence
+# image-viewer style) sitting under the device picture. Each toggle
+# shows the ACTION a click performs and mirrors the state the
+# hardware reports.
+mechanism_toolbar = HGroup(
+    UItem(
+        "chip_locked",
+        editor=IconToggleEditor(
+            on_glyph=ICON_LOCK_OPEN, off_glyph=ICON_LOCK,
+            tooltip="Lock/unlock the chip (the pogo pads "
+                    "press/release it)"),
+    ),
+    UItem(
+        "tray_out",
+        editor=IconToggleEditor(
+            on_glyph=ICON_INPUT, off_glyph=ICON_EJECT,
+            tooltip="Pull the chip tray out / push it back in"),
+    ),
+    UItem(
+        "magnet_engaged",
+        editor=IconToggleEditor(
+            on_glyph=ICON_ARROW_DOWNWARD,
+            off_glyph=ICON_ARROW_UPWARD,
+            tooltip="Magnet up (engage) / down (disengage)"),
+    ),
+    UItem(
+        "mcu_fan_state",
+        editor=IconToggleEditor(
+            on_glyph=ICON_MODE_FAN_OFF, off_glyph=ICON_MODE_FAN,
+            tooltip="MCU fan on/off (state is not read back)"),
+    ),
+    UItem(
+        "light_on",
+        editor=IconToggleEditor(
+            on_glyph=ICON_LIGHT_OFF, off_glyph=ICON_LIGHTBULB,
+            tooltip="Illumination light on/off (keeps the % "
+                    "setpoint)"),
+    ),
+    enabled_when="connected",
+)
+
 left = HGroup(
-    Item("icon_path",
-         editor=StatusIconEditorFactory(fire="tray_toggle_clicked"),
-         show_label=False,
-         tooltip="Click to eject the tray; click again to bring "
-                 "it back in"),
-    Spring("8"),
     VGroup(
-        Spring("12"),
+        HGroup(
+            Item("12"),
+            Item("icon_path",
+                 editor=StatusIconEditorFactory(fire="tray_toggle_clicked", min_size=160),
+                 show_label=False,
+                 tooltip="Click to eject the tray; click again to bring it back in"),
+           ),
+        Item("50"),
+        mechanism_toolbar,
+    ),
+    VGroup(
         VGroup(
             Item("connection_status_text", style="readonly",
                  label="Connection"),
             Item("chip_status_text", style="readonly",
                  label="Chip Status"),
         ),
-        Spring("8"),
         HGroup(
             Item("selected_port", label="Port",
                  editor=EnumEditor(name="available_ports"),
@@ -41,12 +90,12 @@ left = HGroup(
                   editor=IconButtonEditor(glyph=ICON_REFRESH,
                                           tooltip="Refresh ports")),
             UItem("connect_toggle",
-                  style="custom",
-                  editor=InPlaceToggleEditor(on_label="Disconnect",
-                                             off_label="Connect"),
+                  editor=IconToggleEditor(
+                      on_glyph=ICON_LINK_OFF, off_glyph=ICON_LINK,
+                      tooltip="Connect to the selected port / "
+                              "disconnect"),
                   enabled_when="connected or selected_port"),
         ),
-        Spring("8"),
         HGroup(
             UItem(
                 "realtime_mode",
@@ -55,15 +104,7 @@ left = HGroup(
                                            off_label="Realtime Off"),
                 enabled_when="connected and not protocol_running",
             ),
-            UItem(
-                "light_on",
-                style="custom",
-                editor=InPlaceToggleEditor(on_label="Light On",
-                                           off_label="Light Off"),
-                enabled_when="connected",
-            ),
         ),
-        Spring("10"),
     ),
     id="status_controls",
 )
@@ -118,7 +159,6 @@ board_status = VGroup(
     VGrid(
         Item("mechanisms_display", style="readonly",
              label="Mechanisms"),
-        Item("rgy_led_display", style="readonly", label="Status LED"),
         Item("illumination_display", style="readonly",
              label="Illumination"),
         Item("pmt_display", style="readonly", label="PMT"),

@@ -7,7 +7,6 @@ from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
-from ..consts import RGY_STATE_NAMES
 from ..models.model import PortableDropbotStatusAndControlsModel
 
 logger = get_logger(__name__)
@@ -80,10 +79,6 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         fan_duty = data.get("fan_duty")
         if fan_duty is not None:
             self.model.fan_duty_display = f"{fan_duty:g} %"
-        rgy_state = data.get("rgy_state")
-        if rgy_state is not None:
-            self.model.rgy_led_display = RGY_STATE_NAMES.get(
-                rgy_state, str(rgy_state))
         pmt = data.get("pmt")
         if pmt is not None:
             self.model.pmt_display = f"{pmt:g}"
@@ -99,8 +94,18 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_motors_updated_triggered(self, body):
         data = json.loads(str(body))
-        self.model.mechanisms_display = summarize_mechanisms(
-            data.get("mechanisms", {}))
+        mechanisms = data.get("mechanisms", {})
+        self.model.mechanisms_display = summarize_mechanisms(mechanisms)
+        if mechanisms:
+            # State-byte vocabulary mirrors the ctrl commands (see the
+            # motors mixin): cabin 1 = out, mag 1 = engaged, and the
+            # pogo pads report 1 while pressed (chip locked).
+            self.model.tray_out_reported = mechanisms.get("cabin") == 1
+            self.model.magnet_engaged_reported = \
+                mechanisms.get("mag") == 1
+            self.model.chip_locked_reported = (
+                mechanisms.get("lpush") == 1
+                and mechanisms.get("rpush") == 1)
 
     def _on_alarm_triggered(self, body):
         data = json.loads(str(body))
