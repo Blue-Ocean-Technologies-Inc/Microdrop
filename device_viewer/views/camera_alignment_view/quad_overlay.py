@@ -6,42 +6,63 @@ which of the two they are looking at.
 Used in two places: the start-point picker dialog (over the captured
 camera frame, in camera-pixel coordinates) and the endpoint
 viewer/adjuster (over the device scene, in scene coordinates)."""
+
+import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, \
-    QGraphicsPolygonItem
+from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsPolygonItem
 
-#: The endpoint look: orange frame, deeper-orange dots with a white
-#: ring so they stay conspicuous over any feed.
-QUAD_COLOR = QColor(255, 160, 0)
-HANDLE_COLOR = QColor(255, 100, 0)
-HANDLE_RING_COLOR = QColor(255, 255, 255)
-HANDLE_RADIUS_PX = 8
-FRAME_WIDTH_PX = 3
+# The endpoint look (defaults — each overlay can be restyled live):
+# orange frame, deeper-orange dots with a white ring so they stay
+# conspicuous over any feed. ALIGNMENT_SNAP_RADIUS_PX is the distance
+# (in VIEW pixels, zoom-aware like the handles themselves) within
+# which a dragged handle snaps onto a snap point.
+from ...consts import (
+    ALIGNMENT_FRAME_WIDTH_PX,
+    ALIGNMENT_HANDLE_COLOR_HEX,
+    ALIGNMENT_HANDLE_RADIUS_PX,
+    ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_QUAD_COLOR_HEX,
+    ALIGNMENT_SNAP_RADIUS_PX,
+)
 
 
 class QuadHandleItem(QGraphicsEllipseItem):
     """One draggable corner dot. Ignores the view transform so the
     dot stays the same conspicuous size at any zoom."""
 
-    def __init__(self, on_moved, on_released, parent=None):
-        radius = HANDLE_RADIUS_PX
-        super().__init__(-radius, -radius, 2 * radius, 2 * radius,
-                         parent)
+    def __init__(
+        self,
+        on_moved,
+        on_released,
+        parent=None,
+        radius=ALIGNMENT_HANDLE_RADIUS_PX,
+        color=ALIGNMENT_HANDLE_COLOR_HEX,
+        ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ):
+        super().__init__(-radius, -radius, 2 * radius, 2 * radius, parent)
         self._on_moved = on_moved
         self._on_released = on_released
-        self.setBrush(QBrush(HANDLE_COLOR))
-        self.setPen(QPen(HANDLE_RING_COLOR, 2))
+        #: Optional QPointF -> QPointF hook applied while dragging.
+        self.snap_fn = None
+        self.setBrush(QBrush(QColor(color)))
+        self.setPen(QPen(QColor(ring_color), 2))
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges,
-                     True)
+        self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self.setCursor(Qt.OpenHandCursor)
 
+    def set_radius(self, radius):
+        self.setRect(-radius, -radius, 2 * radius, 2 * radius)
+
     def itemChange(self, change, value):
-        if (change
-                == QGraphicsItem.ItemScenePositionHasChanged
-                and self._on_moved is not None):
+        if change == QGraphicsItem.ItemPositionChange and self.snap_fn is not None:
+            return self.snap_fn(value)
+        if (
+            change == QGraphicsItem.ItemScenePositionHasChanged
+            and self._on_moved is not None
+        ):
             self._on_moved()
         return super().itemChange(change, value)
 
@@ -55,18 +76,41 @@ class QuadOverlay:
     """The orange frame plus its four corner handles, managed as one
     unit on a QGraphicsScene."""
 
-    def __init__(self, scene, quad, on_changed=None,
-                 on_released=None, z_value=50.0):
+    def __init__(
+        self,
+        scene,
+        quad,
+        on_changed=None,
+        on_released=None,
+        z_value=50.0,
+        snap_points=None,
+        snap_radius_px=ALIGNMENT_SNAP_RADIUS_PX,
+        handle_radius_px=ALIGNMENT_HANDLE_RADIUS_PX,
+        frame_width_px=ALIGNMENT_FRAME_WIDTH_PX,
+        quad_color=ALIGNMENT_QUAD_COLOR_HEX,
+        handle_color=ALIGNMENT_HANDLE_COLOR_HEX,
+        handle_ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
-        current quad); ``on_released`` when a drag ends."""
+        current quad); ``on_released`` when a drag ends.
+        ``snap_points``: optional (x, y) scene points (e.g. device
+        corner vertices) that dragged handles snap onto when within
+        ``snap_radius_px`` view pixels. Colors accept anything
+        QColor does (QColor or '#rrggbb')."""
         self._scene = scene
         self._on_changed = on_changed
         self._on_released = on_released
         self._syncing = False
+        self._snap_radius_px = float(snap_radius_px)
+        self._snap_points = (
+            np.asarray(snap_points, dtype=float)
+            if snap_points is not None and len(snap_points)
+            else None
+        )
 
         self._frame = QGraphicsPolygonItem()
-        pen = QPen(QUAD_COLOR, FRAME_WIDTH_PX)
+        pen = QPen(QColor(quad_color), frame_width_px)
         pen.setCosmetic(True)  # constant width at any zoom
         self._frame.setPen(pen)
         self._frame.setZValue(z_value)
@@ -74,8 +118,15 @@ class QuadOverlay:
 
         self._handles = []
         for _ in range(4):
-            handle = QuadHandleItem(self._handle_moved,
-                                    self._handle_released)
+            handle = QuadHandleItem(
+                self._handle_moved,
+                self._handle_released,
+                radius=handle_radius_px,
+                color=handle_color,
+                ring_color=handle_ring_color,
+            )
+            if self._snap_points is not None:
+                handle.snap_fn = self._snap
             handle.setZValue(z_value + 1)
             scene.addItem(handle)
             self._handles.append(handle)
@@ -84,23 +135,62 @@ class QuadOverlay:
     # ------------------------------------------------------------------ #
     def quad(self) -> list:
         """The current corner positions as [[x, y] * 4]."""
-        return [[handle.pos().x(), handle.pos().y()]
-                for handle in self._handles]
+        return [[handle.pos().x(), handle.pos().y()] for handle in self._handles]
 
     def set_quad(self, quad):
         self._syncing = True
         try:
             for handle, point in zip(self._handles, quad):
-                handle.setPos(QPointF(float(point[0]),
-                                      float(point[1])))
+                handle.setPos(QPointF(float(point[0]), float(point[1])))
         finally:
             self._syncing = False
         self._sync_frame()
 
     def set_editable(self, editable: bool):
         for handle in self._handles:
-            handle.setFlag(QGraphicsItem.ItemIsMovable,
-                           bool(editable))
+            handle.setFlag(QGraphicsItem.ItemIsMovable, bool(editable))
+
+    def set_snap_radius(self, snap_radius_px):
+        self._snap_radius_px = float(snap_radius_px)
+
+    def set_snap_points(self, snap_points):
+        """Replace the snap targets (e.g. after recapturing the
+        camera frame); None or empty disables snapping."""
+        self._snap_points = (
+            np.asarray(snap_points, dtype=float)
+            if snap_points is not None and len(snap_points)
+            else None
+        )
+        snap_fn = self._snap if self._snap_points is not None else None
+        for handle in self._handles:
+            handle.snap_fn = snap_fn
+
+    def set_appearance(
+        self,
+        handle_radius_px=None,
+        frame_width_px=None,
+        quad_color=None,
+        handle_color=None,
+        handle_ring_color=None,
+    ):
+        """Restyle the overlay live; None leaves that aspect as-is."""
+        if handle_radius_px is not None:
+            for handle in self._handles:
+                handle.set_radius(handle_radius_px)
+        pen = self._frame.pen()
+        if frame_width_px is not None:
+            pen.setWidthF(float(frame_width_px))
+        if quad_color is not None:
+            pen.setColor(QColor(quad_color))
+        self._frame.setPen(pen)
+        if handle_color is not None:
+            for handle in self._handles:
+                handle.setBrush(QBrush(QColor(handle_color)))
+        if handle_ring_color is not None:
+            for handle in self._handles:
+                ring_pen = handle.pen()
+                ring_pen.setColor(QColor(handle_ring_color))
+                handle.setPen(ring_pen)
 
     def remove(self):
         """Take the overlay off its scene."""
@@ -110,9 +200,25 @@ class QuadOverlay:
         self._handles = []
 
     # ------------------------------------------------------------------ #
+    def _snap(self, pos):
+        """The nearest snap point when it is within the snap radius
+        (view pixels) of ``pos``, else ``pos`` unchanged.
+        Programmatic set_quad placements are never snapped."""
+        if self._syncing:
+            return pos
+        deltas = self._snap_points - [pos.x(), pos.y()]
+        nearest = int(np.argmin((deltas * deltas).sum(axis=1)))
+        # Zoom-awareness assumes the scene has exactly one view (true
+        # for the alignment panes, which each own their scene) — with
+        # several views this would use the first one's zoom for all.
+        views = self._scene.views()
+        scale = views[0].transform().m11() if views else 1.0
+        if np.hypot(*deltas[nearest]) * scale <= self._snap_radius_px:
+            return QPointF(*self._snap_points[nearest])
+        return pos
+
     def _sync_frame(self):
-        self._frame.setPolygon(QPolygonF(
-            [handle.pos() for handle in self._handles]))
+        self._frame.setPolygon(QPolygonF([handle.pos() for handle in self._handles]))
 
     def _handle_moved(self):
         if self._syncing:
