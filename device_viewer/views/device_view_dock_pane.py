@@ -1344,7 +1344,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Bottom margin separates the buttons from the alpha table below.
         alignment_layout.setContentsMargins(0, 0, 0, 12)
         for label, handler, tip in (
-            ("Camera Alignment…", self._on_open_camera_alignment,
+            ("Camera Alignment Helper", self._on_open_camera_alignment,
              "Open the split-screen alignment dialog: place this "
              "device's endpoint on the device SVG and drag the "
              "corner dots onto the device outline on a captured "
