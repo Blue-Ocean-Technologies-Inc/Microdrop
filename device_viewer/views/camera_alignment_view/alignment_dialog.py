@@ -1,9 +1,9 @@
 """The combined Camera Alignment window, as TraitsUI MVC.
 
 One modeless split-screen window replacing the two former popups:
-the endpoint pane (device SVG, scene coordinates) on the left and
 the device-outline pane (captured camera frame, camera pixels) on
-the right, so the ground truth and the marked start points are
+the left and the endpoint pane (device SVG, scene coordinates) on
+the right, so the marked start points and the ground truth are
 placed side by side. The green Confirm Alignment button between
 them is the macro that commits everything: it saves the endpoint,
 stages the outline points, and fires alignment_confirmed for the
@@ -110,8 +110,8 @@ camera_alignment_dialog_view = View(
     VGroup(
         HGroup(
             HSplit(
-                UItem("endpoint_pane", style="custom", editor=InstanceEditor()),
                 UItem("outline_pane", style="custom", editor=InstanceEditor()),
+                UItem("endpoint_pane", style="custom", editor=InstanceEditor()),
                 springy=True,
             ),
             # The sidebar reveal: a vertical chevron bar, like the
