@@ -36,6 +36,10 @@ class ElectrodeLayer():
 
         # # Scale to approx 360p resolution for display
         modifier = max(640 / (self.svg.max_x - self.svg.min_x), 360 / (self.svg.max_y - self.svg.min_y))
+        #: SVG-path -> scene coordinate scale: every view below is
+        #: built from ``modifier * path``, so anything comparing raw
+        #: electrode paths against scene positions must apply this.
+        self.path_scale = modifier
 
         # Create the electrode views for each electrode from the electrodes model and add them to the group
         for electrode_id, electrode in electrodes.electrodes.items():
