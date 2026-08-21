@@ -23,8 +23,56 @@ from ...consts import (
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
     ALIGNMENT_QUAD_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_ALPHA,
+    ALIGNMENT_SNAP_MARKER_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_SIZE_PX,
     ALIGNMENT_SNAP_RADIUS_PX,
 )
+
+
+class SnapPointMarkersItem(QGraphicsItem):
+    """Every snappable corner as a small fixed-size dot. One item
+    paints them all through a single cosmetic pen (dot size stays in
+    VIEW pixels at any zoom) — hundreds of separate QGraphicsItems
+    would bog the scene down."""
+
+    def __init__(self, points, color, alpha, marker_px=ALIGNMENT_SNAP_MARKER_SIZE_PX):
+        super().__init__()
+        self._marker_px = marker_px
+        self._polygon = QPolygonF()
+
+        self._pen = QPen()
+        self._pen.setCosmetic(True)
+        self._pen.setWidthF(marker_px)
+        self._pen.setCapStyle(Qt.RoundCap)
+
+        self.set_style(color=color, alpha=alpha)
+        self.set_points(points)
+
+    def set_points(self, points):
+        self.prepareGeometryChange()
+        self._polygon = QPolygonF([QPointF(float(x), float(y)) for x, y in points])
+        self.update()
+
+    def set_style(self, color=None, alpha=None):
+        """Restyle the dots; None leaves that aspect as-is."""
+        pen_color = self._pen.color() if color is None else QColor(color)
+        pen_color.setAlphaF(
+            self._pen.color().alphaF() if alpha is None else float(alpha)
+        )
+        self._pen.setColor(pen_color)
+        self.update()
+
+    def boundingRect(self):
+        # The cosmetic-pen dots extend past the points in VIEW
+        # pixels; pad generously so they aren't clipped when the
+        # view is zoomed far out.
+        margin = self._marker_px * 10
+        return self._polygon.boundingRect().adjusted(-margin, -margin, margin, margin)
+
+    def paint(self, painter, option, widget=None):
+        painter.setPen(self._pen)
+        painter.drawPoints(self._polygon)
 
 
 class QuadHandleItem(QGraphicsEllipseItem):
@@ -90,6 +138,8 @@ class QuadOverlay:
         quad_color=ALIGNMENT_QUAD_COLOR_HEX,
         handle_color=ALIGNMENT_HANDLE_COLOR_HEX,
         handle_ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
+        snap_marker_color=ALIGNMENT_SNAP_MARKER_COLOR_HEX,
+        snap_marker_alpha=ALIGNMENT_SNAP_MARKER_ALPHA,
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
@@ -108,6 +158,12 @@ class QuadOverlay:
             if snap_points is not None and len(snap_points)
             else None
         )
+
+        # View-all-corners markers, created lazily on first show.
+        self._snap_markers = None
+        self._snap_marker_color = snap_marker_color
+        self._snap_marker_alpha = float(snap_marker_alpha)
+        self._z_value = z_value
 
         self._frame = QGraphicsPolygonItem()
         pen = QPen(QColor(quad_color), frame_width_px)
@@ -165,6 +221,25 @@ class QuadOverlay:
         for handle in self._handles:
             handle.snap_fn = snap_fn
 
+        if self._snap_markers is not None:
+            if self._snap_points is None:
+                self._scene.removeItem(self._snap_markers)
+                self._snap_markers = None
+            else:
+                self._snap_markers.set_points(self._snap_points)
+
+    def set_snap_markers_visible(self, visible):
+        """Show/hide every snap point as a dot (view-all-corners)."""
+        if visible and self._snap_markers is None and self._snap_points is not None:
+            markers = SnapPointMarkersItem(
+                self._snap_points, self._snap_marker_color, self._snap_marker_alpha
+            )
+            markers.setZValue(self._z_value - 1)
+            self._scene.addItem(markers)
+            self._snap_markers = markers
+        if self._snap_markers is not None:
+            self._snap_markers.setVisible(bool(visible))
+
     def set_appearance(
         self,
         handle_radius_px=None,
@@ -172,8 +247,20 @@ class QuadOverlay:
         quad_color=None,
         handle_color=None,
         handle_ring_color=None,
+        snap_marker_color=None,
+        snap_marker_alpha=None,
     ):
         """Restyle the overlay live; None leaves that aspect as-is."""
+        if snap_marker_color is not None:
+            self._snap_marker_color = snap_marker_color
+        if snap_marker_alpha is not None:
+            self._snap_marker_alpha = float(snap_marker_alpha)
+        if self._snap_markers is not None and (
+            snap_marker_color is not None or snap_marker_alpha is not None
+        ):
+            self._snap_markers.set_style(
+                color=snap_marker_color, alpha=snap_marker_alpha
+            )
         if handle_radius_px is not None:
             for handle in self._handles:
                 handle.set_radius(handle_radius_px)
@@ -197,6 +284,9 @@ class QuadOverlay:
         for handle in self._handles:
             self._scene.removeItem(handle)
         self._scene.removeItem(self._frame)
+        if self._snap_markers is not None:
+            self._scene.removeItem(self._snap_markers)
+            self._snap_markers = None
         self._handles = []
 
     # ------------------------------------------------------------------ #

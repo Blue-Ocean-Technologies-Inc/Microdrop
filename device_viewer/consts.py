@@ -265,6 +265,12 @@ ALIGNMENT_HANDLE_RADIUS_PX = 8
 ALIGNMENT_FRAME_WIDTH_PX = 3
 ALIGNMENT_SNAP_RADIUS_PX = 100
 
+#: The view-all-snappable-corners markers (toggled per pane): dot
+#: size is in VIEW pixels (cosmetic pen — constant at any zoom).
+ALIGNMENT_SNAP_MARKER_COLOR_HEX = "#00e5ff"
+ALIGNMENT_SNAP_MARKER_ALPHA = 0.6
+ALIGNMENT_SNAP_MARKER_SIZE_PX = 6
+
 #: Bounds shared by the preference Range traits and the settings-sidebar
 #: spinners (one source, so they cannot drift apart).
 ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX = 0, 200
