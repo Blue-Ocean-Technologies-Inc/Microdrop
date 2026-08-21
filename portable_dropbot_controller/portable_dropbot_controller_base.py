@@ -195,8 +195,7 @@ class PortableDropbotControllerBase(HasTraits):
         board's readings (HV, temps, chip detect...) on STATUS_UPDATED
         and the motor picture on MOTORS_UPDATED. Scaled to engineering
         units here, so the panes never learn the wire encoding."""
-        ok, status = self._proxy_call("status read",
-                                      lambda: self.proxy.status)
+        ok, status = self._proxy_call("status read", lambda: self.proxy.status)
         if not ok or not isinstance(status, dict) or not status:
             # The driver answers {} when neither board replied — a
             # timeout per command, seconds per poll. A link that dead
@@ -208,7 +207,8 @@ class PortableDropbotControllerBase(HasTraits):
                 logger.warning(
                     f"Portable Dropbot status unanswered "
                     f"{self._status_failures} polls in a row — "
-                    f"treating the link as lost.")
+                    f"treating the link as lost."
+                )
                 self._status_failures = 0
                 self._publish_disconnected()
                 self.on_disconnected_signal("")
@@ -221,20 +221,39 @@ class PortableDropbotControllerBase(HasTraits):
         if "chip_on_pad" in signal:
             signal["chip_on_pad"] = signal["chip_on_pad"] == 1
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
-        self._publish_motors(mechanisms=status.get("motor", {}))
+        self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
 
-    def _publish_motors(self, mechanisms=None):
-        # Both driver calls answer {motor_name: value} dicts — or
-        # False/None when the motor board is not answering, which the
-        # isinstance guard treats as "nothing to report".
-        _ok, positions = self._proxy_call(
-            "motor positions", lambda: self.proxy.uart.getMotorPositions())
-        _ok, homed = self._proxy_call(
-            "motor homed flags",
-            lambda: self.proxy.uart.queryMotorHomed())
+    def _publish_motors(self, mechanisms=None, poll=True):
+        """Publish the motor picture on MOTORS_UPDATED.
+
+        ``poll=False`` (the periodic status snapshot) publishes the
+        driver's CACHED positions instead of querying the board: the
+        per-motor position round-trips plus the homed query cost more
+        than the whole monitor interval (the apscheduler
+        max-instances skip warnings), and they time out into orphaned
+        replies while a move is running. Fresh polling stays where it
+        matters — every motor action ends with a ``poll=True`` call,
+        as does the manual refresh."""
+        if poll:
+            # Both driver calls answer {motor_name: value} dicts — or
+            # False/None when the motor board is not answering, which
+            # the isinstance guard treats as "nothing to report".
+            _ok, positions = self._proxy_call(
+                "motor positions", lambda: self.proxy.uart.getMotorPositions()
+            )
+            _ok, homed = self._proxy_call(
+                "motor homed flags", lambda: self.proxy.uart.queryMotorHomed()
+            )
+        else:
+            # No serial traffic: the driver caches every position it
+            # learns from action results and position replies.
+            _ok, positions = self._proxy_call(
+                "cached motor positions", lambda: self.proxy.uart.motors.positions()
+            )
+            homed = None
+
         payload = {
-            "positions": (dict(positions)
-                          if isinstance(positions, dict) else {}),
+            "positions": (dict(positions) if isinstance(positions, dict) else {}),
             "homed": dict(homed) if isinstance(homed, dict) else {},
             "mechanisms": mechanisms if mechanisms is not None else {},
         }
