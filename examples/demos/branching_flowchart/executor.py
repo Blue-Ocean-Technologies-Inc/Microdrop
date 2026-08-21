@@ -96,6 +96,7 @@ class PendingDecision:
         self.spec = spec
         self.decision_node = decision_node  # placed shape, or None
         self.message = message
+
         # list[(Outcome, target, target_description)] in button order
         self.options = options
         self.answered = threading.Event()
@@ -157,6 +158,7 @@ class StepContext:
     def pending_decisions(self):
         with self._lock:
             reqs = list(self._decision_requests)
+
         # Deterministic resolution order regardless of in-bucket thread
         # timing: provider priority, then spec id.
         prio = {
@@ -281,12 +283,15 @@ class DemoExecutor:
         steps = proto.leaves()
         if not steps:
             return
+
         # Group chain (outermost first) per leaf, for entry/exit/repeat
         # bookkeeping.
         chains = [proto.group_chain_of(leaf.id) for leaf in steps]
+
         # times each (step_id, decision_id) has fired this run — drives
         # the "stop prompting after N retries" behaviour.
         occurrences = defaultdict(int)
+
         # group_id -> current pass number. Present only for groups that
         # were FORMALLY entered (fall-through or a route to the group
         # node); an informal jump into a group's step seeds the counter
@@ -302,11 +307,14 @@ class DemoExecutor:
             to_chain = chains[to_idx] if to_idx is not None else []
             from_ids = {g.id for g in from_chain}
             to_ids = {g.id for g in to_chain}
+
+            # Exits fire before entries so nesting unwinds cleanly.
             for g in reversed(from_chain):  # innermost first
                 if g.id not in to_ids or g.id in reenter:
                     self.signals.log.emit(f"Leaving group {g.name!r}")
                     self._run_hooks("on_group_exit", handlers, proto_ctx, g)
                     passes.pop(g.id, None)
+
             for g in to_chain:  # outermost first
                 if g.id not in from_ids or g.id in reenter:
                     if formal:
@@ -339,10 +347,12 @@ class DemoExecutor:
                     break
                 self.signals.protocol_resumed.emit()
 
+            # Run the step's hook phases.
             step = steps[i]
             step_no += 1
             step_ctx = StepContext(step, proto_ctx)
             self.signals.step_started.emit(step.id, step_no, len(steps))
+
             self._run_hooks("on_pre_step", handlers, step_ctx, step)
             self._run_hooks("on_step", handlers, step_ctx, step)
             self._run_hooks("on_post_step", handlers, step_ctx, step)
@@ -371,9 +381,11 @@ class DemoExecutor:
                     self.signals.canvas_note.emit(
                         step.id, f"repeat {k + 1}/{step_reps}"
                     )
+
                     # Replay in place: no group transition, streak kept.
                     verdict = ("jump", i, "step", None)
                     fallthrough = False
+
             if fallthrough:
                 to_ids = (
                     {g.id for g in chains[verdict[1]]}
@@ -404,6 +416,7 @@ class DemoExecutor:
                 transition(i, None, formal=True)
                 break
             new_i, kind, gid = verdict[1], verdict[2], verdict[3]
+
             # Routing to the group node you're already inside restarts
             # it: exit + formal re-entry, fresh pass budget.
             reenter = (
@@ -476,6 +489,7 @@ class DemoExecutor:
                 return ("abort",)
             resolved.append((spec, dn, outcome_id))
             resolved_ids.add(spec.id)
+
             # Chain: this outcome's route targets a sibling decision
             # shape -> activate it (once).
             if dn is not None:

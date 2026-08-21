@@ -86,15 +86,19 @@ class Row:
         self.is_group = is_group
         self.children = [] if is_group else None
         self.values = dict(values or {})
+
         # Completion route (steps only): where execution goes when the
         # step finishes and no decision redirected it. NEXT = tree order.
         self.next_target = NEXT
+
         # Groups: how many passes a FORMAL group entry schedules (the
         # analogue of GroupRow.repetitions in the real app).
         self.repetitions = 1
+
         # Groups: collapsed to a single chip on the canvas (view state,
         # persisted so a saved protocol reopens the same way).
         self.collapsed = False
+
         # Canvas position, persisted with the protocol.
         self.pos = (0.0, 0.0)
 
@@ -138,12 +142,15 @@ class DecisionNode:
         self.decision_id = decision_id
         self.pos = tuple(pos)
         self.routes = {}  # outcome_id -> target
+
         # Optional user overrides for the outcome button/edge labels
         # (outcome_id -> text); missing keys use the provider's label.
         self.labels = {}
+
         # Per-edge route priority (outcome_id -> int, lower wins);
         # missing keys use DEFAULT_EDGE_PRIORITY.
         self.route_priority = {}
+
         # Prompt policy:
         #   "prompt"      — always ask (auto_after=N: ask the first N
         #                   times, then answer automatically)
@@ -232,6 +239,7 @@ class Protocol:
         self.rows = []  # top-level rows (tree)
         self.decision_nodes = []  # list[DecisionNode]
         self.op_nodes = []  # list[OpNode]
+
         # Canvas positions of the ⏹ Stop / ▦ Finish terminal nodes
         # ({kind: [x, y]}); None until the user moves them.
         self.terminal_pos = {}
@@ -412,6 +420,7 @@ class Protocol:
         self.decision_nodes = [dn for dn in self.decision_nodes if dn.id != node_id]
         for op in self.op_nodes:
             op.inputs = [i for i in op.inputs if i[0] != node_id]
+
         # Chain routes pointing at the removed shape fall back to defaults.
         for dn in self.decision_nodes:
             for oid, target in list(dn.routes.items()):
@@ -498,6 +507,7 @@ class Protocol:
         ]
         self.op_nodes = [OpNode.from_dict(x) for x in d.get("op_nodes", [])]
         self.terminal_pos = {k: tuple(v) for k, v in d.get("terminal_pos", {}).items()}
+
         # Seed any column values missing from the file (new columns since
         # save).
         for row, _ in self.iter_rows():

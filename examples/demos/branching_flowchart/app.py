@@ -497,11 +497,13 @@ class MainWindow(QMainWindow):
         dn_vol.mode = "auto_first"
         dn_vol.auto_after = 2
         dn_vol.auto_outcome = "retry"
+
         # CHAIN (serial resolution): the operator confirm is only asked
         # AFTER a failed volume check is answered Continue — the dashed
         # "Continue → then" edge.
         dn_op = p.add_decision_node(dispense.id, "operator_check", (0, 0))
         dn_vol.routes["continue"] = dn_op.id
+
         # AND: volume Continue + operator Yes = manually verified — skip
         # the droplet-detect sensor check and enter the Mix group
         # formally (its ×2 passes still apply).
@@ -527,6 +529,7 @@ class MainWindow(QMainWindow):
         op_or = p.add_op_node((0, 0), kind="or")
         op_or.inputs = [(dn_iop.id, "no"), (dn_idet.id, "restart")]
         op_or.target = grp_dispense.id
+
         # Tip: tick 'Operator check' on any OTHER step to see an
         # UNplaced decision — it still prompts with provider defaults.
 
@@ -604,6 +607,7 @@ class MainWindow(QMainWindow):
 
     def commit_port_drop(self, port, target):
         proto = self.protocol
+
         # Resolve the drop target to a route target id/sentinel.
         if isinstance(target, TerminalNodeItem):
             target_id = ABORT if target.kind == "stop" else END
@@ -797,6 +801,7 @@ class MainWindow(QMainWindow):
 
     def edge_menu(self, edge, screen_pos):
         menu = QMenu(self)
+
         # Outcome-carrying edges can rename their button/edge label.
         if edge.payload[0] == "outcome":
             dn_id, oid = edge.payload[1], edge.payload[2]
@@ -1528,6 +1533,7 @@ class MainWindow(QMainWindow):
             else:
                 revert()
             return
+
         # Value columns apply to steps only.
         if row.is_group:
             revert()
@@ -1558,6 +1564,7 @@ class MainWindow(QMainWindow):
             self._updating_table = True
             item.setText(column, str(value))
             self._updating_table = False
+
         # Values can flip a decision active/inactive — refresh shapes.
         self.scene.rebuild()
 

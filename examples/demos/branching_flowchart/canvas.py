@@ -406,6 +406,7 @@ class StepNodeItem(_AnchoredRectItem):
         f = QFont()
         f.setPointSizeF(9.0)
         text.setFont(f)
+
         # Elide long names to the slab width.
         while text.boundingRect().width() > NODE_W - 24 and len(text.text()) > 4:
             text.setText(text.text()[:-2].rstrip() + "…")
@@ -455,6 +456,7 @@ class GroupFrameItem(_AnchoredRectItem):
         )
         self.setPen(self._base_pen)
         self.setZValue(1 if self.collapsed else -4)
+
         # Filled at rebuild: items a title-band drag moves / fit uses.
         self.move_items = []
         self.fit_items = []
@@ -640,6 +642,7 @@ class DecisionShapeItem(_AnchoredRectItem):
             )
             port.setPos(x, DEC_HEADER_H + DEC_PORTS_H - 4)
             self.ports[outcome.id] = port
+
         # Amber ring on the current auto answer (used by auto policies,
         # 'don't ask again', and the Unattended timer). Double-clicking a
         # port moves it.
@@ -1216,6 +1219,7 @@ class FlowchartScene(QGraphicsScene):
                             self, "spine", sa, sb, SPINE_COLOR, payload=("next", a.id)
                         )
                     )
+
         # Explicit completion routes.
         for leaf in leaves:
             if leaf.next_target == NEXT:
@@ -1237,6 +1241,7 @@ class FlowchartScene(QGraphicsScene):
                     payload=("flow", leaf.id),
                 )
             )
+
         # Tethers + outcome/chain edges from decision shapes.
         for dn in proto.decision_nodes:
             dec_item = self.dec_items.get(dn.id)
@@ -1283,6 +1288,7 @@ class FlowchartScene(QGraphicsScene):
                         payload=("outcome", dn.id, outcome.id),
                     )
                 )
+
         # Outcome → op feeds and op → target routes.
         for op in proto.op_nodes:
             op_item = self.op_items.get(op.id)
@@ -1508,6 +1514,7 @@ class FlowchartScene(QGraphicsScene):
                     self._update_drag(event.scenePos())
                     event.accept()
                     return
+
             # Any other press may start a node/frame move: stage an undo
             # snapshot; the release commits it only if something moved.
             self._move_dirty = False
@@ -1539,6 +1546,7 @@ class FlowchartScene(QGraphicsScene):
                     candidates.append((d2, item))
         if candidates:
             return min(candidates, key=lambda pair: pair[0])[1]
+
         # Fallback: expanded frame interiors, innermost (smallest) first.
         frames = [
             f
@@ -1572,6 +1580,7 @@ class FlowchartScene(QGraphicsScene):
                 {self._drag_port.owner, target} if target else {self._drag_port.owner}
             )
         )
+
         # Snap the preview onto compact targets; for an expanded frame
         # keep the free end under the cursor (its side anchor could be
         # far away and would make the preview jump).
@@ -1659,6 +1668,7 @@ class FlowchartScene(QGraphicsScene):
 
     def mouseDoubleClickEvent(self, event):
         items = self.items(event.scenePos())
+
         # Double-click an outcome port: make it the decision's auto
         # answer (the amber ring), right on the flowchart.
         for item in items:
