@@ -21,6 +21,8 @@ from ...consts import (
     ALIGNMENT_FRAME_WIDTH_MIN_PX,
     ALIGNMENT_HANDLE_RADIUS_MAX_PX,
     ALIGNMENT_HANDLE_RADIUS_MIN_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
     ALIGNMENT_SNAP_RADIUS_MAX_PX,
     ALIGNMENT_SNAP_RADIUS_MIN_PX,
 )
@@ -39,6 +41,7 @@ NUMERIC_SETTING_TRAITS = (
     "handle_radius_px",
     "frame_width_px",
     "snap_marker_alpha",
+    "snap_marker_size_px",
 )
 COLOR_SETTING_TRAITS = (
     "quad_color",
@@ -67,8 +70,13 @@ class AlignmentSettingsModel(HasTraits):
         ALIGNMENT_FRAME_WIDTH_MIN_PX, ALIGNMENT_FRAME_WIDTH_MAX_PX, mode="spinner"
     )
 
-    #: Opacity of the view-all-snappable-corners dots.
+    #: Opacity and size of the view-all-snappable-corners dots.
     snap_marker_alpha = Range(0.0, 1.0)
+    snap_marker_size_px = Range(
+        ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
+        ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+        mode="spinner",
+    )
 
     quad_color = RGBColor()
     handle_color = RGBColor()
@@ -125,6 +133,7 @@ alignment_settings_view = View(
         Item("handle_ring_color", label="Dot ring color"),
         Item("snap_marker_color", label="Corner marker color"),
         Item("snap_marker_alpha", label="Corner marker alpha"),
+        Item("snap_marker_size_px", label="Corner marker size (px)"),
         label="Overlay Settings",
         show_border=True,
     ),

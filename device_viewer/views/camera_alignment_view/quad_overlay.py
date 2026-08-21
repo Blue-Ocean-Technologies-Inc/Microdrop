@@ -29,6 +29,9 @@ from ...consts import (
     ALIGNMENT_SNAP_RADIUS_PX,
 )
 
+# NB: import stays above SnapPointMarkersItem — its default argument
+# needs ALIGNMENT_SNAP_MARKER_SIZE_PX at class-definition time.
+
 
 class SnapPointMarkersItem(QGraphicsItem):
     """Every snappable corner as a small fixed-size dot. One item
@@ -54,8 +57,13 @@ class SnapPointMarkersItem(QGraphicsItem):
         self._polygon = QPolygonF([QPointF(float(x), float(y)) for x, y in points])
         self.update()
 
-    def set_style(self, color=None, alpha=None):
+    def set_style(self, color=None, alpha=None, marker_px=None):
         """Restyle the dots; None leaves that aspect as-is."""
+        if marker_px is not None:
+            # The bounding rect's padding follows the dot size.
+            self.prepareGeometryChange()
+            self._marker_px = float(marker_px)
+            self._pen.setWidthF(self._marker_px)
         pen_color = self._pen.color() if color is None else QColor(color)
         pen_color.setAlphaF(
             self._pen.color().alphaF() if alpha is None else float(alpha)
@@ -140,6 +148,7 @@ class QuadOverlay:
         handle_ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
         snap_marker_color=ALIGNMENT_SNAP_MARKER_COLOR_HEX,
         snap_marker_alpha=ALIGNMENT_SNAP_MARKER_ALPHA,
+        snap_marker_size_px=ALIGNMENT_SNAP_MARKER_SIZE_PX,
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
@@ -163,6 +172,7 @@ class QuadOverlay:
         self._snap_markers = None
         self._snap_marker_color = snap_marker_color
         self._snap_marker_alpha = float(snap_marker_alpha)
+        self._snap_marker_size_px = float(snap_marker_size_px)
         self._z_value = z_value
 
         self._frame = QGraphicsPolygonItem()
@@ -232,7 +242,10 @@ class QuadOverlay:
         """Show/hide every snap point as a dot (view-all-corners)."""
         if visible and self._snap_markers is None and self._snap_points is not None:
             markers = SnapPointMarkersItem(
-                self._snap_points, self._snap_marker_color, self._snap_marker_alpha
+                self._snap_points,
+                self._snap_marker_color,
+                self._snap_marker_alpha,
+                marker_px=self._snap_marker_size_px,
             )
             markers.setZValue(self._z_value - 1)
             self._scene.addItem(markers)
@@ -249,17 +262,24 @@ class QuadOverlay:
         handle_ring_color=None,
         snap_marker_color=None,
         snap_marker_alpha=None,
+        snap_marker_size_px=None,
     ):
         """Restyle the overlay live; None leaves that aspect as-is."""
         if snap_marker_color is not None:
             self._snap_marker_color = snap_marker_color
         if snap_marker_alpha is not None:
             self._snap_marker_alpha = float(snap_marker_alpha)
+        if snap_marker_size_px is not None:
+            self._snap_marker_size_px = float(snap_marker_size_px)
         if self._snap_markers is not None and (
-            snap_marker_color is not None or snap_marker_alpha is not None
+            snap_marker_color is not None
+            or snap_marker_alpha is not None
+            or snap_marker_size_px is not None
         ):
             self._snap_markers.set_style(
-                color=snap_marker_color, alpha=snap_marker_alpha
+                color=snap_marker_color,
+                alpha=snap_marker_alpha,
+                marker_px=snap_marker_size_px,
             )
         if handle_radius_px is not None:
             for handle in self._handles:

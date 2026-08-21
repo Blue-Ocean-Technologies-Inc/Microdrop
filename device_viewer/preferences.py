@@ -48,6 +48,9 @@ from .consts import (
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_PX,
     ALIGNMENT_SNAP_RADIUS_MAX_PX,
     ALIGNMENT_SNAP_RADIUS_MIN_PX,
     ALIGNMENT_SNAP_RADIUS_PX,
@@ -124,6 +127,12 @@ class DeviceViewerPreferences(PreferencesHelper):
     alignment_snap_marker_color = Str(ALIGNMENT_SNAP_MARKER_COLOR_HEX)
     alignment_snap_marker_alpha = Range(
         value=ALIGNMENT_SNAP_MARKER_ALPHA, low=0.0, high=1.0
+    )
+    alignment_snap_marker_size_px = Range(
+        value=ALIGNMENT_SNAP_MARKER_SIZE_PX,
+        low=ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
+        high=ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+        mode="spinner",
     )
 
     ### Recording viewer (video_viewer pane) prefs ###
