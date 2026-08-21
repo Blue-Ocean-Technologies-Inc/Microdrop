@@ -33,6 +33,7 @@ from traits.api import (
     Str,
     Tuple,
     Union,
+    observe,
 )
 from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
@@ -42,10 +43,13 @@ from microdrop_style.icons.icons import (
     ICON_FIT_SCREEN,
     ICON_PHOTO_CAMERA,
     ICON_SAVE,
+    ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HtmlLabelEditor,
     IconButtonEditor,
+    IconToggleEditor,
 )
 
 from ...utils.image_corners import detect_corner_points
@@ -105,6 +109,9 @@ class AlignmentPaneBase(HasTraits):
     #: set_snap_radius/set_appearance.
     overlay_options = Dict()
 
+    #: Show every corner the dragged dots can snap onto.
+    show_snap_points = Bool(False)
+
     #: Refit the image in the view.
     fit = Button()
     #: Commit just this pane (the dialog's Confirm Alignment fires
@@ -134,6 +141,14 @@ class AlignmentPaneBase(HasTraits):
             UItem("title", style="readonly", tooltip=instructions),
             spring,
             UItem(
+                "show_snap_points",
+                editor=IconToggleEditor(
+                    on_glyph=ICON_VISIBILITY,
+                    off_glyph=ICON_VISIBILITY_OFF,
+                    tooltip="Show every corner the dots can snap onto",
+                ),
+            ),
+            UItem(
                 "fit",
                 editor=IconButtonEditor(
                     glyph=ICON_FIT_SCREEN, tooltip="Fit the image in the view"
@@ -152,6 +167,13 @@ class AlignmentPaneBase(HasTraits):
         self._overlay = QuadOverlay(
             self.canvas.scene(), quad, snap_points=snap_points, **self.overlay_options
         )
+        if self.show_snap_points:
+            self._overlay.set_snap_markers_visible(True)
+
+    @observe("show_snap_points")
+    def _show_snap_points_changed(self, event):
+        if self._overlay is not None:
+            self._overlay.set_snap_markers_visible(event.new)
 
     def _fit_fired(self):
         self.canvas.fit_frame()
