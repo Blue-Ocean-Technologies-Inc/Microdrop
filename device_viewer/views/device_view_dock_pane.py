@@ -24,8 +24,8 @@ from microdrop_application.dialogs.pyface_wrapper import (
     confirm,
     error, warning, CANCEL
 )
-from pyface.qt.QtCore import QPointF, QSizeF, Qt, QTimer
-from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont
+from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
+from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont, QImage, QPainter
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -49,7 +49,7 @@ from traitsui.view import View
 
 # ext consts
 from logger.logger_service import get_logger
-from microdrop_style.button_styles import get_tooltip_style
+from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
 from microdrop_style.colors import BLACK, SUCCESS_COLOR, GREY
 from microdrop_style.helpers import (
     QT_THEME_NAMES,
@@ -78,6 +78,7 @@ from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED
 from ..models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
+    ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     PKG,
     PKG_name,
     camera_edit_status_message_text,
@@ -88,7 +89,7 @@ from ..consts import (
 from ..models.messages import GeometryChangedMessage
 
 ##### local imports ######
-from ..default_settings import video_key
+from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.electrodes import Electrodes
 
@@ -107,8 +108,16 @@ from ..utils.message_utils import gui_models_to_message_model
 # For sidebar
 from .alpha_view.alpha_table import alpha_table_view
 from .calibration_view.widget import CalibrationController, CalibrationWidget
-from .camera_alignment_view.picker_dialog import AlignmentPickerDialog
-from .camera_alignment_view.quad_overlay import QuadOverlay
+from .camera_alignment_view.alignment_dialog import (
+    CameraAlignmentController,
+    CameraAlignmentModel,
+    camera_alignment_dialog_view,
+)
+from .camera_alignment_view.alignment_panes import EndpointPane, OutlinePane
+from .camera_alignment_view.alignment_settings import (
+    AlignmentSettingsModel,
+    overlay_options_from_preferences,
+)
 from .camera_control_view.widget import CameraControlWidget
 from ..utils.camera_endpoints import CameraEndpointStore
 from .electrode_view.electrode_layer import ElectrodeLayer
@@ -227,11 +236,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################################################################################################
 
         ################ Camera-alignment endpoint workflow ################
-        # Per-device saved endpoints, the outline-picker dialog, and the
-        # in-scene endpoint viewer/adjuster overlay.
+        # Per-device saved endpoints and the combined endpoint/outline
+        # alignment dialog.
         self._endpoint_store = CameraEndpointStore()
-        self._endpoint_overlay = None
-        self._alignment_picker = None
+        self._alignment_ui = None
         self._align_timer = None
 
         self.scene = ElectrodeScene()
@@ -474,14 +482,16 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
     # ------- Camera-alignment endpoint workflow -------------------------
     #
-    # The user defines the ground truth ONCE per device: position the four
-    # alignment points where they belong (finish any good alignment) and
-    # Save Endpoint — the scene positions persist per device. Every later
-    # alignment is then just: mark the start points on a captured frame
-    # (Select Device Outline) and Go To Endpoint — the four precise drags
-    # happen automatically, animated. Show Endpoint draws the saved quad
-    # over the scene (orange frame, conspicuous corner dots — distinct
-    # from the regular aligner's red rect) for viewing and adjustment.
+    # One combined Camera Alignment dialog: the endpoint pane (just the
+    # device SVG) on the left, where the per-device ground truth is
+    # viewed and placed (orange frame, conspicuous corner dots —
+    # distinct from the regular aligner's red rect) and Save persists it
+    # per device; the outline pane (a captured camera frame, with a
+    # recapture glyph) on the right, where the start points are marked.
+    # Go To Endpoint then automates the four precise drags, animated.
+    # Nothing endpoint-related is drawn on the device view itself, and
+    # only Go To Endpoint moves the red frame — the two are fully
+    # decoupled.
     ################################################################################################
 
     def _current_device_key(self):
@@ -539,27 +549,19 @@ class DeviceViewerDockPane(TraitsDockPane):
                  (point.y() - offset_y) / scale_y]
                 for point in perspective.reference_rect]
 
-    def _on_pick_device_outline(self):
-        """Capture ONE raw camera frame (just the device image — none
-        of the viewer's overlays in the way) and open the manual
-        outline picker over it."""
+    def _capture_camera_frame(self):
+        """ONE raw camera frame (just the device image — none of the
+        viewer's overlays in the way) as a QImage copy, or None when
+        the camera has no frame yet. The outline pane calls this at
+        open and again on every recapture click."""
         frame = self.camera_control_widget.video_item.videoSink() \
             .videoFrame()
         image = frame.toImage()
-        if image.isNull():
-            error(None, "Nothing to capture — is the camera on?",
-                  title="Select Device Outline")
-            return
-        dialog = AlignmentPickerDialog(
-            image.copy(), initial_quad=self._current_camera_quad(),
-            parent=self.device_view.window())
-        dialog.quad_accepted.connect(
-            self._stage_alignment_start_points)
-        self._alignment_picker = dialog
-        dialog.show()
+        return None if image.isNull() else image.copy()
 
-    def _stage_alignment_start_points(self, camera_quad):
-        """The picker's accepted quad: pin the four marked spots
+    def _stage_alignment_start_points(self, event):
+        """The outline pane's accepted quad (``event.new``, camera
+        pixels): pin the four marked spots
         where they CURRENTLY show on the feed (no visual jump) and
         enter camera-edit so the user can fine-tune, then Go To
         Endpoint."""
@@ -567,7 +569,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             item_points = [
                 self._camera_pixels_to_video_item(
                     QPointF(float(x), float(y)))
-                for x, y in camera_quad]
+                for x, y in event.new]
         except RuntimeError as exc:
             error(None, str(exc), title="Select Device Outline")
             return
@@ -578,30 +580,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             current.map(point) for point in item_points]
         self.model.mode = "camera-edit"
 
-    def _on_save_endpoint(self):
-        """Persist the current point positions as this device's
-        alignment endpoint — the user's ground truth, captured while
-        the points sit where they belong."""
-        device_key = self._current_device_key()
-        if device_key is None:
-            warning(None, "No device is loaded — load a device SVG "
-                          "first.", title="Save Endpoint")
-            return
-        quad = self.model.camera_perspective.transformed_reference_rect
-        if len(quad) != 4:
-            warning(None, "No 4-point alignment is active — position "
-                          "the four points where they belong first "
-                          "(finish an alignment, or Select Device "
-                          "Outline and adjust).",
-                    title="Save Endpoint")
-            return
-        scene_quad = [[point.x(), point.y()] for point in quad]
-        self._endpoint_store.save(device_key, scene_quad)
-        if self._endpoint_overlay is not None:
-            self._endpoint_overlay.set_quad(scene_quad)
-        self._statusbar_message(
-            f"Saved camera-alignment endpoint for {device_key}")
-
     def _on_go_to_endpoint(self):
         """Automate the drags: glide the marked points onto this
         device's saved endpoint."""
@@ -609,8 +587,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         endpoint = (self._endpoint_store.load(device_key)
                     if device_key else None)
         if endpoint is None:
-            warning(None, "No saved endpoint for this device — align "
-                          "once and Save Endpoint first.",
+            warning(None, "No saved endpoint for this device — set "
+                          "one in View/Edit Endpoint first.",
                     title="Go To Endpoint")
             return
         perspective = self.model.camera_perspective
@@ -654,44 +632,121 @@ class DeviceViewerDockPane(TraitsDockPane):
             self._align_timer.stop()
             self.model.goto_last_mode()
 
-    def _on_toggle_endpoint_overlay(self, checked):
-        """Show/hide the saved endpoint over the scene. While shown,
-        its corner dots drag — adjustments re-save on release."""
-        if not checked:
-            self._hide_endpoint_overlay()
-            return
-        device_key = self._current_device_key()
-        endpoint = (self._endpoint_store.load(device_key)
-                    if device_key else None)
-        if endpoint is None:
-            warning(None, "No saved endpoint for this device — align "
-                          "once and Save Endpoint first.",
-                    title="Show Endpoint")
-            self._hide_endpoint_overlay()
-            return
-        self._endpoint_overlay = QuadOverlay(
-            self.scene, endpoint,
-            on_released=self._on_endpoint_adjusted, z_value=200.0)
-        self.endpoint_toggle_button.setText("Hide Endpoint")
+    def _render_device_image(
+            self, width_px=ALIGNMENT_DEVICE_RENDER_WIDTH_PX):
+        """Just the device SVG, rendered offscreen at FULL visibility —
+        a throwaway ElectrodeLayer with its own alphas and fills, so
+        neither the live view's camera feed/routes nor its current
+        alpha/visibility settings (camera modes hide fill and text)
+        can blank out parts of the device. Fresh ElectrodeViews carry
+        no color stack until a recolor pass runs, so the fills are
+        painted explicitly here. Returns (QImage, the device-scene
+        rect the image covers), or (None, None) when the device has
+        no drawable geometry."""
+        full_alphas = {
+            key: 1.0
+            for key in self.device_viewer_preferences.default_alphas
+        }
+        layer = ElectrodeLayer(self.model.electrodes, full_alphas)
+        scene = QGraphicsScene()
+        layer.add_electrodes_to_scene(scene)
+        for electrode_view in layer.electrode_views.values():
+            electrode_view.update_color([QColor(ELECTRODE_OFF)])
+        rect = layer.get_electrodes_views_bounding_rect()
+        if rect.isEmpty():
+            return None, None
+        # A small margin so edge outlines don't clip at the image
+        # border; the padded rect is also the returned scene bridge,
+        # so the pixel <-> scene mapping stays exact.
+        margin = 0.02 * max(rect.width(), rect.height())
+        rect = rect.adjusted(-margin, -margin, margin, margin)
+        height_px = max(int(width_px * rect.height() / rect.width()),
+                        1)
+        image = QImage(width_px, height_px,
+                       QImage.Format_ARGB32_Premultiplied)
+        image.fill(QColor(BLACK))
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        scene.render(painter, QRectF(0, 0, width_px, height_px),
+                     rect)
+        painter.end()
+        return image, rect
 
-    def _on_endpoint_adjusted(self, scene_quad):
+    def _on_open_camera_alignment(self):
+        """Open the combined Camera Alignment dialog: the endpoint
+        pane (device SVG alone, with this device's saved endpoint to
+        view and adjust — or a starter quad when none is saved) next
+        to the outline pane (a captured camera frame, with a
+        recapture glyph), plus the collapsible tuning sidebar."""
+        device_key = self._current_device_key()
+        if device_key is None or self.current_electrode_layer is None:
+            warning(None, "No device is loaded — load a device SVG "
+                          "first.", title="Camera Alignment")
+            return
+
+        image, scene_rect = self._render_device_image()
+        if image is None:
+            error(None, "The loaded device has no drawable geometry.",
+                  title="Camera Alignment")
+            return
+
+        self._close_alignment_dialog()
+        # Every electrode path vertex is a corner (only straight-line
+        # SVG commands exist), scaled by the layer's path_scale since
+        # the scene (and the endpoint quad) uses scaled coordinates.
+        scale = self.current_electrode_layer.path_scale
+        corner_points = [
+            scaled_point
+            for electrode in self.model.electrodes
+            for scaled_point in (scale * electrode.path).tolist()]
+        preferences = self.device_viewer_preferences
+        endpoint_pane = EndpointPane(
+            device_image=image, scene_rect=scene_rect,
+            initial_scene_quad=self._endpoint_store.load(device_key),
+            device_name=device_key,
+            snap_scene_points=corner_points,
+            overlay_options=overlay_options_from_preferences(
+                preferences, "alignment_endpoint_snap_radius_px"))
+        endpoint_pane.observe(
+            self._on_endpoint_editor_saved, "endpoint_saved")
+        outline_pane = OutlinePane(
+            capture_frame=self._capture_camera_frame,
+            initial_quad=self._current_camera_quad(),
+            overlay_options=overlay_options_from_preferences(
+                preferences, "alignment_outline_snap_radius_px"))
+        outline_pane.observe(
+            self._stage_alignment_start_points, "quad_accepted")
+        alignment_model = CameraAlignmentModel(
+            endpoint_pane=endpoint_pane, outline_pane=outline_pane,
+            settings=AlignmentSettingsModel(preferences=preferences))
+        # Confirm Alignment fires AFTER the two pane signals above
+        # have saved the endpoint and staged the points, so Go To
+        # Endpoint finds both in place.
+        alignment_model.observe(self._on_alignment_confirmed,
+                                "alignment_confirmed")
+        self._alignment_ui = CameraAlignmentController(
+            model=alignment_model,
+        ).edit_traits(view=camera_alignment_dialog_view,
+                      parent=self.device_view.window())
+
+    def _on_endpoint_editor_saved(self, event):
+        """The endpoint pane's saved quad (``event.new``, device-scene
+        coordinates): persist it as this device's endpoint."""
         device_key = self._current_device_key()
         if device_key is None:
             return
-        self._endpoint_store.save(device_key, scene_quad)
+        self._endpoint_store.save(device_key, event.new)
         self._statusbar_message(
-            f"Adjusted camera-alignment endpoint for {device_key}")
+            f"Saved camera-alignment endpoint for {device_key}")
 
-    def _hide_endpoint_overlay(self):
-        if self._endpoint_overlay is not None:
-            self._endpoint_overlay.remove()
-            self._endpoint_overlay = None
-        button = getattr(self, "endpoint_toggle_button", None)
-        if button is not None:
-            button.blockSignals(True)
-            button.setChecked(False)
-            button.blockSignals(False)
-            button.setText("Show Endpoint")
+    def _on_alignment_confirmed(self, event):
+        self._on_go_to_endpoint()
+
+    def _close_alignment_dialog(self):
+        if self._alignment_ui is not None:
+            if self._alignment_ui.control is not None:
+                self._alignment_ui.dispose()
+            self._alignment_ui = None
 
     def _statusbar_message(self, message):
         status_bar_manager = self.task.window.status_bar_manager
@@ -1089,9 +1144,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.clear()
 
     def _initialize_svg_view(self, svg_file):
-        # A different device has a different saved endpoint — take the
-        # old device's endpoint overlay down before rebuilding the view.
-        self._hide_endpoint_overlay()
+        # A different device has a different saved endpoint — close the
+        # old device's alignment dialog before rebuilding the view.
+        self._close_alignment_dialog()
 
         # Trigger an update to redraw and re-initialize view using model.
         self.set_view_from_model(self.model.electrodes)
@@ -1291,30 +1346,23 @@ class DeviceViewerDockPane(TraitsDockPane):
         alignment_layout = QVBoxLayout(alignment_widget)
         alignment_layout.setContentsMargins(0, 0, 0, 0)
         for label, handler, tip in (
-            ("Select Device Outline…", self._on_pick_device_outline,
-             "Capture a camera frame and drag the four corner dots "
-             "onto the device outline yourself (scroll to zoom)"),
-            ("Save Endpoint", self._on_save_endpoint,
-             "Save the current point positions as this device's "
-             "alignment endpoint (do this once, while they sit "
-             "where they belong)"),
+            ("Camera Alignment…", self._on_open_camera_alignment,
+             "Open the split-screen alignment dialog: place this "
+             "device's endpoint on the device SVG (left) and drag "
+             "the corner dots onto the device outline on a captured "
+             "camera frame (right)"),
             ("Go To Endpoint", self._on_go_to_endpoint,
              "Automate the drags: glide the marked points onto "
              "this device's saved endpoint"),
         ):
             action_button = QPushButton(label)
+            # The sidebar's theme stylesheet renders QPushButton text
+            # in the Material Symbols icon font — these buttons carry
+            # real words, so they get the text-button font override.
+            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
             action_button.setToolTip(tip)
             action_button.clicked.connect(handler)
             alignment_layout.addWidget(action_button)
-        self.endpoint_toggle_button = QPushButton("Show Endpoint")
-        self.endpoint_toggle_button.setCheckable(True)
-        self.endpoint_toggle_button.setToolTip(
-            "Show this device's saved endpoint over the view "
-            "(orange frame with corner dots) — drag the dots to "
-            "adjust it")
-        self.endpoint_toggle_button.toggled.connect(
-            self._on_toggle_endpoint_overlay)
-        alignment_layout.addWidget(self.endpoint_toggle_button)
         scroll_layout.addWidget(
             CollapsibleVStackBox("Camera Alignment",
                                  control_widgets=alignment_widget))
