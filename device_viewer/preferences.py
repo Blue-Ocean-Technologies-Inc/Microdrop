@@ -47,6 +47,20 @@ from .consts import (
     GAMEPAD_AXIS_THRESHOLD,
     GAMEPAD_RECONNECT_REQUEST,
 )
+from .consts import (
+    ALIGNMENT_FRAME_WIDTH_MAX_PX,
+    ALIGNMENT_FRAME_WIDTH_MIN_PX,
+    ALIGNMENT_FRAME_WIDTH_PX,
+    ALIGNMENT_HANDLE_COLOR_HEX,
+    ALIGNMENT_HANDLE_RADIUS_MAX_PX,
+    ALIGNMENT_HANDLE_RADIUS_MIN_PX,
+    ALIGNMENT_HANDLE_RADIUS_PX,
+    ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_QUAD_COLOR_HEX,
+    ALIGNMENT_SNAP_RADIUS_MAX_PX,
+    ALIGNMENT_SNAP_RADIUS_MIN_PX,
+    ALIGNMENT_SNAP_RADIUS_PX,
+)
 from .default_settings import default_alphas, default_visibility
 
 
@@ -70,6 +84,39 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
+
+    ### Camera-alignment dialog prefs ###
+    # Snap radii are per pane: the endpoint pane snaps to dense SVG
+    # path vertices while the outline pane snaps to sparse detected
+    # image corners, so they get independent values. Colors are
+    # stored as '#rrggbb' hex strings.
+    alignment_endpoint_snap_radius_px = Range(
+        value=ALIGNMENT_SNAP_RADIUS_PX,
+        low=ALIGNMENT_SNAP_RADIUS_MIN_PX,
+        high=ALIGNMENT_SNAP_RADIUS_MAX_PX,
+        mode="spinner",
+    )
+    alignment_outline_snap_radius_px = Range(
+        value=ALIGNMENT_SNAP_RADIUS_PX,
+        low=ALIGNMENT_SNAP_RADIUS_MIN_PX,
+        high=ALIGNMENT_SNAP_RADIUS_MAX_PX,
+        mode="spinner",
+    )
+    alignment_handle_radius_px = Range(
+        value=ALIGNMENT_HANDLE_RADIUS_PX,
+        low=ALIGNMENT_HANDLE_RADIUS_MIN_PX,
+        high=ALIGNMENT_HANDLE_RADIUS_MAX_PX,
+        mode="spinner",
+    )
+    alignment_frame_width_px = Range(
+        value=ALIGNMENT_FRAME_WIDTH_PX,
+        low=ALIGNMENT_FRAME_WIDTH_MIN_PX,
+        high=ALIGNMENT_FRAME_WIDTH_MAX_PX,
+        mode="spinner",
+    )
+    alignment_quad_color = Str(ALIGNMENT_QUAD_COLOR_HEX)
+    alignment_handle_color = Str(ALIGNMENT_HANDLE_COLOR_HEX)
+    alignment_handle_ring_color = Str(ALIGNMENT_HANDLE_RING_COLOR_HEX)
 
     ### Recording viewer (video_viewer pane) prefs ###
     # Persisted zoom/pan of the playback canvas — the alignment transform
