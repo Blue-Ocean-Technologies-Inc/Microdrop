@@ -254,6 +254,29 @@ RECORDING_60FPS_MIN_FPS = 45     # at least this fps uses the 60 fps classes
 CAMERA_PREVIEW_MAX_FPS = 20
 
 # ---------------------------------------------------------------------------
+# Camera-alignment dialog (endpoint / outline panes)
+# ---------------------------------------------------------------------------
+#: QuadOverlay defaults. Colors are '#rrggbb' hex strings — the same
+#: format the alignment preferences persist.
+ALIGNMENT_QUAD_COLOR_HEX = "#ffa000"
+ALIGNMENT_HANDLE_COLOR_HEX = "#ff6400"
+ALIGNMENT_HANDLE_RING_COLOR_HEX = "#ffffff"
+ALIGNMENT_HANDLE_RADIUS_PX = 8
+ALIGNMENT_FRAME_WIDTH_PX = 3
+ALIGNMENT_SNAP_RADIUS_PX = 50
+
+#: Bounds shared by the preference Range traits and the settings-sidebar
+#: spinners (one source, so they cannot drift apart).
+ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX = 0, 200
+ALIGNMENT_HANDLE_RADIUS_MIN_PX, ALIGNMENT_HANDLE_RADIUS_MAX_PX = 2, 40
+ALIGNMENT_FRAME_WIDTH_MIN_PX, ALIGNMENT_FRAME_WIDTH_MAX_PX = 1, 20
+
+#: Width of the offscreen device-SVG render behind the endpoint pane —
+#: enough resolution to zoom into electrode corners without an
+#: excessive image.
+ALIGNMENT_DEVICE_RENDER_WIDTH_PX = 1400
+
+# ---------------------------------------------------------------------------
 # Resources & UI text
 # ---------------------------------------------------------------------------
 # main view device layout
