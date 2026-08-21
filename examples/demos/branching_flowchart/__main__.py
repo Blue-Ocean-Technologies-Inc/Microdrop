@@ -34,9 +34,11 @@ def main():
     for step in win.protocol.leaves():
         step.values["duration_s"] = 0.05
         for spec in win.protocol.all_specs():
-            dn = (win.protocol.decision_node_for(step.id, spec.id)
-                  or win.protocol.add_decision_node(
-                      step.id, spec.id, (step.pos[0] + 60, step.pos[1] + 90)))
+            dn = win.protocol.decision_node_for(
+                step.id, spec.id
+            ) or win.protocol.add_decision_node(
+                step.id, spec.id, (step.pos[0] + 60, step.pos[1] + 90)
+            )
             dn.mode = "auto"
             dn.auto_outcome = spec.default_outcome
 
@@ -47,12 +49,9 @@ def main():
         print(f"smoke: protocol {label}")
         app.quit()
 
-    win.executor.signals.protocol_finished.connect(
-        lambda: finish(0, "finished"))
-    win.executor.signals.protocol_aborted.connect(
-        lambda: finish(1, "aborted"))
-    win.executor.signals.protocol_error.connect(
-        lambda e: finish(1, f"error: {e}"))
+    win.executor.signals.protocol_finished.connect(lambda: finish(0, "finished"))
+    win.executor.signals.protocol_aborted.connect(lambda: finish(1, "aborted"))
+    win.executor.signals.protocol_error.connect(lambda e: finish(1, f"error: {e}"))
     win.executor.signals.log.connect(lambda m: print(f"smoke: {m}"))
 
     failsafe = QTimer()

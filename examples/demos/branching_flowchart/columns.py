@@ -24,8 +24,17 @@ from .model import ABORT, NEXT, SELF, DecisionSpec, Outcome
 class ColumnModel:
     """col_id + display name + default + editor kind (float/int/bool)."""
 
-    def __init__(self, col_id, col_name, default_value, kind="float",
-                 minimum=0.0, maximum=1e6, decimals=1, suffix=""):
+    def __init__(
+        self,
+        col_id,
+        col_name,
+        default_value,
+        kind="float",
+        minimum=0.0,
+        maximum=1e6,
+        decimals=1,
+        suffix="",
+    ):
         self.col_id = col_id
         self.col_name = col_name
         self.default_value = default_value
@@ -65,13 +74,26 @@ class ColumnHandler:
         return True
 
     # -- lifecycle hooks (same set as the real handler) -----------------
-    def on_pre_protocol_start(self, ctx): pass
-    def on_protocol_start(self, ctx): pass
-    def on_pre_step(self, step, ctx): pass
-    def on_step(self, step, ctx): pass
-    def on_post_step(self, step, ctx): pass
-    def on_protocol_end(self, ctx): pass
-    def on_post_protocol_end(self, ctx): pass
+    def on_pre_protocol_start(self, ctx):
+        pass
+
+    def on_protocol_start(self, ctx):
+        pass
+
+    def on_pre_step(self, step, ctx):
+        pass
+
+    def on_step(self, step, ctx):
+        pass
+
+    def on_post_step(self, step, ctx):
+        pass
+
+    def on_protocol_end(self, ctx):
+        pass
+
+    def on_post_protocol_end(self, ctx):
+        pass
 
     # -- group hooks (proposed addition) --------------------------------
     # Fired only on a FORMAL group entry/exit: sequential fall-through
@@ -79,8 +101,11 @@ class ColumnHandler:
     # into one of the group's steps skips these (and the group repeats) —
     # that is the practical difference between wiring an outcome to a
     # group vs. to its first step.
-    def on_group_enter(self, group, ctx): pass
-    def on_group_exit(self, group, ctx): pass
+    def on_group_enter(self, group, ctx):
+        pass
+
+    def on_group_exit(self, group, ctx):
+        pass
 
 
 class Column:
@@ -95,6 +120,7 @@ class Column:
 # ---------------------------------------------------------------------------
 # Demo columns
 # ---------------------------------------------------------------------------
+
 
 class VoltageHandler(ColumnHandler):
     priority = 10  # actuation setup runs before dwells/checks
@@ -159,8 +185,7 @@ class VolumeCheckHandler(ColumnHandler):
             ctx.log(f"Volume check FAILED (measured {measured:.0f}% of target)")
             ctx.request_decision(
                 VOLUME_CHECK,
-                message=f"Measured {measured:.0f}% of target volume "
-                        f"(needs ≥ 95%).",
+                message=f"Measured {measured:.0f}% of target volume " f"(needs ≥ 95%).",
             )
         else:
             ctx.log(f"Volume check passed ({measured:.0f}% of target)")
@@ -206,7 +231,8 @@ class DropletDetectHandler(ColumnHandler):
             ctx.request_decision(
                 DROPLET_DETECT,
                 message="The capacitance sensor saw no droplet where one "
-                        "was expected.")
+                "was expected.",
+            )
         else:
             ctx.log("Droplet detected")
 
@@ -245,18 +271,58 @@ class OperatorCheckHandler(ColumnHandler):
 
 def make_demo_columns():
     return [
-        Column(ColumnModel("voltage", "Voltage", 100.0, kind="float",
-                           minimum=0, maximum=300, decimals=0, suffix=" V"),
-               VoltageHandler()),
-        Column(ColumnModel("duration_s", "Duration", 1.0, kind="float",
-                           minimum=0, maximum=3600, decimals=1, suffix=" s"),
-               DurationHandler()),
-        Column(ColumnModel("fail_pct", "Fail chance", 0, kind="int",
-                           minimum=0, maximum=100, suffix=" %"),
-               VolumeCheckHandler()),
-        Column(ColumnModel("detect_fail", "Detect fail", 0, kind="int",
-                           minimum=0, maximum=100, suffix=" %"),
-               DropletDetectHandler()),
-        Column(ColumnModel("op_check", "Operator check", False, kind="bool"),
-               OperatorCheckHandler()),
+        Column(
+            ColumnModel(
+                "voltage",
+                "Voltage",
+                100.0,
+                kind="float",
+                minimum=0,
+                maximum=300,
+                decimals=0,
+                suffix=" V",
+            ),
+            VoltageHandler(),
+        ),
+        Column(
+            ColumnModel(
+                "duration_s",
+                "Duration",
+                1.0,
+                kind="float",
+                minimum=0,
+                maximum=3600,
+                decimals=1,
+                suffix=" s",
+            ),
+            DurationHandler(),
+        ),
+        Column(
+            ColumnModel(
+                "fail_pct",
+                "Fail chance",
+                0,
+                kind="int",
+                minimum=0,
+                maximum=100,
+                suffix=" %",
+            ),
+            VolumeCheckHandler(),
+        ),
+        Column(
+            ColumnModel(
+                "detect_fail",
+                "Detect fail",
+                0,
+                kind="int",
+                minimum=0,
+                maximum=100,
+                suffix=" %",
+            ),
+            DropletDetectHandler(),
+        ),
+        Column(
+            ColumnModel("op_check", "Operator check", False, kind="bool"),
+            OperatorCheckHandler(),
+        ),
     ]

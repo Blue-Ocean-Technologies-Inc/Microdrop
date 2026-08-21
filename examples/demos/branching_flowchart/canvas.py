@@ -32,12 +32,22 @@ model objects (move-undo is staged on press and committed on release).
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import (
-    QBrush, QColor, QFont, QPainter, QPainterPath, QPainterPathStroker,
-    QPen, QPolygonF,
+    QBrush,
+    QColor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPainterPathStroker,
+    QPen,
+    QPolygonF,
 )
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsItem, QGraphicsPathItem,
-    QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem,
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsPathItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsSimpleTextItem,
     QGraphicsView,
 )
 
@@ -73,10 +83,10 @@ TERM_END_FILL = QColor("#1d3a2a")
 NODE_TEXT = QColor("#e5e7eb")
 DIM_TEXT = QColor("#8b95a7")
 NODE_BORDER = QColor("#94a3b8")
-GLOW_BORDER = QColor("#22d3ee")      # cyan — "release here" affordance
-ACTIVE_BORDER = QColor("#3b82f6")    # running step
+GLOW_BORDER = QColor("#22d3ee")  # cyan — "release here" affordance
+ACTIVE_BORDER = QColor("#3b82f6")  # running step
 DECIDING_BORDER = QColor("#f59e0b")  # prompt showing
-RECENT_BORDER = QColor(59, 130, 246, 120)   # just-executed trail
+RECENT_BORDER = QColor(59, 130, 246, 120)  # just-executed trail
 DRAG_COLOR = QColor("#60a5fa")
 SPINE_COLOR = QColor(150, 150, 150, 120)
 TETHER_COLOR = QColor(139, 149, 167, 90)
@@ -147,29 +157,31 @@ def _lane_candidate(side, source, target, end_point, rects):
     horizontal_lane = side in ("right", "left")
     if horizontal_lane:
         span_lo, span_hi = sorted((s.y(), e.y()))
-        relevant = [r for r in rects
-                    if r.bottom() >= span_lo - EDGE_CLEARANCE
-                    and r.top() <= span_hi + EDGE_CLEARANCE]
+        relevant = [
+            r
+            for r in rects
+            if r.bottom() >= span_lo - EDGE_CLEARANCE
+            and r.top() <= span_hi + EDGE_CLEARANCE
+        ]
         if side == "right":
-            lane = max([r.right() for r in relevant] + [s.x(), e.x()]) \
-                + LANE_CLEARANCE
+            lane = max([r.right() for r in relevant] + [s.x(), e.x()]) + LANE_CLEARANCE
             step = _LANE_RETRY_STEP
         else:
-            lane = min([r.left() for r in relevant] + [s.x(), e.x()]) \
-                - LANE_CLEARANCE
+            lane = min([r.left() for r in relevant] + [s.x(), e.x()]) - LANE_CLEARANCE
             step = -_LANE_RETRY_STEP
     else:
         span_lo, span_hi = sorted((s.x(), e.x()))
-        relevant = [r for r in rects
-                    if r.right() >= span_lo - EDGE_CLEARANCE
-                    and r.left() <= span_hi + EDGE_CLEARANCE]
+        relevant = [
+            r
+            for r in rects
+            if r.right() >= span_lo - EDGE_CLEARANCE
+            and r.left() <= span_hi + EDGE_CLEARANCE
+        ]
         if side == "bottom":
-            lane = max([r.bottom() for r in relevant] + [s.y(), e.y()]) \
-                + LANE_CLEARANCE
+            lane = max([r.bottom() for r in relevant] + [s.y(), e.y()]) + LANE_CLEARANCE
             step = _LANE_RETRY_STEP
         else:
-            lane = min([r.top() for r in relevant] + [s.y(), e.y()]) \
-                - LANE_CLEARANCE
+            lane = min([r.top() for r in relevant] + [s.y(), e.y()]) - LANE_CLEARANCE
             step = -_LANE_RETRY_STEP
 
     # The cubic sags toward its control points without reaching them, so
@@ -194,8 +206,9 @@ def route_edge_path(source, target, end_point, rects, start_dir=None):
     Returns (start, end, path)."""
     ref = target.center() if target is not None else end_point
     start = source.side_anchor_toward(ref)
-    end = (target.side_anchor_toward(source.center())
-           if target is not None else end_point)
+    end = (
+        target.side_anchor_toward(source.center()) if target is not None else end_point
+    )
     direct = _curve_between(start, end, start_dir)
     if path_is_clear(direct, rects):
         return start, end, direct
@@ -276,20 +289,23 @@ class _AnchoredRectItem(QGraphicsRectItem):
         return self.mapToScene(QPointF(r.center().x(), r.bottom()))
 
     def side_anchor_toward(self, point):
-        return (self.right_anchor() if point.x() >= self.center().x()
-                else self.left_anchor())
+        return (
+            self.right_anchor()
+            if point.x() >= self.center().x()
+            else self.left_anchor()
+        )
 
     def snap_rect(self):
         r = self.mapRectToScene(self.rect())
-        return r.adjusted(-SNAP_MARGIN, -SNAP_MARGIN,
-                          SNAP_MARGIN, SNAP_MARGIN)
+        return r.adjusted(-SNAP_MARGIN, -SNAP_MARGIN, SNAP_MARGIN, SNAP_MARGIN)
 
     def scene_rect(self):
         return self.mapRectToScene(self.rect())
 
     def set_glow(self, on):
-        self.setPen(QPen(GLOW_BORDER, 2.6) if on
-                    else (self._state_pen or self._base_pen))
+        self.setPen(
+            QPen(GLOW_BORDER, 2.6) if on else (self._state_pen or self._base_pen)
+        )
 
     def set_state_pen(self, pen):
         """Run-state border (active/deciding/recent); None restores base."""
@@ -301,15 +317,20 @@ class _AnchoredRectItem(QGraphicsRectItem):
         painter.setRenderHint(QPainter.Antialiasing, True)
         pen = self.pen()
         if self.isSelected() and pen.color() not in (
-                GLOW_BORDER, ACTIVE_BORDER, DECIDING_BORDER):
+            GLOW_BORDER,
+            ACTIVE_BORDER,
+            DECIDING_BORDER,
+        ):
             pen = QPen(DRAG_COLOR, 2.0)
         painter.setPen(pen)
         painter.setBrush(self.brush())
         painter.drawRoundedRect(self.rect(), 5, 5)
 
     def itemChange(self, change, value):
-        if (change == QGraphicsItem.ItemScenePositionHasChanged
-                and self._scene_ref is not None):
+        if (
+            change == QGraphicsItem.ItemScenePositionHasChanged
+            and self._scene_ref is not None
+        ):
             self._scene_ref.on_item_moved(self)
         return super().itemChange(change, value)
 
@@ -347,8 +368,9 @@ class PlusButtonItem(QGraphicsEllipseItem):
         self.setPen(QPen(QColor("#4b5563"), 1.0))
         self.setAcceptHoverEvents(True)
         self.setZValue(3)
-        self.setToolTip("Add a shape: decisions from this step's columns, "
-                        "or an AND/OR operator")
+        self.setToolTip(
+            "Add a shape: decisions from this step's columns, " "or an AND/OR operator"
+        )
         text = QGraphicsSimpleTextItem("＋", self)
         text.setBrush(QBrush(QColor("#cbd5e1")))
         f = QFont()
@@ -385,8 +407,7 @@ class StepNodeItem(_AnchoredRectItem):
         f.setPointSizeF(9.0)
         text.setFont(f)
         # Elide long names to the slab width.
-        while (text.boundingRect().width() > NODE_W - 24
-               and len(text.text()) > 4):
+        while text.boundingRect().width() > NODE_W - 24 and len(text.text()) > 4:
             text.setText(text.text()[:-2].rstrip() + "…")
         text.setPos(10, (NODE_H - text.boundingRect().height()) / 2)
         self.setToolTip(row.name)
@@ -395,7 +416,8 @@ class StepNodeItem(_AnchoredRectItem):
         self.done_port.setPos(NODE_W, NODE_H / 2)
         self.done_port.setToolTip(
             "On completion → drag to a step, a group frame, ⏹/▦, or "
-            "blank space (new step)")
+            "blank space (new step)"
+        )
         self.plus = PlusButtonItem(self)
         self.plus.setPos(NODE_W / 2, NODE_H + PLUS_R + 3)
 
@@ -419,12 +441,18 @@ class GroupFrameItem(_AnchoredRectItem):
     def __init__(self, scene_ref, row):
         self.row = row
         self.collapsed = row.collapsed
-        super().__init__(self.CHIP_W if row.collapsed else NODE_W, NODE_H,
-                         scene_ref,
-                         GROUP_FILL if self.collapsed else FRAME_FILL,
-                         movable=self.collapsed)
-        self._base_pen = (QPen(NODE_BORDER, 1.2) if self.collapsed
-                          else QPen(FRAME_BORDER, 1.2, Qt.DashLine))
+        super().__init__(
+            self.CHIP_W if row.collapsed else NODE_W,
+            NODE_H,
+            scene_ref,
+            GROUP_FILL if self.collapsed else FRAME_FILL,
+            movable=self.collapsed,
+        )
+        self._base_pen = (
+            QPen(NODE_BORDER, 1.2)
+            if self.collapsed
+            else QPen(FRAME_BORDER, 1.2, Qt.DashLine)
+        )
         self.setPen(self._base_pen)
         self.setZValue(1 if self.collapsed else -4)
         # Filled at rebuild: items a title-band drag moves / fit uses.
@@ -470,8 +498,9 @@ class GroupFrameItem(_AnchoredRectItem):
         for item in self.fit_items:
             r = item.sceneBoundingRect()
             union = r if union is None else union.united(r)
-        rect = union.adjusted(-FRAME_PAD, -FRAME_PAD - FRAME_TITLE_H,
-                              FRAME_PAD, FRAME_PAD)
+        rect = union.adjusted(
+            -FRAME_PAD, -FRAME_PAD - FRAME_TITLE_H, FRAME_PAD, FRAME_PAD
+        )
         self.prepareGeometryChange()
         self.setPos(0, 0)
         self.setRect(rect)
@@ -484,7 +513,10 @@ class GroupFrameItem(_AnchoredRectItem):
         r = self.rect()
         pen = self.pen()
         if self.isSelected() and pen.color() not in (
-                GLOW_BORDER, ACTIVE_BORDER, DECIDING_BORDER):
+            GLOW_BORDER,
+            ACTIVE_BORDER,
+            DECIDING_BORDER,
+        ):
             pen = QPen(DRAG_COLOR, 2.0)
         painter.setPen(pen)
         painter.setBrush(self.brush())
@@ -494,17 +526,23 @@ class GroupFrameItem(_AnchoredRectItem):
             painter.setPen(band)
             painter.drawLine(
                 QPointF(r.left(), r.top() + FRAME_TITLE_H),
-                QPointF(r.right(), r.top() + FRAME_TITLE_H))
+                QPointF(r.right(), r.top() + FRAME_TITLE_H),
+            )
         painter.setPen(QPen(NODE_TEXT))
         f = QFont()
         f.setPointSizeF(9.0)
         f.setBold(True)
         painter.setFont(f)
         painter.drawText(
-            QRectF(r.left() + 8, r.top(),
-                   r.width() - 16, FRAME_TITLE_H if not self.collapsed
-                   else r.height()),
-            Qt.AlignVCenter | Qt.AlignLeft, self._title())
+            QRectF(
+                r.left() + 8,
+                r.top(),
+                r.width() - 16,
+                FRAME_TITLE_H if not self.collapsed else r.height(),
+            ),
+            Qt.AlignVCenter | Qt.AlignLeft,
+            self._title(),
+        )
 
     # -- interaction ----------------------------------------------------
 
@@ -514,7 +552,7 @@ class GroupFrameItem(_AnchoredRectItem):
             event.accept()
             return
         if self.collapsed:
-            super().mousePressEvent(event)     # normal chip move
+            super().mousePressEvent(event)  # normal chip move
             return
         if self._title_rect().contains(event.pos()):
             self._dragging = True
@@ -522,7 +560,7 @@ class GroupFrameItem(_AnchoredRectItem):
             self.setSelected(True)
             event.accept()
             return
-        event.ignore()   # interior clicks fall through (rubber band etc.)
+        event.ignore()  # interior clicks fall through (rubber band etc.)
 
     def mouseMoveEvent(self, event):
         if self._dragging:
@@ -556,8 +594,7 @@ class DecisionShapeItem(_AnchoredRectItem):
     label (↻ retry · → next · ⏹ abort · ▦ finish)."""
 
     def __init__(self, scene_ref, dnode, spec, active, badge):
-        super().__init__(DEC_W, DEC_HEADER_H + DEC_PORTS_H, scene_ref,
-                         DEC_FILL)
+        super().__init__(DEC_W, DEC_HEADER_H + DEC_PORTS_H, scene_ref, DEC_FILL)
         self.dnode = dnode
         self.spec = spec
         self.setPos(*dnode.pos)
@@ -598,8 +635,9 @@ class DecisionShapeItem(_AnchoredRectItem):
             label.setFont(lf)
             br = label.boundingRect()
             label.setPos(x - br.width() / 2, DEC_HEADER_H + 2)
-            port = PortItem(self, "outcome", QPointF(0, 1), color,
-                            outcome_id=outcome.id)
+            port = PortItem(
+                self, "outcome", QPointF(0, 1), color, outcome_id=outcome.id
+            )
             port.setPos(x, DEC_HEADER_H + DEC_PORTS_H - 4)
             self.ports[outcome.id] = port
         # Amber ring on the current auto answer (used by auto policies,
@@ -609,8 +647,8 @@ class DecisionShapeItem(_AnchoredRectItem):
         auto_port = self.ports.get(auto_id)
         if auto_port is not None:
             ring = QGraphicsEllipseItem(
-                -PORT_R - 3, -PORT_R - 3,
-                2 * (PORT_R + 3), 2 * (PORT_R + 3), auto_port)
+                -PORT_R - 3, -PORT_R - 3, 2 * (PORT_R + 3), 2 * (PORT_R + 3), auto_port
+            )
             ring.setPen(QPen(QColor("#fbbf24"), 1.4))
             ring.setBrush(QBrush(Qt.NoBrush))
 
@@ -618,15 +656,15 @@ class DecisionShapeItem(_AnchoredRectItem):
         auto_id = self.dnode.auto_outcome or self.spec.default_outcome
         for outcome in self.spec.outcomes:
             target = self.dnode.routes.get(
-                outcome.id,
-                self.spec.default_routes.get(outcome.id))
-            origin = ("custom" if outcome.id in self.dnode.routes
-                      else "default")
+                outcome.id, self.spec.default_routes.get(outcome.id)
+            )
+            origin = "custom" if outcome.id in self.dnode.routes else "default"
             prio = self.dnode.priority_for(outcome.id)
             if prio != self.dnode.DEFAULT_EDGE_PRIORITY:
                 origin += f", p{prio}"
-            auto_note = ("\n● ringed = current auto answer."
-                         if outcome.id == auto_id else "")
+            auto_note = (
+                "\n● ringed = current auto answer." if outcome.id == auto_id else ""
+            )
             self.ports[outcome.id].setToolTip(
                 f"{self.dnode.label_for(outcome)} → "
                 f"{protocol.describe_target(target)} "
@@ -634,11 +672,11 @@ class DecisionShapeItem(_AnchoredRectItem):
                 f"auto answer. Drag to a step/group (route), an AND/OR "
                 f"shape (feed), another decision of this step (resolve "
                 f"serially), ⏹/▦ (abort/finish), or blank space "
-                f"(new step).")
+                f"(new step)."
+            )
 
     def contextMenuEvent(self, event):
-        self._scene_ref.window.decision_menu(self.dnode.id,
-                                             event.screenPos())
+        self._scene_ref.window.decision_menu(self.dnode.id, event.screenPos())
         event.accept()
 
 
@@ -678,18 +716,21 @@ class OpNodeItem(_AnchoredRectItem):
             except KeyError:
                 continue
             prefix = "" if k == 0 else f"{sym} "
-            rows.append((f"{prefix}{spec.title}: {dn.label_for(outcome)}",
-                         KIND_COLORS.get(outcome.kind,
-                                         KIND_COLORS["neutral"]),
-                         line_font))
+            rows.append(
+                (
+                    f"{prefix}{spec.title}: {dn.label_for(outcome)}",
+                    KIND_COLORS.get(outcome.kind, KIND_COLORS["neutral"]),
+                    line_font,
+                )
+            )
         if len(rows) == 1:
             rows.append(("drag outcome ports here…", DIM_TEXT, line_font))
         if opnode.target is not None:
-            rows.append((f"→ {proto.describe_target(opnode.target)}",
-                         DIM_TEXT, line_font))
+            rows.append(
+                (f"→ {proto.describe_target(opnode.target)}", DIM_TEXT, line_font)
+            )
         else:
-            rows.append(("⚠ not wired to a target", QColor("#fbbf24"),
-                         line_font))
+            rows.append(("⚠ not wired to a target", QColor("#fbbf24"), line_font))
 
         # Measure to size the card, then create the text children.
         probe = QGraphicsSimpleTextItem()
@@ -707,8 +748,7 @@ class OpNodeItem(_AnchoredRectItem):
         self.setPos(*opnode.pos)
         self.setZValue(1)
         wired = opnode.inputs and opnode.target is not None
-        self._base_pen = QPen(color, 1.4,
-                              Qt.SolidLine if wired else Qt.DashLine)
+        self._base_pen = QPen(color, 1.4, Qt.SolidLine if wired else Qt.DashLine)
         self.setPen(self._base_pen)
 
         y = self.PAD
@@ -716,8 +756,9 @@ class OpNodeItem(_AnchoredRectItem):
             item = QGraphicsSimpleTextItem(text, self)
             item.setBrush(QBrush(row_color))
             item.setFont(font)
-            while (item.boundingRect().width() > w - 2 * self.PAD
-                   and len(item.text()) > 4):
+            while (
+                item.boundingRect().width() > w - 2 * self.PAD and len(item.text()) > 4
+            ):
                 item.setText(item.text()[:-2].rstrip() + "…")
             item.setPos(self.PAD, y)
             y += item.boundingRect().height() + 2
@@ -727,7 +768,8 @@ class OpNodeItem(_AnchoredRectItem):
         quant = "ALL" if opnode.kind == "and" else "ANY"
         self.out_port.setToolTip(
             f"Combined route: fires when {quant} of the listed outcome(s) "
-            f"are chosen in the same round. Drag to a step/group or ⏹/▦.")
+            f"are chosen in the same round. Drag to a step/group or ⏹/▦."
+        )
 
     def contextMenuEvent(self, event):
         self._scene_ref.window.op_menu(self.opnode.id, event.screenPos())
@@ -755,7 +797,8 @@ class TerminalNodeItem(_AnchoredRectItem):
         text.setPos(10, (TERM_H - text.boundingRect().height()) / 2)
         self.setToolTip(
             "Drop a port here to route it to "
-            + ("abort protocol" if kind == "stop" else "finish protocol"))
+            + ("abort protocol" if kind == "stop" else "finish protocol")
+        )
 
 
 class EdgeItem(QGraphicsPathItem):
@@ -768,15 +811,24 @@ class EdgeItem(QGraphicsPathItem):
     ``heat``: 0 normal, 1 recently traversed (warm), 2 just traversed
     (hot) — the run trail."""
 
-    def __init__(self, scene_ref, kind, src_item, dst_item, color,
-                 label="", src_port=None, payload=None):
+    def __init__(
+        self,
+        scene_ref,
+        kind,
+        src_item,
+        dst_item,
+        color,
+        label="",
+        src_port=None,
+        payload=None,
+    ):
         super().__init__()
         self._scene_ref = scene_ref
         self.kind = kind
         self.src_item = src_item
         self.dst_item = dst_item
-        self.src_port = src_port          # PortItem for port-anchored edges
-        self.payload = payload            # model refs for deletion/flash
+        self.src_port = src_port  # PortItem for port-anchored edges
+        self.payload = payload  # model refs for deletion/flash
         self._color = color
         self._arrow = QPolygonF()
         self._heat = 0
@@ -831,17 +883,14 @@ class EdgeItem(QGraphicsPathItem):
                 self._arrow = QPolygonF()
             return
 
-        rects = self._scene_ref.obstacle_rects(
-            exclude={self.src_item, self.dst_item})
-        use_port = (self.src_port is not None
-                    and self.src_port.owner is self.src_item)
+        rects = self._scene_ref.obstacle_rects(exclude={self.src_item, self.dst_item})
+        use_port = self.src_port is not None and self.src_port.owner is self.src_item
         if use_port:
             start_pt = self.src_port.scenePos()
             if self.src_item is self.dst_item:
                 # Self-loop: out the port, back into the top edge.
                 r = self.src_item.rect()
-                end = self.src_item.mapToScene(
-                    QPointF(r.right() - 18, r.top()))
+                end = self.src_item.mapToScene(QPointF(r.right() - 18, r.top()))
                 path = QPainterPath(start_pt)
                 c1 = start_pt + QPointF(90, 60)
                 c2 = end + QPointF(90, -60)
@@ -849,11 +898,10 @@ class EdgeItem(QGraphicsPathItem):
             else:
                 anchor = _PointAnchor(start_pt)
                 _s, end, path = route_edge_path(
-                    anchor, self.dst_item, None, rects,
-                    start_dir=self.src_port.out_dir)
+                    anchor, self.dst_item, None, rects, start_dir=self.src_port.out_dir
+                )
         else:
-            _s, end, path = route_edge_path(
-                self.src_item, self.dst_item, None, rects)
+            _s, end, path = route_edge_path(self.src_item, self.dst_item, None, rects)
         self.prepareGeometryChange()
         self.setPath(path)
 
@@ -874,23 +922,26 @@ class EdgeItem(QGraphicsPathItem):
         return path.pointAtPercent(0.5) + QPointF(6, -14)
 
     def _set_arrow(self, end, direction):
-        length = max(1e-6,
-                     (direction.x() ** 2 + direction.y() ** 2) ** 0.5)
+        length = max(1e-6, (direction.x() ** 2 + direction.y() ** 2) ** 0.5)
         ux, uy = direction.x() / length, direction.y() / length
         size = 8.0
         base = end - QPointF(ux * size, uy * size)
         normal = QPointF(-uy, ux)
-        self._arrow = QPolygonF([
-            end,
-            base + QPointF(normal.x() * size * 0.5,
-                           normal.y() * size * 0.5),
-            base - QPointF(normal.x() * size * 0.5,
-                           normal.y() * size * 0.5),
-        ])
+        self._arrow = QPolygonF(
+            [
+                end,
+                base + QPointF(normal.x() * size * 0.5, normal.y() * size * 0.5),
+                base - QPointF(normal.x() * size * 0.5, normal.y() * size * 0.5),
+            ]
+        )
 
     def boundingRect(self):
-        return super().boundingRect().united(
-            self._arrow.boundingRect()).adjusted(-6, -6, 6, 6)
+        return (
+            super()
+            .boundingRect()
+            .united(self._arrow.boundingRect())
+            .adjusted(-6, -6, 6, 6)
+        )
 
     def shape(self):
         stroker = QPainterPathStroker()
@@ -961,10 +1012,10 @@ class FlowchartScene(QGraphicsScene):
         super().__init__()
         self.window = window
         self.protocol = protocol
-        self.row_items = {}       # step row_id -> StepNodeItem
-        self.frame_items = {}     # group row_id -> GroupFrameItem
-        self.dec_items = {}       # decision_node_id -> DecisionShapeItem
-        self.op_items = {}        # op_node_id -> OpNodeItem
+        self.row_items = {}  # step row_id -> StepNodeItem
+        self.frame_items = {}  # group row_id -> GroupFrameItem
+        self.dec_items = {}  # decision_node_id -> DecisionShapeItem
+        self.op_items = {}  # op_node_id -> OpNodeItem
         self.terminal_items = {}  # "stop"/"end" -> TerminalNodeItem
         self.edges = []
         self._building = False
@@ -999,7 +1050,7 @@ class FlowchartScene(QGraphicsScene):
     def rebuild(self):
         self._cancel_edge_drag()
         self.clearSelection()
-        self.clear()                      # deletes all items
+        self.clear()  # deletes all items
         self.row_items = {}
         self.frame_items = {}
         self.dec_items = {}
@@ -1014,6 +1065,7 @@ class FlowchartScene(QGraphicsScene):
         leaf_no = {leaf.id: str(i + 1) for i, leaf in enumerate(leaves)}
         self._building = True
         try:
+
             def build(rows, hidden):
                 for row in rows:
                     if row.is_group:
@@ -1023,26 +1075,30 @@ class FlowchartScene(QGraphicsScene):
                             self.frame_items[row.id] = frame
                         build(row.children, hidden or row.collapsed)
                     elif not hidden:
-                        item = StepNodeItem(self, row,
-                                            leaf_no.get(row.id, "?"))
+                        item = StepNodeItem(self, row, leaf_no.get(row.id, "?"))
                         self.addItem(item)
                         self.row_items[row.id] = item
+
             build(proto.rows, False)
 
             for dn in proto.decision_nodes:
                 spec = proto.spec_by_id(dn.decision_id)
                 step = proto.row_by_id(dn.step_id)
-                if (spec is None or step is None
-                        or dn.step_id not in self.row_items):
-                    continue    # spec gone, or step hidden in a chip
+                if spec is None or step is None or dn.step_id not in self.row_items:
+                    continue  # spec gone, or step hidden in a chip
                 handler = next(
-                    (c.handler for c in proto.columns
-                     if c.model.col_id == spec.provider_col_id), None)
-                active = (handler.is_decision_active(spec, step)
-                          if handler else True)
+                    (
+                        c.handler
+                        for c in proto.columns
+                        if c.model.col_id == spec.provider_col_id
+                    ),
+                    None,
+                )
+                active = handler.is_decision_active(spec, step) if handler else True
                 try:
-                    auto_label = dn.label_for(spec.outcome_by_id(
-                        dn.auto_outcome or spec.default_outcome))
+                    auto_label = dn.label_for(
+                        spec.outcome_by_id(dn.auto_outcome or spec.default_outcome)
+                    )
                 except KeyError:
                     auto_label = "?"
                 badge = ""
@@ -1083,8 +1139,7 @@ class FlowchartScene(QGraphicsScene):
                 continue
             group = proto.row_by_id(gid)
             subtree_ids = {r.id for r in _subtree(group)} - {gid}
-            step_ids = {r.id for r in _subtree(group)
-                        if not r.is_group}
+            step_ids = {r.id for r in _subtree(group) if not r.is_group}
             moves, fits = [], []
             for rid in subtree_ids:
                 item = self.row_items.get(rid)
@@ -1096,17 +1151,15 @@ class FlowchartScene(QGraphicsScene):
                     moves.append(chip)
                     fits.append(chip)
                 elif chip is not None:
-                    fits.append(chip)   # nested frame: geometry only
+                    fits.append(chip)  # nested frame: geometry only
             for dn in proto.decision_nodes:
                 if dn.step_id in step_ids and dn.id in self.dec_items:
                     moves.append(self.dec_items[dn.id])
                     fits.append(self.dec_items[dn.id])
             for op in proto.op_nodes:
-                dns = [proto.decision_node_by_id(i[0])
-                       for i in op.inputs]
+                dns = [proto.decision_node_by_id(i[0]) for i in op.inputs]
                 owner_steps = {d.step_id for d in dns if d is not None}
-                if owner_steps and owner_steps <= step_ids \
-                        and op.id in self.op_items:
+                if owner_steps and owner_steps <= step_ids and op.id in self.op_items:
                     moves.append(self.op_items[op.id])
                     fits.append(self.op_items[op.id])
             frame.move_items = moves
@@ -1114,17 +1167,21 @@ class FlowchartScene(QGraphicsScene):
 
     def _fit_frames(self):
         """Innermost frames first so outer frames wrap the inner rects."""
-        frames = [(len(self.protocol.group_chain_of(gid)), f)
-                  for gid, f in self.frame_items.items()]
+        frames = [
+            (len(self.protocol.group_chain_of(gid)), f)
+            for gid, f in self.frame_items.items()
+        ]
         for _depth, frame in sorted(frames, key=lambda t: -t[0]):
             frame.fit()
 
     def _place_terminals(self):
         proto = self.protocol
-        visible = (list(self.row_items.values())
-                   + list(self.frame_items.values())
-                   + list(self.dec_items.values())
-                   + list(self.op_items.values()))
+        visible = (
+            list(self.row_items.values())
+            + list(self.frame_items.values())
+            + list(self.dec_items.values())
+            + list(self.op_items.values())
+        )
         if visible:
             right = max(i.sceneBoundingRect().right() for i in visible)
             top = min(i.sceneBoundingRect().top() for i in visible)
@@ -1154,22 +1211,32 @@ class FlowchartScene(QGraphicsScene):
             if a.next_target == NEXT:
                 sa, sb = disp(a.id), disp(b.id)
                 if sa is not None and sb is not None and sa is not sb:
-                    self._add(EdgeItem(self, "spine", sa, sb, SPINE_COLOR,
-                                       payload=("next", a.id)))
+                    self._add(
+                        EdgeItem(
+                            self, "spine", sa, sb, SPINE_COLOR, payload=("next", a.id)
+                        )
+                    )
         # Explicit completion routes.
         for leaf in leaves:
             if leaf.next_target == NEXT:
                 continue
             src = disp(leaf.id)
-            dst = (self._terminal_for(leaf.next_target)
-                   or disp(leaf.next_target))
+            dst = self._terminal_for(leaf.next_target) or disp(leaf.next_target)
             if src is None or dst is None or src is dst:
                 continue
-            port = (src.done_port if isinstance(src, StepNodeItem)
-                    else None)
-            self._add(EdgeItem(self, "flow", src, dst, FLOW_COLOR,
-                               label="done", src_port=port,
-                               payload=("flow", leaf.id)))
+            port = src.done_port if isinstance(src, StepNodeItem) else None
+            self._add(
+                EdgeItem(
+                    self,
+                    "flow",
+                    src,
+                    dst,
+                    FLOW_COLOR,
+                    label="done",
+                    src_port=port,
+                    payload=("flow", leaf.id),
+                )
+            )
         # Tethers + outcome/chain edges from decision shapes.
         for dn in proto.decision_nodes:
             dec_item = self.dec_items.get(dn.id)
@@ -1178,8 +1245,7 @@ class FlowchartScene(QGraphicsScene):
                 continue
             step_item = self.row_items.get(dn.step_id)
             if dec_item is not None and step_item is not None:
-                self._add(EdgeItem(self, "tether", step_item, dec_item,
-                                   TETHER_COLOR))
+                self._add(EdgeItem(self, "tether", step_item, dec_item, TETHER_COLOR))
             spec = proto.spec_by_id(dn.decision_id)
             if spec is None:
                 continue
@@ -1187,8 +1253,7 @@ class FlowchartScene(QGraphicsScene):
                 target = dn.routes.get(outcome.id)
                 if not target or target == SELF:
                     continue
-                color = KIND_COLORS.get(outcome.kind,
-                                        KIND_COLORS["neutral"])
+                color = KIND_COLORS.get(outcome.kind, KIND_COLORS["neutral"])
                 port = dec_item.ports.get(outcome.id) if dec_item else None
                 kind = "outcome"
                 label = dn.label_for(outcome)
@@ -1206,9 +1271,18 @@ class FlowchartScene(QGraphicsScene):
                         dst = disp(target)
                 if dst is None or dst is src:
                     continue
-                self._add(EdgeItem(self, kind, src, dst, color,
-                                   label=label, src_port=port,
-                                   payload=("outcome", dn.id, outcome.id)))
+                self._add(
+                    EdgeItem(
+                        self,
+                        kind,
+                        src,
+                        dst,
+                        color,
+                        label=label,
+                        src_port=port,
+                        payload=("outcome", dn.id, outcome.id),
+                    )
+                )
         # Outcome → op feeds and op → target routes.
         for op in proto.op_nodes:
             op_item = self.op_items.get(op.id)
@@ -1224,26 +1298,38 @@ class FlowchartScene(QGraphicsScene):
                 if src is None or spec is None or src is op_item:
                     continue
                 outcome = spec.outcome_by_id(oid)
-                color = KIND_COLORS.get(outcome.kind,
-                                        KIND_COLORS["neutral"])
+                color = KIND_COLORS.get(outcome.kind, KIND_COLORS["neutral"])
                 port = dec_item.ports.get(oid) if dec_item else None
-                self._add(EdgeItem(self, "feed", src, op_item, color,
-                                   label=dn.label_for(outcome),
-                                   src_port=port,
-                                   payload=("feed", op.id, dn_id, oid)))
+                self._add(
+                    EdgeItem(
+                        self,
+                        "feed",
+                        src,
+                        op_item,
+                        color,
+                        label=dn.label_for(outcome),
+                        src_port=port,
+                        payload=("feed", op.id, dn_id, oid),
+                    )
+                )
             if op.target is not None:
-                dst = (self._terminal_for(op.target)
-                       or disp(op.target))
+                dst = self._terminal_for(op.target) or disp(op.target)
                 if dst is not None and dst is not op_item:
                     op_label = op.kind.upper()
                     if op.priority != op.DEFAULT_PRIORITY:
                         op_label += f" [p{op.priority}]"
-                    self._add(EdgeItem(
-                        self, "op", op_item, dst,
-                        OP_COLORS.get(op.kind, OP_COLORS["and"]),
-                        label=op_label,
-                        src_port=op_item.out_port,
-                        payload=("op", op.id)))
+                    self._add(
+                        EdgeItem(
+                            self,
+                            "op",
+                            op_item,
+                            dst,
+                            OP_COLORS.get(op.kind, OP_COLORS["and"]),
+                            label=op_label,
+                            src_port=op_item.out_port,
+                            payload=("op", op.id),
+                        )
+                    )
 
     def _add(self, edge):
         self.addItem(edge)
@@ -1253,17 +1339,21 @@ class FlowchartScene(QGraphicsScene):
 
     def obstacle_rects(self, exclude=()):
         rects = []
-        pools = (list(self.row_items.values())
-                 + list(self.dec_items.values())
-                 + list(self.op_items.values())
-                 + [f for f in self.frame_items.values() if f.collapsed]
-                 + list(self.terminal_items.values()))
+        pools = (
+            list(self.row_items.values())
+            + list(self.dec_items.values())
+            + list(self.op_items.values())
+            + [f for f in self.frame_items.values() if f.collapsed]
+            + list(self.terminal_items.values())
+        )
         for item in pools:
             if item in exclude:
                 continue
-            rects.append(item.scene_rect().adjusted(
-                -EDGE_CLEARANCE, -EDGE_CLEARANCE,
-                EDGE_CLEARANCE, EDGE_CLEARANCE))
+            rects.append(
+                item.scene_rect().adjusted(
+                    -EDGE_CLEARANCE, -EDGE_CLEARANCE, EDGE_CLEARANCE, EDGE_CLEARANCE
+                )
+            )
         return rects
 
     def on_item_moved(self, item):
@@ -1306,9 +1396,11 @@ class FlowchartScene(QGraphicsScene):
             item.set_state_pen(QPen(DECIDING_BORDER, 2.6) if on else None)
 
     def clear_run_states(self):
-        for item in (list(self.row_items.values())
-                     + list(self.frame_items.values())
-                     + list(self.dec_items.values())):
+        for item in (
+            list(self.row_items.values())
+            + list(self.frame_items.values())
+            + list(self.dec_items.values())
+        ):
             item.set_state_pen(None)
         self.clear_trail()
 
@@ -1334,16 +1426,20 @@ class FlowchartScene(QGraphicsScene):
         self._trail = []
 
     def toast(self, target_id, text):
-        item = (self.dec_items.get(target_id)
-                or self.op_items.get(target_id)
-                or self.display_for(target_id))
+        item = (
+            self.dec_items.get(target_id)
+            or self.op_items.get(target_id)
+            or self.display_for(target_id)
+        )
         if item is None:
             return
         t = ToastItem(text)
         self.addItem(t)
         r = item.sceneBoundingRect()
-        t.setPos(r.right() + 8, r.top() - 12 - 14 * sum(
-            1 for x in self._toasts if x.scene() is self))
+        t.setPos(
+            r.right() + 8,
+            r.top() - 12 - 14 * sum(1 for x in self._toasts if x.scene() is self),
+        )
         self._toasts.append(t)
         QTimer.singleShot(2200, lambda: self._remove_toast(t))
 
@@ -1364,9 +1460,12 @@ class FlowchartScene(QGraphicsScene):
         if item is not None:
             item.set_glow(on)
         for e in self.edges:
-            if (e.payload and len(e.payload) >= 2
-                    and e.payload[0] in ("outcome", "chain", "feed")
-                    and e.payload[1] == dn_id):
+            if (
+                e.payload
+                and len(e.payload) >= 2
+                and e.payload[0] in ("outcome", "chain", "feed")
+                and e.payload[1] == dn_id
+            ):
                 e.set_heat(2 if on else 0)
 
     # -- selection helpers -----------------------------------------------
@@ -1380,9 +1479,11 @@ class FlowchartScene(QGraphicsScene):
             if isinstance(i, (StepNodeItem, GroupFrameItem)):
                 ids.append(i.row.id)
         picked = set(ids)
-        return [rid for rid in ids
-                if not any(g.id in picked
-                           for g in self.protocol.group_chain_of(rid))]
+        return [
+            rid
+            for rid in ids
+            if not any(g.id in picked for g in self.protocol.group_chain_of(rid))
+        ]
 
     # -- port dragging ---------------------------------------------------
 
@@ -1391,16 +1492,17 @@ class FlowchartScene(QGraphicsScene):
             for item in self.items(event.scenePos()):
                 if isinstance(item, PlusButtonItem):
                     self.window.open_shape_palette(
-                        item.node.row.id, event.screenPos(),
-                        item.mapToScene(QPointF(0, 0)))
+                        item.node.row.id,
+                        event.screenPos(),
+                        item.mapToScene(QPointF(0, 0)),
+                    )
                     event.accept()
                     return
                 if isinstance(item, PortItem):
                     self._drag_port = item
                     self._drag_start = item.scenePos()
                     self._drag_line = QGraphicsPathItem()
-                    self._drag_line.setPen(
-                        QPen(DRAG_COLOR, 1.8, Qt.DashLine))
+                    self._drag_line.setPen(QPen(DRAG_COLOR, 1.8, Qt.DashLine))
                     self._drag_line.setZValue(15)
                     self.addItem(self._drag_line)
                     self._update_drag(event.scenePos())
@@ -1419,9 +1521,11 @@ class FlowchartScene(QGraphicsScene):
         port = self._drag_port
         src_owner = port.owner
         candidates = []
-        pools = [self.row_items.values(),
-                 [f for f in self.frame_items.values() if f.collapsed],
-                 self.terminal_items.values()]
+        pools = [
+            self.row_items.values(),
+            [f for f in self.frame_items.values() if f.collapsed],
+            self.terminal_items.values(),
+        ]
         if port.role == "outcome":
             pools.append(self.op_items.values())
             pools.append(self.dec_items.values())
@@ -1431,18 +1535,20 @@ class FlowchartScene(QGraphicsScene):
                     continue
                 if item.snap_rect().contains(scene_pos):
                     c = item.center()
-                    d2 = ((c.x() - scene_pos.x()) ** 2
-                          + (c.y() - scene_pos.y()) ** 2)
+                    d2 = (c.x() - scene_pos.x()) ** 2 + (c.y() - scene_pos.y()) ** 2
                     candidates.append((d2, item))
         if candidates:
             return min(candidates, key=lambda pair: pair[0])[1]
         # Fallback: expanded frame interiors, innermost (smallest) first.
-        frames = [f for f in self.frame_items.values()
-                  if not f.collapsed and f is not src_owner
-                  and f.scene_rect().contains(scene_pos)]
+        frames = [
+            f
+            for f in self.frame_items.values()
+            if not f.collapsed
+            and f is not src_owner
+            and f.scene_rect().contains(scene_pos)
+        ]
         if frames:
-            return min(frames, key=lambda f: (f.rect().width()
-                                              * f.rect().height()))
+            return min(frames, key=lambda f: (f.rect().width() * f.rect().height()))
         return None
 
     def _update_drag(self, scene_pos):
@@ -1453,16 +1559,19 @@ class FlowchartScene(QGraphicsScene):
             self._drag_glow = target
             if target is not None:
                 target.set_glow(True)
-        far_enough = ((scene_pos - self._drag_start).manhattanLength()
-                      > NEW_STEP_DRAG_THRESHOLD)
+        far_enough = (
+            scene_pos - self._drag_start
+        ).manhattanLength() > NEW_STEP_DRAG_THRESHOLD
         if target is None and far_enough:
             self._show_ghost(scene_pos)
         else:
             self._hide_ghost()
         anchor = _PointAnchor(self._drag_port.scenePos())
         rects = self.obstacle_rects(
-            exclude={self._drag_port.owner, target}
-            if target else {self._drag_port.owner})
+            exclude=(
+                {self._drag_port.owner, target} if target else {self._drag_port.owner}
+            )
+        )
         # Snap the preview onto compact targets; for an expanded frame
         # keep the free end under the cursor (its side anchor could be
         # far away and would make the preview jump).
@@ -1470,8 +1579,8 @@ class FlowchartScene(QGraphicsScene):
         if isinstance(target, GroupFrameItem) and not target.collapsed:
             snap_to = None
         _s, _e, path = route_edge_path(
-            anchor, snap_to, scene_pos, rects,
-            start_dir=self._drag_port.out_dir)
+            anchor, snap_to, scene_pos, rects, start_dir=self._drag_port.out_dir
+        )
         self._drag_line.setPath(path)
 
     def _show_ghost(self, scene_pos):
@@ -1519,15 +1628,15 @@ class FlowchartScene(QGraphicsScene):
         if self._drag_port is not None:
             port = self._drag_port
             target = self._drag_glow
-            ghost_armed = (self._drag_ghost is not None
-                           and self._drag_ghost.isVisible())
-            ghost_pos = (self._drag_ghost.pos() if ghost_armed else None)
+            ghost_armed = self._drag_ghost is not None and self._drag_ghost.isVisible()
+            ghost_pos = self._drag_ghost.pos() if ghost_armed else None
             self._cancel_edge_drag()
             if target is not None:
                 self.window.commit_port_drop(port, target)
             elif ghost_armed:
                 self.window.commit_port_drop_on_blank(
-                    port, (ghost_pos.x(), ghost_pos.y()))
+                    port, (ghost_pos.x(), ghost_pos.y())
+                )
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -1554,13 +1663,11 @@ class FlowchartScene(QGraphicsScene):
         # answer (the amber ring), right on the flowchart.
         for item in items:
             if isinstance(item, PortItem) and item.role == "outcome":
-                self.window.toggle_auto_outcome(
-                    item.owner.dnode.id, item.outcome_id)
+                self.window.toggle_auto_outcome(item.owner.dnode.id, item.outcome_id)
                 event.accept()
                 return
         if not items:
-            self.window.add_step_at(
-                (event.scenePos().x(), event.scenePos().y()))
+            self.window.add_step_at((event.scenePos().x(), event.scenePos().y()))
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
@@ -1579,12 +1686,11 @@ class FlowchartView(QGraphicsView):
 
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
-        self.setRenderHints(QPainter.Antialiasing
-                            | QPainter.TextAntialiasing)
+        self.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setDragMode(QGraphicsView.RubberBandDrag)
         self._pan_last = None
-        self.on_resized = None    # callback for overlay placement
+        self.on_resized = None  # callback for overlay placement
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1614,9 +1720,11 @@ class FlowchartView(QGraphicsView):
             delta = event.position() - self._pan_last
             self._pan_last = event.position()
             self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - int(delta.x()))
+                self.horizontalScrollBar().value() - int(delta.x())
+            )
             self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - int(delta.y()))
+                self.verticalScrollBar().value() - int(delta.y())
+            )
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -1634,6 +1742,8 @@ class FlowchartView(QGraphicsView):
         if not rect.isEmpty():
             self.fitInView(rect, Qt.KeepAspectRatio)
             if self.transform().m11() > 1.0:
-                self.setTransform(self.transform().scale(
-                    1 / self.transform().m11(),
-                    1 / self.transform().m11()))
+                self.setTransform(
+                    self.transform().scale(
+                        1 / self.transform().m11(), 1 / self.transform().m11()
+                    )
+                )

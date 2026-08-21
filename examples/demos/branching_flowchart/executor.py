@@ -45,11 +45,13 @@ class ExecutorSignals(QObject):
     protocol_error = Signal(str)
     protocol_paused = Signal()
     protocol_resumed = Signal()
-    protocol_repetition_finished = Signal(int, int)     # rep, total
-    step_started = Signal(str, int, int)                # step_id, n, total
-    step_finished = Signal(str)                         # step_id
-    decision_pending = Signal(object)                   # PendingDecision
-    decision_resolved = Signal(str, str, str, bool)     # step_id, decision_id, outcome_id, was_auto
+    protocol_repetition_finished = Signal(int, int)  # rep, total
+    step_started = Signal(str, int, int)  # step_id, n, total
+    step_finished = Signal(str)  # step_id
+    decision_pending = Signal(object)  # PendingDecision
+    decision_resolved = Signal(
+        str, str, str, bool
+    )  # step_id, decision_id, outcome_id, was_auto
     # Edge-identifying tuple for the route the executor just followed —
     # ("op", op_id) | ("outcome", dn_id, outcome_id) | ("flow", step_id)
     # | ("next", step_id). The canvas flashes the matching edge.
@@ -92,13 +94,13 @@ class PendingDecision:
     def __init__(self, step, spec, decision_node, message, options):
         self.step = step
         self.spec = spec
-        self.decision_node = decision_node   # placed shape, or None
+        self.decision_node = decision_node  # placed shape, or None
         self.message = message
         # list[(Outcome, target, target_description)] in button order
         self.options = options
         self.answered = threading.Event()
-        self.answer = None           # outcome_id
-        self.remember_auto = False   # "auto-pick this for the rest of the run"
+        self.answer = None  # outcome_id
+        self.remember_auto = False  # "auto-pick this for the rest of the run"
 
     def resolve(self, outcome_id, remember_auto=False):
         self.answer = outcome_id
@@ -126,7 +128,7 @@ class StepContext:
         self.step = step
         self.protocol = proto_ctx
         self._lock = threading.Lock()
-        self._decision_requests = []   # [(DecisionSpec, message)]
+        self._decision_requests = []  # [(DecisionSpec, message)]
 
     def log(self, msg):
         self.protocol.signals.log.emit(f"[{self.step.name}] {msg}")
@@ -157,8 +159,9 @@ class StepContext:
             reqs = list(self._decision_requests)
         # Deterministic resolution order regardless of in-bucket thread
         # timing: provider priority, then spec id.
-        prio = {c.model.col_id: c.handler.priority
-                for c in self.protocol.protocol.columns}
+        prio = {
+            c.model.col_id: c.handler.priority for c in self.protocol.protocol.columns
+        }
         reqs.sort(key=lambda r: (prio.get(r[0].provider_col_id, 999), r[0].id))
         return reqs
 
@@ -168,8 +171,10 @@ class DemoExecutor:
     start() is a no-op while the previous worker thread is alive)."""
 
     _PROTOCOL_HOOKS = (
-        "on_pre_protocol_start", "on_protocol_start",
-        "on_protocol_end", "on_post_protocol_end",
+        "on_pre_protocol_start",
+        "on_protocol_start",
+        "on_protocol_end",
+        "on_post_protocol_end",
     )
     _TEARDOWN_HOOKS = ("on_protocol_end", "on_post_protocol_end")
 
@@ -195,7 +200,8 @@ class DemoExecutor:
         self._error = None
         self._repeats = max(1, int(repeats))
         self._thread = threading.Thread(
-            target=self.run, name="flowchart_demo_executor", daemon=True)
+            target=self.run, name="flowchart_demo_executor", daemon=True
+        )
         self._thread.start()
 
     def wait(self, timeout=None):
@@ -221,8 +227,9 @@ class DemoExecutor:
 
     def run(self):
         handlers = [c.handler for c in self.protocol.columns]
-        proto_ctx = ProtocolContext(self.protocol, self.signals,
-                                    self.stop_event, self.pause_event)
+        proto_ctx = ProtocolContext(
+            self.protocol, self.signals, self.stop_event, self.pause_event
+        )
         started_at = time.monotonic()
         try:
             self._run_hooks("on_pre_protocol_start", handlers, proto_ctx, None)
@@ -234,12 +241,12 @@ class DemoExecutor:
                     break
                 if self._repeats > 1:
                     self.signals.log.emit(
-                        f"Protocol repetition {rep + 1}/{self._repeats}")
+                        f"Protocol repetition {rep + 1}/{self._repeats}"
+                    )
                 self._run_hooks("on_protocol_start", handlers, proto_ctx, None)
                 self._run_steps(handlers, proto_ctx)
                 self._run_hooks("on_protocol_end", handlers, proto_ctx, None)
-                self.signals.protocol_repetition_finished.emit(
-                    rep + 1, self._repeats)
+                self.signals.protocol_repetition_finished.emit(rep + 1, self._repeats)
             self._run_hooks("on_post_protocol_end", handlers, proto_ctx, None)
         except AbortError:
             # Clean cancellation (Stop while a hook was blocked), not a failure.
@@ -258,11 +265,14 @@ class DemoExecutor:
                 pass
         finally:
             self._emit_terminal_signal()
-            outcome = ("errored" if self._error is not None
-                       else "aborted" if self.stop_event.is_set()
-                       else "finished")
+            outcome = (
+                "errored"
+                if self._error is not None
+                else "aborted" if self.stop_event.is_set() else "finished"
+            )
             self.signals.log.emit(
-                f"Protocol {outcome} in {time.monotonic() - started_at:.2f}s")
+                f"Protocol {outcome} in {time.monotonic() - started_at:.2f}s"
+            )
 
     # ------- step walk: sequential fall-through + decision routing -------
 
@@ -292,31 +302,29 @@ class DemoExecutor:
             to_chain = chains[to_idx] if to_idx is not None else []
             from_ids = {g.id for g in from_chain}
             to_ids = {g.id for g in to_chain}
-            for g in reversed(from_chain):          # innermost first
+            for g in reversed(from_chain):  # innermost first
                 if g.id not in to_ids or g.id in reenter:
                     self.signals.log.emit(f"Leaving group {g.name!r}")
-                    self._run_hooks("on_group_exit", handlers,
-                                    proto_ctx, g)
+                    self._run_hooks("on_group_exit", handlers, proto_ctx, g)
                     passes.pop(g.id, None)
-            for g in to_chain:                       # outermost first
+            for g in to_chain:  # outermost first
                 if g.id not in from_ids or g.id in reenter:
                     if formal:
                         passes[g.id] = 1
-                        reps = (f" — pass 1/{g.repetitions}"
-                                if g.repetitions > 1 else "")
+                        reps = f" — pass 1/{g.repetitions}" if g.repetitions > 1 else ""
                         self.signals.log.emit(
                             f"Entering group {g.name!r}{reps} "
-                            f"(group-entry hooks fire)")
-                        self._run_hooks("on_group_enter", handlers,
-                                        proto_ctx, g)
+                            f"(group-entry hooks fire)"
+                        )
+                        self._run_hooks("on_group_enter", handlers, proto_ctx, g)
                     else:
                         passes[g.id] = g.repetitions
                         self.signals.log.emit(
                             f"Jumped into group {g.name!r} mid-sequence "
                             f"— no formal entry: group hooks and repeats "
-                            f"are NOT restarted")
-                        self.signals.canvas_note.emit(
-                            g.id, "no formal entry")
+                            f"are NOT restarted"
+                        )
+                        self.signals.canvas_note.emit(g.id, "no formal entry")
 
         i = 0
         step_no = 0
@@ -349,23 +357,29 @@ class DemoExecutor:
             # own repetitions replay it in place; then the innermost group
             # being left with passes remaining replays from its first
             # leaf. Explicit routes (drawn edges) override repeats.
-            fallthrough = ((verdict[0] == "jump" and verdict[2] == "next")
-                           or (verdict[0] == "end" and verdict[1]))
+            fallthrough = (verdict[0] == "jump" and verdict[2] == "next") or (
+                verdict[0] == "end" and verdict[1]
+            )
             if fallthrough:
                 step_reps = max(1, int(step.repetitions or 1))
                 k = passes.get(("leaf", step.id), 1)
                 if k < step_reps:
                     passes[("leaf", step.id)] = k + 1
                     self.signals.log.emit(
-                        f"Step {step.name!r} — repeat {k + 1}/{step_reps}")
+                        f"Step {step.name!r} — repeat {k + 1}/{step_reps}"
+                    )
                     self.signals.canvas_note.emit(
-                        step.id, f"repeat {k + 1}/{step_reps}")
+                        step.id, f"repeat {k + 1}/{step_reps}"
+                    )
                     # Replay in place: no group transition, streak kept.
                     verdict = ("jump", i, "step", None)
                     fallthrough = False
             if fallthrough:
-                to_ids = ({g.id for g in chains[verdict[1]]}
-                          if verdict[0] == "jump" else set())
+                to_ids = (
+                    {g.id for g in chains[verdict[1]]}
+                    if verdict[0] == "jump"
+                    else set()
+                )
                 for g in reversed(chains[i]):
                     if g.id in to_ids:
                         continue
@@ -376,9 +390,11 @@ class DemoExecutor:
                             passes[g.id] = k + 1
                             self.signals.log.emit(
                                 f"Group {g.name!r} — repeat pass "
-                                f"{k + 1}/{g.repetitions}")
+                                f"{k + 1}/{g.repetitions}"
+                            )
                             self.signals.canvas_note.emit(
-                                g.id, f"pass {k + 1}/{g.repetitions}")
+                                g.id, f"pass {k + 1}/{g.repetitions}"
+                            )
                             verdict = ("jump", first_leaf, "next", None)
                             break
 
@@ -390,10 +406,11 @@ class DemoExecutor:
             new_i, kind, gid = verdict[1], verdict[2], verdict[3]
             # Routing to the group node you're already inside restarts
             # it: exit + formal re-entry, fresh pass budget.
-            reenter = (frozenset({gid})
-                       if kind == "group"
-                       and gid in {g.id for g in chains[i]}
-                       else frozenset())
+            reenter = (
+                frozenset({gid})
+                if kind == "group" and gid in {g.id for g in chains[i]}
+                else frozenset()
+            )
             if new_i != i or reenter:
                 # Leaving the step (or restarting its group) ends the
                 # retry streak: decision counters and the step's own
@@ -401,8 +418,7 @@ class DemoExecutor:
                 for key in [k for k in occurrences if k[0] == step.id]:
                     del occurrences[key]
                 passes.pop(("leaf", step.id), None)
-                transition(i, new_i, formal=kind in ("next", "group"),
-                           reenter=reenter)
+                transition(i, new_i, formal=kind in ("next", "group"), reenter=reenter)
             i = new_i
 
     def _resolve_routing(self, step, step_ctx, i, occurrences):
@@ -424,18 +440,24 @@ class DemoExecutor:
         proto = self.protocol
         requests = step_ctx.pending_decisions()
         fired = {spec.id: (spec, message) for spec, message in requests}
-        step_dns = {dn.decision_id: dn for dn in proto.decision_nodes
-                    if dn.step_id == step.id}
+        step_dns = {
+            dn.decision_id: dn for dn in proto.decision_nodes if dn.step_id == step.id
+        }
         dn_by_id = {dn.id: dn for dn in step_dns.values()}
-        chained_dn_ids = {target for dn in step_dns.values()
-                          for target in dn.routes.values()
-                          if target in dn_by_id}
+        chained_dn_ids = {
+            target
+            for dn in step_dns.values()
+            for target in dn.routes.values()
+            if target in dn_by_id
+        }
 
         # Roots: fired decisions not waiting on a chain activation.
-        queue = [(spec, message) for spec, message in requests
-                 if not (spec.id in step_dns
-                         and step_dns[spec.id].id in chained_dn_ids)]
-        resolved = []          # [(spec, dn|None, outcome_id)] in order
+        queue = [
+            (spec, message)
+            for spec, message in requests
+            if not (spec.id in step_dns and step_dns[spec.id].id in chained_dn_ids)
+        ]
+        resolved = []  # [(spec, dn|None, outcome_id)] in order
         resolved_ids = set()
         activated = set()
         qi = 0
@@ -447,9 +469,10 @@ class DemoExecutor:
                     return ("abort",)
                 continue
             dn = step_dns.get(spec.id)
-            outcome_id = self._resolve_one(step, step_ctx, spec, dn,
-                                           message, occurrences)
-            if outcome_id is None:          # stopped while waiting
+            outcome_id = self._resolve_one(
+                step, step_ctx, spec, dn, message, occurrences
+            )
+            if outcome_id is None:  # stopped while waiting
                 return ("abort",)
             resolved.append((spec, dn, outcome_id))
             resolved_ids.add(spec.id)
@@ -460,22 +483,23 @@ class DemoExecutor:
                 tdn = dn_by_id.get(target)
                 if tdn is not None and target not in activated:
                     activated.add(target)
-                    if (tdn.decision_id in fired
-                            and tdn.decision_id not in resolved_ids):
+                    if tdn.decision_id in fired and tdn.decision_id not in resolved_ids:
                         queue.append(fired[tdn.decision_id])
                     else:
                         step_ctx.log(
                             f"Chained decision for {tdn.decision_id!r} "
-                            f"didn't fire this round — skipped")
+                            f"didn't fire this round — skipped"
+                        )
 
         # 1+2. Route arbitration by per-edge priority (lower wins; ties
         # keep the old order: matched ops in creation order, then the
         # chosen outcomes' routes in resolution order). Ops default to
         # priority 10 and outcome edges to 20, so ops win unless the
         # user raises an edge above them.
-        chosen_endpoints = {(dn.id, oid) for _spec, dn, oid in resolved
-                            if dn is not None}
-        candidates = []      # (priority, tiebreak, tag, target, describe)
+        chosen_endpoints = {
+            (dn.id, oid) for _spec, dn, oid in resolved if dn is not None
+        }
+        candidates = []  # (priority, tiebreak, tag, target, describe)
         order = 0
         for op in proto.ops_for_step(step.id):
             if op.target is None or not op.inputs:
@@ -483,38 +507,39 @@ class DemoExecutor:
             hits = [pair in chosen_endpoints for pair in op.inputs]
             matched = all(hits) if op.kind == "and" else any(hits)
             if matched:
-                candidates.append((
-                    op.priority, order, ("op", op.id), op.target,
-                    f"{op.kind.upper()} op "
-                    f"({sum(hits)}/{len(op.inputs)} outcomes)"))
+                candidates.append(
+                    (
+                        op.priority,
+                        order,
+                        ("op", op.id),
+                        op.target,
+                        f"{op.kind.upper()} op "
+                        f"({sum(hits)}/{len(op.inputs)} outcomes)",
+                    )
+                )
                 order += 1
         for spec, dn, outcome_id in resolved:
             routes = dn.routes if dn else {}
-            target = routes.get(outcome_id,
-                                spec.default_routes.get(outcome_id, NEXT))
+            target = routes.get(outcome_id, spec.default_routes.get(outcome_id, NEXT))
             if target in dn_by_id or target == NEXT:
-                continue    # chains were consumed during resolution
+                continue  # chains were consumed during resolution
             outcome = spec.outcome_by_id(outcome_id)
             label = dn.label_for(outcome) if dn else outcome.label
-            prio = (dn.priority_for(outcome_id) if dn
-                    else 20)
-            tag = (("outcome", dn.id, outcome_id) if dn is not None
-                   else None)
-            candidates.append((prio, order, tag, target,
-                               f"outcome {label!r}"))
+            prio = dn.priority_for(outcome_id) if dn else 20
+            tag = ("outcome", dn.id, outcome_id) if dn is not None else None
+            candidates.append((prio, order, tag, target, f"outcome {label!r}"))
             order += 1
         if candidates:
             candidates.sort(key=lambda c: (c[0], c[1]))
             prio, _t, tag, target, desc = candidates[0]
             if len(candidates) > 1:
-                losers = ", ".join(f"{c[4]} (p{c[0]})"
-                                   for c in candidates[1:])
+                losers = ", ".join(f"{c[4]} (p{c[0]})" for c in candidates[1:])
                 step_ctx.log(
                     f"Route arbitration: {desc} (p{prio}) -> "
-                    f"{proto.describe_target(target)} — beat {losers}")
+                    f"{proto.describe_target(target)} — beat {losers}"
+                )
             else:
-                step_ctx.log(
-                    f"{desc} -> {proto.describe_target(target)}")
+                step_ctx.log(f"{desc} -> {proto.describe_target(target)}")
             if tag is not None:
                 self.signals.route_taken.emit(tag)
             return self._verdict_for(step, target, i)
@@ -542,32 +567,29 @@ class DemoExecutor:
             auto = n is not None and seen > n
             why = f"auto after {n} prompts"
         if auto:
-            outcome_id = ((dn.auto_outcome if dn else None)
-                          or spec.default_outcome)
+            outcome_id = (dn.auto_outcome if dn else None) or spec.default_outcome
             label = spec.outcome_by_id(outcome_id).label
-            step_ctx.log(
-                f"Decision {spec.title!r} -> {label} ({why})")
+            step_ctx.log(f"Decision {spec.title!r} -> {label} ({why})")
             self.signals.canvas_note.emit(
                 dn.id if dn else step.id,
                 f"auto → {label}"
-                + (f"  ({seen}/{n})" if mode == "auto_first" and n
-                   else ""))
+                + (f"  ({seen}/{n})" if mode == "auto_first" and n else ""),
+            )
         else:
             if mode == "auto_first" and n:
                 label = spec.outcome_by_id(
-                    (dn.auto_outcome if dn else None)
-                    or spec.default_outcome).label
-                note = (f"Auto-answered {label!r} {n}× already — "
-                        f"your call now.")
+                    (dn.auto_outcome if dn else None) or spec.default_outcome
+                ).label
+                note = f"Auto-answered {label!r} {n}× already — " f"your call now."
                 message = f"{message}\n{note}" if message else note
             outcome_id = self._answer_for(step, spec, dn, message)
             if outcome_id is None:
                 return None
             step_ctx.log(
                 f"Decision {spec.title!r} -> "
-                f"{spec.outcome_by_id(outcome_id).label} (user)")
-        self.signals.decision_resolved.emit(step.id, spec.id,
-                                            outcome_id, auto)
+                f"{spec.outcome_by_id(outcome_id).label} (user)"
+            )
+        self.signals.decision_resolved.emit(step.id, spec.id, outcome_id, auto)
         return outcome_id
 
     def _verdict_for(self, step, target, i):
@@ -584,16 +606,14 @@ class DemoExecutor:
         if target == ABORT:
             return ("abort",)
         if target == NEXT:
-            return (("jump", i + 1, "next", None) if i + 1 < n_leaves
-                    else ("end", True))
+            return ("jump", i + 1, "next", None) if i + 1 < n_leaves else ("end", True)
         row = proto.row_by_id(target)
         idx = proto.leaf_index(target)
         if idx is None:
             self.signals.log.emit(
-                f"[{step.name}] Route target missing — falling through "
-                f"to next step")
-            return (("jump", i + 1, "next", None) if i + 1 < n_leaves
-                    else ("end", True))
+                f"[{step.name}] Route target missing — falling through " f"to next step"
+            )
+            return ("jump", i + 1, "next", None) if i + 1 < n_leaves else ("end", True)
         if row is not None and row.is_group:
             return ("jump", idx, "group", row.id)
         return ("jump", idx, "step", None)
@@ -604,11 +624,11 @@ class DemoExecutor:
         routes = dn.routes if dn else {}
         options = []
         for outcome in spec.outcomes:
-            target = routes.get(outcome.id,
-                                spec.default_routes.get(outcome.id, NEXT))
+            target = routes.get(outcome.id, spec.default_routes.get(outcome.id, NEXT))
             label = dn.label_for(outcome) if dn else outcome.label
-            options.append((outcome, target,
-                            self.protocol.describe_target(target), label))
+            options.append(
+                (outcome, target, self.protocol.describe_target(target), label)
+            )
         pending = PendingDecision(step, spec, dn, message, options)
         self.signals.decision_pending.emit(pending)
         while not pending.answered.wait(0.1):
@@ -619,8 +639,8 @@ class DemoExecutor:
             # minted next to the step if the user never placed one.
             if dn is None:
                 dn = self.protocol.add_decision_node(
-                    step.id, spec.id,
-                    (step.pos[0] + 60, step.pos[1] + 90))
+                    step.id, spec.id, (step.pos[0] + 60, step.pos[1] + 90)
+                )
             dn.mode = "auto"
             dn.auto_outcome = pending.answer
         return pending.answer
@@ -666,7 +686,8 @@ class DemoExecutor:
         except Exception as e:
             raise RuntimeError(
                 f"{type(handler).__name__}.{hook_name} failed on step "
-                f"{getattr(step, 'name', '<protocol>')!r}: {e}") from e
+                f"{getattr(step, 'name', '<protocol>')!r}: {e}"
+            ) from e
 
     def _emit_terminal_signal(self):
         """Error > aborted > finished — same precedence as the real one."""

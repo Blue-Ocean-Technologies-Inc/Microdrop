@@ -28,10 +28,10 @@ from typing import Optional
 
 # ---- route target sentinels ------------------------------------------------
 
-NEXT = "__next__"     # fall through to the next leaf step in tree order
-SELF = "__self__"     # re-run the current step (retry)
-END = "__end__"       # finish the protocol (this repetition) cleanly
-ABORT = "__abort__"   # abort the whole run
+NEXT = "__next__"  # fall through to the next leaf step in tree order
+SELF = "__self__"  # re-run the current step (retry)
+END = "__end__"  # finish the protocol (this repetition) cleanly
+ABORT = "__abort__"  # abort the whole run
 
 SENTINEL_LABELS = {
     NEXT: "next step",
@@ -48,6 +48,7 @@ def _new_id():
 @dataclass(frozen=True)
 class Outcome:
     """One answer a decision can resolve to (one button / one port)."""
+
     id: str
     label: str
     # Drives port/edge/button colors: "positive" | "negative" | "danger" | "neutral"
@@ -60,11 +61,12 @@ class DecisionSpec:
     may pose, its possible outcomes, and provider defaults for where each
     outcome routes. ``default_outcome`` is the answer picked when the
     prompt is suppressed (auto mode / auto-after-N)."""
+
     id: str
     title: str
     question: str
     outcomes: tuple
-    default_routes: dict          # outcome_id -> target (sentinel or row id)
+    default_routes: dict  # outcome_id -> target (sentinel or row id)
     default_outcome: str
     provider_col_id: str = ""
 
@@ -97,9 +99,14 @@ class Row:
         self.pos = (0.0, 0.0)
 
     def to_dict(self):
-        d = {"id": self.id, "name": self.name, "values": dict(self.values),
-             "next_target": self.next_target, "pos": list(self.pos),
-             "repetitions": self.repetitions}
+        d = {
+            "id": self.id,
+            "name": self.name,
+            "values": dict(self.values),
+            "next_target": self.next_target,
+            "pos": list(self.pos),
+            "repetitions": self.repetitions,
+        }
         if self.is_group:
             d["children"] = [c.to_dict() for c in self.children]
             d["collapsed"] = self.collapsed
@@ -107,8 +114,7 @@ class Row:
 
     @classmethod
     def from_dict(cls, d):
-        row = cls(d["name"], d.get("values"), row_id=d["id"],
-                  is_group="children" in d)
+        row = cls(d["name"], d.get("values"), row_id=d["id"], is_group="children" in d)
         row.next_target = d.get("next_target", NEXT)
         row.repetitions = int(d.get("repetitions", 1) or 1)
         row.pos = tuple(d.get("pos", (0.0, 0.0)))
@@ -131,7 +137,7 @@ class DecisionNode:
         self.step_id = step_id
         self.decision_id = decision_id
         self.pos = tuple(pos)
-        self.routes = {}              # outcome_id -> target
+        self.routes = {}  # outcome_id -> target
         # Optional user overrides for the outcome button/edge labels
         # (outcome_id -> text); missing keys use the provider's label.
         self.labels = {}
@@ -148,28 +154,31 @@ class DecisionNode:
         #   "auto"        — never ask
         self.mode = "prompt"
         self.auto_after: Optional[int] = None
-        self.auto_outcome: Optional[str] = None   # None -> spec default
+        self.auto_outcome: Optional[str] = None  # None -> spec default
 
     def label_for(self, outcome) -> str:
         return self.labels.get(outcome.id, outcome.label)
 
     def priority_for(self, outcome_id) -> int:
-        return self.route_priority.get(outcome_id,
-                                       self.DEFAULT_EDGE_PRIORITY)
+        return self.route_priority.get(outcome_id, self.DEFAULT_EDGE_PRIORITY)
 
     def to_dict(self):
-        return {"id": self.id, "step_id": self.step_id,
-                "decision_id": self.decision_id, "pos": list(self.pos),
-                "routes": dict(self.routes), "mode": self.mode,
-                "auto_after": self.auto_after,
-                "auto_outcome": self.auto_outcome,
-                "labels": dict(self.labels),
-                "route_priority": dict(self.route_priority)}
+        return {
+            "id": self.id,
+            "step_id": self.step_id,
+            "decision_id": self.decision_id,
+            "pos": list(self.pos),
+            "routes": dict(self.routes),
+            "mode": self.mode,
+            "auto_after": self.auto_after,
+            "auto_outcome": self.auto_outcome,
+            "labels": dict(self.labels),
+            "route_priority": dict(self.route_priority),
+        }
 
     @classmethod
     def from_dict(cls, d):
-        n = cls(d["step_id"], d["decision_id"], d.get("pos", (0, 0)),
-                node_id=d["id"])
+        n = cls(d["step_id"], d["decision_id"], d.get("pos", (0, 0)), node_id=d["id"])
         n.routes = dict(d.get("routes", {}))
         n.mode = d.get("mode", "prompt")
         n.auto_after = d.get("auto_after")
@@ -192,14 +201,19 @@ class OpNode:
         self.id = node_id or _new_id()
         self.kind = kind
         self.pos = tuple(pos)
-        self.inputs = []              # [(decision_node_id, outcome_id)]
-        self.target = None            # sentinel or row id; None = unwired
+        self.inputs = []  # [(decision_node_id, outcome_id)]
+        self.target = None  # sentinel or row id; None = unwired
         self.priority = self.DEFAULT_PRIORITY
 
     def to_dict(self):
-        return {"id": self.id, "kind": self.kind, "pos": list(self.pos),
-                "inputs": [list(i) for i in self.inputs],
-                "target": self.target, "priority": self.priority}
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "pos": list(self.pos),
+            "inputs": [list(i) for i in self.inputs],
+            "target": self.target,
+            "priority": self.priority,
+        }
 
     @classmethod
     def from_dict(cls, d):
@@ -214,10 +228,10 @@ class Protocol:
     """A tree of rows + the placed decision/op shapes + the column set."""
 
     def __init__(self, columns):
-        self.columns = list(columns)   # list[Column] from columns.py
-        self.rows = []                 # top-level rows (tree)
-        self.decision_nodes = []       # list[DecisionNode]
-        self.op_nodes = []             # list[OpNode]
+        self.columns = list(columns)  # list[Column] from columns.py
+        self.rows = []  # top-level rows (tree)
+        self.decision_nodes = []  # list[DecisionNode]
+        self.op_nodes = []  # list[OpNode]
         # Canvas positions of the ⏹ Stop / ▦ Finish terminal nodes
         # ({kind: [x, y]}); None until the user moves them.
         self.terminal_pos = {}
@@ -226,11 +240,13 @@ class Protocol:
 
     def iter_rows(self):
         """(row, depth) in tree order."""
+
         def walk(rows, depth):
             for row in rows:
                 yield row, depth
                 if row.is_group:
                     yield from walk(row.children, depth + 1)
+
         yield from walk(self.rows, 0)
 
     def leaves(self):
@@ -244,6 +260,7 @@ class Protocol:
 
     def parent_list_of(self, row_id):
         """(container_list, index) holding the row, or (None, None)."""
+
         def search(rows):
             for i, row in enumerate(rows):
                 if row.id == row_id:
@@ -253,6 +270,7 @@ class Protocol:
                     if found[0] is not None:
                         return found
             return None, None
+
         return search(self.rows)
 
     def group_chain_of(self, row_id):
@@ -291,12 +309,10 @@ class Protocol:
     # -- row management -------------------------------------------------
 
     def add_step(self, name, values=None, after_id=None) -> Row:
-        seeded = {c.model.col_id: c.model.default_value
-                  for c in self.columns}
+        seeded = {c.model.col_id: c.model.default_value for c in self.columns}
         seeded.update(values or {})
         step = Row(name, seeded)
-        container, index = (self.parent_list_of(after_id)
-                            if after_id else (None, None))
+        container, index = self.parent_list_of(after_id) if after_id else (None, None)
         if container is None:
             self.rows.append(step)
         else:
@@ -311,21 +327,20 @@ class Protocol:
                 continue
             row = container.pop(index)
             removed_steps.update(
-                r.id for r in ([row] if not row.is_group
-                               else _subtree_rows(row)))
+                r.id for r in ([row] if not row.is_group else _subtree_rows(row))
+            )
         self._scrub_targets(removed_steps)
 
     def _scrub_targets(self, removed_ids):
-        removed_dn = {dn.id for dn in self.decision_nodes
-                      if dn.step_id in removed_ids}
-        self.decision_nodes = [dn for dn in self.decision_nodes
-                               if dn.step_id not in removed_ids]
+        removed_dn = {dn.id for dn in self.decision_nodes if dn.step_id in removed_ids}
+        self.decision_nodes = [
+            dn for dn in self.decision_nodes if dn.step_id not in removed_ids
+        ]
         for op in self.op_nodes:
             op.inputs = [i for i in op.inputs if i[0] not in removed_dn]
             if op.target in removed_ids:
                 op.target = None
-        self.op_nodes = [op for op in self.op_nodes if op.inputs
-                         or op.target]
+        self.op_nodes = [op for op in self.op_nodes if op.inputs or op.target]
         for row, _ in self.iter_rows():
             if row.next_target in removed_ids:
                 row.next_target = NEXT
@@ -357,13 +372,12 @@ class Protocol:
         if not self.can_group(row_ids):
             return None
         container, _ = self.parent_list_of(row_ids[0])
-        indices = sorted(container.index(self.row_by_id(rid))
-                         for rid in row_ids)
+        indices = sorted(container.index(self.row_by_id(rid)) for rid in row_ids)
         members = [container[i] for i in indices]
         group = Row(name, is_group=True)
         group.children = members
         group.pos = members[0].pos
-        container[indices[0]:indices[-1] + 1] = [group]
+        container[indices[0] : indices[-1] + 1] = [group]
         return group
 
     def ungroup(self, group_id) -> bool:
@@ -371,7 +385,7 @@ class Protocol:
         if row is None or not row.is_group:
             return False
         container, index = self.parent_list_of(group_id)
-        container[index:index + 1] = row.children
+        container[index : index + 1] = row.children
         self._scrub_targets({group_id})
         return True
 
@@ -395,8 +409,7 @@ class Protocol:
         return dn
 
     def remove_decision_node(self, node_id) -> None:
-        self.decision_nodes = [dn for dn in self.decision_nodes
-                               if dn.id != node_id]
+        self.decision_nodes = [dn for dn in self.decision_nodes if dn.id != node_id]
         for op in self.op_nodes:
             op.inputs = [i for i in op.inputs if i[0] != node_id]
         # Chain routes pointing at the removed shape fall back to defaults.
@@ -426,10 +439,12 @@ class Protocol:
         for op in self.op_nodes:
             if not op.inputs:
                 continue
-            owners = {dn.step_id
-                      for i in op.inputs
-                      for dn in [self.decision_node_by_id(i[0])]
-                      if dn is not None}
+            owners = {
+                dn.step_id
+                for i in op.inputs
+                for dn in [self.decision_node_by_id(i[0])]
+                if dn is not None
+            }
             if owners == {step_id}:
                 out.append(op)
         return out
@@ -445,8 +460,9 @@ class Protocol:
 
     def all_specs(self):
         specs = []
-        for col in sorted(self.columns, key=lambda c: (c.handler.priority,
-                                                       c.model.col_id)):
+        for col in sorted(
+            self.columns, key=lambda c: (c.handler.priority, c.model.col_id)
+        ):
             specs.extend(col.handler.decision_specs())
         return specs
 
@@ -457,8 +473,7 @@ class Protocol:
             return SENTINEL_LABELS[target]
         row = self.row_by_id(target)
         if row is not None:
-            return (f"group {row.name!r}" if row.is_group
-                    else f"step {row.name!r}")
+            return f"group {row.name!r}" if row.is_group else f"step {row.name!r}"
         dn = self.decision_node_by_id(target)
         if dn is not None:
             spec = self.spec_by_id(dn.decision_id)
@@ -473,24 +488,22 @@ class Protocol:
             "rows": [r.to_dict() for r in self.rows],
             "decision_nodes": [d.to_dict() for d in self.decision_nodes],
             "op_nodes": [o.to_dict() for o in self.op_nodes],
-            "terminal_pos": {k: list(v)
-                             for k, v in self.terminal_pos.items()},
+            "terminal_pos": {k: list(v) for k, v in self.terminal_pos.items()},
         }
 
     def load_dict(self, d) -> None:
         self.rows = [Row.from_dict(rd) for rd in d.get("rows", [])]
-        self.decision_nodes = [DecisionNode.from_dict(x)
-                               for x in d.get("decision_nodes", [])]
+        self.decision_nodes = [
+            DecisionNode.from_dict(x) for x in d.get("decision_nodes", [])
+        ]
         self.op_nodes = [OpNode.from_dict(x) for x in d.get("op_nodes", [])]
-        self.terminal_pos = {k: tuple(v) for k, v in
-                             d.get("terminal_pos", {}).items()}
+        self.terminal_pos = {k: tuple(v) for k, v in d.get("terminal_pos", {}).items()}
         # Seed any column values missing from the file (new columns since
         # save).
         for row, _ in self.iter_rows():
             if not row.is_group:
                 for c in self.columns:
-                    row.values.setdefault(c.model.col_id,
-                                          c.model.default_value)
+                    row.values.setdefault(c.model.col_id, c.model.default_value)
 
 
 def _subtree_rows(row):
