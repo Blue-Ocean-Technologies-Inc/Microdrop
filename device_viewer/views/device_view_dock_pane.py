@@ -1337,6 +1337,30 @@ class DeviceViewerDockPane(TraitsDockPane):
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget = ZoomControlWidget(vm)
 
+        # Camera Alignment: the manual per-device endpoint workflow.
+        # Lives right under the camera-control button grid.
+        alignment_widget = QWidget()
+        alignment_layout = QVBoxLayout(alignment_widget)
+        alignment_layout.setContentsMargins(0, 0, 0, 0)
+        for label, handler, tip in (
+            ("Camera Alignment…", self._on_open_camera_alignment,
+             "Open the split-screen alignment dialog: place this "
+             "device's endpoint on the device SVG and drag the "
+             "corner dots onto the device outline on a captured "
+             "camera frame"),
+            ("Go To Endpoint", self._on_go_to_endpoint,
+             "Automate the drags: glide the marked points onto "
+             "this device's saved endpoint"),
+        ):
+            action_button = QPushButton(label)
+            # The sidebar's theme stylesheet renders QPushButton text
+            # in the Material Symbols icon font — these buttons carry
+            # real words, so they get the text-button font override.
+            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
+            action_button.setToolTip(tip)
+            action_button.clicked.connect(handler)
+            alignment_layout.addWidget(action_button)
+
         scroll_layout.addWidget(
             CollapsibleVStackBox(
                 "Viewport Controls", control_widgets=self.viewport_controls_widget
@@ -1347,6 +1371,7 @@ class DeviceViewerDockPane(TraitsDockPane):
                 "Camera Controls",
                 control_widgets=[
                     self.camera_control_widget,
+                    alignment_widget,
                     self.alpha_view_ui.control,
                 ],
             )
@@ -1368,32 +1393,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         scroll_layout.addWidget(
             CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
         )
-
-        # Camera Alignment: the manual per-device endpoint workflow.
-        alignment_widget = QWidget()
-        alignment_layout = QVBoxLayout(alignment_widget)
-        alignment_layout.setContentsMargins(0, 0, 0, 0)
-        for label, handler, tip in (
-            ("Camera Alignment…", self._on_open_camera_alignment,
-             "Open the split-screen alignment dialog: place this "
-             "device's endpoint on the device SVG (left) and drag "
-             "the corner dots onto the device outline on a captured "
-             "camera frame (right)"),
-            ("Go To Endpoint", self._on_go_to_endpoint,
-             "Automate the drags: glide the marked points onto "
-             "this device's saved endpoint"),
-        ):
-            action_button = QPushButton(label)
-            # The sidebar's theme stylesheet renders QPushButton text
-            # in the Material Symbols icon font — these buttons carry
-            # real words, so they get the text-button font override.
-            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
-            action_button.setToolTip(tip)
-            action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button)
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Camera Alignment",
-                                 control_widgets=alignment_widget))
         scroll_layout.addStretch()
 
         scroll_area.setWidget(scroll_content)
