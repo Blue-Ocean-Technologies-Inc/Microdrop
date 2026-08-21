@@ -28,8 +28,8 @@ from device_viewer.views.camera_alignment_view.alignment_panes import (
     OutlinePane,
 )
 from device_viewer.views.camera_alignment_view.alignment_settings import (
+    SETTING_TRAITS,
     AlignmentSettingsModel,
-    overlay_options_from_preferences,
 )
 from microdrop_style.helpers import style_app
 
@@ -64,6 +64,9 @@ def main():
     # In-memory preferences — nothing the demo touches is written to
     # the real preference files.
     preferences = DeviceViewerPreferences(preferences=Preferences())
+    overlay_options = {
+        name: getattr(preferences, f"alignment_{name}") for name in SETTING_TRAITS
+    }
 
     endpoint_pane = EndpointPane(
         device_image=_grid_image("#101018", "#4488cc", "#224466"),
@@ -74,9 +77,7 @@ def main():
             for x, y, w, h in GRID_RECTS
             for corner in ((x, y), (x + w, y), (x + w, y + h), (x, y + h))
         ],
-        overlay_options=overlay_options_from_preferences(
-            preferences, "alignment_endpoint_snap_radius_px"
-        ),
+        overlay_options=overlay_options,
     )
     endpoint_pane.observe(
         lambda event: print(f"endpoint saved: {event.new}"), "endpoint_saved"
@@ -88,9 +89,7 @@ def main():
         capture_frame=lambda: _grid_image(
             "#303030", "#c0c0c0", "#606060", offset=(40, 25)
         ),
-        overlay_options=overlay_options_from_preferences(
-            preferences, "alignment_outline_snap_radius_px"
-        ),
+        overlay_options=overlay_options,
     )
     outline_pane.observe(
         lambda event: print(f"outline accepted: {event.new}"), "quad_accepted"

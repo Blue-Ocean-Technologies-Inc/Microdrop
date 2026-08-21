@@ -1,9 +1,9 @@
 """TraitsUI model + view for the Camera Alignment dialog's
 settings sidebar.
 
-A Qt-free HasTraits model mirrors the seven persisted alignment
-preference traits (per-pane snap radii, dot radius, frame width and
-the three quad colors) so the sidebar is a plain TraitsUI View —
+A Qt-free HasTraits model mirrors the persisted alignment
+preference traits (snap radius, dot radius, frame width and the
+three quad colors) so the sidebar is a plain TraitsUI View —
 spinners from the Range traits, color wells from the RGBColor
 traits, and a Reset to Defaults button — instead of hand-built Qt
 widgets. Every model edit writes straight back to the preferences;
@@ -29,11 +29,12 @@ logger = get_logger(__name__)
 
 
 # The model's setting traits; each mirrors the preference trait named
-# 'alignment_<name>'. All double as QuadOverlay kwargs (the numeric
-# snap radii per pane, the rest via set_appearance).
+# 'alignment_<name>', and the names double one-for-one as QuadOverlay
+# kwargs (snap_radius_px directly, the rest via set_appearance) — so
+# `{name: getattr(preferences, f"alignment_{name}") for name in
+# SETTING_TRAITS}` is the full option dict a pane opens with.
 NUMERIC_SETTING_TRAITS = (
-    "endpoint_snap_radius_px",
-    "outline_snap_radius_px",
+    "snap_radius_px",
     "handle_radius_px",
     "frame_width_px",
 )
@@ -45,20 +46,6 @@ COLOR_SETTING_TRAITS = (
 SETTING_TRAITS = NUMERIC_SETTING_TRAITS + COLOR_SETTING_TRAITS
 
 
-def overlay_options_from_preferences(preferences, snap_radius_trait) -> dict:
-    """The QuadOverlay kwargs a pane should open with, read from
-    the persisted preferences; ``snap_radius_trait`` names the
-    pane's own snap-radius preference."""
-    return {
-        "snap_radius_px": getattr(preferences, snap_radius_trait),
-        "handle_radius_px": preferences.alignment_handle_radius_px,
-        "frame_width_px": preferences.alignment_frame_width_px,
-        "quad_color": preferences.alignment_quad_color,
-        "handle_color": preferences.alignment_handle_color,
-        "handle_ring_color": preferences.alignment_handle_ring_color,
-    }
-
-
 class AlignmentSettingsModel(HasTraits):
     """The sidebar's model. Bounds match the preference Range
     traits; values load from the preferences at construction and
@@ -67,10 +54,7 @@ class AlignmentSettingsModel(HasTraits):
 
     preferences = Instance(DeviceViewerPreferences)
 
-    endpoint_snap_radius_px = Range(
-        ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX, mode="spinner"
-    )
-    outline_snap_radius_px = Range(
+    snap_radius_px = Range(
         ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX, mode="spinner"
     )
     handle_radius_px = Range(
@@ -126,18 +110,13 @@ class AlignmentSettingsModel(HasTraits):
 
 alignment_settings_view = View(
     Group(
-        Item("endpoint_snap_radius_px", label="Endpoint (px)"),
-        Item("outline_snap_radius_px", label="Outline (px)"),
-        label="Snap Radius",
-        show_border=True,
-    ),
-    Group(
+        Item("snap_radius_px", label="Snap radius (px)"),
         Item("handle_radius_px", label="Dot radius (px)"),
         Item("frame_width_px", label="Frame width (px)"),
         Item("quad_color", label="Frame color"),
         Item("handle_color", label="Dot color"),
         Item("handle_ring_color", label="Dot ring color"),
-        label="Quad Appearance",
+        label="Overlay Settings",
         show_border=True,
     ),
     Item("reset", show_label=False),

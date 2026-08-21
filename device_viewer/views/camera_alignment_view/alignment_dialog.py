@@ -192,9 +192,8 @@ class CameraAlignmentController(Controller):
         model = self.model
         name, value = event.name, event.new
 
-        if name == "endpoint_snap_radius_px":
+        if name == "snap_radius_px":
             model.endpoint_pane.set_snap_radius(value)
-        elif name == "outline_snap_radius_px":
             model.outline_pane.set_snap_radius(value)
         else:
             if name in COLOR_SETTING_TRAITS:
