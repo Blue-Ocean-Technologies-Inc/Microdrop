@@ -1,3 +1,44 @@
+## v1.12.0 (2026-08-21)
+
+### Feat
+
+- **device_viewer**: corner-marker size in the sidebar
+- **device_viewer**: per-pane toggle to show all snappable corners
+- **device_viewer**: corner-marker color and alpha in the sidebar
+- **device_viewer**: view-all-corners markers in QuadOverlay
+- **device_viewer**: default snap radius to 100 px
+- **device_viewer**: expose the SVG-to-scene path scale
+- **device_viewer**: combined Camera Alignment dialog
+- **device_viewer**: endpoint and outline panes as TraitsUI MVC
+- **device_viewer**: alignment settings sidebar as TraitsUI MVC
+- **device_viewer**: persist camera-alignment prefs
+- **device_viewer**: zoomable pan canvas for the alignment panes
+- **device_viewer**: Shi-Tomasi corner detection helper
+- **device_viewer**: parametrize QuadOverlay style and snapping
+- **device_viewer**: add camera-alignment constants
+- **style**: add TEXT_BUTTON_STYLE for real-word buttons
+- **style**: add the photo-camera glyph constant
+- **microdrop_utils**: add hex/rgb color converters
+- **device_viewer**: manual per-device camera-alignment endpoints
+
+### Refactor
+
+- **device_viewer**: outline pane left, endpoint pane right
+- **device_viewer**: alignment buttons join the Camera Controls box
+- **device_viewer**: one shared alignment snap radius
+- **device_viewer**: drop the alignment dialog's Close button
+- **device_viewer**: declare alignment observers with @observe
+- **device_viewer**: sidebar opens the combined alignment dialog
+
+### Docs
+
+- **examples**: standalone Camera Alignment dialog demo
+
+### Style
+
+- **device_viewer**: rename sidebar button to Camera Alignment Helper
+- **device_viewer**: breathing room under the alignment buttons
+
 ## v1.11.1 (2026-08-14)
 
 ### Fix
