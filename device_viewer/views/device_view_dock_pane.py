@@ -1341,7 +1341,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Lives right under the camera-control button grid.
         alignment_widget = QWidget()
         alignment_layout = QVBoxLayout(alignment_widget)
-        alignment_layout.setContentsMargins(0, 0, 0, 0)
+        # Bottom margin separates the buttons from the alpha table below.
+        alignment_layout.setContentsMargins(0, 0, 0, 12)
         for label, handler, tip in (
             ("Camera Alignment…", self._on_open_camera_alignment,
              "Open the split-screen alignment dialog: place this "
