@@ -2,8 +2,9 @@
 settings sidebar.
 
 A Qt-free HasTraits model mirrors the persisted alignment
-preference traits (snap radius, dot radius, frame width and the
-three quad colors) so the sidebar is a plain TraitsUI View —
+preference traits (snap radius, dot radius, frame width, the quad
+colors and the corner-marker color/alpha) so the sidebar is a plain
+TraitsUI View —
 spinners from the Range traits, color wells from the RGBColor
 traits, and a Reset to Defaults button — instead of hand-built Qt
 widgets. Every model edit writes straight back to the preferences;
@@ -37,11 +38,13 @@ NUMERIC_SETTING_TRAITS = (
     "snap_radius_px",
     "handle_radius_px",
     "frame_width_px",
+    "snap_marker_alpha",
 )
 COLOR_SETTING_TRAITS = (
     "quad_color",
     "handle_color",
     "handle_ring_color",
+    "snap_marker_color",
 )
 SETTING_TRAITS = NUMERIC_SETTING_TRAITS + COLOR_SETTING_TRAITS
 
@@ -64,9 +67,13 @@ class AlignmentSettingsModel(HasTraits):
         ALIGNMENT_FRAME_WIDTH_MIN_PX, ALIGNMENT_FRAME_WIDTH_MAX_PX, mode="spinner"
     )
 
+    #: Opacity of the view-all-snappable-corners dots.
+    snap_marker_alpha = Range(0.0, 1.0)
+
     quad_color = RGBColor()
     handle_color = RGBColor()
     handle_ring_color = RGBColor()
+    snap_marker_color = RGBColor()
 
     reset = Button("Reset to Defaults")
 
@@ -116,6 +123,8 @@ alignment_settings_view = View(
         Item("quad_color", label="Frame color"),
         Item("handle_color", label="Dot color"),
         Item("handle_ring_color", label="Dot ring color"),
+        Item("snap_marker_color", label="Corner marker color"),
+        Item("snap_marker_alpha", label="Corner marker alpha"),
         label="Overlay Settings",
         show_border=True,
     ),

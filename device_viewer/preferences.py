@@ -46,6 +46,8 @@ from .consts import (
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
     ALIGNMENT_QUAD_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_ALPHA,
+    ALIGNMENT_SNAP_MARKER_COLOR_HEX,
     ALIGNMENT_SNAP_RADIUS_MAX_PX,
     ALIGNMENT_SNAP_RADIUS_MIN_PX,
     ALIGNMENT_SNAP_RADIUS_PX,
@@ -119,6 +121,10 @@ class DeviceViewerPreferences(PreferencesHelper):
     alignment_quad_color = Str(ALIGNMENT_QUAD_COLOR_HEX)
     alignment_handle_color = Str(ALIGNMENT_HANDLE_COLOR_HEX)
     alignment_handle_ring_color = Str(ALIGNMENT_HANDLE_RING_COLOR_HEX)
+    alignment_snap_marker_color = Str(ALIGNMENT_SNAP_MARKER_COLOR_HEX)
+    alignment_snap_marker_alpha = Range(
+        value=ALIGNMENT_SNAP_MARKER_ALPHA, low=0.0, high=1.0
+    )
 
     ### Recording viewer (video_viewer pane) prefs ###
     # Persisted zoom/pan of the playback canvas — the alignment transform
