@@ -20,7 +20,7 @@ The three pieces live separately in this module:
   subpanel from alignment_settings), and the button row.
 - CameraAlignmentController — the wiring: pane readiness to the
   model, live overlay restyling from the settings model, and the
-  Confirm/Close behavior."""
+  Confirm Alignment macro. Closing is the window's own X."""
 
 from traits.api import (
     Bool,
@@ -97,7 +97,6 @@ class CameraAlignmentModel(HasTraits):
     options_visible = Bool(False)
 
     confirm = Button("Confirm Alignment")
-    close = Button("Close")
 
     #: Fires AFTER Confirm Alignment has saved the endpoint and
     #: staged the outline points (the pane signals fire first,
@@ -152,7 +151,6 @@ camera_alignment_dialog_view = View(
                 style_sheet=CONFIRM_BUTTON_STYLE,
             ),
             spring,
-            UItem("close"),
         ),
         # Real-word buttons — keep them out of the Material Symbols
         # icon font the themed QPushButton rules use. The panes'
@@ -169,8 +167,8 @@ camera_alignment_dialog_view = View(
 # --------------------------- Controller --------------------------- #
 class CameraAlignmentController(Controller):
     """Wires the pane widgets to the model and view: readiness
-    gating, live overlay restyling from the settings model, the
-    Confirm Alignment macro, and Close."""
+    gating, live overlay restyling from the settings model, and the
+    Confirm Alignment macro."""
 
     model = Instance(CameraAlignmentModel)
 
@@ -216,9 +214,3 @@ class CameraAlignmentController(Controller):
         model.endpoint_pane.save = True
         model.outline_pane.save = True
         model.alignment_confirmed = True
-
-    def object_close_changed(self, info):
-        if not info.initialized:
-            return
-
-        info.ui.dispose()
