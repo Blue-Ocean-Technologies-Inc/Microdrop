@@ -263,7 +263,7 @@ ALIGNMENT_HANDLE_COLOR_HEX = "#ff6400"
 ALIGNMENT_HANDLE_RING_COLOR_HEX = "#ffffff"
 ALIGNMENT_HANDLE_RADIUS_PX = 8
 ALIGNMENT_FRAME_WIDTH_PX = 3
-ALIGNMENT_SNAP_RADIUS_PX = 50
+ALIGNMENT_SNAP_RADIUS_PX = 100
 
 #: Bounds shared by the preference Range traits and the settings-sidebar
 #: spinners (one source, so they cannot drift apart).
