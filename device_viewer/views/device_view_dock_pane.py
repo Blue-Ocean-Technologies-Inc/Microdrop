@@ -160,6 +160,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     layer_ui = None
     mode_picker_view = None
 
+    # The open Camera Alignment dialog's model; None while closed. The
+    # @observe handlers below re-hook automatically on every assignment.
+    _alignment_model = Instance(CameraAlignmentModel)
+
     # Variables
     _undoing = Bool(False, desc="Used to prevent changes made in undo() and redo() from being added to the undo stack")
     _disable_state_messages = Bool(False, desc="Used to disable state messages when the model is being updated, to prevent infinite loops")
@@ -559,6 +563,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         image = frame.toImage()
         return None if image.isNull() else image.copy()
 
+    @observe("_alignment_model:outline_pane:quad_accepted")
     def _stage_alignment_start_points(self, event):
         """The outline pane's accepted quad (``event.new``, camera
         pixels): pin the four marked spots
@@ -707,28 +712,24 @@ class DeviceViewerDockPane(TraitsDockPane):
             snap_scene_points=corner_points,
             overlay_options=overlay_options_from_preferences(
                 preferences, "alignment_endpoint_snap_radius_px"))
-        endpoint_pane.observe(
-            self._on_endpoint_editor_saved, "endpoint_saved")
         outline_pane = OutlinePane(
             capture_frame=self._capture_camera_frame,
             initial_quad=self._current_camera_quad(),
             overlay_options=overlay_options_from_preferences(
                 preferences, "alignment_outline_snap_radius_px"))
-        outline_pane.observe(
-            self._stage_alignment_start_points, "quad_accepted")
-        alignment_model = CameraAlignmentModel(
+        # Assigning the model trait hooks the @observe handlers below.
+        # Confirm Alignment fires alignment_confirmed AFTER the two
+        # pane events have saved the endpoint and staged the points,
+        # so Go To Endpoint finds both in place.
+        self._alignment_model = CameraAlignmentModel(
             endpoint_pane=endpoint_pane, outline_pane=outline_pane,
             settings=AlignmentSettingsModel(preferences=preferences))
-        # Confirm Alignment fires AFTER the two pane signals above
-        # have saved the endpoint and staged the points, so Go To
-        # Endpoint finds both in place.
-        alignment_model.observe(self._on_alignment_confirmed,
-                                "alignment_confirmed")
         self._alignment_ui = CameraAlignmentController(
-            model=alignment_model,
+            model=self._alignment_model,
         ).edit_traits(view=camera_alignment_dialog_view,
                       parent=self.device_view.window())
 
+    @observe("_alignment_model:endpoint_pane:endpoint_saved")
     def _on_endpoint_editor_saved(self, event):
         """The endpoint pane's saved quad (``event.new``, device-scene
         coordinates): persist it as this device's endpoint."""
@@ -739,6 +740,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self._statusbar_message(
             f"Saved camera-alignment endpoint for {device_key}")
 
+    @observe("_alignment_model:alignment_confirmed")
     def _on_alignment_confirmed(self, event):
         self._on_go_to_endpoint()
 
@@ -747,6 +749,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             if self._alignment_ui.control is not None:
                 self._alignment_ui.dispose()
             self._alignment_ui = None
+        self._alignment_model = None
 
     def _statusbar_message(self, message):
         status_bar_manager = self.task.window.status_bar_manager

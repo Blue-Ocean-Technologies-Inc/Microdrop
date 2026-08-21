@@ -28,6 +28,7 @@ from traits.api import (
     Event,
     HasTraits,
     Instance,
+    observe,
 )
 from traitsui.api import (
     Controller,
@@ -174,27 +175,18 @@ class CameraAlignmentController(Controller):
     model = Instance(CameraAlignmentModel)
 
     def init(self, info):
-        model = self.model
-
-        model.outline_ready = model.outline_pane.is_ready
-        model.outline_pane.observe(self._on_outline_ready, "is_ready")
-
-        model.settings.observe(self._on_setting_changed, ", ".join(SETTING_TRAITS))
+        # The pane may already be ready when the window opens — the
+        # observer below only fires on changes.
+        self.model.outline_ready = self.model.outline_pane.is_ready
 
         return super().init(info)
 
-    def closed(self, info, is_ok):
-        self.model.outline_pane.observe(self._on_outline_ready, "is_ready", remove=True)
-        self.model.settings.observe(
-            self._on_setting_changed, ", ".join(SETTING_TRAITS), remove=True
-        )
-
-        super().closed(info, is_ok)
-
     # ------------------------------------------------------------------ #
+    @observe("model:outline_pane:is_ready")
     def _on_outline_ready(self, event):
         self.model.outline_ready = event.new
 
+    @observe(", ".join(f"model:settings:{name}" for name in SETTING_TRAITS))
     def _on_setting_changed(self, event):
         """A sidebar edit (or Reset to Defaults): restyle the
         overlays live — the settings model has already persisted
