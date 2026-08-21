@@ -127,6 +127,20 @@ QPushButton:disabled {{
 }}
 """
 
+# Text-label buttons: QPushButtons whose text is a real word or
+# phrase (e.g. "Save Endpoint") rather than a Material Symbols glyph
+# name. Overrides ONLY the font of the themed QPushButton rules
+# (which set the icon font at 22px); colors, borders, and hover
+# states still cascade from the surrounding theme stylesheet.
+TEXT_BUTTON_STYLE = f"""
+QPushButton {{
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    padding: {BUTTON_PADDING};
+    min-height: {BUTTON_MIN_HEIGHT}px;
+}}
+"""
+
 # Navigation button specific styles
 NAVIGATION_BUTTON_STYLE = f"""
 {BASE_BUTTON_STYLE}

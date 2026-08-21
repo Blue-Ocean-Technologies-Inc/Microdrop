@@ -5,7 +5,19 @@ from pathlib import Path
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from microdrop_application.preferences_dialog import advanced_mode_tab
-from traits.api import Button, Dict, Directory, File, Float, Instance, Property, Range, Bool, Str, observe
+from traits.api import (
+    Button,
+    Dict,
+    Directory,
+    File,
+    Float,
+    Instance,
+    Property,
+    Range,
+    Bool,
+    Str,
+    observe,
+)
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, HGroup, Item, View
 from pyface.qt.QtCore import QTimer
@@ -25,6 +37,23 @@ logger = get_logger(__name__)
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 from .consts import (
+    ALIGNMENT_FRAME_WIDTH_MAX_PX,
+    ALIGNMENT_FRAME_WIDTH_MIN_PX,
+    ALIGNMENT_FRAME_WIDTH_PX,
+    ALIGNMENT_HANDLE_COLOR_HEX,
+    ALIGNMENT_HANDLE_RADIUS_MAX_PX,
+    ALIGNMENT_HANDLE_RADIUS_MIN_PX,
+    ALIGNMENT_HANDLE_RADIUS_PX,
+    ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_QUAD_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_ALPHA,
+    ALIGNMENT_SNAP_MARKER_COLOR_HEX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
+    ALIGNMENT_SNAP_MARKER_SIZE_PX,
+    ALIGNMENT_SNAP_RADIUS_MAX_PX,
+    ALIGNMENT_SNAP_RADIUS_MIN_PX,
+    ALIGNMENT_SNAP_RADIUS_PX,
     ALPHA_VIEW_MIN_HEIGHT,
     AUTO_FIT_MARGIN_SCALE,
     DEVICE_VIEWER_SIDEBAR_WIDTH,
@@ -71,6 +100,41 @@ class DeviceViewerPreferences(PreferencesHelper):
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
 
+    ### Camera-alignment dialog prefs ###
+    # One snap radius shared by both panes. Colors are stored as
+    # '#rrggbb' hex strings.
+    alignment_snap_radius_px = Range(
+        value=ALIGNMENT_SNAP_RADIUS_PX,
+        low=ALIGNMENT_SNAP_RADIUS_MIN_PX,
+        high=ALIGNMENT_SNAP_RADIUS_MAX_PX,
+        mode="spinner",
+    )
+    alignment_handle_radius_px = Range(
+        value=ALIGNMENT_HANDLE_RADIUS_PX,
+        low=ALIGNMENT_HANDLE_RADIUS_MIN_PX,
+        high=ALIGNMENT_HANDLE_RADIUS_MAX_PX,
+        mode="spinner",
+    )
+    alignment_frame_width_px = Range(
+        value=ALIGNMENT_FRAME_WIDTH_PX,
+        low=ALIGNMENT_FRAME_WIDTH_MIN_PX,
+        high=ALIGNMENT_FRAME_WIDTH_MAX_PX,
+        mode="spinner",
+    )
+    alignment_quad_color = Str(ALIGNMENT_QUAD_COLOR_HEX)
+    alignment_handle_color = Str(ALIGNMENT_HANDLE_COLOR_HEX)
+    alignment_handle_ring_color = Str(ALIGNMENT_HANDLE_RING_COLOR_HEX)
+    alignment_snap_marker_color = Str(ALIGNMENT_SNAP_MARKER_COLOR_HEX)
+    alignment_snap_marker_alpha = Range(
+        value=ALIGNMENT_SNAP_MARKER_ALPHA, low=0.0, high=1.0
+    )
+    alignment_snap_marker_size_px = Range(
+        value=ALIGNMENT_SNAP_MARKER_SIZE_PX,
+        low=ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX,
+        high=ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
+        mode="spinner",
+    )
+
     ### Recording viewer (video_viewer pane) prefs ###
     # Persisted zoom/pan of the playback canvas — the alignment transform
     # can push the frame outside the pane's bounds, so the user's chosen
@@ -103,13 +167,21 @@ class DeviceViewerPreferences(PreferencesHelper):
     gamepad_btn_split = Range(value=GAMEPAD_BTN_SPLIT, low=0, high=31, mode="spinner")
     gamepad_btn_add = Range(value=GAMEPAD_BTN_ADD, low=0, high=31, mode="spinner")
     gamepad_btn_remove = Range(value=GAMEPAD_BTN_REMOVE, low=0, high=31, mode="spinner")
-    gamepad_btn_realtime = Range(value=GAMEPAD_BTN_REALTIME, low=0, high=31, mode="spinner")
+    gamepad_btn_realtime = Range(
+        value=GAMEPAD_BTN_REALTIME, low=0, high=31, mode="spinner"
+    )
 
     # Persisted debounce timings (seconds) and analog-stick threshold.
-    gamepad_debounce_move_split = Range(value=GAMEPAD_DEBOUNCE_MOVE_SPLIT_S, low=0.0, high=3.0)
-    gamepad_debounce_add_remove = Range(value=GAMEPAD_DEBOUNCE_ADD_REMOVE_S, low=0.0, high=3.0)
+    gamepad_debounce_move_split = Range(
+        value=GAMEPAD_DEBOUNCE_MOVE_SPLIT_S, low=0.0, high=3.0
+    )
+    gamepad_debounce_add_remove = Range(
+        value=GAMEPAD_DEBOUNCE_ADD_REMOVE_S, low=0.0, high=3.0
+    )
     gamepad_debounce_find = Range(value=GAMEPAD_DEBOUNCE_FIND_S, low=0.0, high=5.0)
-    gamepad_debounce_realtime = Range(value=GAMEPAD_DEBOUNCE_REALTIME_S, low=0.0, high=5.0)
+    gamepad_debounce_realtime = Range(
+        value=GAMEPAD_DEBOUNCE_REALTIME_S, low=0.0, high=5.0
+    )
     gamepad_axis_threshold = Range(value=GAMEPAD_AXIS_THRESHOLD, low=0.1, high=1.0)
 
     # Transient capture-mode UI state. Trailing underscore keeps these OUT of the
@@ -145,7 +217,9 @@ class DeviceViewerPreferences(PreferencesHelper):
             destination = default_dir / source_file.name
             if not destination.exists():
                 if source_file.exists():
-                    logger.info(f"Missing {source_file.name} in device repo.\nCopying {source_file} to {destination}")
+                    logger.info(
+                        f"Missing {source_file.name} in device repo.\nCopying {source_file} to {destination}"
+                    )
                     safe_copy_file(str(source_file), str(destination))
                 else:
                     logger.error(f"Bundled device file not found: {source_file}")
@@ -162,7 +236,9 @@ class DeviceViewerPreferences(PreferencesHelper):
 
         # --- Ensure User's File is a Copy of Master on First Run ---
         default_user_file = Path(self.DEVICE_REPO_DIR) / MASTER_SVG_FILE.name
-        logger.debug(f"Checking for user's default device svg file: {default_user_file}")
+        logger.debug(
+            f"Checking for user's default device svg file: {default_user_file}"
+        )
 
         should_overwrite = True
 
@@ -170,7 +246,9 @@ class DeviceViewerPreferences(PreferencesHelper):
             # If the user's file exists, check if it's different from master
 
             if filecmp.cmp(MASTER_SVG_FILE, default_user_file, shallow=False):
-                logger.info("User's default device svg file already exists and matches master.")
+                logger.info(
+                    "User's default device svg file already exists and matches master."
+                )
                 should_overwrite = False
 
             else:
@@ -179,7 +257,9 @@ class DeviceViewerPreferences(PreferencesHelper):
                 )
 
         else:
-            logger.info("User's default device svg file not found, creating it from master...")
+            logger.info(
+                "User's default device svg file not found, creating it from master..."
+            )
 
         if should_overwrite:
             default_user_file = safe_copy_file(
@@ -327,12 +407,17 @@ main_view_settings = (
     ),
 )
 
+
 ########## Gamepad settings ###########################
 def _gamepad_button_row(trait_name: str, rebind_trait: str, label: str) -> HGroup:
     """A button-index spinner paired with a live 'Rebind' capture button."""
     return HGroup(
         Item(trait_name, label=label),
-        Item(rebind_trait, show_label=False, tooltip="Press, then press a button on the gamepad"),
+        Item(
+            rebind_trait,
+            show_label=False,
+            tooltip="Press, then press a button on the gamepad",
+        ),
     )
 
 
@@ -340,15 +425,22 @@ gamepad_settings = Group(
     Group(
         HGroup(
             Item("capture_prompt_", style="readonly", show_label=False, springy=True),
-            Item("reconnect_gamepad_", show_label=False,
-                 tooltip="Re-attempt connection after unplugging/replugging the controller"),
+            Item(
+                "reconnect_gamepad_",
+                show_label=False,
+                tooltip="Re-attempt connection after unplugging/replugging the controller",
+            ),
         ),
         _gamepad_button_row("gamepad_btn_clear", "rebind_clear_", "Clear all (A)"),
         _gamepad_button_row("gamepad_btn_find", "rebind_find_", "Find liquid (Select)"),
         _gamepad_button_row("gamepad_btn_split", "rebind_split_", "Split — hold (B)"),
         _gamepad_button_row("gamepad_btn_add", "rebind_add_", "Add — hold (Y)"),
-        _gamepad_button_row("gamepad_btn_remove", "rebind_remove_", "Remove — hold (X)"),
-        _gamepad_button_row("gamepad_btn_realtime", "rebind_realtime_", "Realtime toggle (Start)"),
+        _gamepad_button_row(
+            "gamepad_btn_remove", "rebind_remove_", "Remove — hold (X)"
+        ),
+        _gamepad_button_row(
+            "gamepad_btn_realtime", "rebind_realtime_", "Realtime toggle (Start)"
+        ),
         label="Button mapping",
         show_border=True,
     ),
@@ -365,6 +457,7 @@ gamepad_settings = Group(
     show_border=True,
     style_sheet=preferences_group_style_sheet,
 )
+
 
 class DeviceViewerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
@@ -389,7 +482,9 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         resizable=True,
     )
 
+
 #### Advanced Mode preferences (shown only when Advanced Mode is enabled)
+
 
 class DeviceViewerAdvancedPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.
@@ -414,24 +509,24 @@ class DeviceViewerAdvancedPreferencesPane(PreferencesPane):
 
     view = View(
         Item("_"),  # Separator
-            Group(
-                Item(
-                    "allow_hardware_disables",
-                    tooltip=(
-                        "When enabled, the device viewer will visually reflect channels that the hardware "
-                        "has reported as disabled (e.g., due to detected shorts or actuation faults). "
-                        "Disabled channels will appear greyed out and non-interactive in the device view.\n\n"
-                        "When disabled, hardware-reported channel disables are ignored by the device viewer "
-                        "and all channels remain visually active regardless of hardware state.\n\n"
-                        "WARNING: Disabling this setting means you will NOT see visual feedback when the "
-                        "hardware disables channels for safety reasons. Only change this if you understand "
-                        "the implications for your experiment."
-                    ),
+        Group(
+            Item(
+                "allow_hardware_disables",
+                tooltip=(
+                    "When enabled, the device viewer will visually reflect channels that the hardware "
+                    "has reported as disabled (e.g., due to detected shorts or actuation faults). "
+                    "Disabled channels will appear greyed out and non-interactive in the device view.\n\n"
+                    "When disabled, hardware-reported channel disables are ignored by the device viewer "
+                    "and all channels remain visually active regardless of hardware state.\n\n"
+                    "WARNING: Disabling this setting means you will NOT see visual feedback when the "
+                    "hardware disables channels for safety reasons. Only change this if you understand "
+                    "the implications for your experiment."
                 ),
-                label="Device Viewer",
-                show_border=True,
-                style_sheet=preferences_group_style_sheet,
             ),
+            label="Device Viewer",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
         Item("_"),
         resizable=True,
     )

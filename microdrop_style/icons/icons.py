@@ -62,4 +62,5 @@ ICON_FUNCTION        = "function"      # fit equations table
 ICON_COPY            = "content_copy"  # copy the selected ROI
 ICON_PASTE           = "content_paste" # paste a copied ROI
 ICON_TONALITY        = "tonality"      # rolling-ball flattening
+ICON_PHOTO_CAMERA    = "photo_camera"  # capture a camera frame
 ICON_ADJUST          = "adjust"        # show the ball at its size
