@@ -155,7 +155,18 @@ class PortableDropbotMonitorMixinService(HasTraits):
         failure inside it triggers the disconnect path); while
         disconnected, return port candidates to try."""
         if self.portable_dropbot_connection_active and self.proxy is not None:
-            self._publish_status_snapshot()
+            # A long driver call (home-all, a tray move) holds the
+            # proxy lock for tens of seconds. Blocking on it would
+            # stretch this tick past the interval — apscheduler then
+            # skip-warns every fire until the move ends — for a
+            # snapshot that is stale the moment it is taken. Skip it;
+            # the post-action republish refreshes everything anyway.
+            if not self._proxy_lock.acquire(blocking=False):
+                return []
+            try:
+                self._publish_status_snapshot()
+            finally:
+                self._proxy_lock.release()
             return []
         return self._candidate_ports()
 
