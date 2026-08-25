@@ -104,13 +104,15 @@ class UpdateDialogModel(HasTraits):
             ) + NEW_PLUGINS_HINT
 
     def do_update_all(self):
-        """Worker-thread safe: install the latest version of every listed
-        update. Returns (succeeded names, [(name, error) failures])."""
+        """Worker-thread safe: upgrade every listed update to the latest
+        channel version via a full remove + add, so nothing of the old build
+        survives on disk and the controller can apply each result live
+        (``hot_load_installed``). Returns
+        ([(name, EnvChangeResult) successes], [(name, error) failures])."""
         succeeded, failed = [], []
         for name, _installed, _latest in self.report.updates:
             try:
-                package_installer.install_from_channel(name)
-                succeeded.append(name)
+                succeeded.append((name, package_installer.upgrade_package(name)))
             except package_installer.InstallError as e:
                 logger.warning(f"update of {name} failed: {e}")
                 failed.append((name, str(e)))

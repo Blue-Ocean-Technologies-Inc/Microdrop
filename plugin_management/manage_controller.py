@@ -32,7 +32,7 @@ INSTALLED_SPLIT_GAP = 4
 from .browse_model import BrowsePluginsModel
 from .browse_view import browse_view
 from .browse_controller import BrowsePluginsHandler
-from .hot_load import hot_load_installed
+from .hot_load import hot_load_installed, unload_for_change
 from .package_installer import EnvDiff
 from .relaunch import finish_change
 
@@ -165,7 +165,8 @@ class ManagePluginsController(SafeCancelTableController):
         label, dist = row.label, row.dist_name
         # Unload + purge first so the new version's code is genuinely
         # importable — an in-place version change hot-loads like an install.
-        self.model.pre_change(row.manifest_name, dist)
+        unload_for_change(self.model.manager, self.model.application,
+                          row.manifest_name, dist)
         self._run(lambda: self.model.do_install_version(dist, new_version),
                   title="Installing version",
                   message=f"Installing {label} {new_version}…",
@@ -184,7 +185,8 @@ class ManagePluginsController(SafeCancelTableController):
                    message=f"Upgrade <b>{_esc(label)}</b> to the latest "
                            f"version{target}?", cancel=False) != YES:
             return
-        self.model.pre_change(row.manifest_name, dist)
+        unload_for_change(self.model.manager, self.model.application,
+                          row.manifest_name, dist)
         self._run(lambda: self.model.do_upgrade(dist),
                   title="Upgrading plugin", message=f"Upgrading {label}…",
                   done=lambda r: self._finish_install_change(
@@ -199,7 +201,8 @@ class ManagePluginsController(SafeCancelTableController):
                    message=f"Uninstall <b>{_esc(label)}</b>? This removes its "
                            f"package from the environment.", cancel=False) != YES:
             return
-        self.model.pre_change(manifest, dist)
+        unload_for_change(self.model.manager, self.model.application,
+                          manifest, dist)
         self._run(lambda: self.model.do_uninstall(dist),
                   title="Uninstalling plugin", message=f"Removing {label}…",
                   done=lambda r: (self.model.refresh(),
