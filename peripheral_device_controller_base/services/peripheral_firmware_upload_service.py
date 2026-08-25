@@ -150,25 +150,33 @@ class PeripheralFirmwareUploadService(HasTraits):
                 return port, True
         return port, False
 
+    def _flash_firmware(self, data, port, cancel_event):
+        """Run the actual flash and return its success. The default flashes a
+        MicroPython Pico board via firmware_uploader.upload_firmware; a
+        non-Pico peripheral overrides just this step (keeping the shared port
+        resolution, proxy release, threading, and topic reporting)."""
+        return upload_firmware(
+            firmware_path=data.firmware_source,
+            port=port or None,
+            reset_device=data.reset_after_upload,
+            single_file=data.single_file or None,
+            no_format=data.skip_filesystem_format,
+            update_config=data.update_config,
+            device_id=data.device_id,
+            dry_run=data.dry_run,
+            hwids=getattr(self, "_default_hwids", None) or None,
+            log=self._publish_upload_log_line,
+            cancel_event=cancel_event,
+        )
+
     def _run_upload(self, data, port, proxy_released, cancel_event):
-        """Upload thread: run the uploader with a topic-publishing log, then
+        """Upload thread: run the flash step with a topic-publishing log, then
         report the outcome; if the proxy was released for this upload,
         re-request monitoring so the freshly flashed board reconnects."""
         try:
-            success = upload_firmware(
-                firmware_path=data.firmware_source,
-                port=port or None,
-                reset_device=data.reset_after_upload,
-                single_file=data.single_file or None,
-                no_format=data.skip_filesystem_format,
-                update_config=data.update_config,
-                device_id=data.device_id,
-                dry_run=data.dry_run,
-                hwids=getattr(self, "_default_hwids", None) or None,
-                log=self._publish_upload_log_line,
-                cancel_event=cancel_event,
-            )
-            finished_payload = {"success": success}
+            finished_payload = {
+                "success": self._flash_firmware(data, port, cancel_event)
+            }
         except Exception as e:
             logger.exception("Firmware upload crashed")
             finished_payload = {"error": str(e)}
