@@ -57,6 +57,17 @@ class FirmwareUploadDialogController(HasTraits):
     finished_topic = Str()
     default_device_id = Str()
     dialog_title = Str("Upload Firmware")
+    #: Intro text above the config panel; a device with a different flash
+    #: story (e.g. bundled non-Pico firmware) overrides it alongside
+    #: panel_view.
+    intro_message = Str(
+        "Flash the MicroPython firmware to a connected Pico board. "
+        "Configure the source, port, and options below, then press Upload."
+    )
+    #: TraitsUI view for the config panel; the default shows every Pico
+    #: option, a simpler device injects a slimmed view over (a subclass of)
+    #: FirmwareUploadModel.
+    panel_view = Any(firmware_upload_view)
 
     model = Instance(FirmwareUploadModel)
     preferences = Instance(PreferencesHelper)
@@ -79,9 +90,7 @@ class FirmwareUploadDialogController(HasTraits):
             return
         self.dialog = BaseMessageDialog(
             title=self.dialog_title,
-            message="Flash the MicroPython firmware to a connected Pico "
-                    "board. Configure the source, port, and options below, "
-                    "then press Upload.",
+            message=self.intro_message,
             dialog_type=BaseMessageDialog.TYPE_QUESTION,
             buttons={
                 "Close": {"action": self._request_close, "role": "exit"},
@@ -99,7 +108,8 @@ class FirmwareUploadDialogController(HasTraits):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.traits_ui = self.model.edit_traits(
-            view=firmware_upload_view, kind="subpanel", parent=self.dialog)
+            view=self.panel_view, kind="subpanel", parent=self.dialog
+        )
         # The built control is the HSplit's QSplitter; the left column's own
         # QScrollArea is made transparent by the panel stylesheet.
         panel = self.traits_ui.control
