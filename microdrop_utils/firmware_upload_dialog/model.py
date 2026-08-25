@@ -76,12 +76,19 @@ class FirmwareUploadModel(HasTraits):
     preferences = Instance(PreferencesHelper)
 
     def traits_init(self):
+        # No preferences helper → nothing to restore (a device without a
+        # firmware-source preference, e.g. the bundled-firmware Z-Stage,
+        # leaves preferences None).
+        if self.preferences is None:
+            return
         _firmware_source_saved = self.preferences.trait_get("firmware_source")
         if _firmware_source_saved:
             self.firmware_source = _firmware_source_saved["firmware_source"]
 
     @observe("firmware_source")
     def _save_firmware_source(self, event):
+        if self.preferences is None:
+            return
         logger.info(f"Saved firmware source: {event.new}")
         self.preferences.firmware_source = event.new
 
