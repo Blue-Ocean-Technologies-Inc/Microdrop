@@ -8,7 +8,7 @@ import html
 
 from traits.api import Any, Bool, Event, HasTraits, Instance, List, Str, observe
 
-from . import hot_load, package_installer
+from . import package_installer
 from .browse_model import _version_key, _DETAILS_CSS
 from .group_manager import PluginGroupManager
 from logger.logger_service import get_logger
@@ -201,25 +201,6 @@ class ManagePluginsModel(HasTraits):
         """Re-fetch the channel package list (Refresh Versions). Returns the
         data; the controller applies it on the GUI thread."""
         return package_installer.search_channel()
-
-    def pre_change(self, manifest_name, dist_name=""):
-        """Hot-unload + deregister a plugin's groups, then purge its modules
-        from ``sys.modules``, before its package is removed or replaced.
-
-        The purge is what lets an install → uninstall → reinstall cycle and
-        an in-place version change hot-load instead of demanding a relaunch:
-        the next ``enable()`` re-imports FRESH code from disk rather than
-        binding to the cached, stale module objects. Safe because plugins are
-        fully isolated (no cross-plugin imports; they can run as separate
-        processes), so after disable() nothing else references their modules."""
-        specs = []
-        for name in [n for n, g in self.manager.groups.items()
-                     if g.manifest_name == manifest_name]:
-            specs += self.manager.groups[name].plugin_specs
-            if self.manager.is_loaded(name):
-                self.manager.disable(self.application, name)
-        self.manager.deregister_plugin(manifest_name)
-        hot_load.purge_plugin_modules(specs, dist_name)
 
     def do_uninstall(self, dist_name):
         """Worker-thread safe: remove the package (no trait mutation)."""

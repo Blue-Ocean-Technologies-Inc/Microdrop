@@ -112,6 +112,29 @@ def purge_plugin_modules(plugin_specs, dist_name=""):
     return purged
 
 
+def unload_for_change(manager, application, manifest_name, dist_name=""):
+    """Hot-unload + deregister a plugin's groups, then purge its modules
+    from ``sys.modules``, before its package is removed or replaced.
+
+    GUI THREAD ONLY: disabling groups mutates the manager's traits and
+    withdraws TASK_EXTENSIONS.
+
+    The purge is what lets an install → uninstall → reinstall cycle and
+    an in-place version change hot-load instead of demanding a relaunch:
+    the next ``enable()`` re-imports FRESH code from disk rather than
+    binding to the cached, stale module objects. Safe because plugins are
+    fully isolated (no cross-plugin imports; they can run as separate
+    processes), so after disable() nothing else references their modules."""
+    specs = []
+    for name in [n for n, g in manager.groups.items()
+                 if g.manifest_name == manifest_name]:
+        specs += manager.groups[name].plugin_specs
+        if manager.is_loaded(name):
+            manager.disable(application, name)
+    manager.deregister_plugin(manifest_name)
+    purge_plugin_modules(specs, dist_name)
+
+
 def hot_load_installed(application, manager, dist_name, diff) -> str | None:
     """Register + enable a just-installed distribution's plugin groups on the
     live application.
