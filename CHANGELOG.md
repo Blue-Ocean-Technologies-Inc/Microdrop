@@ -1,3 +1,14 @@
+## v1.12.1 (2026-08-25)
+
+### Fix
+
+- **firmware-dialog**: tolerate a missing preferences helper
+
+### Refactor
+
+- **firmware-dialog**: parametrize panel view and intro text
+- **peripherals**: extract flash step into overridable hook
+
 ## v1.12.0 (2026-08-21)
 
 ### Feat
