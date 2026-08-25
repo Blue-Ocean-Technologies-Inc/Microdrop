@@ -154,7 +154,15 @@ left = HGroup(
 # The actuation essentials stay in sight; everything else lives in
 # the chevron-collapsed groups below.
 grid = VGrid(
-    Item("voltage_readback_display", style="readonly", label="Voltage"),
+    # Realtime mode is the HV master enable: with it off the reported
+    # amplitude still wanders, but none of it reaches the pogo pins,
+    # so grey the readback out rather than show a misleading live number.
+    Item(
+        "voltage_readback_display",
+        style="readonly",
+        label="Voltage",
+        enabled_when="realtime_mode",
+    ),
     UItem(
         "voltage", enabled_when="connected and free_mode and " "not protocol_running"
     ),
