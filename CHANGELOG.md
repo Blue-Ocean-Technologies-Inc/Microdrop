@@ -1,3 +1,13 @@
+## v1.13.0 (2026-08-25)
+
+### Feat
+
+- **plugin_management**: hot-load Update All updates
+
+### Fix
+
+- **peripheral-base**: free listener actor on plugin stop
+
 ## v1.12.1 (2026-08-25)
 
 ### Fix
