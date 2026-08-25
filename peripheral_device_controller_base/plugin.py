@@ -3,6 +3,7 @@ from envisage.plugin import Plugin
 from traits.api import List
 
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_utils.dramatiq_controller_base import unregister_dramatiq_listener_actor
 from logger.logger_service import get_logger
 
 from .peripheral_device_controller_base import PeripheralDeviceControllerBase
@@ -51,4 +52,11 @@ class PeripheralDeviceControllerPlugin(Plugin):
         """Cleanup when the plugin is stopped."""
         if hasattr(self, 'device_controller'):
             self.device_controller.cleanup()
+            # Here (not in cleanup()): the upload service calls cleanup() to
+            # free the serial port mid-flash, and the controller must keep
+            # receiving cancel/monitoring requests. Only a plugin stop frees
+            # the listener name — otherwise a hot-reloaded controller's
+            # register is refused and the stale actor keeps dispatching to
+            # this torn-down instance.
+            unregister_dramatiq_listener_actor(self.device_controller.listener_name)
             logger.info(f"{self.device_controller._device_name.title()} Controller plugin stopped")
