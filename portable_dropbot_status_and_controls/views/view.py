@@ -43,47 +43,48 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Mechanism quick controls: a glyph toolbar (fluorescence
-# image-viewer style) sitting under the device picture. Each toggle
-# shows the ACTION a click performs and mirrors the state the
-# hardware reports.
+# image-viewer style) sitting under the device picture. Each toggle's
+# glyph reads as the STATE the hardware reports — a closed padlock
+# means the chip IS locked — never as the action a click performs;
+# the tooltip says what clicking does.
 mechanism_toolbar = HGroup(
     UItem(
         "chip_locked",
         editor=IconToggleEditor(
-            on_glyph=ICON_LOCK_OPEN,
-            off_glyph=ICON_LOCK,
+            on_glyph=ICON_LOCK,
+            off_glyph=ICON_LOCK_OPEN,
             tooltip="Lock/unlock the chip (the pogo pads " "press/release it)",
         ),
     ),
     UItem(
         "tray_out",
         editor=IconToggleEditor(
-            on_glyph=ICON_INPUT,
-            off_glyph=ICON_EJECT,
+            on_glyph=ICON_EJECT,
+            off_glyph=ICON_INPUT,
             tooltip="Pull the chip tray out / push it back in",
         ),
     ),
     UItem(
         "magnet_engaged",
         editor=IconToggleEditor(
-            on_glyph=ICON_ARROW_DOWNWARD,
-            off_glyph=ICON_ARROW_UPWARD,
+            on_glyph=ICON_ARROW_UPWARD,
+            off_glyph=ICON_ARROW_DOWNWARD,
             tooltip="Magnet up (engage) / down (disengage)",
         ),
     ),
     UItem(
         "mcu_fan_state",
         editor=IconToggleEditor(
-            on_glyph=ICON_MODE_FAN_OFF,
-            off_glyph=ICON_MODE_FAN,
+            on_glyph=ICON_MODE_FAN,
+            off_glyph=ICON_MODE_FAN_OFF,
             tooltip="MCU fan on/off (state is not read back)",
         ),
     ),
     UItem(
         "light_on",
         editor=IconToggleEditor(
-            on_glyph=ICON_LIGHT_OFF,
-            off_glyph=ICON_LIGHTBULB,
+            on_glyph=ICON_LIGHTBULB,
+            off_glyph=ICON_LIGHT_OFF,
             tooltip="Illumination light on/off (keeps the % " "setpoint)",
         ),
     ),
@@ -125,8 +126,8 @@ left = HGroup(
             UItem(
                 "connect_toggle",
                 editor=IconToggleEditor(
-                    on_glyph=ICON_LINK_OFF,
-                    off_glyph=ICON_LINK,
+                    on_glyph=ICON_LINK,
+                    off_glyph=ICON_LINK_OFF,
                     tooltip="Connect to the selected port / " "disconnect",
                 ),
                 enabled_when="connected or selected_port",
