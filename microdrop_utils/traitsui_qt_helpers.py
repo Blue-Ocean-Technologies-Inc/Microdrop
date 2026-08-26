@@ -1123,24 +1123,33 @@ class _IconToggleEditor(QtEditor):
         self.control.setFont(font)
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
-        self.control.setChecked(self.value)
+        self.control.setChecked(self._checked())
         self.control.clicked.connect(self._on_click)
         self._refresh()
 
+    def _checked(self):
+        """Button checked state for the trait value. Qt renders checked
+        as sunken/grey and unchecked as popped-out, so invert_checked
+        maps the trait's False to the sunken look instead of True."""
+        return not self.value if self.factory.invert_checked else self.value
+
     def _on_click(self):
-        self.value = self.control.isChecked()
+        checked = self.control.isChecked()
+        self.value = not checked if self.factory.invert_checked else checked
         self._refresh()
 
     def _refresh(self):
+        # The glyph reads as the hardware state (the trait), never as the
+        # button's checked state — the two differ under invert_checked.
         self.control.setText(
-            self.factory.on_glyph if self.control.isChecked()
+            self.factory.on_glyph if self.value
             else self.factory.off_glyph)
 
     def update_editor(self):
         # Re-sync on external change. setChecked emits toggled (not connected),
         # not clicked, so this can't re-enter _on_click.
         if self.control is not None:
-            self.control.setChecked(self.value)
+            self.control.setChecked(self._checked())
             self._refresh()
 
 
@@ -1163,6 +1172,12 @@ class IconToggleEditor(BasicEditorFactory):
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
 
     tooltip = Str()
+
+    #: Check (sunken/grey) the button when the trait is False instead of
+    #: True — for toggles whose True state should render popped-out (the
+    #: mechanism toolbar: light/fan on, magnet up, pogo down). The glyph
+    #: still follows the trait value.
+    invert_checked = Bool(False)
 
 
 class _IconButtonEditor(QtEditor):

@@ -46,13 +46,18 @@ from microdrop_utils.traitsui_qt_helpers import (
 # image-viewer style) sitting under the device picture. Each toggle's
 # glyph reads as the STATE the hardware reports — a closed padlock
 # means the chip IS locked — never as the action a click performs;
-# the tooltip says what clicking does.
+# the tooltip says what clicking does. The button relief reads as
+# on/off: popped-out while the mechanism is ON (light/fan on, magnet
+# up, pogo down, tray in), sunken/grey while it is off — hence
+# invert_checked on every toggle whose True state is the ON state
+# (tray_out's True is the OFF state, so it maps directly).
 mechanism_toolbar = HGroup(
     UItem(
         "chip_locked",
         editor=IconToggleEditor(
             on_glyph=ICON_LOCK,
             off_glyph=ICON_LOCK_OPEN,
+            invert_checked=True,
             tooltip="Lock/unlock the chip (the pogo pads " "press/release it)",
         ),
     ),
@@ -69,6 +74,7 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_ARROW_UPWARD,
             off_glyph=ICON_ARROW_DOWNWARD,
+            invert_checked=True,
             tooltip="Magnet up (engage) / down (disengage)",
         ),
     ),
@@ -77,6 +83,7 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_MODE_FAN,
             off_glyph=ICON_MODE_FAN_OFF,
+            invert_checked=True,
             tooltip="MCU fan on/off (state is not read back)",
         ),
     ),
@@ -85,6 +92,7 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_LIGHTBULB,
             off_glyph=ICON_LIGHT_OFF,
+            invert_checked=True,
             tooltip="Illumination light on/off (keeps the % " "setpoint)",
         ),
     ),
