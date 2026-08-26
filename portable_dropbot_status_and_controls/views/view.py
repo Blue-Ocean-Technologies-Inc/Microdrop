@@ -99,62 +99,60 @@ mechanism_toolbar = HGroup(
     enabled_when="connected",
 )
 
-left = HGroup(
-    VGroup(
-        HGroup(
-            Item("12"),
-            Item(
-                "icon_path",
-                editor=StatusIconEditorFactory(
-                    fire="tray_toggle_clicked", min_size=160
-                ),
-                show_label=False,
-                tooltip="Click to eject the tray; click again to bring it back in",
+# A single column: device picture, the mechanism toolbar, the
+# realtime/HV master toggle, and — in Advanced Mode only — the
+# explicit COM-port connect row (the device normally auto-connects;
+# the connect toggle's glyph already shows the link state, so the
+# old readonly Connection/Chip Status lines are gone).
+left = VGroup(
+    HGroup(
+        Item("12"),
+        Item(
+            "icon_path",
+            editor=StatusIconEditorFactory(
+                fire="tray_toggle_clicked", min_size=160
             ),
+            show_label=False,
+            tooltip="Click to eject the tray; click again to bring it back in",
         ),
-        Item("50"),
-        mechanism_toolbar,
     ),
-    VGroup(
-        VGroup(
-            Item("connection_status_text", style="readonly", label="Connection"),
-            Item("chip_status_text", style="readonly", label="Chip Status"),
+    Item("50"),
+    mechanism_toolbar,
+    HGroup(
+        UItem(
+            "realtime_mode",
+            style="custom",
+            editor=InPlaceToggleEditor(
+                on_label="Realtime On", off_label="Realtime Off"
+            ),
+            enabled_when="connected and not protocol_running",
+            tooltip="Realtime mode is also the HV On/Off: on "
+            "enables the HV output (pad-interlocked) for "
+            "live actuation; off releases all electrodes "
+            "and de-energizes HV",
         ),
-        HGroup(
-            Item(
-                "selected_port",
-                label="Port",
-                editor=EnumEditor(name="available_ports"),
-                enabled_when="not connected",
-            ),
-            UItem(
-                "refresh_ports_button",
-                editor=IconButtonEditor(glyph=ICON_REFRESH, tooltip="Refresh ports"),
-            ),
-            UItem(
-                "connect_toggle",
-                editor=IconToggleEditor(
-                    on_glyph=ICON_LINK,
-                    off_glyph=ICON_LINK_OFF,
-                    tooltip="Connect to the selected port / " "disconnect",
-                ),
-                enabled_when="connected or selected_port",
-            ),
+    ),
+    HGroup(
+        Item(
+            "selected_port",
+            label="Port",
+            editor=EnumEditor(name="available_ports"),
+            enabled_when="not connected",
         ),
-        HGroup(
-            UItem(
-                "realtime_mode",
-                style="custom",
-                editor=InPlaceToggleEditor(
-                    on_label="Realtime On", off_label="Realtime Off"
-                ),
-                enabled_when="connected and not protocol_running",
-                tooltip="Realtime mode is also the HV On/Off: on "
-                "enables the HV output (pad-interlocked) for "
-                "live actuation; off releases all electrodes "
-                "and de-energizes HV",
-            ),
+        UItem(
+            "refresh_ports_button",
+            editor=IconButtonEditor(glyph=ICON_REFRESH, tooltip="Refresh ports"),
         ),
+        UItem(
+            "connect_toggle",
+            editor=IconToggleEditor(
+                on_glyph=ICON_LINK,
+                off_glyph=ICON_LINK_OFF,
+                tooltip="Connect to the selected port / " "disconnect",
+            ),
+            enabled_when="connected or selected_port",
+        ),
+        visible_when="advanced_mode",
     ),
     id="status_controls",
 )

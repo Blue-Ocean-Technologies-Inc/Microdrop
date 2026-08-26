@@ -8,6 +8,7 @@ from traits.api import (
     observe,
 )
 
+from microdrop_application.menus import is_advanced_mode
 from microdrop_utils.traitsui_qt_helpers import (
     RangeWithSteppedSpinViewHint,
 )
@@ -69,6 +70,13 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     #: Fired by clicking the device picture: eject the tray, click
     #: again to bring it back in (the original pane's gesture).
     tray_toggle_clicked = Event()
+
+    #: Follows the Edit-menu Advanced Mode toggle (via the message
+    #: handler); the explicit COM-port connect row hides without it.
+    advanced_mode = Bool()
+
+    def _advanced_mode_default(self):
+        return is_advanced_mode()
 
     # ---- Explicit COM-port connect -----------------------------------
     # The backend owns port enumeration (it may sit on another

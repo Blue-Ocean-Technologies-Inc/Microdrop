@@ -36,6 +36,9 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     model = Instance(PortableDropbotStatusAndControlsModel)
 
+    def _on_advanced_mode_change_triggered(self, body):
+        self.model.advanced_mode = str(body).lower() == "true"
+
     def _on_ports_updated_triggered(self, body):
         ports = [str(port) for port in json.loads(str(body))]
         self.model.available_ports = ports

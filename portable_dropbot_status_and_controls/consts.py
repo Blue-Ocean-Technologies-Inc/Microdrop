@@ -36,6 +36,8 @@ ACTOR_TOPIC_DICT = {
         "hardware/signals/#",
         PROTOCOL_RUNNING,
         PROTOCOL_GRID_DISPLAY_STATE,
+        #: The connect row shows only in Advanced Mode.
+        ADVANCED_MODE_CHANGE,
     ],
     MOTORS_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
