@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Full-stack integration demo: PPT-3 electrodes/routes + PPT-4 voltage/
 frequency + PPT-5 magnet, all in one window. Verifies priority bucketing
 in practice (priority 20 V/F/magnet bucket completes before priority 30
