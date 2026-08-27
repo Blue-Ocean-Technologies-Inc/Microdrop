@@ -1,3 +1,77 @@
+## v1.14.0 (2026-08-27)
+
+### Feat
+
+- **portable**: use MDI magnet glyphs for the magnet toggle
+- **examples**: add MDI icon-buttons TraitsUI demo
+- **utils**: allow a custom icon-font family on glyph editors
+- **style**: ship the Pictogrammers Material Design Icons webfont
+- **portable_dropbot_ui**: single-column status pane, connect row advanced-only
+- **microdrop_utils**: log source checkout version at startup
+- **portable_dropbot**: tie HV master enable to realtime mode
+- **portable_dropbot_ui**: mechanism glyph toolbar in status pane
+- **style**: toolbar glyphs and adjustable status-icon size
+- **portable_dropbot**: outcome-aware logging in all request handlers
+- **portable_dropbot_driver**: log every command and its outcome
+- **portable_dropbot_ui**: vendor-parity panes + grouped status pane
+- **portable_dropbot**: calibration, temp, PMT and system services
+- **portable_dropbot**: vendor ML-calibration driver commands
+- **portable_dropbot**: disconnect toggle + pane control polish
+- **portable_dropbot**: light control drives the fluorescence LED
+- **portable_dropbot**: lighting controls + illumination wire fix
+- **portable_dropbot_status_and_controls**: touch-friendly move spins
+- **portable_dropbot_status_and_controls**: vendor-style motor panel
+- **portable_dropbot_status_and_controls**: DropBot-style status pane
+- **microdrop_utils**: opt-in clickable status icon
+- **portable_dropbot_controller**: explicit COM-port connect service
+- **portable-dropbot**: smoke-test script; fix driver-API mismatches
+- **portable-dropbot**: chip lock and light-intensity control
+- **portable-dropbot**: vendor the bare-minimum driver
+- **portable-dropbot**: --device portable plugin wiring
+- **portable-dropbot**: status pane and motor panel
+- **portable-dropbot**: publish status in engineering units
+- **portable-dropbot**: backend controller package
+
+### Fix
+
+- **style**: fake the windows11 drop shadow on Fusion icon toggles
+- **style**: accent-colored checked icon toggles under Fusion
+- **portable**: put enabled/visible conditions on items, not groups
+- **portable_dropbot_ui**: even minimal spacing and trending magnet glyphs
+- **portable_dropbot_ui**: render mechanism on-states popped out, off sunken
+- **application**: scale splash screen to fit small displays
+- **portable_dropbot_ui**: grey the voltage readback when HV is off
+- **portable_dropbot_ui**: icons show state, not the click action
+- **portable_dropbot_ui**: scale light readback from raw 16-bit
+- **portable_dropbot**: log buzzer/fan request outcomes
+- **portable_dropbot**: gate actuations on realtime mode
+- **portable_dropbot_controller**: tray toggle reads motor STATUS
+- **portable_dropbot_driver**: patch vendored driver for field bugs
+- **portable-dropbot**: a port that merely opens is not a connection
+- **portable-dropbot**: declare the link lost when status goes silent
+- **portable-dropbot**: one status-bar icon, not two
+- **portable-dropbot**: fast, non-overlapping port probes
+
+### Refactor
+
+- **style**: route font loading through one font-file registry
+- **portable_dropbot_ui**: consolidate panes into More/Advanced
+- **portable_dropbot_ui**: split package into MVC folders
+- **power_system_ui**: replace on/off buttons with bool toggles
+
+### Perf
+
+- **portable_dropbot**: skip the status tick while a driver call runs
+- **portable_dropbot**: stop polling motor positions every tick
+
+### Docs
+
+- spec for the Portable Dropbot device type
+
+### Chore
+
+- **hooks**: raise large-file limit to admit icon webfonts
+
 ## v1.13.1 (2026-08-27)
 
 ### Fix
