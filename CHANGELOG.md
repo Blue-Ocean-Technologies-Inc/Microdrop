@@ -1,3 +1,9 @@
+## v1.13.1 (2026-08-27)
+
+### Fix
+
+- **utils**: make ColorColumn cells editable via the trait's own editor
+
 ## v1.13.0 (2026-08-25)
 
 ### Feat
