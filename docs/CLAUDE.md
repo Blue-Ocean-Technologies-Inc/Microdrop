@@ -1,5 +1,10 @@
 # Microdrop Project
 
+Working-environment setup and the authoritative code style guide live in
+`AGENTS.md` at the repo root, imported below:
+
+@../AGENTS.md
+
 ## What is MicroDrop?
 
 MicroDrop is an open-source digital microfluidics (DMF) control system built by [Sci-Bots](https://sci-bots.com/). DMF uses electric fields to manipulate tiny droplets on a chip — lab-on-a-chip for biology, chemistry, and diagnostics.
