@@ -20,3 +20,8 @@ demo*.dot
 # pyinstaller generated files
 **/dist
 **/build
+
+# Agent working plans stay local — only the curated docs/superpowers/specs/
+# design documents are committed
+docs/superpowers/plans/
+docs/plans/
