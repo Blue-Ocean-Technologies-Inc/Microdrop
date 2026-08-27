@@ -104,40 +104,55 @@ repo-wide.
 
 ### Import Ordering
 
-Imports are grouped into sections, in this order:
+Imports are grouped into sections, each introduced by a **labeled comment
+header**, in this order:
 
-1. standard library
-2. third-party (`PySide6`, `shapely`, `dramatiq`, …)
-3. Enthought (`apptools`, `envisage`, `pyface`, `traits`, `traitsui`)
-4. other Microdrop packages (`device_viewer`, `dropbot_controller`, …)
-5. `microdrop_style` — always its own chunk
-6. `microdrop_utils` — always its own chunk
-7. local (relative) imports
-8. `logger` — always last
+1. `# Standard library imports.`
+2. `# Third-party imports.` (`PySide6`, `shapely`, `dramatiq`, `numpy`, …)
+3. `# Enthought library imports.` (`apptools`, `envisage`, `pyface`,
+   `traits`, `traitsui`)
+4. `# Microdrop package imports.` — other Microdrop packages
+   (`device_viewer`, `dropbot_controller`, …)
+5. `# Microdrop style imports.` — `microdrop_style`, always its own chunk
+6. `# Microdrop utils imports.` — `microdrop_utils`, always its own chunk
+7. `# Local imports.` — relative imports
+8. `# Logger import.` — `logger`, always last
+
+Ruff's isort sorts imports *into* these sections but cannot generate the
+headers — write them yourself (only for the sections a module actually
+has); ruff preserves them in place, the same way envisage maintains theirs.
 
 The module-setup globals sit immediately after the imports, closing the
 prologue: the logger first, then the Redis app-globals manager where the
 module uses it, then module constants.
 
 ```python
+# Standard library imports.
 import json
 from pathlib import Path
 
+# Third-party imports.
 from PySide6.QtWidgets import QToolButton
 
+# Enthought library imports.
 from traits.api import HasTraits, Instance, Str, observe
 from traitsui.api import Item, View
 
+# Microdrop package imports.
 from device_viewer.models.electrodes import Electrodes
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Microdrop style imports.
 from microdrop_style.colors import GREY, WHITE
 from microdrop_style.icons.icons import ICON_DELETE
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from .consts import PKG
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
