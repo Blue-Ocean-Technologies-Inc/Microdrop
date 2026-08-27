@@ -4,27 +4,29 @@ from pyface.qt.QtWidgets import QApplication
 
 from .button_styles import get_button_style, get_tooltip_style
 from .combo_box_style import get_combobox_style
-from .font_paths import load_material_symbols_font, load_inter_font
+from .font_paths import load_font_and_get_family
 from .general_style import get_general_style
 from .label_style import get_label_style
 from .message_box_style import get_message_box_style
 
-QT_THEME_NAMES = {
-    Qt.ColorScheme.Dark: "dark",
-    Qt.ColorScheme.Light: "light"
-}
+QT_THEME_NAMES = {Qt.ColorScheme.Dark: "dark", Qt.ColorScheme.Light: "light"}
+
 
 def is_dark_mode():
     return QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
 
-def style_app(app_instance: 'QApplication'):
-    # Load the Material Symbols font
-    load_material_symbols_font()
+
+def style_app(app_instance: "QApplication"):
+    # Load the icon fonts (Material Symbols + Pictogrammers' Material
+    # Design Icons — the latter has no ligatures, use \U000Fxxxx codepoints)
+    load_font_and_get_family("material_symbols")
+    load_font_and_get_family("material_design_icons")
     # load inter font and set with some size
-    LABEL_FONT_FAMILY = load_inter_font()
+    LABEL_FONT_FAMILY = load_font_and_get_family("inter")
 
     app_instance.setFont(QFont(LABEL_FONT_FAMILY, 11))
     QIcon.setThemeName("Material Symbols Outlined")
+
 
 def get_complete_stylesheet(theme="light", button_type="default"):
     """

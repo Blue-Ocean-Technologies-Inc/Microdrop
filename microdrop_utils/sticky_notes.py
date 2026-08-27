@@ -21,7 +21,7 @@ from traits.api import HasTraits, Instance, List, Dict, Event
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import GREY, SECONDARY_SHADE, WHITE
-from microdrop_style.font_paths import load_material_symbols_font
+from microdrop_style.font_paths import load_font_and_get_family
 
 from logger.logger_service import get_logger
 
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     app = QApplication.instance() or QApplication(sys.argv)
 
     # Load fonts once globally
-    load_material_symbols_font()
+    load_font_and_get_family("material_symbols")
 
     launcher = LauncherWindowExample()
     launcher.show()
