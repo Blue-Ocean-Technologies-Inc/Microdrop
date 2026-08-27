@@ -14,7 +14,8 @@ microdrop_runner_setup()
 from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
     DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, FRONTEND_APPLICATION, \
     BACKEND_APPLICATION, SERVER_CONTEXT, \
-    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS
+    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS, \
+    PORTABLE_DROPBOT_BACKEND_PLUGINS, PORTABLE_DROPBOT_FRONTEND_PLUGINS
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__)
@@ -93,9 +94,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        choices=["dropbot", "opendrop", "mock"],
+        choices=["dropbot", "opendrop", "portable", "mock"],
         default="dropbot", # Sets a default if the user doesn't provide the flag
-        help="Specify the device to use: 'dropbot' or 'opendrop'"
+        help="Specify the device to use: 'dropbot', 'opendrop' or "
+             "'portable'"
     )
 
     parser.add_argument(
@@ -118,6 +120,8 @@ if __name__ == "__main__":
             plugins += DROPBOT_FRONTEND_PLUGINS
         elif args.device == "opendrop":
             plugins += OPENDROP_FRONTEND_PLUGINS
+        elif args.device == "portable":
+            plugins += PORTABLE_DROPBOT_FRONTEND_PLUGINS
         elif args.device == "mock":
             plugins += MOCK_DROPBOT_FRONTEND_PLUGINS + DROPBOT_FRONTEND_PLUGINS
 
@@ -132,6 +136,8 @@ if __name__ == "__main__":
             plugins += DROPBOT_BACKEND_PLUGINS
         elif args.device == "opendrop":
             plugins += OPENDROP_BACKEND_PLUGINS
+        elif args.device == "portable":
+            plugins += PORTABLE_DROPBOT_BACKEND_PLUGINS
         elif args.device == "mock":
             plugins += MOCK_DROPBOT_BACKEND_PLUGINS
 

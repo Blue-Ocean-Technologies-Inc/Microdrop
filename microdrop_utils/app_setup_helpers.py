@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
-from logger.logger_service import get_logger
+from logger.logger_service import get_logger, init_logger
 
 logger = get_logger(__name__)
 
@@ -67,7 +67,7 @@ def self_update_source_repo(repo_root=PROJECT_ROOT,
     # A submodule's .git is a FILE pointing at the real git dir — exists(),
     # not is_dir().
     if shutil.which("git") is None or not (Path(repo_root) / ".git").exists():
-        logger.debug("source self-update skipped: no git or not a checkout")
+        logger.info("source self-update skipped: no git or not a checkout")
         return
     try:
         branch = _git(repo_root, "branch", "--show-current").stdout.strip()
@@ -79,6 +79,7 @@ def self_update_source_repo(repo_root=PROJECT_ROOT,
                 logger.warning(f"could not check out {default_branch}: "
                                f"{checkout.stderr.strip()}")
                 return
+            branch = default_branch
         before = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
         pull = _git(repo_root, "pull", "--ff-only", "--autostash")
         if pull.returncode != 0:
@@ -88,12 +89,19 @@ def self_update_source_repo(repo_root=PROJECT_ROOT,
             return
         after = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
         if before != after:
+            old = _git(repo_root, "describe", "--tags", "--always",
+                       before).stdout.strip() or before[:8]
+            new = _git(repo_root, "describe", "--tags", "--always",
+                       after).stdout.strip() or after[:8]
             logger.warning(
-                f"MicroDrop source updated ({before[:8]} -> {after[:8]}). "
+                f"MicroDrop source updated ({old} -> {new}). "
                 f"You will receive the updates the next time you start the "
                 f"app.")
         else:
-            logger.info("MicroDrop source is up to date")
+            described = _git(repo_root, "describe", "--tags", "--always",
+                             "--dirty").stdout.strip()
+            logger.info(f"MicroDrop source is up to date "
+                        f"({branch} @ {described})")
     except Exception as e:
         logger.warning(f"source self-update failed: {e}")
 
@@ -112,4 +120,11 @@ def microdrop_runner_setup():
     configure_dramatiq_broker()
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
+
+    # Handlers only attach when the LoggerPlugin starts, and a handler-less
+    # root logger silently drops INFO records — without this, the version
+    # lines below never reach the console. The plugin's later init_logger()
+    # clears these handlers first, so nothing is duplicated.
+    init_logger()
+
     self_update_source_repo()

@@ -195,6 +195,20 @@ class MicrodropApplication(TasksApplication):
 
             def _create_control(self, parent):
                 control = super()._create_control(parent)
+                # The FHD artwork (1920x1080) overflows small screens
+                # (the portable device is 1280x800) and, being always
+                # on top, locks the user out of everything under it —
+                # cap it at 60% of the available screen and re-centre.
+                available = control.screen().availableGeometry()
+                target = available.size() * 0.6
+                pixmap = control.pixmap()
+                if (pixmap.width() > target.width()
+                        or pixmap.height() > target.height()):
+                    control.setPixmap(pixmap.scaled(
+                        target, Qt.KeepAspectRatio,
+                        Qt.SmoothTransformation))
+                    control.move(available.center()
+                                 - control.rect().center())
                 control.setWindowFlags(control.windowFlags() | Qt.WindowStaysOnTopHint)
                 control.raise_()
                 control.activateWindow()

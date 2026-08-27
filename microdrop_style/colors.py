@@ -28,6 +28,11 @@ SECONDARY_SHADE = {
 
 SECONDARY_COLOR = SECONDARY_SHADE[500]
 
+# Checked/selected accent for controls whose platform style has no system
+# accent of its own (Fusion on Linux). Matched to the Windows accent color
+# used on the lab machines so both platforms render the same checked look.
+ACCENT_COLOR = "#A94DC1"
+
 INFO_COLOR = "#2F80ED"
 SUCCESS_COLOR = "#37A953"
 ERROR_COLOR = '#ff0033'
@@ -37,6 +42,8 @@ DIALOG_ERROR_TEXT_COLOR = "#c0392b"
 WARNING_COLOR = "#F5A623"
 
 GREY = {
+    # Faint resting-state fill, like the windows11 style's tool buttons.
+    "lightest": "#EDEDED",
     "lighter": "#BCBCBC",
     "light": "#D1D1D1",
     "dark":  "#575757"

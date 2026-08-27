@@ -3,33 +3,92 @@ import math
 
 from PySide6.QtWidgets import QToolButton
 from pyface.qt.QtCore import (
-    Qt, QSize, QPoint, QPointF, QRectF, QObject, QEvent,
-    QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
-    Slot, Property as QtProperty,   # aliased: traits.api.Property (below) shadows it
+    Qt,
+    QSize,
+    QPoint,
+    QPointF,
+    QRectF,
+    QObject,
+    QEvent,
+    QEasingCurve,
+    QPropertyAnimation,
+    QSequentialAnimationGroup,
+    Slot,
+    Property as QtProperty,  # aliased: traits.api.Property (below) shadows it
 )
 from pyface.qt.QtGui import (
-    QColor, QCursor, QFont, QShortcut, QKeySequence, QPixmap,
-    QBrush, QPaintEvent, QPen, QPainter,
+    QColor,
+    QCursor,
+    QFont,
+    QShortcut,
+    QKeySequence,
+    QPixmap,
+    QBrush,
+    QPaintEvent,
+    QPen,
+    QPainter,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate, QDoubleSpinBox, QCheckBox, QPushButton, QBoxLayout,
-    QGroupBox, QLabel, QSizePolicy,
+    QStyledItemDelegate,
+    QDoubleSpinBox,
+    QCheckBox,
+    QPushButton,
+    QBoxLayout,
+    QGroupBox,
+    QLabel,
+    QSizePolicy,
 )
 from pyface.qt import QtWidgets
 
-from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Float, Callable
-from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_, Controller,
-                          UIInfo, Handler, RangeEditor, EnumEditor, BasicEditorFactory)
+from traits.api import (
+    Instance,
+    Any,
+    Bool,
+    Range,
+    List,
+    Str,
+    Int,
+    Property,
+    Float,
+    Callable,
+)
+from traitsui.api import (
+    ObjectColumn as ObjectTableColumn_,
+    TableColumn as TableColumn_,
+    Controller,
+    UIInfo,
+    Handler,
+    RangeEditor,
+    EnumEditor,
+    BasicEditorFactory,
+)
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, GREY, SUCCESS_COLOR
+from microdrop_style.colors import (
+    WHITE,
+    BLACK,
+    PRIMARY_COLOR,
+    GREY,
+    ACCENT_COLOR,
+    SUCCESS_COLOR,
+)
 from microdrop_style.helpers import is_dark_mode
-from microdrop_style.icons.icons import ICON_VISIBILITY, ICON_VISIBILITY_OFF, ICON_SELECT_All, ICON_DESELECT
-from microdrop_utils.pyside_helpers import _ScalingPixmapLabel, MarqueeComboBox
+from microdrop_style.icons.icons import (
+    ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
+    ICON_SELECT_All,
+    ICON_DESELECT,
+)
+from microdrop_utils.pyside_helpers import (
+    _ClickablePixmapLabel,
+    _ScalingPixmapLabel,
+    MarqueeComboBox,
+)
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 # QDoubleSpinBox rejects math.inf as a bound — this stands in for
@@ -46,9 +105,15 @@ TABLE_ROW_HEADER_RESIZE_GRIP_PX = 4
 TABLE_ROW_HEADER_MINIMUM_WIDTH_PX = 12
 
 
-def toggle_editor_default_style_sheet_factory(checked, border="none",
-                                              border_radius="4px", padding="8px 16px",
-                                              font_weight="bold", max_width="100px", other="" ):
+def toggle_editor_default_style_sheet_factory(
+    checked,
+    border="none",
+    border_radius="4px",
+    padding="8px 16px",
+    font_weight="bold",
+    max_width="100px",
+    other="",
+):
     background = SUCCESS_COLOR if checked else GREY["lighter"]
     foreground = "white" if checked else "#333333"
     return f"""
@@ -245,7 +310,8 @@ class RangeColumn(EditBlankingColumn):
         # The trait's default editor carries the resolved low/high/mode.
         base = ObjectColumn.get_editor(self, object)
         return self._editor_with_reset(
-            RangeEditor, low=base.low, high=base.high, mode=base.mode)
+            RangeEditor, low=base.low, high=base.high, mode=base.mode
+        )
 
 
 class EnumSelectColumn(EditBlankingColumn):
@@ -266,9 +332,11 @@ class EnumSelectColumn(EditBlankingColumn):
     def _blank_if_editing(self, value, object):
         return "" if id(object) == self._editing_id else f"{value} ⌄"
 
+
 ## --------------------------------------------------------
 # Range editing spinner box with custom increments
 ## --------------------------------------------------------
+
 
 class _SteppedSpinEditor(QtEditor):
     """The actual Qt implementation of the spin box."""
@@ -320,8 +388,7 @@ class SteppedSpinEditor(BasicEditorFactory):
 
 class RangeWithSteppedSpinViewHint(Range):
     def create_editor(self):
-        """ Returns the default UI editor for the trait.
-        """
+        """Returns the default UI editor for the trait."""
         return SteppedSpinEditor(
             low=self._low,
             high=self._high,
@@ -334,6 +401,7 @@ class RangeWithSteppedSpinViewHint(Range):
 # Range-editing slider that moves in fixed increments
 ## --------------------------------------------------------
 
+
 class _SteppedSliderEditor(QtEditor):
     """A horizontal slider whose handle snaps to fixed increments (the
     slider works in integer notches of ``step``), with a value readout."""
@@ -344,8 +412,9 @@ class _SteppedSliderEditor(QtEditor):
         layout.setContentsMargins(0, 0, 0, 0)
         self._slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(0)
-        self._slider.setMaximum(round(
-            (self.factory.high - self.factory.low) / self.factory.step))
+        self._slider.setMaximum(
+            round((self.factory.high - self.factory.low) / self.factory.step)
+        )
         self._slider.setPageStep(1)
         self._readout = QLabel()
         layout.addWidget(self._slider)
@@ -355,8 +424,7 @@ class _SteppedSliderEditor(QtEditor):
     def update_object(self, notches):
         """Handles the user moving the slider handle."""
         # Round away float artifacts (0.1 * 3 -> 0.30000000000000004).
-        self.value = round(
-            self.factory.low + notches * self.factory.step, 10)
+        self.value = round(self.factory.low + notches * self.factory.step, 10)
         # TraitsUI skips update_editor for editor-caused changes (the
         # `updating` guard), so refresh the readout here.
         self._readout.setText(self.factory.format % self.value)
@@ -365,8 +433,9 @@ class _SteppedSliderEditor(QtEditor):
         """Updates the GUI when the Trait changes externally."""
         if self.control is not None:
             self._slider.blockSignals(True)
-            self._slider.setValue(round(
-                (self.value - self.factory.low) / self.factory.step))
+            self._slider.setValue(
+                round((self.value - self.factory.low) / self.factory.step)
+            )
             self._slider.blockSignals(False)
             self._readout.setText(self.factory.format % self.value)
 
@@ -388,8 +457,7 @@ class SteppedSliderEditor(BasicEditorFactory):
 
 class RangeWithViewHints(Range):
     def create_editor(self):
-        """ Returns the default UI editor for the trait.
-        """
+        """Returns the default UI editor for the trait."""
         # fixme: Needs to support a dynamic range editor.
 
         auto_set = self.auto_set
@@ -408,14 +476,14 @@ class RangeWithViewHints(Range):
             high_label=self.high or "",
             low_name=self._low_name,
             high_name=self._high_name,
-            format_str='%.2f',
-            is_float=True
+            format_str="%.2f",
+            is_float=True,
         )
 
 
 class _DoubleSpinBoxEditor(QtEditor):
     def init(self, parent):
-        """ This method builds the native Qt widget. """
+        """This method builds the native Qt widget."""
         self.control = QDoubleSpinBox()
         self.control.setMinimum(self.factory.low)
         self.control.setMaximum(self.factory.high)
@@ -426,11 +494,11 @@ class _DoubleSpinBoxEditor(QtEditor):
         self.control.valueChanged.connect(self.update_object)
 
     def update_object(self, value):
-        """ Sync UI changes back to the Python model. """
+        """Sync UI changes back to the Python model."""
         self.value = value
 
     def update_editor(self):
-        """ Sync Python model changes back to the UI. """
+        """Sync Python model changes back to the UI."""
         self.control.setValue(self.value)
 
 
@@ -494,9 +562,11 @@ class _DictFloatTableEditor(QtEditor):
         self.control = QtWidgets.QTableWidget()
         self.control.setColumnCount(2)
         self.control.setHorizontalHeaderLabels(
-            [self.factory.key_label, self.factory.value_label])
+            [self.factory.key_label, self.factory.value_label]
+        )
         self.control.horizontalHeader().setSectionResizeMode(
-            QtWidgets.QHeaderView.Stretch)
+            QtWidgets.QHeaderView.Stretch
+        )
         self.control.verticalHeader().setVisible(False)
         self._updating_object = False
         # No update_editor() call here — TraitsUI invokes it right after
@@ -523,15 +593,18 @@ class _DictFloatTableEditor(QtEditor):
     def update_editor(self):
         """Rebuild the table from the dict trait."""
         if self._updating_object:
-            return   # echo of our own update_object write — widgets are current
+            return  # echo of our own update_object write — widgets are current
         entries = dict(self.value or {})
-        key_labels = (getattr(self.object, self.factory.key_labels_name, {})
-                      if self.factory.key_labels_name else {})
-        self.control.clearContents()   # drops stale items AND cell widgets
+        key_labels = (
+            getattr(self.object, self.factory.key_labels_name, {})
+            if self.factory.key_labels_name
+            else {}
+        )
+        self.control.clearContents()  # drops stale items AND cell widgets
         self.control.setRowCount(len(entries))
         for row, (key, value) in enumerate(entries.items()):
             key_item = QtWidgets.QTableWidgetItem(str(key_labels.get(key, key)))
-            key_item.setFlags(Qt.ItemIsEnabled)   # visible, not editable
+            key_item.setFlags(Qt.ItemIsEnabled)  # visible, not editable
             self.control.setItem(row, 0, key_item)
 
             if self.factory.allow_infinity:
@@ -544,27 +617,34 @@ class _DictFloatTableEditor(QtEditor):
             else:
                 spinbox = QDoubleSpinBox()
                 spinbox.setMinimum(self.factory.low)
-            spinbox.setMaximum(self.factory.high
-                               if math.isfinite(self.factory.high)
-                               else DOUBLE_SPINBOX_UNBOUNDED_MAX)
+            spinbox.setMaximum(
+                self.factory.high
+                if math.isfinite(self.factory.high)
+                else DOUBLE_SPINBOX_UNBOUNDED_MAX
+            )
             spinbox.setDecimals(self.factory.decimals)
             spinbox.setSingleStep(self.factory.step)
             spinbox.setValue(float(value))
             spinbox.valueChanged.connect(
-                lambda new_value, k=key: self.update_object(k, new_value))
+                lambda new_value, k=key: self.update_object(k, new_value)
+            )
             self.control.setCellWidget(row, 1, spinbox)
         # Size the table to its rows — no dead scroll area below the last
         # entry when embedded in a preferences pane.
-        rows_height = sum(self.control.rowHeight(r)
-                          for r in range(self.control.rowCount()))
+        rows_height = sum(
+            self.control.rowHeight(r) for r in range(self.control.rowCount())
+        )
         self.control.setFixedHeight(
-            self.control.horizontalHeader().height() + rows_height
-            + 2 * self.control.frameWidth())
+            self.control.horizontalHeader().height()
+            + rows_height
+            + 2 * self.control.frameWidth()
+        )
 
 
 class DictFloatTableEditor(BasicEditorFactory):
     """Editor factory for Dict(Str, Float) traits — declare directly in
     a View: Item("my_dict", editor=DictFloatTableEditor(...))."""
+
     klass = _DictFloatTableEditor
 
     key_label = Str("Key")
@@ -588,6 +668,7 @@ class DictFloatTableEditor(BasicEditorFactory):
     infinity_value = Float(-1.0)
     infinity_text = Str("∞")
 
+
 class _RowLabelHeaderResizer(QObject):
     """Event filter that lets the user drag the right edge of a QTableView's
     vertical (row-number) header to change its width.
@@ -608,9 +689,11 @@ class _RowLabelHeaderResizer(QObject):
     def eventFilter(self, watched, event):
         event_type = event.type()
 
-        if (event_type == QEvent.Type.MouseButtonPress
-                and event.button() == Qt.LeftButton
-                and self._in_grip_zone(event)):
+        if (
+            event_type == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.LeftButton
+            and self._in_grip_zone(event)
+        ):
             self._dragging = True
             return True
 
@@ -651,6 +734,7 @@ class SafeCancelTableHandler(Handler):
     """
     In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
     """
+
     escape_shortcut = Any()
 
     def init(self, info: UIInfo):
@@ -671,10 +755,12 @@ class SafeCancelTableHandler(Handler):
         """Swallows the Escape key press so the table doesn't hide."""
         pass
 
+
 class SafeCancelTableController(Controller):
     """
     In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
     """
+
     escape_shortcut = Any()
 
     def init(self, info: UIInfo):
@@ -703,10 +789,19 @@ class StatusIconEditor(QtEditor):
 
     The editor value is bound to `icon_path` (str path to the image).
     It also observes `icon_color` on the model to update the background color.
+
+    With the factory's ``fire`` option set, the icon is clickable
+    (pointing-hand cursor) and a click sets the named Event/Bool trait
+    on the model — the ``GlyphActionColumn(fire=...)`` pattern.
     """
 
     def init(self, parent):
-        self.control = _ScalingPixmapLabel()
+        if self.factory.fire:
+            self.control = _ClickablePixmapLabel()
+            self.control.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self.control.clicked.connect(self._on_icon_clicked)
+        else:
+            self.control = _ScalingPixmapLabel()
 
         # Load initial image
         self._load_pixmap(self.value)
@@ -714,6 +809,21 @@ class StatusIconEditor(QtEditor):
         # Observe icon_color on the model for background color updates
         self.object.observe(self._on_icon_color_changed, "icon_color")
         self._apply_background_color(self.object.icon_color)
+
+        self.control.setMinimumSize(self.factory.min_size, self.factory.min_size)
+        if self.factory.fixed_size:
+            # The label's Ignored vertical policy expects a sibling
+            # (the DropBot pane's data grid) to drive its height; where
+            # no sibling does — the portable pane's single column — the
+            # row collapses and the image paints over the widgets
+            # below. Pin it instead.
+            self.control.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+            )
+            self.control.setFixedSize(self.factory.min_size, self.factory.min_size)
+
+    def _on_icon_clicked(self):
+        setattr(self.object, self.factory.fire, True)
 
     def _load_pixmap(self, path):
         pixmap = QPixmap(path)
@@ -742,6 +852,14 @@ class StatusIconEditorFactory(BasicEditorFactory):
     klass = StatusIconEditor
 
     border_radius = Int(4)
+    #: Name of an Event/Bool trait on the model set True when the icon
+    #: is clicked; empty (the default) leaves the icon inert.
+    fire = Str()
+    min_size = Int(120)
+    #: Pin the icon to exactly min_size x min_size instead of letting
+    #: a layout sibling drive its height — for single-column layouts
+    #: where nothing else sets the row height.
+    fixed_size = Bool(False)
 
 
 class _HtmlLabelEditor(QtEditor):
@@ -756,7 +874,9 @@ class _HtmlLabelEditor(QtEditor):
         self.control.setTextFormat(Qt.TextFormat.RichText)
         self.control.setWordWrap(self.factory.word_wrap)
         self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.control.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.control.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
         if self.factory.word_wrap:
             # A word-wrapped QLabel needs the layout to honour heightForWidth, or
             # it gets one line's height and clips the rest. Ask for that and let
@@ -797,8 +917,13 @@ class Toggle(QCheckBox):
     to ``pyface.qt``.
     """
 
-    def __init__(self, parent=None, bar_color=Qt.gray,
-                 checked_color=PRIMARY_COLOR, handle_color=Qt.white):
+    def __init__(
+        self,
+        parent=None,
+        bar_color=Qt.gray,
+        checked_color=PRIMARY_COLOR,
+        handle_color=Qt.white,
+    ):
         super().__init__(parent)
 
         # Pens/brushes are created per-instance (not at class scope): a QPen
@@ -835,7 +960,8 @@ class Toggle(QCheckBox):
         p.setPen(self._transparent_pen)
 
         bar_rect = QRectF(
-            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
+            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height()
+        )
         bar_rect.moveCenter(cont_rect.center())
         rounding = bar_rect.height() / 2
 
@@ -854,7 +980,8 @@ class Toggle(QCheckBox):
             p.setBrush(self._handle_brush)
 
         p.drawEllipse(
-            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius)
+            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius
+        )
         p.end()
 
     @Slot(int)
@@ -889,8 +1016,13 @@ class AnimatedToggle(Toggle):
     """:class:`Toggle` with the handle sliding between states and a brief pulse
     halo on switch."""
 
-    def __init__(self, *args, pulse_unchecked_color="#44999999",
-                 pulse_checked_color="#4400B0EE", **kwargs):
+    def __init__(
+        self,
+        *args,
+        pulse_unchecked_color="#44999999",
+        pulse_checked_color="#4400B0EE",
+        **kwargs,
+    ):
         self._pulse_radius = 0
         super().__init__(*args, **kwargs)
 
@@ -925,7 +1057,8 @@ class AnimatedToggle(Toggle):
         p.setPen(self._transparent_pen)
 
         bar_rect = QRectF(
-            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height())
+            0, 0, cont_rect.width() - handle_radius, 0.40 * cont_rect.height()
+        )
         bar_rect.moveCenter(cont_rect.center())
         rounding = bar_rect.height() / 2
 
@@ -933,10 +1066,16 @@ class AnimatedToggle(Toggle):
         x_pos = cont_rect.x() + handle_radius + trail_length * self._handle_position
 
         if self.pulse_anim.state() == QPropertyAnimation.Running:
-            p.setBrush(self._pulse_checked_animation if self.isChecked()
-                       else self._pulse_unchecked_animation)
-            p.drawEllipse(QPointF(x_pos, bar_rect.center().y()),
-                          self._pulse_radius, self._pulse_radius)
+            p.setBrush(
+                self._pulse_checked_animation
+                if self.isChecked()
+                else self._pulse_unchecked_animation
+            )
+            p.drawEllipse(
+                QPointF(x_pos, bar_rect.center().y()),
+                self._pulse_radius,
+                self._pulse_radius,
+            )
 
         if self.isChecked():
             p.setBrush(self._bar_checked_brush)
@@ -949,7 +1088,8 @@ class AnimatedToggle(Toggle):
             p.setBrush(self._handle_brush)
 
         p.drawEllipse(
-            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius)
+            QPointF(x_pos, bar_rect.center().y()), handle_radius, handle_radius
+        )
         p.end()
 
 
@@ -995,6 +1135,7 @@ class _AnimatedToggleEditor(_TwoValueToggleEditor):
             pulse_checked_color=self.factory.pulse_checked_color,
         )
 
+
 class SlidingToggleEditor(BasicEditorFactory):
     """Factory for the static :class:`Toggle` iOS-style sliding switch over an
     Enum/Str/Bool trait::
@@ -1013,9 +1154,9 @@ class SlidingToggleEditor(BasicEditorFactory):
     on_value = Any(default_value=True)
     off_value = Any(default_value=False)
     #: Toggle widget colours (hex string or Qt colour).
-    bar_color = Any(Qt.gray)         # unchecked bar
+    bar_color = Any(Qt.gray)  # unchecked bar
     checked_color = Any(PRIMARY_COLOR)  # checked bar + handle accent
-    handle_color = Any(Qt.white)     # unchecked handle
+    handle_color = Any(Qt.white)  # unchecked handle
 
 
 class AnimatedToggleEditor(SlidingToggleEditor):
@@ -1053,7 +1194,9 @@ class _InPlaceToggleEditor(QtEditor):
         self.set_tooltip()
 
         if not self.factory.custom_style_sheet_factory:
-            self.factory.custom_style_sheet_factory = toggle_editor_default_style_sheet_factory
+            self.factory.custom_style_sheet_factory = (
+                toggle_editor_default_style_sheet_factory
+            )
 
         # Apply initial label + styling, and keep them in sync on every toggle
         # (click included; the trait-driven update_editor() does not fire on a
@@ -1065,7 +1208,8 @@ class _InPlaceToggleEditor(QtEditor):
         """Label + styling from the factory's on/off labels for the state."""
         checked = self.control.isChecked()
         self.control.setText(
-            self.factory.on_label if checked else self.factory.off_label)
+            self.factory.on_label if checked else self.factory.off_label
+        )
 
         self.control.setStyleSheet(self.factory.custom_style_sheet_factory(checked))
 
@@ -1098,7 +1242,41 @@ class InPlaceToggleEditor(BasicEditorFactory):
     off_label = Str("Off")
 
     max_width = Int(100)
-    custom_style_sheet_factory = Callable(desc='Override default style sheet for the inplace toggle editor')
+    custom_style_sheet_factory = Callable(
+        desc="Override default style sheet for the inplace toggle editor"
+    )
+
+
+# Fallback checked styling for the glyph toggles, applied ONLY when the
+# running Qt style is Fusion (the Linux default): Fusion renders a checked
+# button sunken grey, which reads as an OFF/disabled state. Windows' native
+# windows11 style fills checked buttons with the system accent color and is
+# left untouched; ACCENT_COLOR matches that accent so both platforms agree.
+ICON_TOGGLE_BUTTON_STYLE_SHEET = f"""
+QToolButton {{
+    border: 1px solid {GREY["lightest"]};
+    /* QSS has no box-shadow; the windows11 style's soft drop shadow is
+       faked with a slightly darker bottom edge. */
+    border-bottom-color: {GREY["lighter"]};
+    border-radius: 4px;
+    background-color: {GREY["lightest"]};
+}}
+QToolButton:hover {{
+    background-color: {GREY["light"]};
+}}
+QToolButton:checked {{
+    background-color: {ACCENT_COLOR};
+    color: {WHITE};
+}}
+"""
+
+
+def _native_style_lacks_checked_accent():
+    """True when the platform Qt style gives a checked button no accent
+    color of its own (Fusion — sunken grey), so the fallback stylesheet
+    above should take over."""
+    app = QtWidgets.QApplication.instance()
+    return app is not None and app.style().objectName().lower() == "fusion"
 
 
 class _IconToggleEditor(QtEditor):
@@ -1110,31 +1288,42 @@ class _IconToggleEditor(QtEditor):
     def init(self, parent):
         self.control = QToolButton()
         self.control.setCheckable(True)
+        if _native_style_lacks_checked_accent():
+            self.control.setStyleSheet(ICON_TOGGLE_BUTTON_STYLE_SHEET)
         self.control.setCursor(Qt.PointingHandCursor)
         self.control.setMaximumWidth(self.factory.max_width)
-        font = QFont(ICON_FONT_FAMILY)
+        font = QFont(self.factory.font_family)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
-        self.control.setChecked(self.value)
+        self.control.setChecked(self._checked())
         self.control.clicked.connect(self._on_click)
         self._refresh()
 
+    def _checked(self):
+        """Button checked state for the trait value. Qt renders checked
+        as sunken/grey and unchecked as popped-out, so invert_checked
+        maps the trait's False to the sunken look instead of True."""
+        return not self.value if self.factory.invert_checked else self.value
+
     def _on_click(self):
-        self.value = self.control.isChecked()
+        checked = self.control.isChecked()
+        self.value = not checked if self.factory.invert_checked else checked
         self._refresh()
 
     def _refresh(self):
+        # The glyph reads as the hardware state (the trait), never as the
+        # button's checked state — the two differ under invert_checked.
         self.control.setText(
-            self.factory.on_glyph if self.control.isChecked()
-            else self.factory.off_glyph)
+            self.factory.on_glyph if self.value else self.factory.off_glyph
+        )
 
     def update_editor(self):
         # Re-sync on external change. setChecked emits toggled (not connected),
         # not clicked, so this can't re-enter _on_click.
         if self.control is not None:
-            self.control.setChecked(self.value)
+            self.control.setChecked(self._checked())
             self._refresh()
 
 
@@ -1153,10 +1342,20 @@ class IconToggleEditor(BasicEditorFactory):
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
 
+    #: Icon-font family the glyphs come from. Material Design Icons
+    #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
+    font_family = Str(ICON_FONT_FAMILY)
+
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
 
     tooltip = Str()
+
+    #: Check (sunken/grey) the button when the trait is False instead of
+    #: True — for toggles whose True state should render popped-out (the
+    #: mechanism toolbar: light/fan on, magnet up, pogo down). The glyph
+    #: still follows the trait value.
+    invert_checked = Bool(False)
 
 
 class _IconButtonEditor(QtEditor):
@@ -1168,7 +1367,7 @@ class _IconButtonEditor(QtEditor):
         self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
         self.control.setMaximumWidth(self.factory.max_width)
-        font = QFont(ICON_FONT_FAMILY)
+        font = QFont(self.factory.font_family)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         self.control.setText(self.factory.glyph)
@@ -1186,8 +1385,8 @@ class _IconButtonEditor(QtEditor):
 class IconButtonEditor(BasicEditorFactory):
     """Factory for a Button trait rendered as a Material glyph button::
 
-        UItem("open_button", editor=IconButtonEditor(
-            glyph=ICON_FOLDER_OPEN, tooltip="Open an image"))
+    UItem("open_button", editor=IconButtonEditor(
+        glyph=ICON_FOLDER_OPEN, tooltip="Open an image"))
     """
 
     klass = _IconButtonEditor
@@ -1195,6 +1394,10 @@ class IconButtonEditor(BasicEditorFactory):
     #: Material Symbols ligature (or codepoint) shown on the button.
     glyph = Str()
     tooltip = Str()
+
+    #: Icon-font family the glyph comes from. Material Design Icons
+    #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
+    font_family = Str(ICON_FONT_FAMILY)
 
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
@@ -1213,8 +1416,7 @@ class _IconModeButtonEditor(_IconButtonEditor):
         self.object.observe(self._on_mode_changed, self.factory.mode_trait)
 
     def _armed(self):
-        return (getattr(self.object, self.factory.mode_trait)
-                == self.factory.mode)
+        return getattr(self.object, self.factory.mode_trait) == self.factory.mode
 
     def _on_click(self):
         # Qt has already flipped the check state on its own; the mode
@@ -1227,8 +1429,7 @@ class _IconModeButtonEditor(_IconButtonEditor):
         self.control.setChecked(self._armed())
 
     def dispose(self):
-        self.object.observe(self._on_mode_changed, self.factory.mode_trait,
-                            remove=True)
+        self.object.observe(self._on_mode_changed, self.factory.mode_trait, remove=True)
         super().dispose()
 
 
@@ -1278,8 +1479,10 @@ def stretch_group_layouts_horizontally(top_control):
     from a ``Handler.init``.
     """
     for layout in top_control.findChildren(QBoxLayout):
-        if (layout.alignment() & Qt.AlignmentFlag.AlignLeft
-                and not _has_group_box_ancestor(layout)):
+        if (
+            layout.alignment() & Qt.AlignmentFlag.AlignLeft
+            and not _has_group_box_ancestor(layout)
+        ):
             layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
 
@@ -1300,19 +1503,22 @@ class _HoverScrollEnumEditor(QtEditor):
 
         self.control.currentTextChanged.connect(self.update_object)
         if self.factory.values_name:
-            self.object.observe(self._on_values_changed,
-                                self.factory.values_name)
+            self.object.observe(self._on_values_changed, self.factory.values_name)
         self._repopulate()
 
     def dispose(self):
         if self.factory.values_name:
-            self.object.observe(self._on_values_changed,
-                                self.factory.values_name, remove=True)
+            self.object.observe(
+                self._on_values_changed, self.factory.values_name, remove=True
+            )
         super().dispose()
 
     def _repopulate(self):
-        values = (getattr(self.object, self.factory.values_name)
-                  if self.factory.values_name else self.factory.values)
+        values = (
+            getattr(self.object, self.factory.values_name)
+            if self.factory.values_name
+            else self.factory.values
+        )
         self.control.blockSignals(True)
         self.control.clear()
         self.control.addItems(list(values))

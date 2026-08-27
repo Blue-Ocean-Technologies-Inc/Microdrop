@@ -15,6 +15,7 @@ ICON_VISIBILITY      = "\ue8f4"  # eye open
 ICON_VISIBILITY_OFF  = "\ue8f5"  # eye closed
 ICON_DESELECT        = "\uebb6"  # deselect
 ICON_SELECT_All      = "\ue162"  # select all
+ICON_CHECK           = "check"   # confirm/apply
 
 # DEVICE VIEWER ICONS
 ICON_VIEW_3D         = "\ue8b4"  # view_in_ar (3D view)
@@ -39,6 +40,21 @@ ICON_DROP_EC         = "\uf875" # droplet with bolt
 ICON_STAIRS          = "\uf46c" # stairs
 ICON_JOYSTICK        = "\uf5ee" # joystick (gamepad connection indicator)
 ICON_MODE_HEAT       = "\uf16a" # mode_heat (heater status indicator)
+
+# PORTABLE DROPBOT MECHANISM TOOLBAR (ligature names, showing the
+# ACTION a click performs \u2014 pause-while-playing convention)
+ICON_LOCK            = "lock"            # lock the chip (pogo press)
+ICON_LOCK_OPEN       = "lock_open"       # unlock the chip (pogo release)
+ICON_EJECT           = "eject"           # pull the tray out
+ICON_INPUT           = "input"           # push the tray back in
+MDI_ICON_MAGNET_ON   = "\U000f0348"      # magnet up (engage)
+MDI_ICON_MAGNET      = "\U000f0347"      # magnet down  (disengage)
+ICON_MODE_FAN        = "mode_fan"        # fan on
+ICON_MODE_FAN_OFF    = "mode_fan_off"    # fan off
+ICON_LIGHTBULB       = "lightbulb"       # light on
+ICON_LIGHT_OFF       = "light_off"       # light off
+ICON_LINK            = "link"            # connect
+ICON_LINK_OFF        = "link_off"        # disconnect
 
 # Recording viewer (ligature names \u2014 the Material Symbols font resolves
 # them like "home"/"play_arrow" above)
