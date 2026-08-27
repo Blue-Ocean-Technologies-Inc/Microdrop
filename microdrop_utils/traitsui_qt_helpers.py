@@ -21,6 +21,7 @@ from traits.api import Instance, Any, Bool, Range, List, Str, Int, Property, Flo
 from traitsui.api import (ObjectColumn as ObjectTableColumn_, TableColumn as TableColumn_, Controller,
                           UIInfo, Handler, RangeEditor, EnumEditor, BasicEditorFactory)
 from traitsui.qt.editor import Editor as QtEditor
+from traitsui.qt.table_editor import TableDelegate
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import WHITE, BLACK, PRIMARY_COLOR, GREY, SUCCESS_COLOR
@@ -92,7 +93,15 @@ class ObjectColumn(ObjectTableColumn_):
         return "white" if is_dark_mode() else "black"
 
 
-class ColorRenderer(QStyledItemDelegate):
+class ColorRenderer(TableDelegate):
+    """Cell delegate that paints the whole cell in the value's color.
+
+    Subclasses TraitsUI's TableDelegate (not a bare QStyledItemDelegate):
+    a column ``renderer`` REPLACES the table's delegate for that column, so
+    it must also provide ``createEditor`` — inherited here — or double-click
+    editing silently dies. Via TableDelegate, editing opens the column
+    trait's own editor (for a Color trait, the standard color picker)."""
+
     def paint(self, painter, option, index):
         value = index.data()
         color = QColor(value)
@@ -115,6 +124,11 @@ class ColorColumn(ObjectColumn):
 
         # force the renderer to be our color renderer
         self.renderer = ColorRenderer()
+        # The renderer rebuilds a QColor from the cell's TEXT, so format the
+        # value to a hex name — a hex string passes through unchanged, and a
+        # Color/QColor trait (whose str() QColor cannot parse) becomes one.
+        if self.format_func is None:
+            self.format_func = lambda value: QColor(value).name()
 
 
 class CustomCheckboxColumn(ObjectColumn):
