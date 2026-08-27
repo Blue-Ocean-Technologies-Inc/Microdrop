@@ -713,6 +713,16 @@ class StatusIconEditor(QtEditor):
         self._apply_background_color(self.object.icon_color)
 
         self.control.setMinimumSize(self.factory.min_size, self.factory.min_size)
+        if self.factory.fixed_size:
+            # The label's Ignored vertical policy expects a sibling
+            # (the DropBot pane's data grid) to drive its height; where
+            # no sibling does — the portable pane's single column — the
+            # row collapses and the image paints over the widgets
+            # below. Pin it instead.
+            self.control.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                       QSizePolicy.Policy.Fixed)
+            self.control.setFixedSize(self.factory.min_size,
+                                      self.factory.min_size)
 
     def _on_icon_clicked(self):
         setattr(self.object, self.factory.fire, True)
@@ -748,6 +758,10 @@ class StatusIconEditorFactory(BasicEditorFactory):
     #: is clicked; empty (the default) leaves the icon inert.
     fire = Str()
     min_size = Int(120)
+    #: Pin the icon to exactly min_size x min_size instead of letting
+    #: a layout sibling drive its height — for single-column layouts
+    #: where nothing else sets the row height.
+    fixed_size = Bool(False)
 
 
 class _HtmlLabelEditor(QtEditor):

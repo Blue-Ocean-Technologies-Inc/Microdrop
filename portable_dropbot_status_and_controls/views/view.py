@@ -7,7 +7,6 @@ so the pane shows only the actuation essentials until the user opens
 them; deeper controls each have their own pane (calibration, temp &
 lighting, PMT, and the advanced-mode power-system / motor-params
 panes)."""
-
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -21,8 +20,6 @@ from traitsui.api import (
 )
 
 from microdrop_style.icons.icons import (
-    ICON_ARROW_DOWNWARD,
-    ICON_ARROW_UPWARD,
     ICON_EJECT,
     ICON_INPUT,
     ICON_LIGHT_OFF,
@@ -34,6 +31,8 @@ from microdrop_style.icons.icons import (
     ICON_MODE_FAN,
     ICON_MODE_FAN_OFF,
     ICON_REFRESH,
+    ICON_TRENDING_DOWN,
+    ICON_TRENDING_UP,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
@@ -72,8 +71,8 @@ mechanism_toolbar = HGroup(
     UItem(
         "magnet_engaged",
         editor=IconToggleEditor(
-            on_glyph=ICON_ARROW_UPWARD,
-            off_glyph=ICON_ARROW_DOWNWARD,
+            on_glyph=ICON_TRENDING_UP,
+            off_glyph=ICON_TRENDING_DOWN,
             invert_checked=True,
             tooltip="Magnet up (engage) / down (disengage)",
         ),
@@ -106,36 +105,38 @@ mechanism_toolbar = HGroup(
 # old readonly Connection/Chip Status lines are gone).
 left = VGroup(
     HGroup(
-        Item("12"),
         Item(
             "icon_path",
             editor=StatusIconEditorFactory(
-                fire="tray_toggle_clicked", min_size=160
+                fire="tray_toggle_clicked", min_size=160,
+                # Nothing else in this single column drives the row
+                # height — unpinned, the image row collapses and the
+                # picture paints over the toolbar.
+                fixed_size=True,
             ),
             show_label=False,
             tooltip="Click to eject the tray; click again to bring it back in",
         ),
     ),
-    Item("50"),
     mechanism_toolbar,
     HGroup(
         UItem(
-            "realtime_mode",
-            style="custom",
-            editor=InPlaceToggleEditor(
-                on_label="Realtime On", off_label="Realtime Off"
-            ),
-            enabled_when="connected and not protocol_running",
-            tooltip="Realtime mode is also the HV On/Off: on "
-            "enables the HV output (pad-interlocked) for "
-            "live actuation; off releases all electrodes "
-            "and de-energizes HV",
+        "realtime_mode",
+        style="custom",
+        editor=InPlaceToggleEditor(
+            on_label="Realtime On", off_label="Realtime Off"
+        ),
+        enabled_when="connected and not protocol_running",
+        tooltip="Realtime mode is also the HV On/Off: on "
+        "enables the HV output (pad-interlocked) for "
+        "live actuation; off releases all electrodes "
+        "and de-energizes HV",
         ),
     ),
+
     HGroup(
-        Item(
+        UItem(
             "selected_port",
-            label="Port",
             editor=EnumEditor(name="available_ports"),
             enabled_when="not connected",
         ),
@@ -154,6 +155,10 @@ left = VGroup(
         ),
         visible_when="advanced_mode",
     ),
+    # Absorb the column's extra height (the right column is taller) at
+    # the bottom — without this the box layout spreads it equally
+    # between the rows, blowing the gaps out to ~50px each.
+    Spring(),
     id="status_controls",
 )
 
@@ -221,9 +226,28 @@ board_status = VGroup(
 )
 
 UnifiedView = View(
-    HGroup(left, "15", VGroup(grid, environment, board_status)),
+    HGroup(left, "12", VGroup(grid, environment, board_status)),
     resizable=True,
     # Let the dock pane shrink below the grids' natural size — the
     # content then scrolls instead of pinning the pane width.
     scrollable=True,
 )
+
+
+if __name__ == "__main__":
+    # Layout preview without the app (no Redis/hardware; the toggles
+    # publish nothing here). Run from the src directory:
+    #   ..\.pixi\envs\default\python.exe -m portable_dropbot_status_and_controls.views.view
+    from portable_dropbot_status_and_controls.models.model import PortableDropbotStatusAndControlsModel
+    from pyface.qt.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    from microdrop_style.helpers import style_app
+    style_app(app)
+
+    model = PortableDropbotStatusAndControlsModel()
+    # Set (not defaulted) so nothing consults the running app, and the
+    # connected/advanced-gated rows all show for inspection.
+    model.connected = True
+    model.advanced_mode = True
+    model.configure_traits(view=UnifiedView)
