@@ -7,7 +7,7 @@ so the pane shows only the actuation essentials until the user opens
 them; deeper controls each have their own pane (calibration, temp &
 lighting, PMT, and the advanced-mode power-system / motor-params
 panes)."""
-
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -32,8 +32,8 @@ from microdrop_style.icons.icons import (
     ICON_MODE_FAN,
     ICON_MODE_FAN_OFF,
     ICON_REFRESH,
-    ICON_TRENDING_DOWN,
-    ICON_TRENDING_UP,
+    MDI_ICON_MAGNET_ON,
+    MDI_ICON_MAGNET
 )
 from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
@@ -62,7 +62,6 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_LOCK,
             off_glyph=ICON_LOCK_OPEN,
-            # invert_checked=True,
             tooltip="Lock/unlock the chip (the pogo pads " "press/release it)",
         ),
         enabled_when="connected",
@@ -80,9 +79,9 @@ mechanism_toolbar = HGroup(
     UItem(
         "magnet_engaged",
         editor=IconToggleEditor(
-            on_glyph=ICON_TRENDING_UP,
-            off_glyph=ICON_TRENDING_DOWN,
-            # invert_checked=True,
+            on_glyph=MDI_ICON_MAGNET_ON,
+            off_glyph=MDI_ICON_MAGNET,
+            font_family=MDI_ICON_FONT_FAMILY,
             tooltip="Magnet up (engage) / down (disengage)",
         ),
         enabled_when="connected",
@@ -92,7 +91,6 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_MODE_FAN,
             off_glyph=ICON_MODE_FAN_OFF,
-            # invert_checked=True,
             tooltip="MCU fan on/off (state is not read back)",
         ),
         enabled_when="connected",
@@ -102,7 +100,6 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_LIGHTBULB,
             off_glyph=ICON_LIGHT_OFF,
-            # invert_checked=True,
             tooltip="Illumination light on/off (keeps the % " "setpoint)",
         ),
         enabled_when="connected",
