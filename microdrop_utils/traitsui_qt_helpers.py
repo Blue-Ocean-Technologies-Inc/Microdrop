@@ -1254,7 +1254,10 @@ class InPlaceToggleEditor(BasicEditorFactory):
 # left untouched; ACCENT_COLOR matches that accent so both platforms agree.
 ICON_TOGGLE_BUTTON_STYLE_SHEET = f"""
 QToolButton {{
-    border: 1px solid transparent;
+    border: 1px solid {GREY["lightest"]};
+    /* QSS has no box-shadow; the windows11 style's soft drop shadow is
+       faked with a slightly darker bottom edge. */
+    border-bottom-color: {GREY["lighter"]};
     border-radius: 4px;
     background-color: {GREY["lightest"]};
 }}
