@@ -11,7 +11,9 @@ repos:
       - id: check-ast         # staged .py files must parse
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: [--maxkb=500]
+        # 1500 admits shipped icon webfonts (the MDI webfont is ~1.3 MB;
+        # firmware images are blocked by .gitignore, not by size)
+        args: [--maxkb=1500]
   - repo: local
     hooks:
       - id: forbid-scratch-files
