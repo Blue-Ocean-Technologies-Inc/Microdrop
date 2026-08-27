@@ -1132,7 +1132,7 @@ class _IconToggleEditor(QtEditor):
         self.control.setCheckable(True)
         self.control.setCursor(Qt.PointingHandCursor)
         self.control.setMaximumWidth(self.factory.max_width)
-        font = QFont(ICON_FONT_FAMILY)
+        font = QFont(self.factory.font_family)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         if self.factory.tooltip:
@@ -1182,6 +1182,10 @@ class IconToggleEditor(BasicEditorFactory):
     on_glyph = Str("expand_more")
     off_glyph = Str("chevron_right")
 
+    #: Icon-font family the glyphs come from. Material Design Icons
+    #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
+    font_family = Str(ICON_FONT_FAMILY)
+
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
 
@@ -1203,7 +1207,7 @@ class _IconButtonEditor(QtEditor):
         self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
         self.control.setMaximumWidth(self.factory.max_width)
-        font = QFont(ICON_FONT_FAMILY)
+        font = QFont(self.factory.font_family)
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         self.control.setText(self.factory.glyph)
@@ -1230,6 +1234,10 @@ class IconButtonEditor(BasicEditorFactory):
     #: Material Symbols ligature (or codepoint) shown on the button.
     glyph = Str()
     tooltip = Str()
+
+    #: Icon-font family the glyph comes from. Material Design Icons
+    #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
+    font_family = Str(ICON_FONT_FAMILY)
 
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
