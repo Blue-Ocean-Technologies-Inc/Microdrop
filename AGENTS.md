@@ -153,9 +153,10 @@ import json
 from pathlib import Path
 
 # Third-party imports.
-from PySide6.QtWidgets import QToolButton
+from shapely.geometry import Polygon
 
 # Enthought library imports.
+from pyface.qt import QtWidgets
 from traits.api import HasTraits, Instance, Str, observe
 from traitsui.api import Item, View
 
@@ -254,8 +255,24 @@ electrode_ids = List(Str)
 
 ### Architecture Conventions
 
+- **Design first**: lean on established software design principles and
+  patterns — separation of concerns above all, plus the patterns the app is
+  already built from (MVC, observer via Traits, dependency injection via
+  Envisage services, pub/sub via Dramatiq). Reach for the fitting pattern
+  before inventing structure.
 - **MVC split**: Qt-free `HasTraits` models; controllers translate signals
-  into model changes or published topics; views observe the model
+  into model changes or published topics; views observe the model. Views are
+  the volatile layer — view preferences change often — so keep business
+  logic out of them entirely, and make every view instantiable standalone
+  against just its model (no plugin/app scaffolding) so it can be prototyped
+  and tested alone.
+- **TraitsUI first**: build views with TraitsUI/Pyface abstractions
+  (`View`/`Item`/`Group`, editors, Handlers); drop to raw Qt widgets only
+  when TraitsUI genuinely cannot express the widget or behavior. When raw Qt
+  is needed, import it through the binding shim —
+  `from pyface.qt import QtCore, QtGui, QtWidgets` — never `from PySide6...`
+  directly in new code (existing PySide6 imports are converted as files are
+  touched, not in sweeps).
 - **Decoupling**: plugins never call each other directly — communicate via
   Dramatiq pub/sub topics or the Redis app-globals hash
 - Every plugin has a `consts.py` with `PKG`, its topics, and
