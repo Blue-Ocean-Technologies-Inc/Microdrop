@@ -14,6 +14,14 @@ repos:
         # 1500 admits shipped icon webfonts (the MDI webfont is ~1.3 MB;
         # firmware images are blocked by .gitignore, not by size)
         args: [--maxkb=1500]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Match the pixi manifest's ruff pin; runs on staged files only, so the
+    # legacy codebase is brought clean incrementally as files are touched.
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check        # lint + import sorting (ruff.toml)
+        args: [--fix]
+      - id: ruff-format
   - repo: local
     hooks:
       - id: forbid-scratch-files
