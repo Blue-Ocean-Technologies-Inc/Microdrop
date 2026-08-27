@@ -1,0 +1,6 @@
+# Bulk mechanical commits that should not pollute git blame.
+# GitHub honors this file automatically; locally, enable it once with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: stamp the AGPL copyright header on all Python files
+0dd4ebadbb30ad13c1c588bebbe2edef0b96cb89

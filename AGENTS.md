@@ -87,7 +87,8 @@ pixi run ruff check --fix .   # lint + import sorting
 Key settings (`ruff.toml` at the repo root):
 
 - **Line length**: 88 (ruff's default); **target**: py312
-- **Lint rules**: `E`, `F`, `W`, `I` (import sorting)
+- **Lint rules**: `CPY001` (copyright header), `E`, `F`, `W`, `I` (import
+  sorting)
 - **Import sections**: custom sections mirror the ordering below, so the
   import layout is machine-enforced, not just documented
 - **ruff version**: pinned `>=0.16,<0.17` in the pixi manifest — ruff
@@ -101,6 +102,26 @@ is brought clean as it is touched. Run ruff on the files you changed, never
 repo-wide.
 
 ## Code Style Guidelines
+
+### Copyright Header
+
+Every non-empty `.py` file starts with the standard header, enforced by
+ruff's `CPY001` rule (the regex in `ruff.toml` accepts any year range —
+state the years the file was created/last substantially revised):
+
+```python
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+```
+
+The vendored portable driver keeps its upstream provenance and is excluded.
 
 ### Import Ordering
 

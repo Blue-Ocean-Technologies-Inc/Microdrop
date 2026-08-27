@@ -11,7 +11,18 @@ extend-exclude = [
 ]
 
 [lint]
-select = ["E", "F", "W", "I"]
+select = ["CPY001", "E", "F", "W", "I"]
+# CPY001 is a preview rule; explicit-preview-rules keeps every other rule on
+# stable behavior.
+preview = true
+explicit-preview-rules = true
+
+[lint.flake8-copyright]
+# The authoritative header text lives in AGENTS.md; this regex pins the
+# owner but accepts any year range, so there is no annual churn.
+notice-rgx = '\(C\) Copyright \d{4}-\d{4} Blue Ocean Technologies, Inc\., Toronto, ON'
+# Empty files (bare __init__.py) need no notice.
+min-file-size = 1
 
 [lint.per-file-ignores]
 # api.py re-exports are intentional.
