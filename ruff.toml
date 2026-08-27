@@ -1,0 +1,40 @@
+# Ruff — formatter, linter, and import sorter (see AGENTS.md).
+# Upper-bound the ruff version when raising it changes formatting:
+# the pixi manifest pins ruff >=0.16,<0.17.
+
+line-length = 88
+target-version = "py312"
+src = ["."]
+
+extend-exclude = [
+    "portable_dropbot_controller/driver",  # vendored verbatim from the private driver repo
+]
+
+[lint]
+select = ["E", "F", "W", "I"]
+
+[lint.per-file-ignores]
+# api.py re-exports are intentional.
+"*/api.py" = ["F401"]
+
+[lint.isort]
+# AGENTS.md import order: standard -> third-party -> enthought -> other
+# microdrop packages (first-party) -> microdrop_style -> microdrop_utils
+# -> local relative -> logger last.
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "enthought",
+    "first-party",
+    "microdrop-style",
+    "microdrop-utils",
+    "local-folder",
+    "logger",
+]
+
+[lint.isort.sections]
+enthought = ["apptools", "envisage", "pyface", "traits", "traitsui"]
+"microdrop-style" = ["microdrop_style"]
+"microdrop-utils" = ["microdrop_utils"]
+logger = ["logger"]
