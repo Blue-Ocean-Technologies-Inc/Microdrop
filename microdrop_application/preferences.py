@@ -11,14 +11,14 @@
 from pathlib import Path
 
 from PySide6.QtGui import QColor
+
 from apptools.preferences.api import PreferencesHelper
-from traits.etsconfig.api import ETSConfig
-from traits.api import Bool, Str, Directory, Range
-from traitsui.api import VGroup, View, Item, Group, RangeEditor, Color
-from envisage.ui.tasks.api import PreferencesCategory
 
 # Enthought library imports.
-from envisage.ui.tasks.api import PreferencesPane
+from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
+from traits.api import Bool, Directory, Range, Str
+from traits.etsconfig.api import ETSConfig
+from traitsui.api import Color, Group, Item, RangeEditor, VGroup, View
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 
@@ -104,46 +104,52 @@ class MicrodropPreferencesPane(PreferencesPane):
 
     #### 'MicrodropPreferencesPane' interface ################################
 
-    app_startup_settings = VGroup(
-            create_item_label_group('always_use_default_layout'),
+    app_startup_settings = (
+        VGroup(
+            create_item_label_group("always_use_default_layout"),
             label="Application Startup",
             show_border=True,
             style_sheet=preferences_group_style_sheet,
         ),
+    )
 
-    canvas_settings = VGroup(
-            Item('canvas_background_use_custom', label="Use Custom Color"),
-            Item('canvas_background_color', label="Background Color (hex)",
-                 enabled_when='canvas_background_use_custom'),
-            Item('canvas_background_opacity', label="Opacity (%)",
-                 editor=RangeEditor(low=0, high=100, mode='slider')),
+    canvas_settings = (
+        VGroup(
+            Item("canvas_background_use_custom", label="Use Custom Color"),
+            Item(
+                "canvas_background_color",
+                label="Background Color (hex)",
+                enabled_when="canvas_background_use_custom",
+            ),
+            Item(
+                "canvas_background_opacity",
+                label="Opacity (%)",
+                editor=RangeEditor(low=0, high=100, mode="slider"),
+            ),
             label="Canvas Background",
             show_border=True,
             style_sheet=preferences_group_style_sheet,
         ),
+    )
 
-    dialog_settings = Group(
+    dialog_settings = (
+        Group(
             Item("suppress_no_shorts_information"),
             label="Dialog Settings",
             show_border=True,
             style_sheet=preferences_group_style_sheet,
         ),
+    )
 
     view = View(
-
-        Item("_"), # Separator
-
+        Item("_"),  # Separator
         app_startup_settings,
-
         Item("_"),
-
         canvas_settings,
-
         Item("_"),
-
         dialog_settings,
-
-        Item("_"),  # ensure other contributed pane groups are spaced out from this pane's group.
-
+        # ensure other contributed pane groups are spaced out from this
+        # pane's group.
+        Item("_"),
         resizable=True,
     )
