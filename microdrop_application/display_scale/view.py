@@ -22,6 +22,7 @@ from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontal
 
 # Local imports.
 from .consts import SCALE_MAX_PERCENT, SCALE_MIN_PERCENT
+from .preview import ScalePreviewEditor
 
 
 class DisplayScaleHandler(Handler):
@@ -34,6 +35,13 @@ class DisplayScaleHandler(Handler):
 
 display_scale_view = View(
     VGroup(
+        # A static mock of the relaunch: the app's own screenshot inside
+        # a screen-shaped frame, redrawn at the scale under the slider.
+        Item(
+            "scale_percent",
+            editor=ScalePreviewEditor(),
+            show_label=False,
+        ),
         Item(
             "scale_percent",
             label="Scale (%)",
