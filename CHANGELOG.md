@@ -1,3 +1,47 @@
+## v1.15.0 (2026-08-28)
+
+### Feat
+
+- **portable**: kiosk fullscreen on the rig
+- **portable**: finger-sized dock separators on the touchscreen
+- **portable**: apply Display Scale via explicit Apply/Reset buttons
+- **portable**: live Display Scale through the display server
+- **ui**: preview the chosen scale inside the Display Scale dialog
+- **ui**: add an app-wide Display Scale slider
+
+### Fix
+
+- **dropbot**: shut the monitor scheduler down on plugin stop
+- **portable**: shut the monitor scheduler down on plugin stop
+- **perf**: stop SDL audio probing from stalling boot ~30 s
+- **ui**: resolve the task from the action event
+
+### Refactor
+
+- **ui**: retire the app-wide display scale integration
+
+### Docs
+
+- correct the SDL audio stall comment to the verified cause
+- require a closing keyword when a PR references an issue
+- require issue metadata to be set via the GitHub API
+- declare validated publishing default and name style exemplars
+- make AGENTS.md the single source of truth for conventions
+- **agents**: codify TraitsUI-first views and pyface.qt imports
+- label import sections with comment headers
+- add AGENTS.md agent and contributor guide
+
+### CI
+
+- enforce the copyright header via ruff CPY001
+- adopt ruff for formatting, linting, and import order
+
+### Chore
+
+- **style**: ruff-format the runner, task and preferences
+- stamp the AGPL copyright header on all Python files
+- keep agent working plans out of the public repo
+
 ## v1.14.0 (2026-08-27)
 
 ### Feat
