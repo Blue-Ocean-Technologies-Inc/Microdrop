@@ -29,8 +29,18 @@ PKG_name = PKG.title().replace("_", " ")
 current_folder_path = os.path.dirname(os.path.abspath(__file__))
 #: Placeholder device photo (a DropBot image) until the portable
 #: instrument has its own.
-PORTABLE_DROPBOT_IMAGE = os.path.join(current_folder_path, "images",
-                                      "portable_dropbot.png")
+PORTABLE_DROPBOT_IMAGE = os.path.join(
+    current_folder_path, "images", "portable_dropbot.png"
+)
+
+#: Display Scale (Tools menu): slider bounds as a percentage of the
+#: panel's native scale — below 100% the interface shrinks and more
+#: panes fit — and the debounce that lets a slider drag settle into a
+#: single xrandr call.
+DISPLAY_SCALE_MIN_PERCENT = 50
+DISPLAY_SCALE_MAX_PERCENT = 200
+DISPLAY_SCALE_DEFAULT_PERCENT = 100
+DISPLAY_SCALE_APPLY_DEBOUNCE_MS = 300
 
 #: Each pane gets its own listener so the panes mount and unmount
 #: independently.

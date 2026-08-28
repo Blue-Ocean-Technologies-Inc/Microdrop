@@ -22,6 +22,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     def _get_dock_pane_class(self):
         from .dock_panes import PortableDropbotStatusAndControls
+
         return PortableDropbotStatusAndControls
 
     def _get_extra_dock_pane_classes(self):
@@ -31,6 +32,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
             PortableDropbotMoreControlsDockPane,
             PortableDropbotMotorsDockPane,
         )
+
         return [
             PortableDropbotMotorsDockPane,
             PortableDropbotCalibrationDockPane,
@@ -40,3 +42,23 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
+
+    def _get_menu_additions(self) -> list:
+        from pyface.action.schema.schema_addition import SchemaAddition
+
+        from .menus import display_scale_group_factory
+
+        return [
+            SchemaAddition(
+                factory=display_scale_group_factory,
+                path="MenuBar/Tools",
+            )
+        ]
+
+    def start(self):
+        super().start()
+        # An xrandr transform does not survive a reboot, so the
+        # persisted interface scale is re-applied on every launch.
+        from .controllers.display_scale_controller import apply_persisted_scale
+
+        apply_persisted_scale()
