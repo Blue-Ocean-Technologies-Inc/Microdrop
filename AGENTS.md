@@ -305,6 +305,39 @@ idiom (chunking, comment density, method order) that rules alone can't:
 - Styling goes through `microdrop_style/` helpers (colors, button styles,
   icon fonts)
 
+## Filing Issues
+
+Issue metadata is **structured data, not prose**. Set it through the GitHub
+API when filing — never write "Low priority" or "blocks #123" in the body,
+where no board, filter, or query can see it.
+
+Set on every issue: **type** (`Task` / `Bug` / `Feature`), **labels** (only
+ones that already exist — `gh label list`), **Priority**, **Effort**,
+**assignee**, and any **sub-issue relationship** to a parent epic.
+
+```bash
+R=Blue-Ocean-Technologies-Inc/Microdrop
+
+gh api -X PATCH repos/$R/issues/N -f type=Task
+
+# org issue fields: Priority=34156766 (Urgent|High|Medium|Low)
+#                   Effort=34156769 (High|Medium|Low)
+gh api -X PUT repos/$R/issues/N/issue-field-values \
+  -H "X-GitHub-Api-Version: 2026-03-10" --input - <<'EOF'
+{"issue_field_values":[{"field_id":34156766,"value":"Low"},
+                       {"field_id":34156769,"value":"Medium"}]}
+EOF
+
+# sub-issue link takes the database id, not the issue number
+gh api -X POST repos/$R/issues/PARENT/sub_issues \
+  -F sub_issue_id=$(gh api repos/$R/issues/CHILD --jq .id)
+```
+
+Discover the current fields and types with
+`gh api orgs/Blue-Ocean-Technologies-Inc/issue-fields` and `.../issue-types`
+rather than trusting the ids above. Quote label names containing spaces
+(`--add-label "UI View"`) or the edit silently no-ops.
+
 ## Commits, PRs, and Changelog
 
 - **Conventional Commits**, CI-enforced: `type(scope): subject` with types
