@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
+
 from logger.logger_service import get_logger, init_logger
 
 logger = get_logger(__name__)
@@ -38,12 +39,17 @@ SOURCE_DEFAULT_BRANCH = "main"
 def _git(repo_root, *args):
     """Run a git command in ``repo_root``, captured, with the update timeout."""
     return subprocess.run(
-        ["git", *args], cwd=str(repo_root), capture_output=True, text=True,
-        timeout=GIT_SELF_UPDATE_TIMEOUT_S)
+        ["git", *args],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        timeout=GIT_SELF_UPDATE_TIMEOUT_S,
+    )
 
 
-def self_update_source_repo(repo_root=PROJECT_ROOT,
-                            default_branch=SOURCE_DEFAULT_BRANCH):
+def self_update_source_repo(
+    repo_root=PROJECT_ROOT, default_branch=SOURCE_DEFAULT_BRANCH
+):
     """Best-effort git self-update of the MicroDrop source repo — a backstop
     so the app keeps itself current even when launched without the launcher
     scripts (IDE, custom shortcut, `pixi run microdrop` directly).
@@ -82,36 +88,46 @@ def self_update_source_repo(repo_root=PROJECT_ROOT,
     try:
         branch = _git(repo_root, "branch", "--show-current").stdout.strip()
         if not branch:
-            logger.warning(f"no branch checked out in {repo_root} (detached "
-                           f"HEAD); checking out {default_branch}")
+            logger.warning(
+                f"no branch checked out in {repo_root} (detached "
+                f"HEAD); checking out {default_branch}"
+            )
             checkout = _git(repo_root, "checkout", default_branch)
             if checkout.returncode != 0:
-                logger.warning(f"could not check out {default_branch}: "
-                               f"{checkout.stderr.strip()}")
+                logger.warning(
+                    f"could not check out {default_branch}: {checkout.stderr.strip()}"
+                )
                 return
             branch = default_branch
         before = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
         pull = _git(repo_root, "pull", "--ff-only", "--autostash")
         if pull.returncode != 0:
-            logger.warning(f"source self-update pull failed (offline, or "
-                           f"local changes/diverged history): "
-                           f"{pull.stderr.strip() or pull.stdout.strip()}")
+            logger.warning(
+                f"source self-update pull failed (offline, or "
+                f"local changes/diverged history): "
+                f"{pull.stderr.strip() or pull.stdout.strip()}"
+            )
             return
         after = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
         if before != after:
-            old = _git(repo_root, "describe", "--tags", "--always",
-                       before).stdout.strip() or before[:8]
-            new = _git(repo_root, "describe", "--tags", "--always",
-                       after).stdout.strip() or after[:8]
+            old = (
+                _git(repo_root, "describe", "--tags", "--always", before).stdout.strip()
+                or before[:8]
+            )
+            new = (
+                _git(repo_root, "describe", "--tags", "--always", after).stdout.strip()
+                or after[:8]
+            )
             logger.warning(
                 f"MicroDrop source updated ({old} -> {new}). "
                 f"You will receive the updates the next time you start the "
-                f"app.")
+                f"app."
+            )
         else:
-            described = _git(repo_root, "describe", "--tags", "--always",
-                             "--dirty").stdout.strip()
-            logger.info(f"MicroDrop source is up to date "
-                        f"({branch} @ {described})")
+            described = _git(
+                repo_root, "describe", "--tags", "--always", "--dirty"
+            ).stdout.strip()
+            logger.info(f"MicroDrop source is up to date ({branch} @ {described})")
     except Exception as e:
         logger.warning(f"source self-update failed: {e}")
 
@@ -127,6 +143,14 @@ def microdrop_runner_setup():
 
     Must be called before importing any modules that use dramatiq.get_broker().
     """
+    # Microdrop uses SDL (via pygame) only for gamepad input, but a bare
+    # pygame.init() also probes SDL's audio backends — and with no reachable
+    # sound server that probe blocks the GUI thread for ~30 s (measured on
+    # the portable rig, where it dominated boot time). Nothing plays SDL
+    # audio, so opt every runner out up front; setdefault keeps an explicit
+    # override possible.
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
     configure_dramatiq_broker()
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
