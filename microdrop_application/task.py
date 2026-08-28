@@ -36,7 +36,6 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 # Local imports.
 from .consts import PKG
 from .dialogs.pyface_wrapper import YES, confirm, information
-from .display_scale.actions import DisplayScaleAction
 from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
@@ -94,7 +93,7 @@ class MicrodropTask(Task):
     menu_bar = SMenuBar(
         SMenu(id="File", name="&File"),
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
-        SMenu(touch_assist_menu(), DisplayScaleAction(), id="Tools", name="&Tools"),
+        SMenu(touch_assist_menu(), id="Tools", name="&Tools"),
         SMenu(TaskToggleGroup(), id="View", name="&View"),
         SMenu(id="Help", name="&Help"),
     )
