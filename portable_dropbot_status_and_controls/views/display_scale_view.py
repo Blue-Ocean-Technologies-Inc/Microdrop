@@ -8,10 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Display Scale dialog: one slider that rescales the interface
-live as it settles — the screen itself is the preview."""
+"""The Display Scale dialog: pick a scale with the slider, commit it
+with Apply — nothing changes while dragging — and Reset returns the
+panel to its native 100%."""
 
-from traitsui.api import Item, RangeEditor, VGroup, View
+from traitsui.api import HGroup, Item, RangeEditor, UItem, VGroup, View
 
 from ..consts import DISPLAY_SCALE_MAX_PERCENT, DISPLAY_SCALE_MIN_PERCENT
 
@@ -29,11 +30,15 @@ display_scale_view = View(
         ),
         Item("_"),
         Item("summary", style="readonly", show_label=False),
+        HGroup(
+            UItem("apply_button"),
+            UItem("reset_button"),
+        ),
         label="Interface Scale",
         show_border=True,
     ),
     title="Display Scale",
-    buttons=["OK", "Cancel"],
+    buttons=["OK"],
     kind="livemodal",
     resizable=True,
     width=480,

@@ -12,7 +12,7 @@
 it buys on the panel it is being chosen for."""
 
 from apptools.preferences.api import PreferencesHelper
-from traits.api import HasTraits, Int, Property, Range, Str
+from traits.api import Button, HasTraits, Int, Property, Range, Str
 
 from ..consts import (
     DISPLAY_SCALE_DEFAULT_PERCENT,
@@ -37,6 +37,12 @@ class DisplayScaleModel(HasTraits):
     #: summary then drops the arithmetic rather than inventing it.
     screen_width = Int()
     screen_height = Int()
+
+    #: Commit the chosen scale to the screen (and persist it).
+    apply_button = Button("Apply")
+
+    #: Back to the panel's native scale, applied immediately.
+    reset_button = Button("Reset to 100%")
 
     #: One line telling the user what the chosen scale does to the room
     #: they have.
