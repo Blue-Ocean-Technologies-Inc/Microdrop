@@ -10,33 +10,37 @@
 
 # system imports.
 import json
+
 import dramatiq
 from PySide6.QtCore import QTimer
+
+from pyface.api import GUI
 
 # Enthought library imports.
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
 from pyface.tasks.api import PaneItem, Task, TaskLayout, VSplitter
-from pyface.api import GUI
 from traits.api import Instance, provides
 
-from electrode_controller.consts import disabled_channels_changed_publisher
-# Local imports.
-from .consts import PKG
 from dropbot_controller.models.self_tests import TestEvent
 from dropbot_controller.models.shorts import ShortsDetectedSignal
-
-from microdrop_utils.dramatiq_controller_base import (generate_class_method_dramatiq_listener_actor,
-                                                      basic_listener_actor_routine)
+from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
+from electrode_controller.consts import disabled_channels_changed_publisher
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
+
+from microdrop_utils.dramatiq_controller_base import (
+    basic_listener_actor_routine,
+    generate_class_method_dramatiq_listener_actor,
+)
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
-from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
-
-from logger.logger_service import get_logger
-from .dialogs.pyface_wrapper import information, confirm, YES
+# Local imports.
+from .consts import PKG
+from .dialogs.pyface_wrapper import YES, confirm, information
 from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -64,7 +68,8 @@ class MicrodropTask(Task):
 
     def traits_init(self):
         """
-        This function needs to be here to let the listener be initialized to the default value automatically.
+        This function needs to be here to let the listener be initialized to
+        the default value automatically.
         We just do it manually here to make the code clearer.
         We can also do other initialization routines here if needed.
 
@@ -77,8 +82,8 @@ class MicrodropTask(Task):
 
         logger.info("Starting Microdrop listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name,
-            class_method=self.listener_actor_routine)
+            listener_name=self.listener_name, class_method=self.listener_actor_routine
+        )
 
     #### 'Task' interface #####################################################
 
@@ -86,28 +91,21 @@ class MicrodropTask(Task):
     name = PKG.title().replace("_", " ")
 
     menu_bar = SMenuBar(
-
         SMenu(id="File", name="&File"),
-
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
-
         SMenu(touch_assist_menu(), id="Tools", name="&Tools"),
-
         SMenu(TaskToggleGroup(), id="View", name="&View"),
-
-        SMenu(id="Help", name="&Help")
+        SMenu(id="Help", name="&Help"),
     )
 
     def create_central_pane(self):
-        """Create the central pane with the device viewer widget with a default view.
-        """
+        """Create the central pane with the device viewer widget with a default view."""
 
         return MicrodropCentralCanvas()
 
     def create_dock_panes(self):
         """Create any dock panes needed for the task."""
-        return [
-        ]
+        return []
 
     def activated(self):
         """Called when the task is activated."""
@@ -131,7 +129,9 @@ class MicrodropTask(Task):
 
         return TaskLayout(
             right=right,
-            left=PaneItem("device_viewer.dock_pane", width=1000), # we want this to take up as much space as it can
+            left=PaneItem(
+                "device_viewer.dock_pane", width=1000
+            ),  # we want this to take up as much space as it can
         )
 
     ##########################################################
@@ -142,9 +142,12 @@ class MicrodropTask(Task):
         logger.info("Showing help dialog.")
 
     ##########################################################
-    # Including below function permanently this class, so no need to dynamically attach it in dropbot_tools_menu/plugin.py
-    # This callback is registered in ACTOR_TOPIC_DICT of dropbot_tools_menu and does nothing if that plugin is not loaded
-    # The relevant code has to be here since the dialogs need to be manipulated from the main task
+    # Including below function permanently this class, so no need to
+    # dynamically attach it in dropbot_tools_menu/plugin.py
+    # This callback is registered in ACTOR_TOPIC_DICT of dropbot_tools_menu and
+    # does nothing if that plugin is not loaded
+    # The relevant code has to be here since the dialogs need to be manipulated
+    # from the main task
     ###########################################################
 
     def _on_self_tests_progress_triggered(self, raw_message):
@@ -180,9 +183,7 @@ class MicrodropTask(Task):
             else:
                 test_name = "Running All Dropbot Self Tests..."
 
-            self.wait_for_test_dialog.perform(
-                self, test_name=test_name, mode=mode
-            )
+            self.wait_for_test_dialog.perform(self, test_name=test_name, mode=mode)
 
         GUI.invoke_later(_show)
 
@@ -191,11 +192,14 @@ class MicrodropTask(Task):
         # So the last test was completed.
         name = payload.get("test_name", "")
         idx = int(payload.get("test_index", 0))
+
         def _update():
             if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
                 # You might need to pass 'total' in payload or store it in self
                 # For now assuming percentage is calculated here or passed
-                self.wait_for_test_dialog.set_progress(int(idx * 100 / self._total_tests), name)
+                self.wait_for_test_dialog.set_progress(
+                    int(idx * 100 / self._total_tests), name
+                )
 
         GUI.invoke_later(_update)
 
@@ -207,8 +211,11 @@ class MicrodropTask(Task):
                 self.wait_for_test_dialog = None  # Cleanup reference
 
         def _close():
-                self.wait_for_test_dialog.set_progress_end("Dropbot Self Test(s) are Complete! \n\nReport will be opened shortly...")
-                QTimer.singleShot(1200, _cleanup_reference)
+            self.wait_for_test_dialog.set_progress_end(
+                "Dropbot Self Test(s) are Complete! \n\n"
+                "Report will be opened shortly..."
+            )
+            QTimer.singleShot(1200, _cleanup_reference)
 
         GUI.invoke_later(_close)
 
@@ -222,10 +229,13 @@ class MicrodropTask(Task):
         if shorts:
             logger.info(f"Shorts detected on channels: {shorts}")
         else:
-            logger.info(f"No Shorts detected")
+            logger.info("No Shorts detected")
 
-        GUI.invoke_later(lambda: self._handle_shorts_detected_dialog_user_input(
-            self._on_shorts_detected_dialog(shorts, signal.show_window), shorts))
+        GUI.invoke_later(
+            lambda: self._handle_shorts_detected_dialog_user_input(
+                self._on_shorts_detected_dialog(shorts, signal.show_window), shorts
+            )
+        )
 
     def _on_shorts_detected_dialog(self, shorted_channels: list, show_window: bool):
         """Offer the user the option to disable shorted channels (runs in UI thread).
@@ -247,12 +257,18 @@ class MicrodropTask(Task):
             )
 
         elif show_window:
-            information(None, title="No Shorts Detected", message="No shorts were detected.")
+            information(
+                None, title="No Shorts Detected", message="No shorts were detected."
+            )
             return None
 
         elif not self.microdrop_preferences.suppress_no_shorts_information:
-            _, checked = information(None, title="No Shorts Detected", message="No shorts were detected.",
-                                     checkbox_text="Do not show again (can be undone from preferences)")
+            _, checked = information(
+                None,
+                title="No Shorts Detected",
+                message="No shorts were detected.",
+                checkbox_text="Do not show again (can be undone from preferences)",
+            )
 
             self.microdrop_preferences.suppress_no_shorts_information = checked
 

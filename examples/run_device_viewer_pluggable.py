@@ -10,8 +10,8 @@
 
 import contextlib
 import os
-import sys
 import signal
+import sys
 import time
 from functools import partial
 
@@ -19,31 +19,49 @@ from envisage.ui.tasks.tasks_application import TasksApplication
 from pyface.qt.QtWidgets import QApplication
 
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+
 microdrop_runner_setup()
 
-from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, BACKEND_PLUGINS, DROPBOT_BACKEND_PLUGINS, \
-    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, OPENDROP_BACKEND_PLUGINS, FRONTEND_APPLICATION, \
-    BACKEND_APPLICATION, SERVER_CONTEXT, \
-    REQUIRED_CONTEXT, MOCK_DROPBOT_BACKEND_PLUGINS, MOCK_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS, \
-    PORTABLE_DROPBOT_BACKEND_PLUGINS, PORTABLE_DROPBOT_FRONTEND_PLUGINS
+from examples.plugin_consts import (  # noqa: E402
+    BACKEND_APPLICATION,
+    BACKEND_PLUGINS,
+    DROPBOT_BACKEND_PLUGINS,
+    DROPBOT_FRONTEND_PLUGINS,
+    FRONTEND_APPLICATION,
+    FRONTEND_PLUGINS,
+    MOCK_DROPBOT_BACKEND_PLUGINS,
+    MOCK_DROPBOT_FRONTEND_PLUGINS,
+    OPENDROP_BACKEND_PLUGINS,
+    OPENDROP_FRONTEND_PLUGINS,
+    PORTABLE_DROPBOT_BACKEND_PLUGINS,
+    PORTABLE_DROPBOT_FRONTEND_PLUGINS,
+    REQUIRED_CONTEXT,
+    REQUIRED_PLUGINS,
+    SERVER_CONTEXT,
+    SERVICE_PLUGINS,
+)
 
-from logger.logger_service import get_logger
+from logger.logger_service import get_logger  # noqa: E402
+
 logger = get_logger(__name__)
 
-from microdrop_style.helpers import style_app
+from microdrop_style.helpers import style_app  # noqa: E402
 
-from microdrop_utils.system_config import is_rpi
+from microdrop_utils.system_config import is_rpi  # noqa: E402
+
 # Set environment variables for Qt for pi
 if is_rpi():
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
     print("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
 
+
 def stop_app(app, signum, frame):
     print("Shutting down...")
-    if isinstance(app,
-                  TasksApplication):  # It's a UI application, so we call exit so that the application can save its state via TasksApplication.exit()
+    # A UI application exits, so that TasksApplication.exit() can save its
+    # state; a backend application has no exit(), so it stops.
+    if isinstance(app, TasksApplication):
         app.exit()
-    else:  # It's a backend application, so we call Application.stop() since exit() doesn't exist
+    else:
         app.stop()
     sys.exit(0)
 
@@ -53,10 +71,11 @@ def main(plugins, contexts, application, persist):
     Run the application.
 
     **Note**
-    The order of plugins matters. This determines whose start routine will be run first, and whose contributions will be prioritized
-    For example: the microdrop plugin and the tasks contributes a preferences dialog service.
-    The dialog contributed by the plugin listed first will be used. That is how the envisage application get_service
-    method works.
+    The order of plugins matters. This determines whose start routine will be
+    run first, and whose contributions will be prioritized. For example: the
+    microdrop plugin and the tasks contributes a preferences dialog service.
+    The dialog contributed by the plugin listed first will be used. That is
+    how the envisage application get_service method works.
 
     """
 
@@ -71,7 +90,9 @@ def main(plugins, contexts, application, persist):
 
     #### Startup application with context
 
-    with contextlib.ExitStack() as stack:  # contextlib.ExitStack is a context manager that allows you to stack multiple context managers
+    # contextlib.ExitStack is a context manager that allows you to stack
+    # multiple context managers.
+    with contextlib.ExitStack() as stack:
         for context, kwargs in contexts:
             stack.enter_context(context(**kwargs))
 
@@ -105,9 +126,8 @@ if __name__ == "__main__":
         "--device",
         type=str,
         choices=["dropbot", "opendrop", "portable", "mock"],
-        default="dropbot", # Sets a default if the user doesn't provide the flag
-        help="Specify the device to use: 'dropbot', 'opendrop' or "
-             "'portable'"
+        default="dropbot",  # Sets a default if the user doesn't provide the flag
+        help="Specify the device to use: 'dropbot', 'opendrop' or 'portable'",
     )
 
     parser.add_argument(
@@ -116,7 +136,7 @@ if __name__ == "__main__":
         choices=["frontend", "backend", "services"],
         default=["frontend", "backend"],
         help="Which plugin layers to load (space-separated). 'frontend' also pulls in "
-             "the colocated service plugins. Default: frontend backend.",
+        "the colocated service plugins. Default: frontend backend.",
     )
 
     args = parser.parse_args()
