@@ -8,8 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
+from traits.api import observe
+
+# Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
 
+# Local imports.
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 
 
@@ -63,6 +68,46 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         apply_persisted_scale()
         self._widen_dock_separators_on_rpi()
+
+    @observe("application:application_initialized")
+    def _on_application_initialized(self, event):
+        # Wait for the window to be created
+        if self.application.active_window is None:
+            self.application.on_trait_change(self._on_window_created, "active_window")
+            return
+
+        self._go_fullscreen_on_rpi(self.application.active_window)
+
+    def _on_window_created(self, window):
+        """Called when the application window is created."""
+        if window is None:
+            return
+
+        # Remove the observer since we don't need it anymore
+        self.application.on_trait_change(
+            self._on_window_created, "active_window", remove=True
+        )
+        self._go_fullscreen_on_rpi(window)
+
+    @staticmethod
+    def _go_fullscreen_on_rpi(window):
+        """Kiosk mode: on the portable rig's touchscreen, fullscreen covers
+        the taskbar and removes the title bar (no close/minimize buttons) so
+        the instrument doesn't look like a desktop PC — the sidebar's Exit
+        button is then the only way back to the desktop. Other platforms
+        keep a normal, titled window."""
+        from microdrop_utils.system_config import is_rpi
+
+        if not is_rpi():
+            return
+
+        if window is None or window.control is None:
+            return
+
+        from pyface.api import GUI
+
+        # Deferred so it runs after the window's layout/state restore.
+        GUI.invoke_later(window.control.showFullScreen)
 
     @staticmethod
     def _widen_dock_separators_on_rpi():
