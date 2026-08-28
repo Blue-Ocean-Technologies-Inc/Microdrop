@@ -8,30 +8,39 @@
 #
 # Thanks for using Microdrop open source!
 
-import time
+import atexit
 import functools
+import time
 
 import dropbot
-from traits.api import provides, HasTraits, Bool, Instance, Str
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.schedulers.base import STATE_STOPPED, STATE_RUNNING, STATE_PAUSED
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
+from traits.api import Bool, HasTraits, Instance, Str, provides
+
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
+
+from ..consts import (
+    DROPBOT_CONNECTED,
+    DROPBOT_DB3_120_HWID,
+    DROPBOT_ERROR,
+    NO_DROPBOT_AVAILABLE,
+    NO_POWER,
+)
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import NO_DROPBOT_AVAILABLE, SHORTS_DETECTED, NO_POWER, DROPBOT_DB3_120_HWID, RETRY_CONNECTION, \
-    OUTPUT_ENABLE_PIN, CHIP_INSERTED, DROPBOT_CONNECTED, DROPBOT_ERROR, DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 def wait_for_proxy(timeout=2, poll_interval=0.1):
     """Decorator that polls until self.proxy is available, with a timeout."""
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -43,45 +52,51 @@ def wait_for_proxy(timeout=2, poll_interval=0.1):
                 logger.warning(f"Timed out waiting for proxy after {timeout}s")
                 return None
             return func(self, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 # silence all APScheduler job-exception logs
-get_logger('apscheduler.executors.default').setLevel(level="WARNING")
+get_logger("apscheduler.executors.default").setLevel(level="WARNING")
 
 
 @provides(IDropbotControlMixinService)
 class DropbotMonitorMixinService(HasTraits):
     """
-    A mixin Class that adds methods to monitor a dropbot connection and get some dropbot information.
+    A mixin Class that adds methods to monitor a dropbot connection and get
+    some dropbot information.
     """
 
     id = Str("dropbot_monitor_mixin_service")
-    name = Str('Dropbot Monitor Mixin')
-    monitor_scheduler = Instance(BackgroundScheduler,
-                                 desc="An AP scheduler job to periodically look for dropbot connected ports."
-                                 )
-    _error_shown = Bool(False)  # Track if we've shown the error for current disconnection
-    _no_power = Bool(False) 
+    name = Str("Dropbot Monitor Mixin")
+    monitor_scheduler = Instance(
+        BackgroundScheduler,
+        desc="An AP scheduler job to periodically look for dropbot connected ports.",
+    )
+    _error_shown = Bool(
+        False
+    )  # Track if we've shown the error for current disconnection
+    _no_power = Bool(False)
 
-    ######################################## Methods to Expose #############################################
+    ############################ Methods to Expose #############################
 
     def on_start_device_monitoring_request(self, hwids_to_check):
         """
         Method to start looking for dropbots connected using their hwids.
         If dropbot already connected, publishes dropbot connected signal.
         """
-        # if dropbot already connected, exit after publishing connection and chip details
+        # if dropbot already connected, exit after publishing connection and
+        # chip details
         if self.dropbot_connection_active:
-            publish_message('dropbot_connected', DROPBOT_CONNECTED)
-            self.on_chip_check_request("") # from base class
+            publish_message("dropbot_connected", DROPBOT_CONNECTED)
+            self.on_chip_check_request("")  # from base class
             return None
 
         ## handle cases where monitor scheduler object already exists
         if hasattr(self, "monitor_scheduler"):
             if isinstance(self.monitor_scheduler, BackgroundScheduler):
-
                 if self.monitor_scheduler.state == STATE_RUNNING:
                     logger.warning("Dropbot connections are already being monitored.")
 
@@ -91,10 +106,15 @@ class DropbotMonitorMixinService(HasTraits):
 
                 elif self.monitor_scheduler.state == STATE_PAUSED:
                     self.monitor_scheduler.resume()
-                    logger.info("Dropbot connection monitoring was paused, now it is resumed.")
+                    logger.info(
+                        "Dropbot connection monitoring was paused, now it is resumed."
+                    )
 
                 else:
-                    logger.error(f"Invalid dropbot monitor scheduler state: it is {self.monitor_scheduler.state}")
+                    logger.error(
+                        f"Invalid dropbot monitor scheduler state: "
+                        f"it is {self.monitor_scheduler.state}"
+                    )
 
                 return None
 
@@ -126,6 +146,33 @@ class DropbotMonitorMixinService(HasTraits):
         logger.info("DropBot monitor created and started")
         # self._error_shown = False  # Reset error state when starting monitoring
         self.monitor_scheduler.start()
+        # Interpreter-exit backstop: atexit callbacks run before Python
+        # kills executor pools, so the scheduler dies quietly even on an
+        # exit path that never reaches plugin stop (a signal handler's
+        # sys.exit, a killed window).
+        atexit.register(self._shutdown_monitor_scheduler)
+
+    def cleanup(self):
+        """Stop the port scanner before the connection teardown: a
+        BackgroundScheduler nothing shuts down outlives plugin stop,
+        and once interpreter shutdown kills its executor pool every
+        tick spams 'cannot schedule new futures after shutdown'."""
+        self._shutdown_monitor_scheduler()
+        super().cleanup()
+
+    def _shutdown_monitor_scheduler(self):
+        """Idempotent scheduler shutdown, shared by cleanup and the
+        atexit backstop."""
+        scheduler = self.monitor_scheduler
+        if (
+            isinstance(scheduler, BackgroundScheduler)
+            and scheduler.state != STATE_STOPPED
+        ):
+            try:
+                scheduler.shutdown(wait=False)
+                logger.info("DropBot monitor stopped.")
+            except Exception as exc:
+                logger.debug(f"Error stopping the DropBot monitor: {exc}")
 
     def on_retry_connection_request(self, message):
         if self.dropbot_connection_active:
@@ -143,7 +190,8 @@ class DropbotMonitorMixinService(HasTraits):
         if self.dropbot_connection_active:
             self.dropbot_connection_active = False
 
-        # Terminate the proxy monitor and reset it to None to allow new connection to set the monitor.
+        # Terminate the proxy monitor and reset it to None to allow new
+        # connection to set the monitor.
         if self.proxy is not None:
             if self.proxy.monitor is not None:
                 self.proxy.terminate()
@@ -151,9 +199,13 @@ class DropbotMonitorMixinService(HasTraits):
                 self.proxy.monitor = None
                 logger.info("Sending Signal to Resumed DropBot monitor")
 
-        # if there is no power, we wait for user to send retry connection request; else: we automatically do it
+        # if there is no power, we wait for user to send retry connection
+        # request; else: we automatically do it
         if self._no_power:
-            logger.info("There was no power detected before the disconnection. Request retry after supplying power.")
+            logger.info(
+                "There was no power detected before the disconnection. "
+                "Request retry after supplying power."
+            )
 
         else:
             logger.info("DropBot disconnected. Resuming search for dropbot connection.")
@@ -173,18 +225,22 @@ class DropbotMonitorMixinService(HasTraits):
         try:
             with self.proxy.transaction_lock:
                 self.preferences._hardware_max_voltage = self.proxy.config.max_voltage
-                self.preferences._hardware_max_frequency = self.proxy.config.max_frequency
+                self.preferences._hardware_max_frequency = (
+                    self.proxy.config.max_frequency
+                )
 
-            cap_interval = self.proxy.state['capacitance_update_interval_ms']
-            logger.info(f"DropBot hardware report: \n"
-                        f"Max Voltage: {self.preferences._hardware_max_voltage} V\n"
-                        f"Max Frequency: {self.preferences._hardware_max_frequency} Hz\n"
-                        f"Capacitance Update Interval (ms): {cap_interval}\n")
+            cap_interval = self.proxy.state["capacitance_update_interval_ms"]
+            logger.info(
+                f"DropBot hardware report: \n"
+                f"Max Voltage: {self.preferences._hardware_max_voltage} V\n"
+                f"Max Frequency: {self.preferences._hardware_max_frequency} Hz\n"
+                f"Capacitance Update Interval (ms): {cap_interval}\n"
+            )
 
         except Exception as e:
             logger.warning(f"Could not read hardware limits from proxy config: {e}")
 
-    ################################# Protected methods ######################################
+    ############################ Protected methods #############################
     def _on_dropbot_port_found(self, event):
         """
         Method defining what to do when dropbot has been found on a port.
@@ -211,28 +267,33 @@ class DropbotMonitorMixinService(HasTraits):
         - No DropBot available for connection - USB not connected
         - No power to DropBot - power supply not connected
         """
-        self._no_power = False # Reset no power state when device is found
+        self._no_power = False  # Reset no power state when device is found
 
-        if self.proxy is None or getattr(self.proxy, 'monitor', None) is None:
+        if self.proxy is None or getattr(self.proxy, "monitor", None) is None:
+            ################# Attempt to make a proxy object ##################
 
-            ############################### Attempt to make a proxy object #############################
-
-            logger.info(f"Attempting to create DropBot serial proxy on port {port_name}")
+            logger.info(
+                f"Attempting to create DropBot serial proxy on port {port_name}"
+            )
 
             try:
                 self.proxy = DramatiqDropbotSerialProxy(port=port_name)
                 logger.info(f"DropBot connected on port {port_name}")
 
-                # this will send out a connected signal to the message router if successful
+                # this will send out a connected signal to the message router
+                # if successful
                 # triggering the self.on_connected_signal method immediately.
                 self._on_dropbot_proxy_connected()
 
-                # once dropbot setup, run on connected routine in case it did not get triggered
+                # once dropbot setup, run on connected routine in case it did
+                # not get triggered
                 if not self.dropbot_connection_active:
                     self.on_connected_signal("")
 
             except (IOError, AttributeError) as e:
-                logger.error(f"IO or Attribute Error connecting to DropBot: {e}", exc_info=True)
+                logger.error(
+                    f"IO or Attribute Error connecting to DropBot: {e}", exc_info=True
+                )
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
 
             except dropbot.proxy.NoPower as e:
@@ -242,7 +303,9 @@ class DropbotMonitorMixinService(HasTraits):
 
             except Exception as e:
                 # This is for any other unexpected error during the connection process.
-                logger.error(f"An unexpected error occurred with DropBot: {e}", exc_info=True)
+                logger.error(
+                    f"An unexpected error occurred with DropBot: {e}", exc_info=True
+                )
                 publish_message(topic=DROPBOT_ERROR, message=str(e))
 
             ###########################################################################################
