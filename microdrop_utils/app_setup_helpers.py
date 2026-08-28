@@ -144,9 +144,12 @@ def microdrop_runner_setup():
     Must be called before importing any modules that use dramatiq.get_broker().
     """
     # Microdrop uses SDL (via pygame) only for gamepad input, but a bare
-    # pygame.init() also probes SDL's audio backends — and with no reachable
-    # sound server that probe blocks the GUI thread for ~30 s (measured on
-    # the portable rig, where it dominated boot time). Nothing plays SDL
+    # pygame.init() also brings up SDL audio — and on a half-broken Linux
+    # audio session that blocks the GUI thread for ~30 s before SDL gives
+    # up. Measured on the portable rig: the PipeWire pulse socket answers,
+    # but wireplumber (the session manager) is down, so SDL's device
+    # negotiation waits on a reply that never comes. Windows never stalls
+    # (WASAPI is an in-process API, no daemon handshake). Nothing plays SDL
     # audio, so opt every runner out up front; setdefault keeps an explicit
     # override possible.
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
