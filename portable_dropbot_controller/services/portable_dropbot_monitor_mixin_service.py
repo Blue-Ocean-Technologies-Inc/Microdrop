@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+import atexit
 import json
 import time
 
@@ -20,9 +21,9 @@ from apscheduler.schedulers.base import (
 )
 from apscheduler.triggers.interval import IntervalTrigger
 from serial.tools import list_ports
+
 from traits.api import Bool, HasTraits, Instance, Str, provides
 
-from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
@@ -30,6 +31,8 @@ from ..driver.session import DropletBotSession
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -40,7 +43,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
     name = Str("Portable Dropbot Monitor Mixin")
     monitor_scheduler = Instance(
         BackgroundScheduler,
-        desc="Scans serial ports while disconnected; polls status " "while connected.",
+        desc="Scans serial ports while disconnected; polls status while connected.",
     )
     _error_shown = Bool(False)
     #: A probe round is running: ticks fire every MONITOR_INTERVAL_S
@@ -60,7 +63,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
 
         if isinstance(self.monitor_scheduler, BackgroundScheduler):
             if self.monitor_scheduler.state == STATE_RUNNING:
-                logger.info("Portable Dropbot monitoring already " "running.")
+                logger.info("Portable Dropbot monitoring already running.")
                 return
             if self.monitor_scheduler.state == STATE_STOPPED:
                 self.monitor_scheduler.start()
@@ -78,7 +81,34 @@ class PortableDropbotMonitorMixinService(HasTraits):
         scheduler.add_listener(self._on_ports_discovered, EVENT_JOB_EXECUTED)
         self.monitor_scheduler = scheduler
         self.monitor_scheduler.start()
+        # Interpreter-exit backstop: atexit callbacks run before Python
+        # kills executor pools, so the scheduler dies quietly even on an
+        # exit path that never reaches plugin stop (a signal handler's
+        # sys.exit, a killed window).
+        atexit.register(self._shutdown_monitor_scheduler)
         logger.info("Portable Dropbot monitor started.")
+
+    def cleanup(self):
+        """Stop the port scanner before the connection teardown: a
+        BackgroundScheduler nothing shuts down outlives plugin stop,
+        and once interpreter shutdown kills its executor pool every
+        tick spams 'cannot schedule new futures after shutdown'."""
+        self._shutdown_monitor_scheduler()
+        super().cleanup()
+
+    def _shutdown_monitor_scheduler(self):
+        """Idempotent scheduler shutdown, shared by cleanup and the
+        atexit backstop."""
+        scheduler = self.monitor_scheduler
+        if (
+            isinstance(scheduler, BackgroundScheduler)
+            and scheduler.state != STATE_STOPPED
+        ):
+            try:
+                scheduler.shutdown(wait=False)
+                logger.info("Portable Dropbot monitor stopped.")
+            except Exception as exc:
+                logger.debug(f"Error stopping the Portable Dropbot monitor: {exc}")
 
     def on_refresh_ports_request(self, *args, **kwargs):
         """The frontend can run on a different machine than the
@@ -95,7 +125,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
         user connects again."""
         if not self.portable_dropbot_connection_active:
             return
-        logger.info("Portable Dropbot disconnect requested; pausing " "the port scan.")
+        logger.info("Portable Dropbot disconnect requested; pausing the port scan.")
         self._user_disconnected = True
         if (
             isinstance(self.monitor_scheduler, BackgroundScheduler)
@@ -107,7 +137,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
             try:
                 self.proxy.disconnect()
             except Exception as exc:
-                logger.debug(f"Error closing the session on user " f"disconnect: {exc}")
+                logger.debug(f"Error closing the session on user disconnect: {exc}")
             self.proxy = None
         self._publish_disconnected()
 
@@ -124,8 +154,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
             return
         if self.portable_dropbot_connection_active:
             logger.info(
-                f"Connect to {port_name} ignored: Portable "
-                f"Dropbot already connected."
+                f"Connect to {port_name} ignored: Portable Dropbot already connected."
             )
             self._publish_connected()
             return
@@ -148,14 +177,14 @@ class PortableDropbotMonitorMixinService(HasTraits):
     def on_retry_connection_request(self, message):
         self._user_disconnected = False
         if self.portable_dropbot_connection_active:
-            logger.info("Retry ignored: Portable Dropbot already " "connected.")
+            logger.info("Retry ignored: Portable Dropbot already connected.")
             return
         if (
             self.monitor_scheduler is not None
             and self.monitor_scheduler.state == STATE_PAUSED
         ):
             self.monitor_scheduler.resume()
-            logger.info("Retry requested. Resumed Portable Dropbot " "monitor.")
+            logger.info("Retry requested. Resumed Portable Dropbot monitor.")
             return
         self.on_start_device_monitoring_request(message)
 
@@ -286,7 +315,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
             self.proxy = None
             self.portable_dropbot_connection_active = False
             if not self._error_shown:
-                logger.debug(f"Connection attempt failed on " f"{port_name}: {exc}")
+                logger.debug(f"Connection attempt failed on {port_name}: {exc}")
                 self._error_shown = True
             return False
 
