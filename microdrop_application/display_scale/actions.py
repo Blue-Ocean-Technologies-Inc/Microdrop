@@ -25,4 +25,8 @@ class DisplayScaleAction(TaskAction):
     name = "&Display Scale..."
 
     def perform(self, event):
-        display_scale_manager.edit_scale(self.task.window.application)
+        # The menu bar is a class-level schema, so the controller does not
+        # always get to inject `self.task`; the event's task, set by
+        # TaskActionController.perform on every invocation, is reliable.
+        task = getattr(event, "task", None) or self.task
+        display_scale_manager.edit_scale(task.window.application)
