@@ -22,6 +22,16 @@ from microdrop_utils.app_setup_helpers import microdrop_runner_setup
 
 microdrop_runner_setup()
 
+# Qt samples QT_SCALE_FACTOR while the QApplication is being constructed and
+# never again, so the interface scale the user picked in Tools -> Display Scale
+# has to reach the environment here, before anything builds one.
+from microdrop_application.display_scale.startup import (  # noqa: E402
+    apply_scale_from_preferences,
+    relaunch_if_requested,
+)
+
+apply_scale_from_preferences()
+
 from examples.plugin_consts import (  # noqa: E402
     BACKEND_APPLICATION,
     BACKEND_PLUGINS,
@@ -109,6 +119,11 @@ def main(plugins, contexts, application, persist):
         if persist:
             while True:
                 time.sleep(0.001)
+
+    # A new interface scale only lands in a fresh process, and only once this
+    # one has let go of Redis and the broker - hence out here, past the
+    # ExitStack that owns them.
+    relaunch_if_requested()
 
 
 if __name__ == "__main__":

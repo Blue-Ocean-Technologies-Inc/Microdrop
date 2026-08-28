@@ -20,6 +20,12 @@ from traits.api import Bool, Directory, Range, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Color, Group, Item, RangeEditor, VGroup, View
 
+from microdrop_application.display_scale.consts import (
+    SCALE_DEFAULT_PERCENT,
+    SCALE_MAX_PERCENT,
+    SCALE_MIN_PERCENT,
+)
+
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
@@ -45,6 +51,14 @@ class MicrodropPreferences(PreferencesHelper):
     always_use_default_layout = Bool
 
     EXPERIMENTS_DIR = Directory()
+
+    # ---- Interface scale ----------------------------------------------------
+    # Percentage of the screen's native scale that the whole interface is drawn
+    # at; exported as QT_SCALE_FACTOR before the QApplication is built (see
+    # display_scale/startup.py), so a change lands on the next launch.
+    ui_scale_percent = Range(
+        low=SCALE_MIN_PERCENT, high=SCALE_MAX_PERCENT, value=SCALE_DEFAULT_PERCENT
+    )
 
     # dialogs:
     suppress_no_shorts_information = Bool(False)
@@ -113,6 +127,24 @@ class MicrodropPreferencesPane(PreferencesPane):
         ),
     )
 
+    display_settings = (
+        VGroup(
+            Item(
+                "ui_scale_percent",
+                label="Interface Scale (%)",
+                editor=RangeEditor(
+                    low=SCALE_MIN_PERCENT,
+                    high=SCALE_MAX_PERCENT,
+                    mode="slider",
+                    is_float=False,
+                ),
+            ),
+            label="Display (applies on restart)",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
+    )
+
     canvas_settings = (
         VGroup(
             Item("canvas_background_use_custom", label="Use Custom Color"),
@@ -144,6 +176,8 @@ class MicrodropPreferencesPane(PreferencesPane):
     view = View(
         Item("_"),  # Separator
         app_startup_settings,
+        Item("_"),
+        display_settings,
         Item("_"),
         canvas_settings,
         Item("_"),
