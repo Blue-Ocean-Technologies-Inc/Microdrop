@@ -283,7 +283,12 @@ electrode_ids = List(Str)
 ## Commits, PRs, and Changelog
 
 - **Conventional Commits**, CI-enforced: `type(scope): subject` with types
-  `feat`/`fix`/`refactor`/`perf`/`docs`/`ci`/`chore`/`test`
+  `feat`/`fix`/`refactor`/`perf`/`docs`/`ci`/`chore`/`test`; append `!` or a
+  `BREAKING CHANGE:` footer for breaking changes. These messages drive
+  versioning and CHANGELOG.md generation (commitizen).
+- One-time per clone: `pixi run setup-hooks` (from `microdrop-py/`) installs
+  the shared git hooks — commit-format enforcement, scratch-file block,
+  syntax check; config in `.pre-commit-config.yaml`
 - Small, single-purpose commits scoped with explicit pathspecs; never one
   bulk commit for iterative work
 - Branch per issue; never commit directly to `main`
