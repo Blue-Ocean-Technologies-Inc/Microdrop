@@ -69,11 +69,9 @@ with proxy.transaction_lock:
 - Issues: https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/
 
 ## Git & PR Workflow
-- Commit early, commit frequently — make multiple small, incremental commits for each iterative change (e.g., add constant, then add listener, then add dialog, then wire it up). Each commit should have a clear, descriptive message.
-- One-time per clone: `pixi run setup-hooks` (from `microdrop-py/`) installs the shared git hooks into this repo and the heater/magnet clones — commit-format enforcement, scratch-file block, syntax check; config in each repo's `.pre-commit-config.yaml`. (Equivalent manual command: `pre-commit install --hook-type commit-msg --hook-type pre-commit`.)
-- Commit messages MUST follow Conventional Commits (a CI check enforces this on PRs): `type(scope): subject` with types `feat` / `fix` / `refactor` / `perf` / `docs` / `ci` / `chore` / `test`; append `!` or a `BREAKING CHANGE:` footer for breaking changes. These messages drive versioning and CHANGELOG.md generation (commitizen).
-- Always create a new branch for resolving issues (never commit directly to main/master)
-- Always submit a PR for reviewing changes after pushing the branch
+
+The commit/PR conventions and hook setup live in `AGENTS.md` (imported above,
+under "Commits, PRs, and Changelog").
 
 ## Releases & changelogs
 - **This repo (the app)**: version = git tags (`.cz.toml`, `version_provider = "scm"`). Cut a release from an up-to-date `main`: `pixi exec --spec "commitizen>=4,<5" -- cz bump` (derives the bump from conventional commits since the last `v*` tag, updates CHANGELOG.md, tags `vX.Y.Z`), then `git push origin main --follow-tags` (requires branch-protection bypass, i.e. an admin).
@@ -84,36 +82,14 @@ with proxy.transaction_lock:
 - See `PRESENTATION-GUIDE.md` (in this same `docs/` folder) for full details: slide structure, brand/design system, CSS architecture, SVG logos, and layout conventions
 - Key corrections (do not revert): `electrodes_state_change` toggles state only (not voltage), architecture is three-way decoupled (Frontend/Backend/Server), DropBot API slides reflect actual Python API
 
-# Below is from a document that provides more guidance to Claude Code (claude.ai/code) when working with code in this repository:
-
-## Project Overview
-
-MicroDrop-Next-Gen is a GUI for the DropBot Digital Microfluidics control system. It uses a plugin-based architecture (Envisage) with async message passing (Dramatiq + Redis) between decoupled components.
-
 ## Running the Application
 
-Redis must be running before launching. Start it via `redis-server` or `python examples/start_redis_server.py`.
+Redis must be running before launching. Start it via `redis-server` or `python examples/start_redis_server.py`. Run through pixi from `src/` (see `AGENTS.md`, "Environment"); besides the full app there are frontend-only and backend-only run scripts:
 
 ```bash
-# Full application (frontend + backend)
-python examples/run_device_viewer_pluggable.py
-
-# Frontend only (needs redis + backend running separately)
-python examples/run_device_viewer_pluggable_frontend.py
-
-# Backend only
-python examples/run_device_viewer_pluggable_backend.py
-```
-
-## Running Tests
-
-Tests are in `examples/tests/` and `electrode_controller/tests/`. Some test subdirectories have external requirements:
-- `tests_with_redis_server_need/` — requires a running Redis server
-- `tests_with_dropbot_connection_need/` — requires physical DropBot hardware
-
-```bash
-pytest examples/tests/
-pytest electrode_controller/tests/
+pixi run python -m examples.run_device_viewer_pluggable            # full app
+pixi run python -m examples.run_device_viewer_pluggable_frontend   # frontend only (needs redis + backend running separately)
+pixi run python -m examples.run_device_viewer_pluggable_backend    # backend only
 ```
 
 ## Architecture
@@ -144,6 +120,7 @@ All inter-plugin communication goes through a pub/sub message router — plugins
 - `MessageRouterActor` in the same file receives and fans out messages to subscribers
 - Topics follow MQTT-style naming: `dropbot/requests/set_voltage`, `dropbot/signals/connected`
 - MQTT wildcards supported: `+` (single level), `#` (multi-level)
+- `ValidatedTopicPublisher` (same module) provides Pydantic-validated message publishing
 - See `MESSAGES.md` for the full topic map of which plugins send/receive what
 
 ### Message Handler Conventions
@@ -165,14 +142,6 @@ All inter-plugin communication goes through a pub/sub message router — plugins
 ### SVG Device Handling
 
 Electrode layouts are defined in SVG files. Metadata is parsed from SVG path elements (`data-channels` attribute). Centers are computed from path vertices and neighbors from distance calculations. Straight path commands (M, L, H, V, Z) contribute endpoints; curved segments (arcs, Béziers — e.g. Inkscape circles) are flattened into polygon vertices by sampling (CURVE_SEGMENT_SAMPLES per segment). See `device_viewer/utils/dmf_utils.py`.
-
-## Coding Conventions
-
-- Every plugin has a `consts.py` with `PKG = '.'.join(__name__.split('.')[:-1])` and `ACTOR_TOPIC_DICT`
-- Logging: `from logger.logger_service import get_logger; logger = get_logger(__name__)`
-- Styling: use `microdrop_style/` helpers (`colors`, `button_styles`, `icons`)
-- Traits/TraitsUI for models and data binding; PySide6/Qt for widgets
-- `ValidatedTopicPublisher` (in `microdrop_utils/dramatiq_pub_sub_helpers.py`) provides Pydantic-validated message publishing
 
 ## Useful Environment Variables
 

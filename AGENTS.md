@@ -153,9 +153,10 @@ import json
 from pathlib import Path
 
 # Third-party imports.
-from PySide6.QtWidgets import QToolButton
+from shapely.geometry import Polygon
 
 # Enthought library imports.
+from pyface.qt import QtWidgets
 from traits.api import HasTraits, Instance, Str, observe
 from traitsui.api import Item, View
 
@@ -252,12 +253,53 @@ electrode_ids = List(Str)
   does, and not the history of the change
 - Match the surrounding file's idiom, comment density, and layout
 
+### Style Exemplars
+
+Before writing new code, pattern-match against these files — they carry the
+idiom (chunking, comment density, method order) that rules alone can't:
+
+- **MVC trio, the frontend template**:
+  `portable_dropbot_status_and_controls/` `models/calibration_model.py` +
+  `controllers/calibration_controller.py` + `views/calibration_view.py` —
+  Qt-free `HasTraits` model, a controller whose `@observe` handlers are
+  one-liners publishing to topics, a declarative module-level TraitsUI
+  `View` of named groups with `enabled_when`. The `advanced_controls` trio
+  is the larger sibling and shows `pyface_wrapper.confirm` for destructive
+  actions.
+- **Backend mixin service**:
+  `dropbot_controller/services/dropbot_states_setting_mixin_service.py` —
+  specific exception tuples, f-strings, no cross-plugin imports.
+- **Plugin package overall**: `portable_dropbot_status_and_controls/` —
+  many small files, consts-only cross-plugin imports, `#:` trait docs.
+
 ### Architecture Conventions
 
+- **Design first**: lean on established software design principles and
+  patterns — separation of concerns above all, plus the patterns the app is
+  already built from (MVC, observer via Traits, dependency injection via
+  Envisage services, pub/sub via Dramatiq). Reach for the fitting pattern
+  before inventing structure.
 - **MVC split**: Qt-free `HasTraits` models; controllers translate signals
-  into model changes or published topics; views observe the model
+  into model changes or published topics; views observe the model. Views are
+  the volatile layer — view preferences change often — so keep business
+  logic out of them entirely, and make every view instantiable standalone
+  against just its model (no plugin/app scaffolding) so it can be prototyped
+  and tested alone.
+- **TraitsUI first**: build views with TraitsUI/Pyface abstractions
+  (`View`/`Item`/`Group`, editors, Handlers); drop to raw Qt widgets only
+  when TraitsUI genuinely cannot express the widget or behavior. When raw Qt
+  is needed, import it through the binding shim —
+  `from pyface.qt import QtCore, QtGui, QtWidgets` — never `from PySide6...`
+  directly in new code (existing PySide6 imports are converted as files are
+  touched, not in sweeps).
 - **Decoupling**: plugins never call each other directly — communicate via
   Dramatiq pub/sub topics or the Redis app-globals hash
+- **Validated publishing**: new topics publish through
+  `ValidatedTopicPublisher` (`microdrop_utils/dramatiq_pub_sub_helpers.py`)
+  with a Pydantic message model colocated with the topic constant in the
+  owning plugin's `consts.py` — the topic and its payload schema are one
+  importable contract. Raw `publish_message` is legacy, converted as call
+  sites are touched.
 - Every plugin has a `consts.py` with `PKG`, its topics, and
   `ACTOR_TOPIC_DICT`
 - Styling goes through `microdrop_style/` helpers (colors, button styles,
@@ -266,7 +308,12 @@ electrode_ids = List(Str)
 ## Commits, PRs, and Changelog
 
 - **Conventional Commits**, CI-enforced: `type(scope): subject` with types
-  `feat`/`fix`/`refactor`/`perf`/`docs`/`ci`/`chore`/`test`
+  `feat`/`fix`/`refactor`/`perf`/`docs`/`ci`/`chore`/`test`; append `!` or a
+  `BREAKING CHANGE:` footer for breaking changes. These messages drive
+  versioning and CHANGELOG.md generation (commitizen).
+- One-time per clone: `pixi run setup-hooks` (from `microdrop-py/`) installs
+  the shared git hooks — commit-format enforcement, scratch-file block,
+  syntax check; config in `.pre-commit-config.yaml`
 - Small, single-purpose commits scoped with explicit pathspecs; never one
   bulk commit for iterative work
 - Branch per issue; never commit directly to `main`
