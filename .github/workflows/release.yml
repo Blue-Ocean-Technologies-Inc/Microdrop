@@ -57,9 +57,20 @@ jobs:
       - name: Install commitizen
         run: pipx install "commitizen>=4,<5"
 
+      # The org's release app mints a short-lived token for the PR calls: a
+      # PR opened by the built-in token triggers no workflows (the release
+      # PR would never get its commit check), and unlike a personal token
+      # the app never expires or leaves with a person.
+      - name: Mint the release-app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Tag merged release, or open/update the release PR
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
