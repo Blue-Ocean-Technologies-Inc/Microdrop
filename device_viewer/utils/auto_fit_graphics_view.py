@@ -8,12 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
-from pyface.qt.QtWidgets import QGraphicsView
 from pyface.qt.QtCore import Qt, Signal
 from pyface.qt.QtGui import QPainter
+from pyface.qt.QtWidgets import QGraphicsView
 
 from device_viewer.consts import AUTO_FIT_MARGIN_SCALE
 from device_viewer.views.electrode_view.electrode_scene import ElectrodeScene
+
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -23,13 +24,16 @@ class AutoFitGraphicsView(QGraphicsView):
     """
     A QGraphicsView with a method to fit to scene size.
     """
+
     display_state_signal = Signal(str)
 
     def __init__(self, *args, **kwargs):
 
         # check initial auto fit value
-        self.auto_fit = kwargs.pop('auto_fit', True)
-        self.auto_fit_margin_scale = kwargs.pop('auto_fit_margin_scale', AUTO_FIT_MARGIN_SCALE)
+        self.auto_fit = kwargs.pop("auto_fit", True)
+        self.auto_fit_margin_scale = kwargs.pop(
+            "auto_fit_margin_scale", AUTO_FIT_MARGIN_SCALE
+        )
 
         super().__init__(*args, **kwargs)
 
@@ -56,24 +60,26 @@ class AutoFitGraphicsView(QGraphicsView):
 
     def keyPressEvent(self, event):
 
-        # forward all the key press events to the interaction service event if interaction disabled:
+        # forward all the key press events to the interaction service if
+        # interaction disabled:
         scene = self.scene()
 
         if not self.isInteractive():
             if isinstance(scene, ElectrodeScene):
-                if hasattr(scene, 'interaction_service'):
+                if hasattr(scene, "interaction_service"):
                     scene.interaction_service.handle_key_press_event(event)
                     return
 
         super().keyPressEvent(event)
 
     def wheelEvent(self, event):
-        # forward all the key press events to the interaction service event if interaction disabled:
+        # forward all the wheel events to the interaction service if
+        # interaction disabled:
         scene = self.scene()
 
         if not self.isInteractive():
             if isinstance(scene, ElectrodeScene):
-                if hasattr(scene, 'interaction_service'):
+                if hasattr(scene, "interaction_service"):
                     scene.interaction_service.handle_wheel_event(event)
                     return
 
