@@ -84,8 +84,11 @@ class ProtocolStatusModel(HasTraits):
 
     # Guards the freeze-state transitions (paused / _wait_depth) since the
     # executor's worker threads drive them concurrently. Mirrors the plain
-    # lock StepContext keeps for its phase-buffer coordination state.
-    _freeze_lock = Instance(threading.Lock)
+    # lock StepContext keeps for its phase-buffer coordination state. Typed
+    # by the lock object's class: ``threading.Lock`` itself is only a class
+    # from Python 3.13 on (a factory function before, which Traits would
+    # validate against instead -- rejecting every real lock on 3.12).
+    _freeze_lock = Instance(type(threading.Lock()))
 
     # Nesting depth of in-progress acknowledgement waits (ctx.wait_for). An
     # ack-wait is a pause in the protocol AS FAR AS TIMING GOES, so the active
@@ -155,11 +158,22 @@ class ProtocolStatusModel(HasTraits):
             self.paused = False
         self.current_step_path = None
         self.trait_set(
-            step_index=0, step_total=0, phase_index=0, phase_total=0,
-            repeats_completed=0, repeats_total=1,
-            frame_index=0, frame_total=0, step_rep_index=0, step_rep_total=0,
-            recent_step_name="-", next_step_name="-", rep_chain_label="",
-            phase_target_s=0.0, running=False, dyn_idle=False,
+            step_index=0,
+            step_total=0,
+            phase_index=0,
+            phase_total=0,
+            repeats_completed=0,
+            repeats_total=1,
+            frame_index=0,
+            frame_total=0,
+            step_rep_index=0,
+            step_rep_total=0,
+            recent_step_name="-",
+            next_step_name="-",
+            rep_chain_label="",
+            phase_target_s=0.0,
+            running=False,
+            dyn_idle=False,
             dyn_loop_active=False,
         )
 
@@ -169,8 +183,17 @@ class ProtocolStatusModel(HasTraits):
         self.running = True
         self.protocol_clock.start(now)
 
-    def on_step_start(self, now, step_index, step_total, step_path,
-                      recent_name, next_name, frame_index=0, frame_total=0):
+    def on_step_start(
+        self,
+        now,
+        step_index,
+        step_total,
+        step_path,
+        recent_name,
+        next_name,
+        frame_index=0,
+        frame_total=0,
+    ):
         # SET the position from the executor's authoritative report (never
         # increment) so a mid-run seek can't drift the counter (issue #471).
         self.step_index = int(step_index)
@@ -189,7 +212,7 @@ class ProtocolStatusModel(HasTraits):
         with self._freeze_lock:
             self.step_clock.start(now)
             self.phase_clock = ScopeStopwatch()  # fresh, unstarted
-            if not self._clocks_should_run():    # started mid-freeze: keep frozen
+            if not self._clocks_should_run():  # started mid-freeze: keep frozen
                 self.step_clock.pause(now)
         # Advancing to the next step clears any stale dynamic-loop state from
         # the previous step (fixes BUG #2 — stale dyn_idle/dyn_loop_active).
@@ -230,8 +253,7 @@ class ProtocolStatusModel(HasTraits):
         self.dyn_idle = True
         self.dyn_loop_active = True
 
-    def seek_step(self, now, step_index, step_total, step_path,
-                  recent_name, next_name):
+    def seek_step(self, now, step_index, step_total, step_path, recent_name, next_name):
         """Navigate to an arbitrary step while paused: SET the position, reset
         the phase scope, and reset the step timer. Same SET semantics as
         on_step_start so the executor's report on resume is idempotent. Seek
@@ -248,8 +270,8 @@ class ProtocolStatusModel(HasTraits):
         self.phase_target_s = 0.0
         self.step_clock = ScopeStopwatch()
         self.step_clock.start(now)
-        self.step_clock.stop(now)                # freeze elapsed at 0 while paused
-        self.phase_clock = ScopeStopwatch()      # fresh, unstarted
+        self.step_clock.stop(now)  # freeze elapsed at 0 while paused
+        self.phase_clock = ScopeStopwatch()  # fresh, unstarted
         # Navigating to a different step drops any stale dynamic-loop state.
         self.dyn_idle = False
         self.dyn_loop_active = False
@@ -266,7 +288,7 @@ class ProtocolStatusModel(HasTraits):
             self.phase_target_s = 0.0
         self.phase_clock = ScopeStopwatch()
         self.phase_clock.start(now)
-        self.phase_clock.stop(now)               # freeze elapsed at 0 while paused
+        self.phase_clock.stop(now)  # freeze elapsed at 0 while paused
 
     def on_phase_extended(self, extra_s):
         try:
