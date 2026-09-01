@@ -8,7 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
-from pyface.qt.QtCore import Qt, Signal
+from pyface.qt.QtCore import QEvent, Qt, Signal
 from pyface.qt.QtGui import QPainter
 from pyface.qt.QtWidgets import QGraphicsView
 
@@ -45,6 +45,12 @@ class AutoFitGraphicsView(QGraphicsView):
         # and label — per update.
         self.setViewportUpdateMode(QGraphicsView.BoundingRectViewportUpdate)
 
+        # Two-finger pinch zoom on touchscreens. Touch events must be
+        # accepted on the viewport for the gesture framework to see them.
+        self.viewport().setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
+        self.viewport().grabGesture(Qt.GestureType.PinchGesture)
+        self._pinch_saved_interactive = None
+
     def resizeEvent(self, event):
         if self.auto_fit:
             self.fit_to_scene_rect()
@@ -71,6 +77,48 @@ class AutoFitGraphicsView(QGraphicsView):
                     return
 
         super().keyPressEvent(event)
+
+    def viewportEvent(self, event):
+        if event.type() == QEvent.Type.Gesture:
+            pinch = event.gesture(Qt.GestureType.PinchGesture)
+            if pinch is not None:
+                self._handle_pinch_gesture(pinch)
+                return True
+
+        return super().viewportEvent(event)
+
+    def _handle_pinch_gesture(self, pinch):
+        """Zoom around the fingers' midpoint. The first finger's synthesized
+        mouse events must not keep driving electrode/route interaction while
+        pinching, so scene interactivity is suspended for the gesture."""
+        if pinch.state() == Qt.GestureState.GestureStarted:
+            # The user is taking manual control of the framing.
+            self.auto_fit = False
+            self._pinch_saved_interactive = self.isInteractive()
+            self.setInteractive(False)
+
+        factor = pinch.scaleFactor()
+        if factor != 1.0:
+            # NoAnchor so the explicit scale-then-translate below is the only
+            # thing repositioning the scene under the gesture's center.
+            anchor = self.transformationAnchor()
+            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.NoAnchor)
+
+            center = self.viewport().mapFromGlobal(pinch.centerPoint().toPoint())
+            before = self.mapToScene(center)
+            self.scale(factor, factor)
+            delta = self.mapToScene(center) - before
+            self.translate(delta.x(), delta.y())
+
+            self.setTransformationAnchor(anchor)
+
+        if pinch.state() in (
+            Qt.GestureState.GestureFinished,
+            Qt.GestureState.GestureCanceled,
+        ):
+            if self._pinch_saved_interactive is not None:
+                self.setInteractive(self._pinch_saved_interactive)
+                self._pinch_saved_interactive = None
 
     def wheelEvent(self, event):
         # forward all the wheel events to the interaction service if
