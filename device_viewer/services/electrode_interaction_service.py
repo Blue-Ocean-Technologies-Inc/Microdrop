@@ -8,46 +8,73 @@
 #
 # Thanks for using Microdrop open source!
 
-import os
 import json
+import os
 import time
 
-from PySide6.QtGui import QKeyEvent, Qt, QWheelEvent, QAction
-from PySide6.QtWidgets import (QGraphicsView, QGraphicsSceneWheelEvent, 
-                               QGraphicsSceneContextMenuEvent, QMenu)
-from traits.api import HasTraits, Instance, Dict, List, Str, observe, Bool, Float
 from PySide6.QtCore import QPointF, QTimer
+from PySide6.QtGui import QAction, QKeyEvent, Qt, QWheelEvent
+from PySide6.QtWidgets import (
+    QGraphicsSceneContextMenuEvent,
+    QGraphicsSceneWheelEvent,
+    QGraphicsView,
+    QMenu,
+    QToolTip,
+)
+
+from traits.api import Bool, Dict, Float, HasTraits, Instance, List, Str, observe
 
 try:
-    import pygame  
-except Exception:  
+    import pygame
+except Exception:
     pygame = None
 
-from device_viewer.models.electrodes import Electrode
-from device_viewer.utils.electrode_route_helpers import find_shortest_paths
-from dropbot_controller.consts import (
-    DETECT_DROPLETS, SET_REALTIME_MODE
-)
 from device_viewer.consts import (
-    GAMEPAD_BTN_CLEAR, GAMEPAD_BTN_FIND, GAMEPAD_BTN_SPLIT, GAMEPAD_BTN_ADD,
-    GAMEPAD_BTN_REMOVE, GAMEPAD_BTN_REALTIME, GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
-    GAMEPAD_DEBOUNCE_ADD_REMOVE_S, GAMEPAD_DEBOUNCE_FIND_S,
-    GAMEPAD_DEBOUNCE_REALTIME_S, GAMEPAD_AXIS_THRESHOLD,
-    GAMEPAD_POLL_INTERVAL_MS, GAMEPAD_IDLE_POLL_INTERVAL_MS,
+    GAMEPAD_AXIS_THRESHOLD,
+    GAMEPAD_BTN_ADD,
+    GAMEPAD_BTN_CLEAR,
+    GAMEPAD_BTN_FIND,
+    GAMEPAD_BTN_REALTIME,
+    GAMEPAD_BTN_REMOVE,
+    GAMEPAD_BTN_SPLIT,
+    GAMEPAD_DEBOUNCE_ADD_REMOVE_S,
+    GAMEPAD_DEBOUNCE_FIND_S,
+    GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
+    GAMEPAD_DEBOUNCE_REALTIME_S,
+    GAMEPAD_IDLE_POLL_INTERVAL_MS,
+    GAMEPAD_POLL_INTERVAL_MS,
 )
-from logger.logger_service import get_logger
-from microdrop_style.colors import GREY, SUCCESS_COLOR
+from device_viewer.default_settings import (
+    AUTOROUTE_COLOR,
+    actuated_electrodes_key,
+    connections_key,
+    electrode_fill_key,
+    electrode_outline_key,
+    electrode_text_key,
+    routes_key,
+)
+from device_viewer.models.electrodes import Electrode
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
+from device_viewer.utils.electrode_route_helpers import find_shortest_paths
 from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
-from device_viewer.views.electrode_view.electrodes_view_base import ElectrodeView, ElectrodeConnectionItem, \
-    ElectrodeEndpointItem
-from device_viewer.default_settings import AUTOROUTE_COLOR, electrode_outline_key, \
-    electrode_fill_key, actuated_electrodes_key, electrode_text_key, routes_key, connections_key
+from device_viewer.views.electrode_view.electrodes_view_base import (
+    ElectrodeConnectionItem,
+    ElectrodeEndpointItem,
+    ElectrodeView,
+)
+from dropbot_controller.consts import DETECT_DROPLETS, SET_REALTIME_MODE
+
+from microdrop_style.colors import GREY, SUCCESS_COLOR
+
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.system_config import is_rpi
+
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -55,9 +82,12 @@ logger = get_logger(__name__)
 # (kept distinct from None, which means "unassign the channel").
 _CHANNEL_REVERT = object()
 
+
 class ElectrodeInteractionControllerService(HasTraits):
-    """Service to handle electrode interactions. Converts complicated Qt-events into more application specific events.
-    Note that this is not an Envisage or Pyface callback/handler class, and is only called manually from the ElectrodeScene class.
+    """Service to handle electrode interactions. Converts complicated Qt-events into
+    more application specific events.
+    Note that this is not an Envisage or Pyface callback/handler class, and is only
+    called manually from the ElectrodeScene class.
 
     The following should be passed as kwargs to the constructor:
     - model: The main model instance.
@@ -94,24 +124,38 @@ class ElectrodeInteractionControllerService(HasTraits):
     rect_buffer = List(Instance(QPointF), [])
 
     #: state data fields
-    _last_electrode_id_visited = Str(allow_none=True, desc="The last electrode clicked / dragged on by user's id.")
+    _last_electrode_id_visited = Str(
+        allow_none=True, desc="The last electrode clicked / dragged on by user's id."
+    )
 
     _left_mouse_pressed = Bool(False)
     _right_mouse_pressed = Bool(False)
 
-    _edit_reference_rect = Bool(False, desc='Is the reference rect editable without affecting perpective.')
+    _edit_reference_rect = Bool(
+        False, desc="Is the reference rect editable without affecting perpective."
+    )
 
     _electrode_tooltip_visible = Bool(True)
 
-    _is_drag = Bool(False, desc='Is user dragging the pointer on screen')
+    _is_drag = Bool(False, desc="Is user dragging the pointer on screen")
 
-    _split_modifier_down = Bool(False, desc="When True (B held), arrow presses are split steps.")
-    _add_modifier_down = Bool(False, desc="When True (Y held), arrows extend active electrodes.")
-    _remove_modifier_down = Bool(False, desc="When True (X held), arrows shrink active electrodes.")
+    _split_modifier_down = Bool(
+        False, desc="When True (B held), arrow presses are split steps."
+    )
+    _add_modifier_down = Bool(
+        False, desc="When True (Y held), arrows extend active electrodes."
+    )
+    _remove_modifier_down = Bool(
+        False, desc="When True (X held), arrows shrink active electrodes."
+    )
     # NOTE: Traits `Str` does not accept None reliably; use "" as the unset sentinel.
     _split_axis = Str("", desc="Split axis: 'h' or 'v'. Empty means unset.")
-    _split_arm_neg = Str("", desc="Negative-direction split arm electrode id. Empty means unset.")
-    _split_arm_pos = Str("", desc="Positive-direction split arm electrode id. Empty means unset.")
+    _split_arm_neg = Str(
+        "", desc="Negative-direction split arm electrode id. Empty means unset."
+    )
+    _split_arm_pos = Str(
+        "", desc="Positive-direction split arm electrode id. Empty means unset."
+    )
 
     _axis_left_pressed = Bool(False)
     _axis_right_pressed = Bool(False)
@@ -143,12 +187,42 @@ class ElectrodeInteractionControllerService(HasTraits):
     #: built-in default). Used by both _load_gamepad_mapping (read) and
     #: _finish_button_capture (write-back), so the two can't drift apart.
     _GAMEPAD_ACTIONS = {
-        "clear":    ("gamepad_btn_clear",    "MICRODROP_GAMEPAD_BTN_CLEAR",           "_btn_clear",           GAMEPAD_BTN_CLEAR),
-        "find":     ("gamepad_btn_find",     "MICRODROP_GAMEPAD_BTN_FIND",            "_btn_find_liquid",     GAMEPAD_BTN_FIND),
-        "split":    ("gamepad_btn_split",    "MICRODROP_GAMEPAD_BTN_SPLIT",           "_btn_split",           GAMEPAD_BTN_SPLIT),
-        "add":      ("gamepad_btn_add",      "MICRODROP_GAMEPAD_BTN_ADD_MOD",         "_btn_add_modifier",    GAMEPAD_BTN_ADD),
-        "remove":   ("gamepad_btn_remove",   "MICRODROP_GAMEPAD_BTN_REMOVE_MOD",      "_btn_remove_modifier", GAMEPAD_BTN_REMOVE),
-        "realtime": ("gamepad_btn_realtime", "MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE", "_btn_realtime_toggle", GAMEPAD_BTN_REALTIME),
+        "clear": (
+            "gamepad_btn_clear",
+            "MICRODROP_GAMEPAD_BTN_CLEAR",
+            "_btn_clear",
+            GAMEPAD_BTN_CLEAR,
+        ),
+        "find": (
+            "gamepad_btn_find",
+            "MICRODROP_GAMEPAD_BTN_FIND",
+            "_btn_find_liquid",
+            GAMEPAD_BTN_FIND,
+        ),
+        "split": (
+            "gamepad_btn_split",
+            "MICRODROP_GAMEPAD_BTN_SPLIT",
+            "_btn_split",
+            GAMEPAD_BTN_SPLIT,
+        ),
+        "add": (
+            "gamepad_btn_add",
+            "MICRODROP_GAMEPAD_BTN_ADD_MOD",
+            "_btn_add_modifier",
+            GAMEPAD_BTN_ADD,
+        ),
+        "remove": (
+            "gamepad_btn_remove",
+            "MICRODROP_GAMEPAD_BTN_REMOVE_MOD",
+            "_btn_remove_modifier",
+            GAMEPAD_BTN_REMOVE,
+        ),
+        "realtime": (
+            "gamepad_btn_realtime",
+            "MICRODROP_GAMEPAD_BTN_REALTIME_TOGGLE",
+            "_btn_realtime_toggle",
+            GAMEPAD_BTN_REALTIME,
+        ),
     }
 
     _hud_message = Str("")
@@ -209,7 +283,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                     mgr.remove(self._hud_message)
                 except Exception:
                     try:
-                        mgr.messages = [m for m in mgr.messages if m != self._hud_message]
+                        mgr.messages = [
+                            m for m in mgr.messages if m != self._hud_message
+                        ]
                     except Exception:
                         pass
             self._hud_message = text
@@ -238,7 +314,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             color = SUCCESS_COLOR if connected else GREY["lighter"]
             icon.setStyleSheet(f"color: {color};")
             icon.setToolTip(text if connected else "Gamepad disconnected")
-        except RuntimeError as e:       # icon deleted with the window
+        except RuntimeError as e:  # icon deleted with the window
             logger.debug(f"gamepad indicator gone: {e}")
 
     @observe("gamepad_icon")
@@ -250,7 +326,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         in later. Without this, a controller acquired during startup would
         color a None icon and never show as connected.
         """
-        if event.new is None or not self._pygame_enabled or self._pygame_joystick is None:
+        if (
+            event.new is None
+            or not self._pygame_enabled
+            or self._pygame_joystick is None
+        ):
             return
         try:
             name = self._pygame_joystick.get_name()
@@ -375,15 +455,30 @@ class ElectrodeInteractionControllerService(HasTraits):
         default). Re-run live on preference changes; no controller required.
         """
         self._dpad_debounce_move_split_s = self._pref_float(
-            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_S", "gamepad_debounce_move_split", GAMEPAD_DEBOUNCE_MOVE_SPLIT_S)
+            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_S",
+            "gamepad_debounce_move_split",
+            GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
+        )
         self._dpad_debounce_add_remove_s = self._pref_float(
-            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_ADD_REMOVE_S", "gamepad_debounce_add_remove", GAMEPAD_DEBOUNCE_ADD_REMOVE_S)
+            "MICRODROP_GAMEPAD_DPAD_DEBOUNCE_ADD_REMOVE_S",
+            "gamepad_debounce_add_remove",
+            GAMEPAD_DEBOUNCE_ADD_REMOVE_S,
+        )
         self._btn_debounce_find_liquid_s = self._pref_float(
-            "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S", "gamepad_debounce_find", GAMEPAD_DEBOUNCE_FIND_S)
+            "MICRODROP_GAMEPAD_DEBOUNCE_FIND_S",
+            "gamepad_debounce_find",
+            GAMEPAD_DEBOUNCE_FIND_S,
+        )
         self._btn_debounce_realtime_s = self._pref_float(
-            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S", "gamepad_debounce_realtime", GAMEPAD_DEBOUNCE_REALTIME_S)
+            "MICRODROP_GAMEPAD_DEBOUNCE_REALTIME_S",
+            "gamepad_debounce_realtime",
+            GAMEPAD_DEBOUNCE_REALTIME_S,
+        )
         self._pygame_axis_threshold = self._pref_float(
-            "MICRODROP_GAMEPAD_AXIS_THRESHOLD", "gamepad_axis_threshold", GAMEPAD_AXIS_THRESHOLD)
+            "MICRODROP_GAMEPAD_AXIS_THRESHOLD",
+            "gamepad_axis_threshold",
+            GAMEPAD_AXIS_THRESHOLD,
+        )
 
     def _configure_dpad_mapping(self, js) -> None:
         """Resolve D-pad axis mapping for ``js``: prefer HAT, fall back to axes.
@@ -401,8 +496,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         except Exception:
             pass
 
-        self._pygame_dpad_x_axis = self._env_int("MICRODROP_GAMEPAD_DPAD_X_AXIS", default_dpad_x)
-        self._pygame_dpad_y_axis = self._env_int("MICRODROP_GAMEPAD_DPAD_Y_AXIS", default_dpad_y)
+        self._pygame_dpad_x_axis = self._env_int(
+            "MICRODROP_GAMEPAD_DPAD_X_AXIS", default_dpad_x
+        )
+        self._pygame_dpad_y_axis = self._env_int(
+            "MICRODROP_GAMEPAD_DPAD_Y_AXIS", default_dpad_y
+        )
 
     def _acquire_joystick(self) -> bool:
         """Grab joystick[0] if one is present. Safe to call repeatedly.
@@ -501,8 +600,11 @@ class ElectrodeInteractionControllerService(HasTraits):
         absent gamepad costs smoothness for nothing)."""
         if self._pygame_timer is None:
             return
-        interval = (GAMEPAD_POLL_INTERVAL_MS if self._pygame_enabled
-                    else GAMEPAD_IDLE_POLL_INTERVAL_MS)
+        interval = (
+            GAMEPAD_POLL_INTERVAL_MS
+            if self._pygame_enabled
+            else GAMEPAD_IDLE_POLL_INTERVAL_MS
+        )
         if self._pygame_timer.interval() != interval:
             self._pygame_timer.setInterval(interval)
 
@@ -540,7 +642,8 @@ class ElectrodeInteractionControllerService(HasTraits):
         # Warn (but don't block) if this button is already bound elsewhere — the
         # two handlers would both fire on that press. Up to the user to resolve.
         clashes = [
-            other for other, m in self._GAMEPAD_ACTIONS.items()
+            other
+            for other, m in self._GAMEPAD_ACTIONS.items()
             if other != action and getattr(self, m[2], None) == int(btn)
         ]
         if clashes:
@@ -556,7 +659,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                 # observer then reloads the live mapping.
                 setattr(prefs, pref_name, int(btn))
             except Exception as e:
-                logger.warning(f"gamepad capture: failed to store {pref_name}={btn}: {e}")
+                logger.warning(
+                    f"gamepad capture: failed to store {pref_name}={btn}: {e}"
+                )
         # Reload now too, in case no preferences object is wired up.
         self._load_gamepad_mapping()
         self._set_hud(f"Gamepad: '{action}' bound to button {btn}")
@@ -781,7 +886,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def _handle_pygame_axis(self, axis: int, value: float) -> None:
         thr = float(self._pygame_axis_threshold or 0.6)
 
-        if self._pygame_dpad_x_axis is not None and axis == int(self._pygame_dpad_x_axis):
+        if self._pygame_dpad_x_axis is not None and axis == int(
+            self._pygame_dpad_x_axis
+        ):
             left_now = value < -thr
             right_now = value > thr
             if left_now and not self._axis_left_pressed:
@@ -791,7 +898,9 @@ class ElectrodeInteractionControllerService(HasTraits):
             self._axis_left_pressed = left_now
             self._axis_right_pressed = right_now
 
-        if self._pygame_dpad_y_axis is not None and axis == int(self._pygame_dpad_y_axis):
+        if self._pygame_dpad_y_axis is not None and axis == int(
+            self._pygame_dpad_y_axis
+        ):
             up_now = value < -thr
             down_now = value > thr
             if up_now and not self._axis_up_pressed:
@@ -832,16 +941,40 @@ class ElectrodeInteractionControllerService(HasTraits):
             debounce_s = float(getattr(self, "_dpad_debounce_add_remove_s", 0.3) or 0.0)
         else:
             debounce_s = float(getattr(self, "_dpad_debounce_move_split_s", 0.7) or 0.0)
-        if debounce_s > 0 and (now - float(getattr(self, "_last_dpad_action_ts", 0.0))) < debounce_s:
-            mode = "SPLIT" if self._split_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
-            self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} (debounce {debounce_s:.0f}s)")
+        if (
+            debounce_s > 0
+            and (now - float(getattr(self, "_last_dpad_action_ts", 0.0))) < debounce_s
+        ):
+            mode = (
+                "SPLIT"
+                if self._split_modifier_down
+                else (
+                    "ADD"
+                    if self._add_modifier_down
+                    else ("REMOVE" if self._remove_modifier_down else "MOVE")
+                )
+            )
+            self._set_hud(
+                f"Pad: {mode} {direction}->{mapped_direction} "
+                f"(debounce {debounce_s:.0f}s)"
+            )
             return
         self._last_dpad_action_ts = now
 
-        mode = "SPLIT" if self._split_modifier_down else ("ADD" if self._add_modifier_down else ("REMOVE" if self._remove_modifier_down else "MOVE"))
+        mode = (
+            "SPLIT"
+            if self._split_modifier_down
+            else (
+                "ADD"
+                if self._add_modifier_down
+                else ("REMOVE" if self._remove_modifier_down else "MOVE")
+            )
+        )
         axis = "H" if mapped_direction in ("left", "right") else "V"
         active_n = len(self._get_active_electrode_ids())
-        self._set_hud(f"Pad: {mode} {direction}->{mapped_direction} axis={axis} active={active_n}")
+        self._set_hud(
+            f"Pad: {mode} {direction}->{mapped_direction} axis={axis} active={active_n}"
+        )
 
         if os.environ.get("MICRODROP_GAMEPAD_DEBUG", "").strip() == "1":
             logger.info(
@@ -881,7 +1014,8 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _apply_active_electrode_ids(self, desired_electrode_ids: set[str]) -> None:
         """
-        Apply desired electrode IDs by mapping to channels and setting actuated_channels.
+        Apply desired electrode IDs by mapping to channels and setting
+        actuated_channels.
         """
         electrode_to_channel = self.model.electrodes.electrode_ids_channels_map or {}
 
@@ -907,11 +1041,15 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _neighbor_in_direction(self, electrode_id: str, direction: str) -> str | None:
         """
-        Pick the "best" neighbor in the requested direction using electrode centroid geometry.
-        Returns None if no neighbor is reasonably in that direction.
+        Pick the "best" neighbor in the requested direction using electrode centroid
+        geometry. Returns None if no neighbor is reasonably in that direction.
         """
         svg = getattr(self.model.electrodes, "svg_model", None)
-        if svg is None or not getattr(svg, "neighbours", None) or not getattr(svg, "electrode_centers", None):
+        if (
+            svg is None
+            or not getattr(svg, "neighbours", None)
+            or not getattr(svg, "electrode_centers", None)
+        ):
             return None
 
         neighbors = svg.neighbours.get(electrode_id, []) or []
@@ -932,7 +1070,8 @@ class ElectrodeInteractionControllerService(HasTraits):
                 continue
             vx = nx - cx
             vy = ny - cy
-            # Prefer large projection in requested direction, penalize sideways motion a bit.
+            # Prefer large projection in requested direction, penalize sideways
+            # motion a bit.
             proj = vx * dx + vy * dy
             if proj <= 0:
                 continue
@@ -1089,8 +1228,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _get_active_components(self, active_ids: set[str]) -> list[set[str]]:
         """
-        Partition active electrode IDs into connected components using the SVG neighbour graph.
-        Each component corresponds to an independent "droplet blob" for splitting.
+        Partition active electrode IDs into connected components using the SVG
+        neighbour graph. Each component corresponds to an independent "droplet
+        blob" for splitting.
         """
         if not active_ids:
             return []
@@ -1122,12 +1262,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         Split stepping while X is held.
 
         Behavior:
-        - The first arrow press selects the split axis (left/right => horizontal, up/down => vertical)
-          and starts a fresh split session (mirror point fixed for the duration of holding X).
+        - The first arrow press selects the split axis (left/right => horizontal,
+          up/down => vertical) and starts a fresh split session (mirror point
+          fixed for the duration of holding X).
         - Right/Down: move *further away* from the mirror point (expand).
         - Left/Up: move *closer* to the mirror point (contract).
 
-        Each connected component of active electrodes is treated as an independent droplet blob.
+        Each connected component of active electrodes is treated as an independent
+        droplet blob.
         """
         if self.model.mode not in ("edit", "draw", "edit-draw", "merge"):
             return
@@ -1135,7 +1277,8 @@ class ElectrodeInteractionControllerService(HasTraits):
         svg = getattr(self.model.electrodes, "svg_model", None)
         centers = getattr(svg, "electrode_centers", None) if svg else None
 
-        # If nothing is active, split should do nothing and should not "remember" old state.
+        # If nothing is active, split should do nothing and should not "remember"
+        # old state.
         active_now = self._get_active_electrode_ids()
         if not active_now:
             self._reset_split_state()
@@ -1183,7 +1326,8 @@ class ElectrodeInteractionControllerService(HasTraits):
                         "right_ids": right_ids,
                         "mirror_ids": mirror_ids,
                         "history": [],  # list[tuple[set[str], set[str]]]
-                        "normalized": False,  # first expand: only remove middle (or split single)
+                        # first expand: only remove middle (or split single)
+                        "normalized": False,
                     }
                 )
 
@@ -1226,7 +1370,8 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self._apply_active_electrode_ids(base_ids)
                 self._last_electrode_id_visited = next(iter(base_ids))
 
-                # Reinitialize sessions from the merged state so the next expand starts cleanly.
+                # Reinitialize sessions from the merged state so the next expand
+                # starts cleanly.
                 self._split_sessions = []
                 for comp in self._get_active_components(base_ids):
                     ids_list = list(comp)
@@ -1271,7 +1416,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             return
 
         # First expand after starting split:
-        # - If 3+ electrodes selected, only turn off the middle (mirror electrode) and keep the rest.
+        # - If 3+ electrodes selected, only turn off the middle (mirror electrode)
+        #   and keep the rest.
         # - If 1 electrode selected, perform the actual split into its two neighbors.
         # Subsequent expands: move left/right groups outward as groups.
         desired_all: set[str] = set()
@@ -1289,7 +1435,8 @@ class ElectrodeInteractionControllerService(HasTraits):
                     pass
 
                 if len(left_ids) == 1 and left_ids == right_ids and not mirror_ids:
-                    # Single-electrode case: split into neighbors (both sides) immediately.
+                    # Single-electrode case: split into neighbors (both sides)
+                    # immediately.
                     center = next(iter(left_ids))
                     new_left = self._neighbor_in_direction(center, neg_dir) or center
                     new_right = self._neighbor_in_direction(center, pos_dir) or center
@@ -1303,8 +1450,10 @@ class ElectrodeInteractionControllerService(HasTraits):
                     continue
 
                 # Multi-electrode case:
-                # - Odd count: deactivate the single middle (mirror) and keep the rest.
-                # - Even count: there is no single middle; immediately begin expanding outward.
+                # - Odd count: deactivate the single middle (mirror) and keep the
+                #   rest.
+                # - Even count: there is no single middle; immediately begin
+                #   expanding outward.
                 sess["normalized"] = True
 
                 if mirror_ids:
@@ -1327,7 +1476,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             except Exception:
                 pass
 
-            # Expand away from mirror: left group moves neg_dir, right group moves pos_dir.
+            # Expand away from mirror: left group moves neg_dir, right group moves
+            # pos_dir.
             new_left, moved_left = _shift(left_ids, neg_dir)
             new_right, moved_right = _shift(right_ids, pos_dir)
             moved_any = moved_any or moved_left or moved_right
@@ -1429,7 +1579,9 @@ class ElectrodeInteractionControllerService(HasTraits):
         # Track cumulative device-view rotation to remap controller directions.
         # Writing the model trait also persists the new angle to preferences
         # via the observer on DeviceViewMainModel.
-        self.model.device_rotation_deg = (int(self.model.device_rotation_deg or 0) + int(angle_step)) % 360
+        self.model.device_rotation_deg = (
+            int(self.model.device_rotation_deg or 0) + int(angle_step)
+        ) % 360
         # undo rotation on text for maintaining readability
         self.electrode_view_layer.rotate_electrode_views_texts(-angle_step)
 
@@ -1452,8 +1604,12 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def detect_droplet(self):
         """Placeholder for a context menu action."""
-        publish_message(topic=DETECT_DROPLETS,
-                        message=json.dumps(list(self.model.electrodes.channels_electrode_ids_map.keys())))
+        publish_message(
+            topic=DETECT_DROPLETS,
+            message=json.dumps(
+                list(self.model.electrodes.channels_electrode_ids_map.keys())
+            ),
+        )
 
     #######################################################################################################
     # Perspective Handlers
@@ -1466,17 +1622,24 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_perspective_edit_start(self, point: QPointF):
         """Handle the start of perspective editing."""
-        closest_point, closest_index = self.model.camera_perspective.get_closest_point(point)
-        self.rect_editing_index = closest_index  # Store the index of the point being edited
+        closest_point, closest_index = self.model.camera_perspective.get_closest_point(
+            point
+        )
+        self.rect_editing_index = (
+            closest_index  # Store the index of the point being edited
+        )
 
     def handle_perspective_edit(self, point: QPointF):
         """Handle the editing of a reference point during perspective correction."""
 
-        # check if we are editing just the reference rect buffer or the actual rect tied to transforming perspective
+        # check if we are editing just the reference rect buffer or the actual rect
+        # tied to transforming perspective
         if self._edit_reference_rect:
             logger.debug("Only reference rect buffer changed")
             if not self.rect_buffer:
-                self.rect_buffer = self.model.camera_perspective.transformed_reference_rect.copy()
+                self.rect_buffer = (
+                    self.model.camera_perspective.transformed_reference_rect.copy()
+                )
             rect_to_edit = self.rect_buffer
         else:
             logger.debug("Reference rect tied to perspective transform changed")
@@ -1496,9 +1659,15 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_toggle_edit_reference_rect(self):
         if self._edit_reference_rect:
-            logger.info(f"Toggling reference rect edit mode off. Changed will affect camera perspective")
+            logger.info(
+                "Toggling reference rect edit mode off. Changed will affect "
+                "camera perspective"
+            )
         else:
-            logger.info(f"Toggling reference rect edit mode on. Changed will not affect camera perspective")
+            logger.info(
+                "Toggling reference rect edit mode on. Changed will not affect "
+                "camera perspective"
+            )
 
         self._edit_reference_rect = not self._edit_reference_rect
 
@@ -1598,14 +1767,18 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         elif self.model.mode in ("edit", "draw", "edit-draw", "merge"):
             clicked_electrode_channel = self.model.electrodes[electrode_id].channel
-            if clicked_electrode_channel != None: # The channel can be unassigned!
+            if clicked_electrode_channel is not None:  # The channel can be unassigned!
                 if clicked_electrode_channel in self.model.electrodes.disabled_channels:
                     return  # Disabled electrodes cannot be actuated
 
                 if clicked_electrode_channel in self.model.electrodes.actuated_channels:
-                    self.model.electrodes.actuated_channels.remove(clicked_electrode_channel)
+                    self.model.electrodes.actuated_channels.remove(
+                        clicked_electrode_channel
+                    )
                 else:
-                    self.model.electrodes.actuated_channels.add(clicked_electrode_channel)
+                    self.model.electrodes.actuated_channels.add(
+                        clicked_electrode_channel
+                    )
 
     def handle_toggle_electrode_tooltips(self, checked):
         """Handle toggle electrode tooltip."""
@@ -1617,51 +1790,78 @@ class ElectrodeInteractionControllerService(HasTraits):
     #######################################################################################################
 
     def handle_route_draw(self, from_id, to_id):
-        '''Handle a route segment being drawn or first electrode being added'''
+        """Handle a route segment being drawn or first electrode being added"""
         if self.model.mode in ("edit", "edit-draw", "draw"):
-            if self.model.mode == "draw": # Create a new layer
+            if self.model.mode == "draw":  # Create a new layer
                 self.model.routes.add_layer(Route(route=[from_id, to_id]))
-                self.model.routes.selected_layer = self.model.routes.layers[-1] # Select the route we just added
-                self.model.mode = "edit-draw" # We now want to extend the route we just made
-            else: # In some edit mode, try to modify currently selected layer
+                self.model.routes.selected_layer = self.model.routes.layers[
+                    -1
+                ]  # Select the route we just added
+                self.model.mode = (
+                    "edit-draw"  # We now want to extend the route we just made
+                )
+            else:  # In some edit mode, try to modify currently selected layer
                 current_route = self.model.routes.get_selected_route()
-                if current_route == None: return
+                if current_route is None:
+                    return
 
                 if current_route.can_add_segment(from_id, to_id):
                     current_route.add_segment(from_id, to_id)
 
     def handle_route_erase(self, from_id, to_id):
-        '''Handle a route segment being erased'''
+        """Handle a route segment being erased"""
         current_route = self.model.routes.get_selected_route()
-        if current_route == None: return
+        if current_route is None:
+            return
 
         if current_route.can_remove(from_id, to_id):
-            new_routes = [Route(route_list) for route_list in current_route.remove_segment(from_id, to_id)]
-            self.model.routes.replace_layer(self.model.routes.selected_layer, new_routes)
+            new_routes = [
+                Route(route_list)
+                for route_list in current_route.remove_segment(from_id, to_id)
+            ]
+            self.model.routes.replace_layer(
+                self.model.routes.selected_layer, new_routes
+            )
 
     def handle_endpoint_erase(self, electrode_id):
-        '''Handle the erase being triggered by hovering an endpoint'''
+        """Handle the erase being triggered by hovering an endpoint"""
         current_route = self.model.get_selected_route()
-        if current_route == None: return
+        if current_route is None:
+            return
 
         endpoints = current_route.get_endpoints()
         segments = current_route.get_segments()
-        if len(endpoints) == 0 or len(segments) == 0: # Path of length 0 or path length of 1
-            self.model.routes.delete_layer(self.model.routes.selected_layer) # Delete layer
-        elif electrode_id == endpoints[0]: # Starting endpoint erased
-            self.handle_route_erase(*segments[0]) # Delete the first segment
-        elif electrode_id == endpoints[1]: # Ending endpoint erased
-            self.handle_route_erase(*segments[-1]) # Delete last segment
+        if (
+            len(endpoints) == 0 or len(segments) == 0
+        ):  # Path of length 0 or path length of 1
+            self.model.routes.delete_layer(
+                self.model.routes.selected_layer
+            )  # Delete layer
+        elif electrode_id == endpoints[0]:  # Starting endpoint erased
+            self.handle_route_erase(*segments[0])  # Delete the first segment
+        elif electrode_id == endpoints[1]:  # Ending endpoint erased
+            self.handle_route_erase(*segments[-1])  # Delete last segment
 
-    def handle_autoroute_start(self, from_id, avoid_collisions=True): # Run when the user enables autorouting an clicks on an electrode
+    def handle_autoroute_start(
+        self, from_id, avoid_collisions=True
+    ):  # Run when the user enables autorouting an clicks on an electrode
         logger.debug("Start Autoroute")
         routes = [layer.route for layer in self.model.routes.layers]
-        self.autoroute_paths = find_shortest_paths(from_id, self.model.electrodes.svg_model.neighbours, routes, avoid_collisions=avoid_collisions) # Run the BFS and cache the result dict
-        self.model.routes.autoroute_layer = RouteLayer(route=Route(), color=AUTOROUTE_COLOR)
+        self.autoroute_paths = find_shortest_paths(
+            from_id,
+            self.model.electrodes.svg_model.neighbours,
+            routes,
+            avoid_collisions=avoid_collisions,
+        )  # Run the BFS and cache the result dict
+        self.model.routes.autoroute_layer = RouteLayer(
+            route=Route(), color=AUTOROUTE_COLOR
+        )
 
     def handle_autoroute(self, to_id):
         logger.debug(f"Autoroute: Adding route to {to_id}")
-        self.model.routes.autoroute_layer.route.route = self.autoroute_paths.get(to_id, []).copy() # Display cached result from BFS
+        self.model.routes.autoroute_layer.route.route = self.autoroute_paths.get(
+            to_id, []
+        ).copy()  # Display cached result from BFS
 
     def handle_autoroute_end(self):
         # only proceed if there is at least one segment and autoroute layer exists
@@ -1669,12 +1869,19 @@ class ElectrodeInteractionControllerService(HasTraits):
             logger.debug("End Autoroute")
             self.autoroute_paths = {}
             if self.model.routes.autoroute_layer.route.get_segments():
-                self.model.routes.add_layer(self.model.routes.autoroute_layer.route) # Keep the route, generate a normal color
+                self.model.routes.add_layer(
+                    self.model.routes.autoroute_layer.route
+                )  # Keep the route, generate a normal color
             self.model.routes.autoroute_layer = None
-            self.model.routes.selected_layer = self.model.routes.layers[-1] # Select just created layer
+            self.model.routes.selected_layer = self.model.routes.layers[
+                -1
+            ]  # Select just created layer
             # self.model.mode = 'edit'
         else:
-            logger.warning("Autoroute needs to start by clicking and dragging from an electrode polygon.")
+            logger.warning(
+                "Autoroute needs to start by clicking and dragging from an "
+                "electrode polygon."
+            )
 
     #######################################################################################################
     # Key handlers
@@ -1702,13 +1909,13 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.model.zoom_out_event = True
 
     def handle_ctrl_plus(self):
-        self.model.zoom_in_event = True # Observer routine will call zoom in
+        self.model.zoom_in_event = True  # Observer routine will call zoom in
 
     def handle_ctrl_minus(self):
-        self.model.zoom_out_event = True # Observer routine will call zoom out
+        self.model.zoom_out_event = True  # Observer routine will call zoom out
 
     def handle_space(self):
-        self.model.flip_mode_activation(mode='pan')
+        self.model.flip_mode_activation(mode="pan")
         # Observer routine will call apply pan mode #
 
     ##########################################################################################
@@ -1722,20 +1929,40 @@ class ElectrodeInteractionControllerService(HasTraits):
         # Only when Ctrl/Alt are NOT held to avoid conflicts with existing shortcuts.
         if not (event.modifiers() & (Qt.ControlModifier | Qt.AltModifier)):
             # We accept either Qt6 enum style (Qt.Key.Key_Left) or legacy aliases.
-            key_left = {getattr(Qt, "Key_Left", None), getattr(getattr(Qt, "Key", None), "Key_Left", None)}
-            key_right = {getattr(Qt, "Key_Right", None), getattr(getattr(Qt, "Key", None), "Key_Right", None)}
-            key_up = {getattr(Qt, "Key_Up", None), getattr(getattr(Qt, "Key", None), "Key_Up", None)}
-            key_down = {getattr(Qt, "Key_Down", None), getattr(getattr(Qt, "Key", None), "Key_Down", None)}
+            key_left = {
+                getattr(Qt, "Key_Left", None),
+                getattr(getattr(Qt, "Key", None), "Key_Left", None),
+            }
+            key_right = {
+                getattr(Qt, "Key_Right", None),
+                getattr(getattr(Qt, "Key", None), "Key_Right", None),
+            }
+            key_up = {
+                getattr(Qt, "Key_Up", None),
+                getattr(getattr(Qt, "Key", None), "Key_Up", None),
+            }
+            key_down = {
+                getattr(Qt, "Key_Down", None),
+                getattr(getattr(Qt, "Key", None), "Key_Down", None),
+            }
             if key in key_left:
-                self._step_active_electrodes(self._map_direction_for_device_rotation("left"))
+                self._step_active_electrodes(
+                    self._map_direction_for_device_rotation("left")
+                )
             elif key in key_right:
-                self._step_active_electrodes(self._map_direction_for_device_rotation("right"))
+                self._step_active_electrodes(
+                    self._map_direction_for_device_rotation("right")
+                )
             elif key in key_up:
-                self._step_active_electrodes(self._map_direction_for_device_rotation("up"))
+                self._step_active_electrodes(
+                    self._map_direction_for_device_rotation("up")
+                )
             elif key in key_down:
-                self._step_active_electrodes(self._map_direction_for_device_rotation("down"))
+                self._step_active_electrodes(
+                    self._map_direction_for_device_rotation("down")
+                )
 
-        if (event.modifiers() & Qt.ControlModifier):
+        if event.modifiers() & Qt.ControlModifier:
             if event.key() == Qt.Key_Right:
                 self.handle_ctrl_key_right()
 
@@ -1749,7 +1976,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             if event.key() == Qt.Key.Key_Minus:
                 self.handle_ctrl_minus()
 
-        if (event.modifiers() & Qt.AltModifier):
+        if event.modifiers() & Qt.AltModifier:
             if event.key() == Qt.Key_Right:
                 self.handle_alt_key_right()
 
@@ -1765,7 +1992,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         button = event.button()
         mode = self.model.mode
 
-        electrode_view =  self.get_electrode_view_for_scene_pos(event.scenePos())
+        electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
         if button == Qt.LeftButton:
             self._left_mouse_pressed = True
 
@@ -1776,8 +2003,9 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif mode == "auto":
                 if electrode_view:
                     is_alt_pressed = event.modifiers() & Qt.KeyboardModifier.AltModifier
-                    self.handle_autoroute_start(electrode_view.id,
-                                                                    avoid_collisions=not is_alt_pressed)
+                    self.handle_autoroute_start(
+                        electrode_view.id, avoid_collisions=not is_alt_pressed
+                    )
 
             elif mode == "channel-edit":
                 if electrode_view:
@@ -1796,8 +2024,6 @@ class ElectrodeInteractionControllerService(HasTraits):
             else:
                 self.model.electrodes.electrode_left_clicked = None
 
-
-
     def handle_mouse_move_event(self, event):
         """Handle the dragging motion."""
 
@@ -1806,36 +2032,58 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.handle_electrode_hover(electrode_view)
 
         if self._left_mouse_pressed:
-            # Only proceed if we are in the appropriate mode with a valid electrode view.
-            # If last electrode view is none then no electrode was clicked yet (for example, first click was not on electrode)
-            if mode in ("edit", "draw", "edit-draw") and electrode_view and self._last_electrode_id_visited:
+            # Only proceed if we are in the appropriate mode with a valid electrode
+            # view. If last electrode view is none then no electrode was clicked yet
+            # (for example, first click was not on electrode)
+            if (
+                mode in ("edit", "draw", "edit-draw")
+                and electrode_view
+                and self._last_electrode_id_visited
+            ):
+                found_connection_item = find_path_item(
+                    self.device_view.scene(),
+                    (self._last_electrode_id_visited, electrode_view.id),
+                )
 
-                found_connection_item = find_path_item(self.device_view.scene(),
-                                                           (self._last_electrode_id_visited, electrode_view.id))
-
-                if found_connection_item:  # Are the electrodes neighbours? (This excludes self)
-                    self.handle_route_draw(self._last_electrode_id_visited, electrode_view.id)
-                    self._is_drag = True  # Since more than one electrode is left clicked, its a drag, not a single electrode click
+                if (
+                    found_connection_item
+                ):  # Are the electrodes neighbours? (This excludes self)
+                    self.handle_route_draw(
+                        self._last_electrode_id_visited, electrode_view.id
+                    )
+                    # Since more than one electrode is left clicked, its a drag, not
+                    # a single electrode click
+                    self._is_drag = True
 
             elif mode == "auto" and electrode_view:
                 # only proceed if a new electrode id was visited
                 if electrode_view.id != self._last_electrode_id_visited:
-                    self.handle_autoroute(electrode_view.id)  # We store last_electrode_id_visited as the source node
+                    self.handle_autoroute(
+                        electrode_view.id
+                    )  # We store last_electrode_id_visited as the source node
 
             elif mode == "camera-edit":
                 self.handle_perspective_edit(event.scenePos())
 
         if self._right_mouse_pressed:
-            if mode in ("edit", "draw", "edit-draw") and event.modifiers() & Qt.ControlModifier:
-                connection_item = self.device_view.scene().get_item_under_mouse(event.scenePos(), ElectrodeConnectionItem)
-                endpoint_item = self.device_view.scene().get_item_under_mouse(event.scenePos(), ElectrodeEndpointItem)
+            if (
+                mode in ("edit", "draw", "edit-draw")
+                and event.modifiers() & Qt.ControlModifier
+            ):
+                connection_item = self.device_view.scene().get_item_under_mouse(
+                    event.scenePos(), ElectrodeConnectionItem
+                )
+                endpoint_item = self.device_view.scene().get_item_under_mouse(
+                    event.scenePos(), ElectrodeEndpointItem
+                )
                 if connection_item:
                     (from_id, to_id) = connection_item.key
                     self.handle_route_erase(from_id, to_id)
                 elif endpoint_item:
                     self.handle_endpoint_erase(endpoint_item.electrode_id)
 
-        # End of routine: now the current electrode view becomes the "last electrode visited"
+        # End of routine: now the current electrode view becomes the "last electrode
+        # visited"
         if electrode_view:
             self._last_electrode_id_visited = electrode_view.id
 
@@ -1855,6 +2103,14 @@ class ElectrodeInteractionControllerService(HasTraits):
                 if not self._is_drag and electrode_view:
                     self.handle_electrode_click(electrode_view.id)
 
+                    # The rig's touchscreen has no hover — surface the
+                    # electrode tooltip at the finger after a tap instead.
+                    # Shown at release: shown any earlier, the release
+                    # event itself hides it again. The Enable Electrode
+                    # Tooltip toggle still governs it.
+                    if is_rpi() and electrode_view.toolTip():
+                        QToolTip.showText(event.screenPos(), electrode_view.toolTip())
+
                 # Reset left-click related vars
                 self._is_drag = False
 
@@ -1865,7 +2121,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         elif button == Qt.RightButton:
             self._right_mouse_pressed = False
 
-    def handle_scene_wheel_event(self, event: 'QGraphicsSceneWheelEvent'):
+    def handle_scene_wheel_event(self, event: "QGraphicsSceneWheelEvent"):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle = event.delta()
             self.handle_ctrl_mouse_wheel_event(angle)
@@ -1874,7 +2130,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         else:
             return False
 
-    def handle_wheel_event(self, event: 'QWheelEvent'):
+    def handle_wheel_event(self, event: "QWheelEvent"):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle = event.angleDelta().y()
             self.handle_ctrl_mouse_wheel_event(angle)
@@ -1884,30 +2140,55 @@ class ElectrodeInteractionControllerService(HasTraits):
             return False
 
     def handle_context_menu_event(self, event: QGraphicsSceneContextMenuEvent):
+        # Resolve the electrode under the event position at menu time — a
+        # touch long-press posts a context-menu event without the
+        # right-button press that used to set electrode_right_clicked, and
+        # this also drops the stale electrode a previous right click left.
+        electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+        self.model.electrodes.electrode_right_clicked = (
+            electrode_view.electrode if electrode_view else None
+        )
 
-        if not (event.modifiers() & Qt.ControlModifier): # If control is pressed, we do not show the context menu
-
+        if not (
+            event.modifiers() & Qt.ControlModifier
+        ):  # If control is pressed, we do not show the context menu
             context_menu = QMenu()
 
             if self.model.mode.split("-")[0] == "camera":
+
                 def set_camera_place_mode():
                     self.model.mode = "camera-place"
 
-                reference_rect_edit_action = QAction("Edit Reference Rect", checkable=True,
-                                              checked=self._edit_reference_rect,
-                                              toolTip="Edit Reference Rectangle without changing camera perspective")
+                reference_rect_edit_action = QAction(
+                    "Edit Reference Rect",
+                    checkable=True,
+                    checked=self._edit_reference_rect,
+                    toolTip=(
+                        "Edit Reference Rectangle without changing camera perspective"
+                    ),
+                )
 
-                reference_rect_edit_action.triggered.connect(self.handle_toggle_edit_reference_rect)
+                reference_rect_edit_action.triggered.connect(
+                    self.handle_toggle_edit_reference_rect
+                )
 
-                context_menu.addAction("Reset Reference Rectangle", set_camera_place_mode)
+                context_menu.addAction(
+                    "Reset Reference Rectangle", set_camera_place_mode
+                )
                 context_menu.addAction(reference_rect_edit_action)
                 context_menu.addSeparator()
 
             else:
-                context_menu.addAction("Measure Liquid Capacitance", self.model.measure_liquid_capacitance)
-                context_menu.addAction("Measure Filler Capacitance", self.model.measure_filler_capacitance)
+                context_menu.addAction(
+                    "Measure Liquid Capacitance", self.model.measure_liquid_capacitance
+                )
+                context_menu.addAction(
+                    "Measure Filler Capacitance", self.model.measure_filler_capacitance
+                )
                 context_menu.addSeparator()
-                context_menu.addAction("Clear Electrodes", self.model.electrodes.clear_electrode_states)
+                context_menu.addAction(
+                    "Clear Electrodes", self.model.electrodes.clear_electrode_states
+                )
                 context_menu.addAction("Clear Routes", self.model.routes.clear_routes)
                 context_menu.addSeparator()
                 context_menu.addAction("Find Liquid", self.detect_droplet)
@@ -1920,11 +2201,15 @@ class ElectrodeInteractionControllerService(HasTraits):
                     self.model.electrodes.disabled_channels.clear()
 
                 def disable_all_electrodes():
-                    all_channels = set(self.model.electrodes.channels_electrode_ids_map.keys())
+                    all_channels = set(
+                        self.model.electrodes.channels_electrode_ids_map.keys()
+                    )
                     self.model.electrodes.disabled_channels = all_channels
 
                 if has_disabled:
-                    context_menu.addAction("Enable All Electrodes", enable_all_electrodes)
+                    context_menu.addAction(
+                        "Enable All Electrodes", enable_all_electrodes
+                    )
                 context_menu.addAction("Disable All Electrodes", disable_all_electrodes)
                 context_menu.addSeparator()
 
@@ -1935,7 +2220,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                     # Disable/Enable electrode toggle
                     if channel is not None:
                         is_disabled = channel in self.model.electrodes.disabled_channels
-                        label = "Enable Electrode" if is_disabled else "Disable Electrode"
+                        label = (
+                            "Enable Electrode" if is_disabled else "Disable Electrode"
+                        )
 
                         def toggle_disable(ch=channel, currently_disabled=is_disabled):
                             if currently_disabled:
@@ -1945,16 +2232,26 @@ class ElectrodeInteractionControllerService(HasTraits):
 
                         context_menu.addAction(label, toggle_disable)
 
-                    scale_edit_view_controller = ScaleEditViewController(model=self.model)
+                    scale_edit_view_controller = ScaleEditViewController(
+                        model=self.model
+                    )
 
-                    context_menu.addAction("Adjust Electrode Area Scale", scale_edit_view_controller.configure_traits)
+                    context_menu.addAction(
+                        "Adjust Electrode Area Scale",
+                        scale_edit_view_controller.configure_traits,
+                    )
                     context_menu.addSeparator()
 
             # tooltip enabled by default
-            tooltip_toggle_action = QAction("Enable Electrode Tooltip", checkable=True,
-                                            checked=self._electrode_tooltip_visible)
+            tooltip_toggle_action = QAction(
+                "Enable Electrode Tooltip",
+                checkable=True,
+                checked=self._electrode_tooltip_visible,
+            )
 
-            tooltip_toggle_action.triggered.connect(self.handle_toggle_electrode_tooltips)
+            tooltip_toggle_action.triggered.connect(
+                self.handle_toggle_electrode_tooltips
+            )
 
             context_menu.addAction(tooltip_toggle_action)
 
@@ -2009,14 +2306,18 @@ class ElectrodeInteractionControllerService(HasTraits):
             changed_channels = set(added or ()) | set(removed or ())
         else:
             old, new = getattr(event, "old", None), getattr(event, "new", None)
-            if not isinstance(old, (set, frozenset)) or not isinstance(new, (set, frozenset)):
+            if not isinstance(old, (set, frozenset)) or not isinstance(
+                new, (set, frozenset)
+            ):
                 # Unknown event shape: recolor everything rather than guess.
                 self.electrode_view_layer.redraw_electrode_colors(
-                    self.model, self.electrode_hovered)
+                    self.model, self.electrode_hovered
+                )
                 return
             changed_channels = old ^ new
         self.electrode_view_layer.redraw_electrode_colors_for_channels(
-            self.model, changed_channels, self.electrode_hovered)
+            self.model, changed_channels, self.electrode_hovered
+        )
 
     @observe("electrode_hovered")
     def hovered_electrode_recolor(self, event):
@@ -2027,7 +2328,8 @@ class ElectrodeInteractionControllerService(HasTraits):
         for electrode_view in (event.old, event.new):
             if electrode_view is not None:
                 self.electrode_view_layer.recolor_electrode(
-                    self.model, electrode_view, self.electrode_hovered)
+                    self.model, electrode_view, self.electrode_hovered
+                )
 
     @observe("model.electrodes.electrodes.items.channel")
     def electrode_channel_change(self, event):
@@ -2048,19 +2350,34 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     @observe("rect_buffer:items")
     def _rect_buffer_change(self, event):
-        logger.debug(f"rect_buffer change: adding point {event.added}. Buffer of length {len(self.rect_buffer)} now.")
+        logger.debug(
+            f"rect_buffer change: adding point {event.added}. "
+            f"Buffer of length {len(self.rect_buffer)} now."
+        )
         if len(self.rect_buffer) == 4:  # We have a rectangle now
-
-            inverse = self.model.camera_perspective.transformation.inverted()[0]  # Get the inverse of the existing transformation matrix
-            self.model.camera_perspective.reference_rect = [inverse.map(point) for point in event.object]
-            self.model.camera_perspective.transformed_reference_rect = self.rect_buffer.copy()
+            inverse = self.model.camera_perspective.transformation.inverted()[
+                0
+            ]  # Get the inverse of the existing transformation matrix
+            self.model.camera_perspective.reference_rect = [
+                inverse.map(point) for point in event.object
+            ]
+            self.model.camera_perspective.transformed_reference_rect = (
+                self.rect_buffer.copy()
+            )
 
             # User may have already completed the reference rectangle and in edit mode.
-            # sometimes user is just editing a completed rect_buffer when edit_reference_rect is enabled
-            # Only need to do this and give log message when its the first time the reference rect is completed.
+            # sometimes user is just editing a completed rect_buffer when
+            # edit_reference_rect is enabled
+            # Only need to do this and give log message when its the first time the
+            # reference rect is completed.
             if self.model.mode != "camera-edit":
-                logger.info(f"Reference rectangle complete!\nProceed to camera perspective editing!!")
-                self.model.mode = "camera-edit"  # Switch to camera-edit mode if not already there
+                logger.info(
+                    "Reference rectangle complete!\n"
+                    "Proceed to camera perspective editing!!"
+                )
+                self.model.mode = (
+                    "camera-edit"  # Switch to camera-edit mode if not already there
+                )
 
         else:
             self.electrode_view_layer.redraw_reference_rect(rect=event.object)
@@ -2071,15 +2388,17 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.clear_reference_rect()
 
         if event.new == "camera-edit":
-            self.electrode_view_layer.redraw_reference_rect(self.model.camera_perspective.transformed_reference_rect)
+            self.electrode_view_layer.redraw_reference_rect(
+                self.model.camera_perspective.transformed_reference_rect
+            )
 
         if event.old != "camera-place" and event.new == "camera-place":
             self.rect_buffer.clear()
 
-        if event.new == 'pan' or event.old == 'pan':
+        if event.new == "pan" or event.old == "pan":
             self._apply_pan_mode()
 
-    @observe('model.electrode_scale', post_init=True)
+    @observe("model.electrode_scale", post_init=True)
     def electrode_area_scale_edited(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_all_electrode_tooltips()
