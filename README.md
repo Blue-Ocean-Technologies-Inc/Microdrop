@@ -53,13 +53,15 @@ Highlights:
 - **Fully decoupled frontend/backend** — GUI and hardware controller talk
   over a Redis message bus, so they can run on the same machine or across a
   network
-- **Cross-platform** — Windows, Linux, and macOS
+- **Cross-platform** — Windows, Linux (x86_64 and Raspberry Pi), and macOS
+  (Apple Silicon)
 
 Supported hardware:
 
 | Platform | Description |
 |---|---|
 | [DropBot](https://sci-bots.com/products/dropbot) | Sci-Bots' DMF platform — full capacitance sensing, short detection, multi-channel actuation |
+| Portable DropBot | Sci-Bots' portable instrument — DropBot actuation plus built-in magnet, heaters, and fluorescence (PMT) behind one backend, typically run on its Raspberry Pi touchscreen |
 | [OpenDrop](https://www.gaudi.ch/OpenDrop/) | Open-source DMF platform by GaudiLabs |
 | Mock device | No hardware needed — for development and demos |
 
@@ -79,22 +81,31 @@ Permanent links to the latest release:
 |---|---|
 | Windows x64 | [microdrop_setup.exe](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup.exe) |
 | Linux x64 | [microdrop_setup-linux-x86_64](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup-linux-x86_64) |
-| macOS Apple Silicon | [Microdrop-Launcher-macos-arm64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-arm64.dmg) |
-| macOS Intel | [Microdrop-Launcher-macos-x86_64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/Microdrop-Launcher-macos-x86_64.dmg) |
+| Linux ARM64 (Raspberry Pi) | [microdrop_setup-linux-aarch64](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup-linux-aarch64) |
+| macOS Apple Silicon | [microdrop_setup-macos-arm64.dmg](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/releases/latest/download/microdrop_setup-macos-arm64.dmg) |
 
 The launcher operates in two stages:
 
 1. **Setup** — installs [pixi](https://pixi.sh) if needed, clones
-   pixi-microdrop with its Microdrop submodule, and prefetches the
-   environment.
-2. **Launcher** — a tabbed GUI for selecting launch modes, devices, and
-   plugins; managing branches; editing server settings like the Redis
-   configuration; and creating desktop shortcuts that launch a saved profile
-   directly.
+   pixi-microdrop with its Microdrop submodule into a chosen install
+   directory, and prefetches the environment.
+2. **Launcher** — a tabbed GUI to pick the launch **mode** (frontend /
+   backend / dual), **device** (dropbot / portable / opendrop / mock), and
+   per-group plugins; manage repo branches and git maintenance (pull / stash /
+   reset); and edit server settings (Redis host/port, Dramatiq worker
+   threads/timeout). It can save named **config profiles** and create desktop
+   shortcuts, each launching its own profile via `--launch --profile <name>`.
 
-Platform notes: on Linux, make the file executable first
-(`chmod +x microdrop_setup-linux-x86_64`); on macOS, drag the app to
-Applications and approve it in System Settings.
+Platform notes:
+
+- **Linux:** make the download executable first (`chmod +x
+  microdrop_setup-linux-x86_64`), and pick the asset matching `uname -m`
+  (`x86_64` or `aarch64`) — the wrong one fails with "Exec format error".
+- **macOS:** open the dmg and drag **microdrop_setup** into Applications.
+  Apple Silicon only — there is no Intel build. The app is unsigned, so
+  macOS blocks the first launch: approve it under System Settings → Privacy &
+  Security → "Open Anyway", or run
+  `xattr -d com.apple.quarantine /Applications/microdrop_setup.app`.
 
 These download links are also available from inside the app under
 **Help → Download MicroDrop Launcher**.
@@ -158,8 +169,8 @@ python examples/run_device_viewer_pluggable.py --plugins backend services --devi
 - The **frontend host owns the Redis server**; a backend-only run instead
   connects to an already-running Redis (use this for a remote backend host).
 
-`--device` selects the hardware target (`dropbot`, `opendrop`, or `mock`;
-default `dropbot`) and pulls in the matching device-specific plugins.
+`--device` selects the hardware target (`dropbot`, `portable`, `opendrop`, or
+`mock`; default `dropbot`) and pulls in the matching device-specific plugins.
 
 ## Remote / Distributed Operation
 
