@@ -1,3 +1,23 @@
+## v1.16.0 (2026-09-01)
+
+### Feat
+
+- **portable**: touch access to tooltips and electrode menu items
+- **portable**: long press posts a right-click context menu
+- **portable**: pinch zoom and touch flick scrolling
+
+### Fix
+
+- **app**: keep touch-assist pads above the fullscreen kiosk window
+- **portable**: show touch tooltips at release, long-press fallback
+- **portable**: arm long-press only on the deepest press receiver
+
+### Chore
+
+- **app**: bring the touch-assist pads ruff-clean
+- **device-viewer**: bring electrode_interaction_service.py ruff-clean
+- **device-viewer**: bring auto_fit_graphics_view.py ruff-clean
+
 ## v1.15.1 (2026-09-01)
 
 ### Fix
