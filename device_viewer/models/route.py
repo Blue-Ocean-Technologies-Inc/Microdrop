@@ -244,6 +244,10 @@ class RouteLayer(HasTraits):
 
     selected_for_run = Bool(True)
 
+    #: Fired by the routes table's delete column; the owning manager removes
+    #: the layer. Gives touchscreens a tap target in place of the Delete key.
+    delete_requested = Event()
+
     def __repr__(self) -> str:
         return f"<RouteLayer route={self.route} name={self.name}>"
 
@@ -536,6 +540,10 @@ class RouteLayerManager(HasTraits):
                 self.mode = "draw"  # Nothing to edit, so set to draw
             else:
                 self.selected_layer = self.layers[-1]  # Set it to the last layer
+
+    @observe("layers:items:delete_requested")
+    def _layer_delete_requested(self, event):
+        self.delete_layer(event.object)
 
     @observe("selected_layer")
     @observe("layers.items")

@@ -27,10 +27,14 @@ from traitsui.key_bindings import KeyBinding, KeyBindings
 from device_viewer.models.route import RouteLayer
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_DELETE
+
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     CustomCheckboxColumn,
     DoubleSpinBoxEditor,
+    GlyphActionColumn,
     ObjectColumn,
     SafeCancelTableHandler,
     VisibleColumn,
@@ -124,6 +128,14 @@ layer_table_editor = TableEditor(
             label="Run",
             editable=False,
             horizontal_alignment="center",
+            resize_mode="interactive",
+        ),
+        # Tap-to-delete for touchscreens, where the Delete key is out of reach
+        GlyphActionColumn(
+            name="name",
+            label="",
+            glyph=ICON_DELETE,
+            fire="delete_requested",
             resize_mode="interactive",
         ),
     ],
