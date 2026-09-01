@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QGraphicsSceneWheelEvent,
     QGraphicsView,
     QMenu,
+    QToolTip,
 )
 
 from traits.api import Bool, Dict, Float, HasTraits, Instance, List, Str, observe
@@ -67,6 +68,7 @@ from dropbot_controller.consts import DETECT_DROPLETS, SET_REALTIME_MODE
 from microdrop_style.colors import GREY, SUCCESS_COLOR
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.system_config import is_rpi
 
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
@@ -1994,6 +1996,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         if button == Qt.LeftButton:
             self._left_mouse_pressed = True
 
+            # The rig's touchscreen has no hover — surface the electrode
+            # tooltip at the finger on press instead. Reading the live
+            # toolTip() keeps the Enable Electrode Tooltip toggle in charge.
+            if is_rpi() and electrode_view and electrode_view.toolTip():
+                QToolTip.showText(event.screenPos(), electrode_view.toolTip())
+
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     self._last_electrode_id_visited = electrode_view.id
@@ -2130,6 +2138,14 @@ class ElectrodeInteractionControllerService(HasTraits):
             return False
 
     def handle_context_menu_event(self, event: QGraphicsSceneContextMenuEvent):
+        # Resolve the electrode under the event position at menu time — a
+        # touch long-press posts a context-menu event without the
+        # right-button press that used to set electrode_right_clicked, and
+        # this also drops the stale electrode a previous right click left.
+        electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+        self.model.electrodes.electrode_right_clicked = (
+            electrode_view.electrode if electrode_view else None
+        )
 
         if not (
             event.modifiers() & Qt.ControlModifier
