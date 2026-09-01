@@ -68,6 +68,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         apply_persisted_scale()
         self._widen_dock_separators_on_rpi()
+        self._enable_long_press_right_click_on_rpi()
 
     @observe("application:application_initialized")
     def _on_application_initialized(self, event):
@@ -142,6 +143,26 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         # Deferred so every dock pane's widgets exist first.
         GUI.invoke_later(grab_scrollers)
+
+    @staticmethod
+    def _enable_long_press_right_click_on_rpi():
+        """The touchscreen has no right button — a long press held still
+        posts the context-menu event a right click would."""
+        from microdrop_utils.system_config import is_rpi
+
+        if not is_rpi():
+            return
+
+        from pyface.qt.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            return
+
+        from microdrop_utils.touch_long_press import TouchLongPressRightClickFilter
+
+        # Parented to the app so the filter outlives this call.
+        app.installEventFilter(TouchLongPressRightClickFilter(app))
 
     @staticmethod
     def _widen_dock_separators_on_rpi():
