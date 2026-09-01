@@ -23,11 +23,10 @@ name: Release
 # added as a ruleset bypass actor on this org — the bot only ever pushes
 # the unprotected ci/release branch and tags.
 #
-# PR creation needs "Allow GitHub Actions to create and approve pull
-# requests" (Settings -> Actions -> General); when org policy locks that
-# setting, add a PAT with repo access as the RELEASE_PAT secret instead —
-# gh then acts as the PAT owner for the release PR (everything else still
-# runs on GITHUB_TOKEN).
+# The release PR is opened with a token minted from the org's release
+# GitHub App (RELEASE_APP_ID variable + RELEASE_APP_PRIVATE_KEY secret):
+# a PR from GITHUB_TOKEN would trigger no workflows, so it would never get
+# its commit check. Everything else runs on GITHUB_TOKEN.
 
 on:
   push:
@@ -57,9 +56,20 @@ jobs:
       - name: Install commitizen
         run: pipx install "commitizen>=4,<5"
 
+      # The org's release app mints a short-lived token for the PR calls: a
+      # PR opened by the built-in token triggers no workflows (the release
+      # PR would never get its commit check), and unlike a personal token
+      # the app never expires or leaves with a person.
+      - name: Mint the release-app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Tag merged release, or open/update the release PR
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -98,9 +108,9 @@ jobs:
           # Look up the OPEN release PR only — a closed-without-merge PR for
           # this branch must not be edited, a fresh one must be opened.
           # REST rather than `gh pr edit`: on an org-owned repo the gh PR
-          # subcommands query org/team fields over GraphQL, which a classic
-          # PAT needs read:org for -- RELEASE_PAT only carries repo, so the
-          # update path failed every time a release PR already existed.
+          # subcommands query org/team fields over GraphQL, which an app or
+          # classic token without org read access cannot answer -- the
+          # update path used to fail whenever a release PR already existed.
           pr_number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$RELEASE_BRANCH&base=main&state=open" --jq '.[0].number')"
           if [ -n "$pr_number" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$pr_number"               -f title="chore: release $tag" -F body=@release_notes.md >/dev/null
