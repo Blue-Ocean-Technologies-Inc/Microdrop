@@ -225,3 +225,20 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 - Timing: contributions are accepted from `start_logging` until the post-`stop_logging` settling flush, so messages published shortly after the run ends still make the report.
 - Demo: `examples/demos/protocol_report_contribution_demo.py` runs the whole pipeline headlessly over redis and prints the generated report path.
 
+
+### Portable DropBot protocol columns: magnet + heater step execution
+
+The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
+
+**Topics (all in `portable_dropbot_controller/consts.py`)**
+- `PROTOCOL_SET_MAGNET = "portable_dropbot/requests/protocol_set_magnet"` — JSON `{"on": bool, "height_mm": float}`. Ack: `MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"`.
+- `PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"` — JSON `{"channel": int, "target_c": float, "tolerance_c": float}`. Ack: `TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"`.
+- `TEMP_CONTROL` (existing) — the temperature handler's `on_post_protocol_end` publishes `{"channel": DEFAULT_TEMP_CHANNEL, "on": False}` after every run so nothing keeps heating unattended.
+
+**Frontend (handlers in `portable_dropbot_protocol_controls/protocol_columns/`)**
+- `MagnetHandler` / `TemperatureHandler` run at priority 20 (with voltage/frequency, before routes). Unchecked steps and preview mode publish nothing and wait for nothing. `ctx.wait_for(<ack>, timeout=self.ack_time_s)` uses the Protocol Settings ack-wait grid value (0 = fire-and-forget); provider defaults are 40 s for the magnet (the driver's engage/disengage blocks up to 30 s) and 120 s for the heater.
+- A magnet height below `MAGNET_HEIGHT_MM_BOUNDS[0]` is the "Default" sentinel: the spinbox shows "Default" and the backend runs the firmware engage macro; any other height is an absolute position on the magnet Z motor.
+
+**Backend (`portable_dropbot_controller/services/`)**
+- `on_protocol_set_magnet_request` (motors mixin) — disengage / engage macro / `motorAbsoluteMove` on the magnet motor (mm × 1000 µm), then publishes `MAGNET_APPLIED` only on success — a failed move leaves the step to time out — and republishes the status snapshot.
+- `on_protocol_set_temperature_request` (temp mixin) — sets the channel target and turns control on, then arms a watcher thread that polls the channel every `TEMP_REACHED_POLL_INTERVAL_S` (republishing `TEMP_UPDATED` so the pane keeps tracking) and publishes `TEMPERATURE_REACHED` once `|current - target| <= tolerance`; it gives up after `TEMP_REACHED_TIMEOUT_S`. A new request cancels the previous watcher.

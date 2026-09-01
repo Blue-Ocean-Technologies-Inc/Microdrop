@@ -66,15 +66,39 @@ TEMP_PID_PERIOD_MS_BOUNDS = (1, 60_000)
 PMT_GAIN_BOUNDS = (0, 255)
 DEFAULT_PMT_GAIN = 128
 
+#: Protocol-step contracts (portable_dropbot_protocol_controls drives
+#: these). The heater channel a protocol's temperature column targets:
+#: the column carries no channel cell, so it always drives this one.
+DEFAULT_TEMP_CHANNEL = 0
+#: How the backend watches for a protocol setpoint being reached:
+#: poll the channel reading this often, and give up (no reached ack,
+#: the step times out) after this long.
+TEMP_REACHED_POLL_INTERVAL_S = 1.0
+TEMP_REACHED_TIMEOUT_S = 600.0
+#: Custom magnet height a protocol step may ask for: an absolute
+#: position on the magnet Z motor (mm). The firmware's own motor
+#: params (nl_pos/pl_pos) are the real travel limits; anything below
+#: MIN is the column's "Default" sentinel = the firmware engage macro.
+MAGNET_HEIGHT_MM_BOUNDS = (0.5, 1000.0)
+
 #: The driver's fixed motor roster: name -> motor id.
-MOTOR_IDS = {"tray": 0, "pmt": 1, "magnet": 2, "filter": 3,
-             "pogo_left": 4, "pogo_right": 5}
+MOTOR_IDS = {
+    "tray": 0,
+    "pmt": 1,
+    "magnet": 2,
+    "filter": 3,
+    "pogo_left": 4,
+    "pogo_right": 5,
+}
 
 #: Motor name -> the driver PARAMS friendly name whose EasyFlash blob
 #: holds that motor's mechanical tuning struct.
 MOTOR_PARAM_NAMES = {
-    "tray": "tray_motor", "pmt": "pmt_motor", "magnet": "magnet_motor",
-    "filter": "filter_motor", "pogo_left": "pogo_motor_left",
+    "tray": "tray_motor",
+    "pmt": "pmt_motor",
+    "magnet": "magnet_motor",
+    "filter": "filter_motor",
+    "pogo_left": "pogo_motor_left",
     "pogo_right": "pogo_motor_right",
 }
 
@@ -83,11 +107,22 @@ MOTOR_PARAM_NAMES = {
 #: newer adds the accel/decel ramp factors (16). Reads accept either
 #: length and writes send back exactly the fields that were read.
 MOTOR_PARAM_FIELDS = (
-    ("nl_pos", "f"), ("pl_pos", "f"), ("round_len", "f"),
-    ("origin_offset", "f"), ("origin_area", "f"), ("step_len", "f"),
-    ("motor_polarity", "i"), ("I_hold", "i"), ("I_run", "i"),
-    ("subdiv", "i"), ("run_sgt", "i"), ("rst_sgt", "i"),
-    ("bspd", "i"), ("rspd", "i"), ("acc_run", "i"), ("acc_rst", "i"),
+    ("nl_pos", "f"),
+    ("pl_pos", "f"),
+    ("round_len", "f"),
+    ("origin_offset", "f"),
+    ("origin_area", "f"),
+    ("step_len", "f"),
+    ("motor_polarity", "i"),
+    ("I_hold", "i"),
+    ("I_run", "i"),
+    ("subdiv", "i"),
+    ("run_sgt", "i"),
+    ("rst_sgt", "i"),
+    ("bspd", "i"),
+    ("rspd", "i"),
+    ("acc_run", "i"),
+    ("acc_rst", "i"),
 )
 
 #: Fluorescence filter wheel positions the hardware knows.
@@ -128,6 +163,10 @@ PMT_UPDATED = "portable_dropbot/signals/pmt_updated"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
+#: Protocol-step acks: the magnet move finished / the heater channel
+#: reading is within the step's tolerance of its target.
+MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
+TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"
 ALARM_RAISED = "portable_dropbot/signals/alarm"
 ERROR_RAISED = "portable_dropbot/signals/error"
 
@@ -145,6 +184,9 @@ SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
 MOVE_TRAY = "portable_dropbot/requests/move_tray"
 MOVE_MAGNET = "portable_dropbot/requests/move_magnet"
+#: Protocol-step magnet: JSON {"on": bool, "height_mm": float}; acks
+#: on MAGNET_APPLIED once the move has finished.
+PROTOCOL_SET_MAGNET = "portable_dropbot/requests/protocol_set_magnet"
 SET_FILTER = "portable_dropbot/requests/set_filter"
 SET_POGO = "portable_dropbot/requests/set_pogo"
 #: Chip lock IS the pogo pads pressing the chip; its own topic so
@@ -157,8 +199,7 @@ SET_RGB_LIGHT = "portable_dropbot/requests/set_rgb_light"
 #: Raw firmware-unit variants, mirroring the vendor UI's
 #: Temp/Lighting tab (illumination 0-255, fluorescence 0-65535).
 SET_ILLUMINATION_RAW = "portable_dropbot/requests/set_illumination_raw"
-SET_FLUORESCENCE_LED_RAW = \
-    "portable_dropbot/requests/set_fluorescence_led_raw"
+SET_FLUORESCENCE_LED_RAW = "portable_dropbot/requests/set_fluorescence_led_raw"
 # Calibration (see the calibration mixin service).
 RUN_CAP_CALIBRATION = "portable_dropbot/requests/run_cap_calibration"
 SET_ML_REALTIME = "portable_dropbot/requests/set_ml_realtime"
@@ -172,6 +213,10 @@ TEMP_CONTROL = "portable_dropbot/requests/temp_control"
 TEMP_READ_INFO = "portable_dropbot/requests/temp_read_info"
 TEMP_READ_PID = "portable_dropbot/requests/temp_read_pid"
 TEMP_SET_PID = "portable_dropbot/requests/temp_set_pid"
+#: Protocol-step heater: JSON {"channel": int, "target_c": float,
+#: "tolerance_c": float}; sets the target, turns control on and acks
+#: on TEMPERATURE_REACHED once the reading is within tolerance.
+PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"
 # PMT.
 PMT_POWER = "portable_dropbot/requests/pmt_power"
 PMT_SET_GAIN = "portable_dropbot/requests/pmt_set_gain"
