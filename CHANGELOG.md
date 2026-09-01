@@ -1,3 +1,28 @@
+## v1.17.0 (2026-09-01)
+
+### Feat
+
+- **portable**: magnet and heater protocol columns plugin
+- **portable**: protocol-step magnet and heater backend contracts
+- **device-viewer**: tap-to-delete column in the routes table
+
+### Fix
+
+- **protocol-tree**: type the status freeze lock by the lock class
+- **protocol-tree**: tap a selected cell to edit on the touchscreen
+
+### Docs
+
+- **messages**: portable protocol column flow
+
+### CI
+
+- **release**: update the release PR through the REST API
+
+### Chore
+
+- **device-viewer**: bring route model and table view ruff-clean
+
 ## v1.16.0 (2026-09-01)
 
 ### Feat
