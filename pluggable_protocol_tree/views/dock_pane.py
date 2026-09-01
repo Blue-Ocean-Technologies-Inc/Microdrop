@@ -577,13 +577,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._select_step(row)
 
     def _on_timeline_phase_seek(self, phase_index):
-        if self._idle_nav_active():
-            # Idle nav shows the full materialized plan (no rep collapse), so
-            # the bar's 0-based index maps 1:1 onto the DV plan.
-            self._publish_phase_nav_request(
-                {"action": "goto", "index": int(phase_index)}
-            )
-            return
         # The bar emits a 0-based phase index within whatever it is showing.
         # When collapsed, that is an index into the base loop -> map it into the
         # current repetition; otherwise it is already the absolute phase.
@@ -591,6 +584,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
             phase_index = (
                 self._timeline_cur_rep - 1
             ) * self._timeline_base_count + phase_index
+        if self._idle_nav_active():
+            self._publish_phase_nav_request(
+                {"action": "goto", "index": int(phase_index)}
+            )
+            return
         self._seek_to_phase(phase_index)
 
     # --- timeline seek bar (model -> view) ---------------------------
@@ -619,26 +617,40 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Phase collapse + rep combo are driven by the distinct current step.
         current_row = self._current_step_row()
         if self._idle_nav_active():
-            # Idle phase navigation (#493): the DV engine owns the position.
-            # Full materialized plan on the phase track — no rep collapse.
-            self._timeline_can_collapse = False
-            self._timeline_base_count = 0
-            self._timeline_base_index = 0
-            self._timeline_cur_rep = 1
-            total = int(self.sync.phase_nav_total)
+            # Idle phase navigation (#493): the DV engine owns the position,
+            # scoped to the current step's own plan (rebuilt on selection, so
+            # phase_nav_index/total are already the step's full materialized
+            # phase count -- same shape as the running path's full_count /
+            # full_index). Collapse math (base loop + rep count) still comes
+            # from the step model, exactly as it does mid-run.
+            full_count = int(self.sync.phase_nav_total)
+            full_index = int(self.sync.phase_nav_index)
+            rep_count = 1
+            base_count = full_count
+            if current_row is not None and sc is not None:
+                rep_count = max(
+                    1, int(getattr(current_row, "route_repetitions", 1) or 1)
+                )
+                base_count = (
+                    sc._base_phase_total_for(current_row)
+                    if rep_count > 1
+                    else full_count
+                )
+            view = collapse_phase_view(
+                full_count, full_index, base_count, rep_count, self._timeline_show_full
+            )
+            self._timeline_can_collapse = view["can_collapse"]
+            self._timeline_base_count = view["base_count"]
+            self._timeline_base_index = view["base_index"]
+            self._timeline_cur_rep = view["cur_rep"]
             tb.set_position(
                 cur if cur is not None else -1,
                 len(rows),
-                int(self.sync.phase_nav_index),
-                total if total > 1 else 0,
+                view["phase_index"],
+                view["phase_total"] if view["phase_total"] > 1 else 0,
             )
             tb.set_idle_cell(None)
-            self._update_timeline_controls(
-                current_row,
-                collapse_phase_view(
-                    total, int(self.sync.phase_nav_index), total, 1, False
-                ),
-            )
+            self._update_timeline_controls(current_row, view)
             return
         full_count = 0
         full_index = 0
@@ -749,9 +761,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # absolute phase to seek.
         if not self._timeline_can_collapse or self._timeline_base_count <= 0:
             return
-        self._seek_to_phase(
-            index * self._timeline_base_count + self._timeline_base_index
-        )
+        target = index * self._timeline_base_count + self._timeline_base_index
+        if self._idle_nav_active():
+            self._publish_phase_nav_request({"action": "goto", "index": int(target)})
+            return
+        self._seek_to_phase(target)
         # Refresh the status bar's phase readout now, not on the next play.
         self._update_protocol_time()
 
