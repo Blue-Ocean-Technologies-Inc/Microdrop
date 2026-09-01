@@ -13,6 +13,7 @@
 Receives its column set from the plugin on construction and constructs
 the experiment + sticky-note services from the live Envisage
 application so the experiment-bar buttons drive real handlers."""
+
 import html as _html
 import json
 import threading
@@ -22,18 +23,28 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
 from apscheduler.triggers.interval import IntervalTrigger
 
+from pyface.tasks.api import TraitsDockPane
+from traits.api import Any, Bool, Dict, Event, Float, Instance, List, Str, observe
+
+from device_viewer.consts import PROTOCOL_RUNNING
 from microdrop_application.dialogs.pyface_wrapper import (
-    confirm, NO, YES, error as error_dialog, escape_html_multiline,
-    format_traceback_detail, information,
+    NO,
+    YES,
+    confirm,
+    escape_html_multiline,
+    format_traceback_detail,
+    information,
+)
+from microdrop_application.dialogs.pyface_wrapper import (
+    error as error_dialog,
 )
 from microdrop_application.menus import is_advanced_mode
-from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
-from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from device_viewer.consts import PROTOCOL_RUNNING
 from pluggable_protocol_tree.consts import (
-    REPEAT_DURATION_RECALC_TRIGGERS, ACK_WAIT_FOREVER, ELECTRODES_STATE_CHANGE,
-    PHASE_NAVIGATION_MODE, PHASE_NAVIGATION_REQUEST,
+    ACK_WAIT_FOREVER,
+    ELECTRODES_STATE_CHANGE,
+    PHASE_NAVIGATION_MODE,
+    PHASE_NAVIGATION_REQUEST,
+    REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
@@ -43,41 +54,55 @@ from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
     RealtimeModeHandler,
 )
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
+from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.services.device_viewer_sync import (
+    DeviceViewerSyncController,
+)
+from pluggable_protocol_tree.services.experiment_manager import ExperimentManager
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
-from pluggable_protocol_tree.services.phase_math import effective_repetitions_for_duration, estimate_repeat_duration_s
-from pluggable_protocol_tree.services.protocol_state_tracker import PluggableProtocolStateTracker
-from pluggable_protocol_tree.services.protocol_status_controller import ProtocolStatusController
-from pyface.tasks.api import TraitsDockPane
-from traits.api import Any, Bool, Dict, Event, Float, Instance, List, Str, observe
-
-from logger.logger_service import get_logger
-from microdrop_utils.sticky_notes import StickyWindowManager
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.services.device_viewer_sync import DeviceViewerSyncController
-from pluggable_protocol_tree.views.protocol_tree_pane import (
-    ProtocolTreePane, REPEAT_DURATION_TOLERANCE_S, REPEAT_DURATION_DECIMALS,
-    RUN_OUTCOME_FINISHED, RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR,
-    PREVIEW_COMPLETE_TOAST_MS,
+from pluggable_protocol_tree.services.phase_math import (
+    effective_repetitions_for_duration,
+    estimate_repeat_duration_s,
+)
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.protocol_state_tracker import (
+    PluggableProtocolStateTracker,
+)
+from pluggable_protocol_tree.services.protocol_status_controller import (
+    ProtocolStatusController,
 )
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
+from pluggable_protocol_tree.views.protocol_tree_pane import (
+    PREVIEW_COMPLETE_TOAST_MS,
+    REPEAT_DURATION_DECIMALS,
+    REPEAT_DURATION_TOLERANCE_S,
+    RUN_OUTCOME_ABORTED,
+    RUN_OUTCOME_ERROR,
+    RUN_OUTCOME_FINISHED,
+    ProtocolTreePane,
+)
 from pluggable_protocol_tree.views.quick_action_bar import QuickActionsController
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
-from pluggable_protocol_tree.services.experiment_manager import ExperimentManager
 
-from pluggable_protocol_tree.interfaces.i_column import IColumn
-from pluggable_protocol_tree.services.preferences import (
-    ProtocolPreferences
-)
+from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
+
+from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.sticky_notes import StickyWindowManager
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 # The status-time poll job runs at 10 Hz; silence APScheduler's per-execution
 # logs so it doesn't flood the log.
-get_logger('apscheduler.executors.default').setLevel(level="WARNING")
+get_logger("apscheduler.executors.default").setLevel(level="WARNING")
 
 _EXITED = False
+
 
 class PluggableProtocolDockPane(TraitsDockPane):
     id = "pluggable_protocol_tree.dock_pane"
@@ -105,8 +130,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: 10 Hz background job that ticks the live status-bar time readouts. It
     #: runs on its own thread and only fires ``time_update_event`` — the actual
     #: widget writes happen on the GUI thread via the dispatch="ui" observer.
-    _protocol_poll_scheduler = Instance(BackgroundScheduler,
-                                        desc="Ticks the status-bar time readouts at 10 Hz")
+    _protocol_poll_scheduler = Instance(
+        BackgroundScheduler, desc="Ticks the status-bar time readouts at 10 Hz"
+    )
     #: Fired (carrying time.monotonic()) on each poll tick from the scheduler's
     #: background thread; _update_protocol_time observes it with dispatch="ui".
     protocol_time_update_event = Event(Float)
@@ -144,7 +170,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         )
 
     def _experiment_manager_default(self):
-        return ExperimentManager(self.task.window.application.current_experiment_directory)
+        return ExperimentManager(
+            self.task.window.application.current_experiment_directory
+        )
 
     def _sticky_manager_default(self):
         return StickyWindowManager()
@@ -243,8 +271,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 # provider is called during on_pre_protocol_start, while
                 # executor.run_paths is still set.
                 n_steps_provider=(
-                    lambda: sum(1 for _ in self.manager.iter_execution_frames(
-                        self.executor.run_paths))
+                    lambda: sum(
+                        1
+                        for _ in self.manager.iter_execution_frames(
+                            self.executor.run_paths
+                        )
+                    )
                 ),
             ),
         ]
@@ -278,14 +310,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # executor sets the events from its worker thread and Traits marshals
         # the handler onto the GUI thread.
         q = self.executor.signals
-        q.observe(self._on_protocol_wait_started, "protocol_wait_started", dispatch="ui")
-        q.observe(self._on_protocol_wait_finished, "protocol_wait_finished", dispatch="ui")
+        q.observe(
+            self._on_protocol_wait_started, "protocol_wait_started", dispatch="ui"
+        )
+        q.observe(
+            self._on_protocol_wait_finished, "protocol_wait_finished", dispatch="ui"
+        )
         q.observe(self._on_protocol_started, "protocol_started", dispatch="ui")
         q.observe(self._on_error, "protocol_error", dispatch="ui")
         # Button state machine: running on start AND during the pre-protocol
         # wait (pause + stop stay live, everything else disabled).
         q.observe(self._set_running_button_state, "protocol_started", dispatch="ui")
-        q.observe(self._set_running_button_state, "protocol_wait_started", dispatch="ui")
+        q.observe(
+            self._set_running_button_state, "protocol_wait_started", dispatch="ui"
+        )
         q.observe(self._on_protocol_paused, "protocol_paused", dispatch="ui")
         q.observe(self._on_protocol_resumed, "protocol_resumed", dispatch="ui")
         q.observe(self._on_protocol_finished, "protocol_finished", dispatch="ui")
@@ -308,9 +346,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
         tb.step_seek_requested.connect(self._on_timeline_step_seek)
         tb.phase_seek_requested.connect(self._on_timeline_phase_seek)
         pane.selection_changed.connect(self._refresh_timeline_position)
-        pane.timeline_step_rep_combo.currentIndexChanged.connect(self._on_timeline_step_rep_selected)
-        pane.timeline_phase_rep_combo.currentIndexChanged.connect(self._on_timeline_phase_rep_selected)
-        pane.timeline_show_full_check.toggled.connect(self._on_timeline_show_full_toggled)
+        pane.timeline_step_rep_combo.currentIndexChanged.connect(
+            self._on_timeline_step_rep_selected
+        )
+        pane.timeline_phase_rep_combo.currentIndexChanged.connect(
+            self._on_timeline_phase_rep_selected
+        )
+        pane.timeline_show_full_check.toggled.connect(
+            self._on_timeline_show_full_toggled
+        )
         pane.phase_nav_check.toggled.connect(self._on_phase_nav_check_toggled)
 
         nb.btn_play.clicked.connect(self._on_play_clicked)
@@ -319,11 +363,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         def _conditional_stop():
             self.executor.pause()
-            result = confirm(
-                None,
-                "Select <b>YES</b> to force finish protocol..."
-
-            )
+            result = confirm(None, "Select <b>YES</b> to force finish protocol...")
 
             if result == YES:
                 self.executor.stop()
@@ -390,9 +430,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # grid entries and push any persisted ack waits into them.
         self.preferences.seed_ack_times_from_columns(self.columns)
         self._sync_handler_ack_times()
-        logger.debug(
-            f"protocol columns rebuilt: +{sorted(added)} -{sorted(removed)}"
-        )
+        logger.debug(f"protocol columns rebuilt: +{sorted(added)} -{sorted(removed)}")
 
     def _stash_column_values(self, col_ids):
         """Snapshot the given columns' per-row values, keyed by row uuid, so a
@@ -488,14 +526,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         idle_cell = sc.model.phase_total - 1
         if sc.model.dyn_idle and target0 != idle_cell:
-            if confirm(
-                None,
-                "The protocol is paused in the idle phase.\n"
-                "Seeking to a non-idle phase will leave the idle phase.\n\n"
-                "Continue?",
-                title="Leave idle phase?",
-                cancel=False,
-            ) != YES:
+            if (
+                confirm(
+                    None,
+                    "The protocol is paused in the idle phase.\n"
+                    "Seeking to a non-idle phase will leave the idle phase.\n\n"
+                    "Continue?",
+                    title="Leave idle phase?",
+                    cancel=False,
+                )
+                != YES
+            ):
                 return
         path = tuple(self._current_row.path)
         sc.seek_to(path, target0)
@@ -536,18 +577,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._select_step(row)
 
     def _on_timeline_phase_seek(self, phase_index):
-        if self._idle_nav_active():
-            # Idle nav shows the full materialized plan (no rep collapse), so
-            # the bar's 0-based index maps 1:1 onto the DV plan.
-            self._publish_phase_nav_request(
-                {"action": "goto", "index": int(phase_index)})
-            return
         # The bar emits a 0-based phase index within whatever it is showing.
         # When collapsed, that is an index into the base loop -> map it into the
         # current repetition; otherwise it is already the absolute phase.
         if self._timeline_can_collapse and not self._timeline_show_full:
-            phase_index = ((self._timeline_cur_rep - 1) * self._timeline_base_count
-                           + phase_index)
+            phase_index = (
+                self._timeline_cur_rep - 1
+            ) * self._timeline_base_count + phase_index
+        if self._idle_nav_active():
+            self._publish_phase_nav_request(
+                {"action": "goto", "index": int(phase_index)}
+            )
+            return
         self._seek_to_phase(phase_index)
 
     # --- timeline seek bar (model -> view) ---------------------------
@@ -576,38 +617,61 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Phase collapse + rep combo are driven by the distinct current step.
         current_row = self._current_step_row()
         if self._idle_nav_active():
-            # Idle phase navigation (#493): the DV engine owns the position.
-            # Full materialized plan on the phase track — no rep collapse.
-            self._timeline_can_collapse = False
-            self._timeline_base_count = 0
-            self._timeline_base_index = 0
-            self._timeline_cur_rep = 1
-            total = int(self.sync.phase_nav_total)
-            tb.set_position(cur if cur is not None else -1, len(rows),
-                            int(self.sync.phase_nav_index),
-                            total if total > 1 else 0)
+            # Idle phase navigation (#493): the DV engine owns the position,
+            # scoped to the current step's own plan (rebuilt on selection, so
+            # phase_nav_index/total are already the step's full materialized
+            # phase count -- same shape as the running path's full_count /
+            # full_index). Collapse math (base loop + rep count) still comes
+            # from the step model, exactly as it does mid-run.
+            full_count = int(self.sync.phase_nav_total)
+            full_index = int(self.sync.phase_nav_index)
+            rep_count = 1
+            base_count = full_count
+            if current_row is not None and sc is not None:
+                rep_count = max(
+                    1, int(getattr(current_row, "route_repetitions", 1) or 1)
+                )
+                base_count = (
+                    sc._base_phase_total_for(current_row)
+                    if rep_count > 1
+                    else full_count
+                )
+            view = collapse_phase_view(
+                full_count, full_index, base_count, rep_count, self._timeline_show_full
+            )
+            self._timeline_can_collapse = view["can_collapse"]
+            self._timeline_base_count = view["base_count"]
+            self._timeline_base_index = view["base_index"]
+            self._timeline_cur_rep = view["cur_rep"]
+            tb.set_position(
+                cur if cur is not None else -1,
+                len(rows),
+                view["phase_index"],
+                view["phase_total"] if view["phase_total"] > 1 else 0,
+            )
             tb.set_idle_cell(None)
-            self._update_timeline_controls(
-                current_row,
-                collapse_phase_view(total, int(self.sync.phase_nav_index),
-                                    total, 1, False))
+            self._update_timeline_controls(current_row, view)
             return
         full_count = 0
         full_index = 0
         rep_count = 1
         base_count = 0
         if current_row is not None and model is not None:
-            on_current = (model.current_step_path is not None
-                          and tuple(model.current_step_path) == tuple(current_row.path))
+            on_current = model.current_step_path is not None and tuple(
+                model.current_step_path
+            ) == tuple(current_row.path)
             if on_current and model.phase_total > 0:
                 full_count = model.phase_total
                 full_index = max(0, model.phase_index - 1)
             else:
                 full_count = sc._phase_total_for(current_row)
             rep_count = max(1, int(getattr(current_row, "route_repetitions", 1) or 1))
-            base_count = sc._base_phase_total_for(current_row) if rep_count > 1 else full_count
-        view = collapse_phase_view(full_count, full_index, base_count, rep_count,
-                                   self._timeline_show_full)
+            base_count = (
+                sc._base_phase_total_for(current_row) if rep_count > 1 else full_count
+            )
+        view = collapse_phase_view(
+            full_count, full_index, base_count, rep_count, self._timeline_show_full
+        )
         self._timeline_can_collapse = view["can_collapse"]
         self._timeline_base_count = view["base_count"]
         self._timeline_base_index = view["base_index"]
@@ -616,14 +680,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # step so its base loop + rep controls are visible without running.
         show_phase = running or view["can_collapse"]
         phase_total = view["phase_total"] if show_phase else 0
-        tb.set_position(cur if cur is not None else -1, len(rows),
-                        view["phase_index"], phase_total)
+        tb.set_position(
+            cur if cur is not None else -1, len(rows), view["phase_index"], phase_total
+        )
         # Dynamic duration step (#477): the last phase cell is the idle phase.
         # Paint it dark yellow so the user can see the parking cell at a glance.
         # Gate on the live dyn_loop_active flag (not repeat_duration_controls) so
         # a STATIC duration step — which has no real idle cell — isn't mislabeled.
-        if (running and model is not None and model.dyn_loop_active
-                and model.phase_total > 1 and self._current_row is not None):
+        if (
+            running
+            and model is not None
+            and model.dyn_loop_active
+            and model.phase_total > 1
+            and self._current_row is not None
+        ):
             tb.set_idle_cell(model.phase_total - 1)
         else:
             tb.set_idle_cell(None)
@@ -640,10 +710,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         model = self.status_controller.model if self.status_controller else None
         phase_possible = view["can_collapse"]
-        self._fill_rep_combo(pane.timeline_phase_rep_combo, pane.timeline_phase_rep_label,
-                             phase_possible, view["rep_count"], view["cur_rep"])
-        step_reps_attr = (max(1, int(getattr(current_row, "repetitions", 1) or 1))
-                          if current_row is not None else 1)
+        self._fill_rep_combo(
+            pane.timeline_phase_rep_combo,
+            pane.timeline_phase_rep_label,
+            phase_possible,
+            view["rep_count"],
+            view["cur_rep"],
+        )
+        step_reps_attr = (
+            max(1, int(getattr(current_row, "repetitions", 1) or 1))
+            if current_row is not None
+            else 1
+        )
         # The running rep count comes from the executor's rep_chain (covers a
         # repeated GROUP, whose step's own ``repetitions`` is 1); the trait is
         # the idle fallback for a directly-repeated step.
@@ -651,8 +729,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         step_total = max(step_reps_attr, model_total)
         step_cur = model.step_rep_index if (model and model.step_rep_index > 0) else 1
         step_possible = step_total > 1
-        self._fill_rep_combo(pane.timeline_step_rep_combo, pane.timeline_step_rep_label,
-                             step_possible, step_total, step_cur)
+        self._fill_rep_combo(
+            pane.timeline_step_rep_combo,
+            pane.timeline_step_rep_label,
+            step_possible,
+            step_total,
+            step_cur,
+        )
         nav_available = not bool(model.running) if model else True
         self._pane.phase_nav_check.setVisible(nav_available)
         controls.setVisible(phase_possible or step_possible or nav_available)
@@ -678,8 +761,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # absolute phase to seek.
         if not self._timeline_can_collapse or self._timeline_base_count <= 0:
             return
-        self._seek_to_phase(index * self._timeline_base_count
-                            + self._timeline_base_index)
+        target = index * self._timeline_base_count + self._timeline_base_index
+        if self._idle_nav_active():
+            self._publish_phase_nav_request({"action": "goto", "index": int(target)})
+            return
+        self._seek_to_phase(target)
         # Refresh the status bar's phase readout now, not on the next play.
         self._update_protocol_time()
 
@@ -690,8 +776,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
         # Cover a repeated group (the step's own ``repetitions`` is 1) by using
         # the running rep total too -- same source the combo was filled from.
-        rep_total = max(int(getattr(row, "repetitions", 1) or 1),
-                        int(sc.model.step_rep_total or 0))
+        rep_total = max(
+            int(getattr(row, "repetitions", 1) or 1), int(sc.model.step_rep_total or 0)
+        )
         sc.seek_to_step_rep(tuple(row.path), index + 1, rep_total)
         # The Step Rep status label follows rep_chain_label (set by the seek);
         # refresh the time readouts now too rather than waiting for play.
@@ -739,7 +826,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # phase_total), so the user can land on it via next and leave via prev.
         prev_enabled = m.phase_index > 1
         next_enabled = 0 < m.phase_index < m.phase_total
-        self._pane.navigation_bar.set_phase_navigation_enabled(prev_enabled, next_enabled)
+        self._pane.navigation_bar.set_phase_navigation_enabled(
+            prev_enabled, next_enabled
+        )
 
     # --- step-cursor selection (drives the view + a paused seek) ------
     def _seek_and_preview_step(self, row):
@@ -803,7 +892,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             if hasattr(row, cid):
                 values[cid] = getattr(row, cid)
         new_path = self.manager.add_step(
-            parent_path=parent_path, index=insert_idx, values=values,
+            parent_path=parent_path,
+            index=insert_idx,
+            values=values,
         )
         new_row = self.manager.get_row(new_path)
         self._select_step(new_row)
@@ -830,8 +921,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     def _publish_phase_nav_request(self, request):
         try:
-            publish_message(topic=PHASE_NAVIGATION_REQUEST,
-                            message=json.dumps(request))
+            publish_message(topic=PHASE_NAVIGATION_REQUEST, message=json.dumps(request))
         except Exception as e:
             logger.warning(f"phase-navigation request publish failed: {e}")
 
@@ -926,8 +1016,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         exc = getattr(self.executor, "_error", None)
         informative = self._format_error_html(exc, str(msg))
         detail = format_traceback_detail(exc) if exc is not None else None
-        error_dialog(parent=None, title="Protocol error",
-                     message=str(msg), informative=informative, detail=detail)
+        error_dialog(
+            parent=None,
+            title="Protocol error",
+            message=str(msg),
+            informative=informative,
+            detail=detail,
+        )
         # Now prompt for a run summary (error is treated like a force-stop).
         self._run_completion_flow(RUN_OUTCOME_ERROR)
 
@@ -1057,16 +1152,20 @@ class PluggableProtocolDockPane(TraitsDockPane):
             except Exception as e:
                 logger.warning(f"stop_logging (preview) failed: {e}")
             try:
-                information(parent=None,
-                            message="Preview run completed successfully.",
-                            title="Preview Complete",
-                            timeout=PREVIEW_COMPLETE_TOAST_MS)
+                information(
+                    parent=None,
+                    message="Preview run completed successfully.",
+                    title="Preview Complete",
+                    timeout=PREVIEW_COMPLETE_TOAST_MS,
+                )
             except Exception as e:
                 logger.warning(f"preview-complete dialog failed: {e}")
             return
 
-        have_exp = (self.experiment_manager is not None
-                    and self.task.window.application is not None)
+        have_exp = (
+            self.experiment_manager is not None
+            and self.task.window.application is not None
+        )
 
         # Auto-save the protocol + record its path into the report metadata,
         # before stop_logging so the metadata is present when _flush builds
@@ -1074,10 +1173,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if have_exp:
             try:
                 saved = self.experiment_manager.auto_save_protocol(
-                    self.manager.to_json())
+                    self.manager.to_json()
+                )
                 if saved:
-                    self.logging_controller.log_metadata(
-                        {"Protocol Path": str(saved)})
+                    self.logging_controller.log_metadata({"Protocol Path": str(saved)})
             except Exception as e:
                 logger.warning(f"protocol auto-save failed: {e}")
 
@@ -1085,22 +1184,39 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # A run stopped before any step ran (e.g. Stop on the loading screen)
         # has nothing meaningful — skip the prompt and generate no report.
         generate_report = self.logging_controller.has_data()
-        if generate_report and outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR) and have_exp:
+        if (
+            generate_report
+            and outcome in (RUN_OUTCOME_ABORTED, RUN_OUTCOME_ERROR)
+            and have_exp
+        ):
             try:
-                if confirm(parent=None,
-                           message=("Protocol was stopped before completion."
-                                    "<br><br>Press <b>YES</b> to create run "
-                                    "summary."),
-                           title="Generate Run Summary?", cancel=False) == NO:
+                if (
+                    confirm(
+                        parent=None,
+                        message=(
+                            "Protocol was stopped before completion."
+                            "<br><br>Press <b>YES</b> to create run "
+                            "summary."
+                        ),
+                        title="Generate Run Summary?",
+                        cancel=False,
+                    )
+                    == NO
+                ):
                     generate_report = False
             except Exception as e:
                 logger.warning(f"run-summary confirm failed: {e}")
         elif outcome == RUN_OUTCOME_FINISHED and have_exp:
             try:
-                if confirm(parent=None,
-                           message="Would you like to start a new experiment?",
-                           title="Create New Experiment?",
-                           cancel=False) == YES:
+                if (
+                    confirm(
+                        parent=None,
+                        message="Would you like to start a new experiment?",
+                        title="Create New Experiment?",
+                        cancel=False,
+                    )
+                    == YES
+                ):
                     self._pane._on_new_experiment()
             except Exception as e:
                 logger.warning(f"new-experiment confirm failed: {e}")
@@ -1132,7 +1248,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # the menu and the toolbutton stay consistent.
         self._pane._on_new_experiment()
 
-
     ### Trait observers ###########################
     @observe("preferences.protocol_tree_ack_times.items", post_init=True)
     def _sync_handler_ack_times(self, event=None):
@@ -1153,11 +1268,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
             if col.id not in ack_times:
                 continue
             seconds = ack_times[col.id]
-            ack_time_s = (float("inf") if seconds == ACK_WAIT_FOREVER
-                          else float(seconds))
+            ack_time_s = float("inf") if seconds == ACK_WAIT_FOREVER else float(seconds)
             if col.handler.ack_time_s != ack_time_s:
-                logger.info(f"Protocol Tree: ack wait changed for {col.id} column: "
-                            f"{col.handler.ack_time_s}s --> {ack_time_s}s")
+                logger.info(
+                    f"Protocol Tree: ack wait changed for {col.id} column: "
+                    f"{col.handler.ack_time_s}s --> {ack_time_s}s"
+                )
                 col.handler.ack_time_s = ack_time_s
 
     @observe("manager.rows_changed")
@@ -1184,7 +1300,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
 
         self.protocol_state_tracker.on_cell_changed(
-            path, col_id, self.manager,
+            path,
+            col_id,
+            self.manager,
         )
 
         self._clamp_trail_overlay_for_row(path, col_id)
@@ -1216,11 +1334,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         global _EXITED
 
         if not _EXITED:
-
             user_choice = confirm(
                 None,  # the dock pane is not a QWidget — no dialog parent
-                "Current protocol has unsaved changes.\n"
-                "Exit without saving?",
+                "Current protocol has unsaved changes.\nExit without saving?",
                 title="Unsaved Protocol Changes",
                 cancel=False,
             )
@@ -1251,13 +1367,23 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._refresh_timeline_position()
 
     ## Observe status bar model changes and modify view accordingly
-    @observe("status_controller:model:[step_index, step_total, phase_index, phase_total]", dispatch="ui", post_init=True)
+    @observe(
+        "status_controller:model:[step_index, step_total, phase_index, phase_total]",
+        dispatch="ui",
+        post_init=True,
+    )
     def _on_counts_changed(self, event=None):
         model = self.status_controller.model
-        self._pane.status_bar._refresh_counts(current=model.step_index, total=model.step_total)
+        self._pane.status_bar._refresh_counts(
+            current=model.step_index, total=model.step_total
+        )
         self._refresh_timeline_position()
 
-    @observe("status_controller:model:[frame_index, step_rep_index]", dispatch="ui", post_init=True)
+    @observe(
+        "status_controller:model:[frame_index, step_rep_index]",
+        dispatch="ui",
+        post_init=True,
+    )
     def _on_timeline_frame_changed(self, event=None):
         # A step's repetitions advance the execution frame / step-rep without
         # changing the distinct step or phase counters, so _on_counts_changed
@@ -1265,14 +1391,26 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # full-view playhead track the running repetition.
         self._refresh_timeline_position()
 
-    @observe("status_controller:model:[repeats_completed, repeats_total]", dispatch="ui", post_init=True)
+    @observe(
+        "status_controller:model:[repeats_completed, repeats_total]",
+        dispatch="ui",
+        post_init=True,
+    )
     def _on_repeats_changed(self, event=None):
-        self._pane.status_bar._refresh_repeats(self.status_controller.model.repeats_completed)
+        self._pane.status_bar._refresh_repeats(
+            self.status_controller.model.repeats_completed
+        )
 
-    @observe("status_controller:model:[recent_step_name, next_step_name, rep_chain_label]", dispatch="ui", post_init=True)
+    @observe(
+        "status_controller:model:[recent_step_name, next_step_name, rep_chain_label]",
+        dispatch="ui",
+        post_init=True,
+    )
     def _on_names_changed(self, event=None):
         model = self.status_controller.model
-        self._pane.status_bar._refresh_names(model.recent_step_name, model.next_step_name, model.rep_chain_label)
+        self._pane.status_bar._refresh_names(
+            model.recent_step_name, model.next_step_name, model.rep_chain_label
+        )
         # rep_chain_label changes on every repetition (step or group), so this
         # reliably advances the Step Rep combo even when no step/phase counter
         # moved (a no-phase repeated step).
@@ -1356,8 +1494,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         and structural edits (Add/Delete/Paste) locked regardless (#434/#471)."""
         running = bool(self.status_controller.model.running)
         ctx = self.executor._active_proto_ctx
-        advanced = (bool(ctx.advanced_mode) if ctx is not None
-                    else bool(self.sync.advanced_mode))
+        advanced = (
+            bool(ctx.advanced_mode)
+            if ctx is not None
+            else bool(self.sync.advanced_mode)
+        )
         self._pane.widget.set_editable(
             editable=(not running) or advanced,
             structural=not running,
@@ -1386,9 +1527,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         try:
             col.handler.on_live_edit(row, ctx)
         except Exception:
-            logger.exception(
-                f"live re-apply of {col_id!r} on the running step failed"
-            )
+            logger.exception(f"live re-apply of {col_id!r} on the running step failed")
 
     def _clamp_trail_overlay_for_row(self, path, col_id):
         """Mirror the DV sidebar's dynamic bound (trail_overlay can never
@@ -1405,7 +1544,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if int(getattr(row, "trail_overlay", 0) or 0) > max_overlay:
             row.trail_overlay = max_overlay
             self.manager.cell_changed = {
-                "path": tuple(path), "col_id": "trail_overlay",
+                "path": tuple(path),
+                "col_id": "trail_overlay",
             }
 
     def _reconcile_repeat_duration_for_row(self, path, col_id):
@@ -1444,33 +1584,41 @@ class PluggableProtocolDockPane(TraitsDockPane):
             n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
             estimated = estimate_repeat_duration_s(
                 routes=routes,
-                trail_length=trail_length, trail_overlay=trail_overlay,
-                n_repeats=n_repeats, step_duration_s=duration_s,
+                trail_length=trail_length,
+                trail_overlay=trail_overlay,
+                n_repeats=n_repeats,
+                step_duration_s=duration_s,
                 linear_repeats=linear_repeats,
-                soft_start=soft_start, soft_end=soft_end,
+                soft_start=soft_start,
+                soft_end=soft_end,
             )
             estimated = round(estimated, REPEAT_DURATION_DECIMALS)
-            if (abs(float(getattr(row, "repeat_duration", 0.0)) - estimated)
-                    >= REPEAT_DURATION_TOLERANCE_S):
+            if (
+                abs(float(getattr(row, "repeat_duration", 0.0)) - estimated)
+                >= REPEAT_DURATION_TOLERANCE_S
+            ):
                 row.repeat_duration = estimated
                 # Re-entrancy is bounded: see the
                 # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
                 # "repeat_duration" is not a trigger in
                 # route-reps-controlled mode so the next pass exits cleanly.
                 self.manager.cell_changed = {
-                    "path": tuple(path), "col_id": "repeat_duration",
+                    "path": tuple(path),
+                    "col_id": "repeat_duration",
                 }
         elif controls and col_id == "repeat_duration":
             effective = effective_repetitions_for_duration(
                 routes=routes,
-                trail_length=trail_length, trail_overlay=trail_overlay,
+                trail_length=trail_length,
+                trail_overlay=trail_overlay,
                 step_duration_s=duration_s,
                 repeat_duration_s=float(getattr(row, "repeat_duration", 0.0) or 0.0),
             )
             if int(getattr(row, "route_repetitions", 1) or 1) != int(effective):
                 row.route_repetitions = int(effective)
                 self.manager.cell_changed = {
-                    "path": tuple(path), "col_id": "route_repetitions",
+                    "path": tuple(path),
+                    "col_id": "route_repetitions",
                 }
 
     def _emit_time_update_tick(self):
@@ -1503,5 +1651,5 @@ class PluggableProtocolDockPane(TraitsDockPane):
             active=model.phase_clock.active(now),
             target=model.phase_target_s,
             current_phase_idx=model.phase_index,
-            total_phases=model.phase_total
+            total_phases=model.phase_total,
         )
