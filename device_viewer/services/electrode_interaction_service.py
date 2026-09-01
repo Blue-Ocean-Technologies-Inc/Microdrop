@@ -1996,12 +1996,6 @@ class ElectrodeInteractionControllerService(HasTraits):
         if button == Qt.LeftButton:
             self._left_mouse_pressed = True
 
-            # The rig's touchscreen has no hover — surface the electrode
-            # tooltip at the finger on press instead. Reading the live
-            # toolTip() keeps the Enable Electrode Tooltip toggle in charge.
-            if is_rpi() and electrode_view and electrode_view.toolTip():
-                QToolTip.showText(event.screenPos(), electrode_view.toolTip())
-
             if mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     self._last_electrode_id_visited = electrode_view.id
@@ -2108,6 +2102,14 @@ class ElectrodeInteractionControllerService(HasTraits):
                 # If it's a click (not a drag) since only one electrode selected:
                 if not self._is_drag and electrode_view:
                     self.handle_electrode_click(electrode_view.id)
+
+                    # The rig's touchscreen has no hover — surface the
+                    # electrode tooltip at the finger after a tap instead.
+                    # Shown at release: shown any earlier, the release
+                    # event itself hides it again. The Enable Electrode
+                    # Tooltip toggle still governs it.
+                    if is_rpi() and electrode_view.toolTip():
+                        QToolTip.showText(event.screenPos(), electrode_view.toolTip())
 
                 # Reset left-click related vars
                 self._is_drag = False
