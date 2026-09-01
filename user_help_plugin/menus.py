@@ -8,32 +8,37 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import webbrowser
 from pathlib import Path
 
+# Enthought library imports.
 from pyface.action.api import Action
 from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Bool, Int, Str
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
+from microdrop_application.consts import CHANGELOG_PATH
+from microdrop_application.dialogs.consts import (
+    DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
+    DEFAULT_WEB_VIEW_DIALOG_WIDTH,
+)
 
-logger = get_logger(__name__)
-
+# Local imports.
 from .consts import (
     ARCHITECTURE_HTML_PATH,
     FEEDBACK_URL,
     GITHUB_ISSUES_URL,
+    INFO_EMAIL,
     MICRODROP_LAUNCHER_README_URL,
     SCIBOTS_URL,
     SUPPORT_EMAIL,
-    INFO_EMAIL,
 )
 
-from microdrop_application.consts import CHANGELOG_PATH
-from microdrop_application.dialogs.consts import (
-    DEFAULT_WEB_VIEW_DIALOG_WIDTH,
-    DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
-)
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class OpenWebViewDialogAction(Action):
@@ -50,9 +55,13 @@ class OpenWebViewDialogAction(Action):
         # Imported lazily so QtWebEngine only initializes on first use.
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
 
-        self.dialog = WebViewDialog(self.source, self.window_title,
-                                    width=self.width, height=self.height,
-                                    open_links_externally=self.open_links_externally)
+        self.dialog = WebViewDialog(
+            self.source,
+            self.window_title,
+            width=self.width,
+            height=self.height,
+            open_links_externally=self.open_links_externally,
+        )
         self.dialog.show()
 
 
@@ -70,8 +79,11 @@ class OpenMarkdownDialogAction(OpenWebViewDialogAction):
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
         from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+
         from microdrop_utils.markdown_helpers import (
-            fetch_github_markdown, render_markdown_as_html_page)
+            fetch_github_markdown,
+            render_markdown_as_html_page,
+        )
         from microdrop_utils.pyside_helpers import markdown_text_to_html
 
         base_href = None
@@ -82,21 +94,27 @@ class OpenMarkdownDialogAction(OpenWebViewDialogAction):
                 markdown_text = fetch_github_markdown(self.source)
                 base_href = self.source.rsplit("/", 1)[0] + "/"
         except Exception as e:
-            logger.warning(f"Failed to load markdown from {self.source}: {e}. "
-                           f"Falling back to loading it directly.")
+            logger.warning(
+                f"Failed to load markdown from {self.source}: {e}. "
+                f"Falling back to loading it directly."
+            )
             return super().perform(event)
 
         try:
             html_content = render_markdown_as_html_page(markdown_text, base_href)
         except Exception as e:
-            logger.warning(f"GitHub markdown render failed: {e}. "
-                           f"Using the offline renderer.")
+            logger.warning(
+                f"GitHub markdown render failed: {e}. Using the offline renderer."
+            )
             html_content = markdown_text_to_html(markdown_text)
 
-        self.dialog = WebViewDialog(html_content=html_content,
-                                    title=self.window_title,
-                                    width=self.width, height=self.height,
-                                    open_links_externally=self.open_links_externally)
+        self.dialog = WebViewDialog(
+            html_content=html_content,
+            title=self.window_title,
+            width=self.width,
+            height=self.height,
+            open_links_externally=self.open_links_externally,
+        )
         self.dialog.show()
 
 
@@ -118,6 +136,7 @@ class OpenSciBotsAction(Action):
 
 class ContactSupportAction(Action):
     """Opens the default mail app with a mailto: link."""
+
     email = Str()
 
     def perform(self, event):
