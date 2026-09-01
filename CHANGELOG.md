@@ -1,3 +1,15 @@
+## v1.15.1 (2026-09-01)
+
+### Fix
+
+- **user_help_plugin**: degrade gracefully without QtWebEngine
+- **protocol-tree**: collapse timeline in idle phase nav
+
+### Chore
+
+- **user_help_plugin**: bring menus.py ruff-clean
+- **protocol-tree**: bring dock_pane.py ruff-clean
+
 ## v1.15.0 (2026-08-28)
 
 ### Feat
