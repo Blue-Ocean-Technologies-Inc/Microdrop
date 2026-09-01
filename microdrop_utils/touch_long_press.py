@@ -42,10 +42,14 @@ class TouchLongPressRightClickFilter(QObject):
         event_type = event.type()
 
         if event_type == QEvent.Type.MouseButtonPress:
+            # An unaccepted press is re-delivered to each ancestor widget as
+            # it propagates; an active timer means this press already armed
+            # on its first, deepest receiver — the context-menu target.
             if (
                 isinstance(watched, QWidget)
                 and event.button() == Qt.MouseButton.LeftButton
                 and event.source() != Qt.MouseEventSource.MouseEventNotSynthesized
+                and not self._timer.isActive()
             ):
                 self._target = watched
                 self._pos = event.position().toPoint()
