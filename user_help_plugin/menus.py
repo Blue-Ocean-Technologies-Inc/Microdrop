@@ -53,7 +53,19 @@ class OpenWebViewDialogAction(Action):
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
-        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        try:
+            from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        except ImportError as e:
+            # QtWebEngine cannot load on some rigs (e.g. missing system
+            # libraries on the portable Pi) — open the source in the
+            # system browser instead of failing silently.
+            logger.warning(
+                f"QtWebEngine unavailable ({e}); opening "
+                f"{self.source} in the system browser."
+            )
+            source = self.source
+            webbrowser.open(source.as_uri() if isinstance(source, Path) else source)
+            return
 
         self.dialog = WebViewDialog(
             self.source,
@@ -78,8 +90,6 @@ class OpenMarkdownDialogAction(OpenWebViewDialogAction):
 
     def perform(self, event):
         # Imported lazily so QtWebEngine only initializes on first use.
-        from microdrop_application.dialogs.web_view_dialog import WebViewDialog
-
         from microdrop_utils.markdown_helpers import (
             fetch_github_markdown,
             render_markdown_as_html_page,
@@ -99,6 +109,26 @@ class OpenMarkdownDialogAction(OpenWebViewDialogAction):
                 f"Falling back to loading it directly."
             )
             return super().perform(event)
+
+        try:
+            from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+        except ImportError as e:
+            # QtWebEngine cannot load on some rigs (e.g. missing system
+            # libraries on the portable Pi) — render offline into the same
+            # dialog the What's New notice uses.
+            from microdrop_application.dialogs.pyface_wrapper import information
+
+            logger.warning(
+                f"QtWebEngine unavailable ({e}); showing "
+                f"'{self.window_title}' in a plain dialog."
+            )
+            information(
+                None,
+                markdown_text_to_html(markdown_text),
+                title=self.window_title,
+                cancel=False,
+            )
+            return
 
         try:
             html_content = render_markdown_as_html_page(markdown_text, base_href)
