@@ -8,23 +8,46 @@
 #
 # Thanks for using Microdrop open source!
 
-from PySide6.QtWidgets import QApplication
-from traitsui.api import View, Item, TableEditor, UIInfo, UItem, HGroup, VGroup, Label, RangeEditor
-from traitsui.key_bindings import KeyBindings, KeyBinding
+# Enthought library imports.
+from pyface.qt.QtWidgets import QApplication
+from traitsui.api import (
+    HGroup,
+    Item,
+    Label,
+    RangeEditor,
+    TableEditor,
+    UIInfo,
+    UItem,
+    VGroup,
+    View,
+)
+from traitsui.key_bindings import KeyBinding, KeyBindings
 
-from device_viewer.views.route_selection_view.menu import RouteLayerMenu
+# Microdrop package imports.
 from device_viewer.models.route import RouteLayer
+from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 
-from microdrop_utils.traitsui_qt_helpers import ColorColumn, VisibleColumn, ObjectColumn, CustomCheckboxColumn, \
-    SafeCancelTableHandler, DoubleSpinBoxEditor, make_table_row_header_resizable
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import (
+    CustomCheckboxColumn,
+    DoubleSpinBoxEditor,
+    ObjectColumn,
+    SafeCancelTableHandler,
+    VisibleColumn,
+    make_table_row_header_resizable,
+)
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+
 class RouteLayerTableHandler(SafeCancelTableHandler):
-    # For these handlers, info is as usual, and rows is a list of rows that the action is acting on
-    # In the case of the right click menu, always a list of size 1 with the affected row
+    # For these handlers, info is as usual, and rows is a list of rows that
+    # the action is acting on
+    # In the case of the right click menu, always a list of size 1 with the
+    # affected row
 
     def init(self, info: UIInfo):
         """Runs once when the UI is generated."""
@@ -50,7 +73,7 @@ class RouteLayerTableHandler(SafeCancelTableHandler):
         info.object.routes.mode = "merge"
 
     def merge_layer(self, info, rows):
-        if info.object.routes.layer_to_merge == None: # Sanity check
+        if info.object.routes.layer_to_merge is None:  # Sanity check
             self.cancel_merge_route(info, rows)
             return
 
@@ -86,7 +109,9 @@ class RunColumn(CustomCheckboxColumn):
 
 layer_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="Path", resize_mode="interactive", editable=False),
+        ObjectColumn(
+            name="name", label="Path", resize_mode="interactive", editable=False
+        ),
         VisibleColumn(
             name="visible",
             label="",
@@ -111,45 +136,67 @@ layer_table_editor = TableEditor(
     show_row_labels=True,
 )
 
-# Width for the whole table needs to be set in the widget itself (in the pane's create_contents)
+# Width for the whole table needs to be set in the widget itself (in the
+# pane's create_contents)
 
 protocol_execution_settings = (
-UItem('object.routes.duration',
-      editor=DoubleSpinBoxEditor(low=0.0, high=10000.0, decimals=1, step=0.1),
-      tooltip="Duration of each step in route (seconds)"),
-UItem('object.routes.trail_length',
-      editor=RangeEditor(low=1, high=10000, mode='spinner'),
-      tooltip="Length of each step in route (# electrodes)"),
-UItem('object.routes.trail_overlay',
-      editor=RangeEditor(low=0, high_name='object.routes.max_trail_overlay', mode='spinner'),
-      tooltip="electrodes actuated from one step to overlay onto next step"),
-UItem('object.routes.repetitions',
-      editor=RangeEditor(low=1, high=10000, mode='spinner'),
-      enabled_when="not object.routes_repeats_frozen",
-      tooltip="Times to repeat loops execution"),
-UItem('object.routes.repeat_duration',
-      editor=RangeEditor(low=0, high=10000, mode='spinner'),
-      enabled_when="not object.routes_repeats_frozen",
-      tooltip="Seconds to repeat path executions. Idle time in end if loop cannot be completed"),
+    UItem(
+        "object.routes.duration",
+        editor=DoubleSpinBoxEditor(low=0.0, high=10000.0, decimals=1, step=0.1),
+        tooltip="Duration of each step in route (seconds)",
+    ),
+    UItem(
+        "object.routes.trail_length",
+        editor=RangeEditor(low=1, high=10000, mode="spinner"),
+        tooltip="Length of each step in route (# electrodes)",
+    ),
+    UItem(
+        "object.routes.trail_overlay",
+        editor=RangeEditor(
+            low=0, high_name="object.routes.max_trail_overlay", mode="spinner"
+        ),
+        tooltip="electrodes actuated from one step to overlay onto next step",
+    ),
+    UItem(
+        "object.routes.repetitions",
+        editor=RangeEditor(low=1, high=10000, mode="spinner"),
+        enabled_when="not object.routes_repeats_frozen",
+        tooltip="Times to repeat loops execution",
+    ),
+    UItem(
+        "object.routes.repeat_duration",
+        editor=RangeEditor(low=0, high=10000, mode="spinner"),
+        enabled_when="not object.routes_repeats_frozen",
+        tooltip="Seconds to repeat path executions. "
+        "Idle time in end if loop cannot be completed",
+    ),
 )
 
 protocol_execution_settings_header = (
-Label("Duration", tooltip="Duration of each step in route (seconds)"),
-Label("Length", tooltip="Length of each step in route (# electrodes)"),
-Label("Overlay", tooltip="electrodes actuated from one step to overlay onto next step"),
-Label("Reps", tooltip="Times to repeat path executions"),
-Label("Rep Duration", tooltip="Seconds to repeat path executions. Idle time in end if loop cannot be completed"),
+    Label("Duration", tooltip="Duration of each step in route (seconds)"),
+    Label("Length", tooltip="Length of each step in route (# electrodes)"),
+    Label(
+        "Overlay", tooltip="electrodes actuated from one step to overlay onto next step"
+    ),
+    Label("Reps", tooltip="Times to repeat path executions"),
+    Label(
+        "Rep Duration",
+        tooltip="Seconds to repeat path executions. "
+        "Idle time in end if loop cannot be completed",
+    ),
 )
 
 soft_transition_settings = (
-UItem('object.routes.soft_start', tooltip="Ramp up overlay at start"),
-UItem('object.routes.soft_terminate', tooltip="Ramp down overlay at end"),
-UItem('object.routes.linear_repeats', tooltip="Replay linear paths Repetitions times"),
+    UItem("object.routes.soft_start", tooltip="Ramp up overlay at start"),
+    UItem("object.routes.soft_terminate", tooltip="Ramp down overlay at end"),
+    UItem(
+        "object.routes.linear_repeats", tooltip="Replay linear paths Repetitions times"
+    ),
 )
 soft_transition_settings_header = (
-Label("Ramp Up", tooltip="Ramp up overlay at start"),
-Label("Ramp Dn", tooltip="Ramp down overlay at end"),
-Label("Lin Reps", tooltip="Replay linear paths Repetitions times"),
+    Label("Ramp Up", tooltip="Ramp up overlay at start"),
+    Label("Ramp Dn", tooltip="Ramp down overlay at end"),
+    Label("Lin Reps", tooltip="Replay linear paths Repetitions times"),
 )
 
 
@@ -230,14 +277,14 @@ run_controls = HGroup(
         "phase_navigation_mode",
         label="Phases",
         tooltip="Step through route phases without running the protocol "
-                "(synced with the protocol tree)",
+        "(synced with the protocol tree)",
         visible_when=f"not {executing}",
     ),  # idle phase-navigation mode (#493)
     enabled_when="not object.protocol_running",
 )
 
 execution_status_bar = HGroup(
-    Item('execution_status', style='readonly', show_label=False),
+    Item("execution_status", style="readonly", show_label=False),
     visible_when=f"{executing} or {nav_mode}",
     # style_sheet='* { font-size: 15px; }',
 )
@@ -246,26 +293,24 @@ RouteLayerView = View(
     VGroup(
         run_controls,
         execution_status_bar,
-        Item('object.routes.layers', editor=layer_table_editor, show_label=False),
+        Item("object.routes.layers", editor=layer_table_editor, show_label=False),
     ),
     resizable=True,
     title="Route Layer Selector",
     handler=RouteLayerTableHandler,
     key_bindings=KeyBindings(
-        KeyBinding(
-            binding1='Delete',
-            method_name='handle_delete_key'
-        ),
-    )
+        KeyBinding(binding1="Delete", method_name="handle_delete_key"),
+    ),
 )
 
 if __name__ == "__main__":
     # demo view
     import sys
 
-    from traits.api import HasTraits, Bool, DelegatesTo, Instance, Str, observe
+    from traits.api import Bool, DelegatesTo, HasTraits, Instance, Str, observe
 
     from device_viewer.models.route import Route, RouteLayerManager
+
     from microdrop_style.helpers import style_app
 
     class RouteSelectionDemoModel(HasTraits):
@@ -299,7 +344,9 @@ if __name__ == "__main__":
     demo_model.routes.add_layer(Route(route=["g", "h"]))
 
     # channel_map: channel id -> list of electrode ids
-    demo_channel_map = {channel: [electrode_id] for channel, electrode_id in enumerate("abcdefgh")}
+    demo_channel_map = {
+        channel: [electrode_id] for channel, electrode_id in enumerate("abcdefgh")
+    }
     for demo_layer in demo_model.routes.layers:
         demo_layer.name = demo_layer.route.get_name(demo_channel_map)
 
