@@ -14,11 +14,19 @@ remove / copy / cut / paste / group."""
 from contextlib import contextmanager
 
 from pyface.qt.QtCore import (
-    Qt, QItemSelectionModel, QModelIndex, Signal,
+    QItemSelectionModel,
+    QModelIndex,
+    Qt,
+    Signal,
 )
 from pyface.qt.QtGui import QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
-    QWidget, QVBoxLayout, QTreeView, QMenu, QAbstractItemView, QDialog,
+    QAbstractItemView,
+    QDialog,
+    QMenu,
+    QTreeView,
+    QVBoxLayout,
+    QWidget,
 )
 
 from pluggable_protocol_tree.models.row import GroupRow
@@ -28,7 +36,10 @@ from pluggable_protocol_tree.views.bulk_set_dialog import BulkSetDialog
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
+from microdrop_utils.system_config import is_rpi
+
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -101,8 +112,16 @@ class ProtocolTreeWidget(QWidget):
 
         self.tree = _ProtocolTreeView()
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self._default_edit_triggers = (QAbstractItemView.DoubleClicked
-                                       | QAbstractItemView.EditKeyPressed)
+        self._default_edit_triggers = (
+            QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed
+        )
+        if is_rpi():
+            # On the rig's touchscreen the tree scrolls by finger flick
+            # (a QScroller touch gesture on its viewport), and Qt's flick
+            # recognizer consumes every double-click while the scroller is
+            # pressed — so a double-tap can never open an editor there.
+            # Tapping an already-selected cell opens it instead.
+            self._default_edit_triggers |= QAbstractItemView.SelectedClicked
         self._editable = True
         # Structural edits (Add/Delete/Paste via the context menu) are gated
         # separately from cell-value editing: Advanced Mode reopens value
@@ -139,17 +158,17 @@ class ProtocolTreeWidget(QWidget):
         # WidgetWithChildrenShortcut so they only fire when the tree
         # has focus. Delete is handled by _ProtocolTreeView.keyPressEvent
         # rather than a QShortcut for maximum reliability.
-        self._shortcuts = []     # keep refs alive (Qt doesn't, in PySide6)
+        self._shortcuts = []  # keep refs alive (Qt doesn't, in PySide6)
         for seq, slot in (
-            (QKeySequence.Copy,  self._copy),
-            (QKeySequence.Cut,   self._cut),
+            (QKeySequence.Copy, self._copy),
+            (QKeySequence.Cut, self._cut),
             (QKeySequence.Paste, self._paste),
             # Structural grouping (#529). Guarded so they honor the run-lock
             # (#471) the same way the context-menu entries do.
-            (QKeySequence("Ctrl+G"),       self._fold_shortcut),
+            (QKeySequence("Ctrl+G"), self._fold_shortcut),
             (QKeySequence("Ctrl+Shift+G"), self._unfold_shortcut),
             # Run just the selected rows (#529-style guard, issue #558).
-            (QKeySequence("Ctrl+R"),       self._run_selected_shortcut),
+            (QKeySequence("Ctrl+R"), self._run_selected_shortcut),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -180,7 +199,8 @@ class ProtocolTreeWidget(QWidget):
         saved_visibility = self._load_column_visibility()
         for i, col in enumerate(self._manager.columns):
             visible = saved_visibility.get(
-                col.model.col_id, saved_visibility.get(col.model.col_name))
+                col.model.col_id, saved_visibility.get(col.model.col_name)
+            )
             if visible is not None:
                 self.tree.setColumnHidden(i, not visible)
 
@@ -253,11 +273,12 @@ class ProtocolTreeWidget(QWidget):
         value edits while keeping structural changes locked (advanced mode
         during a run)."""
         self._editable = bool(editable)
-        self._structural_editable = bool(editable if structural is None
-                                          else structural)
+        self._structural_editable = bool(editable if structural is None else structural)
         self.tree.setEditTriggers(
-            self._default_edit_triggers if editable
-            else QAbstractItemView.NoEditTriggers)
+            self._default_edit_triggers
+            if editable
+            else QAbstractItemView.NoEditTriggers
+        )
 
     def _expand_ancestors(self, idx):
         """Expand every collapsed ancestor group so ``idx`` is visible."""
@@ -315,11 +336,9 @@ class ProtocolTreeWidget(QWidget):
         menu.addAction("Add Step", lambda: self._add_step_at(idx))
         menu.addAction("Add Group", lambda: self._add_group_at(idx))
         fold = menu.addAction("Fold into Group", self._fold_into_group)
-        fold.setEnabled(
-            self._manager.can_fold_into_group(self._manager.selection))
+        fold.setEnabled(self._manager.can_fold_into_group(self._manager.selection))
         unfold = menu.addAction("Unfold Group", self._unfold_group)
-        unfold.setEnabled(
-            self._manager.can_unfold_group(self._manager.selection))
+        unfold.setEnabled(self._manager.can_unfold_group(self._manager.selection))
         menu.addSeparator()
         menu.addAction("Copy", self._copy)
         menu.addAction("Cut", self._cut)
@@ -359,8 +378,7 @@ class ProtocolTreeWidget(QWidget):
         site."""
         try:
             saved = self._preferences.protocol_tree_column_visibility
-            return {str(name): bool(visible)
-                    for name, visible in (saved or {}).items()}
+            return {str(name): bool(visible) for name, visible in (saved or {}).items()}
         except Exception as exc:
             logger.warning(f"Could not read column visibility preference: {exc}")
             return {}
@@ -396,13 +414,12 @@ class ProtocolTreeWidget(QWidget):
         if not saved_order:
             return
         header = self.tree.header()
-        id_to_logical = {col.model.col_id: i
-                         for i, col in enumerate(self._manager.columns)}
-        target = [id_to_logical[cid] for cid in saved_order
-                  if cid in id_to_logical]
+        id_to_logical = {
+            col.model.col_id: i for i, col in enumerate(self._manager.columns)
+        }
+        target = [id_to_logical[cid] for cid in saved_order if cid in id_to_logical]
         seen = set(target)
-        target += [i for i in range(len(self._manager.columns))
-                   if i not in seen]
+        target += [i for i in range(len(self._manager.columns)) if i not in seen]
         blocked = header.blockSignals(True)
         try:
             for visual, logical in enumerate(target):
@@ -417,8 +434,10 @@ class ProtocolTreeWidget(QWidget):
         Connected to the header's ``sectionMoved`` signal (which passes the
         moved section's indices — ignored; we re-read the whole order)."""
         header = self.tree.header()
-        order = [self._manager.columns[header.logicalIndex(v)].model.col_id
-                 for v in range(header.count())]
+        order = [
+            self._manager.columns[header.logicalIndex(v)].model.col_id
+            for v in range(header.count())
+        ]
         try:
             self._preferences.protocol_tree_column_order = order
         except Exception as exc:
@@ -455,7 +474,8 @@ class ProtocolTreeWidget(QWidget):
         """Normalized selection roots for a scoped run — descendants of an
         already-selected row dropped, tree-ordered."""
         return self._manager.run_scope_roots(
-            [tuple(p) for p in self._manager.selection])
+            [tuple(p) for p in self._manager.selection]
+        )
 
     def _can_run_selection(self):
         """True when the selection would actually execute something. Guards
@@ -470,8 +490,7 @@ class ProtocolTreeWidget(QWidget):
         if not self._can_run_selection():
             return
         roots = self._selection_roots()
-        logger.info(f"Run Selected Steps requested for {len(roots)} root(s): "
-                    f"{roots}")
+        logger.info(f"Run Selected Steps requested for {len(roots)} root(s): {roots}")
         self.run_selected_requested.emit(roots)
 
     def _fold_into_group(self):
@@ -480,7 +499,8 @@ class ProtocolTreeWidget(QWidget):
         it (F2 / double-click) and subsequent actions target it."""
         try:
             group_path = self._manager.fold_into_group(
-                [tuple(p) for p in self._manager.selection])
+                [tuple(p) for p in self._manager.selection]
+            )
             if group_path is None:
                 return
             idx = self._node_to_index(self._manager.get_row(group_path))
@@ -488,8 +508,10 @@ class ProtocolTreeWidget(QWidget):
                 self._expand_ancestors(idx)
                 self.tree.selectionModel().setCurrentIndex(
                     idx,
-                    (QItemSelectionModel.SelectionFlag.ClearAndSelect
-                     | QItemSelectionModel.SelectionFlag.Rows),
+                    (
+                        QItemSelectionModel.SelectionFlag.ClearAndSelect
+                        | QItemSelectionModel.SelectionFlag.Rows
+                    ),
                 )
         except Exception:
             logger.exception("Fold into group failed")
@@ -499,13 +521,14 @@ class ProtocolTreeWidget(QWidget):
         at the group's position (#529), then select all the unfolded rows."""
         try:
             child_paths = self._manager.unfold_group(
-                [tuple(p) for p in self._manager.selection])
+                [tuple(p) for p in self._manager.selection]
+            )
             if not child_paths:
                 return
             indexes = [
-                idx for idx in (
-                    self._node_to_index(self._manager.get_row(p))
-                    for p in child_paths
+                idx
+                for idx in (
+                    self._node_to_index(self._manager.get_row(p)) for p in child_paths
                 )
                 if idx.isValid()
             ]
@@ -515,14 +538,18 @@ class ProtocolTreeWidget(QWidget):
             self._expand_ancestors(indexes[0])
             sm.setCurrentIndex(
                 indexes[0],
-                (QItemSelectionModel.SelectionFlag.ClearAndSelect
-                 | QItemSelectionModel.SelectionFlag.Rows),
+                (
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    | QItemSelectionModel.SelectionFlag.Rows
+                ),
             )
             for idx in indexes[1:]:
                 sm.select(
                     idx,
-                    (QItemSelectionModel.SelectionFlag.Select
-                     | QItemSelectionModel.SelectionFlag.Rows),
+                    (
+                        QItemSelectionModel.SelectionFlag.Select
+                        | QItemSelectionModel.SelectionFlag.Rows
+                    ),
                 )
         except Exception:
             logger.exception("Unfold group failed")
@@ -563,8 +590,9 @@ class ProtocolTreeWidget(QWidget):
         """Open the Bulk Set dialog and apply the chosen values to every
         selected step. Groups expand to their child steps — first level only,
         or all descendants when 'Apply to all nested groups' is ticked."""
-        paths = [self._index_to_path(i)
-                 for i in self.tree.selectionModel().selectedRows(0)]
+        paths = [
+            self._index_to_path(i) for i in self.tree.selectionModel().selectedRows(0)
+        ]
         if not paths:
             return
         dialog = BulkSetDialog(self._manager, parent=self)
@@ -628,8 +656,10 @@ class ProtocolTreeWidget(QWidget):
             if first.isValid():
                 sm.setCurrentIndex(
                     first,
-                    (QItemSelectionModel.SelectionFlag.ClearAndSelect
-                     | QItemSelectionModel.SelectionFlag.Rows),
+                    (
+                        QItemSelectionModel.SelectionFlag.ClearAndSelect
+                        | QItemSelectionModel.SelectionFlag.Rows
+                    ),
                 )
         except Exception:
             logger.exception("Delete failed")
