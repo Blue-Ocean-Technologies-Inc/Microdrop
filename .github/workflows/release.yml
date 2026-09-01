@@ -97,10 +97,13 @@ jobs:
           git push --force origin "HEAD:refs/heads/$RELEASE_BRANCH"
           # Look up the OPEN release PR only — a closed-without-merge PR for
           # this branch must not be edited, a fresh one must be opened.
-          pr_number="$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number')"
+          # REST rather than `gh pr edit`: on an org-owned repo the gh PR
+          # subcommands query org/team fields over GraphQL, which a classic
+          # PAT needs read:org for -- RELEASE_PAT only carries repo, so the
+          # update path failed every time a release PR already existed.
+          pr_number="$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$RELEASE_BRANCH&base=main&state=open" --jq '.[0].number')"
           if [ -n "$pr_number" ]; then
-            gh pr edit "$pr_number" --title "chore: release $tag" --body-file release_notes.md
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$pr_number"               -f title="chore: release $tag" -F body=@release_notes.md >/dev/null
           else
-            gh pr create --base main --head "$RELEASE_BRANCH" \
-              --title "chore: release $tag" --body-file release_notes.md
+            gh api -X POST "repos/$GITHUB_REPOSITORY/pulls"               -f base=main -f head="$RELEASE_BRANCH"               -f title="chore: release $tag" -F body=@release_notes.md >/dev/null
           fi
