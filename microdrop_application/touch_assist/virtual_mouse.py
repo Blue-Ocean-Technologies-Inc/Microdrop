@@ -41,6 +41,7 @@ from .consts import (
     MOUSE_WHEEL_PX_PER_NOTCH,
     MOUSE_WHEEL_WIDTH_PX,
 )
+from .input_pads import main_window_parent
 
 #: One wheel notch in QWheelEvent angle-delta units.
 _WHEEL_NOTCH = 120
@@ -57,7 +58,7 @@ class _PointerTip(QWidget):
 
     def __init__(self):
         super().__init__(
-            None,
+            main_window_parent(),
             Qt.Tool
             | Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
@@ -92,7 +93,7 @@ class VirtualMouse(QWidget):
 
     def __init__(self):
         super().__init__(
-            None,
+            main_window_parent(),
             Qt.Tool
             | Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint

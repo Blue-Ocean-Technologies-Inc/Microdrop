@@ -92,6 +92,15 @@ _PAD_STYLE = f"""
 """
 
 
+def main_window_parent():
+    """Parent for the floating pads: the application's main window, so
+    the pads are its transients. A parentless stay-on-top window stacks
+    BELOW a focused fullscreen window (the rig's kiosk mode) on X11;
+    a transient stacks above it."""
+    app = QApplication.instance()
+    return app.activeWindow() if app is not None else None
+
+
 class FloatingPad(QWidget):
     """A frameless, always-on-top, finger-draggable pad with a title
     strip and close button. Subclasses fill ``self.body``."""
@@ -102,7 +111,7 @@ class FloatingPad(QWidget):
 
     def __init__(self, title):
         super().__init__(
-            None,
+            main_window_parent(),
             Qt.Tool
             | Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
