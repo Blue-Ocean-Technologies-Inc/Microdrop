@@ -632,11 +632,20 @@ class ZoneLayerManager(HasTraits):
     def load_records(self, records):
         """Replace the regions with the given records (a device SVG's Zones
         layer). A zone id with no local type gets one auto-created from the
-        record's name/color; region-id counters resume past the loaded ids."""
+        record's name/color; region-id counters resume past the loaded ids.
+
+        Returns
+        -------
+        int
+            Number of records that referenced at least one unknown electrode
+            id — dropped entirely (none of their electrodes are known) or
+            trimmed to the known subset.
+        """
         self.selected_regions = []
         self.editing_region = None
         self.pending_electrode_ids = []
         regions = []
+        unloaded_count = 0
         for record in records:
             zone_id = record["zone_id"]
             if self.zone_type_for(zone_id) is None:
@@ -647,16 +656,25 @@ class ZoneLayerManager(HasTraits):
                         color=record.get("zone_color") or self.next_color(),
                     )
                 )
+            recorded_ids = record["electrode_ids"]
             electrode_ids = [
                 electrode_id
-                for electrode_id in record["electrode_ids"]
+                for electrode_id in recorded_ids
                 if electrode_id in self.electrode_polygons
             ]
             if not electrode_ids:
                 logger.warning(
                     f"Zone region {record['id']} references no known electrode; skipped"
                 )
+                unloaded_count += 1
                 continue
+            if len(electrode_ids) < len(recorded_ids):
+                unknown_count = len(recorded_ids) - len(electrode_ids)
+                logger.warning(
+                    f"Zone region {record['id']} references {unknown_count} "
+                    "unknown electrode(s); trimmed"
+                )
+                unloaded_count += 1
             regions.append(
                 ZoneRegion(
                     id=record["id"],
@@ -672,6 +690,7 @@ class ZoneLayerManager(HasTraits):
             self._advance_region_counter(record["id"], zone_id)
         self.regions = regions
         self._outline_cache = {}
+        return unloaded_count
 
     def snapshot_for_app_globals(self):
         """JSON-serializable zoning state keyed by zone id."""

@@ -321,11 +321,13 @@ def test_merge_requires_two_contiguous_regions_of_one_zone(manager):
     assert manager.merge_selected_regions() is None
     manager.change_region_zone(region_b, "heating")
     manager.selected_regions = [region_a, region_b]
+    manager.region_outline(region_b)
     merged = manager.merge_selected_regions()
     assert merged is region_a
     assert merged.electrode_ids == sorted([a, b])
     assert region_b not in manager.regions
     assert manager.selected_regions == [merged]
+    assert region_b not in manager._outline_cache
 
 
 def test_translate_regions_is_all_or_nothing(manager):
@@ -351,7 +353,7 @@ def test_remove_from_pending(manager):
 
 def test_load_records_auto_creates_unknown_zone(manager):
     ids = sorted(manager.electrode_polygons)
-    manager.load_records(
+    unloaded = manager.load_records(
         [
             {
                 "id": "cooling-7",
@@ -366,6 +368,37 @@ def test_load_records_auto_creates_unknown_zone(manager):
     cooling = manager.zone_type_for("cooling")
     assert (cooling.name, cooling.color) == ("Cool", "#123456")
     assert manager.regions[0].id == "cooling-7"
+    # A clean load (every record fully resolves) reports nothing dropped.
+    assert unloaded == 0
+
+
+def test_load_records_counts_dropped_and_trimmed(manager):
+    ids = sorted(manager.electrode_polygons)
+    unloaded = manager.load_records(
+        [
+            {
+                "id": "heating-1",
+                "zone_id": "heating",
+                "zone_name": "heating",
+                "zone_color": "#f5e050",
+                "visible": True,
+                "electrode_ids": ["nope"],
+            },
+            {
+                "id": "heating-2",
+                "zone_id": "heating",
+                "zone_name": "heating",
+                "zone_color": "#f5e050",
+                "visible": True,
+                "electrode_ids": [ids[0], "nope"],
+            },
+        ]
+    )
+    # The first record is dropped entirely (no known electrodes); the second
+    # is trimmed to its one known electrode. Both count toward the total.
+    assert unloaded == 2
+    assert [region.id for region in manager.regions] == ["heating-2"]
+    assert manager.regions[0].electrode_ids == [ids[0]]
 
 
 def test_undo_restore_drops_outline_cache(manager):

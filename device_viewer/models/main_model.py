@@ -366,14 +366,21 @@ class DeviceViewMainModel(HasTraits):
 
     def load_zones_from_device(self):
         """Point the zone manager at the freshly loaded device and restore
-        the regions stored in its SVG."""
+        the regions stored in its SVG.
+
+        Returns
+        -------
+        int
+            Number of records dropped or trimmed for referencing electrode
+            ids missing from this device (see ``ZoneLayerManager.load_records``).
+        """
         svg_model = self.electrodes.svg_model
         self.zones.set_device(
             svg_model.polygons,
             self.electrodes.electrode_ids_channels_map,
             svg_model.neighbours,
         )
-        self.zones.load_records(svg_model.zone_records)
+        return self.zones.load_records(svg_model.zone_records)
 
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
