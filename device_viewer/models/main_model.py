@@ -552,6 +552,15 @@ class DeviceViewMainModel(HasTraits):
         if svg_model is not None:
             svg_model.zone_records = self.zones.to_records()
 
+    ### channel edits change what a zone resolves to
+    @observe("electrodes.electrodes.items.channel", post_init=True)
+    def _electrode_channel_changed_for_zones(self, event):
+        if isinstance(event, TraitChangeEvent) and event.name == "electrodes":
+            # Fired when `self.electrodes` itself is (re)assigned in
+            # traits_init, before `self.zones` exists yet -- skip.
+            return
+        self.zones.update_channel_map(self.electrodes.electrode_ids_channels_map)
+
     @observe("camera_perspective:transformation")
     def _camera_perspective_changed(self, event=None):
         self.preferences.preferences.set(

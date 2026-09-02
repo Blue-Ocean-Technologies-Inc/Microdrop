@@ -249,6 +249,20 @@ def test_remove_unknown_zone_type_is_a_no_op(manager):
     assert [zone.id for zone in manager.zone_types] == ["heating"]
 
 
+def test_update_channel_map_rederives_region_channels(manager):
+    ids = sorted(manager.electrode_polygons)
+    manager.add_to_pending(ids[:1])
+    region = manager.commit_pending_region()
+    old_channel = manager.electrode_id_to_channel_map[ids[0]]
+    manager.update_channel_map(
+        {**manager.electrode_id_to_channel_map, ids[0]: old_channel + 1000}
+    )
+    assert region.channels == [old_channel + 1000]
+    assert manager.snapshot_for_app_globals()["heating"]["regions"][0]["channels"] == [
+        old_channel + 1000
+    ]
+
+
 def test_zone_state_command_round_trip(manager):
     from pyface.undo.api import CommandStack, UndoManager
 

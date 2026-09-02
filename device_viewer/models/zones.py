@@ -250,6 +250,13 @@ class ZoneLayerManager(HasTraits):
                 "are disabled"
             )
 
+    def update_channel_map(self, electrode_id_to_channel_map):
+        """Re-derive every region's channels after the device's electrode ->
+        channel mapping changed (channel edits in the device viewer)."""
+        self.electrode_id_to_channel_map = dict(electrode_id_to_channel_map)
+        for region in self.regions:
+            self._set_region_electrodes(region, region.electrode_ids)
+
     def add_zone_type(self, name, color=None):
         self._push_undo()
         zone_type = ZoneType(
