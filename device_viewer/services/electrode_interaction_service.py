@@ -1571,10 +1571,18 @@ class ElectrodeInteractionControllerService(HasTraits):
                 except Exception:
                     pass
                 self._pygame_timer = None
-            for overlay in (self._zone_commit_overlay, self._zone_selection_overlay):
-                if overlay is not None:
-                    overlay.hide()
-                    overlay.deleteLater()
+            try:
+                for overlay in (
+                    self._zone_commit_overlay,
+                    self._zone_selection_overlay,
+                ):
+                    if overlay is not None:
+                        overlay.hide()
+                        overlay.deleteLater()
+            except Exception:
+                # A dead C++ overlay (already deleted by Qt) must not skip
+                # _release_joystick() below.
+                logger.debug("Zone overlay teardown failed", exc_info=True)
             self._zone_commit_overlay = None
             self._zone_selection_overlay = None
             # Releases the controller and clears held modifier/split state.
