@@ -239,3 +239,11 @@ def test_remove_zone_type_cascades(manager):
     assert manager.zone_types == []
     assert manager.regions == []
     assert manager.active_zone_id == ""
+
+
+def test_remove_unknown_zone_type_is_a_no_op(manager):
+    fired = []
+    manager.observe(lambda event: fired.append(event), "undo_snapshot_pushed")
+    manager.remove_zone_type("nonexistent")
+    assert fired == []
+    assert [zone.id for zone in manager.zone_types] == ["heating"]

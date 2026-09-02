@@ -259,6 +259,8 @@ class ZoneLayerManager(HasTraits):
         return zone_type
 
     def remove_zone_type(self, zone_id):
+        if self.zone_type_for(zone_id) is None:
+            return
         self._push_undo()
         self.selected_regions = [
             region for region in self.selected_regions if region.zone_id != zone_id
