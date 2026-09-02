@@ -247,3 +247,25 @@ def test_remove_unknown_zone_type_is_a_no_op(manager):
     manager.remove_zone_type("nonexistent")
     assert fired == []
     assert [zone.id for zone in manager.zone_types] == ["heating"]
+
+
+def test_zone_state_command_round_trip(manager):
+    from pyface.undo.api import CommandStack, UndoManager
+
+    from device_viewer.utils.commands import ZoneStateCommand
+
+    stack = CommandStack()
+    undo_manager = UndoManager(active_stack=stack)
+    stack.undo_manager = undo_manager
+    manager.observe(
+        lambda event: stack.push(ZoneStateCommand(manager=manager)),
+        "undo_snapshot_pushed",
+    )
+    ids = sorted(manager.electrode_polygons)
+    manager.add_to_pending(ids[:1])
+    manager.commit_pending_region()
+    assert len(manager.regions) == 1
+    undo_manager.undo()
+    assert manager.regions == []
+    undo_manager.redo()
+    assert [r.id for r in manager.regions] == ["heating-1"]

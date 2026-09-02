@@ -20,6 +20,7 @@ from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 # Local imports.
 from ..consts import ZONE_DRAW_MODE, ZONE_MODES, ZONE_SELECT_MODE
 from ..models.main_model import DeviceViewMainModel
+from ..utils.commands import ZoneStateCommand
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -112,3 +113,11 @@ class ZonesController(HasTraits):
     @observe("model:zones:merge_regions_button")
     def _on_merge_regions(self, event):
         self.model.zones.merge_selected_regions()
+
+    # ----------------------------------------------------------------- undo
+    @observe("model:zones:undo_snapshot_pushed")
+    def _on_undo_snapshot_pushed(self, event):
+        undo_manager = self.model.undo_manager
+        if undo_manager is None:
+            return
+        undo_manager.active_stack.push(ZoneStateCommand(manager=self.model.zones))
