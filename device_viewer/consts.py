@@ -407,8 +407,5 @@ ZONE_CLICK_DRAG_THRESHOLD_PX = 4
 # adjacent members without bridging a skipped-electrode hole.
 ZONE_OUTLINE_GAP_CLOSING_FRACTION = 0.6
 
-# Max snapshots kept by ZoneLayerManager's undo stack.
-ZONE_UNDO_STACK_LIMIT = 20
-
 # Gap between a region/selection corner and its floating button strip.
 ZONE_OVERLAY_MARGIN_PX = 8

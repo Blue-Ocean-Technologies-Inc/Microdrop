@@ -263,6 +263,17 @@ def test_update_channel_map_rederives_region_channels(manager):
     ]
 
 
+def test_undo_history_is_not_capped(manager):
+    ids = sorted(manager.electrode_polygons)
+    for electrode_id in ids[:25]:
+        manager.add_to_pending([electrode_id])
+        manager.commit_pending_region()
+    assert len(manager.regions) == 25
+    while manager.undo():
+        pass
+    assert manager.regions == []
+
+
 def test_zone_state_command_round_trip(manager):
     from pyface.undo.api import CommandStack, UndoManager
 

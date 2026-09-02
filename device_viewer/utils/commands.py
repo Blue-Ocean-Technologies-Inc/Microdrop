@@ -153,7 +153,9 @@ class ZoneStateCommand(AbstractCommand):
         pass
 
     def undo(self):
-        self.manager.undo()
+        if not self.manager.undo():
+            logger.warning("Zone undo requested with no zone snapshot to restore")
 
     def redo(self):
-        self.manager.redo()
+        if not self.manager.redo():
+            logger.warning("Zone redo requested with no zone snapshot to restore")

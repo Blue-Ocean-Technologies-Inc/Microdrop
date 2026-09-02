@@ -52,7 +52,6 @@ from ..consts import (
     ZONE_DRAW_MODE,
     ZONE_OUTLINE_GAP_CLOSING_FRACTION,
     ZONE_SELECT_MODE,
-    ZONE_UNDO_STACK_LIMIT,
 )
 
 # Logger import.
@@ -183,7 +182,8 @@ class ZoneLayerManager(HasTraits):
     #: region -> (electrode-id tuple, computed outline geometry) cache.
     _outline_cache = Dict()
 
-    #: Undo snapshots (plain dicts), newest last; capped at ZONE_UNDO_STACK_LIMIT.
+    #: Undo snapshots (plain dicts), newest last; uncapped so it stays in
+    #: lock-step with the app's own (unbounded) pyface CommandStack.
     _undo_stack = List()
 
     #: Redo snapshots; refilled by undo, cleared by any new operation.
@@ -758,9 +758,7 @@ class ZoneLayerManager(HasTraits):
         }
 
     def _push_undo(self):
-        self._undo_stack = (self._undo_stack + [self._snapshot()])[
-            -ZONE_UNDO_STACK_LIMIT:
-        ]
+        self._undo_stack = self._undo_stack + [self._snapshot()]
         # A new operation forks history; the redone future is gone.
         self._redo_stack = []
         self.undo_snapshot_pushed = True
@@ -771,9 +769,7 @@ class ZoneLayerManager(HasTraits):
             return False
         state = self._undo_stack[-1]
         self._undo_stack = self._undo_stack[:-1]
-        self._redo_stack = (self._redo_stack + [self._snapshot()])[
-            -ZONE_UNDO_STACK_LIMIT:
-        ]
+        self._redo_stack = self._redo_stack + [self._snapshot()]
         self._restore(state)
         return True
 
@@ -784,9 +780,7 @@ class ZoneLayerManager(HasTraits):
         state = self._redo_stack[-1]
         self._redo_stack = self._redo_stack[:-1]
         # Directly, not via _push_undo — redo must not clear its own stack.
-        self._undo_stack = (self._undo_stack + [self._snapshot()])[
-            -ZONE_UNDO_STACK_LIMIT:
-        ]
+        self._undo_stack = self._undo_stack + [self._snapshot()]
         self._restore(state)
         return True
 
