@@ -159,6 +159,12 @@ class ElectrodeInteractionControllerService(HasTraits):
     _zone_press_screen_pos = Instance(QPoint, allow_none=True)
     _zone_band_subtracts = Bool(False)
 
+    #: Region drag in zone-select mode: the pressed item, the press point,
+    #: and whether the drag passed the click threshold (ghost showing).
+    _zone_move_item = Instance(ZoneRegionItem, allow_none=True)
+    _zone_move_origin = Instance(QPointF, allow_none=True)
+    _zone_move_active = Bool(False)
+
     #: Keeps the zone context menu alive while it is open.
     _zone_context_menu = Instance(QMenu, allow_none=True)
 
@@ -1653,6 +1659,15 @@ class ElectrodeInteractionControllerService(HasTraits):
             band_rect.bottom() / scale,
         )
 
+    def _zone_move_regions(self):
+        """Regions a drag moves together: the whole multi-selection when
+        the pressed region is part of it, else just the pressed region."""
+        pressed = self._zone_move_item.region
+        selection = self.model.zones.selected_regions
+        if pressed in selection and len(selection) > 1:
+            return list(selection)
+        return [pressed]
+
     def detect_droplet(self):
         """Placeholder for a context menu action."""
         publish_message(
@@ -2081,6 +2096,11 @@ class ElectrodeInteractionControllerService(HasTraits):
 
             elif mode == ZONE_SELECT_MODE:
                 self._zone_press_screen_pos = event.screenPos()
+                self._zone_move_item = self.device_view.scene().get_item_under_mouse(
+                    event.scenePos(), ZoneRegionItem
+                )
+                self._zone_move_origin = event.scenePos()
+                self._zone_move_active = False
 
         elif button == Qt.RightButton:
             self._right_mouse_pressed = True
@@ -2144,6 +2164,32 @@ class ElectrodeInteractionControllerService(HasTraits):
                         preview_ids=self._zone_band_capture(band_rect),
                         subtract=self._zone_band_subtracts,
                     )
+
+            elif (
+                mode == ZONE_SELECT_MODE
+                and self._zone_move_item is not None
+                and self._zone_drag_exceeds_threshold(event.screenPos())
+            ):
+                if not self._zone_move_active:
+                    self._zone_move_active = True
+                    manager = self.model.zones
+                    zone_type = manager.zone_type_for(
+                        self._zone_move_item.region.zone_id
+                    )
+                    geometry = manager.electrode_union(
+                        [
+                            electrode_id
+                            for region in self._zone_move_regions()
+                            for electrode_id in region.electrode_ids
+                        ]
+                    )
+                    if zone_type is not None and geometry is not None:
+                        self.electrode_view_layer.show_zone_move_ghost(
+                            self.device_view.scene(), geometry, zone_type.color
+                        )
+                self.electrode_view_layer.move_zone_ghost(
+                    event.scenePos() - self._zone_move_origin
+                )
 
         if self._right_mouse_pressed:
             if (
@@ -2228,15 +2274,34 @@ class ElectrodeInteractionControllerService(HasTraits):
                 self._zone_press_screen_pos = None
 
             elif mode == ZONE_SELECT_MODE:
-                if not self._zone_drag_exceeds_threshold(event.screenPos()):
-                    item = self.device_view.scene().get_item_under_mouse(
-                        event.scenePos(), ZoneRegionItem
+                manager = self.model.zones
+                if self._zone_move_active:
+                    self.electrode_view_layer.hide_zone_move_ghost(
+                        self.device_view.scene()
                     )
-                    region = item.region if item else None
+                    delta = event.scenePos() - self._zone_move_origin
+                    scale = self.electrode_view_layer.path_scale
+                    regions = self._zone_move_regions()
+                    if self._zone_move_item.region not in manager.selected_regions:
+                        manager.selected_region = self._zone_move_item.region
+                    if not manager.translate_regions(
+                        regions, delta.x() / scale, delta.y() / scale
+                    ):
+                        self._set_hud(
+                            "Move rejected: regions must stay on the device "
+                            "and contiguous"
+                        )
+                elif not self._zone_drag_exceeds_threshold(event.screenPos()):
+                    region = (
+                        self._zone_move_item.region if self._zone_move_item else None
+                    )
                     if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                        self.model.zones.toggle_region_in_selection(region)
+                        manager.toggle_region_in_selection(region)
                     else:
-                        self.model.zones.selected_region = region
+                        manager.selected_region = region
+                self._zone_move_item = None
+                self._zone_move_origin = None
+                self._zone_move_active = False
                 self._zone_press_screen_pos = None
         elif button == Qt.RightButton:
             self._right_mouse_pressed = False

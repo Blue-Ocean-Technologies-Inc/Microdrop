@@ -83,6 +83,7 @@ class ElectrodeLayer:
         self.zone_items = {}
         self.zone_pending_item = None
         self.zone_band_item = None
+        self.zone_move_ghost_item = None
 
         self.svg = electrodes.svg_model
 
@@ -176,6 +177,7 @@ class ElectrodeLayer:
         self.zone_items = {}
         self._remove_zone_pending(parent_scene)
         self.hide_zone_band(parent_scene)
+        self.hide_zone_move_ghost(parent_scene)
 
     def _remove_zone_pending(self, parent_scene):
         if self.zone_pending_item is not None:
@@ -522,3 +524,21 @@ class ElectrodeLayer:
         if self.zone_band_item is not None:
             parent_scene.removeItem(self.zone_band_item)
             self.zone_band_item = None
+
+    def show_zone_move_ghost(self, parent_scene: "QGraphicsScene", geometry, color):
+        """Dashed copy of the regions being dragged; moved with
+        ``move_zone_ghost`` while the pointer travels."""
+        self.hide_zone_move_ghost(parent_scene)
+        self.zone_move_ghost_item = make_selection_highlight_item(
+            geometry, self.path_scale, color
+        )
+        parent_scene.addItem(self.zone_move_ghost_item)
+
+    def move_zone_ghost(self, delta):
+        if self.zone_move_ghost_item is not None:
+            self.zone_move_ghost_item.setPos(delta)
+
+    def hide_zone_move_ghost(self, parent_scene: "QGraphicsScene"):
+        if self.zone_move_ghost_item is not None:
+            parent_scene.removeItem(self.zone_move_ghost_item)
+            self.zone_move_ghost_item = None
