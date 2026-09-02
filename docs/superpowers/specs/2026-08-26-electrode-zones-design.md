@@ -110,9 +110,12 @@ class ZoneLayerManager(HasTraits):
   - **delete** removes the region;
   - **hide** sets `ZoneRegion.visible = False`; the region disappears from
     the canvas and comes back via its eye checkbox in the regions table.
-- **Right-click** on a region: context menu — *delete region*, *change type*.
-- All wiring through `@observe` in `ElectrodeInteractionControllerService`,
-  branching on mode in the existing mouse handlers.
+- **Right-click** on a region: context menu — *edit region*, *change type*,
+  *delete region*.
+- Mouse wiring is `@observe`/handler branches in
+  `ElectrodeInteractionControllerService`; button flows live in
+  `ZonesController`; the floating strips and context menu in
+  `ZoneCanvasActions`.
 
 ## Persistence
 
@@ -125,8 +128,9 @@ class ZoneLayerManager(HasTraits):
   that type auto-created (name = id) with a default color.
 - **Zone types (id → name, color) → `DeviceViewerPreferences`** (app-global,
   shared across devices), same mirror-on-change pattern as the alpha values.
-- Regions whose electrode ids are missing from the loaded device are dropped
-  with a warning dialog; the next save writes the file without them.
+- Regions referencing electrode ids missing from the loaded device are
+  trimmed to the known electrodes (dropped when none remain) with a warning
+  dialog; the next save writes the file without those electrodes.
 
 ## app_globals mirror
 
