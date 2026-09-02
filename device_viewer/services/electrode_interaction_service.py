@@ -1567,12 +1567,17 @@ class ElectrodeInteractionControllerService(HasTraits):
                 except Exception:
                     pass
                 self._pygame_timer = None
-            try:
-                self.zone_canvas_actions.dispose()
-            except Exception:
-                # A dead C++ overlay (already deleted by Qt) must not skip
-                # _release_joystick() below.
-                logger.debug("Zone canvas actions teardown failed", exc_info=True)
+            # Dispose only if the helper was ever actually built — the trait
+            # is lazily constructed on first access (_zone_canvas_actions_
+            # default), so a fresh service that never entered zone mode must
+            # not build one here just to tear it down.
+            if "zone_canvas_actions" in self.__dict__:
+                try:
+                    self.zone_canvas_actions.dispose()
+                except Exception:
+                    # A dead C++ overlay (already deleted by Qt) must not
+                    # skip _release_joystick() below.
+                    logger.debug("Zone canvas actions teardown failed", exc_info=True)
             # Releases the controller and clears held modifier/split state.
             self._release_joystick()
         finally:

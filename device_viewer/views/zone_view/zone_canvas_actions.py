@@ -14,7 +14,7 @@ stays free of overlay/menu bookkeeping."""
 
 # Enthought library imports.
 from pyface.qt.QtWidgets import QGraphicsView, QMenu
-from traits.api import HasTraits, Instance, observe
+from traits.api import HasTraits, Instance
 
 # Microdrop package imports.
 from device_viewer.consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
@@ -70,11 +70,10 @@ class ZoneCanvasActions(HasTraits):
     _context_menu = Instance(QMenu, allow_none=True)
 
     def traits_init(self):
-        self.device_view.viewport_changed.connect(self.reposition)
-
-    @observe("model.zones.show_canvas_overlays")
-    def _on_show_canvas_overlays_changed(self, event):
-        self.reposition()
+        # Standalone-constructible against just its model: a device_view is
+        # only ever absent in tests that build this helper without one.
+        if self.device_view is not None:
+            self.device_view.viewport_changed.connect(self.reposition)
 
     def _ensure_overlays(self):
         if self._commit_overlay is not None:
@@ -194,3 +193,6 @@ class ZoneCanvasActions(HasTraits):
                 overlay.deleteLater()
         self._commit_overlay = None
         self._selection_overlay = None
+        # A later reposition() (e.g. a stray signal firing during teardown)
+        # becomes a no-op instead of touching a disposed layer.
+        self.electrode_view_layer = None

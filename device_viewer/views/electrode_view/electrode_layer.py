@@ -155,8 +155,8 @@ class ElectrodeLayer:
             parent_scene.addItem(endpoint_view)
 
     def add_zones_to_scene(self, parent_scene: "QGraphicsScene"):
-        """Re-add every zone region item not already in the scene — a model
-        reload rebuilds the graphics scene without recomputing zone items."""
+        """Exists for symmetry with ``remove_zones_to_scene``: re-adds any
+        zone region items already built but not currently in the scene."""
         for item in self.zone_items.values():
             if item.scene() is None:
                 parent_scene.addItem(item)
