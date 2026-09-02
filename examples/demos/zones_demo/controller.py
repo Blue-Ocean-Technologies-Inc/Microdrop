@@ -15,15 +15,20 @@ button flows; the leave-zone-tools cancellation on switching to pan matches
 the app's interaction service instead (ZonesController itself has no such
 call)."""
 
+# Enthought library imports.
 from pyface.api import OK, FileDialog
 from traits.api import HasTraits, Instance, observe
 
+# Microdrop package imports.
 from device_viewer.consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
 from device_viewer.models.electrodes import Electrodes
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 
+# Local imports.
 from .consts import DEVICE_SVG_RESOURCES_DIR, PAN_MODE
 from .models import ZonesDemoModel
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -61,6 +66,7 @@ class ZonesDemoController(HasTraits):
             # zone tools entirely; a pending selection survives zone <->
             # zone-select switches (e.g. draw -> select), only pan drops it.
             self.model.manager.cancel_current_interaction()
+            self.model.manager.selected_regions = []
         self.model.manager.mode = "" if event.new == PAN_MODE else event.new
 
     @observe("model:manager:mode")
@@ -100,7 +106,13 @@ class ZonesDemoController(HasTraits):
 
     @observe("model:manager:zone_types:items:delete_requested")
     def _on_zone_type_delete_requested(self, event):
-        self.model.manager.remove_zone_type(event.object.id)
+        zone_type = event.object
+        message = (
+            f"Delete zone '{zone_type.name}' and its "
+            f"{zone_type.region_count} region(s)?"
+        )
+        if zone_type.region_count == 0 or confirm(None, message) == YES:
+            self.model.manager.remove_zone_type(zone_type.id)
 
     # --------------------------------------------------------------- regions
     @observe("model:manager:edit_region_button")

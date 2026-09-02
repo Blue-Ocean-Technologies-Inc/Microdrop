@@ -15,22 +15,38 @@ From ``microdrop-py/``::
     pixi run python -m examples.demos.zones_demo.run_zones_demo [device.svg]
 
 Load a device SVG (defaults to the bundled 2x3 device), pick a zone type in
-the sidebar table, switch to "Draw zones", and rubber-band electrode blocks.
-Right-click a region to delete it.
+the sidebar table, and switch tools in the Pan / Draw zones / Select radio:
+
+- **Pan** scrolls/zooms the device and drops any pending selection.
+- **Draw zones** rubber-bands (or click-toggles) electrodes into a pending
+  selection; the floating check/delete/dismiss strip and the sidebar's
+  Commit/Clear buttons act on it.
+- **Select** picks existing regions (click, ctrl+click to multi-select, or
+  rubber-band); the floating edit/delete/hide strip and the sidebar's
+  regions-table buttons act on the selection, and dragging a region snaps
+  it to a new electrode block.
+
+Right-click a region for its context menu: Edit region, Change type, Delete
+region. Undo/redo cover every zone mutation.
 
 The feature has been ported into device_viewer (see
 docs/superpowers/specs/2026-08-26-electrode-zones-design.md); this demo
 remains the standalone interaction reference.
 """
 
+# Standard library imports.
 import sys
 
+# Enthought library imports.
 from pyface.qt.QtWidgets import QApplication
 
+# Microdrop package imports.
 from device_viewer.consts import DEFAULT_ZONE_TYPES
 
+# Microdrop style imports.
 from microdrop_style.helpers import style_app
 
+# Local imports.
 from .consts import DEFAULT_DEVICE_SVG_PATH
 from .controller import ZonesDemoController
 from .models import ZonesDemoModel

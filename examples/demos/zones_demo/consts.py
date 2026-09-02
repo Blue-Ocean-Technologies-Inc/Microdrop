@@ -8,8 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
+# Microdrop package imports.
 import device_viewer
 
 # Bundled devices shipped with the device_viewer package; the demo opens one

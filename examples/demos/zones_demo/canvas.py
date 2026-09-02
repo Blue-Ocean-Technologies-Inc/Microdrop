@@ -19,11 +19,11 @@ Everything is driven by ``ZonesDemoModel``/``ZoneLayerManager`` traits via the
 Qt-free ``_CanvasRedrawBridge`` observers.
 """
 
+# Enthought library imports.
 from pyface.qt.QtCore import QRectF, Qt
 from pyface.qt.QtGui import (
     QBrush,
     QColor,
-    QFont,
     QKeySequence,
     QPainter,
     QPainterPath,
@@ -34,39 +34,36 @@ from pyface.qt.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsView,
-    QHBoxLayout,
     QMenu,
-    QToolButton,
-    QWidget,
 )
 from traits.api import Callable, HasTraits, Instance, observe
 
+# Microdrop package imports.
 from device_viewer.consts import (
     ZONE_CLICK_DRAG_THRESHOLD_PX,
     ZONE_DRAW_MODE,
     ZONE_OUTLINE_PEN_WIDTH,
-    ZONE_OVERLAY_MARGIN_PX,
     ZONE_SELECT_MODE,
     ZONE_SELECTED_OUTLINE_PEN_WIDTH,
     ZONE_SUBTRACT_PREVIEW_COLOR,
 )
+from device_viewer.views.zone_view.zone_overlay import ZoneOverlayStrip
 from device_viewer.views.zone_view.zone_region_item import (
     ZoneRegionItem,
     make_selection_highlight_item,
     shapely_geometry_to_painter_path,
 )
 
-from microdrop_style.button_styles import ICON_FONT_FAMILY
+# Microdrop style imports.
 from microdrop_style.icons.icons import (
-    ICON_CANCEL,
     ICON_CHECK,
+    ICON_CLOSE,
     ICON_DELETE,
     ICON_EDIT,
     ICON_VISIBILITY_OFF,
 )
 
-from microdrop_utils.traitsui_qt_helpers import DEFAULT_GLYPH_POINT_SIZE_PX
-
+# Local imports.
 from .consts import ELECTRODE_FILL_COLOR, ELECTRODE_Z_VALUE
 from .models import ZonesDemoModel
 
@@ -160,33 +157,18 @@ class ZonesCanvas(QGraphicsView):
         self._apply_mode()
 
     # -------------------------------------------------------------- overlays
-    # Floating button strips over the viewport. They only FIRE the shipped
-    # manager's Button traits — the behavior stays in the Qt-free controller,
-    # exactly as if the matching sidebar button had been clicked.
-    def _build_floating_overlay(self, button_specs):
-        """Floating icon-button strip parented to the view's viewport;
-        ``button_specs`` is a list of (glyph, tooltip, on_clicked)."""
-        overlay = QWidget(self.viewport())
-        overlay_layout = QHBoxLayout(overlay)
-        overlay_layout.setContentsMargins(0, 0, 0, 0)
-        icon_font = QFont(ICON_FONT_FAMILY, DEFAULT_GLYPH_POINT_SIZE_PX)
-        for glyph, tooltip, on_clicked in button_specs:
-            button = QToolButton()
-            button.setFont(icon_font)
-            button.setText(glyph)
-            button.setToolTip(tooltip)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.clicked.connect(on_clicked)
-            overlay_layout.addWidget(button)
-        overlay.hide()
-        return overlay
-
+    # Floating button strips over the viewport, the shipped
+    # device_viewer.views.zone_view.zone_overlay.ZoneOverlayStrip. They only
+    # FIRE the shipped manager's Button traits — the behavior stays in the
+    # Qt-free controller, exactly as if the matching sidebar button had been
+    # clicked.
     def _build_commit_overlay(self):
         """Check/delete/dismiss buttons shown while a pending selection
         exists: check commits it, delete discards it, dismiss hides the
-        overlay so the selection can keep being edited (it returns on the
+        strip so the selection can keep being edited (it returns on the
         next selection change)."""
-        return self._build_floating_overlay(
+        return ZoneOverlayStrip(
+            self.viewport(),
             [
                 (
                     ICON_CHECK,
@@ -199,19 +181,20 @@ class ZonesCanvas(QGraphicsView):
                     lambda: setattr(self.manager, "clear_pending_button", True),
                 ),
                 (
-                    ICON_CANCEL,
+                    ICON_CLOSE,
                     (
                         "Dismiss the canvas buttons — every action is also "
                         "in the sidebar; re-enable them there"
                     ),
                     lambda: setattr(self.manager, "show_canvas_overlays", False),
                 ),
-            ]
+            ],
         )
 
     def _build_selection_overlay(self):
         """Edit/delete/hide buttons pinned to the selected region."""
-        return self._build_floating_overlay(
+        return ZoneOverlayStrip(
+            self.viewport(),
             [
                 (
                     ICON_EDIT,
@@ -229,34 +212,15 @@ class ZonesCanvas(QGraphicsView):
                     lambda: setattr(self.manager, "hide_region_button", True),
                 ),
                 (
-                    ICON_CANCEL,
+                    ICON_CLOSE,
                     (
                         "Dismiss the canvas buttons — every action is also "
                         "in the sidebar; re-enable them there"
                     ),
                     lambda: setattr(self.manager, "show_canvas_overlays", False),
                 ),
-            ]
+            ],
         )
-
-    def _position_overlay(self, overlay, anchor_scene_point):
-        """Park the overlay just outside the anchor (an item's top-right
-        corner in scene coords), clamped into the viewport."""
-        anchor_view_pos = self.mapFromScene(anchor_scene_point)
-        overlay.adjustSize()
-        viewport = self.viewport()
-        overlay_x = min(
-            max(anchor_view_pos.x() + ZONE_OVERLAY_MARGIN_PX, 0),
-            viewport.width() - overlay.width(),
-        )
-        overlay_y = min(
-            max(
-                anchor_view_pos.y() - overlay.height() - ZONE_OVERLAY_MARGIN_PX,
-                0,
-            ),
-            viewport.height() - overlay.height(),
-        )
-        overlay.move(overlay_x, overlay_y)
 
     # ------------------------------------------------------------------ mode
     def _apply_mode(self):
@@ -581,12 +545,9 @@ class ZonesCanvas(QGraphicsView):
             and self.manager.show_canvas_overlays
             and self.model.mode == ZONE_DRAW_MODE
         ):
-            self._position_overlay(
-                self._commit_overlay,
-                self._pending_selection_item.boundingRect().topRight(),
+            self._commit_overlay.place_at(
+                self, self._pending_selection_item.sceneBoundingRect().topRight()
             )
-            self._commit_overlay.show()
-            self._commit_overlay.raise_()
         else:
             self._commit_overlay.hide()
 
@@ -628,12 +589,9 @@ class ZonesCanvas(QGraphicsView):
             and self.manager.show_canvas_overlays
             and self.model.mode == ZONE_SELECT_MODE
         ):
-            self._position_overlay(
-                self._selection_overlay,
-                selected_region_item.boundingRect().topRight(),
+            self._selection_overlay.place_at(
+                self, selected_region_item.sceneBoundingRect().topRight()
             )
-            self._selection_overlay.show()
-            self._selection_overlay.raise_()
         else:
             self._selection_overlay.hide()
 

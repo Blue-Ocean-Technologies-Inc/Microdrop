@@ -13,11 +13,14 @@ state around the shipped ``ZoneLayerManager`` (see device_viewer.models.zones),
 which the embedded sidebar edits directly.
 """
 
+# Enthought library imports.
 from traits.api import Button, DelegatesTo, Enum, Event, HasTraits, Instance
 
+# Microdrop package imports.
 from device_viewer.consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
 from device_viewer.models.zones import ZoneLayerManager
 
+# Local imports.
 from .consts import PAN_MODE
 
 
