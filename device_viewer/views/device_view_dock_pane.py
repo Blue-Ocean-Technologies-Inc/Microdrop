@@ -101,6 +101,7 @@ from ..consts import (
 )
 
 ##### local imports ######
+from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.electrodes import Electrodes
@@ -147,6 +148,7 @@ from .route_selection_view.route_selection_view import (
     RouteLayerView,
 )
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
+from .zone_view.zones_sidebar import zones_view
 
 # ext consts
 from logger.logger_service import get_logger
@@ -181,6 +183,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
     layer_ui = None
+    zones_ui = None
+    zones_controller = None
     mode_picker_view = None
 
     # The open Camera Alignment dialog's model; None while closed. The
@@ -1432,6 +1436,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             model=self.model.calibration, view=self.calibration_view
         )
 
+        self.zones_controller = ZonesController(model=self.model)
+        self.zones_ui = self.model.zones.edit_traits(view=zones_view)
+
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget = ZoomControlWidget(vm)
 
@@ -1439,6 +1446,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             CollapsibleVStackBox(
                 "Viewport Controls", control_widgets=self.viewport_controls_widget
             )
+        )
+
+        scroll_layout.addWidget(
+            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
         )
 
         # Camera Alignment: the manual per-device endpoint workflow.
