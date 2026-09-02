@@ -9,12 +9,12 @@
 # Thanks for using Microdrop open source!
 
 """TraitsUI sidebar section for electrode zones, edited directly on the
-ZoneLayerManager: the tool radio, the zone types table, the regions table,
-and the commit / edit buttons. Standalone:
-``manager.edit_traits(view=zones_view)``."""
+ZoneLayerManager: the tool grid, the zone types table, and the regions
+table. Standalone: ``manager.edit_traits(view=zones_view)``."""
 
 # Enthought library imports.
-from traitsui.api import EnumEditor, HGroup, Item, TableEditor, UItem, VGroup, View
+from traitsui.api import CustomEditor, HGroup, Item, TableEditor, UItem, VGroup, View
+from traitsui.key_bindings import KeyBinding, KeyBindings
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_DELETE
@@ -30,12 +30,19 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Local imports.
-from ...consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
+from ...consts import ZONE_SELECT_MODE
+from .zone_tool_picker import zone_tool_picker_factory
 
-zone_tool_editor = EnumEditor(
-    values={"": "Off", ZONE_DRAW_MODE: "Draw", ZONE_SELECT_MODE: "Select"},
-    cols=3,
-)
+
+class ZonesSidebarHandler(SafeCancelTableHandler):
+    def handle_return_key(self, info):
+        """Enter anywhere in the section adds a zone type (the controller
+        ignores an empty name). Named to avoid colliding with
+        ``ZoneLayerManager.add_zone_type`` — ``info.object`` is that manager,
+        and TraitsUI's KeyBindings resolves a method name against it before
+        this handler."""
+        info.object.add_zone_type_button = True
+
 
 zone_types_table_editor = TableEditor(
     columns=[
@@ -71,25 +78,11 @@ zone_regions_table_editor = TableEditor(
 
 zones_view = View(
     VGroup(
-        UItem("mode", style="custom", editor=zone_tool_editor),
+        UItem("mode", editor=CustomEditor(zone_tool_picker_factory)),
         UItem("zone_types", editor=zone_types_table_editor),
         HGroup(
             UItem("new_zone_type_name", springy=True),
             UItem("add_zone_type_button", enabled_when="new_zone_type_name.strip()"),
-        ),
-        HGroup(
-            UItem(
-                "commit_button",
-                enabled_when=(
-                    f"mode == '{ZONE_DRAW_MODE}' and len(pending_electrode_ids) > 0"
-                ),
-            ),
-            UItem(
-                "clear_pending_button",
-                enabled_when=(
-                    "len(pending_electrode_ids) > 0 or editing_region is not None"
-                ),
-            ),
         ),
         UItem("regions", editor=zone_regions_table_editor),
         HGroup(
@@ -111,5 +104,10 @@ zones_view = View(
         ),
         Item("show_canvas_overlays", label="Canvas buttons"),
     ),
-    handler=SafeCancelTableHandler(),
+    handler=ZonesSidebarHandler(),
+    key_bindings=KeyBindings(
+        KeyBinding(
+            binding1="Return", binding2="Enter", method_name="handle_return_key"
+        ),
+    ),
 )
