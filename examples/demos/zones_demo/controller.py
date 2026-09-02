@@ -9,8 +9,11 @@
 # Thanks for using Microdrop open source!
 
 """Qt-free controller: mirrors the demo's pan/zone tool onto the shipped
-manager's own ``mode`` trait and turns its button traits into calls, mirroring
-device_viewer.controllers.zones_controller.ZonesController."""
+manager's own ``mode`` trait and turns its button traits into calls,
+mirroring device_viewer.controllers.zones_controller.ZonesController for the
+button flows; the leave-zone-tools cancellation on switching to pan matches
+the app's interaction service instead (ZonesController itself has no such
+call)."""
 
 from pyface.api import OK, FileDialog
 from traits.api import HasTraits, Instance, observe
@@ -53,8 +56,11 @@ class ZonesDemoController(HasTraits):
     # ------------------------------------------------------------------ mode
     @observe("model:mode")
     def _mirror_mode_to_manager(self, event):
-        if event.old == ZONE_DRAW_MODE and event.new != ZONE_DRAW_MODE:
-            self.model.manager.clear_pending()
+        if event.new == PAN_MODE:
+            # The app's interaction service does the same when leaving the
+            # zone tools entirely; a pending selection survives zone <->
+            # zone-select switches (e.g. draw -> select), only pan drops it.
+            self.model.manager.cancel_current_interaction()
         self.model.manager.mode = "" if event.new == PAN_MODE else event.new
 
     @observe("model:manager:mode")
