@@ -1432,12 +1432,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget = ZoomControlWidget(vm)
 
+        scroll_layout.addWidget(
+            CollapsibleVStackBox(
+                "Viewport Controls", control_widgets=self.viewport_controls_widget
+            )
+        )
+
         # Camera Alignment: the manual per-device endpoint workflow.
         # Lives right under the camera-control button grid.
         alignment_widget = QWidget()
-        alignment_layout = QVBoxLayout(alignment_widget)
-        # Bottom margin separates the buttons from the alpha table below.
-        alignment_layout.setContentsMargins(0, 0, 0, 12)
+        alignment_layout = QHBoxLayout(alignment_widget)
         for label, handler, tip in (
             (
                 "Camera Alignment Helper",
@@ -1461,23 +1465,31 @@ class DeviceViewerDockPane(TraitsDockPane):
             action_button.setStyleSheet(TEXT_BUTTON_STYLE)
             action_button.setToolTip(tip)
             action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button)
+            alignment_layout.addWidget(action_button, 1)
 
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Viewport Controls", control_widgets=self.viewport_controls_widget
-            )
+        camera_controls_box = CollapsibleVStackBox(
+            "Camera Controls",
+            control_widgets=[
+                self.camera_control_widget,
+                alignment_widget,
+                self.alpha_view_ui.control,
+            ],
         )
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Camera Controls",
-                control_widgets=[
-                    self.camera_control_widget,
-                    alignment_widget,
-                    self.alpha_view_ui.control,
-                ],
-            )
+        # Same side margins and gap as the camera-control button rows so
+        # the two buttons line up with the four above (each spans a pair);
+        # the bottom margin separates them from the alpha table below.
+        # Read only now: Qt's default layout margin is wider for a widget
+        # that is still a window than for a child, so it settles once the
+        # camera widget sits inside the box.
+        _camera_layout = self.camera_control_widget.layout()
+        _camera_margins = _camera_layout.contentsMargins()
+        alignment_layout.setContentsMargins(
+            _camera_margins.left(), 0, _camera_margins.right(), 12
         )
+        alignment_layout.setSpacing(_camera_layout.spacing())
+
+        scroll_layout.addWidget(camera_controls_box)
+
         self.execution_settings_box = CollapsibleVStackBox(
             "Execution Settings", control_widgets=self.execution_settings_ui.control
         )
