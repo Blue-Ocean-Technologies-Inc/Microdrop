@@ -26,6 +26,7 @@ from traits.api import (
     observe,
     provides,
 )
+from traits.observation.events import TraitChangeEvent
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
@@ -349,14 +350,14 @@ class DeviceViewMainModel(HasTraits):
         names = dict(self.preferences.zone_type_names) if self.preferences else {}
         colors = dict(self.preferences.zone_type_colors) if self.preferences else {}
         if names:
-            self.zones.zone_types = [
-                ZoneType(
-                    id=zone_id,
-                    name=name,
-                    color=colors.get(zone_id, self.zones.next_color()),
+            for zone_id, name in names.items():
+                self.zones.zone_types.append(
+                    ZoneType(
+                        id=zone_id,
+                        name=name,
+                        color=colors.get(zone_id) or self.zones.next_color(),
+                    )
                 )
-                for zone_id, name in names.items()
-            ]
         else:
             for name, color in DEFAULT_ZONE_TYPES:
                 self.zones.add_zone_type(name, color)
@@ -528,6 +529,11 @@ class DeviceViewMainModel(HasTraits):
     @observe("zones.zone_types.items, zones.zone_types.items.[name, color]")
     def _zone_types_changed(self, event):
         if self.preferences is None:
+            return
+        if isinstance(event, TraitChangeEvent) and event.name == "zones":
+            # Fired when `self.zones` itself is (re)assigned in traits_init,
+            # before _seed_zone_types_from_preferences populates it -- skip,
+            # or this clobbers preferences with the not-yet-seeded empty list.
             return
         self.preferences.zone_type_names = {
             zone_type.id: zone_type.name for zone_type in self.zones.zone_types
