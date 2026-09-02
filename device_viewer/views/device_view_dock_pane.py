@@ -1444,18 +1444,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         alignment_layout = QHBoxLayout(alignment_widget)
         for label, handler, tip in (
             (
-                "Camera Alignment Helper",
+                "Align Camera",
                 self._on_open_camera_alignment,
-                "Open the split-screen alignment dialog: place this "
-                "device's endpoint on the device SVG and drag the "
-                "corner dots onto the device outline on a captured "
-                "camera frame",
+                "Place this device's endpoint on the SVG and drag the "
+                "corner dots onto its outline in a captured camera frame",
             ),
             (
                 "Go To Endpoint",
                 self._on_go_to_endpoint,
-                "Automate the drags: glide the marked points onto "
-                "this device's saved endpoint",
+                "Glide the marked points onto this device's saved endpoint",
             ),
         ):
             action_button = QPushButton(label)
