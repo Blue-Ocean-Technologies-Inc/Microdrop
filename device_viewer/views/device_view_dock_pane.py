@@ -13,29 +13,12 @@ import json
 import os
 import traceback
 from pathlib import Path
+
 import dramatiq
-from traits.observation._set_change_event import SetChangeEvent
 
-from electrode_controller.consts import electrode_state_change_publisher
-
-from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
-from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.icons.icons import ICON_JOYSTICK
-from microdrop_status_bar.consts import (
-    ICON_PRIORITY_LEFT,
-    ICON_PRIORITY_LEFTMOST,
-)
-
-from microdrop_application.dialogs.pyface_wrapper import (
-    NO,
-    OK,
-    YES,
-    FileDialog,
-    confirm,
-    error, warning, CANCEL
-)
+from pyface.api import GUI
 from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
-from pyface.qt.QtGui import QGraphicsScene, QColor, QBrush, QFont, QImage, QPainter
+from pyface.qt.QtGui import QBrush, QColor, QFont, QGraphicsScene, QImage, QPainter
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -51,21 +34,38 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
-from pyface.api import GUI
-
-from traits.api import Any, Instance, Str, observe, provides, Bool, Dict
+from traits.api import Bool, Instance, Str, observe, provides
+from traits.observation._set_change_event import SetChangeEvent
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.view import View
 
-# ext consts
-from logger.logger_service import get_logger
+from electrode_controller.consts import electrode_state_change_publisher
+from microdrop_application.dialogs.pyface_wrapper import (
+    CANCEL,
+    NO,
+    OK,
+    YES,
+    FileDialog,
+    confirm,
+    error,
+    warning,
+)
+from microdrop_status_bar.consts import (
+    ICON_PRIORITY_LEFT,
+    ICON_PRIORITY_LEFTMOST,
+)
+
 from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
-from microdrop_style.colors import BLACK, SUCCESS_COLOR, GREY
+from microdrop_style.colors import BLACK, GREY
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.helpers import (
     QT_THEME_NAMES,
     get_complete_stylesheet,
     is_dark_mode,
 )
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
+from microdrop_style.icons.icons import ICON_JOYSTICK
+
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
@@ -79,24 +79,26 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     CollapsibleVStackBox,
-    PulsingLabel, ClickableToggleIcon,
+    PulsingLabel,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
-from ..consts import DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_GEOMETRY_CHANGED, FILLER_CAPACITANCE_KEY, \
-    LIQUID_CAPACITANCE_KEY, CALIBRATION_DATA, STEP_PARAMS_COMMIT, \
-    PHASE_NAVIGATION_MODE
-from ..models.step_params_commit import StepParamsCommitMessage
 
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
+    CALIBRATION_DATA,
+    DEVICE_VIEWER_GEOMETRY_CHANGED,
+    DEVICE_VIEWER_STATE_CHANGED,
+    FILLER_CAPACITANCE_KEY,
+    LIQUID_CAPACITANCE_KEY,
+    PHASE_NAVIGATION_MODE,
     PKG,
+    STEP_PARAMS_COMMIT,
     PKG_name,
     camera_edit_status_message_text,
     camera_place_status_message_text,
     device_modified_tag,
     listener_name,
 )
-from ..models.messages import GeometryChangedMessage
 
 ##### local imports ######
 from ..default_settings import ELECTRODE_OFF, video_key
@@ -105,13 +107,19 @@ from ..models.electrodes import Electrodes
 
 # models and services
 from ..models.main_model import DeviceViewMainModel
-from ..models.messages import DeviceViewerMessageModel
+from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
 from ..models.route import Route
-from ..preferences import DeviceViewerPreferences, sidebar_settings_grid, DeviceViewerAdvancedPreferences
+from ..models.step_params_commit import StepParamsCommitMessage
+from ..preferences import (
+    DeviceViewerAdvancedPreferences,
+    DeviceViewerPreferences,
+    sidebar_settings_grid,
+)
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
+from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
 from ..utils.message_utils import gui_models_to_message_model
 
@@ -129,14 +137,19 @@ from .camera_alignment_view.alignment_settings import (
     AlignmentSettingsModel,
 )
 from .camera_control_view.widget import CameraControlWidget
-from ..utils.camera_endpoints import CameraEndpointStore
 from .electrode_view.electrode_layer import ElectrodeLayer
 
 # Device Viewer electrode and route views
 from .electrode_view.electrode_scene import ElectrodeScene
 from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import RouteLayerView, ExecutionSettingsView
+from .route_selection_view.route_selection_view import (
+    ExecutionSettingsView,
+    RouteLayerView,
+)
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
+
+# ext consts
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -175,14 +188,35 @@ class DeviceViewerDockPane(TraitsDockPane):
     _alignment_model = Instance(CameraAlignmentModel)
 
     # Variables
-    _undoing = Bool(False, desc="Used to prevent changes made in undo() and redo() from being added to the undo stack")
-    _disable_state_messages = Bool(False, desc="Used to disable state messages when the model is being updated, to prevent infinite loops")
-    _applying_phase_nav_message = Bool(False, desc="True while applying an inbound PHASE_NAVIGATION_MODE message, so the publish observer doesn't rebroadcast it")
-    _last_applied_step_id = Instance(str, desc="None means no step applied yet", allow_none=True)
-    _last_published_id_to_channel = Instance(dict, allow_none=True, desc="None means geometry never published yet")
-    message_buffer = Str(desc="Buffer to hold the message to be sent when the debounce timer expires")
-    video_item = Instance(QGraphicsVideoItem, allow_none=True, desc="The video item for the camera feed")
-    # _electrode_publish_timer = None  # Debounce timer for electrode state publish (e.g. arrow-key navigation)
+    _undoing = Bool(
+        False,
+        desc="Used to prevent changes made in undo() and redo() from being added "
+        "to the undo stack",
+    )
+    _disable_state_messages = Bool(
+        False,
+        desc="Used to disable state messages when the model is being updated, "
+        "to prevent infinite loops",
+    )
+    _applying_phase_nav_message = Bool(
+        False,
+        desc="True while applying an inbound PHASE_NAVIGATION_MODE message, so "
+        "the publish observer doesn't rebroadcast it",
+    )
+    _last_applied_step_id = Instance(
+        str, desc="None means no step applied yet", allow_none=True
+    )
+    _last_published_id_to_channel = Instance(
+        dict, allow_none=True, desc="None means geometry never published yet"
+    )
+    message_buffer = Str(
+        desc="Buffer to hold the message to be sent when the debounce timer expires"
+    )
+    video_item = Instance(
+        QGraphicsVideoItem, allow_none=True, desc="The video item for the camera feed"
+    )
+    # _electrode_publish_timer = None  # Debounce timer for electrode state
+    # publish (e.g. arrow-key navigation)
 
     ###################################################################################
     # ------------- IDramatiqControllerBase Interface -------------------- #
@@ -205,7 +239,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # --------------Setup device view model ---------------------------------- #
         ##############################################################################################################
 
-        ########### Load preferences: for app level, and device viewer level: ######################
+        ########### Load preferences: for app level, and device viewer level: #########
         self.app_preferences = (
             self.task.window.application.preferences_helper.preferences
         )
@@ -217,18 +251,18 @@ class DeviceViewerDockPane(TraitsDockPane):
             preferences=self.app_preferences
         )
 
-        ################ Load undo manager ###################################################
+        ################ Load undo manager #####################################
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
 
-        ################ Create Model ######################################################
+        ################ Create Model ##########################################
         self.model = DeviceViewMainModel(
             undo_manager=self.undo_manager, preferences=self.device_viewer_preferences
         )
 
         ################################################################################################################
-        # ------------------Load preferences to model --------------------------------------------#
+        # ------------------Load preferences to model ---------------------------#
         ################################################################################################################
 
         ############## Load preferred / default svg ####################################
@@ -277,8 +311,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.realtime_mode = message.lower() == "true"
 
     def _on_phase_navigation_mode_triggered(self, message):
-        GUI.invoke_later(
-            self._apply_phase_navigation_mode, message.lower() == "true")
+        GUI.invoke_later(self._apply_phase_navigation_mode, message.lower() == "true")
 
     def _apply_phase_navigation_mode(self, enabled):
         if self.model is None:
@@ -374,25 +407,39 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.device_viewer_advanced_preferences.allow_hardware_disables:
             data = json.loads(message)
             disabled_set = set(data.get("channels", []))
-            logger.info(f"DEVICE VIEWER: Received disabled channels change: {len(disabled_set)} channels disabled")
+            logger.info(
+                f"DEVICE VIEWER: Received disabled channels change: "
+                f"{len(disabled_set)} channels disabled"
+            )
             self.model.electrodes.disabled_channels = disabled_set
         else:
-            logger.warning(f"Hardware disabled channels ({message}) not applied to view. Change behaviour in preferences/advanced settings.")
+            logger.warning(
+                f"Hardware disabled channels ({message}) not applied to view. "
+                f"Change behaviour in preferences/advanced settings."
+            )
 
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
         name = data.get("name", "")
 
-        if name == 'output-current-exceeded':
-            logger.error("Output current exceeded Device viewer blocked till reconnection.")
+        if name == "output-current-exceeded":
+            logger.error(
+                "Output current exceeded Device viewer blocked till reconnection."
+            )
             GUI.invoke_later(
-                lambda: error(None, title='DropBot Halted',
-                              message="<b>Device viewer</b>: Dropbot halt due to output current exceeded event. Channels disabled, and re-enabling them is blocked till reconnection.")
+                lambda: error(
+                    None,
+                    title="DropBot Halted",
+                    message="<b>Device viewer</b>: Dropbot halt due to output current "
+                    "exceeded event. Channels disabled, and re-enabling them is "
+                    "blocked till reconnection.",
+                )
             )
             self.device_view.setInteractive(False)
 
     def _on_display_state_triggered(self, message_model_serial: str):
-        # We send the message through a signal since Dramatiq runs the callbacks in a separate thread
+        # We send the message through a signal since Dramatiq runs the callbacks
+        # in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
         self.device_view.display_state_signal.emit(message_model_serial)
 
@@ -403,6 +450,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         from pluggable_protocol_tree.models.display_state import (
             ProtocolTreeDisplayMessage,
         )
+
         msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
         id_to_channel = self.model.electrodes.electrode_ids_channels_map
         channels_activated = {
@@ -412,8 +460,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         }
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
-            routes=[(route, self.model.routes.get_available_color())
-                    for route in msg.routes],
+            routes=[
+                (route, self.model.routes.get_available_color()) for route in msg.routes
+            ],
             step_info={
                 "step_id": msg.step_id,
                 "step_label": msg.step_label,
@@ -524,29 +573,23 @@ class DeviceViewerDockPane(TraitsDockPane):
         video_item = self.camera_control_widget.video_item
         native = video_item.nativeSize()
         if native.isEmpty():
-            raise RuntimeError("no camera frames yet — cannot map "
-                               "camera pixels")
+            raise RuntimeError("no camera frames yet — cannot map camera pixels")
         item_size = video_item.size()
-        if (video_item.aspectRatioMode()
-                == Qt.AspectRatioMode.IgnoreAspectRatio):
+        if video_item.aspectRatioMode() == Qt.AspectRatioMode.IgnoreAspectRatio:
             scale_x = item_size.width() / native.width()
             scale_y = item_size.height() / native.height()
             offset_x = offset_y = 0.0
         else:
             scale_x = scale_y = min(
-                item_size.width() / native.width(),
-                item_size.height() / native.height())
-            offset_x = (item_size.width()
-                        - native.width() * scale_x) / 2
-            offset_y = (item_size.height()
-                        - native.height() * scale_y) / 2
+                item_size.width() / native.width(), item_size.height() / native.height()
+            )
+            offset_x = (item_size.width() - native.width() * scale_x) / 2
+            offset_y = (item_size.height() - native.height() * scale_y) / 2
         return scale_x, scale_y, offset_x, offset_y
 
     def _camera_pixels_to_video_item(self, point: QPointF) -> QPointF:
-        scale_x, scale_y, offset_x, offset_y = \
-            self._camera_to_item_mapping()
-        return QPointF(offset_x + point.x() * scale_x,
-                       offset_y + point.y() * scale_y)
+        scale_x, scale_y, offset_x, offset_y = self._camera_to_item_mapping()
+        return QPointF(offset_x + point.x() * scale_x, offset_y + point.y() * scale_y)
 
     def _current_camera_quad(self):
         """The active reference rect back in RAW camera pixels (the
@@ -612,8 +655,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         if len(perspective.transformed_reference_rect) != 4:
             warning(
                 None,
-                "No start points are marked on the feed — "
-                "Select Device Outline first.",
+                "No start points are marked on the feed — Select Device Outline first.",
                 title="Go To Endpoint",
             )
             return
@@ -807,12 +849,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.undo_manager.active_stack.push(command)
 
     def undo(self):
-        self._undoing = True  # We need to prevent the changes made in undo() from being added to the undo stack
+        # We need to prevent the changes made in undo() from being added to
+        # the undo stack
+        self._undoing = True
         self.model.undo_manager.undo()
         self._undoing = False
 
     def redo(self):
-        self._undoing = True  # We need to prevent the changes made in redo() from being added to the undo stack
+        # We need to prevent the changes made in redo() from being added to
+        # the undo stack
+        self._undoing = True
         self.model.undo_manager.redo()
         self._undoing = False
 
@@ -823,7 +869,11 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         step_changed = message_model.step_id != self._last_applied_step_id
 
-        if not step_changed and message_model.execution_params and not self.model.protocol_running:
+        if (
+            not step_changed
+            and message_model.execution_params
+            and not self.model.protocol_running
+        ):
             # Same-step refresh: the protocol widget echoing back its own
             # reconciliation (e.g. the tree recalculating Route Reps Dur
             # after the DV wrote routes to the step). Reload + rebaseline
@@ -832,11 +882,19 @@ class DeviceViewerDockPane(TraitsDockPane):
             # free-hand draw, wiping the in-progress route and selected
             # layer and kicking the user out of draw mode. Routes only ever
             # flow DV -> tree, never back, so there is nothing else to sync.
-            logger.info(f"Device Viewer: Applying new execution params from protocol side for step {message_model.step_id};\n\n Params: {message_model.execution_params}\n\n")
+            logger.info(
+                f"Device Viewer: Applying new execution params from protocol "
+                f"side for step {message_model.step_id};\n\n "
+                f"Params: {message_model.execution_params}\n\n"
+            )
             self.model.routes.apply_execution_params(message_model.execution_params)
             return
 
-        if step_changed and message_model.execution_params and not self.model.protocol_running:
+        if (
+            step_changed
+            and message_model.execution_params
+            and not self.model.protocol_running
+        ):
             self._check_unsaved_execution_params()
 
         if message_model.uuid == self.model.uuid:
@@ -846,8 +904,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         # old path cleared every route layer and re-added them one by one,
         # repainting the connection map once per layer with the routes
         # visibly blinking off in between (the per-phase flicker).
-        self._disable_state_messages = True  # Prevent state messages from being sent while we apply the new state
-        self._undoing = True  # Prevent changes from being added to the undo stack (otherwise model changes are undone during playback)
+        self._disable_state_messages = (
+            True  # Prevent state messages from being sent while we apply the new state
+        )
+        # Prevent changes from being added to the undo stack (otherwise model
+        # changes are undone during playback)
+        self._undoing = True
         # Suspend the play-checkbox/param-edit rebuild observer while the new
         # step's params/routes are being written below — otherwise it fires
         # mid-apply against the OLD step's execution plan / baseline and
@@ -879,9 +941,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # observer receives a single old/new event and repaints only the
         # channels whose membership flipped.
         self.model.electrodes.electrode_editing = None
-        self.model.electrodes.actuated_channels = set(
-            message_model.channels_activated
-        )
+        self.model.electrodes.actuated_channels = set(message_model.channels_activated)
 
         # Apply routes only when they actually changed (phase toggles change
         # actuation only) — and then as one list swap, so the connection map
@@ -897,11 +957,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         # viewer's own: selected paints yellow and loops CW/CCW at render
         # time; everything else gets the standard pool color.
         incoming_routes = [route for route, _color in message_model.routes]
-        current_routes = [list(layer.route.route)
-                          for layer in self.model.routes.layers]
+        current_routes = [list(layer.route.route) for layer in self.model.routes.layers]
         if incoming_routes != current_routes:
             self.model.routes.replace_all_layers(
-                [Route(route=route.copy()) for route in incoming_routes])
+                [Route(route=route.copy()) for route in incoming_routes]
+            )
         self.model.routes.selected_layer = None
         self.model.routes.layer_to_merge = None
         self.model.routes.mode = "draw"
@@ -935,17 +995,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         # ask user if they want to save changes if there are any before moving on
         if not self.model.protocol_running:
             if self.model.routes.commit_enabled and self._last_applied_step_id:
-                logger.warning(f"Unsaved route execution settings for last step {self._last_applied_step_id}")
+                logger.warning(
+                    f"Unsaved route execution settings for last step "
+                    f"{self._last_applied_step_id}"
+                )
 
                 choice = warning(
                     None,
                     "Save your execution settings to current protocol step?",
                     title="Uncommitted Execution Settings",
                     informative=(
-                        f"You've changed this step's execution settings in the device viewer "
-                        f"but haven't committed them to the protocol.<br><br>"
-                        f"<b>Commit</b> writes them to the step. "
-                        f"<b>Discard</b> reverts to the step's saved values."
+                        "You've changed this step's execution settings in the "
+                        "device viewer but haven't committed them to the "
+                        "protocol.<br><br>"
+                        "<b>Commit</b> writes them to the step. "
+                        "<b>Discard</b> reverts to the step's saved values."
                     ),
                     ok_label="Commit",
                     cancel_label="Discard",
@@ -957,14 +1021,21 @@ class DeviceViewerDockPane(TraitsDockPane):
                 elif choice == OK:
                     prev_id = self._last_applied_step_id
                     params = self.model.routes._current_params()
-                    logger.info(f"Sending protocol step: {prev_id} execution settings: {params}")
+                    logger.info(
+                        f"Sending protocol step: {prev_id} execution settings: {params}"
+                    )
                     commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
-                    publish_message(topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize())
+                    publish_message(
+                        topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
+                    )
 
     @observe("_disable_state_messages")
     def __disable_state_messages_change_log(self, event):
         if event.new:
-            logger.warning("Device viewer will not be processing device view model state change since state messages are disabled.")
+            logger.warning(
+                "Device viewer will not be processing device view model state "
+                "change since state messages are disabled."
+            )
         else:
             logger.info("Device viewer will process device view model state changes")
 
@@ -1010,17 +1081,20 @@ class DeviceViewerDockPane(TraitsDockPane):
         from the last-published mapping. No-op otherwise. Called from chip-
         insert and SVG-load handlers."""
         current = {
-            eid: e.channel
-            for eid, e in self.model.electrodes.electrodes.items()
+            eid: e.channel for eid, e in self.model.electrodes.electrodes.items()
         }
         if current == self._last_published_id_to_channel:
             return
         self._last_published_id_to_channel = dict(current)
         msg = GeometryChangedMessage(id_to_channel=current)
         publish_message(
-            topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
+            topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
+            message=msg.serialize(),
         )
-        logger.info(f"Device Viewer: Published geometry changed event. Current id to channel = {current}")
+        logger.info(
+            f"Device Viewer: Published geometry changed event. Current id to "
+            f"channel = {current}"
+        )
 
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.realtime_mode")
@@ -1035,13 +1109,14 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self._disable_state_messages:
             return
         if self.model.realtime_mode and self.model.connected:
-
-            if (not self.model.protocol_running
-                    and (self.model.free_mode or self.model.phase_navigation_mode)) or (
-                    self.model.protocol_running and self.model.editable):
+            if (
+                not self.model.protocol_running
+                and (self.model.free_mode or self.model.phase_navigation_mode)
+            ) or (self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
-                    f"publishing electrodes state change to activate {len(self.model.electrodes.actuated_channels)} "
+                    f"publishing electrodes state change to activate "
+                    f"{len(self.model.electrodes.actuated_channels)} "
                     f"channels: {self.model.electrodes.actuated_channels}"
                 )
                 electrode_state_change_publisher.publish(
@@ -1078,21 +1153,24 @@ class DeviceViewerDockPane(TraitsDockPane):
         Publish a message with the current calibration values.
         """
         message = {
-            LIQUID_CAPACITANCE_KEY: self.model.liquid_capacitance_over_area,  # In pF/mm^2
-            FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,  # In pF/mm^2
+            # In pF/mm^2
+            LIQUID_CAPACITANCE_KEY: self.model.liquid_capacitance_over_area,
+            # In pF/mm^2
+            FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,
         }
         logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
 
-    # --------------UI view content creation / configuration helpers ---------------------------------
+    # --------------UI view content creation / configuration helpers ---------
     def set_interaction_service(self, new_model):
         """Handle when the electrodes model changes."""
         logger.debug(
             f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}"
         )
 
-        # Clean up previous interaction service (e.g., gamepad listeners) to avoid duplicates.
+        # Clean up previous interaction service (e.g., gamepad listeners) to
+        # avoid duplicates.
         try:
             old_service = getattr(self.scene, "interaction_service", None)
             if old_service and hasattr(old_service, "cleanup"):
@@ -1100,7 +1178,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         except Exception:
             pass
 
-        # Initialize the electrode mouse / key interaction service with the new model and layer
+        # Initialize the electrode mouse / key interaction service with the
+        # new model and layer
         interaction_service = ElectrodeInteractionControllerService(
             model=new_model,
             electrode_view_layer=self.current_electrode_layer,
@@ -1112,7 +1191,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
         self.scene.interaction_service.electrode_state_recolor(None)
-        # Paint the white "possible connections" base layer for the freshly loaded device.
+        # Paint the white "possible connections" base layer for the freshly
+        # loaded device.
         self.scene.interaction_service.route_redraw(None)
 
         logger.debug(
@@ -1149,7 +1229,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     def set_view_from_model(self, new_electrodes_model: "Electrodes"):
         self.remove_current_layer()
 
-        # use model method to figure out default alpha values taking into account visible settings.
+        # use model method to figure out default alpha values taking into
+        # account visible settings.
         default_alphas = {
             key: self.model.get_alpha(key)
             for key in self.device_viewer_preferences.default_alphas
@@ -1212,7 +1293,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             svg_file
         )  # FIXME: Slow! Calculating centers via np.mean
         logger.debug(
-            f"Created electrodes from SVG file: {self.model.electrodes.svg_model.filename}"
+            f"Created electrodes from SVG file: "
+            f"{self.model.electrodes.svg_model.filename}"
         )
 
     def _set_device_view_from_svg(self, svg_file=None):
@@ -1234,7 +1316,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
             error(
                 self.control,
-                f"Could not create electrodes from SVG file: {svg_file} <br><br> Reason: {e}",
+                f"Could not create electrodes from SVG file: {svg_file} "
+                f"<br><br> Reason: {e}",
                 detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
                 title="Error: Cannot Load Device SVG",
             )
@@ -1243,7 +1326,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     # --------------------- UI initialization -----------------------
 
     @observe(
-        "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT]",
+        "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, "
+        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT]",
         post_init=True,
     )
     def _set_device_view_layout_width(self, event=None):
@@ -1285,7 +1369,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.publish_model_message(event=None)
 
         # Layout init for device view and its property editor right-side bar
-        # left side will house device viewer; right side a collapsible scrollable stack of collapsible widgets
+        # left side will house device viewer; right side a collapsible
+        # scrollable stack of collapsible widgets
         main_layout = QHBoxLayout()
         main_container = QWidget()
 
@@ -1347,21 +1432,28 @@ class DeviceViewerDockPane(TraitsDockPane):
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget = ZoomControlWidget(vm)
 
+        scroll_layout.addWidget(
+            CollapsibleVStackBox(
+                "Viewport Controls", control_widgets=self.viewport_controls_widget
+            )
+        )
+
         # Camera Alignment: the manual per-device endpoint workflow.
         # Lives right under the camera-control button grid.
         alignment_widget = QWidget()
-        alignment_layout = QVBoxLayout(alignment_widget)
-        # Bottom margin separates the buttons from the alpha table below.
-        alignment_layout.setContentsMargins(0, 0, 0, 12)
+        alignment_layout = QHBoxLayout(alignment_widget)
         for label, handler, tip in (
-            ("Camera Alignment Helper", self._on_open_camera_alignment,
-             "Open the split-screen alignment dialog: place this "
-             "device's endpoint on the device SVG and drag the "
-             "corner dots onto the device outline on a captured "
-             "camera frame"),
-            ("Go To Endpoint", self._on_go_to_endpoint,
-             "Automate the drags: glide the marked points onto "
-             "this device's saved endpoint"),
+            (
+                "Align Camera",
+                self._on_open_camera_alignment,
+                "Place this device's endpoint on the SVG and drag the "
+                "corner dots onto its outline in a captured camera frame",
+            ),
+            (
+                "Go To Endpoint",
+                self._on_go_to_endpoint,
+                "Glide the marked points onto this device's saved endpoint",
+            ),
         ):
             action_button = QPushButton(label)
             # The sidebar's theme stylesheet renders QPushButton text
@@ -1370,23 +1462,31 @@ class DeviceViewerDockPane(TraitsDockPane):
             action_button.setStyleSheet(TEXT_BUTTON_STYLE)
             action_button.setToolTip(tip)
             action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button)
+            alignment_layout.addWidget(action_button, 1)
 
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Viewport Controls", control_widgets=self.viewport_controls_widget
-            )
+        camera_controls_box = CollapsibleVStackBox(
+            "Camera Controls",
+            control_widgets=[
+                self.camera_control_widget,
+                alignment_widget,
+                self.alpha_view_ui.control,
+            ],
         )
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Camera Controls",
-                control_widgets=[
-                    self.camera_control_widget,
-                    alignment_widget,
-                    self.alpha_view_ui.control,
-                ],
-            )
+        # Same side margins and gap as the camera-control button rows so
+        # the two buttons line up with the four above (each spans a pair);
+        # the bottom margin separates them from the alpha table below.
+        # Read only now: Qt's default layout margin is wider for a widget
+        # that is still a window than for a child, so it settles once the
+        # camera widget sits inside the box.
+        _camera_layout = self.camera_control_widget.layout()
+        _camera_margins = _camera_layout.contentsMargins()
+        alignment_layout.setContentsMargins(
+            _camera_margins.left(), 0, _camera_margins.right(), 12
         )
+        alignment_layout.setSpacing(_camera_layout.spacing())
+
+        scroll_layout.addWidget(camera_controls_box)
+
         self.execution_settings_box = CollapsibleVStackBox(
             "Execution Settings", control_widgets=self.execution_settings_ui.control
         )
@@ -1394,11 +1494,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
         scroll_layout.addWidget(
             CollapsibleVStackBox(
-                "Paths", control_widgets=[
+                "Paths",
+                control_widgets=[
                     self.execution_settings_box,
                     self.layer_ui.control,
                     self.mode_picker_view,
-                ]
+                ],
             )
         )
         scroll_layout.addWidget(
@@ -1466,7 +1567,8 @@ class DeviceViewerDockPane(TraitsDockPane):
                         return  # STOP here
 
                     else:
-                        # Handle case where the C++ widget was destroyed but Python ref exists
+                        # Handle case where the C++ widget was destroyed but
+                        # Python ref exists
                         self.edit_sidebar_layout_ui = None
 
                 self.edit_sidebar_layout_ui = (
@@ -1483,7 +1585,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
         reveal_button.customContextMenuRequested.connect(_on_sidebar_context_menu)
 
-        # ---------------------------------- Theme aware styling ----------------------------------#
+        # ---------------------------------- Theme aware styling -----------#
         def _apply_theme_style(theme: "Qt.ColorScheme"):
             """Handle application level theme updates"""
 
@@ -1493,11 +1595,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
 
-            # device view uses opengl so a complete stylesheet with widget style specs cannot be added:
+            # device view uses opengl so a complete stylesheet with widget
+            # style specs cannot be added:
             # but other elements like tooltips do need updating
             self.device_view.setStyleSheet(get_tooltip_style(theme_name))
 
-            bg_color = BLACK  # if is_dark_mode() else "#263238" #TODO: figure out light mode color
+            # if is_dark_mode() else "#263238" #TODO: figure out light mode color
+            bg_color = BLACK
             self.device_view.setBackgroundBrush(QBrush(QColor(bg_color)))
 
             # reveal requires the narrow button type specified
@@ -1576,7 +1680,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             self._set_device_view_from_svg(safe_copy_file(src_file, dst_file))
 
             logger.info(
-                f"{dst_file.name} has been copied to {src_file.name}. It was not found in the repo before."
+                f"{dst_file.name} has been copied to {src_file.name}. It was "
+                f"not found in the repo before."
             )
 
             return OK
@@ -1588,7 +1693,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             confirm_overwrite = confirm(
                 parent=None,
                 message=f"A file named '{dst_file.name}' already exists in "
-                        "the repository. What would you like to do?",
+                "the repository. What would you like to do?",
                 title="Warning: File Already Exists",
                 cancel=True,
                 yes_label="Overwrite",
@@ -1635,9 +1740,11 @@ class DeviceViewerDockPane(TraitsDockPane):
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
         """Open a file dialog to save the current model to an SVG file."""
-        dialog = FileDialog(action="save as",
-                            default_directory=str(self.device_viewer_preferences.DEVICE_REPO_DIR),
-                            wildcard="SVG Files (*.svg)|*.svg")
+        dialog = FileDialog(
+            action="save as",
+            default_directory=str(self.device_viewer_preferences.DEVICE_REPO_DIR),
+            wildcard="SVG Files (*.svg)|*.svg",
+        )
 
         if dialog.open() == OK:
             new_filename = (
@@ -1684,13 +1791,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             warning(
                 None,
                 modal=False,
-                message=f"Could not load all electrodes from {self.model.electrodes.svg_model.filename}:<br><br>"
-                        f"Error Paths: {self.model.electrodes.svg_model.svg_error_paths}<br><br>"
-                        f"Errors: {self.model.electrodes.svg_model.svg_exceptions_caught}",
+                message=f"Could not load all electrodes from "
+                f"{self.model.electrodes.svg_model.filename}:<br><br>"
+                f"Error Paths: "
+                f"{self.model.electrodes.svg_model.svg_error_paths}<br><br>"
+                f"Errors: {self.model.electrodes.svg_model.svg_exceptions_caught}",
             )
 
     @observe(
-        "model.camera_perspective.transformed_reference_rect.items, model.camera_perspective.reference_rect.items"
+        "model.camera_perspective.transformed_reference_rect.items, "
+        "model.camera_perspective.reference_rect.items"
     )
     @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
     def model_change_handler_with_timeout(self, event=None):
@@ -1701,17 +1811,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             # global display preferences, not step state — they stay
             # adjustable mid-run (like the visibility toggles, which this
             # handler never observed).
-            if not self.model.editable and not isinstance(event.object,
-                                                          AlphaValue):
+            if not self.model.editable and not isinstance(event.object, AlphaValue):
                 self.undo()  # Revert changes if not editable
                 return
 
     @observe("model.routes.layers.items.route.route.items")  # When a route is modified
-    @observe("model.electrodes.actuated_channels.items")  # When an electrode changes state
-    @observe("model.electrodes.disabled_channels.items")  # When an electrode is disabled/enabled
+    @observe(
+        "model.electrodes.actuated_channels.items"
+    )  # When an electrode changes state
+    @observe(
+        "model.electrodes.disabled_channels.items"
+    )  # When an electrode is disabled/enabled
     def model_change_handler_with_message(self, event=None):
         """
-        Handle changes to the model and send a message to the device viewer state change topic.
+        Handle changes to the model and send a message to the device viewer
+        state change topic.
         """
         logger.debug(f"Model change event received: {event}")
 
@@ -1727,7 +1841,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             return
 
         if not self.model.electrodes.svg_model:
-            logger.warning("Unable to publish device view model yet. Need svg_model to fully initialize.")
+            logger.warning(
+                "Unable to publish device view model yet. Need svg_model to "
+                "fully initialize."
+            )
             return
 
         try:
@@ -1767,7 +1884,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # self.publish_model_message()
 
     @observe(
-        "model.liquid_capacitance_over_area, model.filler_capacitance_over_area, model.electrode_scale"
+        "model.liquid_capacitance_over_area, "
+        "model.filler_capacitance_over_area, model.electrode_scale"
     )
     def calibration_change_handler(self, event=None):
         """
@@ -1781,7 +1899,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     def camera_perspective_change_handler(self, event):
         """
         Handle changes to the camera perspective transformation.
-        This is used to update the scene's transformation when the camera perspective changes.
+        This is used to update the scene's transformation when the camera
+        perspective changes.
         """
         if not self.model.camera_perspective.camera_resolution:
             return
@@ -1793,7 +1912,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _alpha_change(self, event):
 
         if isinstance(event.object, AlphaValue):
-
             changed_key = event.object.key
 
             if changed_key == video_key and self.video_item:
@@ -1807,7 +1925,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         _status_bar_manager = self.task.window.status_bar_manager
 
         if _status_bar_manager:
-
             if self.model.protocol_running:
                 _status = "Running Protocol"
                 if self.model.editable:
@@ -1825,7 +1942,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         _status_bar_manager = self.task.window.status_bar_manager
         if _status_bar_manager:
-
             if event.new == "camera-place":
                 _status_bar_manager.messages += [camera_place_status_message_text]
 
@@ -1855,6 +1971,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         (CAMERA_SOURCES extension point). A failing factory is logged and
         skipped so a broken contribution can't take the camera panel down."""
         from device_viewer.consts import CAMERA_SOURCES
+
         providers = []
         try:
             factories = self.task.window.application.get_extensions(CAMERA_SOURCES)
@@ -1865,14 +1982,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             try:
                 providers.append(factory())
             except Exception:
-                logger.error(f"Camera-source provider {factory!r} failed to "
-                             "construct; skipping", exc_info=True)
+                logger.error(
+                    f"Camera-source provider {factory!r} failed to construct; skipping",
+                    exc_info=True,
+                )
         return providers
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
         if getattr(self, "gamepad_icon", None) is not None:
-            return                      # already built; a re-fired manager
+            return  # already built; a re-fired manager
             # assignment must not duplicate icons
         # Push the manager to the camera widget now that it exists, so
         # media-capture notifications can use it directly.
@@ -1915,10 +2034,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         # placement, spacing, and removal.
         plugin = self.task.window.application.get_plugin(PKG)
         if plugin is None:
-            logger.warning(
-                f"{PKG}: plugin not found; status-bar icons not shown"
-            )
+            logger.warning(f"{PKG}: plugin not found; status-bar icons not shown")
             return
-        plugin.status_bar_icons.extend(
-            [self.gamepad_icon, self.recording_icon]
-        )
+        plugin.status_bar_icons.extend([self.gamepad_icon, self.recording_icon])
