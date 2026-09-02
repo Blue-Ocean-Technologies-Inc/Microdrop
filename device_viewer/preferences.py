@@ -170,7 +170,11 @@ class DeviceViewerPreferences(PreferencesHelper):
     _zoom_scale = Property(observe="ZOOM_SENSITIVITY")
 
     ### Gamepad prefs ###
-    # Persisted button indices. The interaction service reads these (with
+    # Off by default: pygame/SDL is only initialized and polled while this is
+    # on, so an instrument without a controller pays nothing for it.
+    gamepad_enabled = Bool(False)
+
+    # Persisted button indices. The gamepad service reads these (with
     # MICRODROP_GAMEPAD_* env vars taking precedence) and reloads live when they
     # change. SDL exposes up to 32 buttons; 0-31 is a safe range.
     gamepad_btn_clear = Range(value=GAMEPAD_BTN_CLEAR, low=0, high=31, mode="spinner")
@@ -435,6 +439,7 @@ def _gamepad_button_row(trait_name: str, rebind_trait: str, label: str) -> HGrou
 
 
 gamepad_settings = Group(
+    Item("gamepad_enabled", label="Enable gamepad support"),
     Group(
         HGroup(
             Item("capture_prompt_", style="readonly", show_label=False, springy=True),
@@ -458,6 +463,7 @@ gamepad_settings = Group(
         ),
         label="Button mapping",
         show_border=True,
+        enabled_when="object.gamepad_enabled",
     ),
     Group(
         Item("gamepad_debounce_move_split", label="Move / split (s)"),
@@ -467,6 +473,7 @@ gamepad_settings = Group(
         Item("gamepad_axis_threshold", label="Analog-stick threshold"),
         label="Timing & sensitivity",
         show_border=True,
+        enabled_when="object.gamepad_enabled",
     ),
     label="Gamepad",
     show_border=True,
