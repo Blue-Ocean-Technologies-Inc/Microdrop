@@ -154,6 +154,13 @@ class ElectrodeLayer:
         for electrode_id, endpoint_view in self.electrode_endpoints.items():
             parent_scene.addItem(endpoint_view)
 
+    def add_zones_to_scene(self, parent_scene: "QGraphicsScene"):
+        """Re-add every zone region item not already in the scene — a model
+        reload rebuilds the graphics scene without recomputing zone items."""
+        for item in self.zone_items.values():
+            if item.scene() is None:
+                parent_scene.addItem(item)
+
     ######################## remove electrodes/connections from scene ########
     def remove_electrodes_to_scene(self, parent_scene: "QGraphicsScene"):
         for electrode_id, electrode_view in self.electrode_views.items():
@@ -189,6 +196,7 @@ class ElectrodeLayer:
         self.add_electrodes_to_scene(parent_scene)
         self.add_connections_to_scene(parent_scene)
         self.add_endpoints_to_scene(parent_scene)
+        self.add_zones_to_scene(parent_scene)
 
         self.reference_rect_item = parent_scene.addPolygon(
             QPolygonF(), QPen(QColor(PERSPECTIVE_RECT_COLOR), 3)

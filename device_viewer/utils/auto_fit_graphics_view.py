@@ -27,6 +27,10 @@ class AutoFitGraphicsView(QGraphicsView):
 
     display_state_signal = Signal(str)
 
+    #: Emitted whenever the visible scene region changes — resize or either
+    #: scrollbar moving — so canvas-anchored overlays know to reposition.
+    viewport_changed = Signal()
+
     def __init__(self, *args, **kwargs):
 
         # check initial auto fit value
@@ -51,11 +55,18 @@ class AutoFitGraphicsView(QGraphicsView):
         self.viewport().grabGesture(Qt.GestureType.PinchGesture)
         self._pinch_saved_interactive = None
 
+        self.horizontalScrollBar().valueChanged.connect(self._emit_viewport_changed)
+        self.verticalScrollBar().valueChanged.connect(self._emit_viewport_changed)
+
+    def _emit_viewport_changed(self, _value):
+        self.viewport_changed.emit()
+
     def resizeEvent(self, event):
         if self.auto_fit:
             self.fit_to_scene_rect()
 
         super().resizeEvent(event)
+        self.viewport_changed.emit()
 
     def fit_to_scene_rect(self):
         if self.scene():
