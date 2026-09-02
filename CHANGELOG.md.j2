@@ -1,0 +1,28 @@
+{#-
+  Changelog template rendered by commitizen (`cz bump --changelog` and
+  `cz changelog`; selected by `template` in .cz.toml).
+
+  `tree` holds the releases newest first, each with `version`, `date`, and
+  `changes` grouped by type; `repo_url` comes from `extras` in .cz.toml.
+  A release without a date is the not-yet-tagged block, so it gets no
+  release link.
+
+  The release workflow reads the newest version from this file, so the
+  version header line is the only place a version string may appear twice
+  (link text + URL) -- keep other links off that line.
+-#}
+{% for entry in tree %}
+
+## {% if entry.date %}[{{ entry.version }}]({{ repo_url }}/releases/tag/{{ entry.version }}) ({{ entry.date }}){% else %}{{ entry.version }}{% endif %}
+
+{% for change_key, changes in entry.changes.items() %}
+
+{% if change_key %}
+### {{ change_key }}
+{% endif %}
+
+{% for change in changes %}
+- {% if change.breaking %}**BREAKING**: {% endif %}{% if change.scope %}**{{ change.scope }}**: {% endif %}{{ change.message }} ([`{{ change.sha1[:7] }}`]({{ repo_url }}/commit/{{ change.sha1 }}))
+{% endfor %}
+{% endfor %}
+{% endfor %}

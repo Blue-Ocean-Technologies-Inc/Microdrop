@@ -6,6 +6,10 @@ bump_message = "chore: release v$new_version"
 update_changelog_on_bump = true
 # Annotated so `git push --follow-tags` carries release tags along.
 annotated_tag = true
+# Repo-root Jinja template: release headers link to the GitHub release and
+# every entry links to its commit (see the template header for the variables).
+template = "CHANGELOG.md.j2"
+extras = { repo_url = "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop" }
 
 # cz_customize replicates cz_conventional_commits, except the changelog also
 # lists non-releasable types (docs/style/test/build/ci/chore/revert). The
