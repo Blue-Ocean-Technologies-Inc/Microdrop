@@ -294,3 +294,85 @@ def test_zone_state_command_round_trip(manager):
     assert manager.regions == []
     undo_manager.redo()
     assert [r.id for r in manager.regions] == ["heating-1"]
+
+
+def test_merge_requires_two_contiguous_regions_of_one_zone(manager):
+    ids = sorted(manager.electrode_polygons)
+    a = ids[0]
+    b = manager.electrode_neighbours[a][0]
+    far = next(
+        i
+        for i in ids
+        if i not in (a, b)
+        and i not in manager.electrode_neighbours[a]
+        and i not in manager.electrode_neighbours[b]
+    )
+    for electrode_id in (a, b, far):
+        manager.add_to_pending([electrode_id])
+        manager.commit_pending_region()
+    region_a, region_b, region_far = manager.regions
+    manager.selected_regions = [region_a]
+    assert manager.merge_selected_regions() is None
+    manager.selected_regions = [region_a, region_far]
+    assert manager.merge_selected_regions() is None
+    manager.add_zone_type("mixing")
+    manager.change_region_zone(region_b, "mixing")
+    manager.selected_regions = [region_a, region_b]
+    assert manager.merge_selected_regions() is None
+    manager.change_region_zone(region_b, "heating")
+    manager.selected_regions = [region_a, region_b]
+    merged = manager.merge_selected_regions()
+    assert merged is region_a
+    assert merged.electrode_ids == sorted([a, b])
+    assert region_b not in manager.regions
+    assert manager.selected_regions == [merged]
+
+
+def test_translate_regions_is_all_or_nothing(manager):
+    ids = sorted(manager.electrode_polygons)
+    a = ids[0]
+    b = manager.electrode_neighbours[a][0]
+    c = next(i for i in ids if i not in (a, b))
+    manager.add_to_pending([a, b])
+    region_a = manager.commit_pending_region()
+    manager.add_to_pending([c])
+    region_b = manager.commit_pending_region()
+    before = (list(region_a.electrode_ids), list(region_b.electrode_ids))
+    assert manager.translate_regions([region_a, region_b], 1e6, 1e6) is False
+    assert (region_a.electrode_ids, region_b.electrode_ids) == before
+
+
+def test_remove_from_pending(manager):
+    ids = sorted(manager.electrode_polygons)[:3]
+    manager.add_to_pending(ids)
+    manager.remove_from_pending(ids[1:])
+    assert manager.pending_electrode_ids == ids[:1]
+
+
+def test_load_records_auto_creates_unknown_zone(manager):
+    ids = sorted(manager.electrode_polygons)
+    manager.load_records(
+        [
+            {
+                "id": "cooling-7",
+                "zone_id": "cooling",
+                "zone_name": "Cool",
+                "zone_color": "#123456",
+                "visible": True,
+                "electrode_ids": ids[:1],
+            }
+        ]
+    )
+    cooling = manager.zone_type_for("cooling")
+    assert (cooling.name, cooling.color) == ("Cool", "#123456")
+    assert manager.regions[0].id == "cooling-7"
+
+
+def test_undo_restore_drops_outline_cache(manager):
+    ids = sorted(manager.electrode_polygons)
+    manager.add_to_pending(ids[:1])
+    region = manager.commit_pending_region()
+    manager.region_outline(region)
+    assert manager._outline_cache
+    manager.undo()
+    assert manager._outline_cache == {}

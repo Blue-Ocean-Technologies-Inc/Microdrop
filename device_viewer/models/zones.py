@@ -282,7 +282,7 @@ class ZoneLayerManager(HasTraits):
             self.selected_zone_type = self.zone_types[0] if self.zone_types else None
             self.active_zone_id = self.zone_types[0].id if self.zone_types else ""
 
-    def add_region_from_electrode_ids(self, electrode_ids, zone_id=None):
+    def _add_region_from_electrode_ids(self, electrode_ids, zone_id=None):
         zone_id = zone_id or self.active_zone_id
         if not electrode_ids or not zone_id:
             return None
@@ -371,7 +371,7 @@ class ZoneLayerManager(HasTraits):
                 self._push_undo()
                 self._set_region_electrodes(region, components[0])
                 for component in components[1:]:
-                    self.add_region_from_electrode_ids(
+                    self._add_region_from_electrode_ids(
                         component, zone_id=region.zone_id
                     )
             self.editing_region = None
@@ -382,7 +382,7 @@ class ZoneLayerManager(HasTraits):
         committed = [
             region
             for component in components
-            if (region := self.add_region_from_electrode_ids(component)) is not None
+            if (region := self._add_region_from_electrode_ids(component)) is not None
         ]
         if committed:
             self.pending_electrode_ids = []
@@ -440,6 +440,9 @@ class ZoneLayerManager(HasTraits):
             for region in self.regions
             if region is merged or region not in selection
         ]
+        for region in selection:
+            if region is not merged:
+                self._outline_cache.pop(region, None)
         self.selected_regions = [merged]
         return merged
 
@@ -802,6 +805,7 @@ class ZoneLayerManager(HasTraits):
             )
             for data in state["regions"]
         ]
+        self._outline_cache = {}
         # Id counters are deliberately NOT restored: ids stay monotonic
         # across undo so an undone region's id is never handed out again.
         self.selected_zone_type = self.zone_type_for(state["active_zone_id"])
