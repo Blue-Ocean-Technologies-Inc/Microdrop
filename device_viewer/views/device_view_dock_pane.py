@@ -1296,6 +1296,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"Created electrodes from SVG file: "
             f"{self.model.electrodes.svg_model.filename}"
         )
+        self.model.load_zones_from_device()
 
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
