@@ -2486,6 +2486,9 @@ class ElectrodeInteractionControllerService(HasTraits):
     def zones_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_zones(self.model, self.device_view.scene())
+            # Keep this inside the guard: the dot-path observers above fire
+            # while __init__ is still assigning traits, before the view and
+            # layer exist, and the lazy helper must not be built then.
             self.zone_canvas_actions.reposition()
 
     @observe("model.zones.pending_electrode_ids.items")
@@ -2495,6 +2498,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_zone_pending(
                 self.model, self.device_view.scene()
             )
+            # Guarded for the same reason as zones_redraw.
             self.zone_canvas_actions.reposition()
 
     @observe("model.electrodes.electrode_editing")

@@ -33,6 +33,7 @@ from microdrop_style.icons.icons import (
 # Local imports.
 from .zone_overlay import ZoneOverlayStrip
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
