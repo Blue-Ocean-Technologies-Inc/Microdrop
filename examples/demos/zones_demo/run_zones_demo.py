@@ -19,8 +19,8 @@ the sidebar table, switch to "Draw zones", and rubber-band electrode blocks.
 Right-click a region to delete it.
 
 The feature has been ported into device_viewer (see
-docs/superpowers/plans/2026-09-02-electrode-zones.md); this demo remains the
-standalone interaction reference.
+docs/superpowers/specs/2026-08-26-electrode-zones-design.md); this demo
+remains the standalone interaction reference.
 """
 
 import sys

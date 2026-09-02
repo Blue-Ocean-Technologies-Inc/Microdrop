@@ -398,6 +398,7 @@ class SvgUtil(HasTraits):
         - Metadata
         - Connections
         - Electrode id to channel mapping.
+        - Zones layer.
         """
 
         # get original svg xml data
