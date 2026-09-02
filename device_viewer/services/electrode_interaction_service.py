@@ -12,7 +12,7 @@ import json
 import os
 import time
 
-from PySide6.QtCore import QPointF, QTimer
+from PySide6.QtCore import QPoint, QPointF, QRectF, QTimer
 from PySide6.QtGui import QAction, QKeyEvent, Qt, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsSceneContextMenuEvent,
@@ -43,6 +43,10 @@ from device_viewer.consts import (
     GAMEPAD_DEBOUNCE_REALTIME_S,
     GAMEPAD_IDLE_POLL_INTERVAL_MS,
     GAMEPAD_POLL_INTERVAL_MS,
+    ZONE_CLICK_DRAG_THRESHOLD_PX,
+    ZONE_DRAW_MODE,
+    ZONE_MODES,
+    ZONE_SELECT_MODE,
 )
 from device_viewer.default_settings import (
     AUTOROUTE_COLOR,
@@ -64,6 +68,7 @@ from device_viewer.views.electrode_view.electrodes_view_base import (
     ElectrodeEndpointItem,
     ElectrodeView,
 )
+from device_viewer.views.zone_view.zone_region_item import ZoneRegionItem
 from dropbot_controller.consts import DETECT_DROPLETS, SET_REALTIME_MODE
 
 from microdrop_style.colors import GREY, SUCCESS_COLOR
@@ -139,6 +144,15 @@ class ElectrodeInteractionControllerService(HasTraits):
     _electrode_tooltip_visible = Bool(True)
 
     _is_drag = Bool(False, desc="Is user dragging the pointer on screen")
+
+    #: Zone rubber band: scene point of the press, screen point for the
+    #: click-vs-drag threshold, and whether ctrl was held (subtract).
+    _zone_band_origin = Instance(QPointF, allow_none=True)
+    _zone_press_screen_pos = Instance(QPoint, allow_none=True)
+    _zone_band_subtracts = Bool(False)
+
+    #: Keeps the zone context menu alive while it is open.
+    _zone_context_menu = Instance(QMenu, allow_none=True)
 
     _split_modifier_down = Bool(
         False, desc="When True (B held), arrow presses are split steps."
@@ -1603,6 +1617,23 @@ class ElectrodeInteractionControllerService(HasTraits):
     def get_electrode_view_for_scene_pos(self, scene_pos):
         return self.device_view.scene().get_item_under_mouse(scene_pos, ElectrodeView)
 
+    def _zone_drag_exceeds_threshold(self, screen_pos):
+        return (
+            self._zone_press_screen_pos is not None
+            and (screen_pos - self._zone_press_screen_pos).manhattanLength()
+            >= ZONE_CLICK_DRAG_THRESHOLD_PX
+        )
+
+    def _zone_band_capture(self, band_rect):
+        """Electrode ids the band touches; the manager works in SVG coords."""
+        scale = self.electrode_view_layer.path_scale
+        return self.model.zones.capture_electrode_ids_touching(
+            band_rect.left() / scale,
+            band_rect.top() / scale,
+            band_rect.right() / scale,
+            band_rect.bottom() / scale,
+        )
+
     def detect_droplet(self):
         """Placeholder for a context menu action."""
         publish_message(
@@ -1926,6 +1957,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     def handle_key_press_event(self, event: QKeyEvent):
         key = event.key()
 
+        if key == Qt.Key.Key_Escape and self.model.mode in ZONE_MODES:
+            if self.model.zones.cancel_current_interaction():
+                return
+
         # Arrow-key stepping (keyboard).
         # Only when Ctrl/Alt are NOT held to avoid conflicts with existing shortcuts.
         if not (event.modifiers() & (Qt.ControlModifier | Qt.AltModifier)):
@@ -2018,6 +2053,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif mode == "camera-edit":
                 self.handle_perspective_edit_start(event.scenePos())
 
+            elif mode == ZONE_DRAW_MODE:
+                self._zone_band_origin = event.scenePos()
+                self._zone_press_screen_pos = event.screenPos()
+                self._zone_band_subtracts = bool(
+                    event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                )
+
+            elif mode == ZONE_SELECT_MODE:
+                self._zone_press_screen_pos = event.screenPos()
+
         elif button == Qt.RightButton:
             self._right_mouse_pressed = True
             if electrode_view:
@@ -2065,6 +2110,21 @@ class ElectrodeInteractionControllerService(HasTraits):
 
             elif mode == "camera-edit":
                 self.handle_perspective_edit(event.scenePos())
+
+            elif mode == ZONE_DRAW_MODE and self._zone_band_origin is not None:
+                if self._zone_drag_exceeds_threshold(event.screenPos()):
+                    band_rect = QRectF(
+                        self._zone_band_origin, event.scenePos()
+                    ).normalized()
+                    self.electrode_view_layer.show_zone_band(
+                        self.device_view.scene(), band_rect
+                    )
+                    self.electrode_view_layer.redraw_zone_pending(
+                        self.model,
+                        self.device_view.scene(),
+                        preview_ids=self._zone_band_capture(band_rect),
+                        subtract=self._zone_band_subtracts,
+                    )
 
         if self._right_mouse_pressed:
             if (
@@ -2119,6 +2179,46 @@ class ElectrodeInteractionControllerService(HasTraits):
                     self.model.mode = "draw"
             elif mode == "camera-edit":
                 self.handle_perspective_edit_end()
+
+            elif mode == ZONE_DRAW_MODE:
+                scene = self.device_view.scene()
+                self.electrode_view_layer.hide_zone_band(scene)
+                manager = self.model.zones
+                if (
+                    self._zone_band_origin is not None
+                    and self._zone_drag_exceeds_threshold(event.screenPos())
+                ):
+                    band_rect = QRectF(
+                        self._zone_band_origin, event.scenePos()
+                    ).normalized()
+                    captured = self._zone_band_capture(band_rect)
+                    if self._zone_band_subtracts:
+                        manager.remove_from_pending(captured)
+                    else:
+                        manager.add_to_pending(captured)
+                else:
+                    electrode_view = self.get_electrode_view_for_scene_pos(
+                        event.scenePos()
+                    )
+                    if electrode_view:
+                        manager.toggle_electrode_in_pending(electrode_view.id)
+                # The pending observer redraws; make sure a no-op band still
+                # clears the live preview.
+                self.zone_pending_redraw(None)
+                self._zone_band_origin = None
+                self._zone_press_screen_pos = None
+
+            elif mode == ZONE_SELECT_MODE:
+                if not self._zone_drag_exceeds_threshold(event.screenPos()):
+                    item = self.device_view.scene().get_item_under_mouse(
+                        event.scenePos(), ZoneRegionItem
+                    )
+                    region = item.region if item else None
+                    if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                        self.model.zones.toggle_region_in_selection(region)
+                    else:
+                        self.model.zones.selected_region = region
+                self._zone_press_screen_pos = None
         elif button == Qt.RightButton:
             self._right_mouse_pressed = False
 
@@ -2149,6 +2249,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.electrodes.electrode_right_clicked = (
             electrode_view.electrode if electrode_view else None
         )
+
+        if self.model.mode in ZONE_MODES:
+            item = self.device_view.scene().get_item_under_mouse(
+                event.scenePos(), ZoneRegionItem
+            )
+            if item is not None:
+                self._show_zone_context_menu(item.region, event.screenPos())
+                return
 
         if not (
             event.modifiers() & Qt.ControlModifier
@@ -2257,6 +2365,33 @@ class ElectrodeInteractionControllerService(HasTraits):
             context_menu.addAction(tooltip_toggle_action)
 
             context_menu.exec(event.screenPos())
+
+    def _show_zone_context_menu(self, region, screen_pos):
+        manager = self.model.zones
+        self._zone_context_menu = QMenu()
+        self._zone_context_menu.addAction(
+            "Edit region", lambda: self._begin_zone_region_edit(region)
+        )
+        change_type_menu = self._zone_context_menu.addMenu("Change type")
+        for zone_type in manager.zone_types:
+            if zone_type.id == region.zone_id:
+                continue
+            change_type_menu.addAction(
+                zone_type.name,
+                lambda zone_id=zone_type.id: manager.change_region_zone(
+                    region, zone_id
+                ),
+            )
+        self._zone_context_menu.addAction(
+            "Delete region", lambda: manager.remove_region(region)
+        )
+        self._zone_context_menu.popup(screen_pos)
+
+    def _begin_zone_region_edit(self, region):
+        # Selecting first lets the Edit button flow (ZonesController) do the
+        # mode switch exactly as the sidebar button does.
+        self.model.zones.selected_region = region
+        self.model.zones.edit_region_button = True
 
     ################################################################################################################
     # ------------------ Traits observers --------------------------------------------
@@ -2416,6 +2551,11 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if event.new == "pan" or event.old == "pan":
             self._apply_pan_mode()
+
+        if event.old in ZONE_MODES and event.new not in ZONE_MODES:
+            # Leaving the zone tools drops any half-made selection or edit.
+            self.model.zones.cancel_current_interaction()
+            self.model.zones.selected_regions = []
 
     @observe("model.electrode_scale", post_init=True)
     def electrode_area_scale_edited(self, event):
