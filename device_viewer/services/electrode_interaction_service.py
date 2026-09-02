@@ -1668,6 +1668,20 @@ class ElectrodeInteractionControllerService(HasTraits):
             return list(selection)
         return [pressed]
 
+    def _clear_zone_gesture(self):
+        """Drop an in-flight rubber band or region drag: hide its scene
+        items and forget the press."""
+        if self.electrode_view_layer is not None:
+            scene = self.device_view.scene()
+            self.electrode_view_layer.hide_zone_band(scene)
+            self.electrode_view_layer.hide_zone_move_ghost(scene)
+        self._zone_band_origin = None
+        self._zone_press_screen_pos = None
+        self._zone_band_subtracts = False
+        self._zone_move_item = None
+        self._zone_move_origin = None
+        self._zone_move_active = False
+
     def detect_droplet(self):
         """Placeholder for a context menu action."""
         publish_message(
@@ -2717,7 +2731,9 @@ class ElectrodeInteractionControllerService(HasTraits):
             self._apply_pan_mode()
 
         if event.old in ZONE_MODES and event.new not in ZONE_MODES:
-            # Leaving the zone tools drops any half-made selection or edit.
+            # Leaving the zone tools drops any half-made selection or edit,
+            # and any gesture still in flight.
+            self._clear_zone_gesture()
             self.model.zones.cancel_current_interaction()
             self.model.zones.selected_regions = []
 
