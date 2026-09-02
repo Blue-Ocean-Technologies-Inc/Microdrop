@@ -80,7 +80,9 @@ zones_view = View(
         HGroup(
             UItem(
                 "commit_button",
-                enabled_when="mode == 'zone' and len(pending_electrode_ids) > 0",
+                enabled_when=(
+                    f"mode == '{ZONE_DRAW_MODE}' and len(pending_electrode_ids) > 0"
+                ),
             ),
             UItem(
                 "clear_pending_button",
@@ -93,13 +95,17 @@ zones_view = View(
         HGroup(
             UItem(
                 "edit_region_button",
-                enabled_when="mode == 'zone-select' and selected_region is not None",
+                enabled_when=(
+                    f"mode == '{ZONE_SELECT_MODE}' and selected_region is not None"
+                ),
             ),
             UItem("delete_region_button", enabled_when="selected_region is not None"),
             UItem("hide_region_button", enabled_when="selected_region is not None"),
             UItem(
                 "merge_regions_button",
-                enabled_when="mode == 'zone-select' and len(selected_regions) >= 2",
+                enabled_when=(
+                    f"mode == '{ZONE_SELECT_MODE}' and len(selected_regions) >= 2"
+                ),
                 tooltip="Merge the ctrl+click-selected regions",
             ),
         ),
