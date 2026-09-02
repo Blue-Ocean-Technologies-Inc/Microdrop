@@ -52,6 +52,7 @@ from device_viewer.default_settings import (
     electrode_outline_key,
     electrode_text_key,
     routes_key,
+    zones_key,
 )
 from device_viewer.models.electrodes import Electrode
 from device_viewer.models.main_model import DeviceViewMainModel
@@ -2270,6 +2271,24 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
 
+    @observe("model.zones.regions.items")
+    @observe("model.zones.regions.items.[visible, zone_id]")
+    @observe("model.zones.regions.items.electrode_ids.items")
+    @observe("model.zones.selected_regions.items")
+    @observe("model.zones.editing_region")
+    @observe("model.zones.zone_types.items.color")
+    def zones_redraw(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_zones(self.model, self.device_view.scene())
+
+    @observe("model.zones.pending_electrode_ids.items")
+    @observe("model.zones.active_zone_id")
+    def zone_pending_redraw(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_zone_pending(
+                self.model, self.device_view.scene()
+            )
+
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
     def electrode_state_recolor(self, event):
@@ -2419,6 +2438,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if changed_key in (routes_key, connections_key):
             self.route_redraw(None)
+
+        if changed_key == zones_key:
+            self.zones_redraw(None)
 
     @observe("model:zoom_in_event", post_init=True)
     def _zoom_in_event_triggered(self, event):

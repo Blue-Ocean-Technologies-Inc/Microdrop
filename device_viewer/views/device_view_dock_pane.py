@@ -1194,6 +1194,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Paint the white "possible connections" base layer for the freshly
         # loaded device.
         self.scene.interaction_service.route_redraw(None)
+        # Regions restored from the SVG's Zones layer.
+        self.scene.interaction_service.zones_redraw(None)
 
         logger.debug(
             f"Setting up handlers for new layer for new electrodes model {new_model}"
