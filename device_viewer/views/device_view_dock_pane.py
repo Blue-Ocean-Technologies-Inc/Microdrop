@@ -1302,7 +1302,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"Created electrodes from SVG file: "
             f"{self.model.electrodes.svg_model.filename}"
         )
+        # `load_zones_from_device` immediately rewrites `zone_records` from
+        # the loaded regions (`_zone_regions_changed`), so the file's record
+        # count must be read before the load, not after.
+        file_record_count = len(self.model.electrodes.svg_model.zone_records)
         self.model.load_zones_from_device()
+
+        dropped = file_record_count - len(self.model.zones.regions)
+        if dropped > 0:
+            warning(
+                None,
+                f"{dropped} zone region(s) in this device file reference electrodes "
+                "that do not exist in it and were not loaded. Saving the file will "
+                "drop them.",
+                title="Zones Not Loaded",
+            )
 
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:

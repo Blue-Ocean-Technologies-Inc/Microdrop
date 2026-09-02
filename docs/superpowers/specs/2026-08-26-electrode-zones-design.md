@@ -78,8 +78,8 @@ class ZoneLayerManager(HasTraits):
 
 ## Interaction
 
-- New `zone` value in the `DeviceViewMainModel.mode` Enum + a mode-picker
-  button.
+- New `zone` value in the `DeviceViewMainModel.mode` Enum. Draw and select
+  are entered from the Zones sidebar's Off/Draw/Select radio.
 - Zone drawing is a **select-then-commit** flow over a *pending selection*
   (`pending_electrode_ids` on the manager), shown live as a dashed highlight
   in the active zone's color:
@@ -93,8 +93,9 @@ class ZoneLayerManager(HasTraits):
     empty);
   - while a selection exists, a floating **check/delete/dismiss** overlay
     sits by its top-right corner on the device view — check commits in
-    place, delete discards the whole selection, dismiss hides the overlay
-    to keep editing (it returns on the next edit).
+    place, delete discards the whole selection, dismiss hides both canvas
+    strips (`show_canvas_overlays`); the sidebar's *Canvas buttons* checkbox
+    brings them back.
 - **Select mode** (its own mode, distinct from drawing, since regions may
   overlap): clicking picks the topmost region under the cursor (empty space
   deselects) and sets the manager's `selected_region`. The selected region is
@@ -124,6 +125,8 @@ class ZoneLayerManager(HasTraits):
   that type auto-created (name = id) with a default color.
 - **Zone types (id → name, color) → `DeviceViewerPreferences`** (app-global,
   shared across devices), same mirror-on-change pattern as the alpha values.
+- Regions whose electrode ids are missing from the loaded device are dropped
+  with a warning dialog; the next save writes the file without them.
 
 ## app_globals mirror
 
