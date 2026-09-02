@@ -118,6 +118,8 @@ from ..preferences import (
 from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
+from ..services.electrode_stepping_service import ElectrodeSteppingService
+from ..services.gamepad_interaction_service import GamepadInteractionService
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
@@ -180,6 +182,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     device_view = Instance(AutoFitGraphicsView)
     device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
+
+    #: Gamepad driver for the current device; exists only while the gamepad
+    #: preference is on, rebuilt on every model reload.
+    gamepad_service = Instance(GamepadInteractionService, allow_none=True)
     layer_ui = None
     mode_picker_view = None
 
@@ -354,21 +360,45 @@ class DeviceViewerDockPane(TraitsDockPane):
         else:
             logger.warning(f"Unknown phase-navigation action: {action!r}")
 
-    def _gamepad_interaction_service(self):
-        """The live interaction service that owns the gamepad poll loop, if any."""
-        return getattr(getattr(self, "scene", None), "interaction_service", None)
-
     def _on_gamepad_capture_request_triggered(self, message):
-        """Relay a Gamepad-prefs remap request to the live interaction service."""
-        svc = self._gamepad_interaction_service()
-        if svc is not None and hasattr(svc, "begin_button_capture"):
-            svc.begin_button_capture(message)
+        """Relay a Gamepad-prefs remap request to the live gamepad service."""
+        if self.gamepad_service is not None:
+            self.gamepad_service.begin_button_capture(message)
 
     def _on_gamepad_reconnect_request_triggered(self, message):
-        """Relay a manual gamepad-reconnect request to the interaction service."""
-        svc = self._gamepad_interaction_service()
-        if svc is not None and hasattr(svc, "reconnect_gamepad"):
-            svc.reconnect_gamepad()
+        """Relay a manual gamepad-reconnect request to the gamepad service."""
+        if self.gamepad_service is not None:
+            self.gamepad_service.reconnect_gamepad()
+
+    @observe("device_viewer_preferences:gamepad_enabled")
+    def _on_gamepad_enabled_changed(self, event):
+        if event.new and getattr(self.scene, "interaction_service", None):
+            self._build_gamepad_service()
+        else:
+            self._release_gamepad_service()
+
+    def _build_gamepad_service(self):
+        """Start gamepad support against the current device.
+
+        pygame/SDL is initialized here and nowhere else, so the preference
+        being off means no poll timer and no controller probing at all.
+        """
+        self._release_gamepad_service()
+        interaction_service = self.scene.interaction_service
+        self.gamepad_service = GamepadInteractionService(
+            model=interaction_service.model,
+            device_view=self.device_view,
+            device_viewer_preferences=self.device_viewer_preferences,
+            stepping=interaction_service.stepping,
+            status_bar_manager=self.task.window.status_bar_manager,
+            gamepad_icon=getattr(self, "gamepad_icon", None),
+        )
+
+    def _release_gamepad_service(self):
+        """Stop the poll timer and drop the controller, if any."""
+        if self.gamepad_service is not None:
+            self.gamepad_service.cleanup()
+            self.gamepad_service = None
 
     def _on_load_svg_request_triggered(self, message):
         """Load the SVG at ``message`` (a file path) into the device view.
@@ -1169,14 +1199,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}"
         )
 
-        # Clean up previous interaction service (e.g., gamepad listeners) to
-        # avoid duplicates.
-        try:
-            old_service = getattr(self.scene, "interaction_service", None)
-            if old_service and hasattr(old_service, "cleanup"):
-                old_service.cleanup()
-        except Exception:
-            pass
+        # The gamepad service polls against the old device; rebuilt below.
+        self._release_gamepad_service()
+
+        # One stepping service per loaded device, shared by the keyboard
+        # handlers and the gamepad so both move the same electrode cursor.
+        stepping = ElectrodeSteppingService(model=new_model)
 
         # Initialize the electrode mouse / key interaction service with the
         # new model and layer
@@ -1185,11 +1213,13 @@ class DeviceViewerDockPane(TraitsDockPane):
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
-            status_bar_manager=self.task.window.status_bar_manager,
+            stepping=stepping,
         )
 
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
+        if self.device_viewer_preferences.gamepad_enabled:
+            self._build_gamepad_service()
         self.scene.interaction_service.electrode_state_recolor(None)
         # Paint the white "possible connections" base layer for the freshly
         # loaded device.
@@ -2023,12 +2053,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.gamepad_icon.status_bar_icon_priority = ICON_PRIORITY_LEFTMOST
 
         # Hand the gamepad service its HUD sink (the manager) and its
-        # indicator icon; both were unavailable when it was constructed.
+        # indicator icon if it was built before the status bar existed.
         # Setting gamepad_icon re-applies the current connection state.
-        svc = self._gamepad_interaction_service()
-        if svc is not None:
-            svc.status_bar_manager = event.new
-            svc.gamepad_icon = self.gamepad_icon
+        if self.gamepad_service is not None:
+            self.gamepad_service.status_bar_manager = event.new
+            self.gamepad_service.gamepad_icon = self.gamepad_icon
 
         # Contribute both icons; the microdrop_status_bar plugin owns their
         # placement, spacing, and removal.
