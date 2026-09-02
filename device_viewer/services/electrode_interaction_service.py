@@ -72,6 +72,13 @@ from device_viewer.views.zone_view.zone_region_item import ZoneRegionItem
 from dropbot_controller.consts import DETECT_DROPLETS, SET_REALTIME_MODE
 
 from microdrop_style.colors import GREY, SUCCESS_COLOR
+from microdrop_style.icons.icons import (
+    ICON_CHECK,
+    ICON_CLOSE,
+    ICON_DELETE,
+    ICON_EDIT,
+    ICON_VISIBILITY_OFF,
+)
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.system_config import is_rpi
@@ -79,6 +86,7 @@ from microdrop_utils.system_config import is_rpi
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
+from ..views.zone_view.zone_overlay import ZoneOverlayStrip
 
 from logger.logger_service import get_logger
 
@@ -153,6 +161,11 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     #: Keeps the zone context menu alive while it is open.
     _zone_context_menu = Instance(QMenu, allow_none=True)
+
+    #: Floating action strips parked beside a pending selection / a selected
+    #: region on the device view.
+    _zone_commit_overlay = Instance(ZoneOverlayStrip, allow_none=True)
+    _zone_selection_overlay = Instance(ZoneOverlayStrip, allow_none=True)
 
     _split_modifier_down = Bool(
         False, desc="When True (B held), arrow presses are split steps."
@@ -1552,6 +1565,12 @@ class ElectrodeInteractionControllerService(HasTraits):
                 except Exception:
                     pass
                 self._pygame_timer = None
+            for overlay in (self._zone_commit_overlay, self._zone_selection_overlay):
+                if overlay is not None:
+                    overlay.hide()
+                    overlay.deleteLater()
+            self._zone_commit_overlay = None
+            self._zone_selection_overlay = None
             # Releases the controller and clears held modifier/split state.
             self._release_joystick()
         finally:
@@ -2226,6 +2245,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle = event.delta()
             self.handle_ctrl_mouse_wheel_event(angle)
+            self._reposition_zone_overlays()
             event.accept()
             return True
         else:
@@ -2393,6 +2413,82 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.model.zones.selected_region = region
         self.model.zones.edit_region_button = True
 
+    def _ensure_zone_overlays(self):
+        if self._zone_commit_overlay is not None:
+            return
+        manager = self.model.zones
+        viewport = self.device_view.viewport()
+        self._zone_commit_overlay = ZoneOverlayStrip(
+            viewport,
+            [
+                (
+                    ICON_CHECK,
+                    "Commit zone",
+                    lambda: setattr(manager, "commit_button", True),
+                ),
+                (
+                    ICON_DELETE,
+                    "Discard selection",
+                    lambda: setattr(manager, "clear_pending_button", True),
+                ),
+                (
+                    ICON_CLOSE,
+                    "Hide these buttons",
+                    lambda: setattr(manager, "show_canvas_overlays", False),
+                ),
+            ],
+        )
+        self._zone_selection_overlay = ZoneOverlayStrip(
+            viewport,
+            [
+                (
+                    ICON_EDIT,
+                    "Edit region",
+                    lambda: setattr(manager, "edit_region_button", True),
+                ),
+                (
+                    ICON_DELETE,
+                    "Delete region",
+                    lambda: setattr(manager, "delete_region_button", True),
+                ),
+                (
+                    ICON_VISIBILITY_OFF,
+                    "Hide region",
+                    lambda: setattr(manager, "hide_region_button", True),
+                ),
+                (
+                    ICON_CLOSE,
+                    "Hide these buttons",
+                    lambda: setattr(manager, "show_canvas_overlays", False),
+                ),
+            ],
+        )
+
+    def _reposition_zone_overlays(self):
+        """Show each strip by its anchor item when its situation applies,
+        hide it otherwise."""
+        if self.electrode_view_layer is None:
+            return
+        self._ensure_zone_overlays()
+        manager = self.model.zones
+        layer = self.electrode_view_layer
+        show = manager.show_canvas_overlays
+        pending_item = layer.zone_pending_item
+        if show and self.model.mode == ZONE_DRAW_MODE and pending_item is not None:
+            self._zone_commit_overlay.place_at(
+                self.device_view, pending_item.boundingRect().topRight()
+            )
+        else:
+            self._zone_commit_overlay.hide()
+        selected = manager.selected_region
+        selected_item = layer.zone_items.get(selected.id) if selected else None
+        if show and self.model.mode == ZONE_SELECT_MODE and selected_item is not None:
+            self._zone_selection_overlay.place_at(
+                self.device_view, selected_item.boundingRect().topRight()
+            )
+        else:
+            self._zone_selection_overlay.hide()
+
     ################################################################################################################
     # ------------------ Traits observers --------------------------------------------
     ################################################################################################################
@@ -2408,6 +2504,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     @observe("model.zones.regions.items")
     @observe("model.zones.regions.items.[visible, zone_id]")
+    @observe("model.zones.show_canvas_overlays")
     @observe("model.zones.regions.items.electrode_ids.items")
     @observe("model.zones.selected_regions.items")
     @observe("model.zones.editing_region")
@@ -2415,6 +2512,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     def zones_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_zones(self.model, self.device_view.scene())
+        self._reposition_zone_overlays()
 
     @observe("model.zones.pending_electrode_ids.items")
     @observe("model.zones.active_zone_id")
@@ -2423,6 +2521,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.electrode_view_layer.redraw_zone_pending(
                 self.model, self.device_view.scene()
             )
+        self._reposition_zone_overlays()
 
     @observe("model.electrodes.electrode_editing")
     @observe("model.electrodes.electrodes.items.channel")
@@ -2556,6 +2655,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             # Leaving the zone tools drops any half-made selection or edit.
             self.model.zones.cancel_current_interaction()
             self.model.zones.selected_regions = []
+
+        self._reposition_zone_overlays()
 
     @observe("model.electrode_scale", post_init=True)
     def electrode_area_scale_edited(self, event):
