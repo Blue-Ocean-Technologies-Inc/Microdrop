@@ -8,19 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Qt-free controller: sidebar button clicks and mode transitions."""
+"""Qt-free controller: mirrors the demo's pan/zone tool onto the shipped
+manager's own ``mode`` trait and turns its button traits into calls, mirroring
+device_viewer.controllers.zones_controller.ZonesController."""
 
 from pyface.api import OK, FileDialog
 from traits.api import HasTraits, Instance, observe
 
+from device_viewer.consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
 from device_viewer.models.electrodes import Electrodes
 
-from .consts import (
-    DEVICE_SVG_RESOURCES_DIR,
-    EDIT_MODE,
-    SELECT_MODE,
-    ZONE_COLOR_CYCLE,
-)
+from .consts import DEVICE_SVG_RESOURCES_DIR, PAN_MODE
 from .models import ZonesDemoModel
 
 from logger.logger_service import get_logger
@@ -54,92 +52,69 @@ class ZonesDemoController(HasTraits):
 
     # ------------------------------------------------------------------ mode
     @observe("model:mode")
-    def _on_mode_changed(self, event):
-        manager = self.model.manager
-        if event.new == EDIT_MODE:
-            if manager.selected_region is None:
-                # Nothing to edit; bounce back to where the user was.
-                self.model.mode = event.old
-            else:
-                manager.begin_edit_region(manager.selected_region)
-        elif event.old == EDIT_MODE and manager.editing_region is not None:
-            # Leaving edit mode without committing cancels the edit (the
-            # region reappears unchanged); after a commit or clear the
-            # editing_region is already gone and this no-ops.
-            manager.clear_pending()
+    def _mirror_mode_to_manager(self, event):
+        if event.old == ZONE_DRAW_MODE and event.new != ZONE_DRAW_MODE:
+            self.model.manager.clear_pending()
+        self.model.manager.mode = "" if event.new == PAN_MODE else event.new
+
+    @observe("model:manager:mode")
+    def _mirror_manager_mode(self, event):
+        self.model.mode = event.new or PAN_MODE
 
     # ----------------------------------------------------------------- zones
-    @observe("model:commit_button")
+    @observe("model:manager:commit_button")
     def _on_commit(self, event):
         manager = self.model.manager
         was_editing = manager.editing_region is not None
-        region = manager.commit_pending_region()
-        # An edit is a detour from select mode; land back there so the
-        # committed region stays selected and re-editable.
-        if was_editing and region is not None:
-            self.model.mode = SELECT_MODE
+        if manager.commit_pending_region() is not None and was_editing:
+            self.model.mode = ZONE_SELECT_MODE
 
-    @observe("model:clear_pending_button")
+    @observe("model:manager:clear_pending_button")
     def _on_clear_pending(self, event):
-        self._clear_pending()
-
-    def _clear_pending(self):
         manager = self.model.manager
         was_editing = manager.editing_region is not None
         manager.clear_pending()
         if was_editing:
-            self.model.mode = SELECT_MODE
+            self.model.mode = ZONE_SELECT_MODE
 
     @observe("model:escape_pressed")
     def _on_escape(self, event):
-        # Cancel the innermost thing first: an in-progress selection/edit,
-        # then the region selection; a bare Escape is a no-op.
         manager = self.model.manager
-        if manager.pending_electrode_ids or manager.editing_region is not None:
-            self._clear_pending()
-        elif manager.selected_regions:
-            manager.selected_regions = []
+        was_editing = manager.editing_region is not None
+        if manager.cancel_current_interaction() and was_editing:
+            self.model.mode = ZONE_SELECT_MODE
 
-    @observe("model:add_zone_type_button")
+    @observe("model:manager:add_zone_type_button")
     def _on_add_zone_type(self, event):
         manager = self.model.manager
-        name = self.model.new_zone_type_name.strip()
-        if not name:
-            return
-        color = ZONE_COLOR_CYCLE[len(manager.zone_types) % len(ZONE_COLOR_CYCLE)]
-        manager.selected_zone_type = manager.add_zone_type(name, color)
-        self.model.new_zone_type_name = ""
-
-    @observe("model:remove_zone_type_button")
-    def _on_remove_zone_type(self, event):
-        manager = self.model.manager
-        if manager.selected_zone_type is not None:
-            manager.remove_zone_type(manager.selected_zone_type.id)
+        name = manager.new_zone_type_name.strip()
+        if name:
+            manager.selected_zone_type = manager.add_zone_type(name)
+            manager.new_zone_type_name = ""
 
     @observe("model:manager:zone_types:items:delete_requested")
     def _on_zone_type_delete_requested(self, event):
-        # Per-row trash glyph; the manager cascades the type's regions away.
         self.model.manager.remove_zone_type(event.object.id)
 
     # --------------------------------------------------------------- regions
-    @observe("model:edit_region_button")
+    @observe("model:manager:edit_region_button")
     def _on_edit_region(self, event):
-        # The mode observer does the actual begin_edit_region.
-        if self.model.manager.selected_region is not None:
-            self.model.mode = EDIT_MODE
+        manager = self.model.manager
+        if manager.selected_region is not None:
+            manager.begin_edit_region(manager.selected_region)
+            self.model.mode = ZONE_DRAW_MODE
 
-    @observe("model:delete_region_button")
+    @observe("model:manager:delete_region_button")
     def _on_delete_region(self, event):
         self.model.manager.remove_region(self.model.manager.selected_region)
 
-    @observe("model:hide_region_button")
+    @observe("model:manager:hide_region_button")
     def _on_hide_region(self, event):
         if self.model.manager.selected_region is not None:
             self.model.manager.selected_region.visible = False
 
-    @observe("model:merge_regions_button")
+    @observe("model:manager:merge_regions_button")
     def _on_merge_regions(self, event):
-        # Ctrl+click regions on the canvas to multi-select; no-op below two.
         self.model.manager.merge_selected_regions()
 
     @observe("model:undo_button")

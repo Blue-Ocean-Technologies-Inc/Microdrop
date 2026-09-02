@@ -27,9 +27,11 @@ import sys
 
 from pyface.qt.QtWidgets import QApplication
 
+from device_viewer.consts import DEFAULT_ZONE_TYPES
+
 from microdrop_style.helpers import style_app
 
-from .consts import DEFAULT_DEVICE_SVG_PATH, DEFAULT_ZONE_TYPES
+from .consts import DEFAULT_DEVICE_SVG_PATH
 from .controller import ZonesDemoController
 from .models import ZonesDemoModel
 from .view import ZonesDemoView

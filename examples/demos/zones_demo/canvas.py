@@ -12,11 +12,14 @@
 
 A QGraphicsView has no stock TraitsUI equivalent, so this widget owns all
 scene painting and mouse interaction; the TraitsUI view embeds it through a
-``CustomEditor``. Everything it shows is driven by ``ZonesDemoModel`` traits
-via the Qt-free ``_CanvasRedrawBridge`` observers.
+``CustomEditor``. Zone regions and the pending-selection highlight use the
+shipped scene items (device_viewer.views.zone_view.zone_region_item), drawn
+in raw SVG coordinates (scale 1.0) since the demo has no separate view scale.
+Everything is driven by ``ZonesDemoModel``/``ZoneLayerManager`` traits via the
+Qt-free ``_CanvasRedrawBridge`` observers.
 """
 
-from pyface.qt.QtCore import QPointF, QRectF, Qt
+from pyface.qt.QtCore import QRectF, Qt
 from pyface.qt.QtGui import (
     QBrush,
     QColor,
@@ -25,7 +28,6 @@ from pyface.qt.QtGui import (
     QPainter,
     QPainterPath,
     QPen,
-    QPolygonF,
     QShortcut,
 )
 from pyface.qt.QtWidgets import (
@@ -39,6 +41,21 @@ from pyface.qt.QtWidgets import (
 )
 from traits.api import Callable, HasTraits, Instance, observe
 
+from device_viewer.consts import (
+    ZONE_CLICK_DRAG_THRESHOLD_PX,
+    ZONE_DRAW_MODE,
+    ZONE_OUTLINE_PEN_WIDTH,
+    ZONE_OVERLAY_MARGIN_PX,
+    ZONE_SELECT_MODE,
+    ZONE_SELECTED_OUTLINE_PEN_WIDTH,
+    ZONE_SUBTRACT_PREVIEW_COLOR,
+)
+from device_viewer.views.zone_view.zone_region_item import (
+    ZoneRegionItem,
+    make_selection_highlight_item,
+    shapely_geometry_to_painter_path,
+)
+
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_CANCEL,
@@ -50,57 +67,13 @@ from microdrop_style.icons.icons import (
 
 from microdrop_utils.traitsui_qt_helpers import DEFAULT_GLYPH_POINT_SIZE_PX
 
-from .consts import (
-    CAPTURE_PREVIEW_Z_VALUE,
-    COMMIT_OVERLAY_MARGIN_PX,
-    EDIT_MODE,
-    ELECTRODE_FILL_COLOR,
-    ELECTRODE_Z_VALUE,
-    SELECT_MODE,
-    SELECTED_ZONE_OUTLINE_PEN_WIDTH,
-    SUBTRACT_PREVIEW_COLOR,
-    ZONE_CLICK_DRAG_THRESHOLD_PX,
-    ZONE_DRAW_MODE,
-    ZONE_FILL_ALPHA,
-    ZONE_OUTLINE_PEN_WIDTH,
-    ZONE_REGION_Z_VALUE,
-)
+from .consts import ELECTRODE_FILL_COLOR, ELECTRODE_Z_VALUE
 from .models import ZonesDemoModel
 
-
-def shapely_geometry_to_painter_path(geometry):
-    """Polygon or MultiPolygon (SVG coords) -> QPainterPath, holes included."""
-    painter_path = QPainterPath()
-    for polygon in getattr(geometry, "geoms", [geometry]):
-        for ring in [polygon.exterior, *polygon.interiors]:
-            painter_path.addPolygon(QPolygonF([QPointF(x, y) for x, y in ring.coords]))
-            painter_path.closeSubpath()
-    return painter_path
-
-
-class ZoneRegionItem(QGraphicsPathItem):
-    """Filled, outlined union boundary of one ZoneRegion."""
-
-    def __init__(
-        self, region, geometry, color, outline_pen_width=ZONE_OUTLINE_PEN_WIDTH
-    ):
-        super().__init__(shapely_geometry_to_painter_path(geometry))
-        self.region = region
-        fill_color = QColor(color)
-        fill_color.setAlpha(ZONE_FILL_ALPHA)
-        self.setBrush(QBrush(fill_color))
-        outline_pen = QPen(QColor(color))
-        outline_pen.setCosmetic(True)
-        outline_pen.setWidth(outline_pen_width)
-        self.setPen(outline_pen)
-        self.setZValue(ZONE_REGION_Z_VALUE)
-
-    def shape(self):
-        # Default QGraphicsPathItem.shape() adds the pen stroke, and a
-        # COSMETIC pen's width counts in item coordinates — here several
-        # electrode-widths — so clicks would hit regions far outside their
-        # fill. Hit-test the fill alone.
-        return self.path()
+# Live rubber-band capture preview and the region-drag ghost draw above
+# committed regions and the pending-selection highlight (which the shipped
+# ZoneRegionItem/make_selection_highlight_item place at 0.5/0.6).
+DEMO_BAND_Z_VALUE = 0.7
 
 
 class _CanvasRedrawBridge(HasTraits):
@@ -133,7 +106,7 @@ class _CanvasRedrawBridge(HasTraits):
     def _pending_selection_changed(self, event):
         self.redraw_pending_selection()
 
-    @observe("[model:mode, model:show_canvas_overlays]")
+    @observe("[model:mode, model:manager:show_canvas_overlays]")
     def _mode_changed(self, event):
         self.apply_mode()
 
@@ -164,7 +137,7 @@ class ZonesCanvas(QGraphicsView):
         self._drag_region_item = None
         self._drag_ghost_item = None
         self._drag_start_scene_pos = None
-        # Ctrl+drag in draw/edit mode subtracts the swept electrodes from the
+        # Ctrl+drag in draw mode subtracts the swept electrodes from the
         # pending selection instead of adding them.
         self._band_subtracts = False
 
@@ -187,8 +160,8 @@ class ZonesCanvas(QGraphicsView):
         self._apply_mode()
 
     # -------------------------------------------------------------- overlays
-    # Floating button strips over the viewport. They only FIRE the demo
-    # model's Button traits — the behavior stays in the Qt-free controller,
+    # Floating button strips over the viewport. They only FIRE the shipped
+    # manager's Button traits — the behavior stays in the Qt-free controller,
     # exactly as if the matching sidebar button had been clicked.
     def _build_floating_overlay(self, button_specs):
         """Floating icon-button strip parented to the view's viewport;
@@ -218,12 +191,12 @@ class ZonesCanvas(QGraphicsView):
                 (
                     ICON_CHECK,
                     "Commit the selection as a zone region",
-                    lambda: setattr(self.model, "commit_button", True),
+                    lambda: setattr(self.manager, "commit_button", True),
                 ),
                 (
                     ICON_DELETE,
                     "Clear the selection without committing",
-                    lambda: setattr(self.model, "clear_pending_button", True),
+                    lambda: setattr(self.manager, "clear_pending_button", True),
                 ),
                 (
                     ICON_CANCEL,
@@ -231,7 +204,7 @@ class ZonesCanvas(QGraphicsView):
                         "Dismiss the canvas buttons — every action is also "
                         "in the sidebar; re-enable them there"
                     ),
-                    lambda: setattr(self.model, "show_canvas_overlays", False),
+                    lambda: setattr(self.manager, "show_canvas_overlays", False),
                 ),
             ]
         )
@@ -243,17 +216,17 @@ class ZonesCanvas(QGraphicsView):
                 (
                     ICON_EDIT,
                     "Edit the selected region's electrodes",
-                    lambda: setattr(self.model, "edit_region_button", True),
+                    lambda: setattr(self.manager, "edit_region_button", True),
                 ),
                 (
                     ICON_DELETE,
                     "Delete the selected region",
-                    lambda: setattr(self.model, "delete_region_button", True),
+                    lambda: setattr(self.manager, "delete_region_button", True),
                 ),
                 (
                     ICON_VISIBILITY_OFF,
                     "Hide the selected region (re-show it via the regions table)",
-                    lambda: setattr(self.model, "hide_region_button", True),
+                    lambda: setattr(self.manager, "hide_region_button", True),
                 ),
                 (
                     ICON_CANCEL,
@@ -261,7 +234,7 @@ class ZonesCanvas(QGraphicsView):
                         "Dismiss the canvas buttons — every action is also "
                         "in the sidebar; re-enable them there"
                     ),
-                    lambda: setattr(self.model, "show_canvas_overlays", False),
+                    lambda: setattr(self.manager, "show_canvas_overlays", False),
                 ),
             ]
         )
@@ -273,12 +246,12 @@ class ZonesCanvas(QGraphicsView):
         overlay.adjustSize()
         viewport = self.viewport()
         overlay_x = min(
-            max(anchor_view_pos.x() + COMMIT_OVERLAY_MARGIN_PX, 0),
+            max(anchor_view_pos.x() + ZONE_OVERLAY_MARGIN_PX, 0),
             viewport.width() - overlay.width(),
         )
         overlay_y = min(
             max(
-                anchor_view_pos.y() - overlay.height() - COMMIT_OVERLAY_MARGIN_PX,
+                anchor_view_pos.y() - overlay.height() - ZONE_OVERLAY_MARGIN_PX,
                 0,
             ),
             viewport.height() - overlay.height(),
@@ -287,15 +260,14 @@ class ZonesCanvas(QGraphicsView):
 
     # ------------------------------------------------------------------ mode
     def _apply_mode(self):
-        # The floating button sets are mode-gated (commit set in draw/edit,
+        # The floating button sets are mode-gated (commit set in draw,
         # selection set in select, one at a time) — re-evaluate both so
         # leaving a mode clears its buttons.
         self._redraw_pending_selection()
         self._redraw_zone_items()
-        # Edit mode is draw-mode interaction over an existing region.
-        if self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE):
+        if self.model.mode == ZONE_DRAW_MODE:
             self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-        elif self.model.mode == SELECT_MODE:
+        elif self.model.mode == ZONE_SELECT_MODE:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
         else:
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -308,7 +280,7 @@ class ZonesCanvas(QGraphicsView):
         self._drag_preview_item = None
         for polygon in self.manager.electrode_polygons.values():
             electrode_item = QGraphicsPathItem(
-                shapely_geometry_to_painter_path(polygon)
+                shapely_geometry_to_painter_path(polygon, 1.0)
             )
             electrode_item.setBrush(QBrush(QColor(ELECTRODE_FILL_COLOR)))
             electrode_item.setPen(QPen(Qt.PenStyle.NoPen))
@@ -324,12 +296,12 @@ class ZonesCanvas(QGraphicsView):
             self._pending_rubber_band_scene_rect = QRectF(
                 from_scene_point, to_scene_point
             ).normalized()
-            if self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE):
+            if self.model.mode == ZONE_DRAW_MODE:
                 self._preview_rubber_band(self._pending_rubber_band_scene_rect)
         elif self._pending_rubber_band_scene_rect is not None:
             committed_rect = self._pending_rubber_band_scene_rect
             self._pending_rubber_band_scene_rect = None
-            if self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE):
+            if self.model.mode == ZONE_DRAW_MODE:
                 self._clear_drag_preview()
                 captured_ids = self.manager.capture_electrode_ids_touching(
                     committed_rect.left(),
@@ -341,7 +313,7 @@ class ZonesCanvas(QGraphicsView):
                     self.manager.remove_from_pending(captured_ids)
                 else:
                     self.manager.add_to_pending(captured_ids)
-            elif self.model.mode == SELECT_MODE:
+            elif self.model.mode == ZONE_SELECT_MODE:
                 captured = set(
                     self.manager.capture_electrode_ids_touching(
                         committed_rect.left(),
@@ -359,14 +331,15 @@ class ZonesCanvas(QGraphicsView):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._press_view_pos = event.pos()
-            # Ctrl+drag in draw/edit sweeps electrodes OUT of the pending
+            # Ctrl+drag in draw mode sweeps electrodes OUT of the pending
             # selection; in select mode ctrl is the multi-select gesture
             # instead, so the two never clash.
-            self._band_subtracts = bool(
-                event.modifiers() & Qt.KeyboardModifier.ControlModifier
-            ) and self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE)
+            self._band_subtracts = (
+                bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+                and self.model.mode == ZONE_DRAW_MODE
+            )
             # Ctrl is the multi-select gesture — never a drag.
-            if self.model.mode == SELECT_MODE and not (
+            if self.model.mode == ZONE_SELECT_MODE and not (
                 event.modifiers() & Qt.KeyboardModifier.ControlModifier
             ):
                 self._drag_region_item = next(
@@ -408,7 +381,7 @@ class ZonesCanvas(QGraphicsView):
                 ghost_pen = QPen(self._drag_region_item.pen())
                 ghost_pen.setStyle(Qt.PenStyle.DashLine)
                 ghost.setPen(ghost_pen)
-                ghost.setZValue(CAPTURE_PREVIEW_Z_VALUE)
+                ghost.setZValue(DEMO_BAND_Z_VALUE)
                 self.scene().addItem(ghost)
                 self._drag_ghost_item = ghost
             delta = self.mapToScene(event.pos()) - self._drag_start_scene_pos
@@ -434,7 +407,7 @@ class ZonesCanvas(QGraphicsView):
                 self.manager.translate_regions(selection, delta.x(), delta.y())
             else:
                 self.manager.selected_region = region
-                self.manager.translate_region(region, delta.x(), delta.y())
+                self.manager.translate_regions([region], delta.x(), delta.y())
             self._press_view_pos = None
             return
         is_click = (
@@ -443,12 +416,12 @@ class ZonesCanvas(QGraphicsView):
             and (event.pos() - self._press_view_pos).manhattanLength()
             < ZONE_CLICK_DRAG_THRESHOLD_PX
         )
-        if is_click and self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE):
+        if is_click and self.model.mode == ZONE_DRAW_MODE:
             scene_pos = self.mapToScene(event.pos())
             electrode_id = self.manager.electrode_id_at(scene_pos.x(), scene_pos.y())
             if electrode_id is not None:
                 self.manager.toggle_electrode_in_pending(electrode_id)
-        elif is_click and self.model.mode == SELECT_MODE:
+        elif is_click and self.model.mode == ZONE_SELECT_MODE:
             # Topmost region under the cursor, or None to deselect.
             clicked_region = next(
                 (
@@ -464,7 +437,7 @@ class ZonesCanvas(QGraphicsView):
                 self.manager.selected_region = clicked_region
         self._press_view_pos = None
         self._drag_region_item = None
-        if self.model.mode == SELECT_MODE:
+        if self.model.mode == ZONE_SELECT_MODE:
             # Fall back to NoDrag after a rubber-band multi-select — a press
             # on empty space temporarily switched into RubberBandDrag above.
             self._apply_mode()
@@ -472,7 +445,7 @@ class ZonesCanvas(QGraphicsView):
     def mouseDoubleClickEvent(self, event):
         if (
             event.button() == Qt.MouseButton.LeftButton
-            and self.model.mode == SELECT_MODE
+            and self.model.mode == ZONE_SELECT_MODE
         ):
             region = next(
                 (
@@ -484,7 +457,7 @@ class ZonesCanvas(QGraphicsView):
             )
             if region is not None:
                 self.manager.selected_region = region
-                self.model.edit_region_button = True
+                self.manager.edit_region_button = True
                 return
         super().mouseDoubleClickEvent(event)
 
@@ -555,7 +528,7 @@ class ZonesCanvas(QGraphicsView):
         # Select first — the edit flow (and its mode gate) acts on the
         # selected region, same as the overlay/sidebar Edit buttons.
         self.manager.selected_region = region
-        self.model.edit_region_button = True
+        self.manager.edit_region_button = True
 
     # -------------------------------------------------------------- painting
     def _make_selection_highlight_item(self, electrode_ids, color=None):
@@ -567,26 +540,10 @@ class ZonesCanvas(QGraphicsView):
             if zone_type is None:
                 return None
             color = zone_type.color
-        if not electrode_ids:
+        geometry = self.manager.electrode_union(electrode_ids)
+        if geometry is None:
             return None
-        highlight_path = QPainterPath()
-        for electrode_id in electrode_ids:
-            highlight_path.addPath(
-                shapely_geometry_to_painter_path(
-                    self.manager.electrode_polygons[electrode_id]
-                )
-            )
-        highlight_item = QGraphicsPathItem(highlight_path)
-        highlight_fill_color = QColor(color)
-        highlight_fill_color.setAlpha(ZONE_FILL_ALPHA)
-        highlight_item.setBrush(QBrush(highlight_fill_color))
-        highlight_pen = QPen(QColor(color))
-        highlight_pen.setCosmetic(True)
-        highlight_pen.setWidth(2)
-        highlight_pen.setStyle(Qt.PenStyle.DashLine)
-        highlight_item.setPen(highlight_pen)
-        highlight_item.setZValue(CAPTURE_PREVIEW_Z_VALUE)
-        return highlight_item
+        return make_selection_highlight_item(geometry, 1.0, color)
 
     def _preview_rubber_band(self, preview_rect):
         """Live drag feedback: highlight the electrodes the rubber band would
@@ -599,7 +556,7 @@ class ZonesCanvas(QGraphicsView):
                 preview_rect.right(),
                 preview_rect.bottom(),
             ),
-            color=SUBTRACT_PREVIEW_COLOR if self._band_subtracts else None,
+            color=ZONE_SUBTRACT_PREVIEW_COLOR if self._band_subtracts else None,
         )
         if self._drag_preview_item is not None:
             self.scene().addItem(self._drag_preview_item)
@@ -618,11 +575,11 @@ class ZonesCanvas(QGraphicsView):
         )
         if self._pending_selection_item is not None:
             self.scene().addItem(self._pending_selection_item)
-        # The commit buttons belong to the drawing modes only.
+        # The commit buttons belong to draw mode only.
         if (
             self._pending_selection_item is not None
-            and self.model.show_canvas_overlays
-            and self.model.mode in (ZONE_DRAW_MODE, EDIT_MODE)
+            and self.manager.show_canvas_overlays
+            and self.model.mode == ZONE_DRAW_MODE
         ):
             self._position_overlay(
                 self._commit_overlay,
@@ -652,9 +609,11 @@ class ZonesCanvas(QGraphicsView):
             region_item = ZoneRegionItem(
                 region,
                 outline_geometry,
+                1.0,
                 zone_type.color,
+                1.0,
                 outline_pen_width=(
-                    SELECTED_ZONE_OUTLINE_PEN_WIDTH
+                    ZONE_SELECTED_OUTLINE_PEN_WIDTH
                     if is_selected
                     else ZONE_OUTLINE_PEN_WIDTH
                 ),
@@ -666,8 +625,8 @@ class ZonesCanvas(QGraphicsView):
         # The edit/delete/hide buttons belong to select mode only.
         if (
             selected_region_item is not None
-            and self.model.show_canvas_overlays
-            and self.model.mode == SELECT_MODE
+            and self.manager.show_canvas_overlays
+            and self.model.mode == ZONE_SELECT_MODE
         ):
             self._position_overlay(
                 self._selection_overlay,
