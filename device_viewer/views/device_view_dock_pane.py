@@ -1456,10 +1456,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
         )
 
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
-        )
-
         # Camera Alignment: the manual per-device endpoint workflow.
         # Lives right under the camera-control button grid.
         alignment_widget = QWidget()
@@ -1514,6 +1510,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         self.execution_settings_box.set_expanded(False)
         self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
+
+        scroll_layout.addWidget(
+            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
+        )
+
         scroll_layout.addWidget(
             CollapsibleVStackBox(
                 "Paths",
