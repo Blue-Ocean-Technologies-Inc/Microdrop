@@ -12,7 +12,7 @@
 mode transitions become ZoneLayerManager calls."""
 
 # Enthought library imports.
-from traits.api import HasTraits, Instance, observe
+from traits.api import HasTraits, Instance, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm
@@ -28,11 +28,18 @@ logger = get_logger(__name__)
 
 
 class ZonesController(HasTraits):
+    #: Device view whose mode/zones this controller keeps in sync.
     model = Instance(DeviceViewMainModel)
+
+    #: Device-view mode in use before the zone tools were entered; Off
+    #: returns to it (model.last_mode is clobbered by zone→zone switches).
+    _mode_before_zone_tools = Str("draw")
 
     # ----------------------------------------------------------------- tool
     @observe("model:mode")
     def _mirror_mode_to_tool(self, event):
+        if event.new in ZONE_MODES and event.old not in ZONE_MODES:
+            self._mode_before_zone_tools = event.old
         # The sidebar radio shows Off whenever another device tool is active.
         self.model.zones.mode = event.new if event.new in ZONE_MODES else ""
 
@@ -43,8 +50,7 @@ class ZonesController(HasTraits):
                 self.model.mode = event.new
         elif self.model.mode in ZONE_MODES:
             # Off: return to the tool in use before the zone tools.
-            last_mode = self.model.last_mode
-            self.model.mode = last_mode if last_mode not in ZONE_MODES else "draw"
+            self.model.mode = self._mode_before_zone_tools
 
     # ----------------------------------------------------------------- draw
     @observe("model:zones:commit_button")
