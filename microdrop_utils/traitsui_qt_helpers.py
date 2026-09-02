@@ -12,89 +12,95 @@ import html
 import math
 
 from PySide6.QtWidgets import QToolButton
+
+from pyface.qt import QtWidgets
 from pyface.qt.QtCore import (
-    Qt,
-    QSize,
-    QPoint,
-    QPointF,
-    QRectF,
-    QObject,
-    QEvent,
-    QEasingCurve,
-    QPropertyAnimation,
-    QSequentialAnimationGroup,
-    Slot,
     Property as QtProperty,  # aliased: traits.api.Property (below) shadows it
 )
+from pyface.qt.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSequentialAnimationGroup,
+    QSize,
+    Qt,
+    Slot,
+)
 from pyface.qt.QtGui import (
+    QBrush,
     QColor,
     QCursor,
     QFont,
-    QShortcut,
     QKeySequence,
-    QPixmap,
-    QBrush,
+    QPainter,
     QPaintEvent,
     QPen,
-    QPainter,
+    QPixmap,
+    QShortcut,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate,
-    QDoubleSpinBox,
-    QCheckBox,
-    QPushButton,
     QBoxLayout,
+    QCheckBox,
+    QDoubleSpinBox,
     QGroupBox,
     QLabel,
+    QPushButton,
     QSizePolicy,
 )
-from pyface.qt import QtWidgets
-
 from traits.api import (
-    Instance,
     Any,
     Bool,
-    Range,
-    List,
-    Str,
-    Int,
-    Property,
-    Float,
     Callable,
+    Float,
+    Int,
+    List,
+    Property,
+    Range,
+    Str,
+)
+from traitsui.api import (
+    BasicEditorFactory,
+    Controller,
+    EnumEditor,
+    Handler,
+    RangeEditor,
+    UIInfo,
 )
 from traitsui.api import (
     ObjectColumn as ObjectTableColumn_,
-    TableColumn as TableColumn_,
-    Controller,
-    UIInfo,
-    Handler,
-    RangeEditor,
-    EnumEditor,
-    BasicEditorFactory,
 )
+from traitsui.api import (
+    TableColumn as TableColumn_,
+)
+from traitsui.qt.color_editor import ToolkitEditorFactory as QtColorEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import (
-    WHITE,
-    BLACK,
-    PRIMARY_COLOR,
-    GREY,
     ACCENT_COLOR,
+    BLACK,
+    GREY,
+    PRIMARY_COLOR,
     SUCCESS_COLOR,
+    WHITE,
 )
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import (
+    ICON_DESELECT,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
     ICON_SELECT_All,
-    ICON_DESELECT,
 )
+
 from microdrop_utils.pyside_helpers import (
+    MarqueeComboBox,
     _ClickablePixmapLabel,
     _ScalingPixmapLabel,
-    MarqueeComboBox,
 )
 
 from logger.logger_service import get_logger
@@ -204,6 +210,18 @@ class ColorColumn(ObjectColumn):
         # Color/QColor trait (whose str() QColor cannot parse) becomes one.
         if self.format_func is None:
             self.format_func = lambda value: QColor(value).name()
+
+
+class HexColorEditorFactory(QtColorEditorFactory):
+    """ColorEditor over a plain hex-string trait (e.g. ``Str("#f5e050")``):
+    the picker round-trips QColor <-> '#rrggbb' so Qt-free models keep
+    serializable hex strings instead of a toolkit Color trait."""
+
+    def to_qt_color(self, editor):
+        return QColor(getattr(editor.object, editor.name))
+
+    def from_qt_color(self, color):
+        return color.name()
 
 
 class CustomCheckboxColumn(ObjectColumn):
@@ -742,7 +760,8 @@ def make_table_row_header_resizable(table_view):
 
 class SafeCancelTableHandler(Handler):
     """
-    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
+    In tables, we want the cancel event not to close the view. Instead it
+    should deselect all elements.
     """
 
     escape_shortcut = Any()
@@ -768,7 +787,8 @@ class SafeCancelTableHandler(Handler):
 
 class SafeCancelTableController(Controller):
     """
-    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
+    In tables, we want the cancel event not to close the view. Instead it
+    should deselect all elements.
     """
 
     escape_shortcut = Any()
