@@ -120,6 +120,7 @@ from ..services.electrode_interaction_service import (
 )
 from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.gamepad_interaction_service import GamepadInteractionService
+from ..services.interaction.pointer_state import PointerState
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
@@ -1204,9 +1205,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         # The gamepad service polls against the old device; rebuilt below.
         self._release_gamepad_service()
 
-        # One stepping service per loaded device, shared by the keyboard
-        # handlers and the gamepad so both move the same electrode cursor.
-        stepping = ElectrodeSteppingService(model=new_model)
+        # One pointer state and one stepping service per loaded device, shared
+        # by the mouse handlers, the keyboard, and the gamepad so every input
+        # moves the same electrode cursor.
+        pointer = PointerState()
+        stepping = ElectrodeSteppingService(model=new_model, pointer=pointer)
 
         # Initialize the electrode mouse / key interaction service with the
         # new model and layer
@@ -1215,6 +1218,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             electrode_view_layer=self.current_electrode_layer,
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
+            pointer=pointer,
             stepping=stepping,
         )
 

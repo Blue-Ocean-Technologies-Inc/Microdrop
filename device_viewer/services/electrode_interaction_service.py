@@ -10,7 +10,6 @@
 
 import json
 
-from PySide6.QtCore import QPointF
 from PySide6.QtGui import QAction, QKeyEvent, Qt, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsSceneContextMenuEvent,
@@ -26,7 +25,6 @@ from traits.api import (
     Dict,
     HasTraits,
     Instance,
-    List,
     Str,
     observe,
 )
@@ -59,6 +57,9 @@ from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
 from .electrode_stepping_service import ElectrodeSteppingService
+from .interaction.camera_handler import CameraInteractionHandler
+from .interaction.handler import InteractionHandler
+from .interaction.pointer_state import PointerState
 
 from logger.logger_service import get_logger
 
@@ -74,6 +75,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     more application specific events.
     Note that this is not an Envisage or Pyface callback/handler class, and is only
     called manually from the ElectrodeScene class.
+
+    Mode-specific handling lives in one InteractionHandler per mode family
+    (``services/interaction/``); this service routes each scene event to the
+    handler for ``model.mode`` and keeps only what every mode shares.
 
     The following should be passed as kwargs to the constructor:
     - model: The main model instance.
@@ -98,26 +103,21 @@ class ElectrodeInteractionControllerService(HasTraits):
     #: gamepad service so both inputs move the same cursor
     stepping = Instance(ElectrodeSteppingService)
 
+    #: Mouse-button state and the electrode the pointer last touched; shared
+    #: with the stepping service and the mode handlers
+    pointer = Instance(PointerState)
+
+    #: Mode handlers keyed by the mode value they serve. A mode without one
+    #: falls through to the inline handling below until it is migrated (#639).
+    handlers = Dict(Str, Instance(InteractionHandler))
+
     autoroute_paths = Dict({})
 
     electrode_hovered = Instance(ElectrodeView)
 
-    rect_editing_index = -1  # Index of the point being edited in the reference rect
-    rect_buffer = List(Instance(QPointF), [])
-
-    #: state data fields
-    _last_electrode_id_visited = DelegatesTo("stepping", "last_electrode_id_visited")
-
-    _left_mouse_pressed = Bool(False)
-    _right_mouse_pressed = Bool(False)
-
-    _edit_reference_rect = Bool(
-        False, desc="Is the reference rect editable without affecting perpective."
-    )
+    _last_electrode_id_visited = DelegatesTo("pointer", "last_electrode_id_visited")
 
     _electrode_tooltip_visible = Bool(True)
-
-    _is_drag = Bool(False, desc="Is user dragging the pointer on screen")
 
     #######################################################################################################
     # Helpers
@@ -129,6 +129,18 @@ class ElectrodeInteractionControllerService(HasTraits):
         # rotation loaded from preferences to the view now that both the
         # QGraphicsView and the electrode layer are bound.
         self._apply_persisted_device_rotation()
+
+        for handler_class in (CameraInteractionHandler,):
+            handler = handler_class(
+                model=self.model,
+                electrode_view_layer=self.electrode_view_layer,
+                device_view=self.device_view,
+                device_viewer_preferences=self.device_viewer_preferences,
+                pointer=self.pointer,
+                stepping=self.stepping,
+            )
+            for mode in handler.modes:
+                self.handlers[mode] = handler
 
     def _apply_persisted_device_rotation(self) -> None:
         """Apply the persisted rotation angle to the QGraphicsView.
@@ -207,64 +219,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         )
 
     #######################################################################################################
-    # Perspective Handlers
+    # Rotation Handlers
     #######################################################################################################
-
-    def handle_reference_point_placement(self, point: QPointF):
-        """Handle the placement of a reference point for perspective correction."""
-        # Add the new point to the reference rect
-        self.rect_buffer.append(point)
-
-    def handle_perspective_edit_start(self, point: QPointF):
-        """Handle the start of perspective editing."""
-        closest_point, closest_index = self.model.camera_perspective.get_closest_point(
-            point
-        )
-        self.rect_editing_index = (
-            closest_index  # Store the index of the point being edited
-        )
-
-    def handle_perspective_edit(self, point: QPointF):
-        """Handle the editing of a reference point during perspective correction."""
-
-        # check if we are editing just the reference rect buffer or the actual rect
-        # tied to transforming perspective
-        if self._edit_reference_rect:
-            logger.debug("Only reference rect buffer changed")
-            if not self.rect_buffer:
-                self.rect_buffer = (
-                    self.model.camera_perspective.transformed_reference_rect.copy()
-                )
-            rect_to_edit = self.rect_buffer
-        else:
-            logger.debug("Reference rect tied to perspective transform changed")
-            rect_to_edit = self.model.camera_perspective.transformed_reference_rect
-
-        rect_to_edit[self.rect_editing_index] = point
-
-    def handle_perspective_edit_end(self):
-        """Finalize the perspective editing."""
-        self.rect_editing_index = -1
 
     def handle_rotate_device(self):
         self._rotate_device_view(90)
 
     def handle_rotate_camera(self):
         self.model.camera_perspective.rotate_output(90)
-
-    def handle_toggle_edit_reference_rect(self):
-        if self._edit_reference_rect:
-            logger.info(
-                "Toggling reference rect edit mode off. Changed will affect "
-                "camera perspective"
-            )
-        else:
-            logger.info(
-                "Toggling reference rect edit mode on. Changed will not affect "
-                "camera perspective"
-            )
-
-        self._edit_reference_rect = not self._edit_reference_rect
 
     #######################################################################################################
     # Electrode Handlers
@@ -518,6 +480,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     ##########################################################################################
 
     def handle_key_press_event(self, event: QKeyEvent):
+        handler = self.handlers.get(self.model.mode)
+        if handler is not None and handler.key_press(event):
+            return
+
         key = event.key()
 
         # Arrow-key stepping (keyboard).
@@ -589,9 +555,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
         if button == Qt.LeftButton:
-            self._left_mouse_pressed = True
+            self.pointer.left_pressed = True
+            handler = self.handlers.get(mode)
 
-            if mode in ("edit", "draw", "edit-draw"):
+            if handler is not None:
+                handler.mouse_press(event, electrode_view)
+
+            elif mode in ("edit", "draw", "edit-draw"):
                 if electrode_view:
                     self._last_electrode_id_visited = electrode_view.id
 
@@ -606,14 +576,8 @@ class ElectrodeInteractionControllerService(HasTraits):
                 if electrode_view:
                     self.handle_electrode_channel_editing(electrode_view.electrode)
 
-            elif mode == "camera-place":
-                self.handle_reference_point_placement(event.scenePos())
-
-            elif mode == "camera-edit":
-                self.handle_perspective_edit_start(event.scenePos())
-
         elif button == Qt.RightButton:
-            self._right_mouse_pressed = True
+            self.pointer.right_pressed = True
             if electrode_view:
                 self.model.electrodes.electrode_right_clicked = electrode_view.electrode
             else:
@@ -625,8 +589,12 @@ class ElectrodeInteractionControllerService(HasTraits):
         mode = self.model.mode
         electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
         self.handle_electrode_hover(electrode_view)
+        handler = self.handlers.get(mode)
 
-        if self._left_mouse_pressed:
+        if handler is not None:
+            handler.mouse_move(event, electrode_view)
+
+        elif self.pointer.left_pressed:
             # Only proceed if we are in the appropriate mode with a valid electrode
             # view. If last electrode view is none then no electrode was clicked yet
             # (for example, first click was not on electrode)
@@ -648,7 +616,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                     )
                     # Since more than one electrode is left clicked, its a drag, not
                     # a single electrode click
-                    self._is_drag = True
+                    self.pointer.is_drag = True
 
             elif mode == "auto" and electrode_view:
                 # only proceed if a new electrode id was visited
@@ -657,10 +625,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                         electrode_view.id
                     )  # We store last_electrode_id_visited as the source node
 
-            elif mode == "camera-edit":
-                self.handle_perspective_edit(event.scenePos())
-
-        if self._right_mouse_pressed:
+        if handler is None and self.pointer.right_pressed:
             if (
                 mode in ("edit", "draw", "edit-draw")
                 and event.modifiers() & Qt.ControlModifier
@@ -687,15 +652,19 @@ class ElectrodeInteractionControllerService(HasTraits):
         button = event.button()
 
         if button == Qt.LeftButton:
-            self._left_mouse_pressed = False
+            self.pointer.left_pressed = False
             mode = self.model.mode
-            if mode == "auto":
+            electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
+            handler = self.handlers.get(mode)
+            if handler is not None:
+                handler.mouse_release(event, electrode_view)
+
+            elif mode == "auto":
                 self.handle_autoroute_end()
 
             elif mode in ("edit", "draw", "edit-draw"):
-                electrode_view = self.get_electrode_view_for_scene_pos(event.scenePos())
                 # If it's a click (not a drag) since only one electrode selected:
-                if not self._is_drag and electrode_view:
+                if not self.pointer.is_drag and electrode_view:
                     self.handle_electrode_click(electrode_view.id)
 
                     # The rig's touchscreen has no hover — surface the
@@ -707,14 +676,12 @@ class ElectrodeInteractionControllerService(HasTraits):
                         QToolTip.showText(event.screenPos(), electrode_view.toolTip())
 
                 # Reset left-click related vars
-                self._is_drag = False
+                self.pointer.is_drag = False
 
                 if mode == "edit-draw":  # Go back to draw
                     self.model.mode = "draw"
-            elif mode == "camera-edit":
-                self.handle_perspective_edit_end()
         elif button == Qt.RightButton:
-            self._right_mouse_pressed = False
+            self.pointer.right_pressed = False
 
     def handle_scene_wheel_event(self, event: "QGraphicsSceneWheelEvent"):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -748,32 +715,12 @@ class ElectrodeInteractionControllerService(HasTraits):
             event.modifiers() & Qt.ControlModifier
         ):  # If control is pressed, we do not show the context menu
             context_menu = QMenu()
+            handler = self.handlers.get(self.model.mode)
 
-            if self.model.mode.split("-")[0] == "camera":
-
-                def set_camera_place_mode():
-                    self.model.mode = "camera-place"
-
-                reference_rect_edit_action = QAction(
-                    "Edit Reference Rect",
-                    checkable=True,
-                    checked=self._edit_reference_rect,
-                    toolTip=(
-                        "Edit Reference Rectangle without changing camera perspective"
-                    ),
-                )
-
-                reference_rect_edit_action.triggered.connect(
-                    self.handle_toggle_edit_reference_rect
-                )
-
-                context_menu.addAction(
-                    "Reset Reference Rectangle", set_camera_place_mode
-                )
-                context_menu.addAction(reference_rect_edit_action)
-                context_menu.addSeparator()
-
-            else:
+            if not (
+                handler is not None
+                and handler.populate_context_menu(context_menu, event)
+            ):
                 context_menu.addAction(
                     "Measure Liquid Capacitance", self.model.measure_liquid_capacitance
                 )
@@ -931,64 +878,14 @@ class ElectrodeInteractionControllerService(HasTraits):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_electrode_labels(self.model)
 
-    @observe("model:camera_perspective:transformed_reference_rect")
-    def _reference_rect_change(self, event):
-        logger.debug(f"Reference rectangle change: {event}")
-        if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
-            self.electrode_view_layer.redraw_reference_rect(rect=event.new)
-
-    @observe("model:camera_perspective:transformed_reference_rect:items")
-    def _reference_rect_items_change(self, event):
-        logger.debug(f"Reference rectangle items change: {event}")
-        if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
-            self.electrode_view_layer.redraw_reference_rect(rect=event.object)
-
-    @observe("rect_buffer:items")
-    def _rect_buffer_change(self, event):
-        logger.debug(
-            f"rect_buffer change: adding point {event.added}. "
-            f"Buffer of length {len(self.rect_buffer)} now."
-        )
-        if len(self.rect_buffer) == 4:  # We have a rectangle now
-            inverse = self.model.camera_perspective.transformation.inverted()[
-                0
-            ]  # Get the inverse of the existing transformation matrix
-            self.model.camera_perspective.reference_rect = [
-                inverse.map(point) for point in event.object
-            ]
-            self.model.camera_perspective.transformed_reference_rect = (
-                self.rect_buffer.copy()
-            )
-
-            # User may have already completed the reference rectangle and in edit mode.
-            # sometimes user is just editing a completed rect_buffer when
-            # edit_reference_rect is enabled
-            # Only need to do this and give log message when its the first time the
-            # reference rect is completed.
-            if self.model.mode != "camera-edit":
-                logger.info(
-                    "Reference rectangle complete!\n"
-                    "Proceed to camera perspective editing!!"
-                )
-                self.model.mode = (
-                    "camera-edit"  # Switch to camera-edit mode if not already there
-                )
-
-        else:
-            self.electrode_view_layer.redraw_reference_rect(rect=event.object)
-
     @observe("model:mode")
     def _on_mode_change(self, event):
-        if event.old in ("camera-edit", "camera-place") and event.new != "camera-edit":
-            self.electrode_view_layer.clear_reference_rect()
-
-        if event.new == "camera-edit":
-            self.electrode_view_layer.redraw_reference_rect(
-                self.model.camera_perspective.transformed_reference_rect
-            )
-
-        if event.old != "camera-place" and event.new == "camera-place":
-            self.rect_buffer.clear()
+        old_handler = self.handlers.get(event.old)
+        if old_handler is not None:
+            old_handler.on_exit(event.old, event.new)
+        new_handler = self.handlers.get(event.new)
+        if new_handler is not None:
+            new_handler.on_enter(event.new, event.old)
 
         if event.new == "pan" or event.old == "pan":
             self._apply_pan_mode()

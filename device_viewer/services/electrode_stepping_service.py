@@ -14,6 +14,9 @@ from traits.api import HasTraits, Instance, Str
 # Microdrop package imports.
 from device_viewer.models.main_model import DeviceViewMainModel
 
+# Local imports.
+from .interaction.pointer_state import PointerState
+
 
 class ElectrodeSteppingService(HasTraits):
     """Move, grow, shrink, and split the actuated electrodes by direction.
@@ -27,9 +30,9 @@ class ElectrodeSteppingService(HasTraits):
     #: Device view Model
     model = Instance(DeviceViewMainModel)
 
-    #: The electrode a step moves from when nothing is actuated; the pointer
-    #: handlers keep it at the last clicked / dragged electrode.
-    last_electrode_id_visited = Str(allow_none=True)
+    #: Where the electrode cursor is; a step moves from it when nothing is
+    #: actuated and leaves it on the electrode stepped to.
+    pointer = Instance(PointerState)
 
     # NOTE: Traits `Str` does not accept None reliably; use "" as the unset sentinel.
     _split_axis = Str("", desc="Split axis: 'h' or 'v'. Empty means unset.")
@@ -153,8 +156,8 @@ class ElectrodeSteppingService(HasTraits):
         active_ids = self.get_active_electrode_ids()
         if not active_ids:
             # Fallback: if user hasn't actuated anything, try last visited.
-            if self.last_electrode_id_visited:
-                active_ids = {self.last_electrode_id_visited}
+            if self.pointer.last_electrode_id_visited:
+                active_ids = {self.pointer.last_electrode_id_visited}
             else:
                 return
 
@@ -172,7 +175,7 @@ class ElectrodeSteppingService(HasTraits):
             self.apply_active_electrode_ids(new_ids)
             # Update "current" electrode for subsequent steps.
             # Pick one of the moved electrodes (arbitrary but stable).
-            self.last_electrode_id_visited = next(iter(new_ids))
+            self.pointer.last_electrode_id_visited = next(iter(new_ids))
 
     def extend_active_electrodes(self, direction: str) -> None:
         """
@@ -184,21 +187,21 @@ class ElectrodeSteppingService(HasTraits):
 
         active_ids = self.get_active_electrode_ids()
         if not active_ids:
-            if self.last_electrode_id_visited:
-                active_ids = {self.last_electrode_id_visited}
+            if self.pointer.last_electrode_id_visited:
+                active_ids = {self.pointer.last_electrode_id_visited}
             else:
                 return
 
         svg = getattr(self.model.electrodes, "svg_model", None)
         centers = getattr(svg, "electrode_centers", None) if svg else None
         if not centers:
-            base = self.last_electrode_id_visited or next(iter(active_ids))
+            base = self.pointer.last_electrode_id_visited or next(iter(active_ids))
             nid = self._neighbor_in_direction(base, direction)
             if nid:
                 desired = set(active_ids)
                 desired.add(nid)
                 self.apply_active_electrode_ids(desired)
-                self.last_electrode_id_visited = nid
+                self.pointer.last_electrode_id_visited = nid
             return
 
         dx, dy = self._direction_vec(direction)
@@ -225,7 +228,7 @@ class ElectrodeSteppingService(HasTraits):
         if additions:
             desired = set(active_ids) | additions
             self.apply_active_electrode_ids(desired)
-            self.last_electrode_id_visited = next(iter(additions))
+            self.pointer.last_electrode_id_visited = next(iter(additions))
 
     def shrink_active_electrodes(self, direction: str) -> None:
         """
@@ -249,9 +252,12 @@ class ElectrodeSteppingService(HasTraits):
         centers = getattr(svg, "electrode_centers", None) if svg else None
         if not centers:
             # No geometry; remove the last visited if active.
-            if self.last_electrode_id_visited in active_ids and len(active_ids) > 1:
+            if (
+                self.pointer.last_electrode_id_visited in active_ids
+                and len(active_ids) > 1
+            ):
                 desired = set(active_ids)
-                desired.remove(self.last_electrode_id_visited)
+                desired.remove(self.pointer.last_electrode_id_visited)
                 self.apply_active_electrode_ids(desired)
             return
 
@@ -277,7 +283,7 @@ class ElectrodeSteppingService(HasTraits):
             return
 
         self.apply_active_electrode_ids(desired)
-        self.last_electrode_id_visited = next(iter(desired))
+        self.pointer.last_electrode_id_visited = next(iter(desired))
 
     def reset_split_state(self) -> None:
         self._split_axis = ""
@@ -424,14 +430,14 @@ class ElectrodeSteppingService(HasTraits):
                 desired_all |= set(sess.get("right_ids") or set())
             if any_change and desired_all:
                 self.apply_active_electrode_ids(desired_all)
-                self.last_electrode_id_visited = next(iter(desired_all))
+                self.pointer.last_electrode_id_visited = next(iter(desired_all))
                 return
 
             # Fully contracted: merge back to the original pre-split selection.
             if not any_change and self._split_base_ids:
                 base_ids = set(self._split_base_ids)
                 self.apply_active_electrode_ids(base_ids)
-                self.last_electrode_id_visited = next(iter(base_ids))
+                self.pointer.last_electrode_id_visited = next(iter(base_ids))
 
                 # Reinitialize sessions from the merged state so the next expand
                 # starts cleanly.
@@ -551,5 +557,5 @@ class ElectrodeSteppingService(HasTraits):
 
         if moved_any and desired_all:
             self.apply_active_electrode_ids(desired_all)
-            self.last_electrode_id_visited = next(iter(desired_all))
+            self.pointer.last_electrode_id_visited = next(iter(desired_all))
         return
