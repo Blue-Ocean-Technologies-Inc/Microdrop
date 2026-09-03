@@ -13,8 +13,16 @@ ZoneLayerManager: the tool grid, the zone types table, and the regions
 table. Standalone: ``manager.edit_traits(view=zones_view)``."""
 
 # Enthought library imports.
-from traitsui.api import CustomEditor, HGroup, Item, TableEditor, UItem, VGroup, View
-from traitsui.key_bindings import KeyBinding, KeyBindings
+from traitsui.api import (
+    CustomEditor,
+    HGroup,
+    Spring,
+    TableEditor,
+    UItem,
+    VGroup,
+    View,
+    spring,
+)
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_DELETE
@@ -31,18 +39,11 @@ from microdrop_utils.traitsui_qt_helpers import (
 
 # Local imports.
 from ...consts import ZONE_SELECT_MODE
-from .zone_tool_picker import zone_tool_picker_factory
-
-
-class ZonesSidebarHandler(SafeCancelTableHandler):
-    def handle_return_key(self, info):
-        """Enter anywhere in the section adds a zone type (the controller
-        ignores an empty name). Named to avoid colliding with
-        ``ZoneLayerManager.add_zone_type`` — ``info.object`` is that manager,
-        and TraitsUI's KeyBindings resolves a method name against it before
-        this handler."""
-        info.object.add_zone_type_button = True
-
+from .zone_tool_picker import (
+    add_zone_type_button_factory,
+    canvas_overlays_toggle_factory,
+    zone_tool_picker_factory,
+)
 
 zone_types_table_editor = TableEditor(
     columns=[
@@ -57,6 +58,7 @@ zone_types_table_editor = TableEditor(
     selection_mode="row",
     sortable=False,
     auto_size=True,
+    show_row_labels=True,
 )
 
 zone_regions_table_editor = TableEditor(
@@ -69,30 +71,35 @@ zone_regions_table_editor = TableEditor(
             editable=False,
             horizontal_alignment="center",
         ),
+        GlyphActionColumn(
+            name="id", label="", glyph=ICON_DELETE, fire="delete_requested"
+        ),
     ],
     selected="selected_region",
     selection_mode="row",
     sortable=False,
     auto_size=True,
+    show_row_labels=True,
 )
 
 zones_view = View(
     VGroup(
         UItem("mode", editor=CustomEditor(zone_tool_picker_factory)),
         UItem("zone_types", editor=zone_types_table_editor),
-        HGroup(
-            UItem("new_zone_type_name", springy=True),
-            UItem("add_zone_type_button", enabled_when="new_zone_type_name.strip()"),
+        UItem(
+            "add_zone_type_button", editor=CustomEditor(add_zone_type_button_factory)
         ),
         UItem("regions", editor=zone_regions_table_editor),
         HGroup(
+            # Same left inset as the tool row above: its 9 px Qt layout
+            # margin equals this spacer plus the group's 6 px item spacing.
+            Spring(width=3, springy=False),
             UItem(
                 "edit_region_button",
                 enabled_when=(
                     f"mode == '{ZONE_SELECT_MODE}' and selected_region is not None"
                 ),
             ),
-            UItem("delete_region_button", enabled_when="selected_region is not None"),
             UItem("hide_region_button", enabled_when="selected_region is not None"),
             UItem(
                 "merge_regions_button",
@@ -101,13 +108,13 @@ zones_view = View(
                 ),
                 tooltip="Merge the ctrl+click-selected regions",
             ),
+            UItem(
+                "show_canvas_overlays",
+                editor=CustomEditor(canvas_overlays_toggle_factory),
+                springy=False,
+            ),
+            spring,
         ),
-        Item("show_canvas_overlays", label="Canvas buttons"),
     ),
-    handler=ZonesSidebarHandler(),
-    key_bindings=KeyBindings(
-        KeyBinding(
-            binding1="Return", binding2="Enter", method_name="handle_return_key"
-        ),
-    ),
+    handler=SafeCancelTableHandler(),
 )
