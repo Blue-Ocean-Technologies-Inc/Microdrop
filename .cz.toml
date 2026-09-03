@@ -6,6 +6,10 @@ bump_message = "chore: release v$new_version"
 update_changelog_on_bump = true
 # Annotated so `git push --follow-tags` carries release tags along.
 annotated_tag = true
+# Repo-root Jinja template: release headers link to the GitHub release and
+# every entry links to its commit (see the template header for the variables).
+template = "CHANGELOG.md.j2"
+extras = { repo_url = "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop" }
 
 # cz_customize replicates cz_conventional_commits, except the changelog also
 # lists non-releasable types (docs/style/test/build/ci/chore/revert). The
@@ -13,7 +17,8 @@ annotated_tag = true
 # MINOR; fix/refactor/perf -> PATCH; breaking -> MAJOR.
 [tool.commitizen.customize]
 bump_pattern = '^((BREAKING[\-\ ]CHANGE|\w+)(\(.+\))?!?):'
-changelog_pattern = '^(BREAKING[\-\ ]CHANGE|feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert)(\(.+\))?(!)?'
+# The release bump commit itself (bump_message above) is not a change.
+changelog_pattern = '^(BREAKING[\-\ ]CHANGE|feat|fix|refactor|perf|docs|style|test|build|ci|chore(?!: release v)|revert)(\(.+\))?(!)?'
 commit_parser = '^((?P<change_type>feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert|BREAKING CHANGE)(?:\((?P<scope>[^()\r\n]*)\)|\()?(?P<breaking>!)?|\w+!):\s(?P<message>.*)?'
 schema_pattern = '(?s)(build|ci|docs|feat|fix|perf|refactor|style|test|chore|revert|bump)(\(\S+\))?!?:( [^\n\r]+)((\n\n.*)|(\s*))?$'
 change_type_order = ["BREAKING CHANGE", "Feat", "Fix", "Refactor", "Perf", "Docs", "CI", "Build", "Test", "Style", "Chore", "Revert"]
