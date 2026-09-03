@@ -202,6 +202,10 @@ class ZoneLayerManager(HasTraits):
     #: the controller pushes a matching command onto the app's undo stack.
     undo_snapshot_pushed = Event()
 
+    #: Fired when ``translate_regions`` refuses a drag (an electrode would
+    #: leave the device or a region would split); the view reports it.
+    move_rejected = Event()
+
     #: Whether the floating button strips show on the device view at all.
     show_canvas_overlays = Bool(True)
 
@@ -560,6 +564,7 @@ class ZoneLayerManager(HasTraits):
         for region in regions:
             new_ids = self._translated_electrode_ids(region, dx, dy)
             if new_ids is None:
+                self.move_rejected = True
                 return False
             moves.append((region, new_ids))
         self._push_undo()

@@ -348,7 +348,10 @@ def test_translate_regions_is_all_or_nothing(manager):
     manager.add_to_pending([c])
     region_b = manager.commit_pending_region()
     before = (list(region_a.electrode_ids), list(region_b.electrode_ids))
+    rejected = []
+    manager.observe(lambda event: rejected.append(event.new), "move_rejected")
     assert manager.translate_regions([region_a, region_b], 1e6, 1e6) is False
+    assert rejected == [True]
     assert (region_a.electrode_ids, region_b.electrode_ids) == before
 
 

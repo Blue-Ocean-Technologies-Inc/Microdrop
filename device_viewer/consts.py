@@ -417,6 +417,9 @@ ZONE_OUTLINE_GAP_CLOSING_FRACTION = 0.6
 # Gap between a region/selection corner and its floating button strip.
 ZONE_OVERLAY_MARGIN_PX = 8
 
+# How long a transient zone note stays beside the status-bar mode message.
+ZONE_STATUS_MESSAGE_MS = 4000
+
 # Zones sidebar tree-table: column order (zone types are parent rows, their
 # regions child rows) and the fixed widths of the non-text columns.
 ZONE_TREE_HEADERS = ("Zone", "Color", "#", "", "")

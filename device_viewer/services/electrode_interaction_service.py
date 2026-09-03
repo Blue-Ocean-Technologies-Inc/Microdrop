@@ -921,15 +921,9 @@ class ElectrodeInteractionControllerService(HasTraits):
                             )
                         else:
                             manager.selected_region = self._zone_move_item.region
-                    if not manager.translate_regions(
+                    manager.translate_regions(
                         regions, delta.x() / scale, delta.y() / scale
-                    ):
-                        QToolTip.showText(
-                            event.screenPos(),
-                            "Move rejected: regions must stay on the device "
-                            "and contiguous",
-                            self.device_view,
-                        )
+                    )
                 elif not self._zone_drag_exceeds_threshold(event.screenPos()):
                     region = (
                         self._zone_move_item.region if self._zone_move_item else None

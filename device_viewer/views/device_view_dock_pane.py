@@ -93,6 +93,7 @@ from ..consts import (
     PHASE_NAVIGATION_MODE,
     PKG,
     STEP_PARAMS_COMMIT,
+    ZONE_STATUS_MESSAGE_MS,
     PKG_name,
     camera_edit_status_message_text,
     camera_place_status_message_text,
@@ -868,6 +869,24 @@ class DeviceViewerDockPane(TraitsDockPane):
         status_bar_manager = self.task.window.status_bar_manager
         if status_bar_manager is not None:
             status_bar_manager.message = message
+
+    @observe("model:zones:move_rejected")
+    def _on_zone_move_rejected(self, event):
+        """Show the note beside the mode message, not in its place: pyface
+        strings the status-bar messages together, and the note goes away
+        on its own."""
+        status_bar_manager = self.task.window.status_bar_manager
+        if status_bar_manager is None:
+            return
+        message = "Move rejected: regions must stay on the device and contiguous"
+        if message not in status_bar_manager.messages:
+            status_bar_manager.messages.append(message)
+
+        def remove_note():
+            if message in status_bar_manager.messages:
+                status_bar_manager.messages.remove(message)
+
+        QTimer.singleShot(ZONE_STATUS_MESSAGE_MS, remove_note)
 
     ################################################################################################
     # ------- Device View class methods -------------------------
