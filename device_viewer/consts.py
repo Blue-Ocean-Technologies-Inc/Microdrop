@@ -188,8 +188,7 @@ RAW_CAPTURES_SUBDIR = "16bit_raw"
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
-ZONE_TYPES_VIEW_MIN_HEIGHT = 200
-ZONE_REGIONS_VIEW_MIN_HEIGHT = 200
+ZONES_VIEW_MIN_HEIGHT = 200
 
 # Default electrode channel count; configurable in Device Viewer preferences.
 NUMBER_OF_CHANNELS = 120
@@ -417,3 +416,17 @@ ZONE_OUTLINE_GAP_CLOSING_FRACTION = 0.6
 
 # Gap between a region/selection corner and its floating button strip.
 ZONE_OVERLAY_MARGIN_PX = 8
+
+# Zones sidebar tree-table: column order (zone types are parent rows, their
+# regions child rows) and the fixed widths of the non-text columns.
+ZONE_TREE_HEADERS = ("Zone", "Color", "#", "", "")
+ZONE_TREE_NAME_COLUMN = 0
+ZONE_TREE_COLOR_COLUMN = 1
+ZONE_TREE_COUNT_COLUMN = 2
+ZONE_TREE_VISIBLE_COLUMN = 3
+ZONE_TREE_DELETE_COLUMN = 4
+ZONE_TREE_COLOR_COLUMN_WIDTH_PX = 60
+# Inset of the painted color swatch inside its cell, and the padding added to
+# the icon font's line height to size the two glyph columns.
+ZONE_TREE_SWATCH_INSET_PX = 4
+ZONE_TREE_GLYPH_COLUMN_PADDING_PX = 8

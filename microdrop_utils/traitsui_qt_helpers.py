@@ -45,7 +45,6 @@ from pyface.qt.QtGui import (
 from pyface.qt.QtWidgets import (
     QBoxLayout,
     QCheckBox,
-    QColorDialog,
     QDoubleSpinBox,
     QGroupBox,
     QLabel,
@@ -77,12 +76,10 @@ from traitsui.api import (
 from traitsui.api import (
     TableColumn as TableColumn_,
 )
-from traitsui.qt.color_editor import SimpleColorEditor
-from traitsui.qt.color_editor import ToolkitEditorFactory as QtColorEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
-from microdrop_style.button_styles import ICON_FONT_FAMILY, TEXT_BUTTON_STYLE
+from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import (
     ACCENT_COLOR,
     BLACK,
@@ -219,43 +216,6 @@ class ColorColumn(ObjectColumn):
         # Color/QColor trait (whose str() QColor cannot parse) becomes one.
         if self.format_func is None:
             self.format_func = lambda value: QColor(value).name()
-
-
-class _TextStyledSimpleColorEditor(SimpleColorEditor):
-    """TraitsUI's color editor opens its picker with the static
-    ``QColorDialog.getColor`` parented to the cell editor, so under the
-    sidebar stylesheet the dialog's text buttons inherit the glyph-font
-    push-button rule. This builds the dialog itself and restores the
-    app's text-button style on it."""
-
-    def popup_editor(self):
-        dialog = QColorDialog(self.factory.to_qt_color(self), self.control)
-        options = QColorDialog.ColorDialogOption.ShowAlphaChannel
-        if not self.factory.use_native_dialog:
-            options |= QColorDialog.ColorDialogOption.DontUseNativeDialog
-        dialog.setOptions(options)
-        dialog.setWindowTitle("Select Color")
-        dialog.setStyleSheet(TEXT_BUTTON_STYLE)
-        # Modal like the TraitsUI editor it replaces: the cell editor that
-        # receives the value only lives while the cell is being edited.
-        if dialog.exec() and dialog.selectedColor().isValid():
-            self.value = self.factory.from_qt_color(dialog.selectedColor())
-            self.update_editor()
-
-
-class HexColorEditorFactory(QtColorEditorFactory):
-    """ColorEditor over a plain hex-string trait (e.g. ``Str("#f5e050")``):
-    the picker round-trips QColor <-> '#rrggbb' so Qt-free models keep
-    serializable hex strings instead of a toolkit Color trait."""
-
-    def to_qt_color(self, editor):
-        return QColor(getattr(editor.object, editor.name))
-
-    def from_qt_color(self, color):
-        return color.name()
-
-    def _get_simple_editor_class(self):
-        return _TextStyledSimpleColorEditor
 
 
 class CustomCheckboxColumn(ObjectColumn):

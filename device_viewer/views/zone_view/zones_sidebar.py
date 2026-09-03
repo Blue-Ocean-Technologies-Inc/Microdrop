@@ -9,18 +9,31 @@
 # Thanks for using Microdrop open source!
 
 """TraitsUI sidebar section for electrode zones, edited directly on the
-ZoneLayerManager: the tool row, the zone types table, and the regions
-table, all push-button editors styled by the sidebar stylesheet. Standalone:
+ZoneLayerManager: three button rows of four over the zones tree-table (zone
+types with their regions nested underneath).
+
+The rows group by workflow — the two tools with their modifier toggles, then
+what acts on the current selection, then the zone list and the view — and all
+of it is push-button editors styled by the sidebar stylesheet. Standalone:
 ``manager.edit_traits(view=zones_view)``."""
 
 # Enthought library imports.
-from traitsui.api import HGroup, Spring, TableEditor, UItem, VGroup, View, spring
+from traitsui.api import (
+    CustomEditor,
+    HGroup,
+    Spring,
+    UItem,
+    VGroup,
+    View,
+    spring,
+)
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import (
     ICON_CALL_TO_ACTION,
+    ICON_CHECKLIST,
     ICON_CROP,
-    ICON_DELETE,
+    ICON_REMOVE_SELECTION,
     ICON_SELECT_All,
 )
 
@@ -28,70 +41,13 @@ from microdrop_style.icons.icons import (
 from microdrop_utils.traitsui_qt_helpers import (
     QT_LAYOUT_MARGIN_PX,
     QT_LAYOUT_SPACING_PX,
-    ColorColumn,
-    GlyphActionColumn,
-    HexColorEditorFactory,
-    ObjectColumn,
     SafeCancelTableHandler,
     ToggleButtonEditor,
-    VisibleColumn,
 )
 
 # Local imports.
 from ...consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
-
-zone_types_table_editor = TableEditor(
-    columns=[
-        # Proportional widths so the columns fill the table (TraitsUI's
-        # interactive default keeps them at content width, which leaves an
-        # empty table's glyph columns invisible); glyph columns get small
-        # shares so they stay compact.
-        ObjectColumn(name="name", label="Zone"),  # content width, like Region
-        ColorColumn(
-            name="color", label="Color", editor=HexColorEditorFactory(), width=0.22
-        ),
-        ObjectColumn(name="region_count", label="#", editable=False, width=0.14),
-        # Bulk eye: shows or hides every region of the zone.
-        VisibleColumn(
-            name="visible",
-            label="",
-            editable=False,
-            horizontal_alignment="center",
-            width=0.14,
-        ),
-        GlyphActionColumn(
-            name="id", label="", glyph=ICON_DELETE, fire="delete_requested", width=0.14
-        ),
-    ],
-    selected="selected_zone_type",
-    selection_mode="row",
-    sortable=False,
-    auto_size=True,
-    show_row_labels=True,
-)
-
-zone_regions_table_editor = TableEditor(
-    columns=[
-        # The region id embeds its zone ("heating-1"), so no zone column;
-        # content width, the glyph columns take small shares of the rest.
-        ObjectColumn(name="id", label="Region", editable=False),
-        VisibleColumn(
-            name="visible",
-            label="",
-            editable=False,
-            horizontal_alignment="center",
-            width=0.14,
-        ),
-        GlyphActionColumn(
-            name="id", label="", glyph=ICON_DELETE, fire="delete_requested", width=0.14
-        ),
-    ],
-    selected="selected_region",
-    selection_mode="row",
-    sortable=False,
-    auto_size=True,
-    show_row_labels=True,
-)
+from .zone_tree import zone_tree_factory
 
 
 def row_inset():
@@ -102,8 +58,10 @@ def row_inset():
 
 class ZonesSidebarHandler(SafeCancelTableHandler):
     def handle_escape(self, info):
-        """Escape deselects in both tables (a click on empty table space
-        already does, through the editors' selection sync)."""
+        """Escape clears both selections. It stays on the handler rather than
+        the tree widget: the handler's own shortcut (which keeps Escape from
+        closing the view) covers the whole section, and a second Escape
+        shortcut inside it would make both ambiguous to Qt."""
         info.object.selected_region = None
         info.object.selected_zone_type = None
         super().handle_escape(info)
@@ -111,6 +69,7 @@ class ZonesSidebarHandler(SafeCancelTableHandler):
 
 zones_view = View(
     VGroup(
+        # Row 1 — the two tools, each followed by its modifier toggle.
         HGroup(
             row_inset(),
             UItem(
@@ -118,11 +77,35 @@ zones_view = View(
                 editor=ToggleButtonEditor(glyph=ICON_CROP, tooltip="Draw zones"),
             ),
             UItem(
+                "subtract_mode",
+                editor=ToggleButtonEditor(
+                    glyph=ICON_REMOVE_SELECTION,
+                    tooltip=(
+                        "Undraw: rubber bands remove electrodes from the selection"
+                    ),
+                ),
+                enabled_when=f"mode == '{ZONE_DRAW_MODE}'",
+            ),
+            UItem(
                 "select_tool_active",
                 editor=ToggleButtonEditor(
                     glyph=ICON_SELECT_All, tooltip="Select zones"
                 ),
             ),
+            UItem(
+                "multi_select",
+                editor=ToggleButtonEditor(
+                    glyph=ICON_CHECKLIST,
+                    tooltip="Multi-select: clicks add regions to the selection",
+                ),
+                enabled_when=f"mode == '{ZONE_SELECT_MODE}'",
+            ),
+            spring,
+        ),
+        # Row 2 — what acts on the current selection, draw side then select
+        # side, matching the tool order of row 1.
+        HGroup(
+            row_inset(),
             UItem(
                 "commit_button",
                 tooltip="Commit zone",
@@ -137,14 +120,6 @@ zones_view = View(
                     "len(pending_electrode_ids) > 0 or editing_region is not None"
                 ),
             ),
-            spring,
-        ),
-        UItem("zone_types", editor=zone_types_table_editor),
-        # Spans the table above like an extra row, following its width.
-        UItem("add_zone_type_button", springy=True, tooltip="Add zone type"),
-        UItem("regions", editor=zone_regions_table_editor),
-        HGroup(
-            row_inset(),
             UItem(
                 "edit_region_button",
                 tooltip="Edit region",
@@ -153,16 +128,27 @@ zones_view = View(
                 ),
             ),
             UItem(
-                "hide_region_button",
-                tooltip="Hide region",
-                enabled_when="selected_region is not None",
-            ),
-            UItem(
                 "merge_regions_button",
                 tooltip="Merge the ctrl+click-selected regions",
                 enabled_when=(
                     f"mode == '{ZONE_SELECT_MODE}' and len(selected_regions) >= 2"
                 ),
+            ),
+            spring,
+        ),
+        # Row 3 — the zone list itself, and the view.
+        HGroup(
+            row_inset(),
+            UItem("add_zone_type_button", tooltip="Add zone type"),
+            UItem(
+                "move_zone_type_up_button",
+                tooltip="Move the zone up a layer",
+                enabled_when="selected_zone_type is not None",
+            ),
+            UItem(
+                "move_zone_type_down_button",
+                tooltip="Move the zone down a layer",
+                enabled_when="selected_zone_type is not None",
             ),
             UItem(
                 "show_canvas_overlays",
@@ -173,6 +159,7 @@ zones_view = View(
             ),
             spring,
         ),
+        UItem("zone_types", editor=CustomEditor(zone_tree_factory)),
     ),
     handler=ZonesSidebarHandler(),
     resizable=True,

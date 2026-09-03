@@ -27,6 +27,8 @@ ICON_DESELECT = "\uebb6"  # deselect
 ICON_SELECT_All = "\ue162"  # select all
 ICON_CHECK = "check"  # confirm/apply
 ICON_CALL_TO_ACTION = "call_to_action"  # panel with a button strip
+ICON_REMOVE_SELECTION = "remove_selection"  # undraw: sweep electrodes out
+ICON_CHECKLIST = "checklist"  # multi-select: clicks add to the selection
 ICON_CLOSE = "close"  # dismiss/cancel
 
 # DEVICE VIEWER ICONS

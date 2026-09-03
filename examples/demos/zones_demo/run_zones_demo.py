@@ -15,7 +15,8 @@ From ``microdrop-py/``::
     pixi run python -m examples.demos.zones_demo.run_zones_demo [device.svg]
 
 Load a device SVG (defaults to the bundled 2x3 device), pick a zone type in
-the sidebar table, and switch tools in the Pan / Draw zones / Select radio:
+the sidebar's zones tree, and switch tools in the Pan / Draw zones / Select
+radio:
 
 - **Pan** scrolls/zooms the device and drops any pending selection.
 - **Draw zones** rubber-bands (or click-toggles) electrodes into a pending
@@ -23,7 +24,7 @@ the sidebar table, and switch tools in the Pan / Draw zones / Select radio:
   Commit/Clear buttons act on it.
 - **Select** picks existing regions (click, ctrl+click to multi-select, or
   rubber-band); the floating edit/delete/hide strip and the sidebar's
-  regions-table buttons act on the selection, and dragging a region snaps
+  Edit/Merge buttons act on the selection, and dragging a region snaps
   it to a new electrode block.
 
 Right-click a region for its context menu: Edit region, Change type, Delete
