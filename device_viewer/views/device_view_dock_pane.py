@@ -1512,10 +1512,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
 
         scroll_layout.addWidget(
-            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
-        )
-
-        scroll_layout.addWidget(
             CollapsibleVStackBox(
                 "Paths",
                 control_widgets=[
@@ -1525,6 +1521,10 @@ class DeviceViewerDockPane(TraitsDockPane):
                 ],
             )
         )
+        scroll_layout.addWidget(
+            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
+        )
+
         scroll_layout.addWidget(
             CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
         )
