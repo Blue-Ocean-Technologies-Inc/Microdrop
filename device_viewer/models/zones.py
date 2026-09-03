@@ -86,6 +86,10 @@ class ZoneRegion(HasTraits):
     #: Id of the ZoneType this region belongs to.
     zone_id = Str()
 
+    #: Display name of that type, kept current by ZoneLayerManager (ids are
+    #: stable, names are not).
+    zone_name = Str()
+
     #: Whether the region is drawn on the device view.
     visible = Bool(True)
 
@@ -745,6 +749,15 @@ class ZoneLayerManager(HasTraits):
     @staticmethod
     def _default_zone_name(row_index):
         return f"zone-{row_index + 1}"
+
+    @observe(
+        "[regions.items, regions:items:zone_id, zone_types.items, "
+        "zone_types:items:name]"
+    )
+    def _update_region_zone_names(self, event):
+        for region in self.regions:
+            zone_type = self.zone_type_for(region.zone_id)
+            region.zone_name = zone_type.name if zone_type else region.zone_id
 
     @observe("zone_types:items:name")
     def _fill_blank_zone_name(self, event):

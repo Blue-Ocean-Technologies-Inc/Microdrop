@@ -64,7 +64,7 @@ zone_types_table_editor = TableEditor(
 zone_regions_table_editor = TableEditor(
     columns=[
         ObjectColumn(name="id", label="Region", editable=False),
-        ObjectColumn(name="zone_id", label="Zone", editable=False),
+        ObjectColumn(name="zone_name", label="Zone", editable=False),
         VisibleColumn(
             name="visible",
             label="",
