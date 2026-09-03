@@ -292,7 +292,8 @@ class ZonesCanvas(QGraphicsView):
     def _selection_accumulates(self, event):
         """Whether the zone-select gesture ADDS to the selection rather
         than replacing it: ctrl held, or the sidebar's Multi-select toggle
-        (its touch equivalent). Either way it is never a region drag."""
+        (its touch equivalent). It decides what a click does; a press that
+        travels past the click threshold is a region drag either way."""
         return (
             bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
             or self.manager.multi_select
@@ -309,10 +310,7 @@ class ZonesCanvas(QGraphicsView):
                 bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
                 or self.manager.subtract_mode
             )
-            # The accumulate gesture (ctrl, or Multi-select) is never a drag.
-            if self.model.mode == ZONE_SELECT_MODE and not (
-                self._selection_accumulates(event)
-            ):
+            if self.model.mode == ZONE_SELECT_MODE:
                 self._drag_region_item = next(
                     (
                         item
@@ -377,23 +375,18 @@ class ZonesCanvas(QGraphicsView):
                 # Group move: keep the multi-selection, move it as one.
                 self.manager.translate_regions(selection, delta.x(), delta.y())
             else:
-                self.manager.selected_region = region
+                if self._selection_accumulates(event):
+                    self.manager.toggle_region_in_selection(region)
+                else:
+                    self.manager.selected_region = region
                 self.manager.translate_regions([region], delta.x(), delta.y())
             self._press_view_pos = None
             return
-        # An accumulating select gesture never dragged anything, so it
-        # counts as a click however far the pointer travelled.
         is_click = (
             event.button() == Qt.MouseButton.LeftButton
             and self._press_view_pos is not None
-            and (
-                (event.pos() - self._press_view_pos).manhattanLength()
-                < ZONE_CLICK_DRAG_THRESHOLD_PX
-                or (
-                    self.model.mode == ZONE_SELECT_MODE
-                    and self._selection_accumulates(event)
-                )
-            )
+            and (event.pos() - self._press_view_pos).manhattanLength()
+            < ZONE_CLICK_DRAG_THRESHOLD_PX
         )
         if is_click and self.model.mode == ZONE_DRAW_MODE:
             scene_pos = self.mapToScene(event.pos())

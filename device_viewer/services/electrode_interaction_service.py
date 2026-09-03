@@ -1653,8 +1653,8 @@ class ElectrodeInteractionControllerService(HasTraits):
     def _zone_selection_accumulates(self, modifiers):
         """Whether the zone-select gesture ADDS to the selection rather
         than replacing it: ctrl held, or the sidebar's Multi-select toggle
-        (its touch equivalent). Either way the press is never a region
-        drag — accumulating and dragging cannot share one gesture."""
+        (its touch equivalent). It decides what a CLICK does; a press that
+        travels past the click threshold is a region drag either way."""
         return (
             bool(modifiers & Qt.KeyboardModifier.ControlModifier)
             or self.model.zones.multi_select
@@ -2124,9 +2124,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
             elif mode == ZONE_SELECT_MODE:
                 self._zone_press_screen_pos = event.screenPos()
-                # The region under the press is remembered either way —
-                # the release needs it for the click — but an
-                # accumulating gesture never arms the move (below).
+                # The region under the press: the click target on release,
+                # or the dragged region once the pointer passes the click
+                # threshold.
                 self._zone_move_item = self.device_view.scene().get_item_under_mouse(
                     event.scenePos(), ZoneRegionItem
                 )
@@ -2199,7 +2199,6 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif (
                 mode == ZONE_SELECT_MODE
                 and self._zone_move_item is not None
-                and not self._zone_selection_accumulates(event.modifiers())
                 and self._zone_drag_exceeds_threshold(event.screenPos())
             ):
                 if not self._zone_move_active:
@@ -2315,7 +2314,12 @@ class ElectrodeInteractionControllerService(HasTraits):
                     scale = self.electrode_view_layer.path_scale
                     regions = self._zone_move_regions()
                     if self._zone_move_item.region not in manager.selected_regions:
-                        manager.selected_region = self._zone_move_item.region
+                        if self._zone_selection_accumulates(event.modifiers()):
+                            manager.toggle_region_in_selection(
+                                self._zone_move_item.region
+                            )
+                        else:
+                            manager.selected_region = self._zone_move_item.region
                     if not manager.translate_regions(
                         regions, delta.x() / scale, delta.y() / scale
                     ):
@@ -2323,9 +2327,7 @@ class ElectrodeInteractionControllerService(HasTraits):
                             "Move rejected: regions must stay on the device "
                             "and contiguous"
                         )
-                elif self._zone_selection_accumulates(
-                    event.modifiers()
-                ) or not self._zone_drag_exceeds_threshold(event.screenPos()):
+                elif not self._zone_drag_exceeds_threshold(event.screenPos()):
                     region = (
                         self._zone_move_item.region if self._zone_move_item else None
                     )
