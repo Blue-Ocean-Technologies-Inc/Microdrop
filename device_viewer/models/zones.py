@@ -89,6 +89,9 @@ class ZoneRegion(HasTraits):
     #: Whether the region is drawn on the device view.
     visible = Bool(True)
 
+    #: Fired by the regions table's per-row delete glyph.
+    delete_requested = Event()
+
     #: SOURCE OF TRUTH for the region — ids of the member electrodes.
     electrode_ids = List(Str)
 
@@ -163,9 +166,6 @@ class ZoneLayerManager(HasTraits):
 
     #: Whether the floating button strips show on the device view at all.
     show_canvas_overlays = Bool(True)
-
-    #: Name typed for the next zone type added via ``add_zone_type_button``.
-    new_zone_type_name = Str()
 
     # Sidebar / overlay actions; ZonesController turns them into calls.
     commit_button = Button("check")
@@ -257,7 +257,9 @@ class ZoneLayerManager(HasTraits):
         for region in self.regions:
             self._set_region_electrodes(region, region.electrode_ids)
 
-    def add_zone_type(self, name, color=None):
+    def add_zone_type(self, name="", color=None):
+        """Append a zone type; a blank name becomes ``zone-<row number>``."""
+        name = name.strip() or self._default_zone_name(len(self.zone_types))
         self._push_undo()
         zone_type = ZoneType(
             id=self._generate_zone_id(name), name=name, color=color or self.next_color()
@@ -739,6 +741,18 @@ class ZoneLayerManager(HasTraits):
             number += 1
         self._region_id_counters[zone_id] = number
         return f"{zone_id}-{number}"
+
+    @staticmethod
+    def _default_zone_name(row_index):
+        return f"zone-{row_index + 1}"
+
+    @observe("zone_types:items:name")
+    def _fill_blank_zone_name(self, event):
+        # A name cleared in the table falls back to its row's default.
+        if not event.new.strip():
+            event.object.name = self._default_zone_name(
+                self.zone_types.index(event.object)
+            )
 
     def _generate_zone_id(self, name):
         existing_ids = {zone_type.id for zone_type in self.zone_types}

@@ -99,10 +99,7 @@ class ZonesDemoController(HasTraits):
     @observe("model:manager:add_zone_type_button")
     def _on_add_zone_type(self, event):
         manager = self.model.manager
-        name = manager.new_zone_type_name.strip()
-        if name:
-            manager.selected_zone_type = manager.add_zone_type(name)
-            manager.new_zone_type_name = ""
+        manager.selected_zone_type = manager.add_zone_type()
 
     @observe("model:manager:zone_types:items:delete_requested")
     def _on_zone_type_delete_requested(self, event):
@@ -125,6 +122,10 @@ class ZonesDemoController(HasTraits):
     @observe("model:manager:delete_region_button")
     def _on_delete_region(self, event):
         self.model.manager.remove_region(self.model.manager.selected_region)
+
+    @observe("model:manager:regions:items:delete_requested")
+    def _on_region_delete_requested(self, event):
+        self.model.manager.remove_region(event.object)
 
     @observe("model:manager:hide_region_button")
     def _on_hide_region(self, event):
