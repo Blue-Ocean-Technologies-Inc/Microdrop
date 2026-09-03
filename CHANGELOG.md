@@ -1,3 +1,36 @@
+## [v1.18.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.18.0) (2026-09-03)
+
+### Feat
+
+- **device-viewer**: add opt-in gamepad preference ([`b9f9f66`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b9f9f662ca4a7cfab6686539a7d6f52860de508e))
+
+### Fix
+
+- **device-viewer**: hide the joystick icon while gamepad support is off ([`85cac63`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/85cac63d3d825d7b03d21efe6093f1a3e32bd572))
+- **device-viewer**: rename alignment helper to Align Camera ([`5583ee8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5583ee88535f2813ea0fbe3ec18a33d3fedd2236))
+- **device-viewer**: align endpoint buttons with camera rows ([`a673b55`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a673b5591c430a03d592ed98d6450cb776a9ae3f))
+
+### Refactor
+
+- **device-viewer**: split gamepad and stepping services ([`3eaa97f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3eaa97f06ea0500ac726d4479321382704bfa94e))
+
+### Docs
+
+- **changelog**: regenerate with commit links ([`b9e3b13`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b9e3b13bfeacaa0edbaf6613dc394fe3a76b09d0))
+- **readme**: sync launcher downloads and add the portable device ([`eb1e3a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eb1e3a582efed9ecc4e7a7fa74545c615ab63c0e))
+
+### CI
+
+- **release**: keep bump commits out of the changelog ([`8b4b5b9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8b4b5b98b6d202ae7a67025ce4cc04fc4c9c1bac))
+- **release**: link changelog entries to commits ([`776f2f1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/776f2f10f8897fc68975f23a1d7cf452cdcae024))
+- **release**: describe the app-token setup in the workflow notes ([`f68a539`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f68a5397def03da7cecba60c530ff569b1e2c42f))
+- **release**: open the release PR with the org release app ([`cc9a528`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc9a528edb89b9c98ddce7c8f610335219d6bf60))
+
+### Chore
+
+- **device-viewer**: ruff-clean preferences.py ([`60efcdc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/60efcdcc9df2f6b4d0ad137631c76f0d682a7c1b))
+- **device-viewer**: bring the device view dock pane ruff-clean ([`5a9ee9b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5a9ee9b23d61c4c1aed88dc8b193d96f23c6c0cd))
+
 ## [v1.17.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.17.0) (2026-09-01)
 
 ### Feat
