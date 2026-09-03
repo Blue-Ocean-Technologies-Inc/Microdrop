@@ -376,6 +376,8 @@ class DeviceViewerDockPane(TraitsDockPane):
             self._build_gamepad_service()
         else:
             self._release_gamepad_service()
+        if getattr(self, "gamepad_icon", None) is not None:
+            self.gamepad_icon.setVisible(event.new)
 
     def _build_gamepad_service(self):
         """Start gamepad support against the current device.
@@ -2051,6 +2053,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.gamepad_icon.setStyleSheet(f"color: {GREY['lighter']};")
         self.gamepad_icon.setToolTip("Gamepad disconnected")
         self.gamepad_icon.status_bar_icon_priority = ICON_PRIORITY_LEFTMOST
+        # Shown only while gamepad support is on; the preference observer
+        # toggles it from then on.
+        self.gamepad_icon.setVisible(self.device_viewer_preferences.gamepad_enabled)
 
         # Hand the gamepad service its HUD sink (the manager) and its
         # indicator icon if it was built before the status bar existed.
