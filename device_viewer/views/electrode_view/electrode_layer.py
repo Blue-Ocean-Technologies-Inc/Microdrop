@@ -21,7 +21,9 @@ from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_facto
 
 from ...consts import (
     ZONE_BAND_Z_VALUE,
+    ZONE_LAYER_Z_STEP,
     ZONE_OUTLINE_PEN_WIDTH,
+    ZONE_REGION_Z_VALUE,
     ZONE_SELECTED_OUTLINE_PEN_WIDTH,
     ZONE_SUBTRACT_PREVIEW_COLOR,
 )
@@ -461,7 +463,10 @@ class ElectrodeLayer:
     def redraw_zones(self, model: DeviceViewMainModel, parent_scene: "QGraphicsScene"):
         """Rebuild every committed region's item from the manager: hidden
         regions and the one being edited get no item; the selected ones draw
-        a thicker outline. Alpha 0 (row hidden) draws nothing."""
+        a thicker outline. Alpha 0 (row hidden) draws nothing.
+
+        Zones stack in the order of the sidebar tree — the first zone is the
+        top layer — by stepping each region's z by ZONE_LAYER_Z_STEP."""
         for item in self.zone_items.values():
             parent_scene.removeItem(item)
         self.zone_items = {}
@@ -469,6 +474,10 @@ class ElectrodeLayer:
         if alpha <= 0:
             return
         manager = model.zones
+        zone_layer_indices = {
+            zone_type.id: index for index, zone_type in enumerate(manager.zone_types)
+        }
+        top_layer_index = len(manager.zone_types) - 1
         for region in manager.regions:
             if not region.visible or region is manager.editing_region:
                 continue
@@ -481,8 +490,17 @@ class ElectrodeLayer:
                 if region in manager.selected_regions
                 else ZONE_OUTLINE_PEN_WIDTH
             )
+            z_value = ZONE_REGION_Z_VALUE + ZONE_LAYER_Z_STEP * (
+                top_layer_index - zone_layer_indices[region.zone_id]
+            )
             item = ZoneRegionItem(
-                region, geometry, self.path_scale, zone_type.color, alpha, pen_width
+                region,
+                geometry,
+                self.path_scale,
+                zone_type.color,
+                alpha,
+                pen_width,
+                z_value,
             )
             parent_scene.addItem(item)
             self.zone_items[region.id] = item

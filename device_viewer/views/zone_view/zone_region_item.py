@@ -49,6 +49,7 @@ class ZoneRegionItem(QGraphicsPathItem):
         color,
         alpha,
         outline_pen_width=ZONE_OUTLINE_PEN_WIDTH,
+        z_value=ZONE_REGION_Z_VALUE,
     ):
         super().__init__(shapely_geometry_to_painter_path(geometry, scale))
         self.region = region
@@ -59,7 +60,7 @@ class ZoneRegionItem(QGraphicsPathItem):
         outline_pen.setCosmetic(True)
         outline_pen.setWidth(outline_pen_width)
         self.setPen(outline_pen)
-        self.setZValue(ZONE_REGION_Z_VALUE)
+        self.setZValue(z_value)
 
     def shape(self):
         # Hit-test the fill only: the cosmetic pen's stroke is huge in item

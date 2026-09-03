@@ -396,6 +396,12 @@ ZONE_REGION_Z_VALUE = 0.5
 ZONE_PENDING_Z_VALUE = 0.6
 ZONE_BAND_Z_VALUE = 0.7
 
+# Per-zone layer offset stacked on ZONE_REGION_Z_VALUE: the first zone in the
+# sidebar tree is the TOP layer, so it gets the largest offset. The step is
+# small enough that up to 20 zones stay below ZONE_PENDING_Z_VALUE, keeping
+# the pending highlight and the rubber band above every region.
+ZONE_LAYER_Z_STEP = 0.005
+
 # Cosmetic outline widths (px); the selected region draws thicker.
 ZONE_OUTLINE_PEN_WIDTH = 2
 ZONE_SELECTED_OUTLINE_PEN_WIDTH = 4
