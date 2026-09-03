@@ -18,7 +18,7 @@ from functools import partial
 
 # Enthought library imports.
 from pyface.qt.QtCore import QObject, Signal
-from pyface.qt.QtWidgets import QGridLayout, QPushButton, QWidget
+from pyface.qt.QtWidgets import QGridLayout, QPushButton, QVBoxLayout, QWidget
 from traits.api import HasTraits, Instance, observe
 
 # Microdrop package imports.
@@ -100,7 +100,7 @@ class ZoneToolPickerViewModel(HasTraits):
 
 class ZoneToolPicker(QWidget):
     """Draw / Select tool buttons and Commit / Clear action buttons, laid
-    out like the Paths ``ModePicker`` grid."""
+    out in one row like the Paths ``ModePicker``."""
 
     def __init__(self, view_model):
         super().__init__()
@@ -128,15 +128,25 @@ class ZoneToolPicker(QWidget):
         self.button_clear.setToolTip("Clear selection")
 
     def _layout_ui(self):
-        layout = QGridLayout()
+        # One flat row, laid out like the Paths picker's rows: natural-size
+        # buttons, left aligned, trailing stretch.
+        row_layout = QGridLayout()
+        row_layout.addWidget(self.button_draw, 0, 0)
+        row_layout.addWidget(self.button_select, 0, 1)
+        row_layout.addWidget(self.button_commit, 0, 2)
+        row_layout.addWidget(self.button_clear, 0, 3)
+        row_layout.setColumnStretch(4, 1)
 
-        layout.addWidget(self.button_draw, 0, 0)
-        layout.addWidget(self.button_select, 0, 1)
-        layout.addWidget(self.button_commit, 1, 0)
-        layout.addWidget(self.button_clear, 1, 1)
-        layout.setColumnStretch(2, 1)
+        # TraitsUI zeroes the margins of the layout it embeds, so the row
+        # lives in a child widget whose default layout margins match the
+        # Paths picker's and keep both rows aligned.
+        row_widget = QWidget(self)
+        row_widget_layout = QVBoxLayout(row_widget)
+        row_widget_layout.addLayout(row_layout)
 
-        self.setLayout(layout)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(row_widget)
 
     def _bind_signals(self):
         # View -> ViewModel (user actions)
