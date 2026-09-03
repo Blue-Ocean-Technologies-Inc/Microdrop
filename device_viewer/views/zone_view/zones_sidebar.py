@@ -50,10 +50,15 @@ from ...consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
 from .zone_tree import zone_tree_factory
 
 
-def row_inset():
-    """Leading spacer giving a button row the same left margin as the Qt
-    button rows elsewhere in the sidebar (the Paths picker)."""
-    return Spring(width=QT_LAYOUT_MARGIN_PX - QT_LAYOUT_SPACING_PX, springy=False)
+def inset(dimension):
+    """Spacer giving a TraitsUI group the margin a plain Qt child layout has
+    (TraitsUI keeps the item spacing but drops the margin): ``"width"`` leads
+    a button row so it lines up with the Qt rows in the sidebar (the Paths
+    picker), ``"height"`` separates the section from its collapsible header
+    like the other sidebar groups."""
+    return Spring(
+        springy=False, **{dimension: QT_LAYOUT_MARGIN_PX - QT_LAYOUT_SPACING_PX}
+    )
 
 
 class ZonesSidebarHandler(SafeCancelTableHandler):
@@ -69,9 +74,10 @@ class ZonesSidebarHandler(SafeCancelTableHandler):
 
 zones_view = View(
     VGroup(
+        inset("height"),
         # Row 1 — the two tools, each followed by its modifier toggle.
         HGroup(
-            row_inset(),
+            inset("width"),
             UItem(
                 "draw_tool_active",
                 editor=ToggleButtonEditor(glyph=ICON_CROP, tooltip="Draw zones"),
@@ -105,7 +111,7 @@ zones_view = View(
         # Row 2 — what acts on the current selection, draw side then select
         # side, matching the tool order of row 1.
         HGroup(
-            row_inset(),
+            inset("width"),
             UItem(
                 "commit_button",
                 tooltip="Commit zone",
@@ -138,7 +144,7 @@ zones_view = View(
         ),
         # Row 3 — the zone list itself, and the view.
         HGroup(
-            row_inset(),
+            inset("width"),
             UItem("add_zone_type_button", tooltip="Add zone type"),
             UItem(
                 "move_zone_type_up_button",
