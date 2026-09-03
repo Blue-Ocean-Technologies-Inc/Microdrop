@@ -14,8 +14,9 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from microdrop_application.preferences_dialog import advanced_mode_tab
+from pyface.qt.QtCore import QTimer
 from traits.api import (
+    Bool,
     Button,
     Dict,
     Directory,
@@ -24,27 +25,23 @@ from traits.api import (
     Instance,
     Property,
     Range,
-    Bool,
     Str,
     observe,
 )
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, HGroup, Item, View
-from pyface.qt.QtCore import QTimer
+
+from microdrop_application.preferences_dialog import advanced_mode_tab
+
+from microdrop_style.text_styles import preferences_group_style_sheet
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
-from logger.logger_service import get_logger
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.preferences_UI_helpers import (
     create_grid_group,
     create_item_label_group,
     create_item_label_pair,
 )
-
-logger = get_logger(__name__)
-
-from microdrop_style.text_styles import preferences_group_style_sheet
 
 from .consts import (
     ALIGNMENT_FRAME_WIDTH_MAX_PX,
@@ -67,26 +64,30 @@ from .consts import (
     ALPHA_VIEW_MIN_HEIGHT,
     AUTO_FIT_MARGIN_SCALE,
     DEVICE_VIEWER_SIDEBAR_WIDTH,
-    LAYERS_VIEW_MIN_HEIGHT,
-    MASTER_SVG_FILE,
-    PIN_MAP_SVG_FILE,
-    NUMBER_OF_CHANNELS,
-    ZOOM_SENSITIVITY,
-    GAMEPAD_CAPTURE_REQUEST,
+    GAMEPAD_AXIS_THRESHOLD,
+    GAMEPAD_BTN_ADD,
     GAMEPAD_BTN_CLEAR,
     GAMEPAD_BTN_FIND,
-    GAMEPAD_BTN_SPLIT,
-    GAMEPAD_BTN_ADD,
-    GAMEPAD_BTN_REMOVE,
     GAMEPAD_BTN_REALTIME,
-    GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
+    GAMEPAD_BTN_REMOVE,
+    GAMEPAD_BTN_SPLIT,
+    GAMEPAD_CAPTURE_REQUEST,
     GAMEPAD_DEBOUNCE_ADD_REMOVE_S,
     GAMEPAD_DEBOUNCE_FIND_S,
+    GAMEPAD_DEBOUNCE_MOVE_SPLIT_S,
     GAMEPAD_DEBOUNCE_REALTIME_S,
-    GAMEPAD_AXIS_THRESHOLD,
     GAMEPAD_RECONNECT_REQUEST,
+    LAYERS_VIEW_MIN_HEIGHT,
+    MASTER_SVG_FILE,
+    NUMBER_OF_CHANNELS,
+    PIN_MAP_SVG_FILE,
+    ZOOM_SENSITIVITY,
 )
 from .default_settings import default_alphas, default_visibility
+
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class DeviceViewerPreferences(PreferencesHelper):
@@ -169,7 +170,11 @@ class DeviceViewerPreferences(PreferencesHelper):
     _zoom_scale = Property(observe="ZOOM_SENSITIVITY")
 
     ### Gamepad prefs ###
-    # Persisted button indices. The interaction service reads these (with
+    # Off by default: pygame/SDL is only initialized and polled while this is
+    # on, so an instrument without a controller pays nothing for it.
+    gamepad_enabled = Bool(False)
+
+    # Persisted button indices. The gamepad service reads these (with
     # MICRODROP_GAMEPAD_* env vars taking precedence) and reloads live when they
     # change. SDL exposes up to 32 buttons; 0-31 is a safe range.
     gamepad_btn_clear = Range(value=GAMEPAD_BTN_CLEAR, low=0, high=31, mode="spinner")
@@ -228,7 +233,8 @@ class DeviceViewerPreferences(PreferencesHelper):
             if not destination.exists():
                 if source_file.exists():
                     logger.info(
-                        f"Missing {source_file.name} in device repo.\nCopying {source_file} to {destination}"
+                        f"Missing {source_file.name} in device repo.\n"
+                        f"Copying {source_file} to {destination}"
                     )
                     safe_copy_file(str(source_file), str(destination))
                 else:
@@ -263,7 +269,8 @@ class DeviceViewerPreferences(PreferencesHelper):
 
             else:
                 logger.info(
-                    "User's default device svg file exists but is different from master. Overwriting..."
+                    "User's default device svg file exists but is different "
+                    "from master. Overwriting..."
                 )
 
         else:
@@ -432,13 +439,16 @@ def _gamepad_button_row(trait_name: str, rebind_trait: str, label: str) -> HGrou
 
 
 gamepad_settings = Group(
+    Item("gamepad_enabled", label="Enable gamepad support"),
     Group(
         HGroup(
             Item("capture_prompt_", style="readonly", show_label=False, springy=True),
             Item(
                 "reconnect_gamepad_",
                 show_label=False,
-                tooltip="Re-attempt connection after unplugging/replugging the controller",
+                tooltip=(
+                    "Re-attempt connection after unplugging/replugging the controller"
+                ),
             ),
         ),
         _gamepad_button_row("gamepad_btn_clear", "rebind_clear_", "Clear all (A)"),
@@ -453,6 +463,7 @@ gamepad_settings = Group(
         ),
         label="Button mapping",
         show_border=True,
+        enabled_when="object.gamepad_enabled",
     ),
     Group(
         Item("gamepad_debounce_move_split", label="Move / split (s)"),
@@ -462,6 +473,7 @@ gamepad_settings = Group(
         Item("gamepad_axis_threshold", label="Analog-stick threshold"),
         label="Timing & sensitivity",
         show_border=True,
+        enabled_when="object.gamepad_enabled",
     ),
     label="Gamepad",
     show_border=True,
@@ -470,7 +482,10 @@ gamepad_settings = Group(
 
 
 class DeviceViewerPreferencesPane(PreferencesPane):
-    """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
+    """Device Viewer preferences pane.
+
+    Based on the preferences pane of the envisage Attractors example.
+    """
 
     #### 'PreferencesPane' interface ##########################################
 
@@ -523,14 +538,18 @@ class DeviceViewerAdvancedPreferencesPane(PreferencesPane):
             Item(
                 "allow_hardware_disables",
                 tooltip=(
-                    "When enabled, the device viewer will visually reflect channels that the hardware "
-                    "has reported as disabled (e.g., due to detected shorts or actuation faults). "
-                    "Disabled channels will appear greyed out and non-interactive in the device view.\n\n"
-                    "When disabled, hardware-reported channel disables are ignored by the device viewer "
-                    "and all channels remain visually active regardless of hardware state.\n\n"
-                    "WARNING: Disabling this setting means you will NOT see visual feedback when the "
-                    "hardware disables channels for safety reasons. Only change this if you understand "
-                    "the implications for your experiment."
+                    "When enabled, the device viewer will visually reflect "
+                    "channels that the hardware has reported as disabled (e.g., "
+                    "due to detected shorts or actuation faults). Disabled "
+                    "channels will appear greyed out and non-interactive in the "
+                    "device view.\n\n"
+                    "When disabled, hardware-reported channel disables are "
+                    "ignored by the device viewer and all channels remain "
+                    "visually active regardless of hardware state.\n\n"
+                    "WARNING: Disabling this setting means you will NOT see "
+                    "visual feedback when the hardware disables channels for "
+                    "safety reasons. Only change this if you understand the "
+                    "implications for your experiment."
                 ),
             ),
             label="Device Viewer",
