@@ -135,6 +135,16 @@ class ZoneLayerManager(HasTraits):
     #: it collapses the multi-selection to that one region (None clears).
     selected_region = Property(observe="selected_regions.items")
 
+    #: Whether ``merge_selected_regions`` would succeed: two or more selected
+    #: regions of one zone whose electrodes form one contiguous block. Tracks
+    #: the selection, its regions' electrodes and their zone.
+    can_merge = Property(
+        Bool,
+        observe=(
+            "selected_regions.items.electrode_ids.items, selected_regions.items.zone_id"
+        ),
+    )
+
     #: Region whose electrode set is being re-edited via the pending
     #: selection; hidden from the committed layer until commit or clear.
     editing_region = Instance(ZoneRegion)
@@ -235,6 +245,22 @@ class ZoneLayerManager(HasTraits):
 
     def _set_selected_region(self, region):
         self.selected_regions = [region] if region is not None else []
+
+    def _get_can_merge(self):
+        selection = self.selected_regions
+        return (
+            len(selection) >= 2
+            and len({region.zone_id for region in selection}) == 1
+            and len(self._connected_components(self._selected_electrode_ids())) == 1
+        )
+
+    def _selected_electrode_ids(self):
+        """Sorted union of the selected regions' electrodes."""
+        return sorted(
+            electrode_id
+            for region in self.selected_regions
+            for electrode_id in region.electrode_ids
+        )
 
     def _get_can_undo(self):
         return bool(self._undo_stack)
@@ -466,25 +492,12 @@ class ZoneLayerManager(HasTraits):
 
     def merge_selected_regions(self):
         """Merge the multi-selected regions into one region of their common
-        zone: at least two regions, one zone, and a contiguous union —
-        otherwise nothing changes and None is returned."""
+        zone when ``can_merge`` allows it; otherwise nothing changes and None
+        is returned."""
+        if not self.can_merge:
+            return None
         selection = list(self.selected_regions)
-        if len(selection) < 2:
-            return None
-        zone_ids = {region.zone_id for region in selection}
-        if len(zone_ids) != 1:
-            logger.info(f"Merge rejected: regions span zones {sorted(zone_ids)}")
-            return None
-        union_ids = sorted(
-            {
-                electrode_id
-                for region in selection
-                for electrode_id in region.electrode_ids
-            }
-        )
-        if len(self._connected_components(union_ids)) != 1:
-            logger.info("Merge rejected: selected regions are not contiguous")
-            return None
+        union_ids = self._selected_electrode_ids()
         self._push_undo()
         merged = min(selection, key=self.regions.index)
         if self.editing_region in selection and self.editing_region is not merged:

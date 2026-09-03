@@ -311,15 +311,23 @@ def test_merge_requires_two_contiguous_regions_of_one_zone(manager):
         manager.add_to_pending([electrode_id])
         manager.commit_pending_region()
     region_a, region_b, region_far = manager.regions
+    can_merge_changes = []
+    manager.observe(lambda event: can_merge_changes.append(event.new), "can_merge")
     manager.selected_regions = [region_a]
+    assert not manager.can_merge
     assert manager.merge_selected_regions() is None
     manager.selected_regions = [region_a, region_far]
+    assert not manager.can_merge
     assert manager.merge_selected_regions() is None
     manager.add_zone_type("mixing")
     manager.change_region_zone(region_b, "mixing")
     manager.selected_regions = [region_a, region_b]
+    assert not manager.can_merge
     assert manager.merge_selected_regions() is None
+    # Changing a selected region's zone re-evaluates the property.
     manager.change_region_zone(region_b, "heating")
+    assert manager.can_merge
+    assert can_merge_changes[-1] is True
     manager.selected_regions = [region_a, region_b]
     manager.region_outline(region_b)
     merged = manager.merge_selected_regions()

@@ -135,10 +135,8 @@ zones_view = View(
             ),
             UItem(
                 "merge_regions_button",
-                tooltip="Merge the ctrl+click-selected regions",
-                enabled_when=(
-                    f"mode == '{ZONE_SELECT_MODE}' and len(selected_regions) >= 2"
-                ),
+                tooltip="Merge the selected regions into one",
+                enabled_when=f"mode == '{ZONE_SELECT_MODE}' and can_merge",
             ),
             spring,
         ),
