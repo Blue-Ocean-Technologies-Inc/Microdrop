@@ -81,6 +81,7 @@ from .consts import (
     MASTER_SVG_FILE,
     NUMBER_OF_CHANNELS,
     PIN_MAP_SVG_FILE,
+    ZONES_VIEW_MIN_HEIGHT,
     ZOOM_SENSITIVITY,
 )
 from .default_settings import default_alphas, default_visibility
@@ -107,9 +108,15 @@ class DeviceViewerPreferences(PreferencesHelper):
     )
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
+    ZONES_VIEW_MIN_HEIGHT = Range(value=ZONES_VIEW_MIN_HEIGHT, low=0, high=10000)
 
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
+
+    #: Zone types shared across devices: zone id -> display name / hex color.
+    #: Mirrored from ZoneLayerManager.zone_types by DeviceViewMainModel.
+    zone_type_names = Dict(Str, Str)
+    zone_type_colors = Dict(Str, Str)
 
     ### Camera-alignment dialog prefs ###
     # One snap radius shared by both panes. Colors are stored as
@@ -376,6 +383,7 @@ sidebar_setting_items = [
     "DEVICE_VIEWER_SIDEBAR_WIDTH",
     "ALPHA_VIEW_MIN_HEIGHT",
     "LAYERS_VIEW_MIN_HEIGHT",
+    "ZONES_VIEW_MIN_HEIGHT",
 ]
 
 # Create the grid group for the sidebar items.

@@ -143,6 +143,8 @@ All inter-plugin communication goes through a pub/sub message router — plugins
 
 Electrode layouts are defined in SVG files. Metadata is parsed from SVG path elements (`data-channels` attribute). Centers are computed from path vertices and neighbors from distance calculations. Straight path commands (M, L, H, V, Z) contribute endpoints; curved segments (arcs, Béziers — e.g. Inkscape circles) are flattened into polygon vertices by sampling (CURVE_SEGMENT_SAMPLES per segment). See `device_viewer/utils/dmf_utils.py`.
 
+Electrode zones (#596): `device_viewer/models/zones.py` holds `ZoneLayerManager` (types by id, regions whose electrode set is the source of truth, outlines computed by shapely union + gap closing). Regions persist in the device SVG's `Zones` layer, zone types in preferences, and the whole snapshot in app_globals under `ZONES_KEY`.
+
 ## Useful Environment Variables
 
 - `USE_CV2=1` — force OpenCV camera backend instead of QMultimedia

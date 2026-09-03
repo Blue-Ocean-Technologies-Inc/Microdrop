@@ -12,89 +12,94 @@ import html
 import math
 
 from PySide6.QtWidgets import QToolButton
+
+from pyface.qt import QtWidgets
 from pyface.qt.QtCore import (
-    Qt,
-    QSize,
-    QPoint,
-    QPointF,
-    QRectF,
-    QObject,
-    QEvent,
-    QEasingCurve,
-    QPropertyAnimation,
-    QSequentialAnimationGroup,
-    Slot,
     Property as QtProperty,  # aliased: traits.api.Property (below) shadows it
 )
+from pyface.qt.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    QSequentialAnimationGroup,
+    QSize,
+    Qt,
+    Slot,
+)
 from pyface.qt.QtGui import (
+    QBrush,
     QColor,
     QCursor,
     QFont,
-    QShortcut,
     QKeySequence,
-    QPixmap,
-    QBrush,
+    QPainter,
     QPaintEvent,
     QPen,
-    QPainter,
+    QPixmap,
+    QShortcut,
 )
 from pyface.qt.QtWidgets import (
-    QStyledItemDelegate,
-    QDoubleSpinBox,
-    QCheckBox,
-    QPushButton,
     QBoxLayout,
+    QCheckBox,
+    QDoubleSpinBox,
     QGroupBox,
     QLabel,
+    QPushButton,
     QSizePolicy,
 )
-from pyface.qt import QtWidgets
-
 from traits.api import (
-    Instance,
     Any,
     Bool,
-    Range,
-    List,
-    Str,
-    Int,
-    Property,
-    Float,
     Callable,
+    Float,
+    Int,
+    List,
+    Property,
+    Range,
+    Str,
+)
+from traitsui.api import (
+    BasicEditorFactory,
+    Controller,
+    EnumEditor,
+    Handler,
+    RangeEditor,
+    UIInfo,
 )
 from traitsui.api import (
     ObjectColumn as ObjectTableColumn_,
+)
+from traitsui.api import (
     TableColumn as TableColumn_,
-    Controller,
-    UIInfo,
-    Handler,
-    RangeEditor,
-    EnumEditor,
-    BasicEditorFactory,
 )
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import (
-    WHITE,
-    BLACK,
-    PRIMARY_COLOR,
-    GREY,
     ACCENT_COLOR,
+    BLACK,
+    GREY,
+    PRIMARY_COLOR,
     SUCCESS_COLOR,
+    WHITE,
 )
 from microdrop_style.helpers import is_dark_mode
 from microdrop_style.icons.icons import (
+    ICON_DESELECT,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
     ICON_SELECT_All,
-    ICON_DESELECT,
 )
+
 from microdrop_utils.pyside_helpers import (
+    MarqueeComboBox,
     _ClickablePixmapLabel,
     _ScalingPixmapLabel,
-    MarqueeComboBox,
 )
 
 from logger.logger_service import get_logger
@@ -107,6 +112,13 @@ logger = get_logger(__name__)
 DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
 
 DEFAULT_GLYPH_POINT_SIZE_PX = 16
+
+#: Qt's default child-layout margin and item spacing (QStyle
+#: PM_LayoutLeftMargin / PM_LayoutHorizontalSpacing on the app styles).
+#: TraitsUI groups use the spacing but drop the margin, so a row that must
+#: line up with a plain Qt row needs a MARGIN - SPACING leading spacer.
+QT_LAYOUT_MARGIN_PX = 9
+QT_LAYOUT_SPACING_PX = 6
 
 # Drag grip for resizing a table's row-number header (see
 # make_table_row_header_resizable): grip strip width along the header's
@@ -742,7 +754,8 @@ def make_table_row_header_resizable(table_view):
 
 class SafeCancelTableHandler(Handler):
     """
-    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
+    In tables, we want the cancel event not to close the view. Instead it
+    should deselect all elements.
     """
 
     escape_shortcut = Any()
@@ -768,7 +781,8 @@ class SafeCancelTableHandler(Handler):
 
 class SafeCancelTableController(Controller):
     """
-    In tables, we want the cancel event not to close the view. Instead it should deselect all elements.
+    In tables, we want the cancel event not to close the view. Instead it
+    should deselect all elements.
     """
 
     escape_shortcut = Any()
@@ -1411,6 +1425,45 @@ class IconButtonEditor(BasicEditorFactory):
 
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
+
+
+class _ToggleButtonEditor(QtEditor):
+    """A checkable QPushButton bound to a Bool: checked while the trait is
+    True. It carries no style of its own, so it looks like every other push
+    button under the surrounding stylesheet (glyph label in the icon font,
+    accent color while checked)."""
+
+    def init(self, parent):
+        self.control = QPushButton(self.factory.glyph)
+        self.control.setCheckable(True)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
+        self.control.clicked.connect(self._on_click)
+        self.update_editor()
+
+    def _on_click(self, checked):
+        self.value = checked
+
+    def update_editor(self):
+        # setChecked emits toggled (not connected), not clicked, so an
+        # external change cannot re-enter _on_click.
+        self.control.setChecked(bool(self.value))
+
+
+class ToggleButtonEditor(BasicEditorFactory):
+    """Factory for a Bool rendered as a checkable push button::
+
+        UItem("draw_tool_active", editor=ToggleButtonEditor(
+            glyph=ICON_CROP, tooltip="Draw zones"))
+
+    The push-button twin of :class:`IconToggleEditor` (a flat tool button).
+    """
+
+    klass = _ToggleButtonEditor
+
+    #: Material Symbols ligature (or codepoint) shown on the button.
+    glyph = Str()
+    tooltip = Str()
 
 
 class _IconModeButtonEditor(_IconButtonEditor):

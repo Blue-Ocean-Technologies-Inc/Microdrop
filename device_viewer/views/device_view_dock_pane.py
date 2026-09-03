@@ -93,6 +93,7 @@ from ..consts import (
     PHASE_NAVIGATION_MODE,
     PKG,
     STEP_PARAMS_COMMIT,
+    ZONE_STATUS_MESSAGE_MS,
     PKG_name,
     camera_edit_status_message_text,
     camera_place_status_message_text,
@@ -101,6 +102,7 @@ from ..consts import (
 )
 
 ##### local imports ######
+from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.electrodes import Electrodes
@@ -149,6 +151,7 @@ from .route_selection_view.route_selection_view import (
     RouteLayerView,
 )
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
+from .zone_view.zones_sidebar import zones_view
 
 # ext consts
 from logger.logger_service import get_logger
@@ -187,6 +190,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     #: preference is on, rebuilt on every model reload.
     gamepad_service = Instance(GamepadInteractionService, allow_none=True)
     layer_ui = None
+    zones_ui = None
+    zones_controller = None
     mode_picker_view = None
 
     # The open Camera Alignment dialog's model; None while closed. The
@@ -865,6 +870,24 @@ class DeviceViewerDockPane(TraitsDockPane):
         if status_bar_manager is not None:
             status_bar_manager.message = message
 
+    @observe("model:zones:move_rejected")
+    def _on_zone_move_rejected(self, event):
+        """Show the note beside the mode message, not in its place: pyface
+        strings the status-bar messages together, and the note goes away
+        on its own."""
+        status_bar_manager = self.task.window.status_bar_manager
+        if status_bar_manager is None:
+            return
+        message = "Move rejected: regions must stay on the device and contiguous"
+        if message not in status_bar_manager.messages:
+            status_bar_manager.messages.append(message)
+
+        def remove_note():
+            if message in status_bar_manager.messages:
+                status_bar_manager.messages.remove(message)
+
+        QTimer.singleShot(ZONE_STATUS_MESSAGE_MS, remove_note)
+
     ################################################################################################
     # ------- Device View class methods -------------------------
     ################################################################################################
@@ -1203,6 +1226,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # The gamepad service polls against the old device; rebuilt below.
         self._release_gamepad_service()
+        # The old interaction service's zone overlays sit on the old scene.
+        if self.scene.interaction_service is not None:
+            self.scene.interaction_service.cleanup()
 
         # One stepping service per loaded device, shared by the keyboard
         # handlers and the gamepad so both move the same electrode cursor.
@@ -1226,6 +1252,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Paint the white "possible connections" base layer for the freshly
         # loaded device.
         self.scene.interaction_service.route_redraw(None)
+        # Regions restored from the SVG's Zones layer.
+        self.scene.interaction_service.zones_redraw(None)
 
         logger.debug(
             f"Setting up handlers for new layer for new electrodes model {new_model}"
@@ -1328,6 +1356,15 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"Created electrodes from SVG file: "
             f"{self.model.electrodes.svg_model.filename}"
         )
+        unloaded = self.model.load_zones_from_device()
+        if unloaded > 0:
+            warning(
+                None,
+                f"{unloaded} zone region(s) in this device file reference electrodes "
+                "that do not exist in it and were dropped or trimmed. Saving the "
+                "file will write it without those electrodes.",
+                title="Zones Not Loaded",
+            )
 
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
@@ -1359,7 +1396,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe(
         "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, "
-        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT]",
+        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, "
+        "ZONES_VIEW_MIN_HEIGHT]",
         post_init=True,
     )
     def _set_device_view_layout_width(self, event=None):
@@ -1379,6 +1417,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
             self.layer_ui.control.setMinimumHeight(
                 self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT
+            )
+            self.zones_ui.get_editors("zone_types")[0].control.setMinimumHeight(
+                self.device_viewer_preferences.ZONES_VIEW_MIN_HEIGHT
             )
 
     def create_contents(self, parent):
@@ -1461,6 +1502,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             model=self.model.calibration, view=self.calibration_view
         )
 
+        self.zones_controller = ZonesController(model=self.model)
+        self.zones_ui = self.model.zones.edit_traits(view=zones_view)
+
         vm = ZoomViewModel(model=self.model)
         self.viewport_controls_widget = ZoomControlWidget(vm)
 
@@ -1524,6 +1568,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         self.execution_settings_box.set_expanded(False)
         self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
+
         scroll_layout.addWidget(
             CollapsibleVStackBox(
                 "Paths",
@@ -1534,6 +1579,10 @@ class DeviceViewerDockPane(TraitsDockPane):
                 ],
             )
         )
+        scroll_layout.addWidget(
+            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
+        )
+
         scroll_layout.addWidget(
             CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
         )

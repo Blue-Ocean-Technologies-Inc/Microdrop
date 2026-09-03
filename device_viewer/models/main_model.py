@@ -8,39 +8,69 @@
 #
 # Thanks for using Microdrop open source!
 
-from pathlib import Path
-from microdrop_utils.decorators import debounce
-
-from traits.api import Property, Str, Enum, observe, Instance, Bool, Dict, List, Float, HasTraits, Event, Int, UUID, provides, DelegatesTo
 from pyface.undo.api import UndoManager
-
-from .alpha import AlphaValue
-from .perspective import PerspectiveModel
-from .calibration import CalibrationModel
-from .route import RouteLayerManager
-from .electrodes import Electrodes
-from ..default_settings import electrode_fill_key, electrode_text_key, electrode_outline_key, default_alphas, \
-    default_visibility
-from ..consts import DEVICE_REPO_DIR_KEY, DEVICE_SVG_PATH_KEY
-from ..interfaces.i_main_model import IDeviceViewMainModel
-from ..interfaces.i_route_execution_service import IRouteExecutionService
-
-from ..preferences import DeviceViewerPreferences
-from ..services.route_execution_service import RouteExecutionService
-
-from ..utils.camera import qpointf_list_serialize, qpointf_list_deserialize
-
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
+from traits.api import (
+    UUID,
+    Bool,
+    DelegatesTo,
+    Dict,
+    Enum,
+    Event,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Str,
+    observe,
+    provides,
+)
+from traits.observation.events import TraitChangeEvent
 
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+from microdrop_utils.decorators import debounce
+
+from ..consts import (
+    DEFAULT_ZONE_TYPES,
+    DEVICE_REPO_DIR_KEY,
+    DEVICE_SVG_PATH_KEY,
+    ZONE_DRAW_MODE,
+    ZONE_SELECT_MODE,
+    ZONES_KEY,
+)
+from ..default_settings import (
+    default_alphas,
+    default_visibility,
+    electrode_fill_key,
+    electrode_outline_key,
+    electrode_text_key,
+)
+from ..interfaces.i_main_model import IDeviceViewMainModel
+from ..interfaces.i_route_execution_service import IRouteExecutionService
+from ..preferences import DeviceViewerPreferences
+from ..services.route_execution_service import RouteExecutionService
+from ..utils.camera import qpointf_list_deserialize, qpointf_list_serialize
+from .alpha import AlphaValue
+from .calibration import CalibrationModel
+from .electrodes import Electrodes
+from .perspective import PerspectiveModel
+from .route import RouteLayerManager
+from .zones import ZoneLayerManager, ZoneType
+
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
+
 
 @provides(IDeviceViewMainModel)
 class DeviceViewMainModel(HasTraits):
-
     # Compose device view model using components
     routes = Instance(RouteLayerManager)
+    #: Electrode zones (#596): named, colored regions drawn on the device.
+    zones = Instance(ZoneLayerManager)
     electrodes = Instance(Electrodes)
     preferences = Instance(DeviceViewerPreferences)
     calibration = Instance(CalibrationModel)
@@ -68,33 +98,71 @@ class DeviceViewMainModel(HasTraits):
 
     undo_manager = Instance(UndoManager)  # Undo manager
 
-    # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
+    # Draw: User can draw a single segment. Switches to draw-edit for
+    # extending the segment immediately
     # Edit: User can only extend selected segment
     # Edit-Draw: Same as edit except we switch to draw on mouserelease
-    # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
+    # Auto: Autorouting. User can only autoroute. Switches to edit once
+    # path has been created
     # Merge: User can only merge paths. They cannot edit.
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
     # Camera-Edit: User can edit the perspective correction of the camera feed
     # Pan: User can pan svg device (useful when zoomed in)
-    # To change the mode, set the mode property and clean up any references/inconsistencies
-    mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
-    last_mode = Enum("draw", "edit", "edit-draw", "auto", "merge", "channel-edit", "display", "camera-place", "camera-edit", "pan")
+    # Zone / Zone-Select: User draws electrode zones / picks a drawn zone region.
+    # To change the mode, set the mode property and clean up any
+    # references/inconsistencies
+    mode = Enum(
+        "draw",
+        "edit",
+        "edit-draw",
+        "auto",
+        "merge",
+        "channel-edit",
+        "display",
+        "camera-place",
+        "camera-edit",
+        "pan",
+        ZONE_DRAW_MODE,
+        ZONE_SELECT_MODE,
+    )
+    last_mode = Enum(
+        "draw",
+        "edit",
+        "edit-draw",
+        "auto",
+        "merge",
+        "channel-edit",
+        "display",
+        "camera-place",
+        "camera-edit",
+        "pan",
+        ZONE_DRAW_MODE,
+        ZONE_SELECT_MODE,
+    )
 
     # Editor related properties
     mode_name = Property(Str, observe="mode")
     editable = Property(Bool, observe="mode")
-    message = Str("") # Message to display in the table view
+    message = Str("")  # Message to display in the table view
 
     last_capacitance = Property(Float, depends_on="calibration.last_capacitance")
-    liquid_capacitance_over_area = Property(Float, depends_on="calibration.liquid_capacitance_over_area")
-    filler_capacitance_over_area = Property(Float, depends_on="calibration.filler_capacitance_over_area")
+    liquid_capacitance_over_area = Property(
+        Float, depends_on="calibration.liquid_capacitance_over_area"
+    )
+    filler_capacitance_over_area = Property(
+        Float, depends_on="calibration.filler_capacitance_over_area"
+    )
 
-    electrode_scale = Property(Float, observe='electrodes.svg_model.area_scale')
+    electrode_scale = Property(Float, observe="electrodes.svg_model.area_scale")
 
     # mode properties
-    step_id = Instance(str, allow_none=True) # The step_id of the current step, if any. If None, we are in free mode.
-    step_label = Instance(str, allow_none=True) # The label of the current step, if any.
+    step_id = Instance(
+        str, allow_none=True
+    )  # The step_id of the current step, if any. If None, we are in free mode.
+    step_label = Instance(
+        str, allow_none=True
+    )  # The label of the current step, if any.
     free_mode = Bool(True)  # Whether we are in free mode (no step_id)
     # Idle phase-navigation mode (#493): step through the selected step's
     # route phases while no protocol runs. Synced with the protocol tree
@@ -102,17 +170,22 @@ class DeviceViewMainModel(HasTraits):
     phase_navigation_mode = Bool(False)
     protocol_running = Bool(False)  # is protocol running
     realtime_mode = Bool(False)
-    connected = Bool(False) # is dropbot connected
+    connected = Bool(False)  # is dropbot connected
 
-    uuid = UUID(desc="The uuid of the model. Used to figure out if a state message is from this model or not.")
+    uuid = UUID(
+        desc="The uuid of the model. Used to figure out if a state message is "
+        "from this model or not."
+    )
 
     # -------------------------------------- events ----------------------------------
     zoom_in_event = Event(desc="Increase device view scale -- zoom into device view")
     zoom_out_event = Event(desc="Decrease device view scale -- zoom out of device view")
     reset_view_event = Event(desc="Reset device view scaling -- reset zoom")
 
-    # --------------------------------- Alpha Color Model --------------------------------
-    alpha_map = List() # We store the dict as a list since TraitsUI doesnt support dicts
+    # --------------------------- Alpha Color Model ---------------------------
+    alpha_map = (
+        List()
+    )  # We store the dict as a list since TraitsUI doesnt support dicts
 
     #: key -> AlphaValue lookup over alpha_map. get_alpha runs inside the
     #: per-electrode recolor loop every protocol phase, so it must not be
@@ -124,8 +197,9 @@ class DeviceViewMainModel(HasTraits):
     @observe("alpha_map")
     @observe("alpha_map.items")
     def _rebuild_alpha_index(self, event):
-        self._alpha_index = {alpha_value.key: alpha_value
-                             for alpha_value in self.alpha_map}
+        self._alpha_index = {
+            alpha_value.key: alpha_value for alpha_value in self.alpha_map
+        }
 
     # ------------------ Camera Model --------------------
     camera_perspective = Instance(PerspectiveModel, PerspectiveModel())
@@ -136,14 +210,20 @@ class DeviceViewMainModel(HasTraits):
     device_rotation_deg = Int(0)
 
     def load_camera_perspective_from_preferences(self):
-        _reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.reference_rect", "[]"))
-        _transformed_reference_rect = qpointf_list_deserialize(self.preferences.preferences.get("camera.transformed_reference_rect", "[]"))
+        _reference_rect = qpointf_list_deserialize(
+            self.preferences.preferences.get("camera.reference_rect", "[]")
+        )
+        _transformed_reference_rect = qpointf_list_deserialize(
+            self.preferences.preferences.get("camera.transformed_reference_rect", "[]")
+        )
 
         if _reference_rect:
             self.camera_perspective.reference_rect = _reference_rect
 
         if _transformed_reference_rect:
-            self.camera_perspective.transformed_reference_rect = _transformed_reference_rect
+            self.camera_perspective.transformed_reference_rect = (
+                _transformed_reference_rect
+            )
 
     def load_device_perspective_from_preferences(self):
         raw = self.preferences.preferences.get("device_view.rotation_deg", "0")
@@ -157,19 +237,31 @@ class DeviceViewMainModel(HasTraits):
         """Restore the last measured calibration capacitances so the sidebar
         starts at the previous session's values. Data-only, mirroring the
         camera reference-rect persistence -- no preferences-pane view."""
-        l_cap_pref = str(self.preferences.preferences.get("calibration.liquid_capacitance_over_area"))
-        f_cap_pref = str(self.preferences.preferences.get("calibration.filler_capacitance_over_area"))
+        l_cap_pref = str(
+            self.preferences.preferences.get("calibration.liquid_capacitance_over_area")
+        )
+        f_cap_pref = str(
+            self.preferences.preferences.get("calibration.filler_capacitance_over_area")
+        )
 
         try:
             self.calibration.liquid_capacitance_over_area = float(l_cap_pref)
             self.calibration.filler_capacitance_over_area = float(f_cap_pref)
 
-            logger.info(f"Loaded calibration data from preferences:\n"
-                        f"filler cap = {self.calibration.filler_capacitance_over_area}pF / mm^2;\n"
-                        f"liquid cap = {self.calibration.liquid_capacitance_over_area}pF / mm^2")
+            logger.info(
+                f"Loaded calibration data from preferences:\n"
+                f"filler cap = {self.calibration.filler_capacitance_over_area}"
+                f"pF / mm^2;\n"
+                f"liquid cap = {self.calibration.liquid_capacitance_over_area}"
+                f"pF / mm^2"
+            )
 
         except (TypeError, ValueError):
-            logger.warning(f"Failed to load calibration data from preferences: since values were not floats: liquid cap preference = {l_cap_pref}, filler capacitance preference = {f_cap_pref}")
+            logger.warning(
+                f"Failed to load calibration data from preferences: since "
+                f"values were not floats: liquid cap preference = {l_cap_pref}, "
+                f"filler capacitance preference = {f_cap_pref}"
+            )
 
     # ------------------ Initialization --------------------
     def traits_init(self):
@@ -178,6 +270,7 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
         self.calibration = CalibrationModel(electrodes=self.electrodes)
+        self.zones = ZoneLayerManager(globals_key=ZONES_KEY)
 
         self.route_execution_service = RouteExecutionService(model=self)
 
@@ -192,11 +285,17 @@ class DeviceViewMainModel(HasTraits):
                 if key not in self.preferences.default_visibility:
                     self.preferences.default_visibility[key] = default_visibility[key]
 
-                _alpha_value = AlphaValue(key=key, alpha=self.preferences.default_alphas[key], visible=self.preferences.default_visibility[key])
+                _alpha_value = AlphaValue(
+                    key=key,
+                    alpha=self.preferences.default_alphas[key],
+                    visible=self.preferences.default_visibility[key],
+                )
 
                 _alpha_map.append(_alpha_value)
 
             self.alpha_map = _alpha_map
+
+        self._seed_zone_types_from_preferences()
 
     # ------------------------- Properties ------------------------
 
@@ -210,7 +309,7 @@ class DeviceViewMainModel(HasTraits):
             self.electrodes.svg_model.area_scale = value
 
     def _get_mode_name(self):
-        return self.mode.title().replace('-', ' ')
+        return self.mode.title().replace("-", " ")
 
     def _get_editable(self):
         return self.mode != "display"
@@ -245,11 +344,49 @@ class DeviceViewMainModel(HasTraits):
         self.electrodes.clear_electrode_states()
         self.routes.clear_routes()
 
+    def _seed_zone_types_from_preferences(self):
+        """Zone types are app-global: restore them from preferences, or seed
+        the defaults on a fresh install."""
+        names = dict(self.preferences.zone_type_names) if self.preferences else {}
+        colors = dict(self.preferences.zone_type_colors) if self.preferences else {}
+        if names:
+            for zone_id, name in names.items():
+                self.zones.zone_types.append(
+                    ZoneType(
+                        id=zone_id,
+                        name=name,
+                        color=colors.get(zone_id) or self.zones.next_color(),
+                    )
+                )
+        else:
+            for name, color in DEFAULT_ZONE_TYPES:
+                self.zones.add_zone_type(name, color)
+        if self.zones.zone_types:
+            self.zones.selected_zone_type = self.zones.zone_types[0]
+
+    def load_zones_from_device(self):
+        """Point the zone manager at the freshly loaded device and restore
+        the regions stored in its SVG.
+
+        Returns
+        -------
+        int
+            Number of records dropped or trimmed for referencing electrode
+            ids missing from this device (see ``ZoneLayerManager.load_records``).
+        """
+        svg_model = self.electrodes.svg_model
+        self.zones.set_device(
+            svg_model.polygons,
+            self.electrodes.electrode_ids_channels_map,
+            svg_model.neighbours,
+        )
+        return self.zones.load_records(svg_model.zone_records)
+
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
         alpha_value = self._alpha_index.get(key)
         if alpha_value is None:
-            return 1.0 # Default alpha if not found
+            return 1.0  # Default alpha if not found
         return alpha_value.alpha / 100 if alpha_value.visible else 0.0
 
     def set_alpha(self, key: str, alpha: float):
@@ -278,10 +415,16 @@ class DeviceViewMainModel(HasTraits):
         Exits mode to last mode if mode is current mode.
         """
         if self.mode == mode:
-            logger.debug(f"Current mode is given mode ({mode}), reverting to last mode ({self.last_mode}).")
+            logger.debug(
+                f"Current mode is given mode ({mode}), reverting to last mode "
+                f"({self.last_mode})."
+            )
             self.goto_last_mode()
         else:
-            logger.debug(f"Current mode ({self.mode}) is not given mode ({mode}), setting given mode")
+            logger.debug(
+                f"Current mode ({self.mode}) is not given mode ({mode}), "
+                f"setting given mode"
+            )
             self.mode = mode
 
     def measure_filler_capacitance(self):
@@ -294,26 +437,38 @@ class DeviceViewMainModel(HasTraits):
 
     # ------------------ Observers ------------------------------------
 
-    @observe('mode')
+    @observe("mode")
     def mode_change(self, event):
         logger.debug(f"Mode change. New mode is: {event.new}")
         # Do not store last mode when moving between the two camera alignment modes.
         # They are one "super" mode.
-        if not (event.old == 'camera-edit' and event.new == 'camera-place') and not (event.new == 'camera-edit' and event.old == 'camera-place'):
+        if not (event.old == "camera-edit" and event.new == "camera-place") and not (
+            event.new == "camera-edit" and event.old == "camera-place"
+        ):
             logger.debug(f"Setting last mode to {event.old}")
-            self.last_mode = event.old # for use in goto_last_mode method
+            self.last_mode = event.old  # for use in goto_last_mode method
 
-        if event.old == 'merge' and event.new != 'merge': # We left merge mode
+        if event.old == "merge" and event.new != "merge":  # We left merge mode
             self.message = ""
             self.routes.layer_to_merge = None
-        if event.old == "channel-edit" and event.new != "channel-edit": # We left channel-edit mode
+        if (
+            event.old == "channel-edit" and event.new != "channel-edit"
+        ):  # We left channel-edit mode
             self.electrodes.electrode_editing = None
         if event.old != "camera-place" and event.new == "camera-place":
-            self.camera_perspective.reset_rects() # Reset the rectangles when entering camera-place mode
-            self.set_visible(electrode_fill_key, False)  # Set the fill alpha low for visibility
-            self.set_visible(electrode_text_key, False)  # Set the text alpha low for visibility
-            self.set_visible(electrode_outline_key, True)  # Keep the outline visible for editing
-        # if (event.old == "camera-edit" or event.old == "camera-place") and event.new != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
+            # Reset the rectangles when entering camera-place mode
+            self.camera_perspective.reset_rects()
+            self.set_visible(
+                electrode_fill_key, False
+            )  # Set the fill alpha low for visibility
+            self.set_visible(
+                electrode_text_key, False
+            )  # Set the text alpha low for visibility
+            self.set_visible(
+                electrode_outline_key, True
+            )  # Keep the outline visible for editing
+        # if (event.old == "camera-edit" or event.old == "camera-place") and event.new
+        # != "camera-edit" and event.new != "camera-place": # We left camera-edit mode
         #     self.set_visible(electrode_fill_key, True)  # Restore fill visibility
         #     self.set_visible(electrode_text_key, True)  # Restore text
 
@@ -326,8 +481,11 @@ class DeviceViewMainModel(HasTraits):
         if self.routes is not None:
             for layer in self.routes.layers:
                 if layer.route.route:
-                    # Update the name of the route layer based on the current channel map
-                    layer.name = layer.route.get_name(self.electrodes.channels_electrode_ids_map)
+                    # Update the name of the route layer based on the
+                    # current channel map
+                    layer.name = layer.route.get_name(
+                        self.electrodes.channels_electrode_ids_map
+                    )
                 else:
                     layer.name = "Null route"
 
@@ -337,21 +495,25 @@ class DeviceViewMainModel(HasTraits):
 
         if self.electrodes.svg_model:
             filename = self.electrodes.svg_model.filename
-            # Full path published to globals, so consumers (e.g. the protocol logger's device
-            # heatmap) can load the file without reaching into this model.
+            # Full path published to globals, so consumers (e.g. the protocol
+            # logger's device heatmap) can load the file without reaching into
+            # this model.
             app_globals[DEVICE_SVG_PATH_KEY] = str(filename)
             # Repo dir published alongside it, so consumers (e.g. the legacy
             # protocol import) can place a device SVG where Device > Load
             # will find it without reaching into this plugin's preferences.
             if self.preferences is not None:
-                app_globals[DEVICE_REPO_DIR_KEY] = str(
-                    self.preferences.DEVICE_REPO_DIR)
+                app_globals[DEVICE_REPO_DIR_KEY] = str(self.preferences.DEVICE_REPO_DIR)
         else:
-            logger.warning("Unable to push svg filename to globals yet. Need svg_model to fully initialize.")
+            logger.warning(
+                "Unable to push svg filename to globals yet. Need svg_model "
+                "to fully initialize."
+            )
 
-    @observe('electrode_scale')
+    @observe("electrode_scale")
     def update_stored_capacitances_on_area_scale_change(self, event):
-        # new_area = old_area * new_scale ==> cap/new_area = cap/(old_area * new_scale) = old_cap_over_area / new_scale
+        # new_area = old_area * new_scale ==> cap/new_area =
+        # cap/(old_area * new_scale) = old_cap_over_area / new_scale
         if event.new:
             if self.liquid_capacitance_over_area:
                 self.liquid_capacitance_over_area /= event.new
@@ -370,10 +532,52 @@ class DeviceViewMainModel(HasTraits):
         elif change_type == "visible":
             self.preferences.default_visibility[event.object.key] = event.new
 
+    ### zone types are app-global: mirror them into preferences
+    @observe("zones.zone_types.items, zones.zone_types.items.[name, color]")
+    def _zone_types_changed(self, event):
+        if self.preferences is None:
+            return
+        if isinstance(event, TraitChangeEvent) and event.name == "zones":
+            # Fired when `self.zones` itself is (re)assigned in traits_init,
+            # before _seed_zone_types_from_preferences populates it -- skip,
+            # or this clobbers preferences with the not-yet-seeded empty list.
+            return
+        self.preferences.zone_type_names = {
+            zone_type.id: zone_type.name for zone_type in self.zones.zone_types
+        }
+        self.preferences.zone_type_colors = {
+            zone_type.id: zone_type.color for zone_type in self.zones.zone_types
+        }
+
+    ### regions travel with the device: keep the SVG model's records current
+    @observe(
+        "zones.regions.items, zones.regions.items.[zone_id, visible], "
+        "zones.regions.items.electrode_ids.items"
+    )
+    def _zone_regions_changed(self, event):
+        svg_model = self.electrodes.svg_model
+        if svg_model is not None:
+            svg_model.zone_records = self.zones.to_records()
+
+    ### channel edits change what a zone resolves to
+    @observe("electrodes.electrodes.items.channel", post_init=True)
+    def _electrode_channel_changed_for_zones(self, event):
+        if isinstance(event, TraitChangeEvent) and event.name == "electrodes":
+            # Fired when `self.electrodes` itself is (re)assigned in
+            # traits_init, before `self.zones` exists yet -- skip.
+            return
+        self.zones.update_channel_map(self.electrodes.electrode_ids_channels_map)
+
     @observe("camera_perspective:transformation")
     def _camera_perspective_changed(self, event=None):
-        self.preferences.preferences.set("camera.reference_rect", qpointf_list_serialize(self.camera_perspective.reference_rect))
-        self.preferences.preferences.set("camera.transformed_reference_rect", qpointf_list_serialize(self.camera_perspective.transformed_reference_rect))
+        self.preferences.preferences.set(
+            "camera.reference_rect",
+            qpointf_list_serialize(self.camera_perspective.reference_rect),
+        )
+        self.preferences.preferences.set(
+            "camera.transformed_reference_rect",
+            qpointf_list_serialize(self.camera_perspective.transformed_reference_rect),
+        )
 
     @observe("device_rotation_deg")
     def _device_perspective_changed(self, event=None):
@@ -381,7 +585,10 @@ class DeviceViewMainModel(HasTraits):
             "device_view.rotation_deg", str(self.device_rotation_deg)
         )
 
-    @observe("calibration:liquid_capacitance_over_area, calibration:filler_capacitance_over_area")
+    @observe(
+        "calibration:liquid_capacitance_over_area, "
+        "calibration:filler_capacitance_over_area"
+    )
     def _calibration_data_changed(self, event=None):
         """Persist the calibration capacitances so they survive a restart
         (loaded back via load_calibration_data_from_preferences)."""

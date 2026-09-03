@@ -11,91 +11,97 @@
 from pathlib import Path
 
 from device_viewer.models.media import (
-    MediaCaptureEventModel, RecordingStatePublisher, RecordingStateModel,
+    MediaCaptureEventModel,
+    RecordingStateModel,
+    RecordingStatePublisher,
 )
 from dropbot_controller.consts import (
-    CHIP_INSERTED,
     CAPACITANCE_UPDATED,
+    CHIP_INSERTED,
     DISABLED_CHANNELS_CHANGED,
-    DROPLETS_DETECTED,
-    REALTIME_MODE_UPDATED,
-    DROPBOT_DISCONNECTED,
     DROPBOT_CONNECTED,
-    SHORTS_DETECTED, HALTED,
+    DROPBOT_DISCONNECTED,
+    DROPLETS_DETECTED,
+    HALTED,
+    REALTIME_MODE_UPDATED,
 )
 
 # ---------------------------------------------------------------------------
 # Package identity
 # ---------------------------------------------------------------------------
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 listener_name = f"{PKG}_listener"
 
 # ---------------------------------------------------------------------------
 # Pub/sub topics
 # ---------------------------------------------------------------------------
-# Device-viewer topics — canonical home (re-exported by protocol_grid.consts for back-compat).
-# Once protocol_grid is deleted in PPT-9, these stay; the re-exports go away.
-DEVICE_VIEWER_STATE_CHANGED    = "ui/device_viewer/state_changed"
-DEVICE_VIEWER_SCREEN_CAPTURE   = "ui/device_viewer/screen_capture"
+# Device-viewer topics — canonical home (re-exported by protocol_grid.consts
+# for back-compat). Once protocol_grid is deleted in PPT-9, these stay; the
+# re-exports go away.
+DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
+DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
-DEVICE_VIEWER_CAMERA_ACTIVE    = "ui/device_viewer/camera_active"
-DEVICE_VIEWER_MEDIA_CAPTURED   = "ui/device_viewer/camera/media_captured"
-DEVICE_VIEWER_RECORDING_STATE  = "ui/device_viewer/recording_state"
+DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
+DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
+DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 # Sidebar route preview/playback is running (payload "True"/"False"). Published
 # by device_viewer's RouteExecutionService. Canonical home moved here from the
 # deleted protocol_grid.consts in PPT-9 (#371).
-ROUTES_EXECUTING               = "ui/device_viewer/routes_executing"
-CALIBRATION_DATA               = "ui/calibration_data"
+ROUTES_EXECUTING = "ui/device_viewer/routes_executing"
+CALIBRATION_DATA = "ui/calibration_data"
 
 # Idle phase-navigation mode (#493): opt-in checkbox synced between the DV
 # sidebar and the protocol tree. Payload "True"/"False". Published by
 # whichever UI the user toggled; both subscribe (applying an equal value is
 # a trait no-op, so echoes are harmless).
-PHASE_NAVIGATION_MODE          = "ui/phase_navigation_mode"
+PHASE_NAVIGATION_MODE = "ui/phase_navigation_mode"
 # Tree -> DV: navigate while idle-stepping. JSON payload:
 # {"action": "prev" | "next" | "goto", "index": <int, goto only>}.
-PHASE_NAVIGATION_REQUEST       = "ui/device_viewer/phase_navigation_request"
+PHASE_NAVIGATION_REQUEST = "ui/device_viewer/phase_navigation_request"
 # DV -> tree: current idle-nav position. JSON payload:
 # {"phase_index": <0-based int>, "phase_total": <int>}; total 0 = no plan.
-PHASE_NAVIGATION_STATE         = "ui/device_viewer/phase_navigation_state"
+PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"
 
 # Sidebar route-executor execution params -> the selected protocol step.
 # Published by the DV commit button; consumed by the active protocol widget
 # (pluggable_protocol_tree sync controller; protocol_grid keeps its own
 # duplicated literal until PPT-9 deletes it). Schema:
 # device_viewer/models/step_params_commit.py.
-STEP_PARAMS_COMMIT             = "ui/device_viewer/step_params_commit"
+STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 
 # Live gamepad button-capture (remap) request: payload is the action name being
 # rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
 # the device-viewer listener to the live interaction service. Dispatches to
 # _on_gamepad_capture_request_triggered (topic.split("/")[-1] == unique segment).
-GAMEPAD_CAPTURE_REQUEST        = "ui/device_viewer/gamepad_capture_request"
+GAMEPAD_CAPTURE_REQUEST = "ui/device_viewer/gamepad_capture_request"
 # Manual gamepad reconnect request (payload unused). Lets the user re-attempt
 # controller acquisition from the UI after an unplug/replug. Dispatches to
 # _on_gamepad_reconnect_request_triggered.
-GAMEPAD_RECONNECT_REQUEST      = "ui/device_viewer/gamepad_reconnect_request"
+GAMEPAD_RECONNECT_REQUEST = "ui/device_viewer/gamepad_reconnect_request"
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
 
-# Shared topics used by device_viewer actor subscriptions. Defined here as literals (rather than
-# imported from protocol_grid.consts) to avoid the circular import that would otherwise form
-# now that protocol_grid.consts re-exports the device_viewer topics above. Duplicated as literals
-# in protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
-PROTOCOL_GRID_DISPLAY_STATE    = "ui/protocol_grid/display_state"
-PROTOCOL_RUNNING               = "microdrop/protocol_running"
+# Shared topics used by device_viewer actor subscriptions. Defined here as
+# literals (rather than imported from protocol_grid.consts) to avoid the
+# circular import that would otherwise form now that protocol_grid.consts
+# re-exports the device_viewer topics above. Duplicated as literals in
+# protocol_grid.consts; safe to consolidate once PPT-9 deletes protocol_grid.
+PROTOCOL_GRID_DISPLAY_STATE = "ui/protocol_grid/display_state"
+PROTOCOL_RUNNING = "microdrop/protocol_running"
 # Literal here (matching PROTOCOL_TREE_DISPLAY_STATE below) to avoid importing
 # microdrop_application.consts. Canonical home is microdrop_application.consts;
 # value must stay in sync. Keeps the viewer editable mid-run in Advanced Mode (#434).
-ADVANCED_MODE_CHANGE           = "microdrop/advanced_mode_change"
-# Literal here to avoid circular import: pluggable_protocol_tree.consts imports from this module.
-# NB: last segment must be unique vs PROTOCOL_GRID_DISPLAY_STATE — the dramatiq listener base
-# dispatches by topic.split("/")[-1], so two topics ending in "display_state" collide on the
-# same handler. Underscore-joined keeps dispatch routed to _on_protocol_tree_display_state_triggered.
-PROTOCOL_TREE_DISPLAY_STATE    = "ui/protocol_tree_display_state"
+ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
+# Literal here to avoid circular import: pluggable_protocol_tree.consts
+# imports from this module. NB: last segment must be unique vs
+# PROTOCOL_GRID_DISPLAY_STATE — the dramatiq listener base dispatches by
+# topic.split("/")[-1], so two topics ending in "display_state" collide on
+# the same handler. Underscore-joined keeps dispatch routed to
+# _on_protocol_tree_display_state_triggered.
+PROTOCOL_TREE_DISPLAY_STATE = "ui/protocol_tree_display_state"
 
 # Topics the plugin's actor subscribes to.
 ACTOR_TOPIC_DICT = {
@@ -129,30 +135,41 @@ ACTOR_TOPIC_DICT = {
 # ---------------------------------------------------------------------------
 # Publishers
 # ---------------------------------------------------------------------------
-device_viewer_recording_state_publisher = RecordingStatePublisher(topic=DEVICE_VIEWER_RECORDING_STATE)
+device_viewer_recording_state_publisher = RecordingStatePublisher(
+    topic=DEVICE_VIEWER_RECORDING_STATE
+)
 
 # ---------------------------------------------------------------------------
 # app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
 # ---------------------------------------------------------------------------
-CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map" # channel areas
-FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area" # filler calibration
-LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area" # liquid calibration
-DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path" # the active svg file path
-DEVICE_REPO_DIR_KEY = "microdrop.device_repo.dir" # the user device-SVG repo directory
-MEDIA_CAPTURES_KEY = "media_captures" # serialised camera captures for the active run.
-DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active" # live video-recording state
+CHANNEL_AREAS_KEY = "channel_electrode_areas_scaled_map"  # channel areas
+FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area"  # filler calibration
+LIQUID_CAPACITANCE_KEY = "liquid_capacitance_over_area"  # liquid calibration
+DEVICE_SVG_PATH_KEY = "microdrop.device_svg.path"  # the active svg file path
+DEVICE_REPO_DIR_KEY = "microdrop.device_repo.dir"  # the user device-SVG repo directory
+MEDIA_CAPTURES_KEY = "media_captures"  # serialised camera captures for the active run.
+DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active"  # recording state
+ZONES_KEY = "microdrop.device.zones"  # JSON snapshot of zone types + regions
 
-# Mirrors the live recording state to app_globals (see DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
-recording_state_model = RecordingStateModel(globals_key=DEVICE_VIEWER_RECORDING_ACTIVE_KEY)
+# Mirrors the live recording state to app_globals (see
+# DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
+recording_state_model = RecordingStateModel(
+    globals_key=DEVICE_VIEWER_RECORDING_ACTIVE_KEY
+)
 
 # Fires with the saved file's path when a capture finishes writing — the
 # event-driven alternative to polling the captures folder (e.g. the
 # fluorescence image viewer refreshes on it).
 media_capture_event_model = MediaCaptureEventModel()
 
-APP_GLOBALS_KEYS = [CHANNEL_AREAS_KEY, FILLER_CAPACITANCE_KEY,
-                    LIQUID_CAPACITANCE_KEY, DEVICE_SVG_PATH_KEY,
-                    DEVICE_REPO_DIR_KEY]
+APP_GLOBALS_KEYS = [
+    CHANNEL_AREAS_KEY,
+    FILLER_CAPACITANCE_KEY,
+    LIQUID_CAPACITANCE_KEY,
+    DEVICE_SVG_PATH_KEY,
+    DEVICE_REPO_DIR_KEY,
+    ZONES_KEY,
+]
 
 # ---------------------------------------------------------------------------
 # Capture file layout (under the experiment directory). Other plugins may
@@ -171,6 +188,7 @@ RAW_CAPTURES_SUBDIR = "16bit_raw"
 DEVICE_VIEWER_SIDEBAR_WIDTH = 320
 ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
+ZONES_VIEW_MIN_HEIGHT = 250
 
 # Default electrode channel count; configurable in Device Viewer preferences.
 NUMBER_OF_CHANNELS = 120
@@ -186,18 +204,18 @@ AUTO_FIT_MARGIN_SCALE = 95
 # Button indices are for the common NES/SNES-style USB pad:
 #   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
 # ---------------------------------------------------------------------------
-GAMEPAD_BTN_CLEAR = 1      # A      -> clear all electrodes
-GAMEPAD_BTN_FIND = 8       # Select -> find liquid
-GAMEPAD_BTN_SPLIT = 2      # B hold -> split
-GAMEPAD_BTN_ADD = 3        # Y hold -> add electrode
-GAMEPAD_BTN_REMOVE = 0     # X hold -> remove electrode
-GAMEPAD_BTN_REALTIME = 9   # Start  -> toggle realtime mode
+GAMEPAD_BTN_CLEAR = 1  # A      -> clear all electrodes
+GAMEPAD_BTN_FIND = 8  # Select -> find liquid
+GAMEPAD_BTN_SPLIT = 2  # B hold -> split
+GAMEPAD_BTN_ADD = 3  # Y hold -> add electrode
+GAMEPAD_BTN_REMOVE = 0  # X hold -> remove electrode
+GAMEPAD_BTN_REALTIME = 9  # Start  -> toggle realtime mode
 
-GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7   # D-pad move / split step debounce
-GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3   # D-pad add / remove debounce
-GAMEPAD_DEBOUNCE_FIND_S = 2.0         # find-liquid button debounce
-GAMEPAD_DEBOUNCE_REALTIME_S = 0.4     # realtime-toggle button debounce
-GAMEPAD_AXIS_THRESHOLD = 0.6          # analog-stick-as-D-pad activation threshold
+GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7  # D-pad move / split step debounce
+GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3  # D-pad add / remove debounce
+GAMEPAD_DEBOUNCE_FIND_S = 2.0  # find-liquid button debounce
+GAMEPAD_DEBOUNCE_REALTIME_S = 0.4  # realtime-toggle button debounce
+GAMEPAD_AXIS_THRESHOLD = 0.6  # analog-stick-as-D-pad activation threshold
 
 # Poll cadence: ~100 Hz only while a controller is attached; with none,
 # a slow tick suffices to catch JOYDEVICEADDED hot-plug events instead
@@ -226,8 +244,17 @@ QT_RECORDER_FORMAT_MKV = "MKV"
 # format are always taken from the camera, never from preferences.
 FFMPEG_CONTAINERS = ("mkv", "mp4")
 FFMPEG_VIDEO_CODECS = ("libx264", "libx265")
-FFMPEG_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast",
-                  "medium", "slow", "slower", "veryslow")
+FFMPEG_PRESETS = (
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+)
 FFMPEG_DEFAULT_CRF = 17
 
 #: Qt/MKV recording quality tiers, easiest first: Auto is the recommended
@@ -237,22 +264,26 @@ RECORDING_BITRATE_TIERS = ("Auto", "Low", "Medium", "High", "Ultra")
 
 #: Resolution class label -> (CameraPreferences trait, {tier: Mbps}).
 RECORDING_BITRATE_CLASSES = {
-    "1080p @ 30 fps": ("qt_bitrate_1080p30_tier",
-                       {"Auto": 4.5, "Low": 3, "Medium": 4.5,
-                        "High": 6, "Ultra": 8}),
-    "1080p @ 60 fps": ("qt_bitrate_1080p60_tier",
-                       {"Auto": 6, "Low": 4.5, "Medium": 6,
-                        "High": 7.5, "Ultra": 9}),
-    "4K @ 24/30 fps": ("qt_bitrate_4k30_tier",
-                       {"Auto": 20, "Low": 15, "Medium": 20,
-                        "High": 25, "Ultra": 30}),
-    "4K @ 60 fps": ("qt_bitrate_4k60_tier",
-                    {"Auto": 45, "Low": 35, "Medium": 45,
-                     "High": 55, "Ultra": 70}),
+    "1080p @ 30 fps": (
+        "qt_bitrate_1080p30_tier",
+        {"Auto": 4.5, "Low": 3, "Medium": 4.5, "High": 6, "Ultra": 8},
+    ),
+    "1080p @ 60 fps": (
+        "qt_bitrate_1080p60_tier",
+        {"Auto": 6, "Low": 4.5, "Medium": 6, "High": 7.5, "Ultra": 9},
+    ),
+    "4K @ 24/30 fps": (
+        "qt_bitrate_4k30_tier",
+        {"Auto": 20, "Low": 15, "Medium": 20, "High": 25, "Ultra": 30},
+    ),
+    "4K @ 60 fps": (
+        "qt_bitrate_4k60_tier",
+        {"Auto": 45, "Low": 35, "Medium": 45, "High": 55, "Ultra": 70},
+    ),
 }
 # Class-matching thresholds for the ACTUAL camera format at record time.
-RECORDING_4K_MIN_HEIGHT = 1600   # frames at least this tall use the 4K classes
-RECORDING_60FPS_MIN_FPS = 45     # at least this fps uses the 60 fps classes
+RECORDING_4K_MIN_HEIGHT = 1600  # frames at least this tall use the 4K classes
+RECORDING_60FPS_MIN_FPS = 45  # at least this fps uses the 60 fps classes
 
 # ---------------------------------------------------------------------------
 # Camera preview
@@ -321,3 +352,84 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 # every feed; raw (16-bit) sensor captures are the source plugin's own
 # concern (the fluorescence capture chain writes its own burst folders).
 CAMERA_SOURCES = "device_viewer.camera_sources"
+
+# ---------------------------------------------------------------------------
+# Electrode zones (#596): named, colored electrode regions drawn on the
+# device view. The model lives in models/zones.py.
+# ---------------------------------------------------------------------------
+
+# Device-view interaction modes added to DeviceViewMainModel.mode. Editing a
+# region is ZONE_DRAW_MODE with ZoneLayerManager.editing_region set.
+ZONE_DRAW_MODE = "zone"
+ZONE_SELECT_MODE = "zone-select"
+ZONE_MODES = (ZONE_DRAW_MODE, ZONE_SELECT_MODE)
+
+# inkscape:label of the autogenerated SVG layer that stores regions.
+ZONES_SVG_LAYER_LABEL = "Zones"
+
+# Zone types seeded when preferences hold none (name, hex color).
+DEFAULT_ZONE_TYPES = [
+    ("heating", "#f5e050"),
+    ("mixing", "#e06666"),
+]
+
+# Colors handed to newly added zone types, cycled in order.
+ZONE_COLOR_CYCLE = [
+    "#f5e050",
+    "#e06666",
+    "#6aa84f",
+    "#6d9eeb",
+    "#c27ba0",
+    "#f6b26b",
+]
+
+# Region fill opacity at 100 % on the alpha table; overlapping regions blend.
+ZONE_FILL_OPACITY = 0.43
+
+# Dashed-highlight color when a ctrl+drag subtracts from the pending selection.
+ZONE_SUBTRACT_PREVIEW_COLOR = "#d32f2f"
+
+# Scene z-order: electrode fill sits at 0 and channel labels at 1, so zones
+# and their previews stack between them.
+ZONE_REGION_Z_VALUE = 0.5
+ZONE_PENDING_Z_VALUE = 0.6
+ZONE_BAND_Z_VALUE = 0.7
+
+# Per-zone layer offset stacked on ZONE_REGION_Z_VALUE: the first zone in the
+# sidebar tree is the TOP layer, so it gets the largest offset. The step is
+# small enough that up to 20 zones stay below ZONE_PENDING_Z_VALUE, keeping
+# the pending highlight and the rubber band above every region.
+ZONE_LAYER_Z_STEP = 0.005
+
+# Cosmetic outline widths (px); the selected region draws thicker.
+ZONE_OUTLINE_PEN_WIDTH = 2
+ZONE_SELECTED_OUTLINE_PEN_WIDTH = 4
+
+# A press/release within this screen distance is a click (toggle one
+# electrode), anything further is a rubber-band drag.
+ZONE_CLICK_DRAG_THRESHOLD_PX = 4
+
+# Fraction of the smallest inter-electrode gap used as the morphological
+# closing distance for a region's union outline: bridges the gap between
+# adjacent members without bridging a skipped-electrode hole.
+ZONE_OUTLINE_GAP_CLOSING_FRACTION = 0.6
+
+# Gap between a region/selection corner and its floating button strip.
+ZONE_OVERLAY_MARGIN_PX = 8
+
+# How long a transient zone note stays beside the status-bar mode message.
+ZONE_STATUS_MESSAGE_MS = 4000
+
+# Zones sidebar tree-table: column order (zone types are parent rows, their
+# regions child rows) and the fixed widths of the non-text columns.
+ZONE_TREE_HEADERS = ("Zone", "Color", "#", "", "")
+ZONE_TREE_NAME_COLUMN = 0
+ZONE_TREE_COLOR_COLUMN = 1
+ZONE_TREE_COUNT_COLUMN = 2
+ZONE_TREE_VISIBLE_COLUMN = 3
+ZONE_TREE_DELETE_COLUMN = 4
+ZONE_TREE_COLOR_COLUMN_WIDTH_PX = 60
+# Inset of the painted color swatch inside its cell, and the padding added to
+# the icon font's line height to size the two glyph columns.
+ZONE_TREE_SWATCH_INSET_PX = 4
+ZONE_TREE_GLYPH_COLUMN_PADDING_PX = 8
