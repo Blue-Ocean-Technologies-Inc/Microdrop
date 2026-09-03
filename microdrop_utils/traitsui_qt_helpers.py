@@ -45,6 +45,7 @@ from pyface.qt.QtGui import (
 from pyface.qt.QtWidgets import (
     QBoxLayout,
     QCheckBox,
+    QColorDialog,
     QDoubleSpinBox,
     QGroupBox,
     QLabel,
@@ -76,11 +77,12 @@ from traitsui.api import (
 from traitsui.api import (
     TableColumn as TableColumn_,
 )
+from traitsui.qt.color_editor import SimpleColorEditor
 from traitsui.qt.color_editor import ToolkitEditorFactory as QtColorEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
-from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.button_styles import ICON_FONT_FAMILY, TEXT_BUTTON_STYLE
 from microdrop_style.colors import (
     ACCENT_COLOR,
     BLACK,
@@ -113,6 +115,13 @@ logger = get_logger(__name__)
 DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
 
 DEFAULT_GLYPH_POINT_SIZE_PX = 16
+
+#: Qt's default child-layout margin and item spacing (QStyle
+#: PM_LayoutLeftMargin / PM_LayoutHorizontalSpacing on the app styles).
+#: TraitsUI groups use the spacing but drop the margin, so a row that must
+#: line up with a plain Qt row needs a MARGIN - SPACING leading spacer.
+QT_LAYOUT_MARGIN_PX = 9
+QT_LAYOUT_SPACING_PX = 6
 
 # Drag grip for resizing a table's row-number header (see
 # make_table_row_header_resizable): grip strip width along the header's
@@ -212,6 +221,28 @@ class ColorColumn(ObjectColumn):
             self.format_func = lambda value: QColor(value).name()
 
 
+class _TextStyledSimpleColorEditor(SimpleColorEditor):
+    """TraitsUI's color editor opens its picker with the static
+    ``QColorDialog.getColor`` parented to the cell editor, so under the
+    sidebar stylesheet the dialog's text buttons inherit the glyph-font
+    push-button rule. This builds the dialog itself and restores the
+    app's text-button style on it."""
+
+    def popup_editor(self):
+        dialog = QColorDialog(self.factory.to_qt_color(self), self.control)
+        options = QColorDialog.ColorDialogOption.ShowAlphaChannel
+        if not self.factory.use_native_dialog:
+            options |= QColorDialog.ColorDialogOption.DontUseNativeDialog
+        dialog.setOptions(options)
+        dialog.setWindowTitle("Select Color")
+        dialog.setStyleSheet(TEXT_BUTTON_STYLE)
+        # Modal like the TraitsUI editor it replaces: the cell editor that
+        # receives the value only lives while the cell is being edited.
+        if dialog.exec() and dialog.selectedColor().isValid():
+            self.value = self.factory.from_qt_color(dialog.selectedColor())
+            self.update_editor()
+
+
 class HexColorEditorFactory(QtColorEditorFactory):
     """ColorEditor over a plain hex-string trait (e.g. ``Str("#f5e050")``):
     the picker round-trips QColor <-> '#rrggbb' so Qt-free models keep
@@ -222,6 +253,9 @@ class HexColorEditorFactory(QtColorEditorFactory):
 
     def from_qt_color(self, color):
         return color.name()
+
+    def _get_simple_editor_class(self):
+        return _TextStyledSimpleColorEditor
 
 
 class CustomCheckboxColumn(ObjectColumn):
@@ -1431,6 +1465,45 @@ class IconButtonEditor(BasicEditorFactory):
 
     point_size = Int(DEFAULT_GLYPH_POINT_SIZE_PX)
     max_width = Int(DEFAULT_GLYPH_POINT_SIZE_PX + 12)
+
+
+class _ToggleButtonEditor(QtEditor):
+    """A checkable QPushButton bound to a Bool: checked while the trait is
+    True. It carries no style of its own, so it looks like every other push
+    button under the surrounding stylesheet (glyph label in the icon font,
+    accent color while checked)."""
+
+    def init(self, parent):
+        self.control = QPushButton(self.factory.glyph)
+        self.control.setCheckable(True)
+        if self.factory.tooltip:
+            self.control.setToolTip(self.factory.tooltip)
+        self.control.clicked.connect(self._on_click)
+        self.update_editor()
+
+    def _on_click(self, checked):
+        self.value = checked
+
+    def update_editor(self):
+        # setChecked emits toggled (not connected), not clicked, so an
+        # external change cannot re-enter _on_click.
+        self.control.setChecked(bool(self.value))
+
+
+class ToggleButtonEditor(BasicEditorFactory):
+    """Factory for a Bool rendered as a checkable push button::
+
+        UItem("draw_tool_active", editor=ToggleButtonEditor(
+            glyph=ICON_CROP, tooltip="Draw zones"))
+
+    The push-button twin of :class:`IconToggleEditor` (a flat tool button).
+    """
+
+    klass = _ToggleButtonEditor
+
+    #: Material Symbols ligature (or codepoint) shown on the button.
+    glyph = Str()
+    tooltip = Str()
 
 
 class _IconModeButtonEditor(_IconButtonEditor):
