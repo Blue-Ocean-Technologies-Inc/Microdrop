@@ -332,6 +332,9 @@ class ZoneTreeWidget(QWidget):
         # True while one direction of the selection sync is writing, so the
         # echo coming back the other way is ignored instead of ping-ponging.
         self._syncing = False
+        # Ids of the zones the user folded; a model reset (add, delete,
+        # reorder) rebuilds every row expanded unless the id is in here.
+        self._collapsed_zone_ids = set()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -353,6 +356,12 @@ class ZoneTreeWidget(QWidget):
         self.tree.expandAll()
 
         self.model.modelReset.connect(self._on_model_reset)
+        self.tree.collapsed.connect(
+            lambda index: self._collapsed_zone_ids.add(index.internalPointer().id)
+        )
+        self.tree.expanded.connect(
+            lambda index: self._collapsed_zone_ids.discard(index.internalPointer().id)
+        )
         self.tree.selectionModel().selectionChanged.connect(self._on_rows_selected)
         self.tree.selection_cleared.connect(self.clear_selection)
 
@@ -506,7 +515,11 @@ class ZoneTreeWidget(QWidget):
             self._syncing = False
 
     def _on_model_reset(self):
-        self.tree.expandAll()
+        for zone_type in self._manager.zone_types:
+            self.tree.setExpanded(
+                self.model.index_for(zone_type),
+                zone_type.id not in self._collapsed_zone_ids,
+            )
         self._on_manager_selection_changed(None)
 
 
