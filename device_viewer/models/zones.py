@@ -168,13 +168,13 @@ class ZoneLayerManager(HasTraits):
     new_zone_type_name = Str()
 
     # Sidebar / overlay actions; ZonesController turns them into calls.
-    commit_button = Button("Commit zone")
-    clear_pending_button = Button("Clear selection")
-    add_zone_type_button = Button("Add")
-    edit_region_button = Button("Edit")
-    delete_region_button = Button("Delete")
-    hide_region_button = Button("Hide")
-    merge_regions_button = Button("Merge")
+    commit_button = Button("check")
+    clear_pending_button = Button("clear")
+    add_zone_type_button = Button("add")
+    edit_region_button = Button("edit")
+    delete_region_button = Button("delete")
+    hide_region_button = Button("hide")
+    merge_regions_button = Button("merge")
 
     #: zone id -> highest region number ever handed out; never reused.
     _region_id_counters = Dict(Str, Int)
