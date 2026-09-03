@@ -9,49 +9,58 @@
 # Thanks for using Microdrop open source!
 
 """TraitsUI sidebar section for electrode zones, edited directly on the
-ZoneLayerManager: the tool grid, the zone types table, and the regions
-table. Standalone: ``manager.edit_traits(view=zones_view)``."""
+ZoneLayerManager: the tool row, the zone types table, and the regions
+table, all push-button editors styled by the sidebar stylesheet. Standalone:
+``manager.edit_traits(view=zones_view)``."""
 
 # Enthought library imports.
-from traitsui.api import (
-    CustomEditor,
-    HGroup,
-    Spring,
-    TableEditor,
-    UItem,
-    VGroup,
-    View,
-    spring,
-)
+from traitsui.api import HGroup, Spring, TableEditor, UItem, VGroup, View, spring
 
 # Microdrop style imports.
-from microdrop_style.icons.icons import ICON_DELETE
+from microdrop_style.icons.icons import (
+    ICON_CALL_TO_ACTION,
+    ICON_CROP,
+    ICON_DELETE,
+    ICON_SELECT_All,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
+    QT_LAYOUT_MARGIN_PX,
+    QT_LAYOUT_SPACING_PX,
     ColorColumn,
     GlyphActionColumn,
     HexColorEditorFactory,
     ObjectColumn,
     SafeCancelTableHandler,
+    ToggleButtonEditor,
     VisibleColumn,
 )
 
 # Local imports.
-from ...consts import ZONE_SELECT_MODE
-from .zone_tool_picker import (
-    add_zone_type_button_factory,
-    canvas_overlays_toggle_factory,
-    zone_tool_picker_factory,
-)
+from ...consts import ZONE_DRAW_MODE, ZONE_SELECT_MODE
 
 zone_types_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="Zone"),
-        ColorColumn(name="color", label="Color", editor=HexColorEditorFactory()),
-        ObjectColumn(name="region_count", label="Regions", editable=False),
+        # Proportional widths so the columns fill the table (TraitsUI's
+        # interactive default keeps them at content width, which leaves an
+        # empty table's glyph columns invisible); glyph columns get small
+        # shares so they stay compact.
+        ObjectColumn(name="name", label="Zone", width=0.36),
+        ColorColumn(
+            name="color", label="Color", editor=HexColorEditorFactory(), width=0.22
+        ),
+        ObjectColumn(name="region_count", label="#", editable=False, width=0.14),
+        # Bulk eye: shows or hides every region of the zone.
+        VisibleColumn(
+            name="visible",
+            label="",
+            editable=False,
+            horizontal_alignment="center",
+            width=0.14,
+        ),
         GlyphActionColumn(
-            name="id", label="", glyph=ICON_DELETE, fire="delete_requested"
+            name="id", label="", glyph=ICON_DELETE, fire="delete_requested", width=0.14
         ),
     ],
     selected="selected_zone_type",
@@ -63,16 +72,18 @@ zone_types_table_editor = TableEditor(
 
 zone_regions_table_editor = TableEditor(
     columns=[
+        # The region id embeds its zone ("heating-1"), so no zone column;
+        # content width, the glyph columns take small shares of the rest.
         ObjectColumn(name="id", label="Region", editable=False),
-        ObjectColumn(name="zone_name", label="Zone", editable=False),
         VisibleColumn(
             name="visible",
             label="",
             editable=False,
             horizontal_alignment="center",
+            width=0.14,
         ),
         GlyphActionColumn(
-            name="id", label="", glyph=ICON_DELETE, fire="delete_requested"
+            name="id", label="", glyph=ICON_DELETE, fire="delete_requested", width=0.14
         ),
     ],
     selected="selected_region",
@@ -82,39 +93,87 @@ zone_regions_table_editor = TableEditor(
     show_row_labels=True,
 )
 
+
+def row_inset():
+    """Leading spacer giving a button row the same left margin as the Qt
+    button rows elsewhere in the sidebar (the Paths picker)."""
+    return Spring(width=QT_LAYOUT_MARGIN_PX - QT_LAYOUT_SPACING_PX, springy=False)
+
+
+class ZonesSidebarHandler(SafeCancelTableHandler):
+    def handle_escape(self, info):
+        """Escape deselects in both tables (a click on empty table space
+        already does, through the editors' selection sync)."""
+        info.object.selected_region = None
+        info.object.selected_zone_type = None
+        super().handle_escape(info)
+
+
 zones_view = View(
     VGroup(
-        UItem("mode", editor=CustomEditor(zone_tool_picker_factory)),
-        UItem("zone_types", editor=zone_types_table_editor),
-        UItem(
-            "add_zone_type_button", editor=CustomEditor(add_zone_type_button_factory)
+        HGroup(
+            row_inset(),
+            UItem(
+                "draw_tool_active",
+                editor=ToggleButtonEditor(glyph=ICON_CROP, tooltip="Draw zones"),
+            ),
+            UItem(
+                "select_tool_active",
+                editor=ToggleButtonEditor(
+                    glyph=ICON_SELECT_All, tooltip="Select zones"
+                ),
+            ),
+            UItem(
+                "commit_button",
+                tooltip="Commit zone",
+                enabled_when=(
+                    f"mode == '{ZONE_DRAW_MODE}' and len(pending_electrode_ids) > 0"
+                ),
+            ),
+            UItem(
+                "clear_pending_button",
+                tooltip="Clear selection",
+                enabled_when=(
+                    "len(pending_electrode_ids) > 0 or editing_region is not None"
+                ),
+            ),
+            spring,
         ),
+        UItem("zone_types", editor=zone_types_table_editor),
+        # Spans the table above like an extra row, following its width.
+        UItem("add_zone_type_button", springy=True, tooltip="Add zone type"),
         UItem("regions", editor=zone_regions_table_editor),
         HGroup(
-            # Same left inset as the tool row above: its 9 px Qt layout
-            # margin equals this spacer plus the group's 6 px item spacing.
-            Spring(width=3, springy=False),
+            row_inset(),
             UItem(
                 "edit_region_button",
+                tooltip="Edit region",
                 enabled_when=(
                     f"mode == '{ZONE_SELECT_MODE}' and selected_region is not None"
                 ),
             ),
-            UItem("hide_region_button", enabled_when="selected_region is not None"),
+            UItem(
+                "hide_region_button",
+                tooltip="Hide region",
+                enabled_when="selected_region is not None",
+            ),
             UItem(
                 "merge_regions_button",
+                tooltip="Merge the ctrl+click-selected regions",
                 enabled_when=(
                     f"mode == '{ZONE_SELECT_MODE}' and len(selected_regions) >= 2"
                 ),
-                tooltip="Merge the ctrl+click-selected regions",
             ),
             UItem(
                 "show_canvas_overlays",
-                editor=CustomEditor(canvas_overlays_toggle_factory),
-                springy=False,
+                editor=ToggleButtonEditor(
+                    glyph=ICON_CALL_TO_ACTION,
+                    tooltip="Show or hide the floating canvas buttons",
+                ),
             ),
             spring,
         ),
     ),
-    handler=SafeCancelTableHandler(),
+    handler=ZonesSidebarHandler(),
+    resizable=True,
 )

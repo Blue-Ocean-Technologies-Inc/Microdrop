@@ -75,6 +75,11 @@ class ZoneType(HasTraits):
     #: Number of regions of this type; maintained by ZoneLayerManager.
     region_count = Int(0)
 
+    #: Bulk switch: toggling it shows or hides every region of this type
+    #: (ZoneLayerManager applies it). Regions can still be toggled one by
+    #: one afterwards; this does not track them back.
+    visible = Bool(True)
+
     #: Fired by the zone-types table's per-row delete glyph.
     delete_requested = Event()
 
@@ -85,10 +90,6 @@ class ZoneRegion(HasTraits):
 
     #: Id of the ZoneType this region belongs to.
     zone_id = Str()
-
-    #: Display name of that type, kept current by ZoneLayerManager (ids are
-    #: stable, names are not).
-    zone_name = Str()
 
     #: Whether the region is drawn on the device view.
     visible = Bool(True)
@@ -156,9 +157,32 @@ class ZoneLayerManager(HasTraits):
     #: computing a region's union outline.
     outline_closing_distance = Property(Float, observe="electrode_polygons")
 
-    #: Sidebar tool radio: "" (zone tools off) or one of the two zone modes.
+    #: Sidebar tool: "" (zone tools off) or one of the two zone modes.
     #: ZonesController keeps it in step with DeviceViewMainModel.mode.
     mode = Enum("", ZONE_DRAW_MODE, ZONE_SELECT_MODE)
+
+    #: The two tool buttons as Bools over ``mode``: setting one True picks
+    #: that tool, setting the active one False turns the zone tools off.
+    draw_tool_active = Property(Bool, observe="mode")
+    select_tool_active = Property(Bool, observe="mode")
+
+    def _get_draw_tool_active(self):
+        return self.mode == ZONE_DRAW_MODE
+
+    def _set_draw_tool_active(self, active):
+        self._set_tool(ZONE_DRAW_MODE, active)
+
+    def _get_select_tool_active(self):
+        return self.mode == ZONE_SELECT_MODE
+
+    def _set_select_tool_active(self, active):
+        self._set_tool(ZONE_SELECT_MODE, active)
+
+    def _set_tool(self, tool_mode, active):
+        if active:
+            self.mode = tool_mode
+        elif self.mode == tool_mode:
+            self.mode = ""
 
     #: app_globals key the zoning snapshot mirrors to; empty disables the
     #: mirror (tests, headless). Set from device_viewer.consts.ZONES_KEY.
@@ -750,14 +774,10 @@ class ZoneLayerManager(HasTraits):
     def _default_zone_name(row_index):
         return f"zone-{row_index + 1}"
 
-    @observe(
-        "[regions.items, regions:items:zone_id, zone_types.items, "
-        "zone_types:items:name]"
-    )
-    def _update_region_zone_names(self, event):
-        for region in self.regions:
-            zone_type = self.zone_type_for(region.zone_id)
-            region.zone_name = zone_type.name if zone_type else region.zone_id
+    @observe("zone_types:items:visible")
+    def _apply_zone_visibility(self, event):
+        for region in self.get(event.object.id):
+            region.visible = event.new
 
     @observe("zone_types:items:name")
     def _fill_blank_zone_name(self, event):

@@ -26,7 +26,6 @@ ICON_VISIBILITY_OFF = "\ue8f5"  # eye closed
 ICON_DESELECT = "\uebb6"  # deselect
 ICON_SELECT_All = "\ue162"  # select all
 ICON_CHECK = "check"  # confirm/apply
-ICON_ADD = "add"  # add a row
 ICON_CALL_TO_ACTION = "call_to_action"  # panel with a button strip
 ICON_CLOSE = "close"  # dismiss/cancel
 
