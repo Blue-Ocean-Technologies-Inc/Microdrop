@@ -23,15 +23,11 @@ from device_viewer.views.electrode_view.electrode_layer import ElectrodeLayer
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import (
-    ICON_CHECK,
     ICON_CLOSE,
-    ICON_DELETE,
-    ICON_EDIT,
-    ICON_VISIBILITY_OFF,
 )
 
 # Local imports.
-from .zone_overlay import ZoneOverlayStrip
+from .zone_overlay import ZoneOverlayStrip, button_spec
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -83,16 +79,8 @@ class ZoneCanvasActions(HasTraits):
         self._commit_overlay = ZoneOverlayStrip(
             viewport,
             [
-                (
-                    ICON_CHECK,
-                    "Commit zone",
-                    lambda: setattr(manager, "commit_button", True),
-                ),
-                (
-                    ICON_DELETE,
-                    "Discard selection",
-                    lambda: setattr(manager, "clear_pending_button", True),
-                ),
+                button_spec(manager, "commit_button", "Commit zone"),
+                button_spec(manager, "clear_pending_button", "Discard selection"),
                 (
                     ICON_CLOSE,
                     "Hide these buttons",
@@ -103,21 +91,9 @@ class ZoneCanvasActions(HasTraits):
         self._selection_overlay = ZoneOverlayStrip(
             viewport,
             [
-                (
-                    ICON_EDIT,
-                    "Edit region",
-                    lambda: setattr(manager, "edit_region_button", True),
-                ),
-                (
-                    ICON_DELETE,
-                    "Delete region",
-                    lambda: setattr(manager, "delete_region_button", True),
-                ),
-                (
-                    ICON_VISIBILITY_OFF,
-                    "Hide region",
-                    lambda: setattr(manager, "hide_region_button", True),
-                ),
+                button_spec(manager, "edit_region_button", "Edit region"),
+                button_spec(manager, "delete_region_button", "Delete region"),
+                button_spec(manager, "hide_region_button", "Hide region"),
                 (
                     ICON_CLOSE,
                     "Hide these buttons",

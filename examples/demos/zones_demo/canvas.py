@@ -47,7 +47,7 @@ from device_viewer.consts import (
     ZONE_SELECTED_OUTLINE_PEN_WIDTH,
     ZONE_SUBTRACT_PREVIEW_COLOR,
 )
-from device_viewer.views.zone_view.zone_overlay import ZoneOverlayStrip
+from device_viewer.views.zone_view.zone_overlay import ZoneOverlayStrip, button_spec
 from device_viewer.views.zone_view.zone_region_item import (
     ZoneRegionItem,
     make_selection_highlight_item,
@@ -56,11 +56,7 @@ from device_viewer.views.zone_view.zone_region_item import (
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import (
-    ICON_CHECK,
     ICON_CLOSE,
-    ICON_DELETE,
-    ICON_EDIT,
-    ICON_VISIBILITY_OFF,
 )
 
 # Local imports.
@@ -170,15 +166,15 @@ class ZonesCanvas(QGraphicsView):
         return ZoneOverlayStrip(
             self.viewport(),
             [
-                (
-                    ICON_CHECK,
+                button_spec(
+                    self.manager,
+                    "commit_button",
                     "Commit the selection as a zone region",
-                    lambda: setattr(self.manager, "commit_button", True),
                 ),
-                (
-                    ICON_DELETE,
+                button_spec(
+                    self.manager,
+                    "clear_pending_button",
                     "Clear the selection without committing",
-                    lambda: setattr(self.manager, "clear_pending_button", True),
                 ),
                 (
                     ICON_CLOSE,
@@ -196,20 +192,21 @@ class ZonesCanvas(QGraphicsView):
         return ZoneOverlayStrip(
             self.viewport(),
             [
-                (
-                    ICON_EDIT,
+                button_spec(
+                    self.manager,
+                    "edit_region_button",
                     "Edit the selected region's electrodes",
-                    lambda: setattr(self.manager, "edit_region_button", True),
                 ),
-                (
-                    ICON_DELETE,
+                button_spec(
+                    self.manager,
+                    "delete_region_button",
                     "Delete the selected region",
-                    lambda: setattr(self.manager, "delete_region_button", True),
                 ),
-                (
-                    ICON_VISIBILITY_OFF,
-                    "Hide the selected region (re-show it via the regions table)",
-                    lambda: setattr(self.manager, "hide_region_button", True),
+                button_spec(
+                    self.manager,
+                    "hide_region_button",
+                    "Hide the selected region (the eye in the zones tree "
+                    "shows it again)",
                 ),
                 (
                     ICON_CLOSE,
@@ -292,19 +289,29 @@ class ZonesCanvas(QGraphicsView):
                     if region.visible and captured & set(region.electrode_ids)
                 ]
 
+    def _selection_accumulates(self, event):
+        """Whether the zone-select gesture ADDS to the selection rather
+        than replacing it: ctrl held, or the sidebar's Multi-select toggle
+        (its touch equivalent). Either way it is never a region drag."""
+        return (
+            bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            or self.manager.multi_select
+        )
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._press_view_pos = event.pos()
             # Ctrl+drag in draw mode sweeps electrodes OUT of the pending
             # selection; in select mode ctrl is the multi-select gesture
-            # instead, so the two never clash.
-            self._band_subtracts = (
+            # instead, so the two never clash. The sidebar's Undraw
+            # toggle is the touch equivalent of holding ctrl here.
+            self._band_subtracts = self.model.mode == ZONE_DRAW_MODE and (
                 bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
-                and self.model.mode == ZONE_DRAW_MODE
+                or self.manager.subtract_mode
             )
-            # Ctrl is the multi-select gesture — never a drag.
+            # The accumulate gesture (ctrl, or Multi-select) is never a drag.
             if self.model.mode == ZONE_SELECT_MODE and not (
-                event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                self._selection_accumulates(event)
             ):
                 self._drag_region_item = next(
                     (
@@ -374,11 +381,19 @@ class ZonesCanvas(QGraphicsView):
                 self.manager.translate_regions([region], delta.x(), delta.y())
             self._press_view_pos = None
             return
+        # An accumulating select gesture never dragged anything, so it
+        # counts as a click however far the pointer travelled.
         is_click = (
             event.button() == Qt.MouseButton.LeftButton
             and self._press_view_pos is not None
-            and (event.pos() - self._press_view_pos).manhattanLength()
-            < ZONE_CLICK_DRAG_THRESHOLD_PX
+            and (
+                (event.pos() - self._press_view_pos).manhattanLength()
+                < ZONE_CLICK_DRAG_THRESHOLD_PX
+                or (
+                    self.model.mode == ZONE_SELECT_MODE
+                    and self._selection_accumulates(event)
+                )
+            )
         )
         if is_click and self.model.mode == ZONE_DRAW_MODE:
             scene_pos = self.mapToScene(event.pos())
@@ -395,7 +410,7 @@ class ZonesCanvas(QGraphicsView):
                 ),
                 None,
             )
-            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if self._selection_accumulates(event):
                 self.manager.toggle_region_in_selection(clicked_region)
             else:
                 self.manager.selected_region = clicked_region

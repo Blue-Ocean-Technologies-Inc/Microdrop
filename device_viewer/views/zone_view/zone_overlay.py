@@ -27,6 +27,17 @@ from microdrop_utils.traitsui_qt_helpers import DEFAULT_GLYPH_POINT_SIZE_PX
 from ...consts import ZONE_OVERLAY_MARGIN_PX
 
 
+def button_spec(manager, trait_name, tooltip):
+    """Strip button for one of the manager's Button traits: the glyph is
+    the trait's own label, so the strip and the sidebar always show the
+    same icon for the same action."""
+    return (
+        manager.trait(trait_name).trait_type.label,
+        tooltip,
+        lambda: setattr(manager, trait_name, True),
+    )
+
+
 class ZoneOverlayStrip(QWidget):
     """``button_specs``: iterable of (glyph, tooltip, on_clicked)."""
 
