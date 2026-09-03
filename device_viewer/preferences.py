@@ -81,6 +81,8 @@ from .consts import (
     MASTER_SVG_FILE,
     NUMBER_OF_CHANNELS,
     PIN_MAP_SVG_FILE,
+    ZONE_REGIONS_VIEW_MIN_HEIGHT,
+    ZONE_TYPES_VIEW_MIN_HEIGHT,
     ZOOM_SENSITIVITY,
 )
 from .default_settings import default_alphas, default_visibility
@@ -107,6 +109,12 @@ class DeviceViewerPreferences(PreferencesHelper):
     )
     ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
+    ZONE_TYPES_VIEW_MIN_HEIGHT = Range(
+        value=ZONE_TYPES_VIEW_MIN_HEIGHT, low=0, high=10000
+    )
+    ZONE_REGIONS_VIEW_MIN_HEIGHT = Range(
+        value=ZONE_REGIONS_VIEW_MIN_HEIGHT, low=0, high=10000
+    )
 
     default_visibility = Dict(default_visibility)
     default_alphas = Dict(default_alphas)
@@ -377,6 +385,8 @@ sidebar_setting_items = [
     "DEVICE_VIEWER_SIDEBAR_WIDTH",
     "ALPHA_VIEW_MIN_HEIGHT",
     "LAYERS_VIEW_MIN_HEIGHT",
+    "ZONE_TYPES_VIEW_MIN_HEIGHT",
+    "ZONE_REGIONS_VIEW_MIN_HEIGHT",
 ]
 
 # Create the grid group for the sidebar items.

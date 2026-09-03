@@ -1342,7 +1342,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe(
         "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, "
-        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT]",
+        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, "
+        "ZONE_TYPES_VIEW_MIN_HEIGHT, ZONE_REGIONS_VIEW_MIN_HEIGHT]",
         post_init=True,
     )
     def _set_device_view_layout_width(self, event=None):
@@ -1362,6 +1363,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
             self.layer_ui.control.setMinimumHeight(
                 self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT
+            )
+            self.zones_ui.get_editors("zone_types")[0].control.setMinimumHeight(
+                self.device_viewer_preferences.ZONE_TYPES_VIEW_MIN_HEIGHT
+            )
+            self.zones_ui.get_editors("regions")[0].control.setMinimumHeight(
+                self.device_viewer_preferences.ZONE_REGIONS_VIEW_MIN_HEIGHT
             )
 
     def create_contents(self, parent):
