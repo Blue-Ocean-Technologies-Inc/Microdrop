@@ -68,8 +68,8 @@ class ZoneType(HasTraits):
     #: Display name, e.g. "heating", "mixing". Not necessarily unique.
     name = Str()
 
-    #: Hex fill/outline color, e.g. "#f5e050" (edited via HexColorEditorFactory
-    #: so the table cell opens the color picker while the model stays a string).
+    #: Hex fill/outline color, e.g. "#f5e050" (the sidebar tree's color cell
+    #: opens a picker and writes the hex back, so the model stays a string).
     color = Str()
 
     #: Number of regions of this type; maintained by ZoneLayerManager.
@@ -80,7 +80,7 @@ class ZoneType(HasTraits):
     #: one afterwards; this does not track them back.
     visible = Bool(True)
 
-    #: Fired by the zone-types table's per-row delete glyph.
+    #: Fired by the row's delete glyph in the sidebar tree.
     delete_requested = Event()
 
 
@@ -94,7 +94,7 @@ class ZoneRegion(HasTraits):
     #: Whether the region is drawn on the device view.
     visible = Bool(True)
 
-    #: Fired by the regions table's per-row delete glyph.
+    #: Fired by the row's delete glyph in the sidebar tree.
     delete_requested = Event()
 
     #: SOURCE OF TRUTH for the region — ids of the member electrodes.
@@ -124,7 +124,7 @@ class ZoneLayerManager(HasTraits):
     #: Id of the type new regions are created as.
     active_zone_id = Str()
 
-    #: Row selected in the zone types table; drives ``active_zone_id``.
+    #: Zone row selected in the sidebar tree; drives ``active_zone_id``.
     selected_zone_type = Instance(ZoneType)
 
     #: Regions picked in select mode; ctrl+click accumulates several (for
@@ -195,13 +195,23 @@ class ZoneLayerManager(HasTraits):
     #: Whether the floating button strips show on the device view at all.
     show_canvas_overlays = Bool(True)
 
+    #: Touch-friendly ctrl: while on, a click in zone-select mode toggles a
+    #: region in the selection instead of replacing it.
+    multi_select = Bool(False)
+
+    #: Touch-friendly ctrl+drag: while on, rubber bands in draw mode remove
+    #: electrodes from the pending selection.
+    subtract_mode = Bool(False)
+
     # Sidebar / overlay actions; ZonesController turns them into calls.
     commit_button = Button("check")
-    clear_pending_button = Button("clear")
+    clear_pending_button = Button("delete")
     add_zone_type_button = Button("add")
+    move_zone_type_up_button = Button("arrow_upward")
+    move_zone_type_down_button = Button("arrow_downward")
     edit_region_button = Button("edit")
     delete_region_button = Button("delete")
-    hide_region_button = Button("hide")
+    hide_region_button = Button("visibility_off")
     merge_regions_button = Button("merge")
 
     #: zone id -> highest region number ever handed out; never reused.
@@ -294,6 +304,21 @@ class ZoneLayerManager(HasTraits):
         )
         self.zone_types.append(zone_type)
         return zone_type
+
+    def move_zone_type(self, zone_type, delta):
+        """Move the zone ``delta`` places in ``zone_types`` — the layer order,
+        first row on top. The move is clamped to the list, and a move that
+        would not shift the zone changes nothing and takes no snapshot."""
+        if zone_type not in self.zone_types:
+            return
+        index = self.zone_types.index(zone_type)
+        target = max(0, min(len(self.zone_types) - 1, index + delta))
+        if target == index:
+            return
+        self._push_undo()
+        zone_types = list(self.zone_types)
+        zone_types.insert(target, zone_types.pop(index))
+        self.zone_types = zone_types
 
     def remove_zone_type(self, zone_id):
         if self.zone_type_for(zone_id) is None:
@@ -781,7 +806,7 @@ class ZoneLayerManager(HasTraits):
 
     @observe("zone_types:items:name")
     def _fill_blank_zone_name(self, event):
-        # A name cleared in the table falls back to its row's default.
+        # A name cleared in the tree falls back to its row's default.
         if not event.new.strip():
             event.object.name = self._default_zone_name(
                 self.zone_types.index(event.object)

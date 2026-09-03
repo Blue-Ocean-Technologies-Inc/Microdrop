@@ -1650,6 +1650,16 @@ class ElectrodeInteractionControllerService(HasTraits):
             >= ZONE_CLICK_DRAG_THRESHOLD_PX
         )
 
+    def _zone_selection_accumulates(self, modifiers):
+        """Whether the zone-select gesture ADDS to the selection rather
+        than replacing it: ctrl held, or the sidebar's Multi-select toggle
+        (its touch equivalent). Either way the press is never a region
+        drag — accumulating and dragging cannot share one gesture."""
+        return (
+            bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+            or self.model.zones.multi_select
+        )
+
     def _zone_band_capture(self, band_rect):
         """Electrode ids the band touches; the manager works in SVG coords."""
         scale = self.electrode_view_layer.path_scale
@@ -2105,12 +2115,18 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif mode == ZONE_DRAW_MODE:
                 self._zone_band_origin = event.scenePos()
                 self._zone_press_screen_pos = event.screenPos()
-                self._zone_band_subtracts = bool(
-                    event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                # The sidebar's Undraw toggle is the touch equivalent
+                # of holding ctrl for the subtracting rubber band.
+                self._zone_band_subtracts = (
+                    bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+                    or self.model.zones.subtract_mode
                 )
 
             elif mode == ZONE_SELECT_MODE:
                 self._zone_press_screen_pos = event.screenPos()
+                # The region under the press is remembered either way —
+                # the release needs it for the click — but an
+                # accumulating gesture never arms the move (below).
                 self._zone_move_item = self.device_view.scene().get_item_under_mouse(
                     event.scenePos(), ZoneRegionItem
                 )
@@ -2183,6 +2199,7 @@ class ElectrodeInteractionControllerService(HasTraits):
             elif (
                 mode == ZONE_SELECT_MODE
                 and self._zone_move_item is not None
+                and not self._zone_selection_accumulates(event.modifiers())
                 and self._zone_drag_exceeds_threshold(event.screenPos())
             ):
                 if not self._zone_move_active:
@@ -2306,11 +2323,13 @@ class ElectrodeInteractionControllerService(HasTraits):
                             "Move rejected: regions must stay on the device "
                             "and contiguous"
                         )
-                elif not self._zone_drag_exceeds_threshold(event.screenPos()):
+                elif self._zone_selection_accumulates(
+                    event.modifiers()
+                ) or not self._zone_drag_exceeds_threshold(event.screenPos()):
                     region = (
                         self._zone_move_item.region if self._zone_move_item else None
                     )
-                    if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    if self._zone_selection_accumulates(event.modifiers()):
                         manager.toggle_region_in_selection(region)
                     else:
                         manager.selected_region = region

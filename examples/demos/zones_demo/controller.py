@@ -101,6 +101,16 @@ class ZonesDemoController(HasTraits):
         manager = self.model.manager
         manager.selected_zone_type = manager.add_zone_type()
 
+    @observe("model:manager:move_zone_type_up_button")
+    def _on_move_zone_type_up(self, event):
+        manager = self.model.manager
+        manager.move_zone_type(manager.selected_zone_type, -1)
+
+    @observe("model:manager:move_zone_type_down_button")
+    def _on_move_zone_type_down(self, event):
+        manager = self.model.manager
+        manager.move_zone_type(manager.selected_zone_type, 1)
+
     @observe("model:manager:zone_types:items:delete_requested")
     def _on_zone_type_delete_requested(self, event):
         zone_type = event.object

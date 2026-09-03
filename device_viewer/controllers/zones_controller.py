@@ -78,6 +78,16 @@ class ZonesController(HasTraits):
         manager = self.model.zones
         manager.selected_zone_type = manager.add_zone_type()
 
+    @observe("model:zones:move_zone_type_up_button")
+    def _on_move_zone_type_up(self, event):
+        manager = self.model.zones
+        manager.move_zone_type(manager.selected_zone_type, -1)
+
+    @observe("model:zones:move_zone_type_down_button")
+    def _on_move_zone_type_down(self, event):
+        manager = self.model.zones
+        manager.move_zone_type(manager.selected_zone_type, 1)
+
     @observe("model:zones:zone_types:items:delete_requested")
     def _on_zone_type_delete_requested(self, event):
         zone_type = event.object
@@ -103,7 +113,7 @@ class ZonesController(HasTraits):
 
     @observe("model:zones:regions:items:delete_requested")
     def _on_region_delete_requested(self, event):
-        # Per-row trash glyph in the regions table.
+        # Per-row trash glyph on a region row of the zones tree.
         self.model.zones.remove_region(event.object)
 
     @observe("model:zones:hide_region_button")

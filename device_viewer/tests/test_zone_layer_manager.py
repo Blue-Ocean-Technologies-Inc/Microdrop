@@ -409,3 +409,37 @@ def test_undo_restore_drops_outline_cache(manager):
     assert manager._outline_cache
     manager.undo()
     assert manager._outline_cache == {}
+
+
+def test_move_zone_type_reorders_and_clamps(manager):
+    fired = []
+    manager.observe(lambda event: fired.append(event), "undo_snapshot_pushed")
+    heating = manager.zone_types[0]
+    mixing = manager.add_zone_type("mixing")
+    # add_zone_type took the first snapshot; the moves below add their own.
+    assert len(fired) == 1
+
+    manager.move_zone_type(heating, 1)
+    assert manager.zone_types == [mixing, heating]
+    assert len(fired) == 2
+
+    manager.move_zone_type(heating, -1)
+    assert manager.zone_types == [heating, mixing]
+    assert len(fired) == 3
+
+    # Already at an edge: clamped to a no-op, so no snapshot either.
+    manager.move_zone_type(heating, -1)
+    manager.move_zone_type(mixing, 5)
+    assert manager.zone_types == [heating, mixing]
+    assert len(fired) == 3
+
+
+def test_move_unknown_zone_type_is_a_no_op(manager):
+    from device_viewer.models.zones import ZoneType
+
+    fired = []
+    manager.observe(lambda event: fired.append(event), "undo_snapshot_pushed")
+    manager.move_zone_type(None, 1)
+    manager.move_zone_type(ZoneType(id="ghost", name="ghost"), 1)
+    assert fired == []
+    assert [zone.id for zone in manager.zone_types] == ["heating"]
