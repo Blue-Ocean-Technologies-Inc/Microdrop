@@ -1,3 +1,71 @@
+## [v1.19.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.19.0) (2026-09-03)
+
+### Feat
+
+- **device-viewer**: enable Merge only when a merge can succeed ([`27268f8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/27268f897fc498c5124b41fd326ca3fdc23ba5a8))
+- **device-viewer**: default zones tree height 250 ([`a416325`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a4163258946a750fdc035910a3871517df6bd306))
+- **device-viewer**: zones sidebar tree-table ([`07fa457`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/07fa457f77d5f381e33ccba5931649ed99f8a0ee))
+- **device-viewer**: zone ordering, multi-select and undraw ([`32d0799`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/32d0799b371371b49ce431d655ffa1e23ca8c27c))
+- **device-viewer**: layer zones by sidebar order ([`7759036`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7759036e8e99c9e7c5e66456bad1bc913a9abd2a))
+- **device-viewer**: zone table height preferences ([`26b325b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/26b325bb28e2511b31be76d2bfa937a954f54f94))
+- **utils**: ToggleButtonEditor and a styled color picker ([`a73c5ef`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a73c5efe049bcb2df749bd14a9d37619ac3d0ee6))
+- **device-viewer**: zones sidebar table buttons ([`23aee9b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/23aee9b6329b93b8235464518eb966586e7d4ff9))
+- **device-viewer**: zone rows delete themselves and self-name ([`5ec49d5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5ec49d5da4b2bae1625f9a3af438e3fbac456670))
+- **device-viewer**: zone tool buttons like the Paths picker ([`0708c11`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0708c117ee59027f98eb759e8493e5731ca3ed88))
+- **device-viewer**: warn when zone regions fail to load ([`50224ca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/50224ca51c42d6e7bf3e4bd691b334b71909ce15))
+- **device-viewer**: zone undo/redo on the app stack ([`b19f369`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b19f3691fdc9ace9342860d5fa7b86725d94c6a6))
+- **device-viewer**: drag zone regions to move them ([`54f3302`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54f330295a47c4cf31cf2546c85c6d61d7cbe2fc))
+- **device-viewer**: floating zone action strips ([`528c375`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/528c37531b26970d0733b628b704024288f1a56f))
+- **device-viewer**: zone draw and select interaction ([`a01d580`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a01d580b5fc73cbdc1784a44b05a35921885f169))
+- **device-viewer**: zones sidebar section and controller ([`dc5b168`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dc5b1683e66fd8d48f0c1a8cc690678c8af8ffd9))
+- **device-viewer**: draw zone regions as an alpha layer ([`15582f4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/15582f45da2d857e9f3bc9211b0abf0d828b8a62))
+- **device-viewer**: mount the zone manager on the model ([`d827f0e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d827f0eea09d760841611e2a96372d78fb7c3ca4))
+- **device-viewer**: persist zone regions in the SVG ([`d2c0be9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d2c0be97e3e52d31908cf833c8971ef2be0b47a5))
+- **device-viewer**: Qt-free zone layer manager model ([`81b10e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/81b10e86e7aafb6e03602e82a120ce8b5480de52))
+- **device-viewer**: zone constants, alpha row, prefs mirrors ([`63f7945`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/63f7945a60c06441fb6b312ea4914bbe2fb7a6c8))
+- **examples**: standalone electrode zones demo ([`bd9146a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bd9146a009fce468657e6e9b460fe8710eba6593))
+
+### Fix
+
+- **device-viewer**: report rejected zone moves on the status bar ([`e45914d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e45914d760693a7c551e570641b159fe7755b38f))
+- **device-viewer**: keep folded zones folded across tree resets ([`1edfd63`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1edfd63fac14edeab857dd485a858ff19e5cd77b))
+- **device-viewer**: gap under the Zones section header ([`3e21a93`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3e21a93cf454b6525c24ef4d8b32fee67bb2140a))
+- **device-viewer**: drag-move regions with multi-select on ([`538c750`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/538c750598340e220660f34b3745e346c43edcec))
+- **device-viewer**: regions table shows the zone's current name ([`0a2934c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0a2934cac5cf8e3320722981920d04cc40f00067))
+- **device-viewer**: report trimmed zone regions on load ([`ab52f01`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ab52f01948ecfbde913741e01d9c0cc133b68be6))
+- **examples**: demo cancels zones only when leaving the tools ([`d4f4921`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d4f4921514ca894abdf66d6b2edf3e02229ffd99))
+- **device-viewer**: guard zone overlay teardown ([`f9e872e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f9e872ec14f4f6cad39872ef52c5b2decbb8db74))
+- **device-viewer**: uncap zone undo history ([`efd8877`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/efd88773b5427895d8eb57dec2e2fcb99b945d64))
+- **device-viewer**: keep zone channels in step with edits ([`53bee9e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/53bee9e7bc4d71abdb66ea634d3d084e74a16b4d))
+- **device-viewer**: drop zone gestures on mode change ([`a46eaf6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a46eaf6e9607d64d0e27b14e7a97d98e25c88a75))
+- **device-viewer**: Off restores the pre-zone-tool mode ([`59c3c53`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/59c3c53552d70e8a711bf3bd8ab5f3de3570d7cb))
+- **device-viewer**: seed zone types with advancing colors ([`b012dd5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b012dd572829f6a812ebe309ef01496d2335a482))
+- **device-viewer**: no undo snapshot for unknown zone type ([`db064ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/db064ac75a1a85b5164d65d814331e107d937058))
+
+### Refactor
+
+- **device-viewer**: canvas strips reuse button labels ([`2cc9fd8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2cc9fd8bb7d0e34eef851d3a05a826a64e3820b6))
+- **device-viewer**: zone name column at content width ([`fcf96ea`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fcf96eaf934bc73f32033764423fe6717667427b))
+- **device-viewer**: zones sidebar on TraitsUI editors ([`09bf2d0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/09bf2d0007653f11232cc261688e0becdf2afe2d))
+- **device-viewer**: zones section below Paths ([`eb4c1cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eb4c1cf605a9bcea746283658171d41605a6ca5c))
+- **device-viewer**: zone tools as one row like Paths ([`a3fe2e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a3fe2e8976d2bcb3edeb4d72d36d655453063578))
+- **device-viewer**: glyph labels for zone buttons ([`4682045`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/46820457f17c050bb4fc13e493009e08e412bf42))
+- **device-viewer**: zones section sits above Paths ([`3e29808`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3e29808af22e40c74cf9bd434ae6310f18e6140c))
+- **device-viewer**: zone canvas actions hygiene ([`ea8d653`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ea8d653dcf880c19ebbe6f749a281244b62392a3))
+- **examples**: demo uses the shipped overlay strip ([`362303a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/362303ac710fc0f78fbc996512bf2a70f7658a42))
+- **device-viewer**: zone canvas actions helper ([`d540963`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d540963a1fee19db3eaffe45a90f5ad53c39d88d))
+- **device-viewer**: zone model polish and tests ([`3afada4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3afada4205583bcaa3acfa64ad476d1e68fd4763))
+- **examples**: zones demo reuses the shipped model ([`c9cc32c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c9cc32cee232d7f267b551cf3c12e7355757c8d9))
+- **device-viewer**: use mode constants in zones view ([`79cc425`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/79cc4255a709a2be6a0974ab73136055680074cd))
+
+### Docs
+
+- zones spec reflects the shipped wiring ([`bf74b21`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bf74b213d3e11a9bcb97fe615e105176780e6185))
+- **device-viewer**: explain the zone reposition guard ([`972c5b2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/972c5b23c09c1d88d7724ae4a29304567824255e))
+- **device-viewer**: tidy zone pointers and teardown docs ([`5838b83`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5838b83573b592923fdc9f5abcda41d40ab366d8))
+- point at the electrode zones implementation ([`2497d1a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2497d1ae173e6adaa8da106f4607386bc3b6bf3b))
+- spec for electrode zones ([`59d574c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/59d574cd1b67668f375650342c9940ff367aa829))
+
 ## [v1.18.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.18.0) (2026-09-03)
 
 ### Feat
