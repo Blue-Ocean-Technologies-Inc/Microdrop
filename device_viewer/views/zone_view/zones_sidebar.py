@@ -46,7 +46,7 @@ zone_types_table_editor = TableEditor(
         # interactive default keeps them at content width, which leaves an
         # empty table's glyph columns invisible); glyph columns get small
         # shares so they stay compact.
-        ObjectColumn(name="name", label="Zone", width=0.36),
+        ObjectColumn(name="name", label="Zone"),  # content width, like Region
         ColorColumn(
             name="color", label="Color", editor=HexColorEditorFactory(), width=0.22
         ),
