@@ -77,7 +77,9 @@ jobs:
           # Merged-release detection: the changelog's newest version has no
           # tag yet, i.e. the release PR just landed. Tag this merge commit
           # and publish; done.
-          top="$(grep -m1 -oE 'v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md || true)"
+          # head -1: the header links to the release, so the version appears
+          # twice on that line.
+          top="$(grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)"
           if [ -n "$top" ] && ! git rev-parse -q --verify "refs/tags/$top" >/dev/null; then
             git tag -a "$top" -m "$top" "$GITHUB_SHA"
             git push origin "refs/tags/$top"
