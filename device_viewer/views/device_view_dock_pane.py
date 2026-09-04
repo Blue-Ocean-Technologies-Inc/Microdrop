@@ -557,9 +557,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         Handle screen recording events from the device viewer.
         """
         logger.info(f"Screen recording triggered: {message}")
+        if self.model and self.camera_control_widget:
+            if not (message and message.strip()):
+                return
 
-        recording_data = json.loads(message)
-        self.camera_control_widget.screen_recording_signal.emit(recording_data)
+            try:
+                recording_data = json.loads(message)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(
+                    f"Screen recording message is not valid JSON, ignoring: {message!r}"
+                )
+                return
+
+            self.camera_control_widget.screen_recording_signal.emit(recording_data)
 
     def _on_camera_active_triggered(self, message):
         """
