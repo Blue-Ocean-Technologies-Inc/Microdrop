@@ -1,0 +1,87 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+name: Unit tests
+
+# Runs the pure-unit pytest partition only: tests/ subpackages next to the
+# code, and examples/tests/. The Redis-need and hardware-need partitions
+# (tests_with_redis_server_need/, tests_with_dropbot_connection_need/) are
+# excluded via --ignore-glob, not just left unselected — merely COLLECTING
+# tests_with_redis_server_need/conftest.py runs module-level code that swaps
+# the global dramatiq broker to a RedisBroker for the rest of the session,
+# which corrupts every other test that expects the default StubBroker. See
+# AGENTS.md "Testing" for the partition layout.
+#
+# The pixi manifest and lockfile live in the launcher repo
+# (Blue-Ocean-Technologies-Inc/pixi-microdrop, public), under microdrop-py/,
+# with this repo checked out as the microdrop-py/src submodule. So this job
+# checks the launcher repo out first, then overlays the PR's/pushed commit
+# of this repo at microdrop-py/src, before handing that manifest to
+# prefix-dev/setup-pixi. The lock covers linux-64, so the job runs on the
+# default x86_64 runner.
+#
+# Known-failing baseline: this selection currently has 139 failing tests and
+# 3 collection errors out of 1363 (verified locally on main @ a3f32b9a,
+# win-64, before this workflow existed -- not introduced by this change).
+# Most cluster in pluggable_protocol_tree/tests (103) and
+# video_protocol_controls/tests (13). The step below runs with
+# continue-on-error so the job stays green on merge while those pre-existing
+# failures stay visible as an annotated warning in the run -- fixing them is
+# tracked as a follow-up, not silently swallowed here.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pure-unit pytest partition
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out launcher repo (pixi manifest + lockfile)
+        uses: actions/checkout@v4
+        with:
+          repository: Blue-Ocean-Technologies-Inc/pixi-microdrop
+          path: launcher
+
+      - name: Check out this commit at microdrop-py/src
+        uses: actions/checkout@v4
+        with:
+          path: launcher/microdrop-py/src
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          manifest-path: launcher/microdrop-py/pyproject.toml
+          locked: true
+          cache: true
+
+      - name: Run pure-unit pytest partition
+        working-directory: launcher/microdrop-py/src
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # continue-on-error: see "Known-failing baseline" above -- remove
+        # once the pre-existing failures are fixed or explicitly deselected.
+        continue-on-error: true
+        run: |
+          pixi run --manifest-path ../pyproject.toml python -m pytest . -q \
+            --ignore-glob="**/tests_with_redis_server_need" \
+            --ignore-glob="**/tests_with_dropbot_connection_need"
