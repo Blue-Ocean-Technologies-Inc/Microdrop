@@ -75,6 +75,11 @@ Do not run the pytest suite or write ad-hoc smoke scripts unless asked.
 When a change genuinely needs a regression test (pure logic, message
 routing), add a focused pytest in the right partition.
 
+CI (`.github/workflows/unit-tests.yml`) runs the pure-unit partition
+headless on every PR and on pushes to `main`, via `pixi run pytest` against
+the launcher repo's manifest. This does not change the local guidance above
+— agents still verify touched files with compile + format, not a pytest run.
+
 ## Linting and Formatting
 
 Style is enforced by **ruff** — both formatter and linter, one config:
