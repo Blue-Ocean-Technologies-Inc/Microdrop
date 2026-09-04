@@ -116,5 +116,5 @@ shorts_detected_publisher = ShortsDetectedPublisher(topic=SHORTS_DETECTED)
 # Convenience publisher singleton, so call sites can do:
 #   from dropbot_controller.consts import self_test_results_publisher
 #   self_test_results_publisher.publish(test_name=..., title=...,
-#       plot_image_path=..., failed_channels=[...])
+#       results_path=..., failed_channels=[...])
 self_test_results_publisher = SelfTestResultsPublisher(topic=SELF_TESTS_RESULTS)

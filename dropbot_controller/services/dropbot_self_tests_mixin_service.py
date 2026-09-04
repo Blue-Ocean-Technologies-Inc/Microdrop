@@ -9,10 +9,9 @@
 # Thanks for using Microdrop open source!
 
 # Standard library imports.
+import json
 from functools import wraps
 from pathlib import Path
-
-import matplotlib.pyplot as plt
 
 # Third-party imports.
 import numpy as np
@@ -30,12 +29,7 @@ from dropbot.hardware_test import (  # noqa: F401
 )
 
 # ******************************************************************************
-from dropbot.self_test import (
-    generate_report,
-    plot_test_channels_results,
-    plot_test_on_board_feedback_calibration_results,
-    plot_test_voltage_results,
-)
+from dropbot.self_test import generate_report
 from tqdm import tqdm
 
 # Enthought library imports.
@@ -53,12 +47,23 @@ from ..consts import (
     shorts_detected_publisher,
 )
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
-from ..models.self_tests import TestEvent, create_test_progress_message
+from ..models.self_tests import (
+    TestEvent,
+    create_test_progress_message,
+    serialise_test_results,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+# Tests whose results are published on SELF_TESTS_RESULTS for interactive
+# frontend plotting (#611); `test_shorts` and `run_all_tests` are handled
+# separately below (shorts_detected_publisher / the full HTML report).
+PLOTTABLE_SELF_TESTS = frozenset(
+    ("test_voltage", "test_on_board_feedback_calibration", "test_channels")
+)
 
 
 def get_timestamped_results_path(test_name: str, path: [str, Path]) -> Path:
@@ -172,20 +177,9 @@ class DropbotSelfTestsMixinService(HasTraits):
                 logger.info(
                     "Self-test was cancelled, skipping report and result dialog."
                 )
-            else:
-                plot_data = None
-                if test_name == "test_voltage":
-                    plot_data = plot_test_voltage_results(
-                        result[test_name], return_fig=True
-                    )
-                elif test_name == "test_on_board_feedback_calibration":
-                    plot_data = plot_test_on_board_feedback_calibration_results(
-                        result[test_name], return_fig=True
-                    )
-                elif test_name == "test_channels":
-                    plot_data = plot_test_channels_results(
-                        result[test_name], return_fig=True
-                    )
+            elif test_name in PLOTTABLE_SELF_TESTS:
+                failed_channels = None
+                if test_name == "test_channels":
                     c = np.array(result[test_name]["c"])
                     test_channels_list = result[test_name]["test_channels"]
                     failed_channels = [
@@ -194,34 +188,32 @@ class DropbotSelfTestsMixinService(HasTraits):
                         if np.mean(c[i]) < 5e-12
                     ]
 
-                if plot_data is not None:
-                    # Render the plot to disk and publish the file path — the
-                    # backend stays Qt-free, and the frontend (dropbot_tools_menu,
-                    # via the microdrop task) owns presenting the results dialog (#611).
-                    fig = plot_data[-1]
-                    plot_image_path = get_timestamped_results_path(
-                        f"{test_name}_plot", report_generation_directory
-                    ).with_suffix(".png")
-                    fig.savefig(plot_image_path)
-                    plt.close(fig)
+                # Persist the raw results next to the HTML report and publish
+                # the file path — the backend stays Qt-free, and the frontend
+                # (dropbot_tools_menu, via the microdrop task) reads the file
+                # back and renders it interactively via
+                # dropbot.self_test.plot_* (#611).
+                results_path = get_timestamped_results_path(
+                    f"{test_name}_results", report_generation_directory
+                ).with_suffix(".json")
+                with open(results_path, "w") as results_file:
+                    json.dump(serialise_test_results(result[test_name]), results_file)
 
-                    test_name_display = (
-                        test_name.replace("_", " ").capitalize() + " Results"
-                    )
-                    self_test_results_publisher.publish(
-                        test_name=test_name,
-                        title=test_name_display,
-                        plot_image_path=str(plot_image_path.absolute()),
-                        failed_channels=failed_channels
-                        if test_name == "test_channels"
-                        else None,
-                    )
-                else:
-                    # The user ran the shorts test, so always report back —
-                    # even when there is nothing to report.
-                    shorts_detected_publisher.publish(
-                        shorted_channels=result[test_name]["shorts"], show_window=True
-                    )
+                test_name_display = (
+                    test_name.replace("_", " ").capitalize() + " Results"
+                )
+                self_test_results_publisher.publish(
+                    test_name=test_name,
+                    title=test_name_display,
+                    results_path=str(results_path.absolute()),
+                    failed_channels=failed_channels,
+                )
+            else:
+                # The user ran the shorts test, so always report back — even
+                # when there is nothing to report.
+                shorts_detected_publisher.publish(
+                    shorted_channels=result[test_name]["shorts"], show_window=True
+                )
 
             # do whatever else is defined in func
             func(self, report_generation_directory)
