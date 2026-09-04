@@ -10,9 +10,7 @@
 
 from typing import Optional
 
-from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY
-from microdrop_utils.ureg_helpers import ureg
-
+from device_viewer.consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -54,17 +52,3 @@ def current_full_electrode_capacitance_per_unit_area() -> Optional[float]:
         app_globals.get(LIQUID_CAPACITANCE_KEY),
         app_globals.get(FILLER_CAPACITANCE_KEY),
     )
-
-
-def force_for_step(
-    voltage_v: float,
-    c_per_a_pf_per_mm2: float,
-) -> Optional[float]:
-    """F = (C/A * V^2) / 2 in mN/m, or None when inputs are
-    non-positive or the resulting force is non-positive."""
-    if voltage_v <= 0 or c_per_a_pf_per_mm2 <= 0:
-        return None
-    cap = ureg.Quantity(c_per_a_pf_per_mm2, "pF/mm**2")
-    v = ureg.Quantity(voltage_v, "V")
-    force = (cap * v**2 / 2).to("mN/m").magnitude
-    return force if force > 0 else None

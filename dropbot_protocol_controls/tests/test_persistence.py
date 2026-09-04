@@ -16,40 +16,46 @@ from unittest.mock import patch
 
 import pytest
 
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.builtins.id_column import make_id_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.builtins.duration_column import make_duration_column
-
-from dropbot_protocol_controls.protocol_columns.voltage_column import (
-    make_voltage_column,
+from dropbot_protocol_controls.protocol_columns.force_column import (
+    make_force_column,
 )
 from dropbot_protocol_controls.protocol_columns.frequency_column import (
     make_frequency_column,
 )
-from dropbot_protocol_controls.protocol_columns.force_column import (
-    make_force_column,
+from dropbot_protocol_controls.protocol_columns.voltage_column import (
+    make_voltage_column,
 )
 from dropbot_protocol_controls.services import force_math
 from dropbot_protocol_controls.services.force_math import (
     current_full_electrode_capacitance_per_unit_area,
-    force_for_step,
 )
+from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.models.row_manager import RowManager
+
+from microdrop_utils.force_math_helpers import force_for_step
 
 
 def _build_columns():
     """Patch DropbotPreferences so column factories don't need an envisage app."""
-    with patch(
-        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
-    ) as MockV, patch(
-        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
-    ) as MockF:
+    with (
+        patch(
+            "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+        ) as MockV,
+        patch(
+            "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+        ) as MockF,
+    ):
         MockV.return_value.last_voltage = 100
         MockF.return_value.last_frequency = 10000
         return [
-            make_type_column(), make_id_column(), make_name_column(),
-            make_voltage_column(), make_frequency_column(),
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_voltage_column(),
+            make_frequency_column(),
         ]
 
 
@@ -73,6 +79,7 @@ def test_voltage_frequency_int_round_trip_through_json():
 # ---------------------------------------------------------------------------
 # Force column persistence — derived, never stored on rows or in JSON.
 # ---------------------------------------------------------------------------
+
 
 class _FakeGlobals:
     """Mutable in-memory stand-in for the Redis app-globals proxy that the
@@ -101,17 +108,23 @@ def _build_seven_columns():
     """7-column set: PPT-3 builtins (type/id/name/duration_s) + voltage +
     frequency + force. Patches DropbotPreferences for the same reason as
     _build_columns()."""
-    with patch(
-        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
-    ) as MockV, patch(
-        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
-    ) as MockF:
+    with (
+        patch(
+            "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+        ) as MockV,
+        patch(
+            "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+        ) as MockF,
+    ):
         MockV.return_value.last_voltage = 100
         MockF.return_value.last_frequency = 10000
         return [
-            make_type_column(), make_id_column(), make_name_column(),
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
             make_duration_column(),
-            make_voltage_column(), make_frequency_column(),
+            make_voltage_column(),
+            make_frequency_column(),
             make_force_column(),
         ]
 
@@ -210,8 +223,9 @@ def test_force_recomputes_when_cache_set_after_load(fake_app_globals):
 
     fake_app_globals.set_calibration(3.0, 1.0)
 
-    expected = force_for_step(float(first_step.voltage),
-                              current_full_electrode_capacitance_per_unit_area())
+    expected = force_for_step(
+        float(first_step.voltage), current_full_electrode_capacitance_per_unit_area()
+    )
     assert force_col.model.get_value(first_step) == expected
     assert expected is not None
 
@@ -220,22 +234,30 @@ def test_force_recomputes_when_cache_set_after_load(fake_app_globals):
 # PPT-8 — check_droplets Bool column persistence (added in Task 3)
 # ---------------------------------------------------------------------------
 
+
 def _build_eight_columns():
     """7-column set from PPT-7 + check_droplets."""
     from dropbot_protocol_controls.protocol_columns.droplet_check_column import (
         make_droplet_check_column,
     )
-    with patch(
-        "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
-    ) as MockV, patch(
-        "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
-    ) as MockF:
+
+    with (
+        patch(
+            "dropbot_protocol_controls.protocol_columns.voltage_column.DropbotPreferences"
+        ) as MockV,
+        patch(
+            "dropbot_protocol_controls.protocol_columns.frequency_column.DropbotPreferences"
+        ) as MockF,
+    ):
         MockV.return_value.last_voltage = 100
         MockF.return_value.last_frequency = 10000
         return [
-            make_type_column(), make_id_column(), make_name_column(),
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
             make_duration_column(),
-            make_voltage_column(), make_frequency_column(),
+            make_voltage_column(),
+            make_frequency_column(),
             make_force_column(),
             make_droplet_check_column(),
         ]
@@ -273,14 +295,16 @@ def test_legacy_load_without_check_droplets_field_defaults_to_true():
     # Build a JSON payload as if check_droplets had never existed (i.e.
     # a protocol saved before PPT-8). After load, all rows should have
     # check_droplets=True (the column default).
-    cols_no_check = [c for c in _build_eight_columns()
-                     if c.model.col_id != "check_droplets"]
+    cols_no_check = [
+        c for c in _build_eight_columns() if c.model.col_id != "check_droplets"
+    ]
     rm = RowManager(columns=cols_no_check)
     rm.add_step(values={"name": "S1"})
     rm.add_step(values={"name": "S2"})
-    payload = rm.to_json()                # no check_droplets in payload
+    payload = rm.to_json()  # no check_droplets in payload
 
-    rm2 = RowManager.from_json(json.loads(json.dumps(payload)),
-                                columns=_build_eight_columns())
+    rm2 = RowManager.from_json(
+        json.loads(json.dumps(payload)), columns=_build_eight_columns()
+    )
     for step in rm2.root.children:
         assert step.check_droplets is True

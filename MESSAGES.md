@@ -277,3 +277,24 @@ The portable's built-in magnet and heater join a protocol through `portable_drop
 **Backend (`portable_dropbot_controller/services/`)**
 - `on_protocol_set_magnet_request` (motors mixin) — disengage / engage macro / `motorAbsoluteMove` on the magnet motor (mm × 1000 µm), then publishes `MAGNET_APPLIED` only on success — a failed move leaves the step to time out — and republishes the status snapshot.
 - `on_protocol_set_temperature_request` (temp mixin) — sets the channel target and turns control on, then arms a watcher thread that polls the channel every `TEMP_REACHED_POLL_INTERVAL_S` (republishing `TEMP_UPDATED` so the pane keeps tracking) and publishes `TEMPERATURE_REACHED` once `|current - target| <= tolerance`; it gives up after `TEMP_REACHED_TIMEOUT_S`. A new request cancels the previous watcher.
+
+### Voltage/frequency range preferences: app_globals owner-publishes (#610)
+
+`dropbot_status_and_controls` used to reach into `dropbot_preferences_ui` directly (`from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences`) to read the voltage/frequency spinner bounds and to persist the last-applied values. #610 replaced that with the app_globals owner-publishes pattern already used for hardware limits in `dropbot_controller/preferences.py`.
+
+**app_globals keys (constants in `dropbot_preferences_ui/consts.py`)**
+- `UI_MIN_VOLTAGE_KEY = "ui_min_voltage"`, `UI_MAX_VOLTAGE_KEY = "ui_max_voltage"`, `UI_DEFAULT_VOLTAGE_KEY = "ui_default_voltage"`
+- `UI_MIN_FREQUENCY_KEY = "ui_min_frequency"`, `UI_MAX_FREQUENCY_KEY = "ui_max_frequency"`, `UI_DEFAULT_FREQUENCY_KEY = "ui_default_frequency"`
+- Each key name doubles as the corresponding trait name on `VoltageFrequencyRangePreferences`.
+
+**Owner (dropbot_preferences_ui)**
+- `VoltageFrequencyRangePreferences.traits_init()` (`models.py`) seeds any key not already in app_globals from its own (ETS-persisted) trait value.
+- `VoltageFrequencyRangePreferences._publish_to_app_globals()` — `@observe` on all six range/default traits — mirrors every change (from the preferences pane, or from any ad hoc instance such as `manual_controls/MVC.py`'s) into app_globals as `app_globals[event.name] = event.new`.
+- The existing `VOLTAGE_FREQUENCY_RANGE_CHANGED` topic (min/max only) is unchanged — it still drives the live QSpinBox bound updates in `dropbot_status_and_controls/dock_pane.py`.
+
+**Reader (dropbot_status_and_controls)**
+- `model.py`'s `voltage`/`frequency` `RangeWithSteppedSpinViewHint` traits read their initial bounds/default from `app_globals.get(<key>, <UI_DEFAULT_* fallback>)` instead of instantiating `VoltageFrequencyRangePreferences`.
+
+**Writer (dropbot_status_and_controls) — persists across restarts**
+- `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
+- This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.

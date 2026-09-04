@@ -25,14 +25,11 @@ column:
 """
 
 import dramatiq
-from dropbot_protocol_controls.consts import CALIBRATION_LISTENER_ACTOR_NAME
-from traits.api import Float, List as TraitList, provides, Instance, Str
 
-from microdrop_utils.dramatiq_controller_base import (
-    generate_class_method_dramatiq_listener_actor,
-    basic_listener_actor_routine,
-)
-from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
+from traits.api import Float, Instance, Str, provides
+from traits.api import List as TraitList
+
+from dropbot_protocol_controls.consts import CALIBRATION_LISTENER_ACTOR_NAME
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
     BaseColumnModel,
@@ -41,9 +38,16 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.views.columns.readonly_label import (
     ReadOnlyLabelColumnView,
 )
-from ..consts import PKG_name
 
-from ..services.force_math import force_for_step, current_full_electrode_capacitance_per_unit_area
+from microdrop_utils.dramatiq_controller_base import (
+    basic_listener_actor_routine,
+    generate_class_method_dramatiq_listener_actor,
+)
+from microdrop_utils.force_math_helpers import force_for_step
+from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
+
+from ..consts import PKG_name
+from ..services.force_math import current_full_electrode_capacitance_per_unit_area
 
 from logger.logger_service import get_logger
 
@@ -128,8 +132,9 @@ class ForceColumnHandler(BaseColumnHandler):
             self.column_changed_signal.emit()
         else:
             # Signal not wired yet (the tree model builds after the column);
-            # defer the repaint until _wire_column_handlers_with_column_changed_signal
-            # assigns the signal. See BaseColumnHandler._on_column_changed_signal_changed.
+            # defer the repaint until
+            # _wire_column_handlers_with_column_changed_signal assigns the
+            # signal. See BaseColumnHandler._on_column_changed_signal_changed.
             self.trigger_column_change_when_wired = True
 
 

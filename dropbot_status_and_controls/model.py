@@ -8,26 +8,57 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import math
+
+# Third-party imports.
 import pint
 
-from traits.api import Str, Enum, Instance, observe, Bool
+# Enthought library imports.
+from apptools.preferences.api import get_default_preferences
+from traits.api import Bool, Enum, Instance, Str, observe
 
-from .consts import (
-    DROPBOT_IMAGE, DROPBOT_CHIP_INSERTED_IMAGE, DIELECTRIC_MATERIALS,
-    disconnected_color, connected_no_device_color, connected_color, halted_color,
+# Microdrop package imports.
+from dropbot_preferences_ui.consts import (
+    UI_DEFAULT_FREQUENCY,
+    UI_DEFAULT_FREQUENCY_KEY,
+    UI_DEFAULT_MAX_FREQUENCY,
+    UI_DEFAULT_MAX_VOLTAGE,
+    UI_DEFAULT_MIN_FREQUENCY,
+    UI_DEFAULT_MIN_VOLTAGE,
+    UI_DEFAULT_VOLTAGE,
+    UI_DEFAULT_VOLTAGE_KEY,
+    UI_MAX_FREQUENCY_KEY,
+    UI_MAX_VOLTAGE_KEY,
+    UI_MIN_FREQUENCY_KEY,
+    UI_MIN_VOLTAGE_KEY,
+    VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH,
 )
-from .preferences import DropbotStatusAndControlsPreferences
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from template_status_and_controls.base_model import BaseStatusModel
 
+# Microdrop utils imports.
+from microdrop_utils.force_math_helpers import force_for_step
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
 from microdrop_utils.ureg_helpers import ureg
 
-from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
-from dropbot_protocol_controls.services.force_math import force_for_step
-from template_status_and_controls.base_model import BaseStatusModel
+# Local imports.
+from .consts import (
+    DIELECTRIC_MATERIALS,
+    DROPBOT_CHIP_INSERTED_IMAGE,
+    DROPBOT_IMAGE,
+    connected_color,
+    connected_no_device_color,
+    disconnected_color,
+    halted_color,
+)
+from .preferences import DropbotStatusAndControlsPreferences
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+app_globals = get_microdrop_redis_globals_manager()
 
 N_DISPLAY_DIGITS = 3
 
@@ -48,15 +79,23 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
-    voltage_frequency_range_prefs = VoltageFrequencyRangePreferences()
+    # Min/max/default read from app_globals, where dropbot_preferences_ui's
+    # VoltageFrequencyRangePreferences publishes them (owner-publishes
+    # pattern, #610) — falls back to its consts if nothing has published
+    # yet (e.g. this plugin's app loads before dropbot_preferences_ui's).
     voltage = RangeWithSteppedSpinViewHint(
-        int(voltage_frequency_range_prefs.ui_min_voltage), int(voltage_frequency_range_prefs.ui_max_voltage),
-        value=int(voltage_frequency_range_prefs.ui_default_voltage), suffix=" V",
+        int(app_globals.get(UI_MIN_VOLTAGE_KEY, UI_DEFAULT_MIN_VOLTAGE)),
+        int(app_globals.get(UI_MAX_VOLTAGE_KEY, UI_DEFAULT_MAX_VOLTAGE)),
+        value=int(app_globals.get(UI_DEFAULT_VOLTAGE_KEY, UI_DEFAULT_VOLTAGE)),
+        suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithSteppedSpinViewHint(
-        int(voltage_frequency_range_prefs.ui_min_frequency), int(voltage_frequency_range_prefs.ui_max_frequency),
-        value=int(voltage_frequency_range_prefs.ui_default_frequency), step=100, suffix=" Hz",
+        int(app_globals.get(UI_MIN_FREQUENCY_KEY, UI_DEFAULT_MIN_FREQUENCY)),
+        int(app_globals.get(UI_MAX_FREQUENCY_KEY, UI_DEFAULT_MAX_FREQUENCY)),
+        value=int(app_globals.get(UI_DEFAULT_FREQUENCY_KEY, UI_DEFAULT_FREQUENCY)),
+        step=100,
+        suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
 
@@ -71,10 +110,16 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
 
     # ---- Dielectric ----------------------------------
-    dielectric_material = Enum(*list(DIELECTRIC_MATERIALS.keys()),
-                               desc="Dielectric material for thickness calculation")
-    dielectric_thickness = Instance(pint.Quantity, desc="Calculated dielectric thickness (um)")
-    show_dielectric_info = Bool(desc="Whether the dielectric readout section is visible")
+    dielectric_material = Enum(
+        *list(DIELECTRIC_MATERIALS.keys()),
+        desc="Dielectric material for thickness calculation",
+    )
+    dielectric_thickness = Instance(
+        pint.Quantity, desc="Calculated dielectric thickness (um)"
+    )
+    show_dielectric_info = Bool(
+        desc="Whether the dielectric readout section is visible"
+    )
     # --------------------------------------------------
 
     preferences = Instance(DropbotStatusAndControlsPreferences)
@@ -123,10 +168,14 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     def _reset_readings_on_realtime_off(self, event):
         """Clear sensor displays when realtime mode is disabled."""
         if not event.new:
-            self.reset_traits([
-                "capacitance", "voltage_readback",
-                "force", "dielectric_thickness",
-            ])
+            self.reset_traits(
+                [
+                    "capacitance",
+                    "voltage_readback",
+                    "force",
+                    "dielectric_thickness",
+                ]
+            )
             self.frequency_display = "-"
 
     @observe("capacitance")
@@ -157,13 +206,15 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     @observe("voltage_readback, c_device")
     def _recalculate_force(self, event):
         """Recalculate force when voltage_readback or c_device changes."""
-        if math.isnan(self.voltage_readback.magnitude) or math.isnan(self.c_device.magnitude):
+        if math.isnan(self.voltage_readback.magnitude) or math.isnan(
+            self.c_device.magnitude
+        ):
             self.force = ureg("nan mN/m")
             return
-        force = force_for_step(
-            self.voltage_readback.magnitude, self.c_device.magnitude
+        force = force_for_step(self.voltage_readback.magnitude, self.c_device.magnitude)
+        self.force = (
+            ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
         )
-        self.force = ureg(f"{force:.4f} mN/m") if force is not None else ureg("nan mN/m")
 
     @observe("dielectric_material, c_device")
     def _recalculate_dielectric_thickness(self, event):
@@ -189,7 +240,9 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
         # d = epsilon_r * epsilon_0 / C_device
         # Convert to micrometres
 
-        self.dielectric_thickness = (epsilon_r * ureg.vacuum_permittivity / self.c_device).to("um")
+        self.dielectric_thickness = (
+            epsilon_r * ureg.vacuum_permittivity / self.c_device
+        ).to("um")
         logger.info(
             f"Dielectric thickness calculated: {self.dielectric_thickness:.3f} um "
             f"(material={self.dielectric_material}, "
@@ -212,9 +265,23 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     @observe("voltage, frequency")
     def _update_prefs(self, event):
-        """Persist last-applied voltage/frequency to UI preferences on every change."""
+        """Persist the last-applied voltage/frequency across restarts.
+
+        Writes straight to the ETS preferences node dropbot_preferences_ui's
+        VoltageFrequencyRangePreferences persists under (#610), by path,
+        rather than importing that plugin's preferences model. Envisage
+        installs the application's preferences node as apptools' default
+        (envisage.application.Application.__init__), so this lands in the
+        exact node PreferencesHelper subclasses read from/write to; if a
+        VoltageFrequencyRangePreferences instance is alive it picks up the
+        change via its preferences listener and mirrors it to app_globals
+        itself — this is the only writer of ui_default_voltage/frequency.
+        """
         logger.debug(f"Updating preferences: {event}")
-        self.voltage_frequency_range_prefs.trait_set(**{f"ui_default_{event.name}": event.new})
+        get_default_preferences().set(
+            f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{event.name}",
+            event.new,
+        )
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
