@@ -8,24 +8,28 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import re
 import traceback
 import warnings
-from typing import Any
-from datetime import datetime
 
-
+# Third-party imports.
 import dramatiq
 from dramatiq import Actor
 from dramatiq.middleware import CurrentMessage
-from traits.api import Instance, Str, provides, HasTraits, Callable
 
-from logger.logger_service import get_logger, debug_throttled
+# Enthought library imports.
+from traits.api import Callable, HasTraits, Instance, Str, provides
 
-from .i_dramatiq_controller_base import IDramatiqControllerBase
+# Microdrop package imports.
 from .datetime_helpers import TimestampedMessage
+from .i_dramatiq_controller_base import IDramatiqControllerBase
+
+# Logger import.
+from logger.logger_service import debug_throttled, get_logger
 
 logger = get_logger(__name__)
+
 
 @provides(IDramatiqControllerBase)
 class DramatiqControllerBase(HasTraits):
@@ -63,19 +67,16 @@ class DramatiqControllerBase(HasTraits):
     listener_queue = Str("default", desc="The unique queue actor is listening to")
     listener_actor_method = Callable(
         desc="Routine to be wrapped into listener_actor. Should accept "
-             "parent_obj, message, topic parameters"
+        "parent_obj, message, topic parameters"
     )
     listener_actor: Actor = Instance(
-        Actor,
-        desc="Dramatiq actor instance for message handling"
+        Actor, desc="Dramatiq actor instance for message handling"
     )
 
     def traits_init(self) -> None:
         """Initialize the controller by setting up the Dramatiq listener."""
         if not self.listener_name:
-            raise ValueError(
-                "listener_name must be set before creating the actor"
-            )
+            raise ValueError("listener_name must be set before creating the actor")
 
         if not self.listener_actor_method:
             raise ValueError(
@@ -88,7 +89,7 @@ class DramatiqControllerBase(HasTraits):
         """Set the default listener actor name to be class name in snake_case."""
         class_name = self.__class__.__name__  # class name in camel case
         # convert to snake case
-        class_name = re.sub(r'([a-z])([A-Z])', r'\1_\2', class_name).lower()
+        class_name = re.sub(r"([a-z])([A-Z])", r"\1_\2", class_name).lower()
         return class_name
 
     def _listener_actor_default(self) -> Actor:
@@ -101,34 +102,47 @@ class DramatiqControllerBase(HasTraits):
             The created actor will use the class's listener_name and
             route messages to the listener_routine method.
         """
-        @dramatiq.actor(
-            actor_name=self.listener_name,
-            queue_name=self.listener_queue
-        )
-        def create_listener_actor(message: str, topic: str, timestamp: float | None = None) -> None:
+
+        @dramatiq.actor(actor_name=self.listener_name, queue_name=self.listener_queue)
+        def create_listener_actor(
+            message: str, topic: str, timestamp: float | None = None
+        ) -> None:
             """Handle incoming Dramatiq messages.
 
             Args:
                 message: Content of the received message
                 topic: Topic/routing key of the message
-                timestamp: Timestamp of the message. If None, the timestamp is extracted from the current message.
+                timestamp: Timestamp of the message. If None, extracted from
+                    the current message.
             """
-            if timestamp is None: # This is the message *to* the message_router
+            # Message *to* the message_router
+            if timestamp is None:
                 msg_proxy = CurrentMessage.get_current_message()
                 msg_timestamp = (
-                    msg_proxy._message.message_timestamp if msg_proxy is not None
+                    msg_proxy._message.message_timestamp
+                    if msg_proxy is not None
                     else None
                 )
-                debug_throttled(logger, f"to_router:{topic}",
-                                f"Message going to message_router: {message} at {msg_timestamp}")
-            else: # This is the message *from* the message_router (since message_router is the only publish_message that adds a timestamp)
+                debug_throttled(
+                    logger,
+                    f"to_router:{topic}",
+                    f"Message going to message_router: {message} at {msg_timestamp}",
+                )
+            # Message *from* the message_router (message_router is the only
+            # publish_message that adds a timestamp)
+            else:
                 msg_timestamp = timestamp
-                debug_throttled(logger, f"from_router:{topic}",
-                                f"Message received from message_router: {message} at {msg_timestamp}")
+                debug_throttled(
+                    logger,
+                    f"from_router:{topic}",
+                    f"Message received from message_router: {message} at "
+                    f"{msg_timestamp}",
+                )
 
-            timestamped_message = TimestampedMessage( # Convert the message to a TimestampedMessage and propagate it to the listener_actor_method
-                content=message,
-                timestamp=msg_timestamp
+            # Convert the message to a TimestampedMessage and propagate it to
+            # the listener_actor_method
+            timestamped_message = TimestampedMessage(
+                content=message, timestamp=msg_timestamp
             )
             self.listener_actor_method(timestamped_message, topic)
 
@@ -136,9 +150,7 @@ class DramatiqControllerBase(HasTraits):
 
 
 def generate_class_method_dramatiq_listener_actor(
-    listener_name: str,
-    class_method: Callable,
-    listener_queue: str = "default"
+    listener_name: str, class_method: Callable, listener_queue: str = "default"
 ) -> Actor:
     """Generate a Dramatiq Actor for message handling for a class method.
 
@@ -160,7 +172,7 @@ def generate_class_method_dramatiq_listener_actor(
         dramatiq_controller = DramatiqControllerBase(
             listener_name=listener_name,
             listener_actor_method=class_method,
-            listener_queue=listener_queue
+            listener_queue=listener_queue,
         )
         return dramatiq_controller.listener_actor
 
@@ -186,9 +198,9 @@ def unregister_dramatiq_listener_actor(listener_name: str) -> bool:
 
 def basic_listener_actor_routine(
     parent_obj: object,
-    timestamped_message: TimestampedMessage,    
+    timestamped_message: TimestampedMessage,
     topic: str,
-    handler_name_pattern: str = "_on_{topic}_triggered"
+    handler_name_pattern: str = "_on_{topic}_triggered",
 ) -> None:
     """Dispatch incoming message to dynamically determined handler method.
 
@@ -199,26 +211,28 @@ def basic_listener_actor_routine(
 
     Args:
         parent_obj: Object expected to have a handler method for the topic.
-                   Should have a 'name' attribute used for logging.
-        timestamped_message: TimestampedMessage object containing the message and timestamp.
+            Should have a 'name' attribute used for logging.
+        timestamped_message: TimestampedMessage object containing the message
+            and timestamp.
         topic: Topic string from which handler method name is derived.
-               Expected to be a string with segments separated by "/".
+            Expected to be a string with segments separated by "/".
         handler_name_pattern: Format string defining handler method's name.
-                            Must include '{topic}' placeholder. Defaults to
-                            "_on_{topic}_triggered".
+            Must include '{topic}' placeholder. Defaults to
+            "_on_{topic}_triggered".
 
     Example:
         For a topic "devices/sensor", the computed method name will be
         "_on_sensor_triggered".
     """
-    
+
     # Debug level: at info this printed EVERY routed message (the old code
     # hand-excluded the two chattiest topics; at debug no exclusion needed).
     # Throttled per (listener, topic): streaming topics fire many times a second.
     debug_throttled(
-        logger, f"listener_rx:{parent_obj.name}:{topic}",
+        logger,
+        f"listener_rx:{parent_obj.name}:{topic}",
         f"{parent_obj.name}: Received message: '{timestamped_message}' "
-        f"from topic: {topic} at {timestamped_message.timestamp}"
+        f"from topic: {topic} at {timestamped_message.timestamp}",
     )
 
     # Split the topic into parts and take the last segment as the key.
@@ -228,11 +242,7 @@ def basic_listener_actor_routine(
     # Compute the handler method name using the provided pattern.
     requested_method = handler_name_pattern.format(topic=topic_key)
 
-    err_msg = invoke_class_method(
-        parent_obj,
-        requested_method,
-        timestamped_message
-    )
+    err_msg = invoke_class_method(parent_obj, requested_method, timestamped_message)
 
     if err_msg:
         logger.error(
@@ -261,11 +271,12 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
 
         # Ensure that the attribute is callable before invoking it.
         if callable(class_method):
-            # Invoke the requested method with the provided arguments and log any errors calling it
+            # Invoke the requested method with the provided arguments and log
+            # any errors calling it
             try:
                 class_method(*args, **kwargs)
                 return error_msg
-            except Exception as e:
+            except Exception:
                 stack_trace = traceback.format_exc()
                 error_msg = (
                     f"Error executing '{requested_method}': "
@@ -284,4 +295,3 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
         error_msg = f"Method '{requested_method}' not found for {parent_obj}."
         logger.warning(error_msg)
         return error_msg
-
