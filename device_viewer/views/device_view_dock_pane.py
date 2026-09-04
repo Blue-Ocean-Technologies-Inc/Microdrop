@@ -8,14 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
-# Site package imports
+# Standard library imports.
 import json
 import os
 import traceback
 from pathlib import Path
 
+# Third-party imports.
 import dramatiq
 
+# Enthought library imports.
 from pyface.api import GUI
 from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QBrush, QColor, QFont, QGraphicsScene, QImage, QPainter
@@ -39,6 +41,7 @@ from traits.observation._set_change_event import SetChangeEvent
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.view import View
 
+# Microdrop package imports.
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import (
     CANCEL,
@@ -55,6 +58,7 @@ from microdrop_status_bar.consts import (
     ICON_PRIORITY_LEFTMOST,
 )
 
+# Microdrop style imports.
 from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
 from microdrop_style.colors import BLACK, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
@@ -66,14 +70,13 @@ from microdrop_style.helpers import (
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_JOYSTICK
 
+# Microdrop utils imports.
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
-# utils imports
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
@@ -83,6 +86,7 @@ from microdrop_utils.pyside_helpers import (
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
 
+# Local imports.
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     CALIBRATION_DATA,
@@ -100,14 +104,10 @@ from ..consts import (
     device_modified_tag,
     listener_name,
 )
-
-##### local imports ######
 from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.electrodes import Electrodes
-
-# models and services
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
 from ..models.route import Route
@@ -126,8 +126,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
 from ..utils.message_utils import gui_models_to_message_model
-
-# For sidebar
 from .alpha_view.alpha_table import alpha_table_view
 from .calibration_view.widget import CalibrationController, CalibrationWidget
 from .camera_alignment_view.alignment_dialog import (
@@ -142,8 +140,6 @@ from .camera_alignment_view.alignment_settings import (
 )
 from .camera_control_view.widget import CameraControlWidget
 from .electrode_view.electrode_layer import ElectrodeLayer
-
-# Device Viewer electrode and route views
 from .electrode_view.electrode_scene import ElectrodeScene
 from .mode_picker.widget import ModePicker, ModePickerViewModel
 from .route_selection_view.route_selection_view import (
@@ -153,7 +149,7 @@ from .route_selection_view.route_selection_view import (
 from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
 from .zone_view.zones_sidebar import zones_view
 
-# ext consts
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
