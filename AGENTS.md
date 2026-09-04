@@ -140,8 +140,11 @@ header**, in this order:
 8. `# Logger import.` — `logger`, always last
 
 Ruff's isort sorts imports *into* these sections but cannot generate the
-headers — write them yourself (only for the sections a module actually
-has); ruff preserves them in place, the same way envisage maintains theirs.
+headers — a `repo: local` pre-commit hook (`tools/stamp_import_sections.py`,
+run after the ruff hooks) stamps and corrects them on staged files instead
+(only for the sections a module actually has), so you never need to write
+them by hand. Run it manually with
+`python tools/stamp_import_sections.py [--check] <files>`.
 
 The module-setup globals sit immediately after the imports, closing the
 prologue: the logger first, then the Redis app-globals manager where the
