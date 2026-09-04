@@ -300,7 +300,7 @@ idiom (chunking, comment density, method order) that rules alone can't:
   plus a short list of genuinely shared infrastructure documented in that
   file (`microdrop_application.helpers`/`dialogs`, the
   `pluggable_protocol_tree` extension-point API). Run it with
-  `pixi run lint-imports` (or `pixi exec --spec "import-linter" --
+  `pixi run lint-microdrop-imports` from `microdrop-py/` (or `pixi exec --spec "import-linter" --
   lint-imports` from the repo root) before pushing. Pre-existing violations
   are seeded as an explicit, commented `ignore_imports` debt list in
   `.importlinter` — that list may only shrink: fix the underlying coupling
