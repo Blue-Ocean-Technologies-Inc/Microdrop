@@ -8,36 +8,38 @@
 #
 # Thanks for using Microdrop open source!
 
-name: Unit tests
+name: Unit tests and import contract
 
-# Runs the pure-unit pytest partition only: tests/ subpackages next to the
-# code, and examples/tests/. The Redis-need and hardware-need partitions
-# (tests_with_redis_server_need/, tests_with_dropbot_connection_need/) are
-# excluded via --ignore-glob, not just left unselected — merely COLLECTING
-# tests_with_redis_server_need/conftest.py runs module-level code that swaps
-# the global dramatiq broker to a RedisBroker for the rest of the session,
-# which corrupts every other test that expects the default StubBroker. See
-# AGENTS.md "Testing" for the partition layout.
+# Runs two jobs in parallel:
+#
+# 1. Import-linter contract (separate status check): validates the plugin-decoupling
+#    contract from AGENTS.md, failing any PR with a new cross-plugin import.
+#
+# 2. Pure-unit pytest partition: tests/ subpackages next to the code, and
+#    examples/tests/. The Redis-need and hardware-need partitions
+#    (tests_with_redis_server_need/, tests_with_dropbot_connection_need/) are
+#    excluded via --ignore-glob, not just left unselected — merely COLLECTING
+#    tests_with_redis_server_need/conftest.py runs module-level code that swaps
+#    the global dramatiq broker to a RedisBroker for the rest of the session,
+#    which corrupts every other test that expects the default StubBroker. See
+#    AGENTS.md "Testing" for the partition layout.
 #
 # The pixi manifest and lockfile live in the launcher repo
 # (Blue-Ocean-Technologies-Inc/pixi-microdrop, public), under microdrop-py/,
-# with this repo checked out as the microdrop-py/src submodule. So this job
+# with this repo checked out as the microdrop-py/src submodule. So each job
 # checks the launcher repo out first, then overlays the PR's/pushed commit
 # of this repo at microdrop-py/src, before handing that manifest to
-# prefix-dev/setup-pixi. The lock covers linux-64, so the job runs on the
+# prefix-dev/setup-pixi. The lock covers linux-64, so jobs run on the
 # default x86_64 runner.
 #
-# Known-failing baseline: this selection currently has 139 failing tests and
-# 3 collection errors out of 1363 (verified locally on main @ a3f32b9a,
+# Known-failing baseline (pytest job): this selection currently has 139 failing tests
+# and 3 collection errors out of 1363 (verified locally on main @ a3f32b9a,
 # win-64, before this workflow existed -- not introduced by this change).
 # Most cluster in pluggable_protocol_tree/tests (103) and
-# video_protocol_controls/tests (13). The step below runs with
+# video_protocol_controls/tests (13). The pytest step runs with
 # continue-on-error so the job stays green on merge while those pre-existing
 # failures stay visible as an annotated warning in the run -- fixing them is
 # tracked as a follow-up, not silently swallowed here.
-#
-# The import-linter step (before pytest) gates the job on the plugin-decoupling
-# contract, failing any PR that introduces a new cross-plugin import.
 
 on:
   pull_request:
@@ -53,8 +55,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pytest:
-    name: pure-unit pytest partition
+  import-linter:
+    name: Import-linter contract
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -78,11 +80,35 @@ jobs:
           cache: true
 
       - name: Import-linter contract
-        # Plugin-decoupling contract from .importlinter (see AGENTS.md). Gates
-        # the job: a new cross-plugin import fails the PR even while the
-        # pytest step below is still report-only.
+        # Plugin-decoupling contract from .importlinter (see AGENTS.md).
         working-directory: launcher/microdrop-py
         run: pixi run lint-microdrop-imports
+
+  pytest:
+    name: Pure-unit pytest partition
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Setup steps duplicated on purpose so the import-linter contract
+      # is a separate check and can be required independently of pytest.
+      - name: Check out launcher repo (pixi manifest + lockfile)
+        uses: actions/checkout@v4
+        with:
+          repository: Blue-Ocean-Technologies-Inc/pixi-microdrop
+          path: launcher
+
+      - name: Check out this commit at microdrop-py/src
+        uses: actions/checkout@v4
+        with:
+          path: launcher/microdrop-py/src
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          manifest-path: launcher/microdrop-py/pyproject.toml
+          locked: true
+          cache: true
 
       - name: Run pure-unit pytest partition
         working-directory: launcher/microdrop-py/src
