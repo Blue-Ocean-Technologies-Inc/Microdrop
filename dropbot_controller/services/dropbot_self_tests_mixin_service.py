@@ -196,8 +196,9 @@ class DropbotSelfTestsMixinService(HasTraits):
                 results_path = get_timestamped_results_path(
                     f"{test_name}_results", report_generation_directory
                 ).with_suffix(".json")
-                with open(results_path, "w") as results_file:
+                with open(results_path, "w", encoding="utf-8") as results_file:
                     json.dump(serialise_test_results(result[test_name]), results_file)
+                logger.info(f"Saved {test_name} self-test results to {results_path}")
 
                 test_name_display = (
                     test_name.replace("_", " ").capitalize() + " Results"

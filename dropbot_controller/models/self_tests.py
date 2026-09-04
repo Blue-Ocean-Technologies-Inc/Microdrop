@@ -85,7 +85,7 @@ def load_self_test_results(results_path):
     an empty figure instead of crashing.
     """
     try:
-        with open(results_path) as results_file:
+        with open(results_path, encoding="utf-8") as results_file:
             data = json.load(results_file)
     except (OSError, json.JSONDecodeError) as e:
         logger.error(f"Could not load self-test results from {results_path}: {e}")
