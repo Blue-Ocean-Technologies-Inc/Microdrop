@@ -261,7 +261,8 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
         **kwargs: Keyword arguments to pass to the method
 
     Returns:
-        str: Empty string if successful, error message if failed
+        str: Empty string if the method ran or does not exist; error message
+            if it raised or is not callable.
     """
     error_msg = ""
 
@@ -292,6 +293,8 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
             logger.warning(error_msg)
             return error_msg
     else:
-        error_msg = f"Method '{requested_method}' not found for {parent_obj}."
-        logger.warning(error_msg)
-        return error_msg
+        # Reflective dispatch: a listener may receive topics it has no handler
+        # for (e.g. contributed by a hot-loaded plugin group), so a miss is not
+        # an error. Returning "" keeps callers from logging one either.
+        logger.debug(f"Method '{requested_method}' not found for {parent_obj}.")
+        return ""
