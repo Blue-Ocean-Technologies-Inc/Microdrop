@@ -8,24 +8,29 @@
 #
 # Thanks for using Microdrop open source!
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from pyface.action.api import Action
-from pyface.qt.QtWidgets import (QDialog, QVBoxLayout, QLabel, 
-                                 QDialogButtonBox, QProgressBar,
-                                 QPushButton, QTextBrowser)
-from pyface.qt.QtCore import Qt, Slot, Signal, QSize, QTimer
-from pyface.qt.QtGui import QPixmap, QMovie
-
+from pyface.qt.QtCore import QSize, Qt, QTimer, Signal, Slot
+from pyface.qt.QtGui import QMovie, QPixmap
+from pyface.qt.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QTextBrowser,
+    QVBoxLayout,
+)
 from traits.api import Str
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+
+from dropbot_controller.consts import SELF_TEST_CANCEL
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from dropbot_controller.consts import SELF_TEST_CANCEL
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -63,8 +68,10 @@ class SelfTestIntroDialog(QDialog):
         # instruction label
         instruction_label = QLabel(
             "<b>Please insert the DropBot test board, for more info see </b>"
-            '<a href="https://github.com/sci-bots/dropbot-v3/wiki/DropBot-Test-Board#loading-dropbot-test-board">'
-            '<span style="text-decoration: underline; color:#2980b9;">DropBot Test Board documentation</span>'
+            '<a href="https://github.com/sci-bots/dropbot-v3/wiki/DropBot-Test-Board'
+            '#loading-dropbot-test-board">'
+            '<span style="text-decoration: underline; color:#2980b9;">'
+            "DropBot Test Board documentation</span>"
             "</a>"
         )
         instruction_label.setWordWrap(True)
@@ -115,7 +122,8 @@ class ShowSelfTestIntroDialogAction(Action):
     name = Str("&Self Test Intro Dialog")
 
     def perform(self, event):
-        # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
+        # The dialog is a child window of the Task Action, so the parent is
+        # coming from the event.task.window.control
         dialog = SelfTestIntroDialog(parent=event.task.window.control)
         result = dialog.exec_()
         if result == QDialog.Accepted:
@@ -349,27 +357,36 @@ class WaitForTestDialogAction:
 
 
 class ResultsDialog(QDialog):
-    def __init__(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
+    def __init__(
+        self, parent=None, title="Test Results", image_path=None, failed_channels=None
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(600, 400)
 
         layout = QVBoxLayout(self)
 
-        # Matplotlib canvas
-        if plot_data is not None:
-            fig = plot_data[-1]
-            fig.tight_layout()
+        # The backend renders the plot to a PNG and hands us the path (#611) —
+        # it never crosses the pub/sub boundary as a live matplotlib Figure.
+        self.plot_label = QLabel()
+        self.plot_label.setAlignment(Qt.AlignCenter)
+        if image_path is not None and Path(image_path).exists():
+            pixmap = QPixmap(image_path)
+            self.plot_label.setPixmap(
+                pixmap.scaled(560, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
         else:
-            fig = Figure(figsize=(5, 3))
-        self.canvas = FigureCanvas(fig)
-        layout.addWidget(self.canvas)
+            logger.error(f"Self-test results image not found: {image_path}")
+            self.plot_label.setText("Results plot unavailable.")
+        layout.addWidget(self.plot_label)
 
         # Show failed channel numbers if provided
         if failed_channels is not None:
             if failed_channels:
                 channel_list = ", ".join(str(ch) for ch in failed_channels)
-                label_text = f"<b>Failed channels ({len(failed_channels)}):</b> {channel_list}"
+                label_text = (
+                    f"<b>Failed channels ({len(failed_channels)}):</b> {channel_list}"
+                )
                 label_color = "color: red;"
             else:
                 label_text = "<b>All channels passed.</b>"
@@ -387,10 +404,24 @@ class ResultsDialog(QDialog):
 class ResultsDialogAction(Action):
     name = Str("&Results Dialog")
 
-    def perform(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
-        # The dialong is a child window of non UI class
-        dialog = ResultsDialog(parent=parent, title=title, plot_data=plot_data, failed_channels=failed_channels)
-        # use exec_() to block the main thread until the dialog is closed otherwise the window is garbage collected
+    def perform(
+        self, parent=None, title="Test Results", image_path=None, failed_channels=None
+    ):
+        # Resolve a Qt parent widget from the owning Task, same as
+        # WaitForTestDialogAction above.
+        gui_parent = (
+            getattr(parent.window, "control", None)
+            if hasattr(parent, "window")
+            else None
+        )
+        dialog = ResultsDialog(
+            parent=gui_parent,
+            title=title,
+            image_path=image_path,
+            failed_channels=failed_channels,
+        )
+        # use exec_() to block the main thread until the dialog is closed
+        # otherwise the window is garbage collected
         dialog.exec_()
 
     def close(self):
@@ -443,7 +474,8 @@ class DropbotDisconnectedDialogAction(Action):
     name = Str("Dropbot &Disconnected Dialog")
 
     def perform(self, event):
-        # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
+        # The dialog is a child window of the Task Action, so the parent is
+        # coming from the event.task.window.control
         dialog = DropbotDisconnectedDialog(parent=event.task.window.control)
         result = dialog.exec_()
         if result == QDialog.Accepted:

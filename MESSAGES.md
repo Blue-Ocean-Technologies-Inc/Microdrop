@@ -37,6 +37,7 @@ Sending: (Via publish_message)
 - "dropbot/error"
 - DROPBOT_SETUP_SUCCESS "dropbot/signals/setup_success"
 - SELF_TESTS_PROGRESS "dropbot/signals/self_tests_progress"
+- SELF_TESTS_RESULTS "dropbot/signals/self_tests_results"
 - CONNECTED "dropbot/signals/connected"
 - ** DISCONNECTED "dropbot/signals/connected"
 
@@ -66,6 +67,7 @@ Receiving:
 
 Receiving: (Via handlers)
 - SELF_TESTS_PROGRESS "dropbot/signals/self_tests_progress"
+- SELF_TESTS_RESULTS "dropbot/signals/self_tests_results" (handled in `microdrop_application/task.py`, not this plugin — see Detailed Flows)
 
 Sending: (Via publish_message)
 - TEST_VOLTAGE "dropbot/requests/test_voltage" (menus.py:78)
@@ -203,6 +205,29 @@ One topic carries both the spontaneous hardware shorts signal and the answer to 
 **Subscriber side (microdrop_application)**
 - `task._on_shorts_detected_triggered` validates the payload and hands off to the UI thread.
 - `task._on_shorts_detected_dialog`: with shorts → a `confirm` offering to keep the channels enabled; declining publishes them via `disabled_channels_changed_publisher`. Without shorts → the "No Shorts Detected" info dialog, unconditionally when `show_window` is set, otherwise only when the `suppress_no_shorts_information` preference is unset (that dialog carries the "do not show again" checkbox which writes the preference).
+
+### Backend → Microdrop task: self-test results dialog (#611)
+
+`dropbot_self_tests_mixin_service` (backend, must stay Qt-free) used to
+import `ResultsDialogAction` from `dropbot_tools_menu` directly and show the
+dialog itself. It now publishes the rendered plot as a file path; the
+frontend (`microdrop_application/task.py`, the same place that already owns
+the progress dialog) subscribes and presents it.
+
+**Topic**
+- `SELF_TESTS_RESULTS = "dropbot/signals/self_tests_results"` — defined in `dropbot_controller/consts.py`.
+
+**Payload schema**
+- Pydantic `SelfTestResultsSignal` at `dropbot_controller/models/self_tests.py`.
+- Fields: `test_name: str`, `title: str`, `plot_image_path: str` (absolute path to a PNG rendered by the backend), `failed_channels: list[int] | None` (only set for `test_channels`).
+- Published through the `self_test_results_publisher` singleton in `dropbot_controller/consts.py` — never hand-rolled `json.dumps`.
+
+**Publisher side (dropbot_controller)**
+- `services/dropbot_self_tests_mixin_service.py` (`_execute_test_based_on_name`) — after a single test (`test_voltage`, `test_on_board_feedback_calibration`, `test_channels`) finishes, the matplotlib `Figure` returned by the `dropbot.self_test.plot_*` helper is saved to a timestamped PNG next to the test's report directory (`get_timestamped_results_path(...).with_suffix(".png")`) and the figure is closed; the path (not the figure) is published. `test_shorts` and `run_all_tests` never publish this topic — they go through `shorts_detected_publisher` / the full HTML report respectively.
+
+**Subscriber side (microdrop_application, via dropbot_tools_menu's `ACTOR_TOPIC_DICT`)**
+- `dropbot_tools_menu/consts.py` routes `SELF_TESTS_RESULTS` to `{microdrop_application_PKG}_listener`, same mechanism already used for `SELF_TESTS_PROGRESS`.
+- `task.py` — `_on_self_tests_results_triggered` validates the payload and, via `GUI.invoke_later`, builds a `dropbot_tools_menu.self_test_dialogs.ResultsDialogAction` and calls `.perform(self, title=..., image_path=..., failed_channels=...)`. `ResultsDialog` now loads the PNG into a `QPixmap`/`QLabel` instead of embedding a live `FigureCanvasQTAgg` — it never receives a `Figure` object.
 
 ### Protocol tree run logging: report data collection + external contributions
 
