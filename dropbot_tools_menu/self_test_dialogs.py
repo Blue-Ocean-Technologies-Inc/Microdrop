@@ -8,9 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import sys
 from pathlib import Path
 
+# Third-party imports.
+from dropbot.self_test import (
+    plot_test_channels_results,
+    plot_test_on_board_feedback_calibration_results,
+    plot_test_voltage_results,
+)
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.figure import Figure
+
+# Enthought library imports.
 from pyface.action.api import Action
 from pyface.qt.QtCore import QSize, Qt, QTimer, Signal, Slot
 from pyface.qt.QtGui import QMovie, QPixmap
@@ -20,18 +31,33 @@ from pyface.qt.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QTextBrowser,
     QVBoxLayout,
 )
 from traits.api import Str
 
+# Microdrop package imports.
 from dropbot_controller.consts import SELF_TEST_CANCEL
+from dropbot_controller.models.self_tests import load_self_test_results
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+# Plot function for each self test's raw results (#611), keyed by test_name
+# as published on SELF_TESTS_RESULTS.
+PLOT_FUNCTIONS_BY_TEST_NAME = {
+    "test_voltage": plot_test_voltage_results,
+    "test_on_board_feedback_calibration": (
+        plot_test_on_board_feedback_calibration_results
+    ),
+    "test_channels": plot_test_channels_results,
+}
 
 
 class SelfTestIntroDialog(QDialog):
@@ -356,29 +382,48 @@ class WaitForTestDialogAction:
             self.dialog = None
 
 
+def _build_results_figure(test_name, results):
+    """Render `results` with the `dropbot.self_test.plot_*` helper for
+    `test_name`, returning an empty figure (after logging) when the test is
+    unrecognised or its results could not be loaded, rather than crashing.
+    """
+    plot_func = PLOT_FUNCTIONS_BY_TEST_NAME.get(test_name)
+    if plot_func is None:
+        logger.warning(f"No plot function registered for self-test '{test_name}'")
+        return Figure()
+    if results is None:
+        return Figure()
+
+    _, fig = plot_func(results, return_fig=True)
+    fig.tight_layout()
+    return fig
+
+
 class ResultsDialog(QDialog):
     def __init__(
-        self, parent=None, title="Test Results", image_path=None, failed_channels=None
+        self,
+        parent=None,
+        title="Test Results",
+        test_name=None,
+        results=None,
+        failed_channels=None,
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(600, 400)
+        self.resize(700, 500)
 
         layout = QVBoxLayout(self)
 
-        # The backend renders the plot to a PNG and hands us the path (#611) —
-        # it never crosses the pub/sub boundary as a live matplotlib Figure.
-        self.plot_label = QLabel()
-        self.plot_label.setAlignment(Qt.AlignCenter)
-        if image_path is not None and Path(image_path).exists():
-            pixmap = QPixmap(image_path)
-            self.plot_label.setPixmap(
-                pixmap.scaled(560, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-        else:
-            logger.error(f"Self-test results image not found: {image_path}")
-            self.plot_label.setText("Results plot unavailable.")
-        layout.addWidget(self.plot_label)
+        # The backend writes the raw results to a JSON file and hands us the
+        # path (#611); we load it and render it ourselves, live, so the user
+        # can zoom, pan, rescale and save — it never crosses the pub/sub
+        # boundary as a rendered image or a matplotlib Figure.
+        fig = _build_results_figure(test_name, results)
+        self.canvas = FigureCanvasQTAgg(fig)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        toolbar = NavigationToolbar2QT(self.canvas, self)
+        layout.addWidget(toolbar)
+        layout.addWidget(self.canvas, stretch=1)
 
         # Show failed channel numbers if provided
         if failed_channels is not None:
@@ -405,7 +450,12 @@ class ResultsDialogAction(Action):
     name = Str("&Results Dialog")
 
     def perform(
-        self, parent=None, title="Test Results", image_path=None, failed_channels=None
+        self,
+        parent=None,
+        title="Test Results",
+        test_name=None,
+        results_path=None,
+        failed_channels=None,
     ):
         # Resolve a Qt parent widget from the owning Task, same as
         # WaitForTestDialogAction above.
@@ -414,10 +464,12 @@ class ResultsDialogAction(Action):
             if hasattr(parent, "window")
             else None
         )
+        results = load_self_test_results(results_path) if results_path else None
         dialog = ResultsDialog(
             parent=gui_parent,
             title=title,
-            image_path=image_path,
+            test_name=test_name,
+            results=results,
             failed_channels=failed_channels,
         )
         # use exec_() to block the main thread until the dialog is closed

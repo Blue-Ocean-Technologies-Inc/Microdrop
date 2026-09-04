@@ -226,10 +226,12 @@ class MicrodropTask(Task):
     def _on_self_tests_results_triggered(self, message):
         """Present a single self-test's results dialog (#611).
 
-        The backend (`dropbot_self_tests_mixin_service`) publishes the plot
-        as a file path rather than a live `matplotlib.Figure` so it never has
-        to import Qt or `dropbot_tools_menu`; this task owns showing the
-        dialog, same as the progress dialog above.
+        The backend (`dropbot_self_tests_mixin_service`) writes the raw test
+        results to a JSON file and publishes its path, never a live
+        `matplotlib.Figure`, so it never has to import Qt or
+        `dropbot_tools_menu`; this task owns showing the dialog, same as the
+        progress dialog above, and the dialog itself loads and plots the
+        file interactively.
         """
         signal = SelfTestResultsSignal.model_validate_json(message)
 
@@ -238,7 +240,8 @@ class MicrodropTask(Task):
             self.results_dialog.perform(
                 self,
                 title=signal.title,
-                image_path=signal.plot_image_path,
+                test_name=signal.test_name,
+                results_path=signal.results_path,
                 failed_channels=signal.failed_channels,
             )
 
