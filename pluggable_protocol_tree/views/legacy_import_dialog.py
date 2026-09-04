@@ -17,7 +17,7 @@ dropdowns, so protocols kept outside a standard Device Folder still import.
 """
 
 # Standard library imports.
-import os
+from pathlib import Path
 
 # Enthought library imports.
 from pyface.qt.QtWidgets import (
@@ -52,15 +52,19 @@ logger = get_logger(__name__)
 
 def default_legacy_root_path() -> str:
     """``~/Documents/MicroDrop`` when it exists, else an empty string."""
-    candidate = os.path.join(
-        os.path.expanduser("~"), DEFAULT_DOCUMENTS_DIR_NAME, DEFAULT_MICRODROP_DIR_NAME
-    )
-    return candidate if os.path.isdir(candidate) else ""
+    candidate = Path.home() / DEFAULT_DOCUMENTS_DIR_NAME / DEFAULT_MICRODROP_DIR_NAME
+    return str(candidate) if candidate.is_dir() else ""
 
 
-def _normalized(path: str) -> str:
-    """Comparison form of a path (case- and separator-insensitive)."""
-    return os.path.normcase(os.path.normpath(path))
+def _normalized(path: str) -> Path:
+    """Comparison form of a path.
+
+    ``Path`` equality already ignores separator style, redundant ``.``
+    segments and (on Windows) case. ``resolve()`` is what additionally
+    collapses ``..``, which the editable path fields let a user type and
+    which is then persisted, so a stored ``.../Other/../Zika/device.svg``
+    still matches its scanned dropdown entry."""
+    return Path(path).resolve()
 
 
 class LegacyImportDialogModel(HasTraits):
@@ -117,7 +121,7 @@ class LegacyImportDialogModel(HasTraits):
         dropdown; one that doesn't (a manual override last time) lands
         back in the editable path field. Files that no longer exist are
         ignored, leaving the scan's own defaults in place."""
-        if device_svg_path and os.path.isfile(device_svg_path):
+        if device_svg_path and Path(device_svg_path).is_file():
             wanted = _normalized(device_svg_path)
             for index, device in enumerate(self.device_folders):
                 if _normalized(device.device_svg_path) == wanted:
@@ -125,7 +129,7 @@ class LegacyImportDialogModel(HasTraits):
                     break
             else:
                 self.device_svg_path = device_svg_path
-        if protocol_path and os.path.isfile(protocol_path):
+        if protocol_path and Path(protocol_path).is_file():
             wanted = _normalized(protocol_path)
             device = self.selected_device()
             paths = device.protocol_paths if device else []
@@ -145,7 +149,7 @@ class LegacyImportDialogModel(HasTraits):
         device = self.selected_device()
         if device is None:
             return []
-        return [os.path.basename(path) for path in device.protocol_paths]
+        return [Path(path).name for path in device.protocol_paths]
 
 
 class LegacyImportDialog(QDialog):
