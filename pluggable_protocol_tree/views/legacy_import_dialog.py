@@ -16,22 +16,36 @@ rebuilds its dropdowns. Editing a path field directly overrides the
 dropdowns, so protocols kept outside a standard Device Folder still import.
 """
 
+# Standard library imports.
 import os
 
-from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
-    QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout,
+# Enthought library imports.
+from pyface.qt.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
 )
 from traits.api import HasTraits, Instance, Int, List, Str, observe
 
-from logger.logger_service import get_logger
-
+# Microdrop package imports.
 from pluggable_protocol_tree.services.legacy_protocol_import import (
-    LegacyDeviceFolder, scan_for_device_folders,
+    LegacyDeviceFolder,
+    scan_for_device_folders,
 )
 from pluggable_protocol_tree.services.legacy_protocol_import.consts import (
-    DEFAULT_DOCUMENTS_DIR_NAME, DEFAULT_MICRODROP_DIR_NAME, NO_SELECTION_INDEX,
+    DEFAULT_DOCUMENTS_DIR_NAME,
+    DEFAULT_MICRODROP_DIR_NAME,
+    NO_SELECTION_INDEX,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,8 +53,8 @@ logger = get_logger(__name__)
 def default_legacy_root_path() -> str:
     """``~/Documents/MicroDrop`` when it exists, else an empty string."""
     candidate = os.path.join(
-        os.path.expanduser("~"), DEFAULT_DOCUMENTS_DIR_NAME,
-        DEFAULT_MICRODROP_DIR_NAME)
+        os.path.expanduser("~"), DEFAULT_DOCUMENTS_DIR_NAME, DEFAULT_MICRODROP_DIR_NAME
+    )
     return candidate if os.path.isdir(candidate) else ""
 
 
@@ -62,8 +76,7 @@ class LegacyImportDialogModel(HasTraits):
     @observe("root_path")
     def _rescan_devices(self, event=None):
         self.device_folders = scan_for_device_folders(self.root_path)
-        self.selected_device_index = (
-            0 if self.device_folders else NO_SELECTION_INDEX)
+        self.selected_device_index = 0 if self.device_folders else NO_SELECTION_INDEX
         # Trait assignment above is a no-op notification-wise when the
         # index happens to already equal the new value (e.g. both 0), so
         # the device/protocol paths must be re-resolved explicitly rather
@@ -78,7 +91,8 @@ class LegacyImportDialogModel(HasTraits):
         device = self.selected_device()
         self.device_svg_path = device.device_svg_path if device else ""
         self.selected_protocol_index = (
-            0 if device and device.protocol_paths else NO_SELECTION_INDEX)
+            0 if device and device.protocol_paths else NO_SELECTION_INDEX
+        )
         # Same reasoning as above: the protocol index may already equal
         # the value just assigned, so explicitly resolve `protocol_path`
         # instead of trusting the `selected_protocol_index` observer.
@@ -96,8 +110,7 @@ class LegacyImportDialogModel(HasTraits):
             return
         self.protocol_path = device.protocol_paths[index]
 
-    def restore_selection(self, device_svg_path: str,
-                          protocol_path: str) -> None:
+    def restore_selection(self, device_svg_path: str, protocol_path: str) -> None:
         """Re-apply a previously used selection after the root scan.
 
         A path that matches a scanned dropdown entry restores that
@@ -138,25 +151,26 @@ class LegacyImportDialogModel(HasTraits):
 class LegacyImportDialog(QDialog):
     """Root directory -> device -> protocol, with editable path overrides."""
 
-    def __init__(self, parent=None, initial_root_path="",
-                 initial_device_svg_path="", initial_protocol_path=""):
+    def __init__(
+        self,
+        parent=None,
+        initial_root_path="",
+        initial_device_svg_path="",
+        initial_protocol_path="",
+    ):
         super().__init__(parent)
         self.setWindowTitle("Import Legacy Protocol")
         self.model = LegacyImportDialogModel()
         self._build_widgets()
         self._connect_widgets()
         self.model.observe(self._refresh_devices, "device_folders")
-        self.model.observe(self._refresh_selected_device,
-                           "selected_device_index")
-        self.model.observe(self._refresh_selected_protocol,
-                           "selected_protocol_index")
-        self.model.observe(self._refresh_paths,
-                           "device_svg_path,protocol_path")
+        self.model.observe(self._refresh_selected_device, "selected_device_index")
+        self.model.observe(self._refresh_selected_protocol, "selected_protocol_index")
+        self.model.observe(self._refresh_paths, "device_svg_path,protocol_path")
         self.model.root_path = initial_root_path or default_legacy_root_path()
         self._root_edit.setText(self.model.root_path)
         if initial_device_svg_path or initial_protocol_path:
-            self.model.restore_selection(
-                initial_device_svg_path, initial_protocol_path)
+            self.model.restore_selection(initial_device_svg_path, initial_protocol_path)
 
     def _build_widgets(self):
         layout = QVBoxLayout(self)
@@ -184,7 +198,8 @@ class LegacyImportDialog(QDialog):
 
         layout.addLayout(form)
         self._buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self)
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self
+        )
         self._buttons.button(QDialogButtonBox.Ok).setText("Import")
         self._buttons.accepted.connect(self.accept)
         self._buttons.rejected.connect(self.reject)
@@ -192,22 +207,27 @@ class LegacyImportDialog(QDialog):
 
     def _connect_widgets(self):
         self._root_edit.editingFinished.connect(
-            lambda: setattr(self.model, "root_path", self._root_edit.text()))
+            lambda: setattr(self.model, "root_path", self._root_edit.text())
+        )
         self._device_combo.currentIndexChanged.connect(
-            lambda index: setattr(self.model, "selected_device_index", index))
+            lambda index: setattr(self.model, "selected_device_index", index)
+        )
         self._protocol_combo.currentIndexChanged.connect(
-            lambda index: setattr(
-                self.model, "selected_protocol_index", index))
+            lambda index: setattr(self.model, "selected_protocol_index", index)
+        )
         self._device_svg_edit.editingFinished.connect(
-            lambda: setattr(self.model, "device_svg_path",
-                            self._device_svg_edit.text()))
+            lambda: setattr(self.model, "device_svg_path", self._device_svg_edit.text())
+        )
         self._protocol_path_edit.editingFinished.connect(
-            lambda: setattr(self.model, "protocol_path",
-                            self._protocol_path_edit.text()))
+            lambda: setattr(
+                self.model, "protocol_path", self._protocol_path_edit.text()
+            )
+        )
 
     def _on_browse(self):
         chosen = QFileDialog.getExistingDirectory(
-            self, "Select MicroDrop or device folder", self.model.root_path)
+            self, "Select MicroDrop or device folder", self.model.root_path
+        )
         if chosen:
             self._root_edit.setText(chosen)
             self.model.root_path = chosen
@@ -216,7 +236,8 @@ class LegacyImportDialog(QDialog):
         self._device_combo.blockSignals(True)
         self._device_combo.clear()
         self._device_combo.addItems(
-            [device.name for device in self.model.device_folders])
+            [device.name for device in self.model.device_folders]
+        )
         self._device_combo.setCurrentIndex(self.model.selected_device_index)
         self._device_combo.blockSignals(False)
         self._refresh_protocols()
@@ -232,16 +253,14 @@ class LegacyImportDialog(QDialog):
 
     def _refresh_selected_protocol(self, event=None):
         self._protocol_combo.blockSignals(True)
-        self._protocol_combo.setCurrentIndex(
-            self.model.selected_protocol_index)
+        self._protocol_combo.setCurrentIndex(self.model.selected_protocol_index)
         self._protocol_combo.blockSignals(False)
 
     def _refresh_protocols(self, event=None):
         self._protocol_combo.blockSignals(True)
         self._protocol_combo.clear()
         self._protocol_combo.addItems(self.model.protocol_names())
-        self._protocol_combo.setCurrentIndex(
-            self.model.selected_protocol_index)
+        self._protocol_combo.setCurrentIndex(self.model.selected_protocol_index)
         self._protocol_combo.blockSignals(False)
 
     def _refresh_paths(self, event=None):
@@ -251,5 +270,7 @@ class LegacyImportDialog(QDialog):
     def selected_paths(self):
         """``(device_svg_path, protocol_path)`` as currently shown, so a
         hand-edited path wins over the dropdown selection."""
-        return (self._device_svg_edit.text().strip(),
-                self._protocol_path_edit.text().strip())
+        return (
+            self._device_svg_edit.text().strip(),
+            self._protocol_path_edit.text().strip(),
+        )

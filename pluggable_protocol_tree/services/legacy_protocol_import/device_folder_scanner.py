@@ -16,16 +16,22 @@ single Device Folder (has ``device.svg``), or a plain parent of Device
 Folders.
 """
 
+# Standard library imports.
 import os
 
+# Enthought library imports.
 from traits.api import HasTraits, List, Str
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from .consts import (
-    DEVICE_SVG_FILENAME, DEVICES_DIR_NAME, PROTOCOLS_DIR_NAME,
+    DEVICE_SVG_FILENAME,
+    DEVICES_DIR_NAME,
+    PROTOCOLS_DIR_NAME,
 )
 from .legacy_pickle_reader import is_legacy_protocol_file
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -66,8 +72,11 @@ def _protocol_paths_in(device_dir: str) -> list[str]:
         logger.warning(f"Could not list {protocols_dir!r}: {error}")
         return []
     candidates = sorted(os.path.join(protocols_dir, entry) for entry in entries)
-    return [path for path in candidates
-            if os.path.isfile(path) and is_legacy_protocol_file(path)]
+    return [
+        path
+        for path in candidates
+        if os.path.isfile(path) and is_legacy_protocol_file(path)
+    ]
 
 
 def _as_device_folder(device_dir: str) -> LegacyDeviceFolder:
@@ -85,8 +94,11 @@ def _child_device_folders(parent_dir: str) -> list[LegacyDeviceFolder]:
         logger.warning(f"Could not list {parent_dir!r}: {error}")
         return []
     children = sorted(os.path.join(parent_dir, entry) for entry in entries)
-    return [_as_device_folder(child) for child in children
-            if os.path.isdir(child) and _is_device_folder(child)]
+    return [
+        _as_device_folder(child)
+        for child in children
+        if os.path.isdir(child) and _is_device_folder(child)
+    ]
 
 
 def scan_for_device_folders(root_path: str) -> list[LegacyDeviceFolder]:
