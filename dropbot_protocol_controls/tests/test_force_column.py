@@ -12,10 +12,9 @@
 declarations, and the calibration-driven repaint handler."""
 
 import pytest
+
 from pyface.qt.QtCore import QObject, Signal
 from traits.api import HasTraits, Int
-
-from pluggable_protocol_tree.models.column import Column
 
 from dropbot_protocol_controls.protocol_columns import force_column
 from dropbot_protocol_controls.protocol_columns.force_column import (
@@ -24,7 +23,9 @@ from dropbot_protocol_controls.protocol_columns.force_column import (
     ForceColumnView,
     make_force_column,
 )
-from dropbot_protocol_controls.services.force_math import force_for_step
+from pluggable_protocol_tree.models.column import Column
+
+from microdrop_utils.force_math_helpers import force_for_step
 
 
 class _FakeRow(HasTraits):
@@ -44,7 +45,8 @@ def patch_c_per_a(monkeypatch):
 
     def _set(value):
         monkeypatch.setattr(
-            force_column, "current_capacitance_per_unit_area",
+            force_column,
+            "current_capacitance_per_unit_area",
             lambda: value,
         )
 
@@ -63,7 +65,9 @@ def test_make_force_column_returns_column_with_force_id():
 def test_get_value_happy_path_matches_force_for_step(patch_c_per_a):
     patch_c_per_a(1.5)
     model = ForceColumnModel(
-        col_id="force", col_name="Force (mN/m)", default_value=0.0,
+        col_id="force",
+        col_name="Force (mN/m)",
+        default_value=0.0,
     )
     row = _FakeRow(voltage=100)
 
@@ -75,7 +79,9 @@ def test_get_value_happy_path_matches_force_for_step(patch_c_per_a):
 def test_get_value_no_calibration_returns_none(patch_c_per_a):
     patch_c_per_a(None)
     model = ForceColumnModel(
-        col_id="force", col_name="Force (mN/m)", default_value=0.0,
+        col_id="force",
+        col_name="Force (mN/m)",
+        default_value=0.0,
     )
     row = _FakeRow(voltage=100)
     assert model.get_value(row) is None
@@ -84,7 +90,9 @@ def test_get_value_no_calibration_returns_none(patch_c_per_a):
 def test_get_value_voltage_zero_returns_none(patch_c_per_a):
     patch_c_per_a(1.5)
     model = ForceColumnModel(
-        col_id="force", col_name="Force (mN/m)", default_value=0.0,
+        col_id="force",
+        col_name="Force (mN/m)",
+        default_value=0.0,
     )
     row = _FakeRow(voltage=0)
     assert model.get_value(row) is None
@@ -110,7 +118,9 @@ def test_view_class_attributes_are_set():
 
 def test_serialize_drops_value_to_none_and_deserialize_returns_float_placeholder():
     model = ForceColumnModel(
-        col_id="force", col_name="Force (mN/m)", default_value=0.0,
+        col_id="force",
+        col_name="Force (mN/m)",
+        default_value=0.0,
     )
     assert model.serialize(123.4) is None
     assert model.serialize(None) is None
@@ -126,6 +136,7 @@ def test_view_dependency_declarations_are_present():
 # ---------------------------------------------------------------------------
 # ForceColumnHandler — calibration-driven column repaint.
 # ---------------------------------------------------------------------------
+
 
 def test_calibration_trigger_emits_signal_when_wired():
     handler = ForceColumnHandler()
