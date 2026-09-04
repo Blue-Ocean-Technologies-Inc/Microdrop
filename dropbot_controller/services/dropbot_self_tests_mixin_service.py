@@ -49,6 +49,7 @@ from ..consts import (
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from ..models.self_tests import (
     TestEvent,
+    append_raw_data_links,
     create_test_progress_message,
     serialise_test_results,
 )
@@ -137,6 +138,20 @@ class DropbotSelfTestsMixinService(HasTraits):
     ################################# private methods ##################################
 
     @staticmethod
+    def _save_test_results_json(test_name, result, directory):
+        """Write `test_name`'s raw results to a timestamped JSON file in `directory`.
+
+        Returns the path written.
+        """
+        results_path = get_timestamped_results_path(
+            f"{test_name}_results", directory
+        ).with_suffix(".json")
+        with open(results_path, "w", encoding="utf-8") as results_file:
+            json.dump(serialise_test_results(result[test_name]), results_file)
+        logger.info(f"Saved {test_name} self-test results to {results_path}")
+        return results_path
+
+    @staticmethod
     def _execute_test_based_on_name(func):
         @wraps(func)
         def _execute_test(self, report_generation_directory):
@@ -172,6 +187,22 @@ class DropbotSelfTestsMixinService(HasTraits):
             if report_path is not None:
                 logger.info(f"Report generating in the file {report_path}")
                 generate_report(result, report_path, force=True)
+
+                # Write the raw data behind each plottable test alongside the
+                # report and link them from it, so a user reading the HTML
+                # report can find the data behind each plot (#611).
+                json_paths = [
+                    self._save_test_results_json(
+                        name, result, report_generation_directory
+                    )
+                    for name in result
+                    if name in PLOTTABLE_SELF_TESTS
+                ]
+                append_raw_data_links(report_path, json_paths)
+                logger.info(
+                    f"Linked {len(json_paths)} raw data files from {report_path}"
+                )
+
                 open_html_in_browser(report_path)
             elif self._self_test_cancelled:
                 logger.info(
@@ -193,12 +224,9 @@ class DropbotSelfTestsMixinService(HasTraits):
                 # (dropbot_tools_menu, via the microdrop task) reads the file
                 # back and renders it interactively via
                 # dropbot.self_test.plot_* (#611).
-                results_path = get_timestamped_results_path(
-                    f"{test_name}_results", report_generation_directory
-                ).with_suffix(".json")
-                with open(results_path, "w", encoding="utf-8") as results_file:
-                    json.dump(serialise_test_results(result[test_name]), results_file)
-                logger.info(f"Saved {test_name} self-test results to {results_path}")
+                results_path = self._save_test_results_json(
+                    test_name, result, report_generation_directory
+                )
 
                 test_name_display = (
                     test_name.replace("_", " ").capitalize() + " Results"

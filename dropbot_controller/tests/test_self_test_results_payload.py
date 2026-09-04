@@ -32,6 +32,7 @@ from dropbot.self_test import (
 
 from dropbot_controller.models.self_tests import (
     SelfTestResultsSignal,
+    append_raw_data_links,
     load_self_test_results,
     serialise_test_results,
 )
@@ -102,3 +103,34 @@ def test_load_self_test_results_missing_file_returns_none(tmp_path):
     missing_path = tmp_path / "does_not_exist.json"
 
     assert load_self_test_results(str(missing_path)) is None
+
+
+def test_append_raw_data_links_inserts_before_closing_body(tmp_path):
+    report_path = tmp_path / "report.html"
+    report_path.write_text(
+        "<html><body><h1>Report</h1></body></html>", encoding="utf-8"
+    )
+    json_paths = [
+        tmp_path / "test_voltage_results_20260904-120000.json",
+        tmp_path / "test_channels_results_20260904-120000.json",
+    ]
+
+    append_raw_data_links(report_path, json_paths)
+
+    report_html = report_path.read_text(encoding="utf-8")
+    assert "<h1>Report</h1>" in report_html
+    assert report_html.index("Raw data") < report_html.index("</body>")
+    for json_path in json_paths:
+        assert f'<a href="{json_path.name}">{json_path.name}</a>' in report_html
+
+
+def test_append_raw_data_links_appends_when_no_closing_body(tmp_path):
+    report_path = tmp_path / "report.html"
+    report_path.write_text("<html><h1>Report</h1>", encoding="utf-8")
+    json_paths = [tmp_path / "test_channels_results_20260904-120000.json"]
+
+    append_raw_data_links(report_path, json_paths)
+
+    report_html = report_path.read_text(encoding="utf-8")
+    assert report_html.startswith("<html><h1>Report</h1>")
+    assert f'<a href="{json_paths[0].name}">{json_paths[0].name}</a>' in report_html

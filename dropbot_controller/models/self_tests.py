@@ -16,7 +16,10 @@ cross-plugin message-schema import).
 """
 
 # Standard library imports.
+import html
 import json
+import re
+from pathlib import Path
 from typing import Optional
 
 # Third-party imports.
@@ -92,6 +95,42 @@ def load_self_test_results(results_path):
         return None
 
     return restore_test_results(data)
+
+
+def append_raw_data_links(report_path, json_paths):
+    """Insert a "Raw data" section linking to `json_paths` into an HTML report.
+
+    Inserted immediately before the closing ``</body>`` tag (matched
+    case-insensitively); appended at the end of the file if there is none.
+    Hrefs are the bare file names — relative links, since the JSON files are
+    written beside the report — HTML-escaped for safety.
+    """
+    report_path = Path(report_path)
+    report_html = report_path.read_text(encoding="utf-8")
+
+    items = "\n".join(
+        f'<li><a href="{html.escape(Path(json_path).name)}">'
+        f"{html.escape(Path(json_path).name)}</a></li>"
+        for json_path in json_paths
+    )
+    section = (
+        '<section id="raw-data">\n'
+        "<h2>Raw data</h2>\n"
+        "<ul>\n"
+        f"{items}\n"
+        "</ul>\n"
+        "</section>\n"
+    )
+
+    match = re.search(r"</body>", report_html, re.IGNORECASE)
+    if match:
+        report_html = (
+            report_html[: match.start()] + section + report_html[match.start() :]
+        )
+    else:
+        report_html = report_html + section
+
+    report_path.write_text(report_html, encoding="utf-8")
 
 
 class SelfTestResultsSignal(BaseModel):
