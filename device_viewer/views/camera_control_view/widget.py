@@ -79,7 +79,7 @@ from ...utils.camera import (
     get_transformed_frame,
 )
 from ..electrode_view.electrode_scene import ElectrodeScene
-from .utils import _cache_media_capture, _show_media_capture_dialog
+from .utils import _cache_media_capture, _show_media_capture_status_message
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -877,7 +877,7 @@ class CameraControlWidget(QWidget):
             _cache_media_capture(MediaType.IMAGE, saved_path)
             media_capture_event_model.captured = saved_path
             if show_dialog:
-                _show_media_capture_dialog(
+                _show_media_capture_status_message(
                     MediaType.IMAGE, saved_path, self.status_bar_manager
                 )
 
@@ -1111,6 +1111,6 @@ class CameraControlWidget(QWidget):
 
         # Show Result
         if recording_output_path and self.show_media_capture_dialog_for_video:
-            _show_media_capture_dialog(
+            _show_media_capture_status_message(
                 MediaType.VIDEO, recording_output_path, self.status_bar_manager
             )

@@ -48,7 +48,7 @@ def _cache_media_capture(name: MediaType, save_path: str):
     logger.info(app_globals[MEDIA_CAPTURES_KEY])
 
 
-def _show_media_capture_dialog(
+def _show_media_capture_status_message(
     name: MediaType, save_path: str, status_bar_manager=None
 ):
 
