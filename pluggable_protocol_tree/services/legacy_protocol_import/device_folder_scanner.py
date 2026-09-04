@@ -16,16 +16,22 @@ single Device Folder (has ``device.svg``), or a plain parent of Device
 Folders.
 """
 
-import os
+# Standard library imports.
+from pathlib import Path
 
+# Enthought library imports.
 from traits.api import HasTraits, List, Str
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from .consts import (
-    DEVICE_SVG_FILENAME, DEVICES_DIR_NAME, PROTOCOLS_DIR_NAME,
+    DEVICE_SVG_FILENAME,
+    DEVICES_DIR_NAME,
+    PROTOCOLS_DIR_NAME,
 )
 from .legacy_pickle_reader import is_legacy_protocol_file
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -38,8 +44,8 @@ class LegacyDeviceFolder(HasTraits):
     protocol_paths = List(Str())
 
 
-def _is_device_folder(path: str) -> bool:
-    return os.path.isfile(os.path.join(path, DEVICE_SVG_FILENAME))
+def _is_device_folder(path: Path) -> bool:
+    return (path / DEVICE_SVG_FILENAME).is_file()
 
 
 def legacy_device_display_name(device_svg_path: str) -> str:
@@ -48,45 +54,58 @@ def legacy_device_display_name(device_svg_path: str) -> str:
     Inside a Device Folder the SVG is always literally ``device.svg`` and
     the folder carries the device's name, so use the parent directory. A
     hand-picked SVG named anything else names the device itself."""
-    path = os.path.normpath(device_svg_path)
-    if os.path.basename(path) == DEVICE_SVG_FILENAME:
-        return os.path.basename(os.path.dirname(path))
-    return os.path.splitext(os.path.basename(path))[0]
+    path = Path(device_svg_path)
+    if path.name == DEVICE_SVG_FILENAME:
+        return path.parent.name
+    return path.stem
 
 
-def _protocol_paths_in(device_dir: str) -> list[str]:
+def _sorted_children(directory: Path) -> list[Path]:
+    """Everything directly under ``directory``, in a stable order.
+
+    Sorted by string form rather than by ``Path``: PurePath ordering is
+    case-insensitive on Windows, and these lists become dropdown entries,
+    so the order has to be the same on every platform."""
+    return sorted(directory.iterdir(), key=str)
+
+
+def _protocol_paths_in(device_dir: Path) -> list[str]:
     """Every file under ``protocols/`` that actually reads as a legacy
     protocol. Directory listings really do contain unrelated files."""
-    protocols_dir = os.path.join(device_dir, PROTOCOLS_DIR_NAME)
-    if not os.path.isdir(protocols_dir):
+    protocols_dir = device_dir / PROTOCOLS_DIR_NAME
+    if not protocols_dir.is_dir():
         return []
     try:
-        entries = os.listdir(protocols_dir)
+        candidates = _sorted_children(protocols_dir)
     except OSError as error:
-        logger.warning(f"Could not list {protocols_dir!r}: {error}")
+        logger.warning(f"Could not list {str(protocols_dir)!r}: {error}")
         return []
-    candidates = sorted(os.path.join(protocols_dir, entry) for entry in entries)
-    return [path for path in candidates
-            if os.path.isfile(path) and is_legacy_protocol_file(path)]
+    return [
+        str(path)
+        for path in candidates
+        if path.is_file() and is_legacy_protocol_file(str(path))
+    ]
 
 
-def _as_device_folder(device_dir: str) -> LegacyDeviceFolder:
+def _as_device_folder(device_dir: Path) -> LegacyDeviceFolder:
     return LegacyDeviceFolder(
-        name=os.path.basename(os.path.normpath(device_dir)),
-        device_svg_path=os.path.join(device_dir, DEVICE_SVG_FILENAME),
+        name=device_dir.name,
+        device_svg_path=str(device_dir / DEVICE_SVG_FILENAME),
         protocol_paths=_protocol_paths_in(device_dir),
     )
 
 
-def _child_device_folders(parent_dir: str) -> list[LegacyDeviceFolder]:
+def _child_device_folders(parent_dir: Path) -> list[LegacyDeviceFolder]:
     try:
-        entries = os.listdir(parent_dir)
+        children = _sorted_children(parent_dir)
     except OSError as error:
-        logger.warning(f"Could not list {parent_dir!r}: {error}")
+        logger.warning(f"Could not list {str(parent_dir)!r}: {error}")
         return []
-    children = sorted(os.path.join(parent_dir, entry) for entry in entries)
-    return [_as_device_folder(child) for child in children
-            if os.path.isdir(child) and _is_device_folder(child)]
+    return [
+        _as_device_folder(child)
+        for child in children
+        if child.is_dir() and _is_device_folder(child)
+    ]
 
 
 def scan_for_device_folders(root_path: str) -> list[LegacyDeviceFolder]:
@@ -94,12 +113,13 @@ def scan_for_device_folders(root_path: str) -> list[LegacyDeviceFolder]:
 
     Returns an empty list rather than raising when the path is missing or
     holds nothing importable -- the dialog simply shows no devices."""
-    if not root_path or not os.path.isdir(root_path):
+    root = Path(root_path) if root_path else None
+    if root is None or not root.is_dir():
         logger.debug(f"{root_path!r} is not a directory; no devices found")
         return []
-    devices_dir = os.path.join(root_path, DEVICES_DIR_NAME)
-    if os.path.isdir(devices_dir):
+    devices_dir = root / DEVICES_DIR_NAME
+    if devices_dir.is_dir():
         return _child_device_folders(devices_dir)
-    if _is_device_folder(root_path):
-        return [_as_device_folder(root_path)]
-    return _child_device_folders(root_path)
+    if _is_device_folder(root):
+        return [_as_device_folder(root)]
+    return _child_device_folders(root)
