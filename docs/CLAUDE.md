@@ -134,6 +134,16 @@ All inter-plugin communication goes through a pub/sub message router — plugins
 - `_request` handlers only run when a DropBot is connected
 - The different naming convention distinguishes frontend "triggers" from backend "requests"
 
+**Startup handler check** (#617): because dispatch is reflective, a typo'd handler name
+or a stale `ACTOR_TOPIC_DICT` entry used to fail silently — the message would arrive and
+match nothing. `microdrop_utils.dramatiq_controller_base.assert_handlers_exist_for_topics`
+verifies, once per controller instance at listener registration (not per message), that
+every non-wildcard subscribed topic resolves to a real handler using the same
+topic-to-handler-name transformation dispatch itself uses; a mismatch raises
+`AttributeError` naming the offending topic(s) and expected method name(s), so it fails
+at app start. Wildcard topics (`+`/`#`) and controller-specific non-reflective paths are
+skipped, not flagged.
+
 ### Service Mixin Pattern
 
 `DropbotControllerPlugin` composes multiple mixin services implementing `IDropbotControlMixinService`:
