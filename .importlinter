@@ -100,16 +100,6 @@ ignore_imports =
     # specific leaf plugin's internals is a real violation, itemized below.
     ** -> pluggable_protocol_tree.**
 
-    # --- Seeded debt: fixed in parallel branches (drop these lines once merged) ---
-
-    # Issue #610 — dropbot_status_and_controls/model.py reaches into two
-    # sibling plugins' internals instead of going through messages/consts.
-    dropbot_status_and_controls.model -> dropbot_preferences_ui.models
-    dropbot_status_and_controls.model -> dropbot_protocol_controls.services.force_math
-
-    # Issue #611 — backend mixin importing a UI plugin's dialog class.
-    dropbot_controller.services.dropbot_self_tests_mixin_service -> dropbot_tools_menu.self_test_dialogs
-
     # --- Seeded debt: microdrop_application.menus.is_advanced_mode consumers ---
     # menus.py is plugin-private (an Action class + a Redis-backed flag
     # check), unlike helpers/dialogs above — not blanket-exempted. These
@@ -138,6 +128,10 @@ ignore_imports =
     microdrop_application.task -> dropbot_tools_menu.self_test_dialogs
     microdrop_application.application -> dropbot_tools_menu.menus
     microdrop_application.application -> dropbot_tools_menu.plugin
+
+    # Issue #611 (PR #658) — dropbot_tools_menu's self-test dialogs render
+    # from the backend's self_tests model directly instead of a message.
+    dropbot_tools_menu.self_test_dialogs -> dropbot_controller.models.self_tests
 
     # --- Seeded debt: preferences modules importing a sibling's preferences
     # module directly instead of via consts/messages ---

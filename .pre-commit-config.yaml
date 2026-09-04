@@ -22,21 +22,20 @@ repos:
       - id: ruff-check        # lint + import sorting (ruff.toml)
         args: [--fix]
       - id: ruff-format
-  - repo: local
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license
+        files: \.py$
+        exclude: ^portable_dropbot_controller/driver/
+        args: [--license-filepath, .copyright-header.txt, --comment-style, "#"]
+  - repo: https://github.com/Blue-Ocean-Technologies-Inc/microdrop-dev-hooks
+    rev: v0.1.0
     hooks:
       - id: stamp-import-sections
-        name: stamp AGENTS.md import-section headers
-        # Must run after the ruff hooks above -- it trusts ruff's isort
-        # grouping (ruff.toml) and only stamps/corrects the labeled comment
-        # headers ruff itself can't emit. stdlib-only, so no dependencies.
-        entry: python tools/stamp_import_sections.py
-        language: python
-        types: [python]
       - id: forbid-scratch-files
-        name: forbid scratch/artifact files
-        entry: scratch/artifact paths must never be committed
-        language: fail
-        files: (^|/)(\.task-report\.md$|\.superpowers/|__pycache__/|\.pixi/)
+  - repo: local
+    hooks:
       - id: import-linter
         name: import-linter (plugin decoupling contract)
         # Whole-graph check against .importlinter at the repo root; a single

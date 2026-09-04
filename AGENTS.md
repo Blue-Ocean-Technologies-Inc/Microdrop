@@ -127,6 +127,8 @@ state the years the file was created/last substantially revised):
 ```
 
 The vendored portable driver keeps its upstream provenance and is excluded.
+The `insert-license` hook adds it to new files; `.copyright-header.txt` is
+the text it inserts.
 
 ### Import Ordering
 
@@ -145,11 +147,11 @@ header**, in this order:
 8. `# Logger import.` — `logger`, always last
 
 Ruff's isort sorts imports *into* these sections but cannot generate the
-headers — a `repo: local` pre-commit hook (`tools/stamp_import_sections.py`,
-run after the ruff hooks) stamps and corrects them on staged files instead
-(only for the sections a module actually has), so you never need to write
-them by hand. Run it manually with
-`python tools/stamp_import_sections.py [--check] <files>`.
+headers — the `stamp-import-sections` pre-commit hook (run after the ruff
+hooks) stamps and corrects them on staged files instead (only for the
+sections a module actually has), so you never need to write them by hand.
+Run it manually with `pre-commit run stamp-import-sections --files <files>`;
+the hook lives in the shared `microdrop-dev-hooks` repo.
 
 The module-setup globals sit immediately after the imports, closing the
 prologue: the logger first, then the Redis app-globals manager where the
