@@ -16,7 +16,7 @@ import pint
 
 # Enthought library imports.
 from apptools.preferences.api import get_default_preferences
-from traits.api import Bool, Enum, Instance, Str, observe
+from traits.api import Bool, Enum, Instance, Str, TraitError, observe
 
 # Microdrop package imports.
 from dropbot_preferences_ui.consts import (
@@ -81,8 +81,11 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # ---- Hardware controls (user-writable via UI) ----------------------
     # Min/max/default read from app_globals, where dropbot_preferences_ui's
     # VoltageFrequencyRangePreferences publishes them (owner-publishes
-    # pattern, #610) — falls back to its consts if nothing has published
-    # yet (e.g. this plugin's app loads before dropbot_preferences_ui's).
+    # pattern, #610). These class-level values are import-time fallbacks
+    # only — app_globals is still empty when this module is first imported,
+    # so they only ever resolve to the consts defaults; traits_init below
+    # overrides voltage/frequency with the persisted last-applied values
+    # once an instance is created (#610).
     voltage = RangeWithSteppedSpinViewHint(
         int(app_globals.get(UI_MIN_VOLTAGE_KEY, UI_DEFAULT_MIN_VOLTAGE)),
         int(app_globals.get(UI_MAX_VOLTAGE_KEY, UI_DEFAULT_MAX_VOLTAGE)),
@@ -123,6 +126,36 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # --------------------------------------------------
 
     preferences = Instance(DropbotStatusAndControlsPreferences)
+
+    def traits_init(self):
+        """Start voltage/frequency from the persisted last-applied values (#610).
+
+        The class-level Range defaults are evaluated at import time, before
+        anything has seeded app_globals, so they can only ever be the consts
+        fallbacks. The ETS preferences node this model writes to in
+        `_update_prefs` is the source of truth; Envisage has installed it as
+        apptools' default node by the time an instance is constructed, so
+        read it here instead. Re-triggers `_update_prefs`, which just writes
+        the same value straight back — harmless.
+        """
+        super().traits_init()
+        preferences = get_default_preferences()
+        for trait_name, key in (
+            ("voltage", UI_DEFAULT_VOLTAGE_KEY),
+            ("frequency", UI_DEFAULT_FREQUENCY_KEY),
+        ):
+            persisted = preferences.get(
+                f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.{key}"
+            )
+            if persisted is None:
+                continue
+            try:
+                setattr(self, trait_name, int(persisted))
+            except TraitError as e:
+                logger.warning(
+                    f"Persisted {trait_name}={persisted!r} out of range, "
+                    f"keeping default: {e}"
+                )
 
     def _capacitance_default(self):
         return ureg("nan pF")
