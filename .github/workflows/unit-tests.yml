@@ -24,13 +24,8 @@ name: Unit tests
 # with this repo checked out as the microdrop-py/src submodule. So this job
 # checks the launcher repo out first, then overlays the PR's/pushed commit
 # of this repo at microdrop-py/src, before handing that manifest to
-# prefix-dev/setup-pixi.
-#
-# Platform note: the manifest locks osx-arm64, win-64, and linux-aarch64
-# only -- there is no linux-64 entry, so plain `ubuntu-latest` (x86_64)
-# cannot install this environment. We run on ubuntu-24.04-arm (GitHub's
-# hosted arm64 Linux runner, free for public repos) to match the locked
-# linux-aarch64 platform instead of silently reworking the manifest.
+# prefix-dev/setup-pixi. The lock covers linux-64, so the job runs on the
+# default x86_64 runner.
 #
 # Known-failing baseline: this selection currently has 139 failing tests and
 # 3 collection errors out of 1363 (verified locally on main @ a3f32b9a,
@@ -57,7 +52,7 @@ concurrency:
 jobs:
   pytest:
     name: pure-unit pytest partition
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
