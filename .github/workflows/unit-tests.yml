@@ -35,6 +35,9 @@ name: Unit tests
 # continue-on-error so the job stays green on merge while those pre-existing
 # failures stay visible as an annotated warning in the run -- fixing them is
 # tracked as a follow-up, not silently swallowed here.
+#
+# The import-linter step (before pytest) gates the job on the plugin-decoupling
+# contract, failing any PR that introduces a new cross-plugin import.
 
 on:
   pull_request:
@@ -73,6 +76,13 @@ jobs:
           manifest-path: launcher/microdrop-py/pyproject.toml
           locked: true
           cache: true
+
+      - name: Import-linter contract
+        # Plugin-decoupling contract from .importlinter (see AGENTS.md). Gates
+        # the job: a new cross-plugin import fails the PR even while the
+        # pytest step below is still report-only.
+        working-directory: launcher/microdrop-py
+        run: pixi run lint-microdrop-imports
 
       - name: Run pure-unit pytest partition
         working-directory: launcher/microdrop-py/src
