@@ -11,36 +11,37 @@
 import functools
 
 import dramatiq
-from traits.api import HasTraits, Range, Bool, provides, Instance, observe, Dict, Str
-from traitsui.api import View, Group, Item, Controller
 
-from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
-from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_controller_base import (
-    IDramatiqControllerBase, 
-    basic_listener_actor_routine, 
-    generate_class_method_dramatiq_listener_actor
-)
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.decorators import debounce
-from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
-from microdrop_utils.datetime_helpers import TimestampedMessage
-from microdrop_utils.decorators import timestamped_value
+from traits.api import Bool, Dict, HasTraits, Instance, Range, observe, provides
+from traitsui.api import Controller, Group, Item, View
 
 from dropbot_controller.consts import (
-    SET_VOLTAGE,
     SET_FREQUENCY,
     SET_REALTIME_MODE,
+    SET_VOLTAGE,
 )
+from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences
 
-from .consts import PKG_name, listener_name
+from microdrop_utils.datetime_helpers import TimestampedMessage
+from microdrop_utils.decorators import debounce, timestamped_value
+from microdrop_utils.dramatiq_controller_base import (
+    IDramatiqControllerBase,
+    basic_listener_actor_routine,
+    generate_class_method_dramatiq_listener_actor,
+)
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
 
+from .consts import ACTOR_TOPIC_DICT, PKG_name, listener_name
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 def _make_manual_control_model():
-    """Build the ManualControlModel class with voltage/frequency ranges from UI preferences.
+    """Build the ManualControlModel class with voltage/frequency ranges from
+    UI preferences.
 
     Traits Range bounds must be set at class-definition time, so we read the
     current preferences once and use the values as class-level constants.
@@ -55,12 +56,16 @@ def _make_manual_control_model():
 
     class _ManualControlModel(HasTraits):
         voltage = Range(
-            _min_v, _max_v, value=_def_v,
-            desc="the voltage to set on the dropbot device (V)"
+            _min_v,
+            _max_v,
+            value=_def_v,
+            desc="the voltage to set on the dropbot device (V)",
         )
         frequency = Range(
-            _min_f, _max_f, value=_def_f,
-            desc="the frequency to set on the dropbot device (Hz)"
+            _min_f,
+            _max_f,
+            value=_def_f,
+            desc="the frequency to set on the dropbot device (Hz)",
         )
         realtime_mode = Bool(False, desc="Enable or disable realtime mode")
         connected = Bool(False, desc="Connected to dropbot?")
@@ -75,27 +80,31 @@ ManualControlView = View(
     Group(
         Group(
             Item(
-                name='voltage',
-                label='Voltage (V)',
+                name="voltage",
+                label="Voltage (V)",
                 resizable=True,
-                # enabled_when='realtime_mode', # we will just not publish changes instead of disabling.
+                # enabled_when='realtime_mode', # we will just not publish
+                # changes instead of disabling.
             ),
             Item(
-                name='frequency',
-                label='Frequency (Hz)',
+                name="frequency",
+                label="Frequency (Hz)",
                 resizable=True,
-                # enabled_when='realtime_mode',  # we will just not publish changes instead of disabling.
+                # enabled_when='realtime_mode',  # we will just not publish
+                # changes instead of disabling.
             ),
             Item(
-                name='realtime_mode',
-                label='Realtime Mode',
-                style='custom',
+                name="realtime_mode",
+                label="Realtime Mode",
+                style="custom",
                 resizable=True,
-                editor=InPlaceToggleEditor(on_label="Realtime On", off_label="Realtime Off"),
-                enabled_when='connected',
+                editor=InPlaceToggleEditor(
+                    on_label="Realtime On", off_label="Realtime Off"
+                ),
+                enabled_when="connected",
             ),
-        ), 
-        show_border=True, 
+        ),
+        show_border=True,
         padding=10,
         # enabled_when='connected', # will only do this for realtime mode
     ),
@@ -120,26 +129,29 @@ class ManualControlControl(Controller):
         logger.info("Starting ManualControls listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
-            class_method=self.listener_actor_routine)
+            class_method=self.listener_actor_routine,
+            topics=ACTOR_TOPIC_DICT[listener_name],
+        )
 
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self, message, topic)
 
-    @timestamped_value('realtime_mode_message')
+    @timestamped_value("realtime_mode_message")
     def _on_realtime_mode_updated_triggered(self, message):
         logger.debug(f"Realtime mode updated to {message}")
         self.model.realtime_mode = message == "True"
 
-    @timestamped_value('disconnected_message')
+    @timestamped_value("disconnected_message")
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
         self.model.realtime_mode = False
         self.model.connected = False
 
-    @timestamped_value('disconnected_message')
+    @timestamped_value("disconnected_message")
     def _on_connected_triggered(self, message):
         logger.debug("Connected from dropbot")
         self.model.connected = True
+
     ###################################################################################
 
     ### Helper traits / funcs #######
@@ -148,7 +160,7 @@ class ManualControlControl(Controller):
 
     def _realtime_mode_message_default(self):
         return TimestampedMessage("", 0)
-        
+
     def _disconnected_message_default(self):
         return TimestampedMessage("", 0)
 
@@ -160,7 +172,9 @@ class ManualControlControl(Controller):
         else:
             # Create the task "snapshot"
             task = functools.partial(publish_message, topic=topic, message=message)
-            logger.debug(f"QUEUEING Topic='{topic}, message={message}' when realtime mode on")
+            logger.debug(
+                f"QUEUEING Topic='{topic}, message={message}' when realtime mode on"
+            )
             # Store the task, overwriting any previous task for this topic
             self.message_dict[topic] = task
 
@@ -170,16 +184,14 @@ class ManualControlControl(Controller):
         """
         Processes the most recent message for each topic.
         """
-        logger.info("\n--- Dropbot Manual Control: Publishing Queued Messages (Last Value Only) ---")
+        logger.info(
+            "\n--- Dropbot Manual Control: Publishing Queued Messages "
+            "(Last Value Only) ---"
+        )
 
         if not self.message_dict:
             logger.info("--- Dropbot Manual Control Queue empty ---")
             return
-
-            # Get all the "latest" tasks that are waiting
-            tasks_to_run = list(self.message_dict.values())
-            # Clear the dict for the next batch
-            self.message_dict.clear()
 
         # 5. Run the tasks *outside* the lock.
         # This is crucial for performance, as publish_message might be slow
@@ -205,7 +217,9 @@ class ManualControlControl(Controller):
         return super().setattr(info, object, traitname, value)
 
     # This callback will not call update_editor() when it is not debounced!
-    # This is likely because update_editor is only called by 'external' trait changes, and the new thread spawned by the decorator appears as such
+    # This is likely because update_editor is only called by 'external'
+    # trait changes, and the new thread spawned by the decorator appears
+    # as such
     @debounce(wait_seconds=1)
     def realtime_mode_setattr(self, info, object, traitname, value):
         logger.debug(f"Set realtime mode to {value}")
@@ -218,10 +232,7 @@ class ManualControlControl(Controller):
 
     @observe("model:realtime_mode")
     def _realtime_mode_changed(self, event):
-        publish_message(
-            topic=SET_REALTIME_MODE,
-            message=str(event.new)
-        )
+        publish_message(topic=SET_REALTIME_MODE, message=str(event.new))
 
         if event.new:
             self.publish_queued_messages()
@@ -234,7 +245,9 @@ class ManualControlControl(Controller):
 
     @observe("model:frequency")
     def _frequency_changed(self, event):
-        if self._publish_message_if_realtime(topic=SET_FREQUENCY, message=str(event.new)):
+        if self._publish_message_if_realtime(
+            topic=SET_FREQUENCY, message=str(event.new)
+        ):
             VoltageFrequencyRangePreferences().ui_default_frequency = int(event.new)
             logger.debug(f"Requesting Frequency change to {event.new} Hz")
 
@@ -245,24 +258,25 @@ class ManualControlControl(Controller):
         QSpinBox min/max so the change takes effect immediately without restart.
         """
         import json
+
         data = json.loads(message)
 
         # Update Traits Range validation bounds
-        voltage_trait = self.model.trait('voltage').trait_type
-        voltage_trait._low = data['ui_min_voltage']
-        voltage_trait._high = data['ui_max_voltage']
-        frequency_trait = self.model.trait('frequency').trait_type
-        frequency_trait._low = data['ui_min_frequency']
-        frequency_trait._high = data['ui_max_frequency']
+        voltage_trait = self.model.trait("voltage").trait_type
+        voltage_trait._low = data["ui_min_voltage"]
+        voltage_trait._high = data["ui_max_voltage"]
+        frequency_trait = self.model.trait("frequency").trait_type
+        frequency_trait._low = data["ui_min_frequency"]
+        frequency_trait._high = data["ui_max_frequency"]
 
         # Update the QSpinBox widgets if the UI is initialized
         if self.info and self.info.initialized:
-            if hasattr(self.info, 'voltage'):
-                self.info.voltage.control.setMinimum(data['ui_min_voltage'])
-                self.info.voltage.control.setMaximum(data['ui_max_voltage'])
-            if hasattr(self.info, 'frequency'):
-                self.info.frequency.control.setMinimum(data['ui_min_frequency'])
-                self.info.frequency.control.setMaximum(data['ui_max_frequency'])
+            if hasattr(self.info, "voltage"):
+                self.info.voltage.control.setMinimum(data["ui_min_voltage"])
+                self.info.voltage.control.setMaximum(data["ui_max_voltage"])
+            if hasattr(self.info, "frequency"):
+                self.info.frequency.control.setMinimum(data["ui_min_frequency"])
+                self.info.frequency.control.setMaximum(data["ui_max_frequency"])
 
 
 if __name__ == "__main__":

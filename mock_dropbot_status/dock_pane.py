@@ -8,14 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import RealtimeModeIconMixin
 
-from .consts import PKG, PKG_name, listener_name
-from .model import MockDropbotStatusModel
+from microdrop_style.icons.icons import ICON_DROP_EC
+
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, listener_name
 from .controller import MockDropbotDockPaneController
 from .message_handler import MockDropbotMessageHandler
+from .model import MockDropbotStatusModel
 from .view import MockDropbotView
 
 from logger.logger_service import get_logger
@@ -46,4 +47,5 @@ class MockDropbotStatusDockPane(RealtimeModeIconMixin, BaseStatusDockPane):
         return MockDropbotMessageHandler(
             model=self.model,
             name=listener_name,
+            topics=ACTOR_TOPIC_DICT[listener_name],
         )

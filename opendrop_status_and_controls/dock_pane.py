@@ -8,15 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
-from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import RealtimeModeIconMixin
 
-from .consts import PKG, PKG_name
-from .model import OpendropStatusAndControlsModel
+from microdrop_style.icons.icons import ICON_DROP_EC
+
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .controller import ControlsController
-from .view import UnifiedView
 from .message_handler import OpendropStatusAndControlsMessageHandler
+from .model import OpendropStatusAndControlsModel
+from .view import UnifiedView
 
 
 class OpendropStatusAndControls(RealtimeModeIconMixin, BaseStatusDockPane):
@@ -35,9 +36,11 @@ class OpendropStatusAndControls(RealtimeModeIconMixin, BaseStatusDockPane):
         return ControlsController(self.model)
 
     def _create_message_handler(self) -> OpendropStatusAndControlsMessageHandler:
+        name = f"{PKG}_listener"
         return OpendropStatusAndControlsMessageHandler(
             model=self.model,
-            name=f"{PKG}_listener",
+            name=name,
+            topics=ACTOR_TOPIC_DICT[name],
         )
 
 

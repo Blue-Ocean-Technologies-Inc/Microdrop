@@ -35,7 +35,8 @@ Design notes:
 import json
 
 import dramatiq
-from traits.api import HasTraits, Instance, Str, provides
+
+from traits.api import HasTraits, Instance, List, Str, provides
 
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
@@ -44,9 +45,10 @@ from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
     unregister_dramatiq_listener_actor,
 )
-from logger.logger_service import get_logger
 
 from .interfaces import IMessageHandler
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -61,9 +63,14 @@ class BaseMessageHandler(HasTraits):
     """
 
     # ---- Composition inputs ----
-    model = Instance(HasTraits)          # must satisfy IStatusModel
+    model = Instance(HasTraits)  # must satisfy IStatusModel
     dramatiq_listener_actor = Instance(dramatiq.Actor)
-    name = Str()                         # unique listener name for Dramatiq
+    name = Str()  # unique listener name for Dramatiq
+    #: This listener's subscribed topics (typically ACTOR_TOPIC_DICT[name]
+    #: from the plugin's consts.py). When set, traits_init runs the #617
+    #: startup check -- every non-wildcard topic here must resolve to a
+    #: real _on_{topic}_triggered() method, or registration raises.
+    topics = List(Str)
 
     # ---- Deduplication guards ----
     # TimestampedMessage lets @timestamped_value drop stale out-of-order msgs.
@@ -86,6 +93,7 @@ class BaseMessageHandler(HasTraits):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.name,
             class_method=self.listener_actor_routine,
+            topics=self.topics,
         )
 
     def teardown(self):

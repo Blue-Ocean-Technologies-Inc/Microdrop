@@ -17,23 +17,34 @@ import warnings
 import dramatiq
 from paramiko import AuthenticationException
 from pydantic import ValidationError
-from traits.api import HasTraits, provides, Instance
 
-from logger.logger_service import get_logger
+from traits.api import HasTraits, Instance, provides
+
 from microdrop_utils import paramiko_helpers
 from microdrop_utils.dramatiq_controller_base import (
     IDramatiqControllerBase,
     basic_listener_actor_routine,
-    generate_class_method_dramatiq_listener_actor
+    generate_class_method_dramatiq_listener_actor,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_sync_helpers import Rsync
 
-
-from .consts import listener_name, SYNC_EXCEPTIONS_TO_PASS, SSH_KEYGEN_SUCCESS, \
-    SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR, SSH_KEY_UPLOAD_ERROR, SSH_KEY_UPLOAD_SUCCESS, \
-    SYNC_EXPERIMENTS_STARTED, SYNC_EXPERIMENTS_SUCCESS, SYNC_EXPERIMENTS_ERROR
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    SSH_KEY_UPLOAD_ERROR,
+    SSH_KEY_UPLOAD_SUCCESS,
+    SSH_KEYGEN_ERROR,
+    SSH_KEYGEN_SUCCESS,
+    SSH_KEYGEN_WARNING,
+    SYNC_EXCEPTIONS_TO_PASS,
+    SYNC_EXPERIMENTS_ERROR,
+    SYNC_EXPERIMENTS_STARTED,
+    SYNC_EXPERIMENTS_SUCCESS,
+    listener_name,
+)
 from .models import ExperimentsSyncRequest
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -80,8 +91,9 @@ def _classify_rsync_stderr(returncode: int, stderr_tail: str) -> tuple[str, str]
 SSH_REACHABILITY_TIMEOUT_S = 3.0
 
 
-def _ssh_port_reachable(host: str, port: int,
-                        timeout_s: float = SSH_REACHABILITY_TIMEOUT_S) -> tuple[bool, str]:
+def _ssh_port_reachable(
+    host: str, port: int, timeout_s: float = SSH_REACHABILITY_TIMEOUT_S
+) -> tuple[bool, str]:
     """Return (reachable, error_text).
 
     Opens a TCP connection to ``host:port`` and closes it. Tests the SSH
@@ -106,7 +118,6 @@ def _ssh_port_reachable(host: str, port: int,
 
 @provides(IDramatiqControllerBase)
 class SSHService(HasTraits):
-
     ###################################################################################
     # IDramatiqControllerBase Interface
     ###################################################################################
@@ -118,11 +129,15 @@ class SSHService(HasTraits):
         logger.info("Starting SSH controls listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=listener_name,
-            class_method=self.listener_actor_routine)
+            class_method=self.listener_actor_routine,
+            topics=ACTOR_TOPIC_DICT[listener_name],
+            handler_name_pattern="_on_{topic}_request",
+        )
 
     def listener_actor_routine(self, message, topic):
-        return basic_listener_actor_routine(self, message, topic, handler_name_pattern="_on_{topic}_request")
-
+        return basic_listener_actor_routine(
+            self, message, topic, handler_name_pattern="_on_{topic}_request"
+        )
 
     def _on_generate_keypair_request(self, message):
         message_data = json.loads(message)
@@ -131,10 +146,12 @@ class SSHService(HasTraits):
 
         err_title = None
         err_msg = None
-        
+
         try:
             with warnings.catch_warnings(record=True) as captured_warnings:
-                pub_key_data, priv_key_path, pub_key_path = paramiko_helpers.generate_ssh_keypair(key_name, ssh_dir)
+                pub_key_data, priv_key_path, pub_key_path = (
+                    paramiko_helpers.generate_ssh_keypair(key_name, ssh_dir)
+                )
 
                 output = dict()
                 output["pub_key_data"] = pub_key_data
@@ -151,7 +168,9 @@ class SSHService(HasTraits):
                     publish_message(json.dumps(message), SSH_KEYGEN_WARNING)
 
         except FileNotFoundError as e:
-            err_title = "FileNotFoundError: Public key exists, but private key is missing"
+            err_title = (
+                "FileNotFoundError: Public key exists, but private key is missing"
+            )
             err_msg = str(e)
 
         except OSError as e:
@@ -179,11 +198,14 @@ class SSHService(HasTraits):
         config = json.loads(config)
         pub_key = config.get("generated_pub_key")
         if not pub_key:
-            publish_message("No key has been generated or read yet.",
-                            SSH_KEY_UPLOAD_ERROR)
+            publish_message(
+                "No key has been generated or read yet.", SSH_KEY_UPLOAD_ERROR
+            )
             return
 
-        if not all([config["host"], config["port"], config["username"], config["password"]]):
+        if not all(
+            [config["host"], config["port"], config["username"], config["password"]]
+        ):
             publish_message("All connection fields are required.", SSH_KEY_UPLOAD_ERROR)
             return
 
@@ -194,7 +216,7 @@ class SSHService(HasTraits):
                 host=config["host"],
                 port=config["port"],
                 username=config["username"],
-                password=config['password']
+                password=config["password"],
             )
 
             # Use the helper function to upload
@@ -202,13 +224,22 @@ class SSHService(HasTraits):
 
             if exit_status == 0:
                 publish_message(
-                    f"Public key authorized on {config['host']}.\nYou can now try connecting with your private key.",
-                    SSH_KEY_UPLOAD_SUCCESS)
+                    f"Public key authorized on {config['host']}.\n"
+                    f"You can now try connecting with your private key.",
+                    SSH_KEY_UPLOAD_SUCCESS,
+                )
             else:
-                publish_message("The server failed to add the key. Check permissions or see server logs.", SSH_KEY_UPLOAD_ERROR)
+                publish_message(
+                    "The server failed to add the key. Check permissions "
+                    "or see server logs.",
+                    SSH_KEY_UPLOAD_ERROR,
+                )
 
         except AuthenticationException:
-            publish_message("Authentication Failed. Please check your username and password.", SSH_KEY_UPLOAD_ERROR)
+            publish_message(
+                "Authentication Failed. Please check your username and password.",
+                SSH_KEY_UPLOAD_ERROR,
+            )
 
         except Exception as e:
             publish_message(f"An unexpected error occurred: {e}", SSH_KEY_UPLOAD_ERROR)
@@ -243,13 +274,17 @@ class SSHService(HasTraits):
         if not reachable:
             logger.error(
                 "SSH host %s:%s unreachable before sync: %s",
-                model.host, model.port, reach_err,
+                model.host,
+                model.port,
+                reach_err,
             )
             publish_message(
-                json.dumps({
-                    "title": "Could not reach remote host",
-                    "text": reach_err,
-                }),
+                json.dumps(
+                    {
+                        "title": "Could not reach remote host",
+                        "text": reach_err,
+                    }
+                ),
                 SYNC_EXPERIMENTS_ERROR,
             )
             return
@@ -287,7 +322,6 @@ class SSHService(HasTraits):
                 else:
                     logger.warning(f"This Exception is set to be ignored: {tail}")
 
-
             logger.info("Sync succeeded")
             publish_message(
                 json.dumps({"message": "Sync complete."}),
@@ -297,14 +331,17 @@ class SSHService(HasTraits):
         except subprocess.TimeoutExpired:
             logger.error("Remote sync timed out after %s s", RSYNC_TIMEOUT_S)
             publish_message(
-                json.dumps({
-                    "title": "Connection timed out",
-                    "text": (
-                        f"Could not reach {model.username}@{model.host}:{model.port} "
-                        f"within {RSYNC_TIMEOUT_S}s. Check that the host is online "
-                        "and the SSH port is correct."
-                    ),
-                }),
+                json.dumps(
+                    {
+                        "title": "Connection timed out",
+                        "text": (
+                            f"Could not reach {model.username}@{model.host}:"
+                            f"{model.port} within {RSYNC_TIMEOUT_S}s. Check "
+                            "that the host is online and the SSH port is "
+                            "correct."
+                        ),
+                    }
+                ),
                 SYNC_EXPERIMENTS_ERROR,
             )
         except FileNotFoundError as e:

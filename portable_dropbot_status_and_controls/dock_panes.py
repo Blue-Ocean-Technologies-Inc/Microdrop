@@ -8,15 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
-from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import (
     RealtimeModeIconMixin,
 )
 
+from microdrop_style.icons.icons import ICON_DROP_EC
+
 from .consts import (
-    ADVANCED_CONTROLS_LISTENER, CALIBRATION_LISTENER,
-    MORE_CONTROLS_LISTENER, MOTORS_LISTENER, PKG, PKG_name,
+    ACTOR_TOPIC_DICT,
+    ADVANCED_CONTROLS_LISTENER,
+    CALIBRATION_LISTENER,
+    MORE_CONTROLS_LISTENER,
+    MOTORS_LISTENER,
+    PKG,
+    PKG_name,
 )
 from .controllers.advanced_controls_controller import (
     AdvancedControlsController,
@@ -56,8 +62,7 @@ from .views.motors_view import MotorsView
 from .views.view import UnifiedView
 
 
-class PortableDropbotStatusAndControls(RealtimeModeIconMixin,
-                                       BaseStatusDockPane):
+class PortableDropbotStatusAndControls(RealtimeModeIconMixin, BaseStatusDockPane):
     """Dock pane for Portable Dropbot status display and controls."""
 
     id = PKG + ".dock_pane"
@@ -73,9 +78,11 @@ class PortableDropbotStatusAndControls(RealtimeModeIconMixin,
         return PortableDropbotStatusAndControlsController(self.model)
 
     def _create_message_handler(self):
+        name = f"{PKG}_listener"
         return PortableDropbotStatusAndControlsMessageHandler(
             model=self.model,
-            name=f"{PKG}_listener",
+            name=name,
+            topics=ACTOR_TOPIC_DICT[name],
         )
 
 
@@ -109,6 +116,7 @@ class PortableDropbotMotorsDockPane(PortableDropbotSecondaryDockPane):
         return PortableDropbotMotorsMessageHandler(
             model=self.model,
             name=MOTORS_LISTENER,
+            topics=ACTOR_TOPIC_DICT[MOTORS_LISTENER],
         )
 
 
@@ -131,6 +139,7 @@ class PortableDropbotCalibrationDockPane(PortableDropbotSecondaryDockPane):
         return PortableDropbotCalibrationMessageHandler(
             model=self.model,
             name=CALIBRATION_LISTENER,
+            topics=ACTOR_TOPIC_DICT[CALIBRATION_LISTENER],
         )
 
 
@@ -155,11 +164,11 @@ class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
         return PortableDropbotMoreControlsMessageHandler(
             model=self.model,
             name=MORE_CONTROLS_LISTENER,
+            topics=ACTOR_TOPIC_DICT[MORE_CONTROLS_LISTENER],
         )
 
 
-class PortableDropbotAdvancedControlsDockPane(
-        PortableDropbotSecondaryDockPane):
+class PortableDropbotAdvancedControlsDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for the advanced-mode-locked controls: the
     power-system buzzer and per-motor mechanical param tuning (read /
     RAM write / flash preset / reboot)."""
@@ -179,4 +188,5 @@ class PortableDropbotAdvancedControlsDockPane(
         return PortableDropbotAdvancedControlsMessageHandler(
             model=self.model,
             name=ADVANCED_CONTROLS_LISTENER,
+            topics=ACTOR_TOPIC_DICT[ADVANCED_CONTROLS_LISTENER],
         )

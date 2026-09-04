@@ -10,18 +10,19 @@
 
 import dramatiq
 
-from traits.api import HasTraits, provides, Instance
+from traits.api import HasTraits, Instance, provides
 
-from logger.logger_service import get_logger
 from microdrop_utils.dramatiq_controller_base import (
-    IDramatiqControllerBase, 
-    basic_listener_actor_routine, 
-    generate_class_method_dramatiq_listener_actor
+    IDramatiqControllerBase,
+    assert_handlers_exist_for_topics,
+    basic_listener_actor_routine,
+    generate_class_method_dramatiq_listener_actor,
 )
 
+from .consts import ACTOR_TOPIC_DICT, listener_name
 from .view_model import SSHControlViewModel
 
-from .consts import listener_name
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,11 +40,13 @@ class SSHControlUIListener(HasTraits):
 
     def traits_init(self):
         logger.info("Starting SSH controls UI listener")
+        # basic_listener_actor_routine dispatches to self.ui, not self, so the
+        # #617 startup check must target self.ui directly rather than going
+        # through generate_class_method_dramatiq_listener_actor's topics= hook.
+        assert_handlers_exist_for_topics(self.ui, ACTOR_TOPIC_DICT[listener_name])
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=listener_name,
-            class_method=self.listener_actor_routine)
+            listener_name=listener_name, class_method=self.listener_actor_routine
+        )
 
     def listener_actor_routine(self, message, topic):
         return basic_listener_actor_routine(self.ui, message, topic)
-
-

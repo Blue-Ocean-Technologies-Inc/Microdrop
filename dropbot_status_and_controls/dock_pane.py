@@ -10,19 +10,21 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMenu
+
 from traits.api import Instance, observe
 
 from dropbot_status_and_controls.preferences import DropbotStatusAndControlsPreferences
-from microdrop_style.icons.icons import ICON_DROP_EC
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import RealtimeModeIconMixin
 
-from .consts import PKG, PKG_name, listener_name
-from .model import DropbotStatusAndControlsModel
+from microdrop_style.icons.icons import ICON_DROP_EC
+
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, listener_name
 from .controller import ControlsController
-from .view import UnifiedView
-from .message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
 from .dialog_views import DialogView
+from .message_handler import DialogSignals, DropbotStatusAndControlsMessageHandler
+from .model import DropbotStatusAndControlsModel
+from .view import UnifiedView
 
 
 class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane):
@@ -61,6 +63,7 @@ class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane
             model=self.model,
             dialog_signals=self._dialog_signals,
             name=listener_name,
+            topics=ACTOR_TOPIC_DICT[listener_name],
         )
 
     def _setup_extras(self):
@@ -77,12 +80,12 @@ class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane
         """Update the QSpinBox min/max on the voltage and frequency controls."""
         if self.controller.info and self.controller.info.initialized:
             info = self.controller.info
-            if hasattr(info, 'voltage') and info.voltage.control is not None:
-                info.voltage.control.setMinimum(data['ui_min_voltage'])
-                info.voltage.control.setMaximum(data['ui_max_voltage'])
-            if hasattr(info, 'frequency') and info.frequency.control is not None:
-                info.frequency.control.setMinimum(data['ui_min_frequency'])
-                info.frequency.control.setMaximum(data['ui_max_frequency'])
+            if hasattr(info, "voltage") and info.voltage.control is not None:
+                info.voltage.control.setMinimum(data["ui_min_voltage"])
+                info.voltage.control.setMaximum(data["ui_max_voltage"])
+            if hasattr(info, "frequency") and info.frequency.control is not None:
+                info.frequency.control.setMinimum(data["ui_min_frequency"])
+                info.frequency.control.setMaximum(data["ui_max_frequency"])
 
     @observe("control")
     def _install_context_menu(self, event):
@@ -102,12 +105,15 @@ class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane
         )
         menu.exec(self.control.mapToGlobal(point))
 
+
 if __name__ == "__main__":
     model = DropbotStatusAndControlsModel()
     dialog_signals = DialogSignals()
     message_handler = DropbotStatusAndControlsMessageHandler(
         model=model, dialog_signals=dialog_signals, name=listener_name
     )
-    dialog_view = DialogView(dialog_signals=dialog_signals, message_handler=message_handler)
+    dialog_view = DialogView(
+        dialog_signals=dialog_signals, message_handler=message_handler
+    )
     controller = ControlsController(model)
     model.configure_traits(view=UnifiedView, handler=controller)

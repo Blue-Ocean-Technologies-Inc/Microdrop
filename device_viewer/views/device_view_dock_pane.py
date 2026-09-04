@@ -84,6 +84,7 @@ from microdrop_utils.pyside_helpers import (
 from microdrop_utils.trait_change_commands import SetChangeCommand
 
 from ..consts import (
+    ACTOR_TOPIC_DICT,
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     CALIBRATION_DATA,
     DEVICE_VIEWER_GEOMETRY_CHANGED,
@@ -243,7 +244,12 @@ class DeviceViewerDockPane(TraitsDockPane):
     def traits_init(self):
         logger.info("Starting DeviceViewer listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name, class_method=self.listener_actor_routine
+            listener_name=self.listener_name,
+            class_method=self.listener_actor_routine,
+            # Startup check: every subscribed topic must resolve to a real
+            # _on_{topic}_triggered() method, so a typo'd handler or a stale
+            # ACTOR_TOPIC_DICT entry fails at app start, not silently.
+            topics=ACTOR_TOPIC_DICT[self.listener_name],
         )
 
         ###############################################################################################################

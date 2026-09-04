@@ -23,6 +23,7 @@ from traits.api import Instance, provides
 
 from dropbot_controller.models.self_tests import TestEvent
 from dropbot_controller.models.shorts import ShortsDetectedSignal
+from dropbot_tools_menu.consts import ACTOR_TOPIC_DICT as TOOLS_MENU_ACTOR_TOPIC_DICT
 from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
 from electrode_controller.consts import disabled_channels_changed_publisher
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
@@ -34,7 +35,7 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
 # Local imports.
-from .consts import PKG
+from .consts import ACTOR_TOPIC_DICT, PKG
 from .dialogs.pyface_wrapper import YES, confirm, information
 from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
@@ -81,8 +82,17 @@ class MicrodropTask(Task):
         """
 
         logger.info("Starting Microdrop listener")
+        # This listener also receives SELF_TESTS_PROGRESS, contributed by
+        # dropbot_tools_menu to the same listener name -- combine both so the
+        # #617 startup check covers everything actually routed here.
+        topics = [
+            *ACTOR_TOPIC_DICT[self.listener_name],
+            *TOOLS_MENU_ACTOR_TOPIC_DICT[self.listener_name],
+        ]
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name, class_method=self.listener_actor_routine
+            listener_name=self.listener_name,
+            class_method=self.listener_actor_routine,
+            topics=topics,
         )
 
     #### 'Task' interface #####################################################
