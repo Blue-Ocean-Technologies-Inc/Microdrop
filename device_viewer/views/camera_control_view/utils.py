@@ -8,20 +8,27 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
+# Third-party imports.
 import dramatiq
-from PySide6.QtCore import QUrl
 
-from ...models.media import MediaType, MediaCaptureMessageModel
-from ...consts import MEDIA_CAPTURES_KEY
+# Enthought library imports.
+from pyface.qt.QtCore import QUrl
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-app_globals = get_microdrop_redis_globals_manager()
 
+# Local imports.
+from ...consts import MEDIA_CAPTURES_KEY
+from ...models.media import MediaCaptureMessageModel, MediaType
+
+# Logger import.
 from logger.logger_service import get_logger
-logger = get_logger(__name__)
 
+logger = get_logger(__name__)
+app_globals = get_microdrop_redis_globals_manager()
 
 
 @dramatiq.actor
@@ -30,7 +37,7 @@ def _cache_media_capture(name: MediaType, save_path: str):
         path=Path(save_path), type=name.lower()
     )
 
-    message=media_capture_message.model_dump_json()
+    message = media_capture_message.model_dump_json()
 
     if not app_globals.get(MEDIA_CAPTURES_KEY):
         app_globals[MEDIA_CAPTURES_KEY] = [message]
@@ -40,7 +47,8 @@ def _cache_media_capture(name: MediaType, save_path: str):
 
     logger.info(app_globals[MEDIA_CAPTURES_KEY])
 
-def _show_media_capture_dialog(
+
+def _show_media_capture_status_message(
     name: MediaType, save_path: str, status_bar_manager=None
 ):
 

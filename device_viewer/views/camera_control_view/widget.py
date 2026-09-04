@@ -8,37 +8,59 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import time
 from pathlib import Path
 
-from PySide6.QtCore import (
-    Signal,
-    Slot,
-    QThreadPool,
-    QTimer,
-)
-from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import (
-    QMediaCaptureSession, QCamera, QCameraDevice,
-    QCameraFormat, QVideoFrame, QVideoSink,
-)
-from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
-from PySide6.QtWidgets import (
-    QWidget,
-    QHBoxLayout,
-    QPushButton,
-    QVBoxLayout,
-    QLabel,
-    QSizePolicy,
-    QApplication,
-)
-
 from apptools.preferences.api import Preferences
 
-from microdrop_application.dialogs.pyface_wrapper import error, warning, YES, OK, disclaimer
+# Enthought library imports.
+from pyface.qt.QtCore import (
+    QThreadPool,
+    QTimer,
+    Signal,
+    Slot,
+)
+from pyface.qt.QtGui import QImage
+from pyface.qt.QtMultimedia import (
+    QCamera,
+    QCameraDevice,
+    QCameraFormat,
+    QMediaCaptureSession,
+    QVideoFrame,
+    QVideoSink,
+)
+from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+# Microdrop package imports.
+from device_viewer.views.camera_control_view.preferences import CameraPreferences
+from microdrop_application.dialogs.pyface_wrapper import (
+    OK,
+    YES,
+    disclaimer,
+    error,
+    warning,
+)
 from microdrop_application.helpers import get_current_experiment_directory
+
+# Microdrop style imports.
+from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
+
+# Microdrop utils imports.
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from microdrop_utils.pyside_helpers import MarqueeComboBox
-from microdrop_utils.v4l2_fps_getter import get_video_inputs, LinuxCameraDeviceContainer
+from microdrop_utils.v4l2_fps_getter import LinuxCameraDeviceContainer, get_video_inputs
+
+# Local imports.
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
     CAPTURES_DIR_NAME,
@@ -48,28 +70,26 @@ from ...consts import (
     media_capture_event_model,
     recording_state_model,
 )
-
-from device_viewer.views.camera_control_view.preferences import CameraPreferences
-from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
-from microdrop_utils.datetime_helpers import get_current_utc_datetime
-from .utils import _cache_media_capture, _show_media_capture_dialog
-from ..electrode_view.electrode_scene import ElectrodeScene
 from ...default_settings import video_key
-
-from ...utils.camera import (
-    NativeVideoRecorder,
-    get_transformed_frame,
-    ImageSaver, RawFFMPEGVideoRecorder
-)
 from ...models.media import MediaType
+from ...utils.camera import (
+    ImageSaver,
+    NativeVideoRecorder,
+    RawFFMPEGVideoRecorder,
+    get_transformed_frame,
+)
+from ..electrode_view.electrode_scene import ElectrodeScene
+from .utils import _cache_media_capture, _show_media_capture_status_message
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 MIN_RECORDING_FPS = 20
 
-class CameraControlWidget(QWidget):
 
+class CameraControlWidget(QWidget):
     # Signals
     camera_active_signal = Signal(bool)
     screen_capture_signal = Signal(object)
@@ -173,7 +193,8 @@ class CameraControlWidget(QWidget):
                 f"codec={self.preferences.ffmpeg_video_codec}, "
                 f"preset={self.preferences.ffmpeg_preset}, "
                 f"crf={self.preferences.ffmpeg_crf}, "
-                f"extra args={self.preferences.ffmpeg_extra_output_args!r}")
+                f"extra args={self.preferences.ffmpeg_extra_output_args!r}"
+            )
             recorder = RawFFMPEGVideoRecorder(
                 self.video_item,
                 frame_sink=self._camera_sink,
@@ -185,13 +206,16 @@ class CameraControlWidget(QWidget):
         else:
             # Qt's own QMediaRecorder: hardware-encoded, zero per-frame
             # Python work.
-            video_bitrate = self.preferences.recording_bitrate_bps(
-                resolution, fps)
+            video_bitrate = self.preferences.recording_bitrate_bps(resolution, fps)
+            bitrate_description = (
+                f"{video_bitrate:,} bps" if video_bitrate else "encoder default"
+            )
             logger.info(
                 f"Recorder from preferences: Qt MediaRecorder — "
                 f"format={self.preferences.qt_video_format}, "
                 f"codec={self.preferences.qt_video_codec}, "
-                f"bitrate={f'{video_bitrate:,} bps' if video_bitrate else 'encoder default'}")
+                f"bitrate={bitrate_description}"
+            )
             recorder = NativeVideoRecorder(
                 session=self.session,
                 video_item=self.video_item,
@@ -292,8 +316,6 @@ class CameraControlWidget(QWidget):
         self.combo_cameras.currentIndexChanged.connect(self.on_camera_changed)
         self.combo_resolutions.currentIndexChanged.connect(self.on_resolution_changed)
 
-    # ... [Existing Camera Management Methods (populate_resolutions, etc.) remain unchanged] ...
-
     @staticmethod
     def _is_ir_camera_name(camera_name) -> bool:
         return bool(camera_name) and ("ir" in str(camera_name).lower())
@@ -301,7 +323,8 @@ class CameraControlWidget(QWidget):
     def _preferred_video_format_change(self, event):
         strict_flag = "strictly" if self.preferences.strict_video_format else ""
         logger.critical(
-            f"Preferred video format changed to: {self.preferences.preferred_video_format} {strict_flag}"
+            f"Preferred video format changed to: "
+            f"{self.preferences.preferred_video_format} {strict_flag}"
         )
         self.populate_resolutions()
 
@@ -434,7 +457,9 @@ class CameraControlWidget(QWidget):
             return QCamera(selected_device)
 
         else:
-            logger.warning("Failed to create camera. Need to get camera from available devices")
+            logger.warning(
+                "Failed to create camera. Need to get camera from available devices"
+            )
             return None
 
     def _get_camera_description(self, selected_device):
@@ -476,7 +501,7 @@ class CameraControlWidget(QWidget):
         # bypass; screen captures still work (they grab the scene).
         self.record_toggle_button.setDisabled(True)
         self.combo_resolutions.blockSignals(True)
-        self.combo_resolutions.clear()   # providers stream full resolution
+        self.combo_resolutions.clear()  # providers stream full resolution
         self.combo_resolutions.blockSignals(False)
         if was_running:
             self.turn_on_camera()
@@ -623,8 +648,11 @@ class CameraControlWidget(QWidget):
                     self._provider_sources[label] = (provider, key)
                     self.combo_cameras.addItem(label, userData=None)
             except Exception:
-                logger.error(f"Camera-source provider {provider!r} failed to "
-                             "enumerate; skipping", exc_info=True)
+                logger.error(
+                    f"Camera-source provider {provider!r} failed to "
+                    "enumerate; skipping",
+                    exc_info=True,
+                )
 
         # account for no camera
         _available_cameras.append(None)
@@ -642,7 +670,8 @@ class CameraControlWidget(QWidget):
 
             if old_camera_name in self._provider_sources:
                 self.combo_cameras.setCurrentIndex(
-                    self.combo_cameras.findText(old_camera_name))
+                    self.combo_cameras.findText(old_camera_name)
+                )
                 return
 
             # Preferred camera not found — clear stale resolution since it
@@ -673,7 +702,7 @@ class CameraControlWidget(QWidget):
         was_running = self._feed_active()
         self._stop_provider_feed()
         if self.camera:
-            if  self.camera.isActive():
+            if self.camera.isActive():
                 self.turn_off_camera()
                 was_running = True
 
@@ -762,7 +791,10 @@ class CameraControlWidget(QWidget):
             self._restore_or_fallback_resolution(seen_resolutions)
         elif self.preferences.strict_video_format:
             # No formats survived strict filtering — retry without it
-            warning_message = f"Preferred format {self.preferences.preferred_video_format} not supported."
+            warning_message = (
+                f"Preferred format "
+                f"{self.preferences.preferred_video_format} not supported."
+            )
             logger.warning(warning_message)
             if not self._is_ir_camera_name(self.preferences.selected_camera):
                 warning(None, warning_message)
@@ -845,8 +877,9 @@ class CameraControlWidget(QWidget):
             _cache_media_capture(MediaType.IMAGE, saved_path)
             media_capture_event_model.captured = saved_path
             if show_dialog:
-                _show_media_capture_dialog(
-                    MediaType.IMAGE, saved_path, self.status_bar_manager)
+                _show_media_capture_status_message(
+                    MediaType.IMAGE, saved_path, self.status_bar_manager
+                )
 
         # get_screen_shot may return the recorder's live current_image, which
         # the recorder keeps painting into — snapshot it before handing off.
@@ -867,9 +900,11 @@ class CameraControlWidget(QWidget):
                 callback(saved_path)
 
         worker.signals.save_complete.connect(
-            lambda saved_path: _finish(saved_path, on_saved))
+            lambda saved_path: _finish(saved_path, on_saved)
+        )
         worker.signals.save_failed.connect(
-            lambda saved_path: _finish(saved_path, on_failed))
+            lambda saved_path: _finish(saved_path, on_failed)
+        )
         QThreadPool.globalInstance().start(worker)
 
     def _capture_image_and_close(self, capture_data):
@@ -908,8 +943,8 @@ class CameraControlWidget(QWidget):
 
     def _generate_recording_filename(self, step_description=None, step_id=None):
         return self._generate_media_filename(
-            step_description, step_id,
-            self.preferences.recording_file_extension())
+            step_description, step_id, self.preferences.recording_file_extension()
+        )
 
     def on_recording_active(self, recording_data):
         if isinstance(recording_data, dict):
@@ -995,7 +1030,8 @@ class CameraControlWidget(QWidget):
         # protocol/message-driven path.
         if self._provider_selected() or self.camera is None:
             logger.warning(
-                "Video recording is not supported for the selected camera source")
+                "Video recording is not supported for the selected camera source"
+            )
             self.record_toggle_button.setChecked(False)
             return
 
@@ -1008,7 +1044,8 @@ class CameraControlWidget(QWidget):
                 title="Recording Not Supported",
                 message=(
                     f"Cannot record at <b>{fps:.0f} fps</b>. "
-                    f"Minimum supported frame rate for recording is <b>{MIN_RECORDING_FPS} fps</b>.\n\n"
+                    f"Minimum supported frame rate for recording is "
+                    f"<b>{MIN_RECORDING_FPS} fps</b>.\n\n"
                     f"Please select a resolution with a higher frame rate."
                 ),
                 ack_button_text="OK",
@@ -1018,7 +1055,9 @@ class CameraControlWidget(QWidget):
 
         if not self.camera.isActive():
             self.toggle_camera()
-            self._camera_state_pre_recording = False ## Flag only used for video recording management
+            self._camera_state_pre_recording = (
+                False  ## Flag only used for video recording management
+            )
 
         else:
             self._camera_state_pre_recording = True
@@ -1040,9 +1079,7 @@ class CameraControlWidget(QWidget):
         # changes apply without a restart, with the bitrate class matched
         # to the actual camera resolution and frame rate.
         self.recorder = self._build_recorder(_resolution, fps)
-        self.recorder.start(
-            _recording_file_path, _resolution, fps
-        )
+        self.recorder.start(_recording_file_path, _resolution, fps)
         device_viewer_recording_state_publisher.publish(state=True)
         recording_state_model.recording = True
 
@@ -1057,7 +1094,8 @@ class CameraControlWidget(QWidget):
         recording_state_model.recording = False
         error(
             self,
-            "<b>Error</b>: Cannot continue to record video<br><br>Exception raised while recording video.",
+            "<b>Error</b>: Cannot continue to record video<br><br>"
+            "Exception raised while recording video.",
             detail=error_msg,
         )
         self.video_record_stop()
@@ -1073,6 +1111,6 @@ class CameraControlWidget(QWidget):
 
         # Show Result
         if recording_output_path and self.show_media_capture_dialog_for_video:
-            _show_media_capture_dialog(
+            _show_media_capture_status_message(
                 MediaType.VIDEO, recording_output_path, self.status_bar_manager
             )
