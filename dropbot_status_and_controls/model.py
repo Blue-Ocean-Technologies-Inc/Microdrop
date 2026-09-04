@@ -15,24 +15,21 @@ import math
 import pint
 
 # Enthought library imports.
-from apptools.preferences.api import get_default_preferences
 from traits.api import Bool, Enum, Instance, Str, observe
 
 # Microdrop package imports.
 from dropbot_preferences_ui.consts import (
     UI_DEFAULT_FREQUENCY,
-    UI_DEFAULT_FREQUENCY_KEY,
     UI_DEFAULT_MAX_FREQUENCY,
     UI_DEFAULT_MAX_VOLTAGE,
     UI_DEFAULT_MIN_FREQUENCY,
     UI_DEFAULT_MIN_VOLTAGE,
     UI_DEFAULT_VOLTAGE,
-    UI_DEFAULT_VOLTAGE_KEY,
     UI_MAX_FREQUENCY_KEY,
     UI_MAX_VOLTAGE_KEY,
     UI_MIN_FREQUENCY_KEY,
     UI_MIN_VOLTAGE_KEY,
-    VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH,
+    VoltageFrequencyRangePreferences,
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from template_status_and_controls.base_model import BaseStatusModel
@@ -79,25 +76,38 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     HALTED_COLOR = halted_color
 
     # ---- Hardware controls (user-writable via UI) ----------------------
-    # Min/max/default read from app_globals, where dropbot_preferences_ui's
-    # VoltageFrequencyRangePreferences publishes them (owner-publishes
-    # pattern, #610) — falls back to its consts if nothing has published
-    # yet (e.g. this plugin's app loads before dropbot_preferences_ui's).
+    # Bounds come from app_globals (seeded by dropbot_preferences_ui's helper)
+    # with the consts as import-time fallbacks; the persisted last-applied
+    # values are applied per instance in traits_init through the owner's
+    # PreferencesHelper (#610).
     voltage = RangeWithSteppedSpinViewHint(
         int(app_globals.get(UI_MIN_VOLTAGE_KEY, UI_DEFAULT_MIN_VOLTAGE)),
         int(app_globals.get(UI_MAX_VOLTAGE_KEY, UI_DEFAULT_MAX_VOLTAGE)),
-        value=int(app_globals.get(UI_DEFAULT_VOLTAGE_KEY, UI_DEFAULT_VOLTAGE)),
+        value=UI_DEFAULT_VOLTAGE,
         suffix=" V",
         desc="Voltage to set on the DropBot device (V)",
     )
     frequency = RangeWithSteppedSpinViewHint(
         int(app_globals.get(UI_MIN_FREQUENCY_KEY, UI_DEFAULT_MIN_FREQUENCY)),
         int(app_globals.get(UI_MAX_FREQUENCY_KEY, UI_DEFAULT_MAX_FREQUENCY)),
-        value=int(app_globals.get(UI_DEFAULT_FREQUENCY_KEY, UI_DEFAULT_FREQUENCY)),
+        value=UI_DEFAULT_FREQUENCY,
         step=100,
         suffix=" Hz",
         desc="Frequency to set on the DropBot device (Hz)",
     )
+
+    #: dropbot_preferences_ui's typed accessor for the persisted UI voltage /
+    #: frequency preferences. Created per instance, not at import, so it binds
+    #: to the application's preferences node.
+    range_preferences = Instance(
+        VoltageFrequencyRangePreferences, VoltageFrequencyRangePreferences()
+    )
+
+    def traits_init(self):
+        """Start voltage/frequency from the persisted last-applied values."""
+        super().traits_init()
+        self.voltage = int(self.range_preferences.ui_default_voltage)
+        self.frequency = int(self.range_preferences.ui_default_frequency)
 
     # ---- Device-specific status ----------------------------------------
     chip_status_text = Str("Absent")
@@ -265,23 +275,8 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     @observe("voltage, frequency")
     def _update_prefs(self, event):
-        """Persist the last-applied voltage/frequency across restarts.
-
-        Writes straight to the ETS preferences node dropbot_preferences_ui's
-        VoltageFrequencyRangePreferences persists under (#610), by path,
-        rather than importing that plugin's preferences model. Envisage
-        installs the application's preferences node as apptools' default
-        (envisage.application.Application.__init__), so this lands in the
-        exact node PreferencesHelper subclasses read from/write to; if a
-        VoltageFrequencyRangePreferences instance is alive it picks up the
-        change via its preferences listener and mirrors it to app_globals
-        itself — this is the only writer of ui_default_voltage/frequency.
-        """
-        logger.debug(f"Updating preferences: {event}")
-        get_default_preferences().set(
-            f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{event.name}",
-            event.new,
-        )
+        """Persist the last-applied voltage/frequency through the owner's helper."""
+        self.range_preferences.trait_set(**{f"ui_default_{event.name}": int(event.new)})
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
