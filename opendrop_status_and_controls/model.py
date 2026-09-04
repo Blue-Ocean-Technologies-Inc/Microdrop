@@ -10,7 +10,7 @@
 
 from traits.api import Str
 
-from opendrop_status.consts import OPENDROP_IMAGE
+from opendrop_status_and_controls.consts import OPENDROP_IMAGE
 from template_status_and_controls.base_model import BaseStatusModel
 
 from logger.logger_service import get_logger
