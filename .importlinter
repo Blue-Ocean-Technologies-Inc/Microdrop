@@ -1,0 +1,159 @@
+[importlinter]
+root_packages =
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    integrated_ssh_portal
+    logger
+    logger_ui
+    manual_controls
+    message_router
+    microdrop_application
+    microdrop_status_bar
+    microdrop_style
+    microdrop_utils
+    mock_dropbot_controller
+    mock_dropbot_status
+    opendrop_controller
+    opendrop_status_and_controls
+    peripheral_device_controller_base
+    pluggable_protocol_tree
+    plugin_management
+    portable_dropbot_controller
+    portable_dropbot_protocol_controls
+    portable_dropbot_status_and_controls
+    protocol_quick_action_tools
+    ssh_controls
+    ssh_controls_ui
+    template_status_and_controls
+    user_help_plugin
+    video_protocol_controls
+    volume_threshold_protocol_controls
+    examples
+
+[importlinter:contract:plugin-decoupling]
+name = Plugins never import each other's internals (consts only)
+type = independence
+modules =
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    integrated_ssh_portal
+    logger_ui
+    manual_controls
+    message_router
+    microdrop_application
+    microdrop_status_bar
+    mock_dropbot_controller
+    mock_dropbot_status
+    opendrop_controller
+    opendrop_status_and_controls
+    peripheral_device_controller_base
+    pluggable_protocol_tree
+    plugin_management
+    portable_dropbot_controller
+    portable_dropbot_protocol_controls
+    portable_dropbot_status_and_controls
+    protocol_quick_action_tools
+    ssh_controls
+    ssh_controls_ui
+    user_help_plugin
+    video_protocol_controls
+    volume_threshold_protocol_controls
+    # Add your new Envisage plugin package here (not to root_packages only).
+ignore_imports =
+    # Rule: a plugin's own consts module (topics/constants/message schemas)
+    # is the one thing siblings may import from it.
+    ** -> *.consts
+    # microdrop_application is itself a plugin (MicrodropPlugin), but two
+    # of its submodules are genuinely shared infrastructure by design, not
+    # plugin-private business logic: `helpers` (the Redis app-globals
+    # accessor + experiment-directory lookup, used repo-wide) and the
+    # `dialogs` subpackage (a self-contained messaging-dialog library,
+    # AGENTS.md: "User-facing errors go through
+    # microdrop_application.dialogs.pyface_wrapper ... never a raw
+    # QMessageBox"). Everything else in microdrop_application (menus.py,
+    # plugin.py, task.py, views/, preferences*, touch_assist/) stays
+    # plugin-private; existing cross-plugin uses are itemized as debt below.
+    ** -> microdrop_application.helpers
+    ** -> microdrop_application.dialogs
+    ** -> microdrop_application.dialogs.**
+
+    # pluggable_protocol_tree registers the PROTOCOL_COLUMNS Envisage
+    # extension point (see its plugin.py docstring); its interfaces,
+    # models.column/quick_action/row/display_state/compound_column,
+    # views.columns.*, builtins.*_column, execution.*, session and
+    # services.preferences ARE the declared public API for plugins that
+    # contribute protocol columns (dropbot_protocol_controls,
+    # volume_threshold_protocol_controls, portable_dropbot_protocol_controls,
+    # video_protocol_controls, protocol_quick_action_tools, device_viewer).
+    # Treated like a consts surface: importable by everyone. This does NOT
+    # cover the opposite direction — pluggable_protocol_tree importing a
+    # specific leaf plugin's internals is a real violation, itemized below.
+    ** -> pluggable_protocol_tree.**
+
+    # --- Seeded debt: fixed in parallel branches (drop these lines once merged) ---
+
+    # Issue #610 — dropbot_status_and_controls/model.py reaches into two
+    # sibling plugins' internals instead of going through messages/consts.
+    dropbot_status_and_controls.model -> dropbot_preferences_ui.models
+    dropbot_status_and_controls.model -> dropbot_protocol_controls.services.force_math
+
+    # Issue #611 — backend mixin importing a UI plugin's dialog class.
+    dropbot_controller.services.dropbot_self_tests_mixin_service -> dropbot_tools_menu.self_test_dialogs
+
+    # --- Seeded debt: microdrop_application.menus.is_advanced_mode consumers ---
+    # menus.py is plugin-private (an Action class + a Redis-backed flag
+    # check), unlike helpers/dialogs above — not blanket-exempted. These
+    # call sites should switch to a published topic/consts flag instead.
+    pluggable_protocol_tree.services.device_viewer_sync -> microdrop_application.menus
+    pluggable_protocol_tree.views.dock_pane -> microdrop_application.menus
+    pluggable_protocol_tree.services.protocol_status_controller -> microdrop_application.menus
+    portable_dropbot_status_and_controls.models.advanced_controls_model -> microdrop_application.menus
+    portable_dropbot_status_and_controls.models.model -> microdrop_application.menus
+
+    # --- Seeded debt: pluggable_protocol_tree (the framework) reaching back
+    # into specific leaf plugins it should not know about ---
+    pluggable_protocol_tree.services.device_viewer_sync -> device_viewer.models.messages
+    pluggable_protocol_tree.services.device_viewer_sync -> device_viewer.models.step_params_commit
+    pluggable_protocol_tree.services.logging.controller -> device_viewer.models.media
+    pluggable_protocol_tree.tests.tests_with_redis_server_need.test_device_viewer_sync_redis -> device_viewer.models.messages
+    # Root cause of the reporting.py chain below: a "shared" microdrop_utils
+    # helper itself imports a specific plugin's internals, so anything using
+    # microdrop_utils.plotly_helpers transitively depends on device_viewer.
+    microdrop_utils.plotly_helpers -> device_viewer.utils.dmf_utils_helpers
+
+    # --- Seeded debt: microdrop_application (the core plugin) reaching into
+    # hardware/UI plugin internals in its wiring code ---
+    microdrop_application.task -> dropbot_controller.models.self_tests
+    microdrop_application.task -> dropbot_controller.models.shorts
+    microdrop_application.task -> dropbot_tools_menu.self_test_dialogs
+    microdrop_application.application -> dropbot_tools_menu.menus
+    microdrop_application.application -> dropbot_tools_menu.plugin
+
+    # --- Seeded debt: preferences modules importing a sibling's preferences
+    # module directly instead of via consts/messages ---
+    logger_ui.preferences -> microdrop_application.preferences
+    device_viewer.preferences -> microdrop_application.preferences_dialog
+    dropbot_preferences_ui.preferences -> dropbot_controller.preferences
+    dropbot_protocol_controls.protocol_columns.voltage_column -> dropbot_controller.preferences
+    dropbot_protocol_controls.protocol_columns.frequency_column -> dropbot_controller.preferences
+
+    # --- Seeded debt: mocks/tests reaching into the real plugin's models ---
+    mock_dropbot_controller.consts -> dropbot_controller.models.self_tests
+    mock_dropbot_status.message_handler -> dropbot_controller.models.shorts
+
+    # --- Seeded debt: other direct model/service/interface reach-ins ---
+    portable_dropbot_controller.services.portable_dropbot_electrodes_mixin_service -> electrode_controller.models
+    electrode_controller.plugin -> dropbot_controller.interfaces.i_dropbot_control_mixin_service
+    manual_controls.MVC -> dropbot_preferences_ui.models
+    volume_threshold_protocol_controls.protocol_columns.volume_threshold_column -> dropbot_protocol_controls.services.force_math
+    volume_threshold_protocol_controls.demos.vt_test_harness -> dropbot_protocol_controls.services.force_math

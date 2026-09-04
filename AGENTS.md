@@ -296,7 +296,19 @@ idiom (chunking, comment density, method order) that rules alone can't:
   directly in new code (existing PySide6 imports are converted as files are
   touched, not in sweeps).
 - **Decoupling**: plugins never call each other directly — communicate via
-  Dramatiq pub/sub topics or the Redis app-globals hash
+  Dramatiq pub/sub topics or the Redis app-globals hash. This is enforced
+  mechanically, not just by review: `.importlinter` at the repo root
+  (`import-linter`) declares an `independence` contract over every plugin
+  package, allowing siblings to import only each other's `consts` module
+  plus a short list of genuinely shared infrastructure documented in that
+  file (`microdrop_application.helpers`/`dialogs`, the
+  `pluggable_protocol_tree` extension-point API). Run it with
+  `pixi run lint-microdrop-imports` from `microdrop-py/` (or `pixi exec --spec "import-linter" --
+  lint-imports` from the repo root) before pushing. Pre-existing violations
+  are seeded as an explicit, commented `ignore_imports` debt list in
+  `.importlinter` — that list may only shrink: fix the underlying coupling
+  when you touch a file on it, never add a new entry to work around a
+  failing check.
 - **Validated publishing**: new topics publish through
   `ValidatedTopicPublisher` (`microdrop_utils/dramatiq_pub_sub_helpers.py`)
   with a Pydantic message model colocated with the topic constant in the

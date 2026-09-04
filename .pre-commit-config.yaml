@@ -37,3 +37,14 @@ repos:
         entry: scratch/artifact paths must never be committed
         language: fail
         files: (^|/)(\.task-report\.md$|\.superpowers/|__pycache__/|\.pixi/)
+      - id: import-linter
+        name: import-linter (plugin decoupling contract)
+        # Whole-graph check against .importlinter at the repo root; a single
+        # touched file can introduce a new cross-plugin import anywhere in
+        # the dependency chain, so it always runs rather than filtering by
+        # the files pre-commit staged.
+        entry: lint-imports
+        language: python
+        additional_dependencies: [import-linter==2.14]
+        types: [python]
+        pass_filenames: false
