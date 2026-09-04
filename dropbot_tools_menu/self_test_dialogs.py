@@ -406,6 +406,7 @@ class ResultsDialog(QDialog):
         title="Test Results",
         test_name=None,
         results=None,
+        results_path=None,
         failed_channels=None,
     ):
         super().__init__(parent)
@@ -424,6 +425,15 @@ class ResultsDialog(QDialog):
         toolbar = NavigationToolbar2QT(self.canvas, self)
         layout.addWidget(toolbar)
         layout.addWidget(self.canvas, stretch=1)
+
+        # Link to the raw data behind the plot; Qt opens file URLs with the
+        # system's default handler for .json.
+        if results_path:
+            link_label = QLabel(
+                f'<a href="{Path(results_path).resolve().as_uri()}">Raw data JSON</a>'
+            )
+            link_label.setOpenExternalLinks(True)
+            layout.addWidget(link_label, alignment=Qt.AlignLeft)
 
         # Show failed channel numbers if provided
         if failed_channels is not None:
@@ -470,6 +480,7 @@ class ResultsDialogAction(Action):
             title=title,
             test_name=test_name,
             results=results,
+            results_path=results_path,
             failed_channels=failed_channels,
         )
         # use exec_() to block the main thread until the dialog is closed
