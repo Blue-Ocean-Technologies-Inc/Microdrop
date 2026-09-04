@@ -8,25 +8,56 @@
 #
 # Thanks for using Microdrop open source!
 
-from pathlib import Path
+# Standard library imports.
 import sys
+from pathlib import Path
 
-from pyface.action.api import Action
-from pyface.qt.QtWidgets import (QDialog, QVBoxLayout, QLabel, 
-                                 QDialogButtonBox, QProgressBar,
-                                 QPushButton, QTextBrowser)
-from pyface.qt.QtCore import Qt, Slot, Signal, QSize, QTimer
-from pyface.qt.QtGui import QPixmap, QMovie
-
-from traits.api import Str
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+# Third-party imports.
+from dropbot.self_test import (
+    plot_test_channels_results,
+    plot_test_on_board_feedback_calibration_results,
+    plot_test_voltage_results,
+)
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 
+# Enthought library imports.
+from pyface.action.api import Action
+from pyface.qt.QtCore import QSize, Qt, QTimer, Signal, Slot
+from pyface.qt.QtGui import QMovie, QPixmap
+from pyface.qt.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QTextBrowser,
+    QVBoxLayout,
+)
+from traits.api import Str
+
+# Microdrop package imports.
+from dropbot_controller.consts import SELF_TEST_CANCEL
+from dropbot_controller.models.self_tests import load_self_test_results
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from dropbot_controller.consts import SELF_TEST_CANCEL
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+
+# Plot function for each self test's raw results (#611), keyed by test_name
+# as published on SELF_TESTS_RESULTS.
+PLOT_FUNCTIONS_BY_TEST_NAME = {
+    "test_voltage": plot_test_voltage_results,
+    "test_on_board_feedback_calibration": (
+        plot_test_on_board_feedback_calibration_results
+    ),
+    "test_channels": plot_test_channels_results,
+}
 
 
 class SelfTestIntroDialog(QDialog):
@@ -63,8 +94,10 @@ class SelfTestIntroDialog(QDialog):
         # instruction label
         instruction_label = QLabel(
             "<b>Please insert the DropBot test board, for more info see </b>"
-            '<a href="https://github.com/sci-bots/dropbot-v3/wiki/DropBot-Test-Board#loading-dropbot-test-board">'
-            '<span style="text-decoration: underline; color:#2980b9;">DropBot Test Board documentation</span>'
+            '<a href="https://github.com/sci-bots/dropbot-v3/wiki/DropBot-Test-Board'
+            '#loading-dropbot-test-board">'
+            '<span style="text-decoration: underline; color:#2980b9;">'
+            "DropBot Test Board documentation</span>"
             "</a>"
         )
         instruction_label.setWordWrap(True)
@@ -115,7 +148,8 @@ class ShowSelfTestIntroDialogAction(Action):
     name = Str("&Self Test Intro Dialog")
 
     def perform(self, event):
-        # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
+        # The dialog is a child window of the Task Action, so the parent is
+        # coming from the event.task.window.control
         dialog = SelfTestIntroDialog(parent=event.task.window.control)
         result = dialog.exec_()
         if result == QDialog.Accepted:
@@ -348,28 +382,66 @@ class WaitForTestDialogAction:
             self.dialog = None
 
 
+def _build_results_figure(test_name, results):
+    """Render `results` with the `dropbot.self_test.plot_*` helper for
+    `test_name`, returning an empty figure (after logging) when the test is
+    unrecognised or its results could not be loaded, rather than crashing.
+    """
+    plot_func = PLOT_FUNCTIONS_BY_TEST_NAME.get(test_name)
+    if plot_func is None:
+        logger.warning(f"No plot function registered for self-test '{test_name}'")
+        return Figure()
+    if results is None:
+        return Figure()
+
+    _, fig = plot_func(results, return_fig=True)
+    fig.tight_layout()
+    return fig
+
+
 class ResultsDialog(QDialog):
-    def __init__(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
+    def __init__(
+        self,
+        parent=None,
+        title="Test Results",
+        test_name=None,
+        results=None,
+        results_path=None,
+        failed_channels=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(600, 400)
+        self.resize(700, 500)
 
         layout = QVBoxLayout(self)
 
-        # Matplotlib canvas
-        if plot_data is not None:
-            fig = plot_data[-1]
-            fig.tight_layout()
-        else:
-            fig = Figure(figsize=(5, 3))
-        self.canvas = FigureCanvas(fig)
-        layout.addWidget(self.canvas)
+        # The backend writes the raw results to a JSON file and hands us the
+        # path (#611); we load it and render it ourselves, live, so the user
+        # can zoom, pan, rescale and save — it never crosses the pub/sub
+        # boundary as a rendered image or a matplotlib Figure.
+        fig = _build_results_figure(test_name, results)
+        self.canvas = FigureCanvasQTAgg(fig)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        toolbar = NavigationToolbar2QT(self.canvas, self)
+        layout.addWidget(toolbar)
+        layout.addWidget(self.canvas, stretch=1)
+
+        # Link to the raw data behind the plot; Qt opens file URLs with the
+        # system's default handler for .json.
+        if results_path:
+            link_label = QLabel(
+                f'<a href="{Path(results_path).resolve().as_uri()}">Raw data JSON</a>'
+            )
+            link_label.setOpenExternalLinks(True)
+            layout.addWidget(link_label, alignment=Qt.AlignLeft)
 
         # Show failed channel numbers if provided
         if failed_channels is not None:
             if failed_channels:
                 channel_list = ", ".join(str(ch) for ch in failed_channels)
-                label_text = f"<b>Failed channels ({len(failed_channels)}):</b> {channel_list}"
+                label_text = (
+                    f"<b>Failed channels ({len(failed_channels)}):</b> {channel_list}"
+                )
                 label_color = "color: red;"
             else:
                 label_text = "<b>All channels passed.</b>"
@@ -387,10 +459,32 @@ class ResultsDialog(QDialog):
 class ResultsDialogAction(Action):
     name = Str("&Results Dialog")
 
-    def perform(self, parent=None, title="Test Results", plot_data=None, failed_channels=None):
-        # The dialong is a child window of non UI class
-        dialog = ResultsDialog(parent=parent, title=title, plot_data=plot_data, failed_channels=failed_channels)
-        # use exec_() to block the main thread until the dialog is closed otherwise the window is garbage collected
+    def perform(
+        self,
+        parent=None,
+        title="Test Results",
+        test_name=None,
+        results_path=None,
+        failed_channels=None,
+    ):
+        # Resolve a Qt parent widget from the owning Task, same as
+        # WaitForTestDialogAction above.
+        gui_parent = (
+            getattr(parent.window, "control", None)
+            if hasattr(parent, "window")
+            else None
+        )
+        results = load_self_test_results(results_path) if results_path else None
+        dialog = ResultsDialog(
+            parent=gui_parent,
+            title=title,
+            test_name=test_name,
+            results=results,
+            results_path=results_path,
+            failed_channels=failed_channels,
+        )
+        # use exec_() to block the main thread until the dialog is closed
+        # otherwise the window is garbage collected
         dialog.exec_()
 
     def close(self):
@@ -443,7 +537,8 @@ class DropbotDisconnectedDialogAction(Action):
     name = Str("Dropbot &Disconnected Dialog")
 
     def perform(self, event):
-        # The dialog is a child window of the Task Action, so the parent is coming from the event.task.window.control
+        # The dialog is a child window of the Task Action, so the parent is
+        # coming from the event.task.window.control
         dialog = DropbotDisconnectedDialog(parent=event.task.window.control)
         result = dialog.exec_()
         if result == QDialog.Accepted:

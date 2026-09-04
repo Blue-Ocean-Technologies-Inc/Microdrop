@@ -21,9 +21,12 @@ from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
 from pyface.tasks.api import PaneItem, Task, TaskLayout, VSplitter
 from traits.api import Instance, provides
 
-from dropbot_controller.models.self_tests import TestEvent
+from dropbot_controller.models.self_tests import SelfTestResultsSignal, TestEvent
 from dropbot_controller.models.shorts import ShortsDetectedSignal
-from dropbot_tools_menu.self_test_dialogs import WaitForTestDialogAction
+from dropbot_tools_menu.self_test_dialogs import (
+    ResultsDialogAction,
+    WaitForTestDialogAction,
+)
 from electrode_controller.consts import disabled_channels_changed_publisher
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
 
@@ -53,6 +56,7 @@ class MicrodropTask(Task):
 
     # Child window should be an instance of Dialog Action
     wait_for_test_dialog = Instance(WaitForTestDialogAction)
+    results_dialog = Instance(ResultsDialogAction)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     microdrop_preferences = Instance(MicrodropPreferences)
 
@@ -218,6 +222,30 @@ class MicrodropTask(Task):
             QTimer.singleShot(1200, _cleanup_reference)
 
         GUI.invoke_later(_close)
+
+    def _on_self_tests_results_triggered(self, message):
+        """Present a single self-test's results dialog (#611).
+
+        The backend (`dropbot_self_tests_mixin_service`) writes the raw test
+        results to a JSON file and publishes its path, never a live
+        `matplotlib.Figure`, so it never has to import Qt or
+        `dropbot_tools_menu`; this task owns showing the dialog, same as the
+        progress dialog above, and the dialog itself loads and plots the
+        file interactively.
+        """
+        signal = SelfTestResultsSignal.model_validate_json(message)
+
+        def _show():
+            self.results_dialog = ResultsDialogAction()
+            self.results_dialog.perform(
+                self,
+                title=signal.title,
+                test_name=signal.test_name,
+                results_path=signal.results_path,
+                failed_channels=signal.failed_channels,
+            )
+
+        GUI.invoke_later(_show)
 
     def _on_shorts_detected_triggered(self, message):
         """
