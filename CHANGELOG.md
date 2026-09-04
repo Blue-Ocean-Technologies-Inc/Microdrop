@@ -1,3 +1,56 @@
+## [v1.20.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.0) (2026-09-04)
+
+### Feat
+
+- **dropbot**: link raw data JSON from the self-test report ([`106c804`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/106c804048dabcdd061d76e5b60ac417d2bf2e4f))
+- **tools-menu**: link the raw data JSON under the plot ([`3df0c50`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3df0c50713efc9839519e86a88a6aa2984d62eb5))
+- **tools-menu**: interactive self-test result plots ([`db374be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/db374bea5f68c68414bc0924c1e55e0286615224))
+
+### Fix
+
+- **dropbot**: log where self-test results are saved ([`837dc59`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/837dc5986706bce1c9570a5d9b5129a6a7b83a6e))
+- **utils**: log missing reflective handlers at debug ([`e4e0cb5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e4e0cb5f30e92c2ecddc607cad6b9cf7c58f3f1d))
+- **opendrop**: import OPENDROP_IMAGE from the right module ([`854084d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/854084dd1059171768b06f050c78a0905f27eb7e))
+- **device_viewer**: guard screen recording JSON parse ([`fef91d8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fef91d873c918c5a65b6f95599caba1e2a3d3c78))
+
+### Refactor
+
+- **status**: stop importing the preferences model ([`90bed98`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/90bed9801afc846acff0773af7c97b23bb5e4a1b))
+- **utils**: move force_for_step to microdrop_utils ([`965bd89`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/965bd8962c4115d25c133e914c8efbcb5ab14f07))
+- **dropbot**: publish raw self-test results ([`d84e63a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d84e63a96daccf79f6fdee4004387564e7924913))
+- **tools-menu**: show self-test results from the topic ([`6413d37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6413d3761c552df460a1394b12a36be73ecec294))
+- **dropbot**: publish self-test results as a topic ([`ef8d6d7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ef8d6d7d888e9eecbb350764e6198a1126b66160))
+- **device_viewer**: rename _show_media_capture_dialog ([`c142281`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c14228175422b0d2d19d3e8df4e42193e20d079f))
+
+### Docs
+
+- **agents**: say where lint-imports must run ([`a6073a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a6073a5aa6a26af814485b4dcbd938fa7032e5e4))
+- convention rollout design spec ([`0eb9c87`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0eb9c8731816358551e72e609e26c63cb43df5e5))
+- **agents**: note the unit-test partition runs in CI ([`7ef9d0f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7ef9d0fcc032dd166e2a745edbac411977308ca8))
+- **agents**: name the launcher's lint task correctly ([`b677f0b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b677f0bac343a8e75882a59ea123cb542136ff05))
+- **agents**: document import-linter enforcement ([`86f4d6c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/86f4d6c0da429e540416cd50e3429dcd7ae48723))
+- **agents**: note the import-section stamper hook ([`931b22a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/931b22acc81648ad0cebea221854663fa152d234))
+
+### CI
+
+- run the import-linter contract as its own check ([`a0f4867`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a0f4867be50f3e5cb6a1f191a3fb39d0dab2d7d9))
+- gate PRs on the import-linter contract ([`c854c9b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c854c9bda044ca175b3460e2331c09a515d77787))
+- run the unit-test job on ubuntu-latest ([`8f3b936`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f3b936aaacc47923552848a235272909e277dec))
+- run the pure-unit pytest partition on PRs ([`1921478`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1921478b2b2c3bdcbca378cb635a961f50e42b64))
+
+### Style
+
+- **utils**: bring dramatiq_controller_base ruff-clean ([`6334b1a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6334b1abac6393c5cdd0cb4cc82156e7a1c7b626))
+- **device_viewer**: label import sections in dock pane ([`835aa98`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/835aa985eaf9b70beb5c6abe46fc2e988404354d))
+
+### Chore
+
+- **pre-commit**: consume microdrop-dev-hooks, drop tools/ ([`ff82a61`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ff82a611d93246909323d2a94e4e61413113f8b0))
+- **lint**: drop import-linter debt fixed by #657 and #658 ([`749fd81`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/749fd81ccc98c571e7f13fcae31da790500a558d))
+- **lint**: enforce plugin decoupling with import-linter ([`6725d0e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6725d0e59db22e3edf8ce37a8936633d2b0cf95c))
+- **tooling**: stamp import-section headers in pre-commit ([`c3b9c81`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c3b9c810bd44df14b0b5fedbff3a46227011ec90))
+- **camera-control**: bring camera control view ruff-clean ([`b270ba7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b270ba751690173f31ddf54e87b5819dc45a0e69))
+
 ## [v1.19.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.19.0) (2026-09-03)
 
 ### Feat
