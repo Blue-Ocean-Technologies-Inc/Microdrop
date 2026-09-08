@@ -14,9 +14,6 @@ from pydantic import BaseModel, Field
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
-# Local imports.
-from .driver.commands_generated import DroSIGCmd
-
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -82,10 +79,11 @@ PMT_SPOT_SLOTS = 5
 #: boxcar samples per value; osr index 6 = 64x). Measured ~23 ms per value.
 PMT_STREAM_AVG = 16
 PMT_STREAM_OSR = 6
-#: The stream's data frames arrive on this command id via uart.subscribe.
-STREAM_DATA_CMD = int(DroSIGCmd.CMD_PMT_STREAM_DATA)
+#: Stream data frames arrive on this command id (DroSIGCmd.CMD_PMT_STREAM_DATA
+#: in the vendored driver's commands_generated.py).
+PMT_STREAM_DATA_CMD = 0x123F
 #: Abort/deadline polling slice while a capture stream is open.
-STREAM_WAIT_SLICE_S = 0.05
+PMT_STREAM_WAIT_SLICE_S = 0.05
 #: Exposure per spot in seconds — the stream duration.
 PMT_EXPOSURE_S_BOUNDS = (0.1, 600.0)
 DEFAULT_PMT_EXPOSURE_S = 2.0

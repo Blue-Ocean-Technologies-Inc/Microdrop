@@ -24,6 +24,7 @@ from portable_dropbot_controller.consts import (
     PMT_GAIN_BOUNDS,
     PMT_SPOT_SLOTS,
     PMT_SPOTS_UPDATED,
+    PMT_STREAM_DATA_CMD,
     PmtCaptureDone,
     PmtCaptureEntry,
     PmtCaptureRequest,
@@ -33,6 +34,7 @@ from portable_dropbot_controller.consts import (
     pmt_capture_publisher,
     pmt_spots_updated_publisher,
 )
+from portable_dropbot_controller.driver.commands_generated import DroSIGCmd
 
 
 def test_publishers_are_bound_to_their_topics_and_models():
@@ -70,3 +72,10 @@ def test_spots_updated_round_trips_through_json():
 def test_capture_done_defaults():
     done = PmtCaptureDone(ok=False, aborted=False, directory="", results=[])
     assert done.error == ""
+
+
+def test_stream_data_cmd_matches_the_driver():
+    # consts.py keeps this a literal so importing it never loads the
+    # vendored driver; this test is where that literal is checked against
+    # the generated enum it was copied from.
+    assert PMT_STREAM_DATA_CMD == int(DroSIGCmd.CMD_PMT_STREAM_DATA)

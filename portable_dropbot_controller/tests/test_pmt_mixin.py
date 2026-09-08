@@ -93,10 +93,10 @@ class _Sig:
                 self.fail_starts -= 1
                 return None
             # Deliver two frames the way the RX thread would, then reply.
-            cb = self.uart.subscribers.get(mod.STREAM_DATA_CMD)
+            cb = self.uart.subscribers.get(mod.PMT_STREAM_DATA_CMD)
             if cb is not None:
-                cb(mod.STREAM_DATA_CMD, _frame(0, [10, 20]))
-                cb(mod.STREAM_DATA_CMD, _frame(1, [30, 40]))
+                cb(mod.PMT_STREAM_DATA_CMD, _frame(0, [10, 20]))
+                cb(mod.PMT_STREAM_DATA_CMD, _frame(1, [30, 40]))
             return self.stream_start_reply
         return object()
 
