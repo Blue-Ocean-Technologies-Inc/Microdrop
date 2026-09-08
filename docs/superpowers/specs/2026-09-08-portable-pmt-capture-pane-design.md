@@ -50,9 +50,12 @@ PMT_SPOT_SLOTS = 5
 #: samples per value; osr index 6 = 64x). Measured ~23 ms per value.
 PMT_STREAM_AVG = 16
 PMT_STREAM_OSR = 6
-#: Exposure per spot in seconds (stream duration).
-PMT_EXPOSURE_S_BOUNDS = (0.1, 600.0)
-DEFAULT_PMT_EXPOSURE_S = 2.0
+#: Exposure per spot in seconds (stream duration). At avg=16 the board
+#: emits ~1 packet of 62 values per second, so the lower bound is set to
+#: guarantee at least a few packets (a sub-second exposure would reliably
+#: come back with "no stream frames received").
+PMT_EXPOSURE_S_BOUNDS = (1.0, 600.0)
+DEFAULT_PMT_EXPOSURE_S = 10.0
 #: Counts -> volts -> amps, per the driver's PMT tab (2026-07-30 TIA rework):
 #: ADS7076 16-bit, nominal 4.98 V reference (untrimmed, known), Rf 499 kΩ.
 #: Gain is deliberately NOT folded in (it changes the tube's real output).

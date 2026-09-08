@@ -84,9 +84,12 @@ PMT_STREAM_OSR = 6
 PMT_STREAM_DATA_CMD = 0x123F
 #: Abort/deadline polling slice while a capture stream is open.
 PMT_STREAM_WAIT_SLICE_S = 0.05
-#: Exposure per spot in seconds — the stream duration.
-PMT_EXPOSURE_S_BOUNDS = (0.1, 600.0)
-DEFAULT_PMT_EXPOSURE_S = 2.0
+#: Exposure per spot in seconds — the stream duration. At avg=16 the board
+#: emits ~1 packet of 62 values per second, so the lower bound is set to
+#: guarantee at least a few packets (a sub-second exposure would reliably
+#: come back with "no stream frames received").
+PMT_EXPOSURE_S_BOUNDS = (1.0, 600.0)
+DEFAULT_PMT_EXPOSURE_S = 10.0
 #: Counts -> volts -> amps, per the driver's PMT tab (2026-07-30 TIA rework):
 #: ADS7076 16-bit, nominal 4.98 V reference (untrimmed, a known hardware
 #: issue), Rf 499 kΩ. Gain is deliberately NOT folded in — the MCP41010

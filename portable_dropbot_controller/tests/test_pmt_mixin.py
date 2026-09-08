@@ -204,8 +204,8 @@ def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
         h,
         _request(
             [
-                {"slot": 3, "gain": 100, "exposure_s": 0.1},
-                {"slot": 1, "gain": 50, "exposure_s": 0.1},
+                {"slot": 3, "gain": 100, "exposure_s": 1.0},
+                {"slot": 1, "gain": 50, "exposure_s": 1.0},
             ]
         ),
     )
@@ -254,8 +254,8 @@ def test_failed_stream_start_records_error_and_continues(published):
         h,
         _request(
             [
-                {"slot": 2, "gain": 10, "exposure_s": 0.1},
-                {"slot": 4, "gain": 20, "exposure_s": 0.1},
+                {"slot": 2, "gain": 10, "exposure_s": 1.0},
+                {"slot": 4, "gain": 20, "exposure_s": 1.0},
             ]
         ),
     )
@@ -279,7 +279,7 @@ def test_second_request_while_running_is_refused(published):
     h = _Harness()
     h.proxy = _Session(h.log)
     h._pmt_capturing = True
-    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 0.1}]))
+    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
     assert published["done"] == [
         {
             "ok": False,
@@ -313,7 +313,7 @@ def test_malformed_request_still_publishes_a_done_refusal(published):
 def test_capture_with_no_proxy_still_acks_a_failed_done(published):
     h = _Harness()
     h.proxy = None
-    _run(h, _request([{"slot": 1, "gain": 10, "exposure_s": 0.1}]))
+    _run(h, _request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
     done = published["done"][-1]
     assert done["ok"] is False
     assert done["error"] != ""
