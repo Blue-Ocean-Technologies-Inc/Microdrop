@@ -8,13 +8,18 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import os
 
+# Microdrop package imports.
 from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
     MOTOR_PARAMS_UPDATED,
+    PMT_CAPTURE_DONE,
+    PMT_CAPTURE_PROGRESS,
+    PMT_SPOTS_UPDATED,
     PMT_UPDATED,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
@@ -46,6 +51,7 @@ MOTORS_LISTENER = f"{PKG}_motors_listener"
 CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
 MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
 ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
+PMT_CAPTURE_LISTENER = f"{PKG}_pmt_capture_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -74,6 +80,13 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         TEMP_UPDATED,
         PMT_UPDATED,
+    ],
+    PMT_CAPTURE_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        PMT_SPOTS_UPDATED,
+        PMT_CAPTURE_PROGRESS,
+        PMT_CAPTURE_DONE,
     ],
     #: The advanced-only pane also tracks the Edit-menu Advanced Mode
     #: toggle, which is what unlocks its controls.
