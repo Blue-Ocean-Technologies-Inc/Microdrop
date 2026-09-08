@@ -177,6 +177,16 @@ def _request(entries):
     return json.dumps({"entries": entries})
 
 
+def _run(h, message):
+    """Call the handler, then join the capture thread it may have started
+    (a refusal starts none — `_pmt_capture_thread` stays at its default
+    `None`) so every assertion below still sees the routine's finished
+    state, the way it did back when the routine ran inline."""
+    h.on_pmt_capture_request(message)
+    if h._pmt_capture_thread is not None:
+        h._pmt_capture_thread.join(timeout=5)
+
+
 def test_spots_read_publishes_non_zero_slots(published):
     h = _Harness()
     h.proxy = _Session(h.log)
@@ -190,13 +200,14 @@ def test_spots_read_publishes_non_zero_slots(published):
 def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
     h = _Harness()
     h.proxy = _Session(h.log)
-    h.on_pmt_capture_request(
+    _run(
+        h,
         _request(
             [
                 {"slot": 3, "gain": 100, "exposure_s": 0.1},
                 {"slot": 1, "gain": 50, "exposure_s": 0.1},
             ]
-        )
+        ),
     )
     assert h.log == [
         "led 0",
@@ -239,13 +250,14 @@ def test_failed_stream_start_records_error_and_continues(published):
     h = _Harness()
     # Only the first stream start fails, so the second spot must still run.
     h.proxy = _Session(h.log, fail_starts=1)
-    h.on_pmt_capture_request(
+    _run(
+        h,
         _request(
             [
                 {"slot": 2, "gain": 10, "exposure_s": 0.1},
                 {"slot": 4, "gain": 20, "exposure_s": 0.1},
             ]
-        )
+        ),
     )
     done = published["done"][-1]
     assert done["ok"] is False
@@ -301,7 +313,7 @@ def test_malformed_request_still_publishes_a_done_refusal(published):
 def test_capture_with_no_proxy_still_acks_a_failed_done(published):
     h = _Harness()
     h.proxy = None
-    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 0.1}]))
+    _run(h, _request([{"slot": 1, "gain": 10, "exposure_s": 0.1}]))
     done = published["done"][-1]
     assert done["ok"] is False
     assert done["error"] != ""
@@ -334,13 +346,14 @@ def test_abort_stops_after_current_spot(published):
         return reply
 
     h.proxy.sig.pmt_stream = stream_and_abort
-    h.on_pmt_capture_request(
+    _run(
+        h,
         _request(
             [
                 {"slot": 1, "gain": 10, "exposure_s": 5.0},
                 {"slot": 2, "gain": 10, "exposure_s": 5.0},
             ]
-        )
+        ),
     )
     done = published["done"][-1]
     assert done["aborted"] is True

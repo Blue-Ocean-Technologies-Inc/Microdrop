@@ -21,6 +21,11 @@ gain -> stream for the exposure -> stream stop -> CSV, with a teardown
 that always reaches stream stop and power off. The proxy lock is taken
 per command, not for the whole routine, so the status poll keeps the
 status pane live over a multi-minute capture.
+
+The routine runs on a daemon thread, not inline in the Dramatiq actor: a
+600 s exposure bound makes a multi-spot table run well past the actor's
+default 600 s time limit, and an interrupted handler would leave the
+pane stuck at capturing=True with the message retried against the board.
 """
 
 # Standard library imports.
@@ -33,7 +38,7 @@ from datetime import datetime
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import Bool, Dict, HasTraits, Instance, Int, Str, provides
+from traits.api import Any, Bool, Dict, HasTraits, Instance, Int, Str, provides
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
@@ -87,6 +92,19 @@ class PortableDropbotPmtMixinService(HasTraits):
     #: Set by PMT_CAPTURE_ABORT; the routine polls it between stream wait
     #: slices and before each spot.
     _pmt_capture_abort = Instance(threading.Event)
+    #: The routine's daemon thread — started and returned from immediately
+    #: by on_pmt_capture_request so no Dramatiq actor time limit applies.
+    _pmt_capture_thread = Instance(threading.Thread)
+    #: Serializes the read-check-set of `_pmt_capturing` and the abort
+    #: event's creation, so two requests racing on different worker
+    #: threads cannot both claim the routine at once. `Instance(threading
+    #: .Lock)` is rejected on Python 3.12 (the Pi's interpreter), hence
+    #: `Any()` with a `_default` — see `_proxy_lock` in the controller base.
+    _pmt_capture_claim = Any()
+
+    def __pmt_capture_claim_default(self):
+        return threading.Lock()
+
     #: slot -> position_um from the last spots read, for the CSV preamble.
     _pmt_spot_positions = Dict(Int, Int)
 
@@ -218,34 +236,39 @@ class PortableDropbotPmtMixinService(HasTraits):
         logger.warning(f"Portable Dropbot PMT capture refused: {error}")
 
     def on_pmt_capture_request(self, message):
-        """Run the multi-spot capture inline; the done publish is the ack."""
+        """Validate, claim, and hand the routine to a daemon thread; the
+        handler returns at once so no Dramatiq actor time limit applies
+        to a multi-minute capture. The done publish, from that thread,
+        is the ack."""
         try:
             request = PmtCaptureRequest.model_validate_json(str(message))
         except ValidationError as error:
             self._publish_error("PMT capture", error)
             self._refuse_pmt_capture(str(error).splitlines()[0])
             return
-        refusal = (
-            "a PMT capture is already running"
-            if self._pmt_capturing
-            else "no spots ticked"
-            if not request.entries
-            else ""
-        )
-        if refusal:
-            self._refuse_pmt_capture(refusal)
+        if not request.entries:
+            self._refuse_pmt_capture("no spots ticked")
             return
-        # Claim the routine right after the refusal check: the flag and
-        # the abort event it guards must both be live before any I/O
-        # below, or a second request racing in during that window would
-        # drive the tube from two threads at once, and an abort arriving
-        # in that same window would find no event to set.
-        self._pmt_capturing = True
-        self._pmt_capture_abort = threading.Event()
+        # Claim the routine: the read-check-set of _pmt_capturing and the
+        # abort event's creation is held under one lock so two requests
+        # racing in on different worker threads cannot both claim it —
+        # one would otherwise drive the tube from two threads at once,
+        # and an abort arriving in that window would find no event to set.
+        with self._pmt_capture_claim:
+            already_running = self._pmt_capturing
+            if not already_running:
+                self._pmt_capturing = True
+                self._pmt_capture_abort = threading.Event()
+        if already_running:
+            self._refuse_pmt_capture("a PMT capture is already running")
+            return
+        abort = self._pmt_capture_abort
         try:
             directory = get_current_experiment_directory() / PMT_CAPTURE_SUBDIR
             directory.mkdir(parents=True, exist_ok=True)
         except Exception as error:
+            # Broad except: any filesystem/preferences failure here must
+            # become a refusal ack, never an unhandled exception.
             self._pmt_capturing = False
             self._pmt_capture_abort = None
             logger.exception(f"Portable Dropbot PMT capture directory FAILED: {error}")
@@ -255,10 +278,19 @@ class PortableDropbotPmtMixinService(HasTraits):
             f"Portable Dropbot PMT capture started: "
             f"{len(request.entries)} spot(s) -> {directory}"
         )
+        self._pmt_capture_thread = threading.Thread(
+            target=self._capture_and_finish,
+            args=(request.entries, directory, abort),
+            daemon=True,
+            name="pmt-capture",
+        )
+        self._pmt_capture_thread.start()
+
+    def _capture_and_finish(self, entries, directory, abort):
+        """Thread body: run the routine, clear the claim, then publish and
+        log the outcome — the part that used to run inline in the handler."""
         try:
-            done = self._run_pmt_capture(
-                request.entries, directory, self._pmt_capture_abort
-            )
+            done = self._run_pmt_capture(entries, directory, abort)
         finally:
             self._pmt_capturing = False
             self._pmt_capture_abort = None
@@ -279,8 +311,10 @@ class PortableDropbotPmtMixinService(HasTraits):
         # None until the proxy unpack below succeeds; the finally block
         # only tears down what was actually opened.
         uart = sig = None
-        self._publish_pmt(acquiring=True)
         try:
+            # Inside the try, not before it: a raise from the publish
+            # itself must still reach the guaranteed teardown below.
+            self._publish_pmt(acquiring=True)
             # self.proxy can vanish between the dispatcher's connection
             # check and here (a disconnect racing this worker thread);
             # that shows up as an AttributeError on the unpack below,
@@ -288,6 +322,9 @@ class PortableDropbotPmtMixinService(HasTraits):
             # instead of an uncaught exception.
             if self.proxy is None:
                 raise RuntimeError("PMT capture: no proxy connected")
+            # pmt_stream/pmt_gain_set/pmt_power live only on the generated
+            # sig/motor proxies, not the uart facade the single-acquire
+            # path uses — one dialect per routine keeps the log readable.
             uart, sig, motor = self.proxy.uart, self.proxy.sig, self.proxy.motor
             self._proxy_call(
                 "PMT capture: fluorescence LED off",
@@ -353,7 +390,11 @@ class PortableDropbotPmtMixinService(HasTraits):
                     )
                     if not ok or reply is None:
                         raise RuntimeError("stream start: no reply (BUSY or timeout)")
-                    deadline = started + entry.exposure_s
+                    # started (for duration_s) is taken before the start
+                    # command's round-trip; deadline is taken after the
+                    # reply is checked so the real stream window is not
+                    # short by that round-trip's latency.
+                    deadline = time.monotonic() + entry.exposure_s
                     while time.monotonic() < deadline:
                         if abort.is_set():
                             aborted = True
@@ -435,7 +476,11 @@ class PortableDropbotPmtMixinService(HasTraits):
     def _read_board_uids(self):
         """Both boards' factory UIDs for the CSV preamble; best-effort — a
         board answering with something unexpected never aborts the
-        capture, it just leaves that UID "unavailable"."""
+        capture, it just leaves that UID "unavailable".
+
+        uart.read_uid() -> hex str, motor.read_uid() -> NamedTuple with
+        raw bytes: the asymmetry is the driver's, not a bug here.
+        """
         ok, uid = self._proxy_call(
             "PMT capture: signal UID", lambda: self.proxy.uart.read_uid()
         )
