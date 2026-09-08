@@ -8,6 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
+from pydantic import BaseModel, Field
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -65,6 +71,26 @@ TEMP_PID_PERIOD_MS_BOUNDS = (1, 60_000)
 #: PMT gain is the MCP41010 wiper position (one byte).
 PMT_GAIN_BOUNDS = (0, 255)
 DEFAULT_PMT_GAIN = 128
+
+#: Firmware slot count of the PMT position table (PMTPositionParams.pos):
+#: MotorBoardProxy.pmt_ctrl(slot) takes 1..PMT_SPOT_SLOTS.
+PMT_SPOT_SLOTS = 5
+#: Stream averaging / oversampling, the driver bench UI's defaults (avg=16
+#: boxcar samples per value; osr index 6 = 64x). Measured ~23 ms per value.
+PMT_STREAM_AVG = 16
+PMT_STREAM_OSR = 6
+#: Exposure per spot in seconds — the stream duration.
+PMT_EXPOSURE_S_BOUNDS = (0.1, 600.0)
+DEFAULT_PMT_EXPOSURE_S = 2.0
+#: Counts -> volts -> amps, per the driver's PMT tab (2026-07-30 TIA rework):
+#: ADS7076 16-bit, nominal 4.98 V reference (untrimmed, a known hardware
+#: issue), Rf 499 kΩ. Gain is deliberately NOT folded in — the MCP41010
+#: wiper changes the tube's real output current, it is not a scale factor.
+PMT_ADC_FULL_SCALE = 65536
+PMT_VREF_V = 4.98
+PMT_RF_OHMS = 499_000.0
+#: Capture output folder under the experiment directory.
+PMT_CAPTURE_SUBDIR = "captures/pmt"
 
 #: Protocol-step contracts (portable_dropbot_protocol_controls drives
 #: these). The heater channel a protocol's temperature column targets:
@@ -160,6 +186,12 @@ CALIBRATION_UPDATED = "portable_dropbot/signals/calibration_updated"
 TEMP_UPDATED = "portable_dropbot/signals/temp_updated"
 #: PMT pane feedback: power state, gain, acquire results.
 PMT_UPDATED = "portable_dropbot/signals/pmt_updated"
+#: PMT Capture pane: the board's configured spots (PmtSpotsUpdated), per-spot
+#: progress of a running capture (PmtCaptureProgress), and the outcome
+#: (PmtCaptureDone).
+PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"
+PMT_CAPTURE_PROGRESS = "portable_dropbot/signals/pmt_capture_progress"
+PMT_CAPTURE_DONE = "portable_dropbot/signals/pmt_capture_done"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
@@ -221,6 +253,12 @@ PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"
 PMT_POWER = "portable_dropbot/requests/pmt_power"
 PMT_SET_GAIN = "portable_dropbot/requests/pmt_set_gain"
 PMT_ACQUIRE = "portable_dropbot/requests/pmt_acquire"
+#: Re-read the motor board's PMT position table and publish PMT_SPOTS_UPDATED.
+PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"
+#: Run the multi-spot capture routine (PmtCaptureRequest); one CSV per spot.
+PMT_CAPTURE = "portable_dropbot/requests/pmt_capture"
+#: Stop the running capture after the current spot's teardown.
+PMT_CAPTURE_ABORT = "portable_dropbot/requests/pmt_capture_abort"
 # Power system (advanced): fan and buzzer only.
 SET_FAN = "portable_dropbot/requests/set_fan"
 SET_BUZZER = "portable_dropbot/requests/set_buzzer"
@@ -246,3 +284,84 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
     ]
 }
+
+# --------------------------------------------------------------------- #
+# PMT capture message contracts (topic + schema, one importable unit)    #
+# --------------------------------------------------------------------- #
+
+
+class PmtSpot(BaseModel):
+    """One configured PMT motor slot and its Y-axis position."""
+
+    slot: int = Field(ge=1, le=PMT_SPOT_SLOTS)
+    position_um: int
+
+
+class PmtSpotsUpdated(BaseModel):
+    """The configured slots, ascending; empty when the table has none."""
+
+    spots: list[PmtSpot]
+
+
+class PmtCaptureEntry(BaseModel):
+    """One spot to capture: where, at what gain, for how long."""
+
+    slot: int = Field(ge=1, le=PMT_SPOT_SLOTS)
+    gain: int = Field(ge=PMT_GAIN_BOUNDS[0], le=PMT_GAIN_BOUNDS[1])
+    exposure_s: float = Field(ge=PMT_EXPOSURE_S_BOUNDS[0], le=PMT_EXPOSURE_S_BOUNDS[1])
+
+
+class PmtCaptureRequest(BaseModel):
+    """Capture order is list order; only ticked spots are sent."""
+
+    entries: list[PmtCaptureEntry]
+
+
+class PmtCaptureProgress(BaseModel):
+    """Per-stage progress of the running capture."""
+
+    index: int
+    total: int
+    slot: int
+    #: "move" | "gain" | "stream" | "saved" | "failed"
+    stage: str
+    detail: str = ""
+
+
+class PmtSpotResult(BaseModel):
+    """Summary of one spot's capture; csv_path empty when nothing was saved."""
+
+    slot: int
+    gain: int
+    exposure_s: float
+    n_samples: int
+    mean_counts: float
+    sd_counts: float
+    min_counts: int
+    max_counts: int
+    csv_path: str = ""
+    error: str = ""
+
+
+class PmtCaptureDone(BaseModel):
+    """Outcome of a capture request; `error` is request-level (refused)."""
+
+    ok: bool
+    aborted: bool
+    directory: str
+    results: list[PmtSpotResult]
+    error: str = ""
+
+
+pmt_spots_updated_publisher = ValidatedTopicPublisher(
+    topic=PMT_SPOTS_UPDATED, validator_class=PmtSpotsUpdated
+)
+pmt_capture_publisher = ValidatedTopicPublisher(
+    topic=PMT_CAPTURE, validator_class=PmtCaptureRequest
+)
+pmt_capture_progress_publisher = ValidatedTopicPublisher(
+    topic=PMT_CAPTURE_PROGRESS, validator_class=PmtCaptureProgress
+)
+pmt_capture_done_publisher = ValidatedTopicPublisher(
+    topic=PMT_CAPTURE_DONE, validator_class=PmtCaptureDone
+)
