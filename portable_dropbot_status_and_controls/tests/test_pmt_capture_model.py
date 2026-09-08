@@ -56,9 +56,9 @@ def test_capture_entries_honours_ticks_and_order():
     m.rows = [
         PmtSpotRow(slot=2, position_um=0, gain=90, exposure_s=1.5),
         PmtSpotRow(slot=1, position_um=0, capture=False),
-        PmtSpotRow(slot=5, position_um=0, gain=10, exposure_s=0.5),
+        PmtSpotRow(slot=5, position_um=0, gain=10, exposure_s=2.5),
     ]
     assert m.capture_entries() == [
         {"slot": 2, "gain": 90, "exposure_s": 1.5},
-        {"slot": 5, "gain": 10, "exposure_s": 0.5},
+        {"slot": 5, "gain": 10, "exposure_s": 2.5},
     ]
