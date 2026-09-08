@@ -8,6 +8,8 @@
 # Import and use: from proxy import SignalBoardProxy, MotorBoardProxy
 
 from __future__ import annotations
+
+# Standard library imports.
 import struct
 import time
 from typing import NamedTuple, TYPE_CHECKING

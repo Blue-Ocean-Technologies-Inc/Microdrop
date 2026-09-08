@@ -7,6 +7,7 @@
 #   DroSIG firmware: DroSIG_1.0.1.26-8-g724f7a9
 #   DroDri firmware: DroDri_1.0.0.19-6-g845a12f-dirty
 
+# Standard library imports.
 from enum import IntEnum
 
 DroSIG_FW_VERSION = "DroSIG_1.0.1.26-8-g724f7a9"  # firmware this was generated from

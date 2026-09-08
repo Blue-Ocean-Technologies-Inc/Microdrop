@@ -1,4 +1,4 @@
-import serial
+# Standard library imports.
 import random
 import threading
 import collections
@@ -7,14 +7,16 @@ import struct
 import time
 import ctypes
 import logging
-
 from typing import Callable
-
-import numpy as np
-
-from tqdm import tqdm
 from pathlib import Path
 from enum import IntEnum
+
+# Third-party imports.
+import serial
+import numpy as np
+from tqdm import tqdm
+
+# Local imports.
 from .commands import Frame, MotorBoard, SignalBoard, Alarms
 
 log = logging.getLogger(__name__)

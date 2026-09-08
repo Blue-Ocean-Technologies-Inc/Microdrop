@@ -10,6 +10,7 @@ clean, Pythonic interface. Supports context manager usage::
         print(caps)
 """
 
+# Standard library imports.
 import json
 import logging
 import struct
@@ -18,8 +19,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+# Third-party imports.
 import numpy as np
 
+# Local imports.
 from .portable_dropbot_service import DropletBotUart, APP_BAUD_WHITELIST
 from .commands import SignalBoard, MotorBoard
 
