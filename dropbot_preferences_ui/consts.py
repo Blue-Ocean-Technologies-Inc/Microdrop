@@ -50,3 +50,18 @@ VOLTAGE_FREQUENCY_RANGE_APP_GLOBALS_KEYS = (
     UI_MAX_FREQUENCY_KEY,
     UI_DEFAULT_FREQUENCY_KEY,
 )
+
+
+def __getattr__(name):
+    """Expose the preferences helper through the consts contract.
+
+    `VoltageFrequencyRangePreferences` (models.py) is the typed accessor for
+    the persisted UI voltage/frequency preferences, so sibling plugins may use
+    it under the consts-only import rule. Resolved lazily because models.py
+    imports this module.
+    """
+    if name == "VoltageFrequencyRangePreferences":
+        from .models import VoltageFrequencyRangePreferences
+
+        return VoltageFrequencyRangePreferences
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

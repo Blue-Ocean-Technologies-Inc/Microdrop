@@ -148,6 +148,5 @@ ignore_imports =
     # --- Seeded debt: other direct model/service/interface reach-ins ---
     portable_dropbot_controller.services.portable_dropbot_electrodes_mixin_service -> electrode_controller.models
     electrode_controller.plugin -> dropbot_controller.interfaces.i_dropbot_control_mixin_service
-    manual_controls.MVC -> dropbot_preferences_ui.models
     volume_threshold_protocol_controls.protocol_columns.volume_threshold_column -> dropbot_protocol_controls.services.force_math
     volume_threshold_protocol_controls.demos.vt_test_harness -> dropbot_protocol_controls.services.force_math
