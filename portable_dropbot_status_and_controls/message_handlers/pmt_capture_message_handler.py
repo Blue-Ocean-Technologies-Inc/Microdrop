@@ -56,7 +56,10 @@ class PortableDropbotPmtCaptureMessageHandler(BaseMessageHandler):
     def _on_pmt_capture_done_triggered(self, body):
         done = PmtCaptureDone.model_validate_json(str(body))
         self.model.capturing = False
-        self.model.results_directory = done.directory
+        # A refusal carries directory="" — never overwrite the previous
+        # run's path with that.
+        if done.directory:
+            self.model.results_directory = done.directory
         saved = sum(1 for r in done.results if r.csv_path)
         failed = [r for r in done.results if r.error]
         if done.error:
