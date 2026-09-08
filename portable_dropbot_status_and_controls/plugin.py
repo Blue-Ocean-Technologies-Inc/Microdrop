@@ -36,11 +36,13 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
             PortableDropbotCalibrationDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotMotorsDockPane,
+            PortableDropbotPmtCaptureDockPane,
         )
 
         return [
             PortableDropbotMotorsDockPane,
             PortableDropbotCalibrationDockPane,
+            PortableDropbotPmtCaptureDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotAdvancedControlsDockPane,
         ]
