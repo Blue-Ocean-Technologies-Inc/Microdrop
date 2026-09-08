@@ -105,7 +105,6 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     def traits_init(self):
         """Start voltage/frequency from the persisted last-applied values."""
-        super().traits_init()
         self.voltage = int(self.range_preferences.ui_default_voltage)
         self.frequency = int(self.range_preferences.ui_default_frequency)
 
