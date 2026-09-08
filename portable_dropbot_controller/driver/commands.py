@@ -1,3 +1,9 @@
+# Standard library imports.
+import logging
+
+_log = logging.getLogger(__name__)
+
+
 class Frame:
     # --------------------------------------------------------
     # Frame Header Constants
@@ -279,17 +285,6 @@ class SignalBoard:
         HEAD << 8
     ) | 0x34  # Capacitance detection progress: data[0]=index, data[1]=value
     CAP_SHORT_DETECT = (HEAD << 8) | 0x30    # Capacitor short detect → resp u8 (0=ok, 1=short)
-    # Vendored from upstream proxy.py (not in upstream commands.py, which
-    # hardcodes the codes at the call sites). HV_ENABLE shares 0x34 with the
-    # unsolicited CAP_PROGRESS_REPORT above — the request direction is HV
-    # enable, per the working vendor UI.
-    HV_ENABLE = (HEAD << 8) | 0x34           # u8 enable, u8 bypass → resp u8 status
-    CAL_CAPS_GET = (HEAD << 8) | 0x48        # → resp u8 reference-cap count (3 or 5)
-    CAL_CAPS_SET = (HEAD << 8) | 0x49        # u8 count (3|5, EF-persisted) → resp u8 echo
-    CAP_CALIBRATE_ML = (HEAD << 8) | 0x4A    # u16 hv_mv → resp u8 status (blocking ~6 s)
-    CAP_ML_GET = (HEAD << 8) | 0x4B          # u8 level (0=HIGH,1=MED,2=LOW) → fit blob
-    CAP_ML_REALTIME = (HEAD << 8) | 0x4E     # u8 mode (255=query) → resp u8 current
-    CAP_ELEC_GAIN = (HEAD << 8) | 0x4F       # u16 permille (0=query) → resp u16 current
     LOADED_SHORT_DETECT = (
         HEAD << 8
     ) | 0xAC  # Chip load status & short detection → returns u8 chip loaded (0/1), u8 short(0/1)
@@ -358,6 +353,69 @@ class SignalBoard:
     REQ_MT_GET_POS = (HEAD << 8) | 0xB3  # Query motor position
 
 
+_GENERATED_ALARM_TABLES: "list[dict[str, str]] | None" = None
+
+
+def generated_alarm_tables() -> "list[dict[str, str]]":
+    """The per-board alarm tables generated from each firmware's alarm.c.
+
+    [review 2026-08-31, A12] This used to be a bare `from proxy import ...`
+    inside `Alarms.to_str`, wrapped in `except ImportError: pass`. The
+    launcher (`full_test_ui.py:14-16`) puts the REPO ROOT on sys.path, not
+    `python/`, so under the running app that bare import always failed and
+    the failure was swallowed: all 83 motor-board alarm descriptions and all
+    16 signal-board ones were dead, and every motor alarm in the alarm panel
+    and the log pane read `Unknown alarm code: 04xxx`. The MCU's 16 survived
+    only through the hand-written static fallback below -- which is exactly
+    the firmware drift the generated table exists to prevent. It "worked" for
+    a script run with cwd=python/, which is why it survived.
+
+    Resolved once, against all three import styles this repo is used under
+    (package-relative, `python.` qualified, bare `python/` on sys.path), and
+    a total failure is LOGGED rather than silently degraded -- the silent
+    fallback is what hid this for so long.
+    """
+    global _GENERATED_ALARM_TABLES
+    if _GENERATED_ALARM_TABLES is not None:
+        return _GENERATED_ALARM_TABLES
+
+    tables: "list[dict[str, str]]" = []
+    mod = None
+    errors = []
+    for importer in (
+        lambda: __import__("python.proxy", fromlist=["proxy"]),
+        lambda: __import__("proxy"),
+    ):
+        try:
+            mod = importer()
+            break
+        except ImportError as exc:  # noqa: PERF203 - three cheap attempts
+            errors.append(str(exc))
+    if mod is None:
+        # Last resort: relative to this package, which works when `commands`
+        # was itself imported as `python.commands`.
+        try:
+            from . import proxy as mod  # type: ignore[no-redef]
+        except (ImportError, ValueError) as exc:
+            errors.append(str(exc))
+            mod = None
+
+    if mod is not None:
+        for name in ("MotorBoardAlarms", "SignalBoardAlarms"):
+            table = getattr(getattr(mod, name, None), "CODES", None)
+            if table:
+                tables.append(table)
+
+    if not tables:
+        _log.warning(
+            "alarm decoding degraded: the generated per-board tables could "
+            "not be imported (%s). Motor-board alarms will render as "
+            "'Unknown alarm code'. Tried python.proxy, proxy and .proxy.",
+            "; ".join(errors) or "no CODES attribute")
+    _GENERATED_ALARM_TABLES = tables
+    return tables
+
+
 class Alarms:
     ALARM_MT_HW_CODE = "A0100"  # Motor board hardware alarm code
     ALARM_MT_TMP_SENS_FAULT = "A0200"  # Signal board temperature sensor fault
@@ -366,9 +424,32 @@ class Alarms:
     ALARM_MT_OVER_CURRENT = "B0101"  # Motor board over current alarm code
     ALARM_MT_OVER_STEP = "B0103"  # Motor board over step alarm code
     ALARM_MT_OPTO_CODE = "B0200"  # Motor board opto alarm code
+    # Signal board (MCU) numeric codes — mirror firmware/MCU/applications/alarm.c
+    ALARM_SIG_TEMP_COMM_PARTIAL = "05001"   # temp sensor: partial channel communication fault
+    ALARM_SIG_TEMP_READ_PARTIAL = "05002"   # temp sensor: partial channel reading fault
+    ALARM_SIG_TEMP_SENSOR_FAULT = "05003"   # temp sensor fault
+    ALARM_SIG_HUMIDITY_COMM = "05004"       # temp/humidity sensor communication fault
+    ALARM_SIG_HEATER_OVERLIMIT = "09001"    # heater module temperature over-limit
+    ALARM_SIG_HEATER_NO_HEAT = "09002"      # heater not raising temperature
+    ALARM_SIG_ADC_FAULT = "07001"           # ADC detect fault
+    ALARM_SIG_CHIP_DETECT_FAULT = "07002"   # chip presence detection fault
+    ALARM_SIG_SHORT_DETECT_FAULT = "07003"  # chip short-circuit detection fault
+    ALARM_SIG_CAP_CAL_FAULT = "01001"       # HV driver capacitance calibration fault
+    ALARM_SIG_HV_CHAN_WARN = "01002"        # HV channel fault (unused channel — informational)
+    ALARM_SIG_HV_CHAN_FAULT = "01003"       # HV channel detect fault
+    ALARM_SIG_HV_INACCURATE = "01004"       # HV inaccurate
+    ALARM_SIG_CAP_FB_SATURATED = "01005"    # capacitance feedback saturated (ADC near rail)
+    ALARM_SIG_HV_DEVIATION = "01006"        # HV deviates >20% from setpoint
+    ALARM_SIG_HV_GATE_OVERRIDDEN = "01007"  # HV routing gate forced to safe path while HV enabled
 
     @staticmethod
     def to_str(alarm_code: str) -> str:
+        # The autogenerated proxy carries the COMPLETE per-board tables parsed
+        # straight from each firmware's alarm.c (motor 04xxx: 83 codes) --
+        # consult those first so decoding can never drift from firmware.
+        for table in generated_alarm_tables():
+            if alarm_code in table:
+                return table[alarm_code]
         return {
             Alarms.ALARM_MT_HW_CODE: "Motor board hardware alarm",
             Alarms.ALARM_MT_TMP_SENS_FAULT: "Temperature sensor fault",
@@ -377,4 +458,20 @@ class Alarms:
             Alarms.ALARM_MT_OVER_CURRENT: "Over current",
             Alarms.ALARM_MT_OVER_STEP: "Over step",
             Alarms.ALARM_MT_OPTO_CODE: "Endstop triggered",
+            Alarms.ALARM_SIG_TEMP_COMM_PARTIAL: "Temp sensor: partial channel comm fault",
+            Alarms.ALARM_SIG_TEMP_READ_PARTIAL: "Temp sensor: partial channel read fault",
+            Alarms.ALARM_SIG_TEMP_SENSOR_FAULT: "Temp sensor fault",
+            Alarms.ALARM_SIG_HUMIDITY_COMM: "Temp/humidity sensor comm fault",
+            Alarms.ALARM_SIG_HEATER_OVERLIMIT: "Heater temperature over-limit",
+            Alarms.ALARM_SIG_HEATER_NO_HEAT: "Heater not raising temperature",
+            Alarms.ALARM_SIG_ADC_FAULT: "ADC detect fault",
+            Alarms.ALARM_SIG_CHIP_DETECT_FAULT: "Chip presence detection fault",
+            Alarms.ALARM_SIG_SHORT_DETECT_FAULT: "Chip short-circuit detection fault",
+            Alarms.ALARM_SIG_CAP_CAL_FAULT: "Cap calibration fault",
+            Alarms.ALARM_SIG_HV_CHAN_WARN: "HV channel fault (unused channel)",
+            Alarms.ALARM_SIG_HV_CHAN_FAULT: "HV channel detect fault",
+            Alarms.ALARM_SIG_HV_INACCURATE: "HV inaccurate",
+            Alarms.ALARM_SIG_CAP_FB_SATURATED: "Cap feedback saturated",
+            Alarms.ALARM_SIG_HV_DEVIATION: "HV deviation >20% from setpoint",
+            Alarms.ALARM_SIG_HV_GATE_OVERRIDDEN: "HV gate overridden (HV not routed)",
         }.get(alarm_code, f"Unknown alarm code: {alarm_code}")
