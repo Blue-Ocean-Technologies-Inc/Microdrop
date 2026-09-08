@@ -33,6 +33,8 @@ repos:
     rev: v0.1.0
     hooks:
       - id: stamp-import-sections
+        # The vendored driver is a verbatim copy of the driver repo.
+        exclude: ^portable_dropbot_controller/driver/
       - id: forbid-scratch-files
   - repo: local
     hooks:

@@ -2,6 +2,7 @@ import serial
 import random
 import threading
 import collections
+import re
 import struct
 import time
 import ctypes
@@ -20,6 +21,84 @@ log = logging.getLogger(__name__)
 
 # Response index where motor/mechanism status byte is located
 MOTOR_STATUS_INDEX = 11
+
+
+class _Busy:
+    """Singleton sentinel: the board REFUSED the command (RESP_BUSY).
+
+    [review 2026-08-31, A10] Never a valid payload (payloads are bytes), so it
+    can be parked in response_map / returned from _wr_locked without colliding
+    with a real reply. `_wr` maps it back to None for backward compatibility
+    and records a per-thread mark that take_busy() drains, so BUSY stays a
+    falsy no-reply at every existing call site while the worker and the log
+    pane can report it honestly instead of as a timeout.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "BUSY"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+BUSY = _Busy()
+
+
+class _Pending:
+    """One outstanding request, keyed by (cmd, cmd_idx).
+
+    [review 2026-08-31, A11] Replies used to be matched by command id ALONE
+    (`response_map[cmd] = data`), so a reply arriving after its requester gave
+    up was handed to the NEXT request for that command id, however unrelated.
+    Measured: request 1 times out at 0.4 s, its reply lands at 0.45 s, request
+    2 issued at 0.42 s returns request 1's payload in 54 ms. Live surfaces
+    included motor_position_query (wrong axis position, silently), every
+    30-60 s motion command (second move reports instantly complete while the
+    axis has not moved), the 1 Hz STATUS poll (permanently one frame stale)
+    and the params family (the field-observed pogo-params corruption).
+
+    The wire already carries everything needed to match exactly and always
+    has -- the firmware echoes the request's cmd_idx on EVERY reply:
+      * `_frame.c:182`  msg->cmd_idx = SWAP_UINT16(frame->cmd_idx)  (RX)
+      * `_frame.c:694-706`  the whole request struct, cmd_idx included, is
+        memcpy'd into the reply before dlen/data/ftype are overwritten
+      * `_frame.c:235`  frame->cmd_idx = SWAP_UINT16(msg->cmd_idx) -- the
+        echo, deliberately NOT the board's own auto-incremented msg_idx
+      * `_frame.c:575-627`  CAN routing forwards frames byte-for-byte in both
+        directions, so a motor-board reply routed through the MCU reaches us
+        with our original cmd_idx intact
+    and this host has always allocated cmd_idx uniquely per frame under
+    idx_lock (`_make_cmd_packet`). So the aliasing was purely a host-side
+    matching bug, and the fix needs no firmware change.
+
+    Fields:
+      event    set once the request is resolved (reply, FAIL or BUSY)
+      value    payload bytes on success; None on RESP_FAIL
+      busy     the board REFUSED the command (RESP_BUSY -- terminal, see A10)
+      failed   RESP_FAIL
+      short    last RESP_OK payload shorter than `min_len`, kept as a fallback
+      min_len  resolve only on a reply of at least this many bytes; used for
+               commands whose real answer follows an immediate empty ACK
+      progress a "still working" signal (matching ACK_OK, or a device-pushed
+               REQ on the same cmd) arrived; consumed once by the waiter to
+               extend its deadline, exactly as the old marker scheme did
+    """
+
+    __slots__ = ("event", "value", "busy", "failed", "short", "min_len",
+                 "progress", "cmd", "cmd_idx")
+
+    def __init__(self, cmd: int, cmd_idx: int, min_len: int = 0) -> None:
+        self.event = threading.Event()
+        self.value = None
+        self.busy = False
+        self.failed = False
+        self.short = None
+        self.min_len = min_len
+        self.progress = False
+        self.cmd = cmd
+        self.cmd_idx = cmd_idx
 
 # --- 200-channel expansion command IDs (see docs/SPEC_200_CHANNEL_IMPL.md) ---
 # Not present in commands_generated.py/proxy.py yet (those are auto-regenerated
@@ -334,6 +413,20 @@ class HeaterPositionParams(ctypes.BigEndianStructure):
 
 
 class MotorPositionParams(ctypes.BigEndianStructure):
+    """The `_mt_*_dp` mechanical blob: 6 floats + 11 int32, 68 bytes.
+
+    [review 2026-08-31, L3] This was still the 56-byte, 14-field generation
+    (ctypes.sizeof == 56). Because from_buffer_copy TOLERATES an oversized
+    source, getBoardParameters silently discarded acc_run / acc_rst /
+    stealthchop from every 68-byte read with no error at all, while
+    motor_params_tab.py's own struct format was already correct -- so the two
+    consumers of the same wire bytes disagreed about how many fields exist.
+
+    Read it with from_dynamic_buffer(), never from_buffer_copy(): the two
+    older firmware generations really do serve 56 and 64 byte blobs and
+    from_buffer_copy raises on a short source.
+    """
+    _pack_ = 1
     _fields_ = [("lower_limit_position", ctypes.c_float),
                 ("upper_limit_position", ctypes.c_float),
                 ("lead_per_revolution", ctypes.c_float),
@@ -347,7 +440,34 @@ class MotorPositionParams(ctypes.BigEndianStructure):
                 ("moving_stallguard_threshold", ctypes.c_int32),
                 ("homing_stallguard_threshold", ctypes.c_int32),
                 ("homing_speed", ctypes.c_int32),
-                ("moving_speed", ctypes.c_int32)]
+                ("moving_speed", ctypes.c_int32),
+                # 2026-08-01 (56 -> 64 B): accel/decel ramp factors.
+                ("acc_run", ctypes.c_int32),
+                ("acc_rst", ctypes.c_int32),
+                # 2026-08-28 (64 -> 68 B): per-axis StealthChop enable.
+                ("stealthchop", ctypes.c_int32)]
+
+    # What older firmware effectively runs for the fields it does not send,
+    # matching full_test_ui/tabs/motor_params_tab.py's _MOTOR_PAD_DEFAULTS.
+    _LEGACY_DEFAULTS = {"acc_run": 6, "acc_rst": 6, "stealthchop": 0}
+    _KNOWN_SIZES = (56, 64, 68)
+
+    @classmethod
+    def from_dynamic_buffer(cls, data: bytes) -> "MotorPositionParams":
+        """Decode a 56, 64 or 68 byte blob, padding legacy tails. [L3]"""
+        size = ctypes.sizeof(cls)
+        if len(data) >= size:
+            return cls.from_buffer_copy(data[:size])
+        if len(data) not in cls._KNOWN_SIZES:
+            raise ValueError(
+                f"{len(data)} B is not a known motor param blob size "
+                f"{cls._KNOWN_SIZES}")
+        padded = bytearray(data)
+        # Field names in wire order; pad only the ones the board omitted.
+        tail = [n for n, _ in cls._fields_][-((size - len(data)) // 4):]
+        for name in tail:
+            padded += struct.pack(">i", cls._LEGACY_DEFAULTS.get(name, 0))
+        return cls.from_buffer_copy(bytes(padded))
 
     def to_dict(self):
         return {field[0]: getattr(self, field[0]) for field in self._fields_}
@@ -582,6 +702,176 @@ class _CapStreamAssembler:
         return bytes(self.buffer)
 
 
+# --- PMT multi-packet upload ------------------------------------------------
+# [WP-PMT 2026-08-28] Protocol facts, read off the firmware
+# (firmware/MCU/applications/business/pmt.c: upload_adc128_data(), the
+# PMT_SAMPLING_DONE_EVT branch of pmt_simple_entry(), and
+# pmt_debug_upload_server()), not guessed:
+#
+#   * Every uploaded frame is exactly PMT_PACKET_SIZE = 128 payload bytes:
+#         [total_packets u16 LE][packet_idx u16 LE][124 B = 62 samples u16 LE]
+#     packet_idx counts 0 .. total_packets-1; the LAST packet is zero-PADDED
+#     to the full 124 B (rt_memset in upload_adc128_data), so the padding is
+#     indistinguishable from genuine zero samples -- the sample count has to
+#     come from elsewhere (see sample_limit below).
+#   * total_packets = ceil(total_samples*2 / 124), and is repeated in EVERY
+#     packet header -- so the stream is self-describing: the completion
+#     criterion is "every index 0..total_packets-1 seen", with total_packets
+#     taken from the packet headers themselves (cross-checked against the
+#     command's own reply when one is available).
+#   * The frames are sent with zgsw_rep_notry(..., ZGSW_FT_RESP_OK, ...) --
+#     i.e. they arrive as RESP_OK frames, NOT as unsolicited REQ frames.
+#     RESP_OK is exactly the path that writes response_map[cmd] (see
+#     _process_thread_fn), which is why the plain _wr() path only ever sees
+#     the LAST packet: each packet overwrites the previous one under the same
+#     cmd key. RESP_OK also reaches _dispatch(), so subscribe(cmd, cb) sees
+#     every packet -- that is the hook this collector uses.
+#   * Which cmd the packets carry depends on the path:
+#       - acquire (CMD_PMT_ACQUIRE_START 0x1227): the 2-byte [packet_count
+#         u16 LE] reply comes back on 0x1227 when sampling COMPLETES (~10.3 s
+#         for the full 10240-sample buffer), and the packets then arrive on
+#         CMD_PMT_DATA_REPORT 0x1228 (declared `unsolicited: true` in
+#         commands.yaml).
+#       - debug upload (CMD_PMT_DATA_UPLOAD_DEBUG 0x122E): BOTH the 2-byte
+#         packet-count reply AND the 128-byte packets arrive on 0x122E. They
+#         are told apart by length (2 vs 128), which is also why the generic
+#         _wr() reply for that command is unreliable (a packet can win the
+#         race and be returned as if it were the count).
+#   * Packets are paced by rt_thread_mdelay(50) -- ~50 ms apart, so a full
+#     10240-sample acquisition is 166 packets ~= 8.3 s of upload.
+PMT_PACKET_SIZE = 128
+PMT_PACKET_HEADER_BYTES = 4
+PMT_SAMPLES_PER_PACKET = (PMT_PACKET_SIZE - PMT_PACKET_HEADER_BYTES) // 2  # 62
+# firmware ADC_BUFFER_SIZE (pmt.c) -- a completed acquire always fills it.
+PMT_ACQUIRE_BUFFER_SAMPLES = 10 * 1024
+
+
+class PmtCapture:
+    """Result of a multi-packet PMT upload (see DropletBotUart.pmt_*_collect).
+
+    Always returned, complete or not: `complete` says whether every expected
+    packet arrived, and `n_received`/`n_expected` + `missing` describe the
+    partial result. Truthy even when incomplete (the worker layer treats
+    None/False as "no reply", and a partial capture IS a reply).
+    """
+
+    def __init__(self, samples: list[int], n_received: int, n_expected: int,
+                 missing: list[int], aborted: bool = False, busy: bool = False,
+                 error: str | None = None, elapsed_s: float = 0.0):
+        self.samples = samples
+        self.n_received = n_received
+        self.n_expected = n_expected
+        self.missing = missing
+        self.aborted = aborted
+        self.busy = busy
+        self.error = error
+        self.elapsed_s = elapsed_s
+
+    @property
+    def complete(self) -> bool:
+        return (self.error is None and not self.aborted
+                and self.n_expected > 0 and self.n_received >= self.n_expected)
+
+    def summary(self) -> str:
+        bits = [f"{self.n_received}/{self.n_expected} packets",
+                f"{len(self.samples)} samples", f"{self.elapsed_s:.1f}s"]
+        if self.error:
+            bits.append(f"ERROR: {self.error}")
+        if self.busy:
+            bits.append("device BUSY")
+        if self.aborted:
+            bits.append("ABORTED")
+        if self.missing:
+            shown = ",".join(str(i) for i in self.missing[:8])
+            more = "..." if len(self.missing) > 8 else ""
+            bits.append(f"missing idx [{shown}{more}]")
+        return "  ".join(bits)
+
+    def __repr__(self) -> str:
+        return f"PmtCapture({self.summary()})"
+
+
+class _PmtPacketAssembler:
+    """Assembles a PMT 128-byte upload packet stream (pure state machine).
+
+    No I/O and no DropletBotUart dependency, so the assembly/completion logic
+    is directly unit-testable; DropletBotUart._collect_pmt_packets drives it
+    from live subscriber callbacks.
+    """
+
+    def __init__(self, expected_total: int | None = None):
+        self.expected_total: int | None = expected_total
+        self.packets: dict[int, tuple] = {}
+        self._total_mismatch_logged = False
+
+    def set_expected(self, total: int) -> None:
+        """Record the packet count reported by the command's own reply."""
+        if total > 0:
+            self.expected_total = total
+
+    def feed(self, data: bytes) -> bool:
+        """Record one 128-byte upload packet.
+
+        Returns True if this was a new, in-range packet; False for a short
+        frame, a duplicate index, or an out-of-range index.
+        """
+        if len(data) < PMT_PACKET_HEADER_BYTES + 2:
+            return False
+        total, idx = struct.unpack('<HH', data[:PMT_PACKET_HEADER_BYTES])
+        if total == 0:
+            return False
+        if self.expected_total is None:
+            self.expected_total = total
+        elif total != self.expected_total:
+            # Trust the LARGER of the two so a stale/short count can never
+            # truncate a real upload; the count reply and the packet headers
+            # come from the same firmware computation, so this is diagnostic.
+            if not self._total_mismatch_logged:
+                log.warning(f"PMT upload: packet header total={total} disagrees "
+                            f"with expected={self.expected_total}")
+                self._total_mismatch_logged = True
+            self.expected_total = max(total, self.expected_total)
+        if not (0 <= idx < self.expected_total) or idx in self.packets:
+            return False
+        payload = data[PMT_PACKET_HEADER_BYTES:PMT_PACKET_HEADER_BYTES + 2 * PMT_SAMPLES_PER_PACKET]
+        n = len(payload) // 2
+        self.packets[idx] = struct.unpack(f'<{n}H', payload[:2 * n])
+        return True
+
+    @property
+    def n_received(self) -> int:
+        return len(self.packets)
+
+    def is_complete(self) -> bool:
+        return (self.expected_total is not None
+                and len(self.packets) >= self.expected_total)
+
+    def missing(self) -> list[int]:
+        if not self.expected_total:
+            return []
+        return [i for i in range(self.expected_total) if i not in self.packets]
+
+    def to_samples(self, sample_limit: int | None = None) -> list[int]:
+        """Flatten to one sample list in packet-index order.
+
+        A missing packet contributes PMT_SAMPLES_PER_PACKET zeros so later
+        packets keep their true sample offsets (the gap is reported through
+        `missing()`, not silently closed up).
+
+        `sample_limit`, when known, trims the zero padding the firmware adds
+        to the last packet -- that padding cannot be detected from the data
+        itself (see the protocol notes above).
+        """
+        out: list[int] = []
+        for i in range(self.expected_total or 0):
+            values = self.packets.get(i)
+            out.extend(values if values is not None
+                       else (0,) * PMT_SAMPLES_PER_PACKET)
+        if sample_limit is not None and 0 <= sample_limit < len(out):
+            out = out[:sample_limit]
+        return out
+
+
 class DropletBotUart:
     def __init__(self):
         self.serial = None
@@ -596,6 +886,36 @@ class DropletBotUart:
         # It holds responses, keyed by command ID
         self.response_map = {}
         self.response_lock = threading.Lock()
+
+        # Serializes serial writes. The RX thread ACKs device frames while
+        # caller threads send commands; pyserial's write() is not atomic
+        # across threads, so two interleaved writes can splice one packet
+        # into another.
+        self.tx_lock = threading.Lock()
+        self.idx_lock = threading.Lock()  # msg_idx/cmd_idx allocation (two lanes build packets concurrently)
+
+        # [WP-LANES] Per-command in-flight guard. Pending replies are keyed by
+        # command id (response_map), so two concurrent _wr() calls for the SAME
+        # cmd would race for one another's reply -- the second call also clears
+        # the first's markers on entry. The UI now drives this transport from
+        # two lane threads, so serialize per cmd id: a second _wr() on the same
+        # cmd BLOCKS until the first resolves, then proceeds normally.
+        # RLock, not Lock, so a same-thread re-entrant call behaves exactly as
+        # it did before (single-threaded behaviour is unchanged; an uncontended
+        # acquire is ~100 ns).
+        self._cmd_locks = {}  # cmd id -> threading.RLock
+        self._cmd_locks_guard = threading.Lock()
+
+        # [review 2026-08-31, A11] Replies matched by (cmd, cmd_idx) -- see
+        # _Pending and _wr_locked_by_idx. response_map above is the legacy
+        # cmd-id-only table, still written by the RX thread and still read by
+        # _wr_locked_legacy for the handful of callers that hand _wr a buffer
+        # that is not a frame this transport built.
+        self._pending: dict[tuple[int, int], "_Pending"] = {}
+        self._pending_lock = threading.Lock()
+        # Per-thread "the board REFUSED this command" marker, drained by
+        # take_busy(). See _Pending.busy / A10.
+        self._busy_marks: dict[int, tuple[int, float]] = {}
 
         # Threads
         self.listen_thread = None
@@ -612,6 +932,9 @@ class DropletBotUart:
         self.time_buffer = b''
         self.sig_board_connected = False
         self.motor_board_connected = False
+        # [WP-L] board -> "module;hw;sw" identity echoed in the login reply
+        # by firmware >= 2026-08-27 (empty until a login sees one).
+        self.login_identity: dict = {}
 
         self.motors = Motors()
 
@@ -746,12 +1069,24 @@ class DropletBotUart:
         log.debug("Listen thread stopped.")
 
     # --- Consumer Thread ---
+    # [review 2026-08-31, A9] Largest frame this protocol can produce is 527 B
+    # (ZGSW_MSG_MAX_SIZE 512, firmware/MCU/rtconfig.h:360, + FRAME_HEAD_SIZE
+    # 11, zgsw_protocol_frame_def.h:8, + 4-byte CRC). Anything claiming more
+    # than this cap is a corrupt length byte, not a big frame.
+    _MAX_FRAME_BYTES = 1024
+    # A plausible-but-never-completing header is dropped after this long with
+    # no new bytes arriving. 527 B takes ~46 ms at 115200 baud.
+    _FRAME_RESYNC_S = 2.0
+
     def _process_thread_fn(self):
         """
         Parses the protocol from the byte_buffer.
         This is the equivalent of your 'run()' method.
         """
         log.debug("Process thread started.")
+        # [A9] resync bookkeeping for a header that never completes
+        pending_since = None
+        pending_len = -1
         while self.is_running:
             # --- This section finds a complete packet ---
             # This logic must be replicated *exactly* from your C++ 'run' method
@@ -772,35 +1107,80 @@ class DropletBotUart:
                 break
 
             # 2. Check for full header and get length
+            need_more = False
             with self.buffer_lock:
                 if len(self.byte_buffer) < 4:
-                    time.sleep(0.001)  # Not enough data for header yet
-                    continue
-
+                    need_more = True  # Not enough data for header yet
                 # Check for STX_HEAD1
-                if self.byte_buffer[1] != Frame.HEAD1:
+                elif self.byte_buffer[1] != Frame.HEAD1:
                     self.byte_buffer.popleft()  # Bad packet, discard STX0
+                    pending_since = None
                     continue
-                # else:
-                # header = f"{(self.byte_buffer[0] << 8) | self.byte_buffer[1]:#04x}"
-                # print(f"Found header: {header.upper()} ", end='')
+                else:
+                    # Get length field (headers + data length in C++)
+                    packet_len, = struct.unpack(
+                        '>H', bytes(list(self.byte_buffer)[2:4]))
 
-                # Get length field (headers + data length in C++)
-                packet_len, = struct.unpack(
-                    '>H', bytes(list(self.byte_buffer)[2:4]))
+                    # Calculate total packet length (like C++: len + 4)
+                    total_packet_len = packet_len + 4
 
-                # Calculate total packet length (like C++: len + 4)
-                total_packet_len = packet_len + 4
+                    if total_packet_len > self._MAX_FRAME_BYTES:
+                        # [review 2026-08-31, A9] The length came straight off
+                        # the wire with no sanity cap. One flipped byte made
+                        # the parser wait for up to 65,539 bytes, swallowing
+                        # every subsequent real frame into the same span --
+                        # and if the board then went quiet (it does, because
+                        # the host stopped answering) it NEVER recovered.
+                        # Measured: 176 bytes stuck, 10 valid frames injected
+                        # behind the corrupt header, none ever parsed, every
+                        # command timing out forever with the port still open.
+                        # A strong candidate for the recurring "the MCU
+                        # stopped answering until I reconnected" symptom.
+                        # The protocol's own bound is 527 B
+                        # (ZGSW_MSG_MAX_SIZE 512 + FRAME_HEAD_SIZE 11 + CRC 4).
+                        log.warning(
+                            "RX: impossible frame length %d (> %d) -- corrupt "
+                            "header, dropping STX and resyncing",
+                            total_packet_len, self._MAX_FRAME_BYTES)
+                        self.byte_buffer.popleft()
+                        pending_since = None
+                        continue
 
-                if len(self.byte_buffer) < total_packet_len:
-                    time.sleep(0.001)  # Not enough data for full packet
-                    continue
+                    if len(self.byte_buffer) < total_packet_len:
+                        need_more = True  # Not enough data for full packet
+                    else:
+                        # If we're here, we have a full packet. Extract it.
+                        packet_bytes = bytes([self.byte_buffer.popleft()
+                                              for _ in range(total_packet_len)])
+                        pending_since = None
 
-                # print(f"Packet length: {packet_len} bytes ", end='')
-
-                # If we're here, we have a full packet. Extract it.
-                packet_bytes = bytes([self.byte_buffer.popleft()
-                                      for _ in range(total_packet_len)])
+            if need_more:
+                # [review 2026-08-31, A9] Second half of the wedge fix: a
+                # header that is plausible (<= the cap) but never completes
+                # would still park the parser forever. If nothing has been
+                # added to the buffer for _FRAME_RESYNC_S, drop the STX byte
+                # and rescan -- a real frame at this baud completes in tens of
+                # milliseconds.
+                # [review 2026-08-31, L2] Both waits used to sleep INSIDE
+                # `buffer_lock`, so every partial frame blocked the listener
+                # thread for a full millisecond and the lock was re-acquired
+                # immediately on wake -- measurably starving the writer.
+                now = time.monotonic()
+                with self.buffer_lock:
+                    have = len(self.byte_buffer)
+                if pending_since is None or have != pending_len:
+                    pending_since, pending_len = now, have
+                elif now - pending_since > self._FRAME_RESYNC_S:
+                    with self.buffer_lock:
+                        if self.byte_buffer:
+                            self.byte_buffer.popleft()
+                    log.warning(
+                        "RX: frame header stalled for %.1fs with %d bytes "
+                        "buffered -- dropping STX and resyncing",
+                        self._FRAME_RESYNC_S, have)
+                    pending_since = None
+                time.sleep(0.001)
+                continue
 
             # --- Now we have a full packet, process it ---
 
@@ -829,54 +1209,93 @@ class DropletBotUart:
 
 
             # 5. Process based on ftype
-            if ftype == Frame.RESP_OK:
-                with self.response_lock:
-                    if self.response_map.get(Frame.REQ, 0x0000) == cmd:
-                        self.response_map.pop(Frame.REQ)
-                    elif self.response_map.get(Frame.RESP_BUSY, 0x0000) == cmd:
-                        self.response_map.pop(Frame.RESP_BUSY)
-                    self.response_map[cmd] = data
-                    # Send an ACK back
+            # A malformed payload or a throwing user callback must never end
+            # this thread -- the whole per-packet body is guarded.
+            try:
+                # [review 2026-08-31, A11] Exact match FIRST: hand this frame
+                # to the one request that carries this (cmd, cmd_idx), if any.
+                # A frame with no waiter -- a late reply to a request that
+                # already timed out, an unsolicited stream/alarm push carrying
+                # the board's own cmd_idx sequence, a retransmission arriving
+                # after its waiter left -- resolves nothing and is dispatched
+                # only. That is what makes the aliasing class structurally
+                # impossible rather than merely unlikely.
+                self._resolve_pending(cmd, cmd_idx, ftype, data)
+                if ftype == Frame.RESP_OK:
+                    with self.response_lock:
+                        # markers are per-cmd (see _wr): only this cmd's are consumed
+                        self.response_map.pop((Frame.REQ, cmd), None)
+                        self.response_map.pop((Frame.RESP_BUSY, cmd), None)
+                        self.response_map[cmd] = data
+                    # Send an ACK back (outside response_lock: a serial write
+                    # must not be held up by / hold up response bookkeeping)
                     self._ack(cmd, msg_idx, cmd_idx)
-                if cmd & 0xFF == 0x72:
-                    if self.on_alarm:
-                        alarms = data.decode('utf8').split(';')
-                        parsed_alarms = []
-                        for alarm in alarms:
-                            if alarm.find('A0') != -1 or alarm.find('B0') != -1:
-                                idx = alarm.find('A0') if alarm.find('A0') != -1 else alarm.find('B0')
-                                parsed_alarms.append(Alarms.to_str(alarm[idx:idx+6]))
-                            else:
-                                parsed_alarms.append(alarm)
-                        self.on_alarm(cmd, parsed_alarms)
-                else:
+                    if cmd & 0xFF == 0x72:
+                        if self.on_alarm:
+                            alarms = data.decode('utf8', errors='replace').split(';')
+                            parsed_alarms = []
+                            for alarm in alarms:
+                                if alarm.find('A0') != -1 or alarm.find('B0') != -1:
+                                    idx = alarm.find('A0') if alarm.find('A0') != -1 else alarm.find('B0')
+                                    parsed_alarms.append(Alarms.to_str(alarm[idx:idx+6]))
+                                else:
+                                    # [2026-08-27] MCU alarms are 5-digit numeric codes
+                                    # (possibly prefixed with level/idx bytes): decode
+                                    # via the same table, keep the raw code visible.
+                                    m = re.search(r'\d{5}', alarm)
+                                    if m:
+                                        parsed_alarms.append(f"{Alarms.to_str(m.group())} [{m.group()}]")
+                                    else:
+                                        parsed_alarms.append(alarm)
+                            self.on_alarm(cmd, parsed_alarms)
+                    else:
+                        self._dispatch(cmd, data)
+                elif ftype == Frame.RESP_FAIL:
+                    # print(f"Error ftype: {Frame.to_str(ftype)} for cmd: {cmd:X}")
+                    with self.response_lock:
+                        self.response_map[cmd] = None
+                    if self.on_error:
+                        self.on_error(ftype,
+                                      f"Device responded with error `{Frame.to_str(ftype)}` for cmd {cmd:X}")
+                elif ftype == Frame.ACK_OK:
+                    with self.response_lock:
+                        self.response_map[Frame.ACK_OK] = cmd
+                elif ftype == Frame.REQ:
+                    with self.response_lock:
+                        self.response_map[(Frame.REQ, cmd)] = True
+                    # Send an ACK back (outside response_lock, see above)
+                    self._ack(cmd, msg_idx, cmd_idx)
                     self._dispatch(cmd, data)
-            elif ftype == Frame.RESP_FAIL:
-                log.warning(f"Device replied RESP_FAIL for cmd 0x{cmd:04X}")
-                self.response_map[cmd] = None
-                if self.on_error:
-                    self.on_error(ftype,
-                                  f"Device responded with error `{Frame.to_str(ftype)}` for cmd {cmd:X}")
-            elif ftype == Frame.ACK_OK:
-                with self.response_lock:
-                    self.response_map[Frame.ACK_OK] = cmd
-            elif ftype == Frame.REQ:
-                with self.response_lock:
-                    self.response_map[Frame.REQ] = cmd
-                    # Send an ACK back
+                elif ftype == Frame.RESP_BUSY:
+                    # [review 2026-08-31, A10] BUSY is a TERMINAL REJECTION in
+                    # firmware: every one of the 15 call sites that sends it
+                    # returns on the next line, so no later reply ever follows
+                    # (MCU pmt.c:643/651/687/710/787/792/868/891/950,
+                    # extern_server.c:799, system_server.c:111; MotorDriver
+                    # motion_coord.c:424+453, fluorescence.c:167/177/235).
+                    # The host used to do the opposite -- park a marker that
+                    # RESET the deadline -- so a refused command cost a full
+                    # extra timeout_s (measured 1.21 s on a 1.0 s timeout,
+                    # 30 s on a 30 s motion command) and then returned None,
+                    # indistinguishable from a dead board. It now resolves the
+                    # wait the way RESP_FAIL does, with a distinguishable
+                    # sentinel so callers and the log pane can say "BUSY".
+                    with self.response_lock:
+                        self.response_map.pop((Frame.REQ, cmd), None)
+                        self.response_map[cmd] = BUSY
+                else:
+                    # print(f"cmd: {cmd:X} > data: {data.hex(' ')}")
+                    with self.response_lock:
+                        self.response_map[cmd] = None
                     self._ack(cmd, msg_idx, cmd_idx)
-                self._dispatch(cmd, data)
-            elif ftype == Frame.RESP_BUSY:
-                with self.response_lock:
-                    self.response_map[Frame.RESP_BUSY] = cmd
-            else:
-                log.warning(f"Unexpected frame type {Frame.to_str(ftype)} "
-                            f"for cmd 0x{cmd:04X}")
-                self.response_map[cmd] = None
-                self._ack(cmd, msg_idx, cmd_idx)
-                if self.on_error:
-                    self.on_error(ftype,
-                                  f"Device responded with error `{Frame.to_str(ftype)}` for cmd {cmd:X}")
+                    # print(f"Error ftype: {Frame.to_str(ftype)} for cmd: {cmd:X}")
+                    if self.on_error:
+                        self.on_error(ftype,
+                                      f"Device responded with error `{Frame.to_str(ftype)}` for cmd {cmd:X}")
+            except Exception:
+                log.exception(
+                    f"RX packet handling failed for cmd=0x{cmd:04X} "
+                    f"ftype={Frame.to_str(ftype)}")
 
         log.debug("Process thread stopped.")
 
@@ -981,8 +1400,29 @@ class DropletBotUart:
                          msg_idx_override=None, cmd_idx_override=None):
         """Creates a complete command packet."""
 
-        msg_idx = self.msg_idx if msg_idx_override is None else msg_idx_override
-        cmd_idx = self.cmd_idx if cmd_idx_override is None else cmd_idx_override
+        # [WP-LANES follow-up] Allocate BOTH counters atomically up front: with
+        # two lanes building packets concurrently, the old read-at-top /
+        # increment-at-bottom pattern spanned the whole build (incl. the CRC
+        # loop), so two frames could share a cmd_idx.
+        #
+        # [review 2026-08-31, L7] Why that matters -- the original comment here
+        # said "the firmware rejects a duplicate cmd_idx", which is NOT true:
+        # there is no duplicate-cmd_idx rejection anywhere in the MCU RX path.
+        # The allocation is still load-bearing, for two other reasons:
+        #   1. the firmware's reply-retry queue matches ACKs on (cmd, cmd_idx)
+        #      (_frame.c:432-437), so two outstanding frames sharing a pair
+        #      cross-match each other's ACKs and one reply retransmits until
+        #      MSG_TRY_MSG;
+        #   2. this host now matches REPLIES on (cmd, cmd_idx) too -- see
+        #      _Pending -- so cmd_idx uniqueness is the precondition of the
+        #      whole anti-aliasing scheme.
+        with self.idx_lock:
+            msg_idx = self.msg_idx if msg_idx_override is None else msg_idx_override
+            cmd_idx = self.cmd_idx if cmd_idx_override is None else cmd_idx_override
+            if msg_idx_override is None:
+                self.msg_idx = (self.msg_idx + 1) & 0xFFFF
+            if cmd_idx_override is None:
+                self.cmd_idx = (self.cmd_idx + 1) & 0xFFFF
 
         ba = bytearray()
         ba.extend(struct.pack('>H', Frame.HEAD))
@@ -1002,46 +1442,274 @@ class DropletBotUart:
         crc = self._crc32(ba)
         ba.extend(struct.pack('>I', crc))  # swap bytes to network order
 
-        if msg_idx_override is None:
-            self.msg_idx = (self.msg_idx + 1) & 0xFFFF
-        if cmd_idx_override is None:
-            self.cmd_idx = (self.cmd_idx + 1) & 0xFFFF
-
         return bytes(ba)
+
+    def is_port_open(self) -> bool:
+        """True when a write would actually reach the wire.
+
+        [review 2026-08-31, A4] The one condition `_w()` gates on, exposed so
+        wait loops can bail on a vanished port instead of hot-spinning on
+        `_w() -> False` (an unplugged FTDI, or `_listen_thread_fn` having
+        already cleared `is_running` after a SerialException)."""
+        return bool(self.serial and self.serial.is_open)
 
     def _w(self, data: bytes):
         """Equivalent to _w. Just writes data."""
         if self.serial and self.serial.is_open:
             # print(f"Sending  {len(data)} bytes > {data.hex(' ')}")
-            self.serial.write(data)
+            with self.tx_lock:  # keep packets from interleaving on the wire
+                self.serial.write(data)
             return True
         return False
 
-    def _wr(self, wbuf: bytes, cmd: int, timeout_s: float = 1.0):
+    # [WP-LANES] Cap on the per-cmd lock map. Command ids come from a fixed
+    # set in practice; the Raw/Advanced UI can send arbitrary ones, so prune
+    # (only locks nobody holds) instead of growing without bound.
+    _MAX_CMD_LOCKS = 512
+
+    def _cmd_lock_entry(self, cmd: int) -> list:
+        """Reserve the in-flight guard for one command id, creating it on
+        first use. Returns the `[RLock, users]` entry with `users` already
+        incremented -- `_wr` decrements it again in its finally block, and
+        pruning only ever drops entries nobody has reserved."""
+        with self._cmd_locks_guard:
+            entry = self._cmd_locks.get(cmd)
+            if entry is None:
+                if len(self._cmd_locks) >= self._MAX_CMD_LOCKS:
+                    self._cmd_locks = {c: e for c, e in self._cmd_locks.items()
+                                       if e[1] > 0}
+                entry = self._cmd_locks.setdefault(cmd, [threading.RLock(), 0])
+            entry[1] += 1
+            return entry
+
+    # Absolute ceiling on one _wr wait, however many "still working" signals
+    # the device sends. Shared by both matching paths.
+    _MAX_PROGRESS_EXTEND_S = 60.0
+
+    @staticmethod
+    def frame_cmd_idx(wbuf: bytes, cmd: int) -> int | None:
+        """The cmd_idx carried by `wbuf`, or None if it is not our frame.
+
+        [review 2026-08-31, A11] Layout, from `_make_cmd_packet`:
+            [0:2] 0x7CF1  [2:4] len  [4:6] msg_idx  [6:8] cmd_idx
+            [8:10] cmd    [10] ftype  ... payload ...  [-4:] CRC32
+        Reading it back off the packet -- rather than threading a second
+        return value through ~200 generated call sites -- is what makes the
+        (cmd, cmd_idx) matching a pure transport change with no regeneration
+        and no call-site churn. Anything that is not a well-formed frame for
+        this exact `cmd` (a hand-rolled buffer, a test marker) returns None
+        and falls back to the legacy cmd-id-only wait.
         """
-        Equivalent to _wr. Writes data and waits for a response.
-        This is a simplified version.
+        if wbuf is None or len(wbuf) < Frame.HEAD_SIZE:
+            return None
+        try:
+            head, = struct.unpack('>H', wbuf[0:2])
+            frame_cmd, = struct.unpack('>H', wbuf[8:10])
+        except struct.error:
+            return None
+        if head != Frame.HEAD or frame_cmd != cmd:
+            return None
+        return struct.unpack('>H', wbuf[6:8])[0]
+
+    def take_busy(self) -> tuple[int, float] | None:
+        """Drain this thread's "the board refused it" mark, if any.
+
+        [review 2026-08-31, A10] `_wr` keeps returning None for a BUSY so no
+        existing call site changes behaviour, and records the rejection here
+        instead. Keyed by thread id, so the lane thread that made the call is
+        the one that reads it back -- see SerialWorker._run_lane, which turns
+        it into a "BUSY" job result rather than a "TIMEOUT".
+        """
+        return self._busy_marks.pop(threading.get_ident(), None)
+
+    def _note_busy(self, cmd: int) -> None:
+        self._busy_marks[threading.get_ident()] = (cmd, time.time())
+        log.info("cmd 0x%04X refused by the device (RESP_BUSY)", cmd)
+
+    def _resolve_pending(self, cmd: int, cmd_idx: int, ftype: int,
+                         data: bytes) -> None:
+        """Hand one received frame to the request that owns (cmd, cmd_idx).
+
+        Called from the RX thread for EVERY frame. See _Pending for why the
+        pair, not the command id alone, is the right key. Idempotent: the
+        firmware retransmits un-ACKed `zgsw_rep` replies with the same
+        (cmd, cmd_idx) (`_frame.c:389-392`), and a retransmission must resolve
+        its waiter exactly once.
+        """
+        with self._pending_lock:
+            p = self._pending.get((cmd, cmd_idx))
+            if p is None:
+                if ftype in (Frame.RESP_OK, Frame.REQ):
+                    # Device-pushed frames (PMT stream, alarm notify) run the
+                    # board's OWN cmd_idx sequence and legitimately match
+                    # nothing; so does a reply whose requester already left.
+                    log.debug("unmatched frame cmd=0x%04X idx=%d ftype=0x%02X "
+                              "-> dispatch only", cmd, cmd_idx, ftype)
+                if ftype == Frame.REQ:
+                    # ...but a device-pushed REQ on a cmd someone IS waiting
+                    # on still means "still working", exactly as the old
+                    # (Frame.REQ, cmd) marker did. Extend those waits.
+                    for key, other in self._pending.items():
+                        if key[0] == cmd:
+                            other.progress = True
+                return
+            if p.event.is_set():
+                return  # already resolved; a retransmission is a no-op
+            if ftype == Frame.ACK_OK:
+                p.progress = True
+                return
+            if ftype == Frame.REQ:
+                p.progress = True
+                return
+            if ftype == Frame.RESP_BUSY:
+                p.busy = True
+            elif ftype == Frame.RESP_FAIL:
+                p.failed = True
+                p.value = None
+            elif ftype == Frame.RESP_OK:
+                if len(data) < p.min_len:
+                    # An immediate empty ACK that precedes the real answer
+                    # (CLEAR_ALARM does exactly this). Keep it as a fallback
+                    # but keep waiting for the frame that carries the payload.
+                    p.short = data
+                    return
+                p.value = data
+            else:
+                p.value = None  # RESP_ERR / UNKNOWN / TIMEOUT: same as FAIL
+            p.event.set()
+
+    def _wr(self, wbuf: bytes, cmd: int, timeout_s: float = 1.0,
+            min_len: int = 0):
+        """
+        Writes a command frame and waits for ITS reply.
+
+        [review 2026-08-31, A11] Replies are matched on (cmd, cmd_idx) when
+        `wbuf` is a frame this transport built -- which is every real caller,
+        since they all go through `_make_cmd_packet`. A late reply to a
+        request that already timed out therefore has no waiter and is dropped
+        (logged, still dispatched) instead of being served to the next request
+        for the same command id. Anything else falls back to the legacy
+        cmd-id-only wait below.
+
+        [WP-LANES] Still serialized per command id. With (cmd, cmd_idx)
+        matching the guard is no longer load-bearing for correctness, but it
+        is kept for now because (a) the legacy path still needs it and (b)
+        retiring it changes lane scheduling for commands that carry both a
+        short and a long operation (MOTOR_CONTROL 0x11B0 is move AND stop) --
+        a bench-validated change, not a desk one. Single-threaded callers are
+        unaffected (uncontended RLock).
+
+        `min_len` resolves the wait only on a reply of at least that many
+        bytes; shorter RESP_OK frames are kept as a fallback and returned only
+        if nothing longer arrives. For commands that answer with an immediate
+        empty ACK followed by the real payload (CLEAR_ALARM, alarm.c:277 then
+        alarm.c:120-133). Ignored on the legacy path.
+        """
+        entry = self._cmd_lock_entry(cmd)
+        entry[0].acquire()
+        try:
+            cmd_idx = self.frame_cmd_idx(wbuf, cmd)
+            if cmd_idx is None:
+                return self._wr_locked_legacy(wbuf, cmd, timeout_s)
+            result = self._wr_locked_by_idx(wbuf, cmd, cmd_idx, timeout_s,
+                                            min_len)
+            if result is BUSY:
+                self._note_busy(cmd)
+                return None
+            return result
+        finally:
+            # [review 2026-08-31, L1] RELEASE FIRST, then drop the user count.
+            # The other order left a window between `entry[1] -= 1` and
+            # `entry[0].release()` in which the entry has users == 0, so
+            # _cmd_lock_entry's prune (`{c: e for c, e in ... if e[1] > 0}`)
+            # could drop it and a third thread setdefault a FRESH RLock for
+            # the same cmd -- entering _wr_locked concurrently with a caller
+            # that has not released yet, which is exactly what the in-flight
+            # guard exists to prevent. Reaching it needs > 512 distinct cmd
+            # ids, which only the Raw/Advanced tab can produce.
+            entry[0].release()
+            with self._cmd_locks_guard:
+                entry[1] -= 1
+
+    def _wr_locked_by_idx(self, wbuf: bytes, cmd: int, cmd_idx: int,
+                          timeout_s: float = 1.0, min_len: int = 0):
+        """Write-and-wait matched on (cmd, cmd_idx). See _Pending.
+
+        Registers the waiter BEFORE writing, so a reply that comes back faster
+        than this thread is rescheduled cannot miss it, and pops it in a
+        finally so a timed-out request leaves nothing behind for a late reply
+        to land in.
+        """
+        p = _Pending(cmd, cmd_idx, min_len=min_len)
+        key = (cmd, cmd_idx)
+        with self._pending_lock:
+            self._pending[key] = p
+        try:
+            if not self._w(wbuf):
+                return None  # Write failed (port closed)
+
+            absolute_start = time.monotonic()
+            start_time = absolute_start
+            while True:
+                remaining = timeout_s - (time.monotonic() - start_time)
+                if remaining <= 0:
+                    break
+                # Event-driven: the reply resolves the wait the moment it
+                # lands, instead of up to a 10 ms poll tick later. The cap
+                # keeps "still working" extensions responsive.
+                if p.event.wait(timeout=min(0.05, remaining)):
+                    break
+                with self._pending_lock:
+                    progressed = p.progress
+                    p.progress = False
+                # An ACK, or a device-pushed REQ on this cmd, means the board
+                # is still working: reset the timer, but respect the absolute
+                # ceiling, exactly as the old marker scheme did.
+                if progressed and (time.monotonic() - absolute_start
+                                   < self._MAX_PROGRESS_EXTEND_S):
+                    start_time = time.monotonic()
+
+            if p.event.is_set():
+                if p.busy:
+                    return BUSY
+                return p.value
+            if p.short is not None:
+                # Only the immediate ACK arrived; hand it back so callers see
+                # today's behaviour rather than a spurious timeout.
+                log.warning("Command %X idx %d: only a short (%dB) reply, "
+                            "expected >= %dB", cmd, cmd_idx, len(p.short),
+                            min_len)
+                return p.short
+        finally:
+            with self._pending_lock:
+                self._pending.pop(key, None)
+
+        log.warning(f"Command {cmd:X} idx {cmd_idx} timed out!")
+        if self.on_error:
+            self.on_error(-2, f"Timeout for cmd {cmd:X}")
+        return None  # Timeout
+
+    def _wr_locked_legacy(self, wbuf: bytes, cmd: int, timeout_s: float = 1.0):
+        """The pre-cmd_idx write-and-wait, matched on the command id ALONE.
+
+        Kept verbatim (bar the A10 BUSY change) as the fallback for a `wbuf`
+        that is not a frame this transport built. It carries the A11 aliasing
+        weakness by construction -- a late reply lands in `response_map[cmd]`
+        and is claimed by the next request for that id -- which is exactly why
+        every real caller now takes `_wr_locked_by_idx`.
         """
 
-        # Clear any old response for this command
+        # Clear any old response / stale busy-req markers for this command
         with self.response_lock:
-            if cmd in self.response_map:
-                del self.response_map[cmd]
+            self.response_map.pop(cmd, None)
+            self.response_map.pop((Frame.REQ, cmd), None)
+            self.response_map.pop((Frame.RESP_BUSY, cmd), None)
 
         if not self._w(wbuf):
             return None  # Write failed
 
-        return self._wait_response(cmd, timeout_s)
-
-    def _wait_response(self, cmd: int, timeout_s: float = 1.0):
-        """Waits for a response to a `cmd` frame already in flight.
-
-        Local patch (not in upstream cf15ac0): split out of _wr() so a
-        caller that received a STALE same-cmd reply (one orphaned by an
-        earlier timeout) can drain it and keep waiting for its own
-        without re-sending — see queryMotorPosition().
-        """
-        max_busy_s = 60.0  # absolute maximum wait even if device keeps reporting busy
+        # absolute maximum wait even if the device keeps signalling progress
+        max_busy_s = self._MAX_PROGRESS_EXTEND_S
         absolute_start = time.time()
         start_time = absolute_start
         while time.time() - start_time < timeout_s:
@@ -1049,12 +1717,20 @@ class DropletBotUart:
                 if self.response_map.get(Frame.ACK_OK, 0x0000) == cmd:
                     start_time = time.time()  # reset timer on ACK
                     self.response_map.pop(Frame.ACK_OK)
-                if (self.response_map.get(Frame.RESP_BUSY, False) or
-                        self.response_map.get(Frame.REQ, False)):
+                # Only THIS cmd's req marker may extend THIS wait; it is
+                # consumed once, so markers left by unrelated / device-pushed
+                # frames never poison us. [A10] BUSY no longer extends
+                # anything -- it resolves the wait, below, via the sentinel.
+                req = self.response_map.pop((Frame.REQ, cmd), None) is not None
+                if req:
                     if time.time() - absolute_start < max_busy_s:
                         start_time = time.time()  # reset timer, but respect absolute limit
                 if cmd in self.response_map:
-                    return self.response_map.pop(cmd)
+                    value = self.response_map.pop(cmd)
+                    if value is BUSY:
+                        self._note_busy(cmd)
+                        return None
+                    return value
 
             time.sleep(0.01)  # Poll for response
 
@@ -1062,6 +1738,9 @@ class DropletBotUart:
         if self.on_error:
             self.on_error(-2, f"Timeout for cmd {cmd:X}")
         return None  # Timeout
+
+    # Back-compat alias: some scripts call the internal directly.
+    _wr_locked = _wr_locked_legacy
 
     def _ack(self, cmd: int, msg_idx: int, cmd_idx: int, frame_type: int = Frame.ACK_OK):
         """Sends an ACK back"""
@@ -1111,16 +1790,58 @@ class DropletBotUart:
         response = self._wr(packet, cmd, timeout_s=timeout_s)
         if response is not None:
             connected = self._update_board_connected(board, response[0] == 0)
-            log.info(f"{board} board login "
-                     f"{'ok' if connected else 'refused by board'}")
+            # [WP-L 2026-08-27] Firmware from this date appends the same
+            # "module;hw;sw;" identity string as VERSION after the status
+            # byte; legacy firmware replies 1 byte and lands in the fallback.
+            if len(response) > 1:
+                ident = response[1:].decode('ascii', errors='replace').strip('\x00;')
+                self.login_identity[board] = ident
+                log.info("%s login identity: %s", board, ident)
             if board == 'signal' and connected:
                 # Auto-adapt to the provisioned channel count right after
                 # login; board_channels/board_n_chips remain available even
                 # if this particular query fails (lazy retry on next access).
                 self._query_board_channels()
             return connected
-        log.debug(f"{board} board login: no reply")
         return self._update_board_connected(board, False)
+
+    def login_with_retry(self, board: str = 'signal', attempts: int = 3,
+                         backoff_s: float = 0.5, timeout_s: float = 3.0,
+                         wait_version_s: float = 0.0) -> bool:
+        """Robust login for the fragile just-after-open serial window.
+
+        Login is idempotent firmware-side (sets the RTC, starts the status
+        thread, arms alarm push; no other command is login-gated), so
+        retrying is always safe. `wait_version_s` > 0 first polls the
+        read-only VERSION command until the board answers (or the budget
+        runs out) before spending login attempts — use it on
+        reconnect-after-reset paths where boot logs share the UART.
+        """
+        if wait_version_s > 0:
+            deadline = time.time() + wait_version_s
+            while time.time() < deadline:
+                # [review 2026-08-31, A4] Bail the instant the port is gone.
+                # _w() returns False immediately on a closed port and
+                # _wr_locked then returns None without waiting, so on an
+                # unplugged FTDI this loop is NOT self-limiting: measured
+                # 253,524 GetBoardVersion calls/second, 100 % CPU, for the
+                # whole 12 s attach_motor budget -- on the lane the E-STOP
+                # used to share.
+                if not self.is_port_open():
+                    log.warning("%s version wait aborted: port is closed", board)
+                    return False
+                v = self.GetBoardVersion(board, timeout_s=1.0) or {}
+                if v.get('software_version'):
+                    break
+                # ...and never spin even when the port IS open but the board
+                # answers instantly-negatively (RESP_FAIL parks None at once).
+                time.sleep(0.2)
+        for attempt in range(attempts):
+            if self.BoardLogin(board, timeout_s=timeout_s):
+                return True
+            if attempt < attempts - 1:
+                time.sleep(backoff_s * (attempt + 1))
+        return False
 
     def _query_board_channels(self) -> None:
         """Query CMD_BOARD_CHANNELS_GET (0x1240) and cache the result.
@@ -1141,8 +1862,6 @@ class DropletBotUart:
             self._board_channels = channels
             self._board_n_chips = n_chips
             self._legacy_fw = False
-            log.info(f"Board reports {channels} channels "
-                     f"({n_chips} chips/chain)")
         else:
             log.warning("BOARD_CHANNELS_GET timed out/failed; "
                         "assuming legacy 120-channel board (8 chips/chain)")
@@ -1211,8 +1930,6 @@ class DropletBotUart:
                 if channels == n:
                     self._board_channels = channels
                     self._board_n_chips = n_chips
-                    log.info(f"Board provisioned to {n} channels "
-                             f"({n_chips} chips/chain)")
                     return True
             if attempt + 1 < retries:
                 log.warning(f"set_board_channels({n}) unconfirmed "
@@ -1300,8 +2017,13 @@ class DropletBotUart:
             return self._uid_hex
         return None
 
-    def GetBoardVersion(self, board: str = 'signal') -> str:
-        """Get signal or motor board version"""
+    def GetBoardVersion(self, board: str = 'signal',
+                        timeout_s: float = 1.0) -> str:
+        """Get signal or motor board version.
+
+        `timeout_s` is worth raising for the motor board: its VERSION reply is
+        CAN-routed through the signal board and can take longer than 1 s.
+        """
         if board == 'signal':
             cmd = SignalBoard.VERSION
         elif board == 'motor':
@@ -1310,7 +2032,7 @@ class DropletBotUart:
             return None
 
         packet = self._make_cmd_packet(cmd)
-        version = self._wr(packet, cmd)
+        version = self._wr(packet, cmd, timeout_s=timeout_s)
         if version is not None:
             version = version.decode('utf8')
             parts = version.split(';')
@@ -1349,7 +2071,6 @@ class DropletBotUart:
             cmd = MotorBoard.HW_RESET
         else:
             return None
-        log.info(f"Hardware reset sent to {board} board")
         packet = self._make_cmd_packet(cmd)
         self._w(packet)
         return True
@@ -1364,23 +2085,20 @@ class DropletBotUart:
             self.motor_board_connected = False
         else:
             return None
-        log.info(f"Rebooting {board} board (re-login in ~3 s)")
         packet = self._make_cmd_packet(cmd)
         self._w(packet)
 
         time.sleep(3)
-        # attempt to login again
-        logged_in = self.BoardLogin(board, timeout_s=5)
-        log.info(f"{board} board "
-                 f"{'back online' if logged_in else 'did not answer login'} "
-                 f"after reboot")
-        return logged_in
+        # [WP-L] reconnect-after-reset: poll read-only VERSION until the board
+        # answers (boot logs share the UART), then log in with retries.
+        return self.login_with_retry(board, attempts=2, timeout_s=5,
+                                     wait_version_s=5.0)
 
     # --- Convenience Functions ---
     def login(self):
         """Replicating login"""
-        signal_response = self.BoardLogin('signal')
-        motor_response = self.BoardLogin('motor')
+        signal_response = self.login_with_retry('signal', attempts=2)
+        motor_response = self.login_with_retry('motor', attempts=2)
         return signal_response, motor_response
 
     def getVersions(self):
@@ -1424,7 +2142,6 @@ class DropletBotUart:
         buf = struct.pack('B', level)
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
 
     def setLogLevel(self, board: str = 'signal', level: int = 0):
         """Set log reporting level on specified board."""
@@ -1437,7 +2154,6 @@ class DropletBotUart:
         buf = struct.pack('B', level)
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
 
     # # --- Capacitance ---
     def calibrateCapacitors(self):
@@ -1480,8 +2196,9 @@ class DropletBotUart:
         isn't working -- fall back to the chunked 0x1235 path"): zero
         packets received within the first `first_packet_timeout_s` seconds.
 
-        Always unsubscribes from ROUTE_POWER_CMD before returning, including
-        on exception.
+        Always restores the previous ROUTE_POWER_CMD subscriber (or
+        unsubscribes if there wasn't one) before returning, including on
+        exception.
 
         Args:
             n: Expected channel count (self.board_channels at call time).
@@ -1504,6 +2221,10 @@ class DropletBotUart:
             assembler.feed(total, idx, cap_pf)
             packet_event.set()
 
+        # Save any pre-existing ROUTE_POWER_CMD subscriber so this collection
+        # window restores it instead of silently dropping it.
+        with self._subscribers_lock:
+            prev_subscriber = self._subscribers.get(ROUTE_POWER_CMD)
         self.subscribe(ROUTE_POWER_CMD, _on_stream_packet)
         try:
             buf = struct.pack('>H', switch_time_ms)
@@ -1538,7 +2259,10 @@ class DropletBotUart:
                             f"({assembler.n_received}/{n} channels)")
             return assembler.to_bytes()
         finally:
-            self.unsubscribe(ROUTE_POWER_CMD)
+            if prev_subscriber is not None:
+                self.subscribe(ROUTE_POWER_CMD, prev_subscriber)
+            else:
+                self.unsubscribe(ROUTE_POWER_CMD)
 
     def readAllChannels(self, switch_time_ms: int = 20) -> bytes | None:
         """Read capacitance on all board_channels channels (120 or 200).
@@ -1744,9 +2468,7 @@ class DropletBotUart:
         # voltage is a 8-bit value (unsigned char)
         buf = struct.pack('>B', min(max(voltage, 0), 255))
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"HV voltage -> {voltage}: {'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     @property
     def voltage(self) -> int | None:
@@ -1768,10 +2490,7 @@ class DropletBotUart:
         # frequency is a 16-bit value (unsigned short) in big-endian
         buf = struct.pack('>H', min(max(frequency, 0), 65535))
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"HV frequency -> {frequency} Hz: "
-                  f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     @property
     def frequency(self) -> int | None:
@@ -1796,7 +2515,6 @@ class DropletBotUart:
         cmd = SignalBoard.ELECTRODE_STATE
         packet = self._make_cmd_packet(cmd, states)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
 
     def setElectrodeStates(self, electrode_states: np.ndarray | list | tuple):
         """
@@ -1838,7 +2556,6 @@ class DropletBotUart:
         else:
             packed = packed[:n_bytes]
 
-        log.debug(f"Electrode states -> {int(states_arr.sum())}/{n} active")
         legacy = self._legacy_fw and n == 120
         if not legacy:
             cmd = CMD_ELECTRODE_STATE_CH
@@ -2053,7 +2770,10 @@ class DropletBotUart:
                     elif struct_name_resp == '_dp_flu':
                         values = FilterPositionParams.from_buffer_copy(raw_big)
                     elif 'mt' in struct_name_resp:
-                        values = MotorPositionParams.from_buffer_copy(raw_big)
+                        # [L3] dynamic, so a legacy 56/64 B blob decodes
+                        # instead of raising, and a 68 B one keeps its last
+                        # three fields instead of being silently truncated.
+                        values = MotorPositionParams.from_dynamic_buffer(raw_big)
                     else:
                         count = len(raw_big) // 4
                         values = struct.unpack(f'>{count}i', raw_big)
@@ -2105,15 +2825,6 @@ class DropletBotUart:
             return response
         return None
 
-    def setTempHeatPWMDebug(self, heat1_percent: int = 0, heat2_percent: int = 0):
-        """Directly set heater PWM duty cycles (debug). 0-100%."""
-        if not self.sig_board_connected:
-            return False
-        cmd = SignalBoard.TEMP_HEAT_PWM_DEBUG
-        buf = struct.pack('>BB', heat1_percent, heat2_percent)
-        packet = self._make_cmd_packet(cmd, buf)
-        return self._wr(packet, cmd, timeout_s=2.0) is not None
-
     def setBuzzer(self, on: bool = True):
         """Control buzzer. on=True activates, on=False deactivates."""
         if not self.sig_board_connected:
@@ -2121,10 +2832,7 @@ class DropletBotUart:
         cmd = SignalBoard.BUZZER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"Buzzer -> {'on' if on else 'off'}: "
-                  f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def setFan(self, on: bool = True, board: str = 'motor'):
         """Control fan on specified board.
@@ -2137,16 +2845,16 @@ class DropletBotUart:
             if not self.sig_board_connected:
                 return False
             cmd = SignalBoard.FAN_CTRL
+            buf = struct.pack('>B', 1 if on else 0)
+            packet = self._make_cmd_packet(cmd, buf)
+            return self._wr(packet, cmd, timeout_s=2.0) is not None
         else:
             if not self.motor_board_connected:
                 return False
             cmd = MotorBoard.FAN_CTRL
-        buf = struct.pack('>B', 1 if on else 0)
-        packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"{board} fan -> {'on' if on else 'off'}: "
-                  f"{'ok' if ok else 'no reply'}")
-        return ok
+            buf = struct.pack('>B', 1 if on else 0)
+            packet = self._make_cmd_packet(cmd, buf)
+            return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def setPower(self, on: bool = True):
         """Control system power pin. on=True enables, on=False disables."""
@@ -2155,10 +2863,7 @@ class DropletBotUart:
         cmd = SignalBoard.POWER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.info(f"System power pin -> {'on' if on else 'off'}: "
-                 f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def readAdcData(self):
         """Read 8-channel ADC data. Returns raw response bytes (8x u16 BE, mV*100)."""
@@ -2215,7 +2920,7 @@ class DropletBotUart:
         if not self.sig_board_connected:
             return False
         cmd = SignalBoard.DDS_POT
-        buf = struct.pack('>BBH', action, value)
+        buf = struct.pack('>BH', action, value)
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
 
@@ -2224,7 +2929,7 @@ class DropletBotUart:
         if not self.sig_board_connected:
             return False
         cmd = SignalBoard.DDS_WAVE
-        buf = struct.pack('>BBI', wave, freq)
+        buf = struct.pack('>BI', wave, freq)
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
 
@@ -2246,10 +2951,7 @@ class DropletBotUart:
         temp_val = int(target_c * 100)
         buf = struct.pack('>Bh', channel, temp_val)
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"Heater ch{channel} target -> {target_c} C: "
-                  f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def set_temp_control(self, on: bool, channel: int = 0):
         """Enable or disable heater control."""
@@ -2258,10 +2960,7 @@ class DropletBotUart:
         cmd = SignalBoard.TEMP_START_STOP
         buf = struct.pack('>BB', channel, 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"Heater ch{channel} control -> "
-                  f"{'on' if on else 'off'}: {'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def get_temp_info(self, channel: int = 0):
         """Read current temperature, target, and heater output.
@@ -2297,10 +2996,7 @@ class DropletBotUart:
         cmd = SignalBoard.TEMP_SET_PARAMS
         buf = struct.pack('>Bhhhh', channel, int(kp * 100), int(ki * 100), int(kd * 100), period_ms)
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"Heater ch{channel} PID -> kp={kp} ki={ki} kd={kd} "
-                  f"period={period_ms} ms: {'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def setTempHeatPWMDebug(self, heat1_percent: int = 0, heat2_percent: int = 0):
         """Directly set heater PWM duty cycles (debug). 0-100%."""
@@ -2310,22 +3006,15 @@ class DropletBotUart:
         buf = struct.pack('>BB', min(heat1_percent, 100), min(heat2_percent, 100))
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
 
     # --- PMT (Signal Board) ---
     def pmt_acquire(self):
-        """Start PMT ADC sampling. Returns packet count or None.
-
-        Local patch (not in upstream cf15ac0): the firmware replies
-        only when sampling COMPLETES, and a full-buffer run is 10240
-        samples at 1 kHz (~10.3 s) — upstream's own newer proxy uses a
-        longer timeout for exactly this reason; 10 s guaranteed a
-        timeout on every full acquisition."""
+        """Start PMT ADC sampling. Returns packet count or None."""
         if not self.sig_board_connected:
             return None
         cmd = SignalBoard.PMT_ACQUIRE_START
         packet = self._make_cmd_packet(cmd)
-        resp = self._wr(packet, cmd, timeout_s=30.0)
+        resp = self._wr(packet, cmd, timeout_s=10.0)
         if resp and len(resp) >= 2:
             return struct.unpack('<H', resp[:2])[0]
         return None
@@ -2337,9 +3026,7 @@ class DropletBotUart:
         cmd = SignalBoard.PMT_GAIN_SET
         buf = struct.pack('>B', min(max(gain, 0), 255))
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"PMT gain -> {gain}: {'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def pmt_power(self, on: bool):
         """Control PMT power supply. Returns actual power state or None."""
@@ -2350,10 +3037,7 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=3.0)
         if resp and len(resp) >= 1:
-            log.debug(f"PMT power -> {'on' if on else 'off'} "
-                      f"(board reports {'on' if resp[0] == 1 else 'off'})")
             return resp[0] == 1
-        log.warning(f"PMT power -> {'on' if on else 'off'}: no reply")
         return None
 
     def pmt_start_debug(self, sample_limit: int = 1000):
@@ -2375,7 +3059,6 @@ class DropletBotUart:
         cmd = SignalBoard.PMT_STOP_DEBUG
         packet = self._make_cmd_packet(cmd)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
 
     def pmt_upload_debug(self):
         """Upload buffered PMT debug samples. Returns packet count or None."""
@@ -2388,6 +3071,219 @@ class DropletBotUart:
             return struct.unpack('<H', resp[:2])[0]
         return None
 
+    # --- PMT multi-packet upload collector [WP-PMT 2026-08-28] ---
+    def _collect_pmt_packets(self, cmd: int, packet_cmd: int, payload: bytes = b'',
+                             *, first_packet_timeout_s: float = 30.0,
+                             packet_timeout_s: float = 5.0,
+                             sample_limit: int | None = None,
+                             max_total_s: float = 180.0,
+                             abort_event: "threading.Event | None" = None,
+                             on_progress: Callable[[int, int], None] | None = None
+                             ) -> PmtCapture:
+        """Send `cmd` and collect the 128-byte PMT upload packets it produces.
+
+        See the protocol notes above _PmtPacketAssembler for the packet
+        format and why this cannot go through _wr(): the packets arrive as
+        RESP_OK frames under one cmd key, so response_map keeps only the LAST
+        one. This subscribes to the packet cmd (and, when it differs, to the
+        request cmd for its [packet_count u16 LE] reply), fires the request
+        fire-and-forget with _w(), and assembles the stream.
+
+        Deliberately does NOT take the per-cmd _wr in-flight guard: nothing
+        here waits on response_map, so it composes with a concurrent _wr()
+        for another command on the other lane. Do not run two collections for
+        the same packet_cmd concurrently (subscribe() is one callback per
+        cmd) -- in this UI both entry points are single, operator-driven
+        buttons on the slow lane.
+
+        Completion (any one ends the collection):
+          * every index 0..total_packets-1 seen (total_packets from the
+            packet headers / the count reply)  -> complete
+          * `abort_event` set                   -> aborted, partial result
+          * no first frame within first_packet_timeout_s (the acquire reply
+            only comes when sampling COMPLETES, ~10.3 s) -> partial/empty
+          * no further packet for packet_timeout_s (packets are paced 50 ms
+            apart by the firmware) -> partial result
+          * the device answered RESP_BUSY (sampling already running) -> busy
+          * the device answered RESP_FAIL -> error
+          * `max_total_s` elapsed overall -> error. Belt-and-braces against
+            the reply-aliasing history: duplicate/aliased frames keep
+            refreshing the inter-packet deadline without ever advancing
+            n_received, so the per-packet timeout alone cannot bound this
+            loop. Default 180 s >> the ~19 s a full acquire+upload takes.
+
+        Always returns a PmtCapture (never None): a partial upload is a
+        result to report, not a failure to swallow.
+        """
+        assembler = _PmtPacketAssembler()
+        state_lock = threading.Lock()
+        frame_event = threading.Event()
+        saw_frame = [False]
+
+        def _on_packet(_cmd: int, data: bytes) -> None:
+            with state_lock:
+                saw_frame[0] = True
+                if len(data) == 2 and assembler.expected_total is None:
+                    # the command's own [packet_count u16 LE] reply, which on
+                    # the debug path shares this cmd id with the packets
+                    assembler.set_expected(struct.unpack('<H', data)[0])
+                else:
+                    assembler.feed(data)
+            frame_event.set()
+
+        def _on_count(_cmd: int, data: bytes) -> None:
+            if len(data) >= 2:
+                with state_lock:
+                    saw_frame[0] = True
+                    assembler.set_expected(struct.unpack('<H', data[:2])[0])
+                frame_event.set()
+
+        cmds = [packet_cmd] if packet_cmd == cmd else [packet_cmd, cmd]
+        # Snapshot the displaced subscribers and install ours in ONE critical
+        # section: doing it in two steps leaves a window in which another
+        # caller's subscribe() lands between them and is then clobbered by our
+        # restore below. Writes the dict directly rather than calling
+        # subscribe() because that would re-take this same (non-reentrant) lock.
+        with self._subscribers_lock:
+            prev = {c: self._subscribers.get(c) for c in cmds}
+            self._subscribers[packet_cmd] = _on_packet
+            if packet_cmd != cmd:
+                self._subscribers[cmd] = _on_count
+
+        start = time.time()
+        aborted = False
+        busy = False
+        error: str | None = None
+        try:
+            # Clear stale markers for this cmd so a BUSY/FAIL seen below is ours.
+            with self.response_lock:
+                self.response_map.pop((Frame.RESP_BUSY, cmd), None)
+                self.response_map.pop(cmd, None)
+            if not self._w(self._make_cmd_packet(cmd, payload)):
+                error = "serial write failed"
+            else:
+                last_rx = start
+                reported = -1
+                while True:
+                    with state_lock:
+                        done = assembler.is_complete()
+                        n_now = assembler.n_received
+                        n_exp = assembler.expected_total or 0
+                    if done:
+                        break
+                    if abort_event is not None and abort_event.is_set():
+                        aborted = True
+                        break
+                    if time.time() - start > max_total_s:
+                        error = (f"gave up after {max_total_s:.0f}s "
+                                 f"({n_now}/{n_exp} packets)")
+                        break
+                    if n_now != reported:
+                        reported = n_now
+                        if on_progress is not None:
+                            try:
+                                on_progress(n_now, n_exp)
+                            except Exception:
+                                log.exception("PMT collector on_progress raised")
+                    got = frame_event.wait(timeout=0.2)
+                    frame_event.clear()
+                    now = time.time()
+                    if got:
+                        last_rx = now
+                        continue
+                    with self.response_lock:
+                        if self.response_map.pop((Frame.RESP_BUSY, cmd), None) is not None:
+                            busy = True
+                        # RESP_FAIL parks a None under the cmd key and does NOT
+                        # dispatch, so it is invisible to the subscribers above
+                        # -- without this the caller would wait out the full
+                        # first-packet timeout for an answer already given.
+                        elif cmd in self.response_map and self.response_map[cmd] is None:
+                            self.response_map.pop(cmd, None)
+                            error = "device replied FAIL"
+                    if busy or error:
+                        break
+                    with state_lock:
+                        any_frame = saw_frame[0]
+                    if not any_frame:
+                        if now - start > first_packet_timeout_s:
+                            error = (f"no reply within {first_packet_timeout_s:.0f}s")
+                            break
+                    elif now - last_rx > packet_timeout_s:
+                        log.warning(f"PMT upload 0x{packet_cmd:04X}: stalled at "
+                                    f"{assembler.n_received}/"
+                                    f"{assembler.expected_total or 0} packets")
+                        break
+        finally:
+            with self._subscribers_lock:     # symmetric with the install above
+                for c in cmds:
+                    if prev.get(c) is not None:
+                        self._subscribers[c] = prev[c]
+                    else:
+                        self._subscribers.pop(c, None)
+
+        with state_lock:
+            capture = PmtCapture(
+                samples=assembler.to_samples(sample_limit),
+                n_received=assembler.n_received,
+                n_expected=assembler.expected_total or 0,
+                missing=assembler.missing(),
+                aborted=aborted, busy=busy, error=error,
+                elapsed_s=time.time() - start)
+        if not capture.complete:
+            log.warning(f"PMT upload 0x{packet_cmd:04X} incomplete: {capture.summary()}")
+        return capture
+
+    def pmt_acquire_collect(self, first_packet_timeout_s: float = 30.0,
+                            packet_timeout_s: float = 5.0,
+                            sample_limit: int | None = PMT_ACQUIRE_BUFFER_SAMPLES,
+                            max_total_s: float = 180.0,
+                            abort_event: "threading.Event | None" = None,
+                            on_progress: Callable[[int, int], None] | None = None
+                            ) -> PmtCapture | None:
+        """Run CMD_PMT_ACQUIRE_START (0x1227) and collect the 0x1228 upload.
+
+        The firmware replies (packet count) only when sampling COMPLETES --
+        a full-buffer run is 10240 samples at 1 kHz (~10.3 s) -- and then
+        ships ~166 packets 50 ms apart (~8.3 s), so the default first-frame
+        timeout is 30 s.
+
+        `sample_limit` defaults to the firmware's ADC_BUFFER_SIZE, which a
+        completed acquisition always fills; it trims the zero padding of the
+        final packet. Pass None to keep every decoded value including that
+        padding.
+        """
+        if not self.sig_board_connected:
+            return None
+        return self._collect_pmt_packets(
+            SignalBoard.PMT_ACQUIRE_START, SignalBoard.PMT_DATA_REPORT,
+            first_packet_timeout_s=first_packet_timeout_s,
+            packet_timeout_s=packet_timeout_s, sample_limit=sample_limit,
+            max_total_s=max_total_s,
+            abort_event=abort_event, on_progress=on_progress)
+
+    def pmt_upload_debug_collect(self, sample_limit: int | None = None,
+                                 first_packet_timeout_s: float = 10.0,
+                                 packet_timeout_s: float = 5.0,
+                                 max_total_s: float = 180.0,
+                                 abort_event: "threading.Event | None" = None,
+                                 on_progress: Callable[[int, int], None] | None = None
+                                 ) -> PmtCapture | None:
+        """Run CMD_PMT_DATA_UPLOAD_DEBUG (0x122E) and collect its packets.
+
+        Both the packet-count reply and the packets themselves come back on
+        0x122E (told apart by length); pass the sample limit that was given
+        to pmt_start_debug() to trim the final packet's zero padding.
+        """
+        if not self.sig_board_connected:
+            return None
+        return self._collect_pmt_packets(
+            SignalBoard.PMT_DATA_UPLOAD_DEBUG, SignalBoard.PMT_DATA_UPLOAD_DEBUG,
+            first_packet_timeout_s=first_packet_timeout_s,
+            packet_timeout_s=packet_timeout_s, sample_limit=sample_limit,
+            max_total_s=max_total_s,
+            abort_event=abort_event, on_progress=on_progress)
+
     # --- PMT Motor (Motor Board) ---
     def pmt_motor_ctrl(self, position: int):
         """Move PMT motor to position (1-5). Returns current location byte."""
@@ -2396,12 +3292,9 @@ class DropletBotUart:
         cmd = MotorBoard.PMT_CTRL
         buf = struct.pack('>B', position)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"PMT motor -> position {position} (blocking move)")
         resp = self._wr(packet, cmd, timeout_s=30.0)
         if resp and len(resp) >= 1:
-            log.info(f"PMT motor move done (at position {resp[0]})")
             return resp[0]
-        log.warning(f"PMT motor move to {position}: no reply")
         return None
 
     def pmt_motor_read(self):
@@ -2423,108 +3316,6 @@ class DropletBotUart:
         buf = struct.pack('>i', speed)
         packet = self._make_cmd_packet(cmd, buf)
         return self._wr(packet, cmd, timeout_s=2.0) is not None
-        return True
-
-    # --- ML capacitance calibration / HV interlock (Signal Board) ---
-    # Vendored from upstream proxy.py (post-cf15ac0): same wire formats
-    # and timeouts as the hardware-validated vendor UI.
-    def hv_enable(self, enable: int, bypass: int = 0):
-        """Master HV output enable (pad-sensor interlock). HV only
-        energizes with a device on the pads unless bypass=1 (test/cal
-        only). Returns the status byte or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.HV_ENABLE
-        buf = struct.pack('>BB', enable, bypass)
-        packet = self._make_cmd_packet(cmd, buf)
-        resp = self._wr(packet, cmd, timeout_s=2.0)
-        if resp and len(resp) >= 1:
-            log.info(f"HV enable={enable} bypass={bypass} -> "
-                     f"status {resp[0]}")
-            return resp[0]
-        log.warning(f"HV enable={enable} bypass={bypass}: no reply")
-        return None
-
-    def cal_caps_get(self):
-        """Get the multi-slope reference-cap count (3 or 5), or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.CAL_CAPS_GET
-        packet = self._make_cmd_packet(cmd)
-        resp = self._wr(packet, cmd, timeout_s=2.0)
-        if resp and len(resp) >= 1:
-            return resp[0]
-        return None
-
-    def cal_caps_set(self, cal_caps: int):
-        """Provision the reference-cap count (3 or 5, EF-persisted).
-        Returns the echoed count or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.CAL_CAPS_SET
-        buf = struct.pack('>B', cal_caps)
-        packet = self._make_cmd_packet(cmd, buf)
-        resp = self._wr(packet, cmd, timeout_s=2.0)
-        if resp and len(resp) >= 1:
-            log.debug(f"Reference-cap count -> {cal_caps} "
-                      f"(board echoed {resp[0]})")
-            return resp[0]
-        log.warning(f"Reference-cap count -> {cal_caps}: no reply")
-        return None
-
-    def cap_calibrate_ml(self, hv_mv: int = 0):
-        """Run the multi-slope 3-level calibration (enable HV routing
-        first; blocking ~6 s). Returns the status byte or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.CAP_CALIBRATE_ML
-        buf = struct.pack('>H', hv_mv)
-        packet = self._make_cmd_packet(cmd, buf)
-        log.info("Multi-slope ML capacitance calibration started "
-                 "(blocking ~6 s)")
-        resp = self._wr(packet, cmd, timeout_s=30.0)
-        if resp and len(resp) >= 1:
-            log.info(f"Multi-slope ML calibration finished: "
-                     f"status {resp[0]}")
-            return resp[0]
-        log.warning("Multi-slope ML calibration: no reply")
-        return None
-
-    def cap_ml_realtime(self, mode: int = 255):
-        """Get/set the ML-fitted realtime cap path (255 = query only).
-        Returns the current mode byte or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.CAP_ML_REALTIME
-        buf = struct.pack('>B', mode)
-        packet = self._make_cmd_packet(cmd, buf)
-        resp = self._wr(packet, cmd, timeout_s=2.0)
-        if resp and len(resp) >= 1:
-            if mode != 255:
-                log.debug(f"ML realtime cap path -> {mode} "
-                          f"(board reports {resp[0]})")
-            return resp[0]
-        log.warning(f"ML realtime cap path (mode={mode}): no reply")
-        return None
-
-    def cap_elec_gain(self, permille: int = 0):
-        """Get/set the electrode-path gain in permille (0 = query
-        only; EF-persisted, HW-benchmark default 692). Returns the
-        current permille or None."""
-        if not self.sig_board_connected:
-            return None
-        cmd = SignalBoard.CAP_ELEC_GAIN
-        buf = struct.pack('>H', permille)
-        packet = self._make_cmd_packet(cmd, buf)
-        resp = self._wr(packet, cmd, timeout_s=2.0)
-        if resp and len(resp) >= 2:
-            if permille != 0:
-                log.debug(f"Electrode-path gain -> {permille} permille "
-                          f"(board reports "
-                          f"{struct.unpack('>H', resp[:2])[0]})")
-            return struct.unpack('>H', resp[:2])[0]
-        log.warning(f"Electrode-path gain (permille={permille}): no reply")
-        return None
 
     # --- Capacitance & Short Detection (Signal Board) ---
     def cap_short_detect(self):
@@ -2598,10 +3389,7 @@ class DropletBotUart:
             return False
         buf = alarm_code[:5].encode('ascii').ljust(5, b'\x00')
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.info(f"Clear alarm {alarm_code!r} on {board} board: "
-                 f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def presetParams(self, board: str = 'signal', param_name: str = None):
         """Save parameter(s) to flash (persist across reboots).
@@ -2643,9 +3431,7 @@ class DropletBotUart:
         packet = self._make_cmd_packet(cmd, buf)
         resp = self._wr(packet, cmd, timeout_s=3.0)
         if resp and len(resp) >= 4:
-            log.debug(f"Event streaming mask -> 0x{mask:08X}")
             return struct.unpack('>I', resp[:4])[0]
-        log.warning(f"Event streaming mask -> 0x{mask:08X}: no reply")
         return None
 
     def set_report_interval(self, interval_ms: int):
@@ -2662,31 +3448,17 @@ class DropletBotUart:
         return None
 
     def setLEDIntensity(self, intensity: int = 0, fluorescence=True):
-        """Set LED brightness, in RAW firmware units: fluorescence=True
-        drives the fluorescence LED (16-bit, 0-65535); False drives the
-        illumination LED (single byte, 0-255).
-
-        Local patch (not in upstream cf15ac0): the old body clamped to
-        0-100 and sent a 2-byte payload of intensity/2 — but the
-        firmware's illumination handler (0x1222) reads a single 0-255
-        byte, so it always saw the payload's high byte (0x00) and the
-        light never changed. Both branches now match the vendor
-        proxy's wire formats (illumination_ctrl '>B', fluorescence_ctrl
-        '>H') and raw ranges.
-        """
+        """Set LED brightness. fluorescence=True for fluorescence LED, False for illumination."""
         if not self.sig_board_connected:
             return False
         if fluorescence:
             cmd = SignalBoard.FLUORESCENCE_CTRL
-            buf = struct.pack('>H', min(max(0, intensity), 65535))
         else:
             cmd = SignalBoard.ILLUMINATION_CTRL
-            buf = struct.pack('>B', min(max(0, intensity), 255))
+        intensity = min(max(0, intensity), 100)
+        buf = struct.pack('>H', int(intensity/2))
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"{'Fluorescence' if fluorescence else 'Illumination'} "
-                  f"LED -> {intensity}: {'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     def setBoxLight(self, state: str = "off"):
         """Control RGB indicator light. state: color code."""
@@ -2697,10 +3469,7 @@ class DropletBotUart:
         cmd = SignalBoard.RGB_LIGHT_CTRL
         buf = struct.pack('>B', states.get(state, 0))
         packet = self._make_cmd_packet(cmd, buf)
-        ok = self._wr(packet, cmd, timeout_s=2.0) is not None
-        log.debug(f"RGB indicator light -> {state}: "
-                  f"{'ok' if ok else 'no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=2.0) is not None
 
     # # --- Motor Control ---
     def queryMotorOptoSensors(self):
@@ -2714,6 +3483,7 @@ class DropletBotUart:
         if response is not None:
             if len(response) < 12:
                 log.error(f"Motor opto sensors response length is too short: {len(response)}")
+                return None  # short frame: indexing below would raise
 
             with self.response_lock:  # Protect motor state from concurrent access
                     for i in range(0, 12, 2):
@@ -2755,23 +3525,14 @@ class DropletBotUart:
         buf = struct.pack('B', motor.id)
         packet = self._make_cmd_packet(cmd, buf)
         response = self._wr(packet, cmd, timeout_s=5)
-        # Local patch (not in upstream cf15ac0): all per-motor position
-        # queries share this one command code, so a single timed-out
-        # query leaves an orphan reply that answers the NEXT query
-        # instantly — and every later request/response pairing stays
-        # shifted by one (a permanent "Motor ID mismatch" lockstep).
-        # A reply naming the wrong motor IS that orphan: drain it and
-        # keep waiting for our own, which re-synchronises the stream.
-        while (response is not None and len(response) == 5
-               and response[0] != motor.id):
-            log.warning(f"Stale position reply for motor {response[0]} "
-                        f"while querying motor {motor.id}; draining "
-                        f"and re-waiting")
-            response = self._wait_response(cmd, timeout_s=5)
         if response is not None:
             # response is 5 bytes long, 1 byte motor id, 4 bytes position
             if len(response) != 5:
                 log.error(f"Motor position response length is too short: {len(response)}")
+                return None
+            motor_id = response[0]
+            if motor_id != motor.id:
+                log.error(f"Motor ID mismatch: {motor_id} != {motor.id}")
                 return None
             motor.position = struct.unpack('>i', response[1:5])[0]
             if motor.position <= -10000000:
@@ -2802,7 +3563,6 @@ class DropletBotUart:
         if motor is None:
             raise ValueError(f"Motor not found: {motor_id}")
 
-        action_name = action
         if action == 'relative':
             action = MotorBoard.MOTOR_ACTION_RELATIVE
         elif action == 'absolute':
@@ -2814,7 +3574,6 @@ class DropletBotUart:
         else:
             raise ValueError(f"Invalid action: {action}")
 
-        log.info(f"Motor {motor.name} {action_name} {distance}")
         cmd = MotorBoard.MOTOR_CONTROL
         buf = struct.pack('>BBi', motor.id, action, distance)
         packet = self._make_cmd_packet(cmd, buf)
@@ -2832,24 +3591,16 @@ class DropletBotUart:
             motor.position = struct.unpack('>i', response[2:6])[0]
             if motor.position <= -10000000:
                 motor.error = f"Position outside of allowed range: {motor.position}"
-                log.warning(f"Motor {motor.name} {action_name}: {motor.error}")
                 return motor.error
             else:
                 motor.error = None
             if motor.status == "Normal":
-                log.info(f"Motor {motor.name} {action_name} done at "
-                         f"position {motor.position}")
                 return motor.position
             else:
                 if motor.status == "Error":
-                    log.warning(f"Motor {motor.name} {action_name} FAILED: "
-                                f"{motor.error}")
                     return motor.error
                 else:
-                    log.warning(f"Motor {motor.name} {action_name} ended "
-                                f"with status {motor.status}")
                     return motor.status
-        log.warning(f"Motor {motor.name} {action_name}: no reply")
         return None
 
     def motorRelativeMove(self, motor_id: str|int, distance:int):
@@ -2921,34 +3672,24 @@ class DropletBotUart:
                 log.error(f"Motor ID mismatch: {motor_id} != {motor.id}")
                 return None
             motor.speed = struct.unpack('>i', response[1:5])[0]
-            log.info(f"Motor {motor.name} run speed -> {speed} um/s "
-                     f"(accepted {motor.speed})")
             return motor.speed
-        log.warning(f"Motor {motor.name} run speed -> {speed} um/s: "
-                    f"no reply")
         return None
 
     # --- Motor Macros ---
     def setTray(self, state: bool):
-        """Control chip tray. state: 0=in, 1=out. Returns error status."""
+        """Control chip tray. state: 0=in, 1=out.
+
+        Tri-state result: False = moved OK, True = the board reported an
+        error, None = no/short reply (timeout). A timeout must NOT report
+        itself as success, which the old `return False` did.
+        """
         cmd = MotorBoard.CHIP_CABIN_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"Tray -> {'out' if state else 'in'} (blocking move)")
         response = self._wr(packet, cmd, timeout_s=300)
-        if response is not None:
-            if len(response) > MOTOR_STATUS_INDEX:
-                error = response[MOTOR_STATUS_INDEX] == 0xFF
-                if error:
-                    log.warning(f"Tray move ({'out' if state else 'in'}) "
-                                f"reported an error status")
-                else:
-                    log.info(f"Tray move ({'out' if state else 'in'}) done")
-                return error  # False:ok True:error
-            log.warning(f"Tray move: short reply ({len(response)} bytes)")
-        else:
-            log.warning(f"Tray move ({'out' if state else 'in'}): no reply")
-            return False
+        if response is None or len(response) <= MOTOR_STATUS_INDEX:
+            return None
+        return response[MOTOR_STATUS_INDEX] == 0xFF  # False:ok True:error
 
     def getTray(self):
         """Read chip tray position. Returns status byte."""
@@ -2962,26 +3703,14 @@ class DropletBotUart:
             return None
 
     def setMagnet(self, state: bool):
-        """Control magnet. state: 0=disengage (retract), 1=engage (press chip). Returns error status.
-
-        Local patch (not in upstream cf15ac0): timeout raised 5 -> 30 s
-        to match the vendor proxy (0x1122) — the magnet Z move outlasts
-        5 s, so every engage/disengage timed out mid-move and its late
-        reply orphaned into the next same-cmd request.
-        """
+        """Control magnet. state: 0=disengage (retract), 1=engage (press chip). Returns error status."""
         cmd = MotorBoard.MAG_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"Magnet -> {'engage' if state else 'disengage'} "
-                 f"(blocking move)")
-        response = self._wr(packet, cmd, timeout_s=30)
+        response = self._wr(packet, cmd, timeout_s=5)
         if response is not None:
-            log.info(f"Magnet move "
-                     f"({'engage' if state else 'disengage'}) done")
             return response
         else:
-            log.warning(f"Magnet move "
-                        f"({'engage' if state else 'disengage'}): no reply")
             return False
 
     def getMagnet(self):
@@ -2996,31 +3725,14 @@ class DropletBotUart:
             return None
 
     def setPogo(self, state: bool):
-        """Control pogo pin plates, both pads as a coordinated pair.
-
-        state: 1=press (engage), 0=release (disengage). Returns error
-        status.
-
-        Local patch (not in upstream cf15ac0): the original docstring
-        claimed the opposite mapping (0=press) — the vendor's own test
-        UI sends pushpad_ctrl(1) for PRESS, hardware-confirmed. Also
-        timeout raised 5 -> 30 s to match the vendor proxy (0x1124);
-        the mechanical move outlasts 5 s and a timed-out reply orphans
-        into the next same-cmd request.
-        """
+        """Control pogo pin plates. state: 0=press, 1=release. Returns error status."""
         cmd = MotorBoard.PUSHPAD_CTRL
         buf = struct.pack('B', state & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"Pogo pads -> {'press' if state else 'release'} "
-                 f"(blocking move)")
-        response = self._wr(packet, cmd, timeout_s=30)
+        response = self._wr(packet, cmd, timeout_s=5)
         if response is not None:
-            log.info(f"Pogo pads move "
-                     f"({'press' if state else 'release'}) done")
             return response
         else:
-            log.warning(f"Pogo pads move "
-                        f"({'press' if state else 'release'}): no reply")
             return False
 
     def getPogo(self):
@@ -3035,23 +3747,14 @@ class DropletBotUart:
             return None
 
     def setFilter(self, pos: int):
-        """Set fluorescence filter position (0-4). Returns error status.
-
-        Local patch (not in upstream cf15ac0): timeout raised 5 -> 60 s
-        to match the vendor proxy (0x1126) — the wheel move can outlast
-        5 s, and a timed-out reply orphans into the next same-cmd
-        request.
-        """
+        """Set fluorescence filter position (0-4). Returns error status."""
         cmd = MotorBoard.FLUORESCENCE_CTRL
         buf = struct.pack('B', pos & 0xFF)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"Fluorescence filter -> position {pos} (blocking move)")
-        response = self._wr(packet, cmd, timeout_s=60)
+        response = self._wr(packet, cmd, timeout_s=5)
         if response is not None:
-            log.info(f"Fluorescence filter move to {pos} done")
             return response
         else:
-            log.warning(f"Fluorescence filter move to {pos}: no reply")
             return False
 
     def getFilter(self):
@@ -3075,8 +3778,6 @@ class DropletBotUart:
         cmd = MotorBoard.POWER_CTRL
         buf = struct.pack('>B', 1 if on else 0)
         packet = self._make_cmd_packet(cmd, buf)
-        log.info(f"Motor board power -> "
-                 f"{'on (reset)' if on else 'off'}")
         self._w(packet)
         return True
 
@@ -3087,11 +3788,7 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.CABIN_MAG_RESET
         packet = self._make_cmd_packet(cmd)
-        log.info("Homing chip tray and magnet (blocking)...")
-        ok = self._wr(packet, cmd, timeout_s=60.0) is not None
-        log.info(f"Chip tray and magnet homing "
-                 f"{'done' if ok else 'got no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=60.0) is not None
 
     def resetPMTMotor(self):
         """Reset PMT motor to home position."""
@@ -3099,10 +3796,7 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.PMT_RESET
         packet = self._make_cmd_packet(cmd)
-        log.info("Homing PMT motor (blocking)...")
-        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
-        log.info(f"PMT motor homing {'done' if ok else 'got no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=30.0) is not None
 
     def resetFluorescenceFilter(self):
         """Reset fluorescence filter motor to home position."""
@@ -3110,11 +3804,7 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.FLU_RESET
         packet = self._make_cmd_packet(cmd)
-        log.info("Homing fluorescence filter motor (blocking)...")
-        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
-        log.info(f"Fluorescence filter homing "
-                 f"{'done' if ok else 'got no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=30.0) is not None
 
     def resetPogoPlates(self):
         """Reset pogo pin plate motors to home position."""
@@ -3122,10 +3812,7 @@ class DropletBotUart:
             return False
         cmd = MotorBoard.PUSHPAD_RESET
         packet = self._make_cmd_packet(cmd)
-        log.info("Homing pogo pin plates (blocking)...")
-        ok = self._wr(packet, cmd, timeout_s=30.0) is not None
-        log.info(f"Pogo pin plate homing {'done' if ok else 'got no reply'}")
-        return ok
+        return self._wr(packet, cmd, timeout_s=30.0) is not None
 
     # --- Firmware Upgrade ---
     def performFirmwareUpgrade(self, board: str = 'signal',
@@ -3303,17 +3990,21 @@ class DropletBotUart:
                 log.warning(f"Frame {frame_idx + 1}/{total_frames} no ACK "
                             f"(attempt {attempt + 1}/{frame_attempts}), retrying...")
 
-            if resp is None and baud_switched and frame_idx == 0:
-                # [fallback 2026-08-01] The high-baud session could not carry
-                # even the first frame (marginal link at speed). The bootloader
-                # is still listening at the high baud and only returns to
-                # 115200 after its ~120 s inactivity reset — a naive immediate
-                # classic retry would talk 115200 at a 921600 bootloader and
-                # look bricked (field incident). Recover automatically in the
-                # SAME session: drop our port to 115200, wait out the
-                # bootloader's timeout reset, re-handshake, and redo the
-                # transfer classic from frame 0.
-                log.warning("High-baud transfer could not start; falling back to 115200")
+            if resp is None and baud_switched:
+                # [fallback 2026-08-01] The high-baud session ran out of
+                # retries on this frame (marginal link at speed). The
+                # bootloader is still listening at the high baud and only
+                # returns to 115200 after its ~120 s inactivity reset — a naive
+                # immediate classic retry would talk 115200 at a 921600
+                # bootloader and look bricked (field incident). Recover
+                # automatically in the SAME session: drop our port to 115200,
+                # wait out the bootloader's timeout reset, re-handshake (which
+                # re-erases the app area), and redo the transfer classic from
+                # frame 0. [2026-08-27] This applies at ANY frame index — a
+                # link that dies mid-image must not abandon the bootloader at
+                # the high baud.
+                log.warning(f"High-baud transfer stalled at frame "
+                            f"{frame_idx + 1}/{total_frames}; falling back to 115200")
                 # Fast path (bootloader >= 2026-08-01): command the session
                 # back down — handshake sent AT the high baud with 115200 in
                 # the baud-extension bytes; the ready reply arrives at the
@@ -3418,9 +4109,10 @@ class DropletBotUart:
             else:
                 log.info(f"Rebooting {board.capitalize()} board...")
                 self.RebootBoard(board)
-                # Re-login after reboot
+                # [WP-L] Re-login after reboot: wait for VERSION first so the
+                # login isn't lost into the boot-log window, then retry.
                 time.sleep(2)
-                self.BoardLogin(board)
+                self.login_with_retry(board, attempts=3, wait_version_s=8.0)
 
             version = self.GetBoardVersion(board)
             if version is None:
@@ -3431,8 +4123,26 @@ class DropletBotUart:
             # Step 5: Restore backed-up parameters
             if saved_params:
                 log.info(f"Restoring {len(saved_params)} parameters to {board} board...")
+                cmd_get = param_source.GET_PARAMS
                 for flash_key, raw_value in saved_params.items():
-                    if self.setParams(board, flash_key, raw_value):
+                    # The new firmware generation may serve a different blob
+                    # size for this key. Read what it serves NOW and overlay
+                    # the stored bytes on the front, keeping its own tail
+                    # (same merge as params_tool.restore); raw-writing an
+                    # old-size blob would leave new fields as garbage.
+                    reply = self._param_cmd_echoed(
+                        cmd_get, flash_key, flash_key.encode('utf-8') + b'\x00',
+                        timeout_s=5.0)
+                    if reply is None:
+                        log.warning(f"  {flash_key} not served by the new "
+                                    "firmware -- skipped")
+                        continue
+                    current = reply[len(flash_key) + 1:]
+                    value = raw_value[:len(current)] + current[len(raw_value):]
+                    if len(raw_value) != len(current):
+                        log.info(f"  {flash_key}: {len(raw_value)}B -> "
+                                 f"{len(current)}B merged")
+                    if self.setParams(board, flash_key, value):
                         log.debug(f"  Restored {flash_key}")
                     else:
                         log.warning(f"  Failed to restore {flash_key}")
@@ -3460,14 +4170,13 @@ class DropletBotUart:
         try:
             with open(file_path, 'rb') as f:
                 firmware_data = f.read()
-            if firmware_data.find(b'DroSIG') != -1:
-                board = 'signal'
-                fw_idx = firmware_data.find(b'DroSIG')
-                fw_version = firmware_data[fw_idx:fw_idx+len(b'DroSIG_0.0.0.0')].decode('utf8')
-            elif firmware_data.find(b'DroDri') != -1:
-                board = 'motor'
-                fw_idx = firmware_data.find(b'DroDri')
-                fw_version = firmware_data[fw_idx:fw_idx+len(b'DroDri_0.0.0.0')].decode('utf8')
+            # Tags are variable width (DroSIG_1.0.1.23, DroDri_1.0.0.9, ...);
+            # a fixed-width slice truncates or over-reads. Same pattern as
+            # flash_firmware.detect_board.
+            m = re.search(rb'Dro(SIG|Dri)_[0-9]+(?:\.[0-9]+){0,3}', firmware_data)
+            if m:
+                board = 'signal' if m.group(1) == b'SIG' else 'motor'
+                fw_version = m.group(0).decode('utf8', 'replace')
             else:
                 # Need to ask user to select board
                 fw_version = None

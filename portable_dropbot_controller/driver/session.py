@@ -106,14 +106,7 @@ class DropletBotSession:
         else:
             if not self._uart.init(p, baudrate):
                 raise DropletBotError(f"Failed to open {p}")
-            # Local patch (not in upstream cf15ac0): the same settle +
-            # login retry init_autodetect() applies — a freshly opened
-            # FTDI/USB-serial port misses the first login reply without
-            # it, so the single-rate path never connected over COM-port
-            # adapters even at the correct baud.
-            time.sleep(0.8)
-            if not self._uart.BoardLogin("signal"):
-                self._uart.BoardLogin("signal")
+            self._uart.BoardLogin("signal")
         self._uart.BoardLogin("motor")
 
         if self.load_cap_cal():
@@ -149,20 +142,15 @@ class DropletBotSession:
         result = {}
         sig = self._uart.GetBoardStatus("signal")
         if sig and len(sig) >= 34:
-            # Local patch (not in upstream cf15ac0): the vendor UI's
-            # STATUS decode carries an 18th field, temp_onoff (heater
-            # enable), missing here; unpack as many of the known
-            # fields as the firmware actually sent.
             fields = [
                 "cur_temp", "target_temp", "out_power", "rgy_state",
                 "light_led_bright", "flu_led_bright", "chip_on_pad",
                 "chip_cap", "chip_short_circuit", "chip_res",
                 "dev_temp", "dev_hum", "fan_duty", "pmt",
-                "hv_vol", "hv_freq", "cap_match", "temp_onoff",
+                "hv_vol", "hv_freq", "cap_match",
             ]
-            count = min(len(fields), len(sig) // 2)
-            values = struct.unpack(f">{count}H", sig[:count * 2])
-            result["signal"] = dict(zip(fields[:count], values))
+            values = struct.unpack(f">{len(fields)}H", sig[:len(fields) * 2])
+            result["signal"] = dict(zip(fields, values))
         mot = self._uart.GetBoardStatus("motor")
         if mot and len(mot) >= 7:
             fields = ["rst", "cabin", "mag", "flu", "lpush", "rpush", "pmt"]
@@ -183,7 +171,6 @@ class DropletBotSession:
         """Set HV voltage (in volts) and frequency (in Hz) for electrode actuation."""
         # Voltage is sent as integer (firmware interprets as amplitude)
         v_int = max(0, min(int(voltage_v), 255))
-        log.debug("Actuation setpoints -> %d V, %d Hz", v_int, frequency_hz)
         self._uart.set_voltage(v_int)
         self._uart.set_frequency(frequency_hz)
 
@@ -194,13 +181,10 @@ class DropletBotSession:
         for ch in channels:
             if 0 <= ch < n:
                 states[ch] = True
-        log.debug("Actuating %d channel(s): %s", int(states.sum()),
-                  sorted(ch for ch in channels if 0 <= ch < n))
         self._uart.setElectrodeStates(states)
 
     def clear_channels(self) -> None:
         """Deactivate all electrode channels."""
-        log.debug("Clearing all electrode channels")
         self._uart.setElectrodeStates(np.zeros(self._uart.board_channels, dtype=bool))
 
     # --- Capacitance Calibration Persistence ---
@@ -386,8 +370,6 @@ class DropletBotSession:
         """
         raw = self.measure_active_capacitance(n_averages, corrected=False)
         self.cap_cal = CapCalibration(gain=self.cap_cal.gain, offset_pf=raw)
-        log.info("Capacitance baseline tared: offset_pf=%.3f (gain=%.4f kept)",
-                 raw, self.cap_cal.gain)
         self.save_cap_cal()
         return raw
 
@@ -424,9 +406,6 @@ class DropletBotSession:
         slope, intercept = np.polyfit(n, y, 1)
         gain = pf_per_electrode / slope if slope else 1.0
         self.cap_cal = CapCalibration(gain=float(gain), offset_pf=float(intercept))
-        log.info("Capacitance calibrated: gain=%.4f offset_pf=%.3f "
-                 "(slope=%.3f over %d points)",
-                 float(gain), float(intercept), float(slope), len(ns))
         self.save_cap_cal()
         pred = slope * n + intercept
         ss_res = float(np.sum((y - pred) ** 2))
@@ -451,8 +430,6 @@ class DropletBotSession:
             enable: True to start heating, False to stop.
             channel: Heater channel (0 or 1).
         """
-        log.debug("Heater ch%d -> %.2f C, control %s", channel, target_c,
-                  "on" if enable else "off")
         self._uart.set_temp_target(target_c, channel=channel)
         self._uart.set_temp_control(enable, channel=channel)
 
@@ -482,12 +459,10 @@ class DropletBotSession:
 
     def home_all(self) -> None:
         """Home all motor axes (chip tray + magnet, pogo plates, filter, PMT)."""
-        log.info("Homing all motor axes (tray+magnet, pogo, filter, PMT)")
         self._uart.resetChipTrayAndMagnet()
         self._uart.resetPogoPlates()
         self._uart.resetFluorescenceFilter()
         self._uart.resetPMTMotor()
-        log.info("Home-all sequence finished")
 
     def move_tray(self, position: str) -> bool | None:
         """Move chip tray. position: 'in' (0), 'out' (1).
@@ -539,14 +514,11 @@ class DropletBotSession:
         self, mask: int = SignalBoard.EVT_ALL, interval_ms: int = 1000
     ) -> None:
         """Enable event streaming with given mask and interval."""
-        log.debug("Event streaming enabled: mask=0x%08X interval=%d ms",
-                  mask, interval_ms)
         self._uart.set_event_mask(mask)
         self._uart.set_report_interval(interval_ms)
 
     def disable_streaming(self) -> None:
         """Disable event streaming."""
-        log.debug("Event streaming disabled")
         self._uart.set_event_mask(0)
 
     # --- Safety ---
