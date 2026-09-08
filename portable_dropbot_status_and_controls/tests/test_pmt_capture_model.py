@@ -44,6 +44,13 @@ def test_merge_spots_keeps_settings_order_and_refreshes_positions():
     assert m.rows[2].gain == DEFAULT_PMT_GAIN
 
 
+def test_merge_spots_empty_clears_rows():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000), (2, 2000)])
+    m.merge_spots([])
+    assert m.rows == []
+
+
 def test_capture_entries_honours_ticks_and_order():
     m = PortableDropbotPmtCaptureModel()
     m.rows = [

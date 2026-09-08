@@ -47,10 +47,14 @@ class PmtSpotRow(HasTraits):
     position_um = Int
     #: Read-only ID column: "Spot 3 · 24.50 mm".
     label = Property(Str, observe="slot, position_um")
-    capture = Bool(True)
-    gain = Range(PMT_GAIN_BOUNDS[0], PMT_GAIN_BOUNDS[1], DEFAULT_PMT_GAIN)
+    capture = Bool(True, desc="Capture this spot")
+    gain = Range(
+        *PMT_GAIN_BOUNDS, DEFAULT_PMT_GAIN, desc="PMT gain (MCP41010 wiper position)"
+    )
     exposure_s = Range(
-        PMT_EXPOSURE_S_BOUNDS[0], PMT_EXPOSURE_S_BOUNDS[1], DEFAULT_PMT_EXPOSURE_S
+        *PMT_EXPOSURE_S_BOUNDS,
+        DEFAULT_PMT_EXPOSURE_S,
+        desc="Stream duration for this spot, seconds",
     )
 
     def _get_label(self):
