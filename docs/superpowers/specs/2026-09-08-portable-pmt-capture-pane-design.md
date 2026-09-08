@@ -165,10 +165,13 @@ New handlers beside the existing power / gain / acquire ones:
 - `on_pmt_capture_request` — validates the payload; when a capture is already
   running or the payload is empty it publishes `PmtCaptureDone(ok=False,
   error=…)` straight away so the pane's `capturing` flag never sticks, and
-  otherwise runs the
-  routine below **inline in the handler** (like the calibration macro and the
-  DropBot self tests). Dramatiq's worker pool lets the abort request run on
-  another thread meanwhile.
+  otherwise claims the routine and hands it to a **daemon thread**, returning
+  at once. A 5-spot table at the 600 s exposure bound is a 15-50 minute
+  request — well past the Dramatiq actor's default 600 s time limit, which
+  would otherwise raise `Interrupt` mid-capture, skip the done publish (pane
+  stuck at `capturing=True`), and have the message retried against the board.
+  The thread's body does the work the handler used to do inline, then
+  publishes `PmtCaptureDone` itself.
 - `on_pmt_capture_abort_request` — sets the running capture's
   `threading.Event`; the routine finishes its teardown and reports
   `aborted=True`.
@@ -328,12 +331,16 @@ verification for touched files stays compile + ruff.
       motors pane's PMT position readback.
 - [ ] Spot count on this rig (the pane should show the configured ones; you
       expect 4).
-- [ ] One-spot capture at 2 s: CSV appears under `captures/pmt`, row count ≈
-      exposure / sample_period, `period_source=measured`.
+- [ ] One-spot capture at 10 s: CSV appears under `captures/pmt`, row count ≈
+      exposure / sample_period; `period_source=measured` needs ≥ 2 packets
+      (≥ ~3 s at avg=16).
 - [ ] Three-spot capture with a reorder: files land in table order; progress
       line advances per stage.
 - [ ] Abort mid-stream: teardown log shows stream stop + power off; partial
       CSV for the current spot; `aborted=true`.
+- [ ] Status pane keeps polling during a 60 s exposure; watch for the
+      disconnect-after-N-missed-polls logic firing while the board streams
+      frames.
 - [ ] Status pane keeps updating during a 60 s exposure (lock released).
 - [ ] More Controls' Acquire button is greyed during a capture.
 
