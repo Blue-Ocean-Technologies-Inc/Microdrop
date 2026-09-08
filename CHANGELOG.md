@@ -1,3 +1,17 @@
+## [v1.20.2](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.2) (2026-09-08)
+
+### Refactor
+
+- **legacy-import**: use pathlib instead of os.path ([`af2140c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af2140c3436d60ef91b474066be03a363c8d68ab))
+
+### Test
+
+- **legacy-import**: pin scanner and dialog path handling ([`a557432`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a557432c6be7084d9c383cc53f11658d4d163e63))
+
+### Chore
+
+- **legacy-import**: bring the two modules ruff-clean ([`9443a35`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9443a35563359c4a70ccee898a1493b53ed518a9))
+
 ## [v1.20.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.1) (2026-09-08)
 
 ### Fix
