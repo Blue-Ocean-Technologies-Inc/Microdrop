@@ -1,3 +1,15 @@
+## [v1.20.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.1) (2026-09-08)
+
+### Fix
+
+- remove redundant super call. traits init does not need this. ([`beb0e29`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/beb0e2949b8bcff2b56861f05106553de3bacd43))
+- **status**: persist voltage and frequency via the range helper ([`2579ee7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2579ee739166ecc49fea41aad074f8ccc25c9596))
+- **status**: start from the persisted voltage and frequency ([`16e0b11`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/16e0b119287078a12c9a62d175c3290b90854847))
+
+### Chore
+
+- **manual-controls**: import the range helper via consts ([`a43fe74`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a43fe742155bb49854c488f3bdb299f92d79b09b))
+
 ## [v1.20.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.0) (2026-09-04)
 
 ### Feat
