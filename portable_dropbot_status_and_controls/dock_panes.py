@@ -8,15 +8,24 @@
 #
 # Thanks for using Microdrop open source!
 
-from microdrop_style.icons.icons import ICON_DROP_EC
+# Microdrop package imports.
 from template_status_and_controls.base_dock_pane import BaseStatusDockPane
 from template_status_and_controls.realtime_mode_icon_mixin import (
     RealtimeModeIconMixin,
 )
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_DROP_EC
+
+# Local imports.
 from .consts import (
-    ADVANCED_CONTROLS_LISTENER, CALIBRATION_LISTENER,
-    MORE_CONTROLS_LISTENER, MOTORS_LISTENER, PKG, PKG_name,
+    ADVANCED_CONTROLS_LISTENER,
+    CALIBRATION_LISTENER,
+    MORE_CONTROLS_LISTENER,
+    MOTORS_LISTENER,
+    PKG,
+    PMT_CAPTURE_LISTENER,
+    PKG_name,
 )
 from .controllers.advanced_controls_controller import (
     AdvancedControlsController,
@@ -24,6 +33,7 @@ from .controllers.advanced_controls_controller import (
 from .controllers.calibration_controller import CalibrationController
 from .controllers.more_controls_controller import MoreControlsController
 from .controllers.motors_controller import MotorsController
+from .controllers.pmt_capture_controller import PmtCaptureController
 from .controllers.status_controls_pane_controller import (
     PortableDropbotStatusAndControlsController,
 )
@@ -42,6 +52,9 @@ from .message_handlers.more_controls_message_handler import (
 from .message_handlers.motors_message_handler import (
     PortableDropbotMotorsMessageHandler,
 )
+from .message_handlers.pmt_capture_message_handler import (
+    PortableDropbotPmtCaptureMessageHandler,
+)
 from .models.advanced_controls_model import (
     PortableDropbotAdvancedControlsModel,
 )
@@ -49,15 +62,16 @@ from .models.calibration_model import PortableDropbotCalibrationModel
 from .models.model import PortableDropbotStatusAndControlsModel
 from .models.more_controls_model import PortableDropbotMoreControlsModel
 from .models.motors_model import PortableDropbotMotorsModel
+from .models.pmt_capture_model import PortableDropbotPmtCaptureModel
 from .views.advanced_controls_view import AdvancedControlsView
 from .views.calibration_view import CalibrationView
 from .views.more_controls_view import MoreControlsView
 from .views.motors_view import MotorsView
+from .views.pmt_capture_view import PmtCaptureView
 from .views.view import UnifiedView
 
 
-class PortableDropbotStatusAndControls(RealtimeModeIconMixin,
-                                       BaseStatusDockPane):
+class PortableDropbotStatusAndControls(RealtimeModeIconMixin, BaseStatusDockPane):
     """Dock pane for Portable Dropbot status display and controls."""
 
     id = PKG + ".dock_pane"
@@ -134,6 +148,29 @@ class PortableDropbotCalibrationDockPane(PortableDropbotSecondaryDockPane):
         )
 
 
+class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
+    """Dock pane for multi-spot PMT capture: the configured spots as a
+    reorderable table of capture / gain / exposure, and the routine that
+    visits them and writes one CSV per spot."""
+
+    id = PKG + ".pmt_capture_dock_pane"
+    name = "PMT Capture"
+
+    view = PmtCaptureView
+
+    def _create_model(self):
+        return PortableDropbotPmtCaptureModel()
+
+    def _create_controller(self):
+        return PmtCaptureController(self.model)
+
+    def _create_message_handler(self):
+        return PortableDropbotPmtCaptureMessageHandler(
+            model=self.model,
+            name=PMT_CAPTURE_LISTENER,
+        )
+
+
 class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for everything beyond the everyday status-pane
     controls, one collapsible group per subsystem: per-channel heater
@@ -158,8 +195,7 @@ class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
         )
 
 
-class PortableDropbotAdvancedControlsDockPane(
-        PortableDropbotSecondaryDockPane):
+class PortableDropbotAdvancedControlsDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for the advanced-mode-locked controls: the
     power-system buzzer and per-motor mechanical param tuning (read /
     RAM write / flash preset / reboot)."""

@@ -278,6 +278,21 @@ The portable's built-in magnet and heater join a protocol through `portable_drop
 - `on_protocol_set_magnet_request` (motors mixin) — disengage / engage macro / `motorAbsoluteMove` on the magnet motor (mm × 1000 µm), then publishes `MAGNET_APPLIED` only on success — a failed move leaves the step to time out — and republishes the status snapshot.
 - `on_protocol_set_temperature_request` (temp mixin) — sets the channel target and turns control on, then arms a watcher thread that polls the channel every `TEMP_REACHED_POLL_INTERVAL_S` (republishing `TEMP_UPDATED` so the pane keeps tracking) and publishes `TEMPERATURE_REACHED` once `|current - target| <= tolerance`; it gives up after `TEMP_REACHED_TIMEOUT_S`. A new request cancels the previous watcher.
 
+### Portable DropBot PMT capture: spot table + multi-spot routine (#601)
+
+The PMT Capture pane (`portable_dropbot_status_and_controls`) and the PMT mixin (`portable_dropbot_controller/services/portable_dropbot_pmt_mixin_service.py`) talk over six validated topics; the Pydantic contracts and publishers live in `portable_dropbot_controller/consts.py`.
+
+**Spot table**
+- On `PORTABLE_DROPBOT_CONNECTED` (and the pane's Refresh button) the pane publishes `PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"` (empty message).
+- The backend reads the motor board's `pmt_defaults` flash parameter (five int32 Y positions in µm, one per `pmt_ctrl` slot) and publishes `PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"` — `PmtSpotsUpdated {spots: [{slot, position_um}]}`, non-zero slots only. The pane merges it into its rows by slot, keeping the operator's tick/gain/exposure and order. A future add/remove-spot feature only has to republish this topic.
+
+**Capture routine**
+- Start publishes `PMT_CAPTURE = "portable_dropbot/requests/pmt_capture"` — `PmtCaptureRequest {entries: [{slot, gain, exposure_s}]}`, ticked rows in table order.
+- The backend runs the routine on a daemon thread (the actor's time limit would otherwise interrupt a long capture): fluorescence LED off, PMT power on, then per entry move (`MotorBoardProxy.pmt_ctrl`), gain, `SignalBoardProxy.pmt_stream(1, PMT_STREAM_AVG, PMT_STREAM_OSR)` for `exposure_s` while a `uart.subscribe(CMD_PMT_STREAM_DATA)` callback assembles the frames, stream stop, CSV to `<experiment>/captures/pmt/pmt_spot<slot>_<stamp>_gain<g>.csv`. Each stage publishes `PMT_CAPTURE_PROGRESS = "portable_dropbot/signals/pmt_capture_progress"` (`PmtCaptureProgress {index, total, slot, stage, detail}`; stages move/gain/stream/saved/failed). The proxy lock is taken per command so `STATUS_UPDATED` keeps flowing during a long exposure.
+- Teardown always runs: stream stop, power off (an unanswered power-off is logged at error level), light setpoint restored. Then `PMT_CAPTURE_DONE = "portable_dropbot/signals/pmt_capture_done"` — `PmtCaptureDone {ok, aborted, directory, results: [PmtSpotResult], error}`; a refused request (one already running, nothing ticked) publishes it immediately with `error` set so the pane's Start never sticks.
+- `PMT_CAPTURE_ABORT = "portable_dropbot/requests/pmt_capture_abort"` sets an event the routine polls every 50 ms; it finishes the current spot's teardown and reports `aborted=true`.
+- `PMT_UPDATED {acquiring: true/false}` brackets the routine so the More Controls PMT group greys its Acquire button, as for the single acquire.
+
 ### Voltage/frequency range preferences: app_globals owner-publishes (#610)
 
 `dropbot_status_and_controls` used to reach into `dropbot_preferences_ui` directly (`from dropbot_preferences_ui.models import VoltageFrequencyRangePreferences`) to read the voltage/frequency spinner bounds and to persist the last-applied values. #610 replaced that with the app_globals owner-publishes pattern already used for hardware limits in `dropbot_controller/preferences.py`.
