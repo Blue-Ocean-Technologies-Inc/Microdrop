@@ -257,7 +257,12 @@ electrode_ids = List(Str)
 ### Readability
 
 - Organize code into logical chunks separated by blank lines; whitespace is
-  structure, not decoration
+  structure, not decoration. Concretely, inside a function body: a blank line
+  before every `if`/`for`/`while`/`try`/`with` that follows other statements,
+  a blank line after the block ends, a blank line between the setup
+  assignments and the work that uses them, and one before the final
+  `return`. Only two- or three-line bodies are exempt. A body with no blank
+  lines is wrong even when ruff passes.
 - Clean, elegant, human-readable code beats clever compression
 - Comments state constraints the code cannot show — not what the next line
   does, and not the history of the change
