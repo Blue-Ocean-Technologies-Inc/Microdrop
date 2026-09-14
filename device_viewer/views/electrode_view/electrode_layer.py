@@ -8,17 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsScene
 
+# Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt
 from pyface.qt.QtWidgets import QGraphicsRectItem
 
+# Microdrop package imports.
 from device_viewer.models.main_model import DeviceViewMainModel
 
+# Microdrop utils imports.
 from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_factor
 
+# Local imports.
 from ...consts import (
     ZONE_BAND_Z_VALUE,
     ZONE_LAYER_Z_STEP,
@@ -57,9 +62,14 @@ from .electrodes_view_base import (
     ElectrodeView,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: How much of the routes alpha the slug preview tint takes: light enough
+#: to read the electrode's own state through it.
+FOOTPRINT_ALPHA_FACTOR = 0.35
 
 
 class ElectrodeLayer:
@@ -385,6 +395,40 @@ class ElectrodeLayer:
                 electrode_view = self.electrode_views.get(electrode_id)
                 if electrode_view is not None:
                     self.recolor_electrode(model, electrode_view, electrode_hovered)
+
+    def redraw_footprints(self, model: DeviceViewMainModel):
+        """The live slug preview: every visible route layer tints the
+        electrodes its slug would actuate, in the layer's colour, so the
+        user sees the actuations as they draw and as the sidebar settings
+        change."""
+        svg_model = model.electrodes.svg_model
+        footprint_colors = {}
+
+        if svg_model is not None:
+            centroids = {
+                electrode_id: (polygon.centroid.x, polygon.centroid.y)
+                for electrode_id, polygon in svg_model.polygons.items()
+            }
+            neighbours = {
+                electrode_id: list(adjacent)
+                for electrode_id, adjacent in svg_model.neighbours.items()
+            }
+            alpha = model.get_alpha(routes_key) * FOOTPRINT_ALPHA_FACTOR
+
+            for route_layer in model.routes.layers:
+                if not route_layer.visible:
+                    continue
+
+                color = QColor(route_layer.color)
+                color.setAlphaF(alpha)
+
+                for electrode_id in model.routes.slug_footprint(
+                    route_layer.route.route, centroids, neighbours
+                ):
+                    footprint_colors[electrode_id] = color
+
+        for electrode_id, electrode_view in self.electrode_views.items():
+            electrode_view.set_footprint(footprint_colors.get(electrode_id))
 
     def redraw_electrode_labels(self, model: DeviceViewMainModel):
         alpha = model.get_alpha(electrode_text_key)

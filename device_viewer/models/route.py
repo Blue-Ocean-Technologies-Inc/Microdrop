@@ -27,6 +27,10 @@ from traits.api import (
     observe,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.route_execution import PathExecutionService
+from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
+
 # Local imports.
 from ..default_settings import ROUTE_COLOR_POOL
 
@@ -358,6 +362,44 @@ class RouteLayerManager(HasTraits):
             "lane_right": int(self.lane_right),
             "lanes_in_out": bool(self.lanes_in_out),
             "rotation_lock": bool(self.rotation_lock),
+        }
+
+    def plan_arguments(self) -> dict:
+        """The sidebar's settings as the plan builder's keyword arguments —
+        the one place they are spelled out, for playback and the preview."""
+        return {
+            "duration": float(self.duration),
+            "repetitions": int(self.repetitions),
+            "repeat_duration": float(self.repeat_duration),
+            "trail_length": int(self.trail_length),
+            "trail_overlay": int(self.trail_overlay),
+            "soft_start": bool(self.soft_start),
+            "soft_terminate": bool(self.soft_terminate),
+            "linear_repeats": bool(self.linear_repeats),
+            "lane_left": int(self.lane_left),
+            "lane_right": int(self.lane_right),
+            "lane_frame": IN_OUT if self.lanes_in_out else LEFT_RIGHT,
+            "rotation_lock": bool(self.rotation_lock),
+        }
+
+    def slug_footprint(self, route_ids, centroids, neighbours) -> set:
+        """Every electrode the slug would actuate along ``route_ids`` with
+        the current settings — the union of the plan's phases — for the
+        live preview on the device. Empty for an empty route."""
+        if not route_ids:
+            return set()
+
+        plan = PathExecutionService.calculate_execution_plan_from_params(
+            paths=[list(route_ids)],
+            centroids=centroids,
+            neighbours=neighbours,
+            **self.plan_arguments(),
+        )
+
+        return {
+            electrode_id
+            for item in plan
+            for electrode_id in item["activated_electrodes"]
         }
 
     def apply_execution_params(self, params: dict) -> None:

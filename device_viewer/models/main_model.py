@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from pyface.undo.api import UndoManager
 from traits.api import (
     UUID,
@@ -28,10 +29,13 @@ from traits.api import (
 )
 from traits.observation.events import TraitChangeEvent
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Microdrop utils imports.
 from microdrop_utils.decorators import debounce
 
+# Local imports.
 from ..consts import (
     DEFAULT_ZONE_TYPES,
     DEVICE_REPO_DIR_KEY,
@@ -59,6 +63,7 @@ from .perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .zones import ZoneLayerManager, ZoneType
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -90,6 +95,10 @@ class DeviceViewMainModel(HasTraits):
     # Repetitions / Repeat Duration spinners re-evaluate `enabled_when`
     # reliably when a loop is added/removed or Lin Reps is toggled.
     routes_repeats_frozen = DelegatesTo("routes", prefix="repeats_frozen")
+
+    # Mirror of routes.lanes_in_out so the lane spinners' labels switch
+    # frame reliably (visible_when on a nested path does not re-evaluate).
+    routes_lanes_in_out = DelegatesTo("routes", prefix="lanes_in_out")
 
     # route Execution status display
     execution_status = Str("")

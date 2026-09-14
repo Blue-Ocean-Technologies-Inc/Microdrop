@@ -8,8 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Third-party imports.
 from PySide6.QtCore import QPoint, QPointF, QRectF
 from PySide6.QtGui import QAction, QKeyEvent, Qt, QWheelEvent
 from PySide6.QtWidgets import (
@@ -20,6 +22,7 @@ from PySide6.QtWidgets import (
     QToolTip,
 )
 
+# Enthought library imports.
 from traits.api import (
     Bool,
     DelegatesTo,
@@ -31,6 +34,7 @@ from traits.api import (
     observe,
 )
 
+# Microdrop package imports.
 from device_viewer.consts import (
     ZONE_CLICK_DRAG_THRESHOLD_PX,
     ZONE_DRAW_MODE,
@@ -60,15 +64,18 @@ from device_viewer.views.electrode_view.electrodes_view_base import (
 from device_viewer.views.zone_view.zone_region_item import ZoneRegionItem
 from dropbot_controller.consts import DETECT_DROPLETS
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.system_config import is_rpi
 
+# Local imports.
 from ..preferences import DeviceViewerPreferences
 from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
 from ..views.zone_view.zone_canvas_actions import ZoneCanvasActions
 from .electrode_stepping_service import ElectrodeSteppingService
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -1098,6 +1105,17 @@ class ElectrodeInteractionControllerService(HasTraits):
     def route_redraw(self, event):
         if self.electrode_view_layer:
             self.electrode_view_layer.redraw_connections_to_scene(self.model)
+            self.electrode_view_layer.redraw_footprints(self.model)
+
+    # The preview follows every sidebar setting that changes the phases.
+    @observe(
+        "model.routes.[trail_length, trail_overlay, lane_left, lane_right, "
+        "lanes_in_out, rotation_lock, soft_start, soft_terminate, "
+        "linear_repeats, repetitions, repeat_duration]"
+    )
+    def footprint_redraw(self, event):
+        if self.electrode_view_layer:
+            self.electrode_view_layer.redraw_footprints(self.model)
 
     @observe("model.zones.regions.items")
     @observe("model.zones.regions.items.[visible, zone_id]")

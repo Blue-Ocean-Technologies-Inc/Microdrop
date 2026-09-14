@@ -212,18 +212,10 @@ soft_transition_settings_header = (
 )
 
 # The slug shape: lanes on each side of the route, how they are read, and
-# whether the slug rotates at corners. No lanes = the plain trail.
+# whether the slug rotates at corners. No lanes = the plain trail. The two
+# spinners are shown twice, labelled for the frame in force.
+lane_spinner = dict(editor=RangeEditor(low=0, high=20, mode="spinner"))
 slug_shape_settings = (
-    UItem(
-        "object.routes.lane_left",
-        editor=RangeEditor(low=0, high=20, mode="spinner"),
-        tooltip="Extra lanes inside the turn (screen-left of travel with In/Out off)",
-    ),
-    UItem(
-        "object.routes.lane_right",
-        editor=RangeEditor(low=0, high=20, mode="spinner"),
-        tooltip="Extra lanes outside the turn (screen-right of travel, In/Out off)",
-    ),
     UItem(
         "object.routes.lanes_in_out",
         tooltip="Lanes read as inside / outside of the turn, not screen left / right",
@@ -233,9 +225,45 @@ slug_shape_settings = (
         tooltip="Keep the slug's orientation through corners: it only translates",
     ),
 )
+lanes_in_out_settings = HGroup(
+    VGroup(
+        Label("Lanes In", tooltip="Extra lanes inside the turn"),
+        UItem(
+            "object.routes.lane_left",
+            tooltip="Extra lanes inside the turn",
+            **lane_spinner,
+        ),
+    ),
+    VGroup(
+        Label("Lanes Out", tooltip="Extra lanes outside the turn"),
+        UItem(
+            "object.routes.lane_right",
+            tooltip="Extra lanes outside the turn",
+            **lane_spinner,
+        ),
+    ),
+    visible_when="object.routes_lanes_in_out",
+)
+lanes_left_right_settings = HGroup(
+    VGroup(
+        Label("Lanes Left", tooltip="Extra lanes to the screen-left of travel"),
+        UItem(
+            "object.routes.lane_left",
+            tooltip="Extra lanes to the screen-left of travel",
+            **lane_spinner,
+        ),
+    ),
+    VGroup(
+        Label("Lanes Right", tooltip="Extra lanes to the screen-right of travel"),
+        UItem(
+            "object.routes.lane_right",
+            tooltip="Extra lanes to the screen-right of travel",
+            **lane_spinner,
+        ),
+    ),
+    visible_when="not object.routes_lanes_in_out",
+)
 slug_shape_settings_header = (
-    Label("Lanes In", tooltip="Extra lanes inside the turn"),
-    Label("Lanes Out", tooltip="Extra lanes outside the turn"),
     Label("In/Out", tooltip="Lanes read as inside / outside of the turn"),
     Label("Rot Lock", tooltip="The slug keeps its orientation through corners"),
 )
@@ -257,11 +285,18 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
     ),
     HGroup(
+        lanes_in_out_settings,
+        lanes_left_right_settings,
         VGroup(slug_shape_settings_header[0], slug_shape_settings[0]),
         VGroup(slug_shape_settings_header[1], slug_shape_settings[1]),
-        VGroup(slug_shape_settings_header[2], slug_shape_settings[2]),
-        VGroup(slug_shape_settings_header[3], slug_shape_settings[3]),
     ),
+    Item(
+        "phase_navigation_mode",
+        label="Phases",
+        tooltip="Step through route phases without running the protocol "
+        "(synced with the protocol tree)",
+        visible_when="not object.route_execution_service_executing",
+    ),  # idle phase-navigation mode (#493)
     # enabled_when='free_mode',
 )
 
@@ -320,13 +355,6 @@ run_controls = HGroup(
         visible_when=f"not {executing}",
         springy=True,
     ),  # commit to step
-    Item(
-        "phase_navigation_mode",
-        label="Phases",
-        tooltip="Step through route phases without running the protocol "
-        "(synced with the protocol tree)",
-        visible_when=f"not {executing}",
-    ),  # idle phase-navigation mode (#493)
     enabled_when="not object.protocol_running",
 )
 

@@ -12,6 +12,9 @@
 sidebar manager carries it, the commit message serialises it with defaults
 for older senders, and the geometry message can carry the lattice."""
 
+# Microdrop utils imports.
+from microdrop_utils.tests.test_wide_path_slug_phases import square_lattice
+
 # Local imports.
 from ..models.messages import GeometryChangedMessage
 from ..models.route import RouteLayerManager
@@ -77,3 +80,36 @@ def test_geometry_message_carries_the_lattice_when_given():
 
     assert parsed.centroids == {"a": (0.0, 0.0), "b": (1.0, 0.0)}
     assert parsed.neighbours == {"a": ["b"], "b": ["a"]}
+
+
+def test_plan_arguments_spell_out_every_sidebar_setting_once():
+    manager = RouteLayerManager(trail_length=2, lane_right=1, lanes_in_out=False)
+    arguments = manager.plan_arguments()
+
+    assert arguments["trail_length"] == 2 and arguments["lane_right"] == 1
+    assert arguments["lane_frame"] == "left/right" and arguments["rotation_lock"]
+    assert set(arguments) == {
+        "duration",
+        "repetitions",
+        "repeat_duration",
+        "trail_length",
+        "trail_overlay",
+        "soft_start",
+        "soft_terminate",
+        "linear_repeats",
+        "lane_left",
+        "lane_right",
+        "lane_frame",
+        "rotation_lock",
+    }
+
+
+def test_slug_footprint_is_every_electrode_the_slug_would_actuate():
+    centroids, neighbours, _pitch = square_lattice()
+    route = ["e0205", "e0305", "e0405"]
+    manager = RouteLayerManager(lane_left=1, lane_right=1, lanes_in_out=False)
+
+    assert manager.slug_footprint([], centroids, neighbours) == set()
+    assert manager.slug_footprint(route, centroids, neighbours) == {
+        f"e{x:02d}{y:02d}" for x in (2, 3, 4) for y in (4, 5, 6)
+    }

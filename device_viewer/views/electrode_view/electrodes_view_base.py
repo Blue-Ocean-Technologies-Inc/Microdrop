@@ -309,6 +309,7 @@ class ElectrodeView(QGraphicsPathItem):
 
         # Two colours at most: the base fill and the actuation / disabled fill.
         self.color_stack = None
+        self.footprint_color = None  # the live slug preview tint, if any
         self._disabled = False  # Whether this electrode's channel is disabled
 
         self.electrode = electrode
@@ -450,10 +451,21 @@ class ElectrodeView(QGraphicsPathItem):
         self.color_stack = colors
         self.update()
 
+    def set_footprint(self, color):
+        """Tint the electrode as part of a route's slug preview (None
+        clears it); painted over the base fill, under the actuation."""
+        if color == self.footprint_color:
+            return
+        self.footprint_color = color
+        self.update()
+
     def paint(self, painter, option, widget):
 
         # if only one element, then only base color given
         painter.fillPath(self.path, self.color_stack[0])
+
+        if self.footprint_color is not None:
+            painter.fillPath(self.path, self.footprint_color)
 
         # second element should be the actuation color.
         if len(self.color_stack) > 1:
