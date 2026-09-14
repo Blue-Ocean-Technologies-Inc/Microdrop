@@ -26,8 +26,10 @@ doesn't have); their phase windows also come from the central geometry.
 No Traits, no Qt, no broker — testable as plain Python.
 """
 
+# Standard library imports.
 from typing import Iterator, List, Optional, Set, Tuple
 
+# Microdrop utils imports.
 from microdrop_utils.route_execution import PathExecutionService
 
 
@@ -87,15 +89,15 @@ def effective_repetitions_for_duration(
 
     Returns 1 if no loop routes or the budget is too small for one cycle.
     """
-    _phases_per_rep, total_reps = (
-        PathExecutionService.calculate_phase_rep_breakdown(
-            routes or [], 1,
-            duration=step_duration_s,
-            repetitions=1,
-            repeat_duration=repeat_duration_s,
-            trail_length=trail_length,
-            trail_overlay=trail_overlay,
-        ))
+    _phases_per_rep, total_reps = PathExecutionService.calculate_phase_rep_breakdown(
+        routes or [],
+        1,
+        duration=step_duration_s,
+        repetitions=1,
+        repeat_duration=repeat_duration_s,
+        trail_length=trail_length,
+        trail_overlay=trail_overlay,
+    )
     return total_reps
 
 
@@ -121,24 +123,27 @@ def estimate_repeat_duration_s(
     """
     if not routes:
         return 0.0
-    phases = list(iter_phases(
-        static_electrodes=[],
-        routes=routes,
-        trail_length=trail_length,
-        trail_overlay=trail_overlay,
-        soft_start=soft_start,
-        soft_end=soft_end,
-        repeat_duration_s=0.0,
-        linear_repeats=linear_repeats,
-        n_repeats=n_repeats,
-        step_duration_s=step_duration_s,
-    ))
+    phases = list(
+        iter_phases(
+            static_electrodes=[],
+            routes=routes,
+            trail_length=trail_length,
+            trail_overlay=trail_overlay,
+            soft_start=soft_start,
+            soft_end=soft_end,
+            repeat_duration_s=0.0,
+            linear_repeats=linear_repeats,
+            n_repeats=n_repeats,
+            step_duration_s=step_duration_s,
+        )
+    )
     return len(phases) * float(step_duration_s)
 
 
 # --------------------------------------------------------------------- #
 # Dynamic duration-mode loop helpers (volume-threshold steps)             #
 # --------------------------------------------------------------------- #
+
 
 def duration_loop_parts(
     static_electrodes: List[str],
@@ -189,14 +194,13 @@ def duration_loop_parts(
         )
 
     plan = build_plan(False)
-    unit_cycle = [set(plan_item["activated_electrodes"])
-                  for plan_item in plan]
+    unit_cycle = [set(plan_item["activated_electrodes"]) for plan_item in plan]
     # A single-rep plan for loop routes ends with the return-to-start
     # phase; the dynamic loop closes cycles itself (the next loop's phase
     # 0 IS the return), so drop it from the repeatable unit.
-    if (len(unit_cycle) > 1
-            and any(PathExecutionService.is_loop_path(list(route))
-                    for route in routes)):
+    if len(unit_cycle) > 1 and any(
+        PathExecutionService.is_loop_path(list(route)) for route in routes
+    ):
         unit_cycle = unit_cycle[:-1]
     if not unit_cycle:
         return [], [set(static)], None
@@ -206,22 +210,30 @@ def duration_loop_parts(
         # the length difference IS the ramp — taken from the plan itself
         # to match the device viewer's ramp exactly.
         soft_plan = build_plan(True)
-        ramp_up = [set(plan_item["activated_electrodes"])
-                   for plan_item in soft_plan[:len(soft_plan) - len(plan)]]
+        ramp_up = [
+            set(plan_item["activated_electrodes"])
+            for plan_item in soft_plan[: len(soft_plan) - len(plan)]
+        ]
     return ramp_up, unit_cycle, unit_cycle[0]
 
 
-def unit_cycle_len(static_electrodes, routes, *, trail_length=1,
-                   trail_overlay=0, soft_start=False) -> int:
+def unit_cycle_len(
+    static_electrodes, routes, *, trail_length=1, trail_overlay=0, soft_start=False
+) -> int:
     """Number of phases in one unit loop (the unique, navigable phases)."""
     _ramp, unit_cycle, _ret = duration_loop_parts(
-        static_electrodes, routes, trail_length=trail_length,
-        trail_overlay=trail_overlay, soft_start=soft_start)
+        static_electrodes,
+        routes,
+        trail_length=trail_length,
+        trail_overlay=trail_overlay,
+        soft_start=soft_start,
+    )
     return len(unit_cycle)
 
 
-def another_loop_fits(raw_elapsed: float, cycle_len: int,
-                      phase_dwell: float, budget: float) -> bool:
+def another_loop_fits(
+    raw_elapsed: float, cycle_len: int, phase_dwell: float, budget: float
+) -> bool:
     """True if a FULL fresh loop is guaranteed to finish within budget.
 
     Worst case assumes every phase runs its full ``phase_dwell`` (the
@@ -232,9 +244,13 @@ def another_loop_fits(raw_elapsed: float, cycle_len: int,
     return raw_elapsed + cycle_len * phase_dwell <= budget
 
 
-def loop_completion_fits(raw_elapsed: float, phase_in_cycle: int,
-                         cycle_len: int, phase_dwell: float,
-                         budget: float) -> bool:
+def loop_completion_fits(
+    raw_elapsed: float,
+    phase_in_cycle: int,
+    cycle_len: int,
+    phase_dwell: float,
+    budget: float,
+) -> bool:
     """True if finishing the CURRENT loop from ``phase_in_cycle`` (0-based)
     back to the start still fits the budget. Used for the mid-loop-expiry
     check on resume after a seek."""

@@ -26,12 +26,15 @@ with the same handoff dialog and, on confirm, flips the flag back to
 False, which unlocks Route Reps again.
 """
 
+# Enthought library imports.
 from traits.api import Float
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm
-
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.services.phase_math import (
     estimate_repeat_duration_s,
@@ -43,9 +46,11 @@ from pluggable_protocol_tree.views.columns.spinbox import (
 
 class RepeatDurationColumnModel(BaseColumnModel):
     def trait_for_row(self):
-        return Float(float(self.default_value or 0.0),
-                     desc="Loop cycles capped to fit within this many "
-                          "seconds. 0 disables (use linear n_repeats).")
+        return Float(
+            float(self.default_value or 0.0),
+            desc="Loop cycles capped to fit within this many "
+            "seconds. 0 disables (use linear n_repeats).",
+        )
 
 
 class RepeatDurationHandler(BaseColumnHandler):
@@ -129,11 +134,11 @@ class RepeatDurationHandler(BaseColumnHandler):
 def make_repeat_duration_column():
     return Column(
         model=RepeatDurationColumnModel(
-            col_id="repeat_duration", col_name="Route Reps Dur",
+            col_id="repeat_duration",
+            col_name="Route Reps Dur",
             default_value=0.0,
         ),
         # Bounds mirror the DV sidebar's RouteLayerManager.repeat_duration.
-        view=DoubleSpinBoxColumnView(low=0.0, high=10000.0,
-                                     decimals=2, single_step=10),
+        view=DoubleSpinBoxColumnView(low=0.0, high=10000.0, decimals=2, single_step=10),
         handler=RepeatDurationHandler(),
     )
