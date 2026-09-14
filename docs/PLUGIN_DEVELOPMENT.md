@@ -496,6 +496,4 @@ earlier `application_initialized` + manual `on_trait_change("active_window")` re
 The architecture deliberately favors a **TOML manifest + lazy `module:Class` imports** over a
 scan-and-import discovery (the deprecated `PackagePluginManager` pattern) — it gives
 installability without importing untrusted code at discovery, and dependency resolution is
-delegated to the conda solver via `pixi add`, not custom `sys.path` wiring. See
-`docs/superpowers/specs/2026-06-26-plugin-conda-package-migration-design.md` for that
-rationale.
+delegated to the conda solver via `pixi add`, not custom `sys.path` wiring.
