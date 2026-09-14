@@ -9,46 +9,67 @@
 # Thanks for using Microdrop open source!
 
 # library imports
+
+# Standard library imports.
 import math
 from typing import List
 
-import numpy as np
+# Third-party imports.
 from PySide6.QtGui import QTransform
-from traits.observation.observe import observe
 
-# local imports
-from logger.logger_service import get_logger, debug_throttled
+# Enthought library imports.
+from pyface.qt.QtCore import QPointF, Qt, Signal
+from pyface.qt.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QGraphicsItem,
+    QGraphicsPathItem,
+    QGraphicsTextItem,
+    QPainterPath,
+    QPen,
+    QTextCursor,
+)
+from traits.api import Array, Instance, Str
 
-# enthought imports
-from traits.api import Instance, Array, Str
-from pyface.qt.QtCore import Qt, QPointF, Signal
-from pyface.qt.QtGui import (QColor, QPen, QBrush, QFont, QPainterPath, QGraphicsPathItem, QGraphicsTextItem,
-                             QGraphicsItem, QTextCursor)
-
-from microdrop_utils.decorators import debounce
-from ...default_settings import ELECTRODE_OFF, ELECTRODE_ON, ELECTRODE_NO_CHANNEL, ELECTRODE_LINE, ELECTRODE_TEXT_COLOR, \
-    CONNECTION_LINE_ON_DEFAULT, default_alphas, electrode_text_key, electrode_outline_key
+# Microdrop package imports.
 from device_viewer.models.electrodes import Electrode
 from device_viewer.views.electrode_view.electrode_view_helpers import label_geometry
 
-logger = get_logger(__name__, level='INFO')
+# Local imports.
+from ...default_settings import (
+    CONNECTION_LINE_ON_DEFAULT,
+    ELECTRODE_LINE,
+    ELECTRODE_TEXT_COLOR,
+    electrode_outline_key,
+    electrode_text_key,
+)
+
+# Logger import.
+from logger.logger_service import debug_throttled, get_logger
+
+logger = get_logger(__name__, level="INFO")
 
 
 # electrode connection lines
 class ElectrodeConnectionItem(QGraphicsPathItem):
     """
-    Class defining an Elecrode connection view. These are the small segments that connect neighboring electrodes, visually
+    Class defining an Elecrode connection view. These are the small segments that
+    connect neighboring electrodes, visually
     appearing to be a line segment with an arrow pointing to is directionality
 
     Parameters:
-    - key: The connection item's id/key. A unique and addressable identifier. In electrode_layer.py, this is the tuple (from_id, to_id), where ids are for electrodes
+    - key: The connection item's id/key. A unique and addressable identifier. In
+    electrode_layer.py, this is the tuple (from_id, to_id), where ids are for electrodes
     - src: A (relative) coordinate for where the line starts
     - dst: A (relative) coordinate for where the line ends
     """
+
     def __init__(self, key, src: QPointF, dst: QPointF):
         super().__init__()
 
-        # Plain line, no arrowhead. Used by the white base layer of possible connections.
+        # Plain line, no arrowhead. Used by the white base layer of possible
+        # connections.
         self._line_path = QPainterPath()
         self._line_path.moveTo(src)
         self._line_path.lineTo(dst)
@@ -58,22 +79,23 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
 
         # Arrow start point (2/3 of the way along the line)
         start = QPointF(
-            src.x() + ((dst.x() - src.x()) / (3/2)),
-            src.y() + ((dst.y() - src.y()) / (3/2))
+            src.x() + ((dst.x() - src.x()) / (3 / 2)),
+            src.y() + ((dst.y() - src.y()) / (3 / 2)),
         )
 
         # Arrow end 'level' (along the line, 8 pixels behind start)
-        # We abuse the fact that QPointF addition/scaling works exactly as vector addition/scaling for a bit cleaner computation
-        end_diff = src - dst # Backwards!
-        end_diff /= math.hypot(end_diff.x(), end_diff.y()) # Normalize
-        end_diff *= 4 # Scale
+        # We abuse the fact that QPointF addition/scaling works exactly as vector
+        # addition/scaling for a bit cleaner computation
+        end_diff = src - dst  # Backwards!
+        end_diff /= math.hypot(end_diff.x(), end_diff.y())  # Normalize
+        end_diff *= 4  # Scale
         end = start + end_diff
 
         # Generate ticks
         con_vec = dst - src
         perp_vec = QPointF(con_vec.y(), -con_vec.x())
-        perp_vec /= math.hypot(perp_vec.x(), perp_vec.y()) # Normalize
-        perp_vec *= 4 # Scale
+        perp_vec /= math.hypot(perp_vec.x(), perp_vec.y())  # Normalize
+        perp_vec *= 4  # Scale
 
         first_tick = end + perp_vec
         second_tick = end - perp_vec
@@ -93,7 +115,13 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         self.key = key
         self.set_inactive()
 
-    def set_active(self, color=QColor(CONNECTION_LINE_ON_DEFAULT), alpha=1.0, width=3, show_arrow=True):
+    def set_active(
+        self,
+        color=QColor(CONNECTION_LINE_ON_DEFAULT),
+        alpha=1.0,
+        width=3,
+        show_arrow=True,
+    ):
         """
         Set connection item to visually active. ``width`` lets the thin white base layer
         (possible connections) sit beneath the thicker coloured route segments, and
@@ -109,29 +137,36 @@ class ElectrodeConnectionItem(QGraphicsPathItem):
         """
         self.setPen(Qt.NoPen)
 
+
 class ElectrodeEndpointItem(QGraphicsPathItem):
     """
-    Class defining an endpoint view item. Visually, appears to be a small square situated in the center of an electrode.
+    Class defining an endpoint view item. Visually, appears to be a small square
+    situated in the center of an electrode.
 
     Parameters:
-    - electrode_id: The id of the electrode it is situated on. Also serves as an id for itself
+    - electrode_id: The id of the electrode it is situated on. Also serves as an id for
+    itself
     - centerpoint: The centerpoint of the electrode it is situated on
-    - size: The size of one of the sides of the square, in the same coordinate system as centerpoint
+    - size: The size of one of the sides of the square, in the same coordinate system as
+    centerpoint
     """
+
     def __init__(self, electrode_id, centerpoint: QPointF, size=5):
         super().__init__()
 
         # Generate path
         path = QPainterPath()
-        
-        current_point = centerpoint + QPointF(size/2, size/2) # First corner, top right
+
+        current_point = centerpoint + QPointF(
+            size / 2, size / 2
+        )  # First corner, top right
 
         path.moveTo(current_point)
-        current_point += QPointF(0, -size) # Bottom right
+        current_point += QPointF(0, -size)  # Bottom right
         path.lineTo(current_point)
-        current_point += QPointF(-size, 0) # Bottom left
+        current_point += QPointF(-size, 0)  # Bottom left
         path.lineTo(current_point)
-        current_point += QPointF(0, size) # Top left
+        current_point += QPointF(0, size)  # Top left
         path.lineTo(current_point)
         path.closeSubpath()
 
@@ -250,19 +285,30 @@ class ElectrodeView(QGraphicsPathItem):
     """
     Class defining the view for an electrode in the device viewer:
 
-    - This view is a QGraphicsPathItem that represents the electrode as a polygon with a text label in the center.
-    The view is responsible for updating the color and alpha of the electrode based on the state of the electrode.
+    - This view is a QGraphicsPathItem that represents the electrode as a polygon with a
+    text label in the center.
+    The view is responsible for updating the color and alpha of the electrode based on
+    the state of the electrode.
 
-    - The view also handles the mouse events for the electrode. The view is selectable and focusable.
+    - The view also handles the mouse events for the electrode. The view is selectable
+    and focusable.
     the callbacks for the clicking has to be implemented by a controller for the view.
 
     - The view requires an electrode model to be passed to it.
     """
 
-    def __init__(self, id_: Str, electrode: Instance(Electrode), path_data: Array, default_alphas, parent=None):
+    def __init__(
+        self,
+        id_: Str,
+        electrode: Instance(Electrode),
+        path_data: Array,
+        default_alphas,
+        parent=None,
+    ):
         super().__init__(parent)
 
-        self.color_stack = None # only supports two right now: base, and actuation/disabled layer color
+        # Two colours at most: the base fill and the actuation / disabled fill.
+        self.color_stack = None
         self._disabled = False  # Whether this electrode's channel is disabled
 
         self.electrode = electrode
@@ -279,7 +325,7 @@ class ElectrodeView(QGraphicsPathItem):
 
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
-        self.update_line_alpha(default_alphas.get(electrode_outline_key,1.0))
+        self.update_line_alpha(default_alphas.get(electrode_outline_key, 1.0))
 
         # Text item
         self.text_path = EditableChannelTextItem(parent=self)
@@ -287,8 +333,12 @@ class ElectrodeView(QGraphicsPathItem):
         self.text_path.setDefaultTextColor(self.text_color)
         # Pole of inaccessibility + inscribed diameter: keeps the label
         # inside curved/concave shapes where the bbox center falls outside.
-        self.label_anchor_x, self.label_anchor_y, self.label_extent =             label_geometry(path_data)
-        self._fit_text_in_path(alpha=default_alphas.get(electrode_text_key, 1.0)) # Called again by electrode_layer set the proper alphas using the model
+        self.label_anchor_x, self.label_anchor_y, self.label_extent = label_geometry(
+            path_data
+        )
+        self._fit_text_in_path(
+            alpha=default_alphas.get(electrode_text_key, 1.0)
+        )  # Called again by electrode_layer set the proper alphas using the model
 
         # Make the electrode selectable and focusable
         # self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -322,15 +372,17 @@ class ElectrodeView(QGraphicsPathItem):
 
     @property
     def _tooltip_text(self):
-        _tooltip_text = f"Electrode ID: {self.id}\n" \
-                        f"Channel: {self.electrode.channel}\n" \
-                        f"Area (mm²): {self.electrode.area_scaled:.2f}"
+        _tooltip_text = (
+            f"Electrode ID: {self.id}\n"
+            f"Channel: {self.electrode.channel}\n"
+            f"Area (mm²): {self.electrode.area_scaled:.2f}"
+        )
         if self._disabled:
             _tooltip_text += "\n[DISABLED]"
 
         return _tooltip_text
 
-    def _fit_text_in_path(self, alpha = 1.0, default_font_size: int = 8):
+    def _fit_text_in_path(self, alpha=1.0, default_font_size: int = 8):
         """
         Method to fit the text in the center of the electrode path
         """
@@ -350,7 +402,7 @@ class ElectrodeView(QGraphicsPathItem):
             if font_size < default_font_size:
                 font_size = default_font_size
 
-        resized_font = QFont("Arial") # Get the default font
+        resized_font = QFont("Arial")  # Get the default font
         resized_font.setPointSize(font_size)
         self.text_path.setFont(resized_font)
 
@@ -360,8 +412,10 @@ class ElectrodeView(QGraphicsPathItem):
 
         # center the text on the label anchor
         text_size = self.text_path.document().size()
-        self.text_path.setPos(self.label_anchor_x - text_size.width() / 2,
-                              self.label_anchor_y - text_size.height() / 2)
+        self.text_path.setPos(
+            self.label_anchor_x - text_size.width() / 2,
+            self.label_anchor_y - text_size.height() / 2,
+        )
         # Any rotation (device-view counter-rotation) must pivot about the
         # NEW text's center: after an edit changes the label's size, the
         # origin set at load would be stale and swing the label off its
@@ -425,8 +479,9 @@ class ElectrodeView(QGraphicsPathItem):
             self.setToolTip(self._tooltip_text)
             # One shared key: a redraw touches every electrode at once, so
             # per-id keys would still emit one line per electrode.
-            debug_throttled(logger, "tooltip_redraw",
-                            f"{self.id}: Redrew electrode tooltip")
+            debug_throttled(
+                logger, "tooltip_redraw", f"{self.id}: Redrew electrode tooltip"
+            )
 
     def toggle_tooltip(self, checked: bool):
         if checked:
@@ -434,5 +489,3 @@ class ElectrodeView(QGraphicsPathItem):
             self.setToolTip(self._tooltip_text)
         else:
             self.setToolTip("")
-
-
