@@ -32,6 +32,9 @@ so it deliberately stays a plain class rather than HasTraits.
 # Standard library imports.
 from typing import Any, Dict, List, Optional
 
+# Microdrop utils imports.
+from microdrop_utils import wide_path_geometry
+
 # Logger import.
 from logger.logger_service import get_logger
 
@@ -304,6 +307,12 @@ class PathExecutionService:
         soft_start: bool = False,
         soft_terminate: bool = False,
         linear_repeats: Optional[bool] = None,
+        lane_left: int = 0,
+        lane_right: int = 0,
+        lane_frame: Optional[str] = None,
+        rotation_lock: bool = True,
+        centroids: Optional[Dict[str, tuple]] = None,
+        neighbours: Optional[Dict[str, List[str]]] = None,
     ) -> List[Dict[str, Any]]:
         """Build the full phase-by-phase execution plan for a step.
 
@@ -314,6 +323,16 @@ class PathExecutionService:
         ``repetitions`` times. ``soft_start`` / ``soft_terminate`` add ramp
         phases on top. When ``linear_repeats`` is True, linear (non-loop)
         paths are replayed ``repetitions`` times.
+
+        The slug shape — ``lane_left`` / ``lane_right`` extra lanes across
+        the route, read in ``lane_frame``, with ``rotation_lock`` — applies
+        to every path of the step. At the default width of one electrode
+        this function is the trail algorithm it always was. A wider slug
+        takes its per-path phases from ``wide_path_geometry.slug_phases``
+        (see that module for the rules) and needs the device ``centroids``
+        and ``neighbours``; the plan-level work — merging paths, the repeat
+        duration cap and idle padding, linear repeats, timing — is the same
+        for every width.
         """
         duration = float(duration)
         repetitions = int(repetitions)
@@ -323,6 +342,14 @@ class PathExecutionService:
         linear_repeats = bool(linear_repeats)
         activated_electrodes = list(activated_electrodes or [])
         paths = list(paths or [])
+        width = int(lane_left) + int(lane_right) + 1
+        lane_frame = lane_frame or wide_path_geometry.IN_OUT
+
+        if width > 1 and (centroids is None or neighbours is None):
+            raise ValueError(
+                "A slug wider than one electrode needs the device centroids "
+                "and neighbours to lay its lanes out"
+            )
 
         execution_plan = []
 
@@ -346,6 +373,38 @@ class PathExecutionService:
 
         for i, path in enumerate(paths):
             is_loop = PathExecutionService.is_loop_path(path)
+
+            if width > 1:
+                # A wide slug's phases come ready-made as electrode ids, laps,
+                # ramps and padding included; the merge below treats them as
+                # one open sequence.
+                electrode_phases = PathExecutionService.wide_path_phases(
+                    path,
+                    repetitions,
+                    duration,
+                    repeat_duration,
+                    trail_length,
+                    trail_overlay,
+                    lane_left,
+                    lane_right,
+                    lane_frame,
+                    rotation_lock,
+                    centroids,
+                    neighbours,
+                    soft_start,
+                    soft_terminate,
+                    linear_repeats,
+                )
+                max_open_path_length = max(max_open_path_length, len(electrode_phases))
+                path_info.append(
+                    {
+                        "path": path,
+                        "is_loop": False,
+                        "electrode_phases": electrode_phases,
+                        "loop_total_phases": len(electrode_phases),
+                    }
+                )
+                continue
 
             if is_loop:
                 effective_repetitions = (
@@ -456,6 +515,13 @@ class PathExecutionService:
             phase_electrodes = set(activated_electrodes)
 
             for path_idx, path_data in enumerate(path_info):
+                if "electrode_phases" in path_data:
+                    if phase_idx < path_data["loop_total_phases"]:
+                        phase_electrodes.update(
+                            path_data["electrode_phases"][phase_idx]
+                        )
+                    continue
+
                 path = path_data["path"]
                 is_loop = path_data["is_loop"]
                 cycle_length = path_data["cycle_length"]
@@ -578,6 +644,84 @@ class PathExecutionService:
             )
 
         return execution_plan
+
+    @staticmethod
+    def wide_path_phases(
+        path: List[str],
+        repetitions: int,
+        duration: float,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+        lane_left: int,
+        lane_right: int,
+        lane_frame: str,
+        rotation_lock: bool,
+        centroids: Dict[str, tuple],
+        neighbours: Dict[str, List[str]],
+        soft_start: bool = False,
+        soft_terminate: bool = False,
+        linear_repeats: bool = False,
+    ) -> List[List[str]]:
+        """The phases of one path driven by a slug wider than one electrode,
+        as lists of electrode ids, laid out as a width-1 path's would be.
+
+        ``slug_phases`` already plays a loop's laps and both ramps. What is
+        added here is the step-level layout the width-1 code applies to a
+        loop — the repeat-duration cap on its laps and idle phases holding
+        the return position before the ramp down — and the replay of an
+        open path for linear repeats. The cap and padding use the same
+        arithmetic as ``calculate_effective_repetitions_for_path`` and
+        ``calculate_loop_balance_idle_phases``, with the lap measured in
+        phases of the wide slug rather than of the trail.
+        """
+
+        def phases(laps, ramp_up=False, ramp_down=False):
+            return [
+                list(phase.ids)
+                for phase in wide_path_geometry.slug_phases(
+                    path,
+                    centroids,
+                    neighbours,
+                    lane_left,
+                    lane_right,
+                    trail_length,
+                    trail_overlay,
+                    rotation_lock=rotation_lock,
+                    lane_frame=lane_frame,
+                    repetitions=laps,
+                    soft_start=ramp_up,
+                    soft_terminate=ramp_down,
+                )
+            ]
+
+        if not PathExecutionService.is_loop_path(path):
+            once = phases(1, soft_start, soft_terminate)
+
+            return once * (repetitions if linear_repeats else 1)
+
+        lap_phases = len(phases(2)) - len(phases(1))
+        effective_repetitions = repetitions
+
+        if repeat_duration > 0 and lap_phases > 0 and duration > 0:
+            effective_repetitions = max(
+                int(((repeat_duration / duration) - 1) / lap_phases), 1
+            )
+
+        active = phases(effective_repetitions)
+        ramped = phases(effective_repetitions, soft_start, soft_terminate)
+        idle_phases = 0
+
+        if repeat_duration > 0:
+            balance_time = repeat_duration - len(active) * duration
+            idle_phases = max(int(balance_time / duration), 0)
+
+        # [ramp up][laps][idle at the return position][ramp down]
+        ramp_down_count = len(ramped) - len(phases(effective_repetitions, soft_start))
+        before_ramp_down = len(ramped) - ramp_down_count
+        idle = [list(ramped[before_ramp_down - 1])] * idle_phases
+
+        return ramped[:before_ramp_down] + idle + ramped[before_ramp_down:]
 
     @staticmethod
     def calculate_phase_rep_breakdown(

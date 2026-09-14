@@ -94,7 +94,7 @@ import statistics
 from collections import namedtuple
 
 # Microdrop utils imports.
-from microdrop_utils.route_execution import PathExecutionService
+from microdrop_utils import route_execution
 
 #: How far (in pitches) a snapped lattice position may be from the nearest
 #: electrode centroid and still count as that electrode. Half a pitch: any
@@ -562,7 +562,7 @@ def trail_phases(
     """The shipped trail algorithm on the route itself — width-1 behaviour,
     ramps included. Each phase belongs to its leading electrode."""
     overlay = min(trail_overlay, trail_length - 1)
-    index_phases = PathExecutionService.calculate_trail_phases_for_path(
+    index_phases = route_execution.PathExecutionService.calculate_trail_phases_for_path(
         route,
         trail_length,
         overlay,
