@@ -27,10 +27,66 @@ No Traits, no Qt, no broker — testable as plain Python.
 """
 
 # Standard library imports.
-from typing import Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 # Microdrop utils imports.
 from microdrop_utils.route_execution import PathExecutionService
+from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+
+#: The device's lattice — electrode centroids and the neighbour graph — from
+#: the last geometry message, for slugs wider than one electrode (#682).
+#: Kept here because every caller of the phase math reads a *row* and none
+#: holds the device; the device-viewer sync controller sets it. Empty until
+#: a device has loaded.
+_device_lattice = {"centroids": None, "neighbours": None}
+
+
+def set_device_lattice(centroids, neighbours) -> None:
+    """Remember the device's lattice for the phase math (see
+    ``_device_lattice``); either may be None to clear it."""
+    _device_lattice["centroids"] = dict(centroids) if centroids else None
+    _device_lattice["neighbours"] = dict(neighbours) if neighbours else None
+
+
+def slug_shape_for_row(row) -> Dict:
+    """The slug shape a row asks for, as the plan builder's keyword
+    arguments. Rows saved before the shape existed read as the plain trail
+    (no lanes)."""
+    return {
+        "lane_left": int(getattr(row, "lane_left", 0) or 0),
+        "lane_right": int(getattr(row, "lane_right", 0) or 0),
+        "lane_frame": IN_OUT if getattr(row, "lanes_in_out", True) else LEFT_RIGHT,
+        "rotation_lock": bool(getattr(row, "rotation_lock", True)),
+    }
+
+
+def _shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock) -> Dict:
+    """The plan builder's shape and lattice arguments. A slug wider than one
+    electrode needs the lattice; without one (no device loaded yet, or a
+    device viewer that does not publish it) the step runs at width 1 and
+    says so, rather than failing mid-protocol."""
+    width = int(lane_left) + int(lane_right) + 1
+    lattice = dict(_device_lattice)
+
+    if width > 1 and not (lattice["centroids"] and lattice["neighbours"]):
+        logger.error(
+            f"Slug {width} wide requested but the device lattice is unknown; "
+            "running the route one electrode wide"
+        )
+        lane_left = lane_right = 0
+
+    return {
+        "lane_left": int(lane_left),
+        "lane_right": int(lane_right),
+        "lane_frame": lane_frame,
+        "rotation_lock": bool(rotation_lock),
+        **lattice,
+    }
 
 
 def iter_phases(
@@ -45,6 +101,10 @@ def iter_phases(
     linear_repeats: bool = False,
     n_repeats: int = 1,
     step_duration_s: float = 1.0,
+    lane_left: int = 0,
+    lane_right: int = 0,
+    lane_frame: str = IN_OUT,
+    rotation_lock: bool = True,
 ) -> Iterator[Set[str]]:
     """Yield each phase as the set of electrode IDs to actuate.
 
@@ -70,6 +130,7 @@ def iter_phases(
         soft_start=soft_start,
         soft_terminate=soft_end,
         linear_repeats=linear_repeats,
+        **_shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock),
     )
     for plan_item in plan:
         yield set(plan_item["activated_electrodes"])
@@ -111,6 +172,10 @@ def estimate_repeat_duration_s(
     linear_repeats: bool = False,
     soft_start: bool = False,
     soft_end: bool = False,
+    lane_left: int = 0,
+    lane_right: int = 0,
+    lane_frame: str = IN_OUT,
+    rotation_lock: bool = True,
 ) -> float:
     """Total wall-clock seconds the step would take in Route Reps-
     controlled mode (i.e. with ``repeat_duration_s = 0`` so the loop
@@ -135,6 +200,10 @@ def estimate_repeat_duration_s(
             linear_repeats=linear_repeats,
             n_repeats=n_repeats,
             step_duration_s=step_duration_s,
+            lane_left=lane_left,
+            lane_right=lane_right,
+            lane_frame=lane_frame,
+            rotation_lock=rotation_lock,
         )
     )
     return len(phases) * float(step_duration_s)
@@ -152,6 +221,10 @@ def duration_loop_parts(
     trail_length: int = 1,
     trail_overlay: int = 0,
     soft_start: bool = False,
+    lane_left: int = 0,
+    lane_right: int = 0,
+    lane_frame: str = IN_OUT,
+    rotation_lock: bool = True,
 ) -> Tuple[List[Set[str]], List[Set[str]], Optional[Set[str]]]:
     """Decompose a step into the pieces the RoutesHandler needs to drive a
     *dynamic* duration-mode loop under volume threshold:
@@ -191,6 +264,7 @@ def duration_loop_parts(
             soft_start=with_soft_start,
             soft_terminate=False,
             linear_repeats=False,
+            **_shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock),
         )
 
     plan = build_plan(False)
@@ -218,15 +292,23 @@ def duration_loop_parts(
 
 
 def unit_cycle_len(
-    static_electrodes, routes, *, trail_length=1, trail_overlay=0, soft_start=False
+    static_electrodes,
+    routes,
+    *,
+    trail_length=1,
+    trail_overlay=0,
+    soft_start=False,
+    **shape,
 ) -> int:
-    """Number of phases in one unit loop (the unique, navigable phases)."""
+    """Number of phases in one unit loop (the unique, navigable phases).
+    ``shape`` is ``slug_shape_for_row``'s keyword arguments, if any."""
     _ramp, unit_cycle, _ret = duration_loop_parts(
         static_electrodes,
         routes,
         trail_length=trail_length,
         trail_overlay=trail_overlay,
         soft_start=soft_start,
+        **shape,
     )
     return len(unit_cycle)
 

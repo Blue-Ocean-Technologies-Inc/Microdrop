@@ -92,6 +92,7 @@ from pluggable_protocol_tree.models.display_state import (
 )
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.services.phase_math import set_device_lattice
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 # Microdrop utils imports.
@@ -494,6 +495,7 @@ class DeviceViewerSyncController(HasTraits):
             for electrode_id, point in (geo_change_msg.centroids or {}).items()
         }
         self.electrode_neighbours = dict(geo_change_msg.neighbours or {})
+        set_device_lattice(self.electrode_centroids, self.electrode_neighbours)
 
     @observe("_dv_state_changed_event", dispatch="ui")
     def _on_dv_state(self, event) -> None:

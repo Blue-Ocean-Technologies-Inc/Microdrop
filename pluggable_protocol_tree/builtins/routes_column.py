@@ -67,6 +67,7 @@ from pluggable_protocol_tree.services.phase_math import (
     duration_loop_parts,
     iter_phases,
     loop_completion_fits,
+    slug_shape_for_row,
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
@@ -462,6 +463,7 @@ class RoutesHandler(BaseColumnHandler):
             trail_length=int(getattr(row, "trail_length", 1)),
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
             soft_start=bool(getattr(row, "soft_start", False)),
+            **slug_shape_for_row(row),
         )
         # No routes -> unit_cycle is the single static phase and return_phase
         # is None; the loop below repeats that static actuation across the
@@ -759,6 +761,7 @@ class RoutesHandler(BaseColumnHandler):
                     linear_repeats=bool(getattr(row, "linear_repeats", False)),
                     n_repeats=int(getattr(row, "route_repetitions", 1)),
                     step_duration_s=float(getattr(row, "duration_s", 1.0)),
+                    **slug_shape_for_row(row),
                 )
             )
             cursor = ctx.protocol.cursor

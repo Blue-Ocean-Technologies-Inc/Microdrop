@@ -42,6 +42,7 @@ from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
 from pluggable_protocol_tree.services.phase_math import (
     duration_loop_parts,
     iter_phases,
+    slug_shape_for_row,
 )
 
 # Microdrop utils imports.
@@ -278,6 +279,7 @@ class ProtocolStatusController(HasTraits):
                     linear_repeats=bool(getattr(row, "linear_repeats", False)),
                     n_repeats=reps,
                     step_duration_s=float(getattr(row, "duration_s", 1.0)),
+                    **slug_shape_for_row(row),
                 )
             )
         except Exception:
@@ -312,6 +314,7 @@ class ProtocolStatusController(HasTraits):
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),
                 soft_start=bool(getattr(row, "soft_start", False)),
+                **slug_shape_for_row(row),
             )
             idle_idx = len(unit_cycle)
             electrodes = (

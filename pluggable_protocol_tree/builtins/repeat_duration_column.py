@@ -38,6 +38,7 @@ from pluggable_protocol_tree.models.column import (
 )
 from pluggable_protocol_tree.services.phase_math import (
     estimate_repeat_duration_s,
+    slug_shape_for_row,
 )
 from pluggable_protocol_tree.views.columns.spinbox import (
     DoubleSpinBoxColumnView,
@@ -105,6 +106,7 @@ class RepeatDurationHandler(BaseColumnHandler):
             linear_repeats=bool(getattr(row, "linear_repeats", False)),
             soft_start=bool(getattr(row, "soft_start", False)),
             soft_end=bool(getattr(row, "soft_end", False)),
+            **slug_shape_for_row(row),
         )
         # Compare at 0.01s resolution — matches the column's two-decimal
         # display so a user-typed value identical to what's shown does

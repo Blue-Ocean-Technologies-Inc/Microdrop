@@ -14,18 +14,22 @@ Receives its column set from the plugin on construction and constructs
 the experiment + sticky-note services from the live Envisage
 application so the experiment-bar buttons drive real handlers."""
 
+# Standard library imports.
 import html as _html
 import json
 import threading
 import time
 
+# Third-party imports.
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
 from apscheduler.triggers.interval import IntervalTrigger
 
+# Enthought library imports.
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Any, Bool, Dict, Event, Float, Instance, List, Str, observe
 
+# Microdrop package imports.
 from device_viewer.consts import PROTOCOL_RUNNING
 from microdrop_application.dialogs.pyface_wrapper import (
     NO,
@@ -66,6 +70,7 @@ from pluggable_protocol_tree.services.logging.controller import (
 from pluggable_protocol_tree.services.phase_math import (
     effective_repetitions_for_duration,
     estimate_repeat_duration_s,
+    slug_shape_for_row,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
@@ -87,12 +92,15 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
 from pluggable_protocol_tree.views.quick_action_bar import QuickActionsController
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
 
+# Microdrop style imports.
 from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
 
+# Microdrop utils imports.
 from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.sticky_notes import StickyWindowManager
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -1591,6 +1599,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 linear_repeats=linear_repeats,
                 soft_start=soft_start,
                 soft_end=soft_end,
+                **slug_shape_for_row(row),
             )
             estimated = round(estimated, REPEAT_DURATION_DECIMALS)
             if (
