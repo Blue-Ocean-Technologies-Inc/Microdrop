@@ -10,7 +10,7 @@ It is a *framework* guide. It deliberately does **not** restate:
   (`microdrop-py/.claude/skills/microdrop-conventions/SKILL.md`),
 - the pub/sub topic map → see [`MESSAGES.md`](MESSAGES.md),
 - the Dramatiq API notes → see [`DRAMATIQ_DOCS.md`](DRAMATIQ_DOCS.md),
-- the high-level three-layer architecture → see `microdrop-py/CLAUDE.md`.
+- the high-level three-layer architecture → see `AGENTS.md` (repo root).
 
 ---
 
@@ -379,7 +379,7 @@ interfaces, plugin decoupling).
 - apptools — https://docs.enthought.com/apptools/
 
 **Related in-repo docs**
-- `microdrop-py/CLAUDE.md` — architecture & messaging overview.
+- `AGENTS.md` — project instructions, architecture & messaging overview.
 - `microdrop-py/.claude/skills/microdrop-conventions/SKILL.md` — enforced rules.
 - [`MESSAGES.md`](MESSAGES.md), [`DRAMATIQ_DOCS.md`](DRAMATIQ_DOCS.md),
   [`README.md`](README.md).
