@@ -151,7 +151,7 @@ live route sync so step cells only mutate on deliberate user action.
 
 **Payload schema**
 - Pydantic `StepParamsCommitMessage` at `device_viewer/models/step_params_commit.py` (canonical; `protocol_grid/models/step_params_commit.py` is the legacy copy).
-- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate, linear_repeats`.
+- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate, linear_repeats`, plus the slug shape (#682) `lane_left, lane_right, lanes_in_out, rotation_lock` — defaulted (0, 0, True, True) so messages from older senders still parse; on the tree side they are the hidden columns of the same ids.
 
 **Subscriber side (protocol_grid, legacy)**
 - `protocol_grid/services/message_listener.py` — `listener_actor_routine` branches on `STEP_PARAMS_COMMIT`, deserializes, emits `step_params_commit_received`.
@@ -163,6 +163,25 @@ live route sync so step cells only mutate on deliberate user action.
 **Companion addition (pull direction)**
 - The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
 - The tree publishes that same-step refresh in two cases: the post-commit echo (above), and any tree-originated edit to an execution-param cell on the selected step (`_republish_on_param_cell_change`, gated on `DV_EXECUTION_PARAM_COL_IDS`) — protocol values supersede the sidebar, including uncommitted sidebar edits.
+
+### Device Viewer → Protocol Tree: device geometry for wide paths (#682)
+
+The plan builder lays a slug wider than one electrode out on the device's
+lattice, so the tree needs the electrode centroids and the neighbour graph
+that only the device viewer has.
+
+**Topic**
+- `DEVICE_VIEWER_GEOMETRY_CHANGED` — published once per device change (chip insert, SVG load), change-gated on the electrode-to-channel mapping.
+
+**Payload schema**
+- Pydantic `GeometryChangedMessage` at `device_viewer/models/messages.py`.
+- Fields: `id_to_channel` (as before) plus optional `centroids` (`id -> (x, y)`) and `neighbours` (`id -> [ids]`), None from publishers that predate the shape.
+
+**Publisher side (device_viewer)**
+- `device_viewer/views/device_view_dock_pane.py` — `_publish_geometry_if_changed` fills the two lattice fields from `Electrodes.svg_model` when a device is loaded.
+
+**Subscriber side (pluggable_protocol_tree)**
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_geometry_changed` keeps them on `electrode_centroids` / `electrode_neighbours` and hands them to `services.phase_math.set_device_lattice`, the module-level lattice every phase-math caller reads. A step asking for a wide slug before any lattice is known runs one electrode wide and logs an error.
 
 ### Device Viewer ↔ Protocol Tree: idle phase navigation (#493)
 
