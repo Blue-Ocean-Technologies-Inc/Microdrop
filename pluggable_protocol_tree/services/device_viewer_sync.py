@@ -29,16 +29,31 @@ the former Qt QObject signal bridge.
 
 from __future__ import annotations
 
-from collections import defaultdict
+# Standard library imports.
 import json
+from collections import defaultdict
 
+# Third-party imports.
 import dramatiq
 
+# Enthought library imports.
 from pyface.qt.QtCore import QObject
 from pyface.qt.QtWidgets import QWidget
+from traits.api import (
+    Bool,
+    Dict,
+    Event,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Set,
+    Str,
+    observe,
+)
 
-from traits.api import Bool, Dict, HasTraits, Instance, Str, Property, List, observe, Set, Int, Event
-
+# Microdrop package imports.
 from device_viewer.consts import (
     DEVICE_VIEWER_GEOMETRY_CHANGED,
     DEVICE_VIEWER_STATE_CHANGED,
@@ -46,28 +61,29 @@ from device_viewer.consts import (
     STEP_PARAMS_COMMIT,
 )
 from device_viewer.models.messages import (
-    DeviceViewerMessageModel, GeometryChangedMessage,
+    DeviceViewerMessageModel,
+    GeometryChangedMessage,
 )
 from device_viewer.models.step_params_commit import StepParamsCommitMessage
-from dropbot_controller.consts import REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED
+from dropbot_controller.consts import DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
 from electrode_controller.consts import electrode_state_change_publisher
-from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_controller_base import (
-    generate_class_method_dramatiq_listener_actor,
-)
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 from microdrop_application.menus import is_advanced_mode
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
-    DV_EXECUTION_PARAM_COL_IDS, ELECTRODE_TO_CHANNEL_KEY,
-    PROTOCOL_TREE_ADD_STEP, PROTOCOL_TREE_DISPLAY_STATE,
-    PROTOCOL_TREE_SET_CELL, SYNC_LISTENER_NAME,
-    PHASE_NAVIGATION_MODE, PHASE_NAVIGATION_STATE,
+    DV_EXECUTION_PARAM_COL_IDS,
+    ELECTRODE_TO_CHANNEL_KEY,
+    PHASE_NAVIGATION_MODE,
+    PHASE_NAVIGATION_STATE,
+    PROTOCOL_TREE_ADD_STEP,
+    PROTOCOL_TREE_DISPLAY_STATE,
+    PROTOCOL_TREE_SET_CELL,
+    SYNC_LISTENER_NAME,
     protocol_tree_row_selected_publisher,
 )
 from pluggable_protocol_tree.models.cell_sync import (
-    ProtocolTreeAddStepMessage, ProtocolTreeSetCellMessage,
+    ProtocolTreeAddStepMessage,
+    ProtocolTreeSetCellMessage,
 )
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
@@ -75,6 +91,15 @@ from pluggable_protocol_tree.models.display_state import (
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_controller_base import (
+    generate_class_method_dramatiq_listener_actor,
+)
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -87,8 +112,9 @@ def _execution_params_for_row(row) -> dict:
     and its ``repeat_duration`` spinner is integer-granular."""
 
     ## The device viewer only has spinners to set the repeats num or repeat duration.
-    ## It does not have dialogs to change controls, simply indicates by resetting repeat duration to 0 if
-    ## repeat num in control, and repeat num to 1 and repeat duration to some number when duration based repeats.
+    ## It does not have dialogs to change controls, simply indicates by resetting
+    ## repeat duration to 0 if repeat num in control, and repeat num to 1 and repeat
+    ## duration to some number when duration based repeats.
     if row.repeat_duration_controls:
         repeat_duration = row.repeat_duration
         route_repetitions = 1
@@ -140,7 +166,6 @@ def _col_values_from_execution_params(params: dict) -> dict:
         del result["repeat_duration"]
         result["route_repetitions"] = result.pop("route_repetitions")
 
-
     return result
 
 
@@ -175,7 +200,9 @@ def _insert_step_from_message(row_manager, msg) -> None:
         if isinstance(group, GroupRow):
             parent_path = tuple(group.path)
     new_path = row_manager.add_step(
-        parent_path=parent_path, index=index, values=values,
+        parent_path=parent_path,
+        index=index,
+        values=values,
     )
 
     # add_step writes cell values via bare setattr, bypassing set_value and
@@ -190,26 +217,29 @@ def _insert_step_from_message(row_manager, msg) -> None:
 
 
 class DeviceViewerSyncController(HasTraits):
-    row_manager              = Instance(RowManager)
-    parent_widget            = Instance(QWidget, allow_none=True)
-    dramatiq_actor           = Instance(dramatiq.Actor, allow_none=True)
-    listener_name            = Str(SYNC_LISTENER_NAME)
+    row_manager = Instance(RowManager)
+    parent_widget = Instance(QWidget, allow_none=True)
+    dramatiq_actor = Instance(dramatiq.Actor, allow_none=True)
+    listener_name = Str(SYNC_LISTENER_NAME)
 
-    _free_mode_stash         = Instance(dict, allow_none=True)
-    free_mode                = Bool(False)
+    _free_mode_stash = Instance(dict, allow_none=True)
+    free_mode = Bool(False)
     # "" = no row selected; we never expose this trait, so the empty
     # string sentinel is fine and keeps comparisons simple.
-    _last_selected_uuid      = Str()
-    _protocol_running        = Bool(False)
-    _suppress_publish        = Bool(False)
+    _last_selected_uuid = Str()
+    _protocol_running = Bool(False)
+    _suppress_publish = Bool(False)
 
-    #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
-    # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
+    #: Map of the unique channels found amongst the electrodes, and various
+    #: electrode ids associated with them. Note that channel-electrode_id is
+    #: one-to-many! So there is meaningful difference in acting on one or the other
     electrode_ids_channels_map = Dict(Str, Int)
-    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrode_ids_channels_map')
+    channels_electrode_ids_map = Property(
+        Dict(Int, List(Str)), observe="electrode_ids_channels_map"
+    )
 
-    _tree_widget             = Instance(ProtocolTreeWidget, allow_none=True)
-    _selection_model         = Instance(QObject, allow_none=True)
+    _tree_widget = Instance(ProtocolTreeWidget, allow_none=True)
+    _selection_model = Instance(QObject, allow_none=True)
 
     realtime_mode = Bool()
     actuated_channels = Set(Int)
@@ -233,18 +263,18 @@ class DeviceViewerSyncController(HasTraits):
     # bridge. The row-mutating ones use dispatch="ui" to marshal onto the GUI
     # thread (cell_changed -> QtTreeModel.dataChanged must run there); the
     # Qt-free ones (geometry, realtime, advanced mode) run inline.
-    _geometry_changed_event       = Event(Str)
-    _dv_state_changed_event       = Event(Str)
+    _geometry_changed_event = Event(Str)
+    _dv_state_changed_event = Event(Str)
     _protocol_running_changed_event = Event(Bool)
-    _step_params_committed_event  = Event(Str)
-    _set_cell_request_event       = Event(Str)
-    _add_step_request_event       = Event(Str)
+    _step_params_committed_event = Event(Str)
+    _set_cell_request_event = Event(Str)
+    _add_step_request_event = Event(Str)
 
     def _advanced_mode_default(self):
         return bool(is_advanced_mode())
 
     def traits_init(self):
-        logger.info(f"Starting Protocol Tree Device View Sync Controller listener")
+        logger.info("Starting Protocol Tree Device View Sync Controller listener")
         self.dramatiq_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.listener_name,
             class_method=self._listener_routine,
@@ -252,9 +282,9 @@ class DeviceViewerSyncController(HasTraits):
 
         # seed electrode_ids_channels_map from metadata if it exists
         if self.row_manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY):
-            self.electrode_ids_channels_map = (
-                self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY]
-            )
+            self.electrode_ids_channels_map = self.row_manager.protocol_metadata[
+                ELECTRODE_TO_CHANNEL_KEY
+            ]
 
     # --- public lifecycle ----------------------------------------------
 
@@ -285,7 +315,10 @@ class DeviceViewerSyncController(HasTraits):
     # -------- trait observers --------------
     @observe("electrode_ids_channels_map")
     def _update_metadata(self, event=None):
-        logger.info(f"PROTOCOL TREE (Device Sync): Updating metadata. Electrode Channels Change: {event.new}")
+        logger.info(
+            "PROTOCOL TREE (Device Sync): Updating metadata. Electrode Channels "
+            f"Change: {event.new}"
+        )
         self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
 
     @observe("row_manager:cell_changed")
@@ -343,15 +376,27 @@ class DeviceViewerSyncController(HasTraits):
             reason += "In Free-mode"
 
         if reason:
-            logger.warning(f"PROTOCOL TREE (Device Sync): Cannot publish actuations; reason: {reason}")
+            logger.warning(
+                "PROTOCOL TREE (Device Sync): Cannot publish actuations; "
+                f"reason: {reason}"
+            )
         else:
             logger.info("PROTOCOL TREE (Device Sync): Will publish actuations")
 
     @observe("actuated_channels")
     def _send_actuation_request(self, event):
-        if not self._protocol_running and self.realtime_mode and not self._free_mode_stash:
-            logger.info(f"PROTOCOL TREE (Device Sync): Publishing electrode actuation:{self.actuated_channels}")
-            electrode_state_change_publisher.publish(actuated_channels=self.actuated_channels)
+        if (
+            not self._protocol_running
+            and self.realtime_mode
+            and not self._free_mode_stash
+        ):
+            logger.info(
+                "PROTOCOL TREE (Device Sync): Publishing electrode actuation:"
+                f"{self.actuated_channels}"
+            )
+            electrode_state_change_publisher.publish(
+                actuated_channels=self.actuated_channels
+            )
 
     @observe("realtime_mode")
     def _realtime_mode_change(self, event):
@@ -362,19 +407,26 @@ class DeviceViewerSyncController(HasTraits):
             logger.debug("Not processing actuation request... In free mode.")
             return
 
-        logger.info(f"PROTOCOL TREE (Device Sync): Publishing electrode actuation:{self.actuated_channels}")
-        electrode_state_change_publisher.publish(actuated_channels=self.actuated_channels)
+        logger.info(
+            "PROTOCOL TREE (Device Sync): Publishing electrode actuation:"
+            f"{self.actuated_channels}"
+        )
+        electrode_state_change_publisher.publish(
+            actuated_channels=self.actuated_channels
+        )
 
     # --- worker-thread dispatch (no Qt / RowManager mutation here) -----
 
     def _listener_routine(self, message: str, topic: str) -> None:
-        logger.debug(f"PROTOCOL TREE (Device Sync): Topic = {topic}; Message = {message}")
+        logger.debug(
+            f"PROTOCOL TREE (Device Sync): Topic = {topic}; Message = {message}"
+        )
         if topic == DEVICE_VIEWER_STATE_CHANGED:
             self._dv_state_changed_event = message
         elif topic == DEVICE_VIEWER_GEOMETRY_CHANGED:
             self._geometry_changed_event = message
         elif topic == PROTOCOL_RUNNING:
-            self._protocol_running_changed_event = (message.casefold() == "true")
+            self._protocol_running_changed_event = message.casefold() == "true"
         elif topic == STEP_PARAMS_COMMIT:
             self._step_params_committed_event = message
         elif topic == PROTOCOL_TREE_SET_CELL:
@@ -382,12 +434,14 @@ class DeviceViewerSyncController(HasTraits):
         elif topic == PROTOCOL_TREE_ADD_STEP:
             self._add_step_request_event = message
         elif topic == PHASE_NAVIGATION_MODE:
-            self.phase_nav_mode = (message.casefold() == "true")
+            self.phase_nav_mode = message.casefold() == "true"
         elif topic == PHASE_NAVIGATION_STATE:
             try:
                 state = json.loads(message)
                 if not isinstance(state, dict):
-                    logger.warning(f"bad phase-navigation state {message!r}: not an object")
+                    logger.warning(
+                        f"bad phase-navigation state {message!r}: not an object"
+                    )
                 else:
                     self.trait_set(
                         phase_nav_index=int(state.get("phase_index", 0)),
@@ -396,15 +450,15 @@ class DeviceViewerSyncController(HasTraits):
             except (ValueError, TypeError) as e:
                 logger.warning(f"bad phase-navigation state {message!r}: {e}")
         elif topic == REALTIME_MODE_UPDATED:
-            self.realtime_mode = (message.casefold() == "true")
+            self.realtime_mode = message.casefold() == "true"
         elif topic == DROPBOT_DISCONNECTED:
             self.realtime_mode = False
         elif topic == ADVANCED_MODE_CHANGE:
             # Qt-free trait — the dock pane's dispatch="ui" observer marshals
             # the GUI-thread work (tree editability, live ctx update).
-            self.advanced_mode = (message.casefold() == "true")
+            self.advanced_mode = message.casefold() == "true"
 
-    # --- Qt-thread / trait Event handlers / observers --------------------------------------------
+    # --- Qt-thread / trait Event handlers / observers ---------------------------
 
     @observe("_geometry_changed_event")
     def _on_geometry_changed(self, event) -> None:
@@ -481,12 +535,14 @@ class DeviceViewerSyncController(HasTraits):
             if list(row.electrodes or []) != electrodes:
                 row.electrodes = list(electrodes)
                 self.row_manager.cell_changed = {
-                    "path": path, "col_id": "electrodes",
+                    "path": path,
+                    "col_id": "electrodes",
                 }
             if list(row.routes or []) != routes:
                 row.routes = routes
                 self.row_manager.cell_changed = {
-                    "path": path, "col_id": "routes",
+                    "path": path,
+                    "col_id": "routes",
                 }
             return
 
@@ -520,13 +576,14 @@ class DeviceViewerSyncController(HasTraits):
         row = self.row_manager.get_row_by_uuid(commit_msg.step_id)
         if row is None or isinstance(row, GroupRow):
             logger.warning(
-                f"step-params commit for unknown step "
-                f"{commit_msg.step_id!r} dropped"
+                f"step-params commit for unknown step {commit_msg.step_id!r} dropped"
             )
             return
         path = tuple(row.path)
 
-        new_values = _col_values_from_execution_params(commit_msg.model_dump(exclude={"step_id"}))
+        new_values = _col_values_from_execution_params(
+            commit_msg.model_dump(exclude={"step_id"})
+        )
         # Direct trait writes bypass QtTreeModel.setData and the delegate,
         # so fire cell_changed per changed column — it drives both the
         # dirty tracker and the pane's repeat-duration reconciliation.
@@ -562,19 +619,20 @@ class DeviceViewerSyncController(HasTraits):
             logger.warning(f"failed to parse set-cell request: {e}")
             return
         if self._protocol_running:
-            logger.info(
-                f"set-cell for {set_cell_msg.col_id!r} ignored during a run")
+            logger.info(f"set-cell for {set_cell_msg.col_id!r} ignored during a run")
             return
         row = self.row_manager.get_row_by_uuid(set_cell_msg.step_id)
         if row is None or isinstance(row, GroupRow):
             logger.warning(
-                f"set-cell for unknown step {set_cell_msg.step_id!r} dropped")
+                f"set-cell for unknown step {set_cell_msg.step_id!r} dropped"
+            )
             return
         try:
             column = self.row_manager._column_by_id(set_cell_msg.col_id)
         except KeyError:
             logger.warning(
-                f"set-cell for unknown column {set_cell_msg.col_id!r} dropped")
+                f"set-cell for unknown column {set_cell_msg.col_id!r} dropped"
+            )
             return
         value = column.model.deserialize(set_cell_msg.value)
         current = column.model.get_value(row)
@@ -585,8 +643,10 @@ class DeviceViewerSyncController(HasTraits):
         # set_value fires cell_changed, so the edit flows through the same
         # dirty tracking + rebroadcast path as a manual cell edit.
         self.row_manager.set_value(tuple(row.path), set_cell_msg.col_id, value)
-        logger.info(f"set-cell applied to Step {row.dotted_path()} "
-                    f"column {set_cell_msg.col_id!r}")
+        logger.info(
+            f"set-cell applied to Step {row.dotted_path()} "
+            f"column {set_cell_msg.col_id!r}"
+        )
 
     @observe("_add_step_request_event", dispatch="ui")
     def _on_add_step_request(self, event) -> None:
@@ -612,20 +672,18 @@ class DeviceViewerSyncController(HasTraits):
         group selection). Column-owning panes (fluorescence) live-track
         the selected step through this without reaching into the tree."""
         if row is None:
-            protocol_tree_row_selected_publisher.publish(step_id=None,
-                                                         cells={})
+            protocol_tree_row_selected_publisher.publish(step_id=None, cells={})
             return
         if isinstance(row, GroupRow):
             protocol_tree_row_selected_publisher.publish(
-                step_id=None, group_id=row.uuid, cells={})
+                step_id=None, group_id=row.uuid, cells={}
+            )
             return
         cells = {
-            column.model.col_id:
-                column.model.serialize(column.model.get_value(row))
+            column.model.col_id: column.model.serialize(column.model.get_value(row))
             for column in self.row_manager.columns
         }
-        protocol_tree_row_selected_publisher.publish(step_id=row.uuid,
-                                                     cells=cells)
+        protocol_tree_row_selected_publisher.publish(step_id=row.uuid, cells=cells)
 
     def _publish_for_row(self, row) -> None:
         """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
@@ -690,7 +748,9 @@ class DeviceViewerSyncController(HasTraits):
                     f"({len(msg.electrodes)} electrodes, "
                     f"{len(msg.routes)} routes)"
                 )
-                self.actuated_channels = set(self.electrode_ids_channels_map[id] for id in row.electrodes)
+                self.actuated_channels = set(
+                    self.electrode_ids_channels_map[id] for id in row.electrodes
+                )
 
             self._last_selected_uuid = row.uuid
         publish_message(
@@ -716,9 +776,7 @@ class DeviceViewerSyncController(HasTraits):
         # protocol_grid parity) — the DV carries them on free-mode state
         # messages for exactly this purpose.
         if stash.get("execution_params"):
-            values.update(
-                _col_values_from_execution_params(stash["execution_params"])
-            )
+            values.update(_col_values_from_execution_params(stash["execution_params"]))
         self._suppress_publish = True
         try:
             self.row_manager.add_step(parent_path=(), index=None, values=values)

@@ -8,21 +8,33 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
-from traits.api import observe, HasTraits, Instance, Bool, Int, List, Set, provides
+# Third-party imports.
+from PySide6.QtCore import QTimer
 
+# Enthought library imports.
+from traits.api import Bool, HasTraits, Instance, Int, List, Set, observe, provides
+
+# Microdrop package imports.
+from electrode_controller.consts import electrode_state_change_publisher
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pyside_helpers import PausableTimer
+from microdrop_utils.route_execution import PathExecutionService
+
+# Local imports.
+from ..consts import PHASE_NAVIGATION_STATE, ROUTES_EXECUTING
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_route_execution_service import IRouteExecutionService
-from electrode_controller.consts import electrode_state_change_publisher
-from ..consts import ROUTES_EXECUTING, PHASE_NAVIGATION_STATE
-from microdrop_utils.route_execution import PathExecutionService
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from PySide6.QtCore import QTimer
-from microdrop_utils.pyside_helpers import PausableTimer
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+
 
 @provides(IRouteExecutionService)
 class RouteExecutionService(HasTraits):
@@ -65,11 +77,14 @@ class RouteExecutionService(HasTraits):
     # ---------------------- User-toggle diff helper -------------------------
 
     def _capture_user_changes(self):
-        """Diff current actuated_channels against what we last set to detect user clicks."""
+        """Diff current actuated_channels against what we last set to detect
+        user clicks."""
         current = set(self.model.electrodes.actuated_channels)
         user_added = current - self._last_set_channels
         user_removed = self._user_toggled_channels - current
-        self._user_toggled_channels = (self._user_toggled_channels | user_added) - user_removed
+        self._user_toggled_channels = (
+            self._user_toggled_channels | user_added
+        ) - user_removed
 
     def _build_execution_plan(self, routes_to_execute):
         """Phase plan for the given layers from the live sidebar params.
@@ -82,7 +97,8 @@ class RouteExecutionService(HasTraits):
         for channel in self.model.electrodes.actuated_channels:
             if channel in self.model.electrodes.channels_electrode_ids_map:
                 activated_electrode_ids.extend(
-                    self.model.electrodes.channels_electrode_ids_map[channel])
+                    self.model.electrodes.channels_electrode_ids_map[channel]
+                )
 
         return PathExecutionService.calculate_execution_plan_from_params(
             duration=self.model.routes.duration,
@@ -101,7 +117,8 @@ class RouteExecutionService(HasTraits):
 
     @observe("model:routes:execute_path_requested")
     def _execute_path_requested_change(self, event):
-        """Build an execution plan for the requested routes and start phase-by-phase playback.
+        """Build an execution plan for the requested routes and start
+        phase-by-phase playback.
 
         One repetition is defined as every selected loop path completing one full
         cycle. The displayed rep counter is derived from the longest loop's cycle
@@ -133,7 +150,8 @@ class RouteExecutionService(HasTraits):
             return
 
         logger.info(
-            f"Starting route execution: {len(plan)} phases, duration={self.model.routes.duration}s"
+            f"Starting route execution: {len(plan)} phases, "
+            f"duration={self.model.routes.duration}s"
         )
 
         self._execution_plan = plan
@@ -146,7 +164,8 @@ class RouteExecutionService(HasTraits):
         # with the protocol tree so both report the same breakdown).
         self._phases_per_rep, self._total_reps = (
             PathExecutionService.calculate_phase_rep_breakdown(
-                paths, len(plan),
+                paths,
+                len(plan),
                 duration=self.model.routes.duration,
                 repetitions=self.model.routes.repetitions,
                 repeat_duration=self.model.routes.repeat_duration,
@@ -155,7 +174,8 @@ class RouteExecutionService(HasTraits):
                 soft_start=self.model.routes.soft_start,
                 soft_terminate=self.model.routes.soft_terminate,
                 linear_repeats=linear_repeats,
-            ))
+            )
+        )
 
         # Initialize status display
         self._total_phases = len(plan)
@@ -204,9 +224,11 @@ class RouteExecutionService(HasTraits):
         """Idle phase navigation is in charge: mode on, no timed playback,
         no protocol run (kept local rather than relying solely on the dock
         pane's force-exit observer ordering, #493 review F4)."""
-        return (self.model.phase_navigation_mode
-                and not self.model.route_execution_service_executing
-                and not self.model.protocol_running)
+        return (
+            self.model.phase_navigation_mode
+            and not self.model.route_execution_service_executing
+            and not self.model.protocol_running
+        )
 
     def start_phase_navigation(self):
         if self.model.route_execution_service_executing:
@@ -247,10 +269,12 @@ class RouteExecutionService(HasTraits):
             # Restore the user baseline before re-snapshotting it, so the
             # previous plan's phase electrodes don't leak into the new plan.
             self.model.electrodes.actuated_channels = self._user_toggled_channels
-        routes_to_execute = [layer for layer in self.model.routes.layers
-                             if layer.selected_for_run]
-        plan = (self._build_execution_plan(routes_to_execute)
-                if routes_to_execute else [])
+        routes_to_execute = [
+            layer for layer in self.model.routes.layers if layer.selected_for_run
+        ]
+        plan = (
+            self._build_execution_plan(routes_to_execute) if routes_to_execute else []
+        )
         self._user_toggled_channels = set(self.model.electrodes.actuated_channels)
         self._last_set_channels = set(self.model.electrodes.actuated_channels)
         self._execution_plan = plan
@@ -268,22 +292,30 @@ class RouteExecutionService(HasTraits):
         displayed = (self._current_phase_index - 1) if self._execution_plan else 0
         publish_message(
             topic=PHASE_NAVIGATION_STATE,
-            message=json.dumps({
-                "phase_index": max(0, displayed),
-                "phase_total": len(self._execution_plan),
-            }))
+            message=json.dumps(
+                {
+                    "phase_index": max(0, displayed),
+                    "phase_total": len(self._execution_plan),
+                }
+            ),
+        )
 
     @observe("model:routes:layers:items:selected_for_run")
-    @observe("model:routes:[duration, repetitions, repeat_duration, "
-             "trail_length, trail_overlay, soft_start, soft_terminate, "
-             "linear_repeats]")
+    @observe(
+        "model:routes:[duration, repetitions, repeat_duration, "
+        "trail_length, trail_overlay, soft_start, soft_terminate, "
+        "linear_repeats]"
+    )
     def _rebuild_nav_on_edit(self, event):
         self.rebuild_phase_navigation()
 
     # ----------------------------- Execution loop ---------------------------
 
     def _execute_next_phase(self):
-        if not self.model.route_execution_service_executing or self.model.route_execution_service_paused:
+        if (
+            not self.model.route_execution_service_executing
+            or self.model.route_execution_service_paused
+        ):
             return
 
         if self._current_phase_index >= len(self._execution_plan):
@@ -334,12 +366,14 @@ class RouteExecutionService(HasTraits):
 
         # Send to hardware
         # electrode_state_change_publisher.publish(merged_channels)
-        # actuated channels trait change should trigger the publisher in dv dock pane observer
+        # actuated channels trait change should trigger the publisher in dv dock
+        # pane observer
 
     # ----------------------------- Status display ----------------------------
 
     def _update_status_display(self):
-        """Called by _display_timer every 100ms to update the execution status string."""
+        """Called by _display_timer every 100ms to update the execution status
+        string."""
         remaining_s = self._phase_timer.remainingTime() / 1000
 
         phase = self._displayed_phase
@@ -358,7 +392,8 @@ class RouteExecutionService(HasTraits):
         if self._nav_active():
             # No timer/rep readout while idle-stepping — just the position.
             self.model.execution_status = (
-                f"Phase: {self._displayed_phase}/{len(self._execution_plan)}")
+                f"Phase: {self._displayed_phase}/{len(self._execution_plan)}"
+            )
         else:
             self._update_status_display()
 
@@ -410,7 +445,10 @@ class RouteExecutionService(HasTraits):
 
     def pause_execution(self):
         """Pause a running route execution."""
-        if not self.model.route_execution_service_executing or self.model.route_execution_service_paused:
+        if (
+            not self.model.route_execution_service_executing
+            or self.model.route_execution_service_paused
+        ):
             return
 
         logger.info("Pausing route execution")
@@ -423,7 +461,10 @@ class RouteExecutionService(HasTraits):
         If the user navigated phases while paused, replay the current phase
         from scratch. Otherwise keep the remaining timer balance.
         """
-        if not self.model.route_execution_service_executing or not self.model.route_execution_service_paused:
+        if (
+            not self.model.route_execution_service_executing
+            or not self.model.route_execution_service_paused
+        ):
             return
 
         logger.info("Resuming route execution")

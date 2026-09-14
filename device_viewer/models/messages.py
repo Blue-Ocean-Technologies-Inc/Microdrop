@@ -8,9 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel, computed_field, UUID4
+
+# Third-party imports.
+from pydantic import UUID4, BaseModel, computed_field
+
 
 class DeviceViewerMessageModel(BaseModel):
     # A map from channel number to activation status
@@ -68,12 +72,16 @@ class DeviceViewerMessageModel(BaseModel):
 
     @classmethod
     def deserialize(cls, json_str: str) -> "DeviceViewerMessageModel":
-        # Pydantic automatically handles the dict[int, bool] conversion from JSON strings
+        # Pydantic automatically handles the dict[int, bool] conversion from JSON
+        # strings
         return cls.model_validate_json(json_str)
 
     def __repr__(self):
         count = len(self.channels_activated)
-        return f"<DeviceViewerMessageModel len(routes)={len(self.routes)} activated={count}>"
+        return (
+            f"<DeviceViewerMessageModel len(routes)={len(self.routes)} "
+            f"activated={count}>"
+        )
 
 
 class GeometryChangedMessage(BaseModel):
@@ -97,7 +105,7 @@ if __name__ == "__main__":
 
     test_step_info = {"step_id": "1", "step_label": "Test Step 1", "free_mode": False}
     test = DeviceViewerMessageModel(
-        channels_activated=[1,5,5],
+        channels_activated=[1, 5, 5],
         routes=[(["a", "a"], "red")],
         # id_to_channel={"a": 1},
         step_info=test_step_info,
