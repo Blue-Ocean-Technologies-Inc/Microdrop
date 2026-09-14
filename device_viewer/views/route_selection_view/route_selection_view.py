@@ -211,6 +211,35 @@ soft_transition_settings_header = (
     Label("Lin Reps", tooltip="Replay linear paths Repetitions times"),
 )
 
+# The slug shape: lanes on each side of the route, how they are read, and
+# whether the slug rotates at corners. No lanes = the plain trail.
+slug_shape_settings = (
+    UItem(
+        "object.routes.lane_left",
+        editor=RangeEditor(low=0, high=20, mode="spinner"),
+        tooltip="Extra lanes inside the turn (screen-left of travel with In/Out off)",
+    ),
+    UItem(
+        "object.routes.lane_right",
+        editor=RangeEditor(low=0, high=20, mode="spinner"),
+        tooltip="Extra lanes outside the turn (screen-right of travel, In/Out off)",
+    ),
+    UItem(
+        "object.routes.lanes_in_out",
+        tooltip="Lanes read as inside / outside of the turn, not screen left / right",
+    ),
+    UItem(
+        "object.routes.rotation_lock",
+        tooltip="Keep the slug's orientation through corners: it only translates",
+    ),
+)
+slug_shape_settings_header = (
+    Label("Lanes In", tooltip="Extra lanes inside the turn"),
+    Label("Lanes Out", tooltip="Extra lanes outside the turn"),
+    Label("In/Out", tooltip="Lanes read as inside / outside of the turn"),
+    Label("Rot Lock", tooltip="The slug keeps its orientation through corners"),
+)
+
 
 protocol_execution_settings_group = VGroup(
     HGroup(
@@ -226,6 +255,12 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[0], soft_transition_settings[0]),
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
         VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
+    ),
+    HGroup(
+        VGroup(slug_shape_settings_header[0], slug_shape_settings[0]),
+        VGroup(slug_shape_settings_header[1], slug_shape_settings[1]),
+        VGroup(slug_shape_settings_header[2], slug_shape_settings[2]),
+        VGroup(slug_shape_settings_header[3], slug_shape_settings[3]),
     ),
     # enabled_when='free_mode',
 )

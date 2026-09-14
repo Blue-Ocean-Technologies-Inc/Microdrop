@@ -24,6 +24,7 @@ from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import PausableTimer
 from microdrop_utils.route_execution import PathExecutionService
+from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
 
 # Local imports.
 from ..consts import PHASE_NAVIGATION_STATE, ROUTES_EXECUTING
@@ -100,17 +101,40 @@ class RouteExecutionService(HasTraits):
                     self.model.electrodes.channels_electrode_ids_map[channel]
                 )
 
+        # A slug wider than one electrode lays its lanes out on the device's
+        # lattice: the electrode centroids and the neighbour graph.
+        svg_model = self.model.electrodes.svg_model
+        centroids = neighbours = None
+
+        if svg_model is not None:
+            centroids = {
+                electrode_id: (polygon.centroid.x, polygon.centroid.y)
+                for electrode_id, polygon in svg_model.polygons.items()
+            }
+            neighbours = {
+                electrode_id: list(adjacent)
+                for electrode_id, adjacent in svg_model.neighbours.items()
+            }
+
+        routes = self.model.routes
+
         return PathExecutionService.calculate_execution_plan_from_params(
-            duration=self.model.routes.duration,
-            repetitions=self.model.routes.repetitions,
-            repeat_duration=self.model.routes.repeat_duration,
-            trail_length=self.model.routes.trail_length,
-            trail_overlay=self.model.routes.trail_overlay,
+            duration=routes.duration,
+            repetitions=routes.repetitions,
+            repeat_duration=routes.repeat_duration,
+            trail_length=routes.trail_length,
+            trail_overlay=routes.trail_overlay,
             paths=paths,
             activated_electrodes=activated_electrode_ids,
-            soft_start=self.model.routes.soft_start,
-            soft_terminate=self.model.routes.soft_terminate,
-            linear_repeats=bool(self.model.routes.linear_repeats),
+            soft_start=routes.soft_start,
+            soft_terminate=routes.soft_terminate,
+            linear_repeats=bool(routes.linear_repeats),
+            lane_left=routes.lane_left,
+            lane_right=routes.lane_right,
+            lane_frame=IN_OUT if routes.lanes_in_out else LEFT_RIGHT,
+            rotation_lock=routes.rotation_lock,
+            centroids=centroids,
+            neighbours=neighbours,
         )
 
     # ----------------------------- Observers --------------------------------

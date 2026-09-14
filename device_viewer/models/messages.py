@@ -92,6 +92,12 @@ class GeometryChangedMessage(BaseModel):
 
     id_to_channel: dict[str, int | None]
 
+    # The device's lattice, for slugs wider than one electrode (#682):
+    # electrode centroids and the neighbour graph. Optional, so messages
+    # from older publishers still parse.
+    centroids: Optional[dict[str, tuple[float, float]]] = None
+    neighbours: Optional[dict[str, list[str]]] = None
+
     def serialize(self) -> str:
         return self.model_dump_json()
 

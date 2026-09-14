@@ -300,6 +300,15 @@ class RouteLayerManager(HasTraits):
     soft_terminate = Bool(False)
     linear_repeats = Bool(False)
 
+    # The slug shape (#682): extra lanes across the route on each side, read
+    # as inside / outside of the turn — or screen left / right of travel when
+    # ``lanes_in_out`` is off — and whether the slug keeps its orientation
+    # through corners. With no lanes the route is the plain trail it always was.
+    lane_left = Range(low=0, high=20, value=0)
+    lane_right = Range(low=0, high=20, value=0)
+    lanes_in_out = Bool(True)
+    rotation_lock = Bool(True)
+
     # True when linear_repeats is off AND no layer contains a loop route —
     # Repetitions / Repeat Duration are meaningless in that mode, so the
     # sidebar spinners are disabled and the values are pinned to 1 / 0.
@@ -345,6 +354,10 @@ class RouteLayerManager(HasTraits):
             "soft_start": bool(self.soft_start),
             "soft_terminate": bool(self.soft_terminate),
             "linear_repeats": bool(self.linear_repeats),
+            "lane_left": int(self.lane_left),
+            "lane_right": int(self.lane_right),
+            "lanes_in_out": bool(self.lanes_in_out),
+            "rotation_lock": bool(self.rotation_lock),
         }
 
     def apply_execution_params(self, params: dict) -> None:
@@ -364,6 +377,11 @@ class RouteLayerManager(HasTraits):
                 soft_start=bool(params["soft_start"]),
                 soft_terminate=bool(params["soft_terminate"]),
                 linear_repeats=bool(params["linear_repeats"]),
+                # Shape keys are absent from steps saved before #682.
+                lane_left=int(params.get("lane_left", 0)),
+                lane_right=int(params.get("lane_right", 0)),
+                lanes_in_out=bool(params.get("lanes_in_out", True)),
+                rotation_lock=bool(params.get("rotation_lock", True)),
             )
         self.mark_params_committed()
 

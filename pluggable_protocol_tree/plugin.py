@@ -28,6 +28,11 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.lane_left_column import make_lane_left_column
+from pluggable_protocol_tree.builtins.lane_right_column import make_lane_right_column
+from pluggable_protocol_tree.builtins.lanes_in_out_column import (
+    make_lanes_in_out_column,
+)
 from pluggable_protocol_tree.builtins.linear_repeats_column import (
     make_linear_repeats_column,
 )
@@ -39,6 +44,9 @@ from pluggable_protocol_tree.builtins.repeat_duration_column import (
     make_repeat_duration_column,
 )
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.rotation_lock_column import (
+    make_rotation_lock_column,
+)
 from pluggable_protocol_tree.builtins.route_repetitions_column import (
     make_route_repetitions_column,
 )
@@ -188,6 +196,10 @@ class PluggableProtocolTreePlugin(Plugin):
             make_soft_end_column(),
             make_repeat_duration_column(),
             make_linear_repeats_column(),
+            make_lane_left_column(),
+            make_lane_right_column(),
+            make_lanes_in_out_column(),
+            make_rotation_lock_column(),
             make_message_prompt_column(),
         ]
         try:

@@ -43,6 +43,7 @@ from traits.api import (
     Bool,
     Dict,
     Event,
+    Float,
     HasTraits,
     Instance,
     Int,
@@ -50,6 +51,7 @@ from traits.api import (
     Property,
     Set,
     Str,
+    Tuple,
     observe,
 )
 
@@ -132,6 +134,10 @@ def _execution_params_for_row(row) -> dict:
         "soft_start": bool(getattr(row, "soft_start", False)),
         "soft_terminate": bool(getattr(row, "soft_end", False)),
         "linear_repeats": bool(getattr(row, "linear_repeats", False)),
+        "lane_left": int(getattr(row, "lane_left", 0) or 0),
+        "lane_right": int(getattr(row, "lane_right", 0) or 0),
+        "lanes_in_out": bool(getattr(row, "lanes_in_out", True)),
+        "rotation_lock": bool(getattr(row, "rotation_lock", True)),
     }
 
 
@@ -155,6 +161,11 @@ def _col_values_from_execution_params(params: dict) -> dict:
         "soft_start": bool(params["soft_start"]),
         "soft_end": bool(params["soft_terminate"]),
         "linear_repeats": bool(params["linear_repeats"]),
+        # Shape keys are absent from senders older than #682.
+        "lane_left": int(params.get("lane_left", 0)),
+        "lane_right": int(params.get("lane_right", 0)),
+        "lanes_in_out": bool(params.get("lanes_in_out", True)),
+        "rotation_lock": bool(params.get("rotation_lock", True)),
     }
 
     result["repeat_duration_controls"] = bool(float(result["repeat_duration"]))
@@ -237,6 +248,12 @@ class DeviceViewerSyncController(HasTraits):
     channels_electrode_ids_map = Property(
         Dict(Int, List(Str)), observe="electrode_ids_channels_map"
     )
+
+    #: The device's lattice from the last geometry message — centroids and
+    #: neighbours — for slugs wider than one electrode (#682). Empty until
+    #: a device viewer that publishes them has loaded a device.
+    electrode_centroids = Dict(Str, Tuple(Float, Float))
+    electrode_neighbours = Dict(Str, List(Str))
 
     _tree_widget = Instance(ProtocolTreeWidget, allow_none=True)
     _selection_model = Instance(QObject, allow_none=True)
@@ -472,6 +489,11 @@ class DeviceViewerSyncController(HasTraits):
 
         logger.info("Device View Sync: Received geometry change")
         self.electrode_ids_channels_map = dict(geo_change_msg.id_to_channel)
+        self.electrode_centroids = {
+            electrode_id: tuple(point)
+            for electrode_id, point in (geo_change_msg.centroids or {}).items()
+        }
+        self.electrode_neighbours = dict(geo_change_msg.neighbours or {})
 
     @observe("_dv_state_changed_event", dispatch="ui")
     def _on_dv_state(self, event) -> None:

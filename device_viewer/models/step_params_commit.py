@@ -20,6 +20,7 @@ tree's ``route_repetitions`` column and ``soft_terminate`` is ``soft_end``;
 the remaining keys match their column ids directly.
 """
 
+# Third-party imports.
 from pydantic import BaseModel
 
 
@@ -33,6 +34,11 @@ class StepParamsCommitMessage(BaseModel):
     soft_start: bool
     soft_terminate: bool
     linear_repeats: bool
+    # The slug shape (#682); defaults keep messages from older senders valid.
+    lane_left: int = 0
+    lane_right: int = 0
+    lanes_in_out: bool = True
+    rotation_lock: bool = True
 
     def serialize(self) -> str:
         return self.model_dump_json()

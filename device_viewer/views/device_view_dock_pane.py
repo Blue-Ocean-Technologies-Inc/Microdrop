@@ -1147,7 +1147,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         if current == self._last_published_id_to_channel:
             return
         self._last_published_id_to_channel = dict(current)
-        msg = GeometryChangedMessage(id_to_channel=current)
+        svg_model = self.model.electrodes.svg_model
+        centroids = neighbours = None
+
+        if svg_model is not None:
+            centroids = {
+                electrode_id: (polygon.centroid.x, polygon.centroid.y)
+                for electrode_id, polygon in svg_model.polygons.items()
+            }
+            neighbours = {
+                electrode_id: list(adjacent)
+                for electrode_id, adjacent in svg_model.neighbours.items()
+            }
+
+        msg = GeometryChangedMessage(
+            id_to_channel=current, centroids=centroids, neighbours=neighbours
+        )
         publish_message(
             topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
             message=msg.serialize(),
