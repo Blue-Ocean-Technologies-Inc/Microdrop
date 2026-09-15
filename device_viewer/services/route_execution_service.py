@@ -310,11 +310,15 @@ class RouteExecutionService(HasTraits):
             ),
         )
 
+    # Any edit that changes the phases: a route drawn, edited or deleted,
+    # a layer's play checkbox, or any sidebar setting including the shape.
+    @observe("model:routes:layers:items")
+    @observe("model:routes:layers:items:route:route:items")
     @observe("model:routes:layers:items:selected_for_run")
     @observe(
         "model:routes:[duration, repetitions, repeat_duration, "
         "trail_length, trail_overlay, soft_start, soft_terminate, "
-        "linear_repeats]"
+        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock]"
     )
     def _rebuild_nav_on_edit(self, event):
         self.rebuild_phase_navigation()

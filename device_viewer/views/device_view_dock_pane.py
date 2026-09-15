@@ -1960,10 +1960,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error(e, exc_info=True)
 
     @observe(
-        "model.routes.duration, model.routes.repetitions, "
-        "model.routes.repeat_duration, model.routes.trail_length, "
-        "model.routes.trail_overlay, model.routes.soft_start, "
-        "model.routes.soft_terminate, model.routes.linear_repeats"
+        "model:routes:[duration, repetitions, repeat_duration, "
+        "trail_length, trail_overlay, soft_start, soft_terminate, "
+        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock]"
     )
     def execution_params_change_handler(self, event=None):
         """Free-mode state messages carry the sidebar execution params so
