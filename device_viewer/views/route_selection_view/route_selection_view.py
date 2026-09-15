@@ -284,19 +284,14 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
         VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
     ),
+    # The lane rows are rows of the outer group, not nested in another
+    # HGroup, so their two columns line up with the Reps row above.
+    lanes_in_out_settings,
+    lanes_left_right_settings,
     HGroup(
-        lanes_in_out_settings,
-        lanes_left_right_settings,
         VGroup(slug_shape_settings_header[0], slug_shape_settings[0]),
         VGroup(slug_shape_settings_header[1], slug_shape_settings[1]),
     ),
-    Item(
-        "phase_navigation_mode",
-        label="Phases",
-        tooltip="Step through route phases without running the protocol "
-        "(synced with the protocol tree)",
-        visible_when="not object.route_execution_service_executing",
-    ),  # idle phase-navigation mode (#493)
     # enabled_when='free_mode',
 )
 
@@ -364,9 +359,20 @@ execution_status_bar = HGroup(
     # style_sheet='* { font-size: 15px; }',
 )
 
+# Idle phase-navigation mode (#493). Sits under the play buttons so it stays
+# in reach when the execution settings are collapsed.
+phase_navigation_toggle = Item(
+    "phase_navigation_mode",
+    label="Phases",
+    tooltip="Step through route phases without running the protocol "
+    "(synced with the protocol tree)",
+    visible_when=f"not {executing}",
+)
+
 RouteLayerView = View(
     VGroup(
         run_controls,
+        phase_navigation_toggle,
         execution_status_bar,
         Item("object.routes.layers", editor=layer_table_editor, show_label=False),
     ),
