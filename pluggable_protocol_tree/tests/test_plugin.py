@@ -10,8 +10,9 @@
 
 """Minimal plugin smoke tests — verify the extension point is registered."""
 
-from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
+from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 
 
 def test_plugin_id():
@@ -27,6 +28,7 @@ def test_plugin_declares_extension_point():
 
 # --- PPT-2 additions ---
 
+
 def test_assemble_columns_includes_repetitions():
     p = PluggableProtocolTreePlugin()
     cols = p._assemble_columns()
@@ -38,13 +40,16 @@ def test_assemble_columns_canonical_order():
     """Built-ins land in: type, id, name, repetitions, duration_s order."""
     p = PluggableProtocolTreePlugin()
     cols = p._assemble_columns()
-    builtin_ids = [c.model.col_id for c in cols
-                   if c.model.col_id in ("type", "id", "name",
-                                         "repetitions", "duration_s")]
+    builtin_ids = [
+        c.model.col_id
+        for c in cols
+        if c.model.col_id in ("type", "id", "name", "repetitions", "duration_s")
+    ]
     assert builtin_ids == ["type", "id", "name", "repetitions", "duration_s"]
 
 
 # --- PPT-3 additions ---
+
 
 def test_assemble_columns_includes_electrodes_and_routes():
     p = PluggableProtocolTreePlugin()
@@ -56,29 +61,60 @@ def test_assemble_columns_includes_electrodes_and_routes():
 def test_assemble_columns_includes_six_hidden_config_columns():
     p = PluggableProtocolTreePlugin()
     ids = [c.model.col_id for c in p._assemble_columns()]
-    for hid in ("trail_length", "trail_overlay", "soft_start",
-                "soft_end", "repeat_duration", "linear_repeats"):
+    for hid in (
+        "trail_length",
+        "trail_overlay",
+        "soft_start",
+        "soft_end",
+        "repeat_duration",
+        "linear_repeats",
+    ):
         assert hid in ids
 
 
 def test_assemble_columns_canonical_order_after_ppt3():
     p = PluggableProtocolTreePlugin()
-    ids = [c.model.col_id for c in p._assemble_columns()
-           if c.model.col_id in (
-               "type", "id", "name", "repetitions", "route_repetitions",
-               "duration_s", "electrodes", "routes",
-               "trail_length", "trail_overlay", "soft_start", "soft_end",
-               "repeat_duration", "linear_repeats",
-           )]
+    ids = [
+        c.model.col_id
+        for c in p._assemble_columns()
+        if c.model.col_id
+        in (
+            "type",
+            "id",
+            "name",
+            "repetitions",
+            "route_repetitions",
+            "duration_s",
+            "electrodes",
+            "routes",
+            "trail_length",
+            "trail_overlay",
+            "soft_start",
+            "soft_end",
+            "repeat_duration",
+            "linear_repeats",
+        )
+    ]
     assert ids == [
-        "type", "id", "name", "repetitions", "route_repetitions",
-        "duration_s", "electrodes", "routes",
-        "trail_length", "trail_overlay", "soft_start", "soft_end",
-        "repeat_duration", "linear_repeats",
+        "type",
+        "id",
+        "name",
+        "repetitions",
+        "route_repetitions",
+        "duration_s",
+        "electrodes",
+        "routes",
+        "trail_length",
+        "trail_overlay",
+        "soft_start",
+        "soft_end",
+        "repeat_duration",
+        "linear_repeats",
     ]
 
 
 # --- PPT-10.1.1: contribution mixing regression -----------------------
+
 
 def test_extension_point_accepts_compound_columns_alongside_plain_columns():
     """Regression: when one plugin contributes ICompoundColumn and
@@ -87,9 +123,7 @@ def test_extension_point_accepts_compound_columns_alongside_plain_columns():
     List(Instance(IColumn)) which raised TraitError on compound-column
     contributions and silently dropped EVERY contribution from EVERY
     plugin — including the plain IColumn ones."""
-    from traits.api import HasTraits, Instance, List
 
-    from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
     from pluggable_protocol_tree.interfaces.i_column import IColumn
     from pluggable_protocol_tree.interfaces.i_compound_column import (
         ICompoundColumn,
@@ -112,14 +146,15 @@ def test_extension_point_accepts_compound_columns_alongside_plain_columns():
 
     p = PluggableProtocolTreePlugin()
     p.contributed_columns = [
-        make_repetitions_column(),       # IColumn
-        make_enabled_count_compound(),   # ICompoundColumn
+        make_repetitions_column(),  # IColumn
+        make_enabled_count_compound(),  # ICompoundColumn
     ]
 
     cols = p._assemble_columns()
     ids = [c.model.col_id for c in cols]
-    # Plain IColumn contribution survives.
-    assert ids.count("repetitions") >= 2  # builtin + contributed
+    # The plain contribution is accepted, and as it shares the builtin's id
+    # only one of the two reaches the table (whose columns must be unique).
+    assert ids.count("repetitions") == 1
     # Compound column expanded into its field cells.
     # enabled_count_compound exposes 'ec_enabled' + 'ec_count' fields.
     assert "ec_enabled" in ids

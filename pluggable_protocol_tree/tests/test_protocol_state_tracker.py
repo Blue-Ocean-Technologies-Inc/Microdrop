@@ -16,8 +16,10 @@ writable ``name`` attribute for title-rewrite tests, and a real
 HasTraits-only).
 """
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import PKG_name
@@ -29,6 +31,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 
 class _NameStub:
     """Stand-in for a DockPane — only ``name`` matters for these tests."""
+
     def __init__(self):
         self.name = ""
 
@@ -38,6 +41,7 @@ def _make_manager():
 
 
 # --- defaults / display name ----------------------------------------
+
 
 def test_defaults():
     t = PluggableProtocolStateTracker()
@@ -59,8 +63,8 @@ def test_display_name_clean_dirty_and_untitled():
 def test_no_dock_pane_is_safe():
     """Tracker should be usable headlessly without a dock_pane."""
     t = PluggableProtocolStateTracker()
-    t.protocol_name = "demo"      # no crash
-    t.is_modified = True          # no crash
+    t.protocol_name = "demo"  # no crash
+    t.is_modified = True  # no crash
     assert t.display_name() == f"{PKG_name} - demo [modified]"
 
 
@@ -83,6 +87,7 @@ def test_dock_pane_name_rewritten_on_dirty_change():
 
 
 # --- file lifecycle (filename only; dirty is separate) --------------
+
 
 def test_set_loaded_sets_name_and_path():
     t = PluggableProtocolStateTracker()
@@ -114,6 +119,7 @@ def test_reset_returns_defaults():
 
 
 # --- incremental diff against baseline -------------------------------
+
 
 def test_reseed_clears_dirty_state():
     mgr = _make_manager()
@@ -156,7 +162,7 @@ def test_cell_revert_clears_dirty():
     t.on_cell_changed(path, "name", mgr)
     assert t.is_modified is True
 
-    row.name = "before"     # revert
+    row.name = "before"  # revert
     t.on_cell_changed(path, "name", mgr)
     assert t.is_modified is False
     assert (path, "name") not in t.dirty_cells
@@ -178,7 +184,7 @@ def test_two_diffs_then_revert_one_still_dirty():
     assert t.is_modified is True
     assert len(t.dirty_cells) == 2
 
-    mgr.get_row(p1).name = "A"      # revert one
+    mgr.get_row(p1).name = "A"  # revert one
     t.on_cell_changed(p1, "name", mgr)
     assert t.is_modified is True
     assert len(t.dirty_cells) == 1
@@ -208,15 +214,15 @@ def test_move_then_undo_clears_dirty():
     baseline (count unchanged), but the rescan on rows_changed detects
     that values at each path match baseline again."""
     mgr = _make_manager()
-    p1 = mgr.add_step(values={"name": "A"})    # A at (0,)
-    mgr.add_step(values={"name": "B"})         # B at (1,)
+    p1 = mgr.add_step(values={"name": "A"})  # A at (0,)
+    mgr.add_step(values={"name": "B"})  # B at (1,)
     t = PluggableProtocolStateTracker()
     t.reseed_baseline(mgr)
 
     # Move A from (0,) to the end. After: B at (0,), A at (1,).
     mgr.move([p1], target_parent_path=(), target_index=2)
     t.on_structure_changed(mgr)
-    assert t.is_modified is True   # contents at (0,)/(1,) swapped
+    assert t.is_modified is True  # contents at (0,)/(1,) swapped
 
     # Now move what is at (1,) (the A row again) back to position 0.
     # After: A at (0,), B at (1,) — baseline order restored.
@@ -236,7 +242,7 @@ def test_structure_change_skips_cell_increment():
     t.reseed_baseline(mgr)
 
     # Cause a structure-mismatch.
-    p2 = mgr.add_step(values={"name": "B"})
+    mgr.add_step(values={"name": "B"})
     t.on_structure_changed(mgr)
     assert t.structure_dirty is True
 
@@ -244,4 +250,21 @@ def test_structure_change_skips_cell_increment():
     mgr.get_row(p1).name = "edited"
     t.on_cell_changed(p1, "name", mgr)
     assert len(t.dirty_cells) == 0
-    assert t.is_modified is True   # held by structure_dirty
+    assert t.is_modified is True  # held by structure_dirty
+
+
+def test_cell_change_on_a_non_unique_table_marks_structure_dirty():
+    """A duplicated column id makes the table's columns non-unique, and pandas
+    refuses scalar access on it; the tracker must not raise (#682 review)."""
+    manager = RowManager(
+        columns=[make_type_column(), make_name_column(), make_name_column()]
+    )
+    manager.add_step()
+    tracker = PluggableProtocolStateTracker()
+    tracker.reseed_baseline(manager)
+
+    assert not manager.table.columns.is_unique
+
+    tracker.on_cell_changed((0,), "name", manager)
+
+    assert tracker.structure_dirty

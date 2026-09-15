@@ -212,7 +212,24 @@ class PluggableProtocolTreePlugin(Plugin):
                 out.extend(_expand_compound(c))
             else:
                 out.append(c)
-        return out
+
+        # The tree's table is a DataFrame keyed by col_id; a second column
+        # with the same id would make its columns non-unique and break every
+        # scalar lookup on it. First one wins, builtins first.
+        seen, unique = set(), []
+
+        for column in out:
+            if column.model.col_id in seen:
+                logger.warning(
+                    f"Protocol tree: dropping a second column with id "
+                    f"{column.model.col_id!r}"
+                )
+                continue
+
+            seen.add(column.model.col_id)
+            unique.append(column)
+
+        return unique
 
     def _assemble_quick_actions(self):
         """Return contributed quick actions in deterministic order

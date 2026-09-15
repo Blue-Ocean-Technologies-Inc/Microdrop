@@ -100,3 +100,10 @@ def test_senders_and_rows_without_the_shape_read_as_a_plain_trail():
     for shape in (values, params):
         assert (shape["lane_left"], shape["lane_right"]) == (0, 0)
         assert shape["lanes_in_out"] is True and shape["rotation_lock"] is True
+
+
+def test_a_contributed_column_with_a_builtin_id_is_dropped():
+    plugin = PluggableProtocolTreePlugin(contributed_columns=[make_lane_left_column()])
+    ids = [c.model.col_id for c in plugin._assemble_columns()]
+
+    assert ids.count("lane_left") == 1 and len(ids) == len(set(ids))
