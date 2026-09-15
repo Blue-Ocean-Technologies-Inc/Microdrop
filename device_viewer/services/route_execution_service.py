@@ -265,11 +265,12 @@ class RouteExecutionService(HasTraits):
         self.model.execution_status = ""
         self._publish_phase_nav_state()
 
-    def rebuild_phase_navigation(self):
+    def rebuild_phase_navigation(self, phase=0):
         """(Re)build the idle-nav plan from the play-enabled layers and show
-        phase 0. Called on mode entry, on step selection change (dock pane),
-        and on play-checkbox / execution-param edits. No-op unless idle
-        navigation is in charge."""
+        ``phase`` (the first by default; a finished run hands over at the
+        phase it reached). Called on mode entry, on step selection change
+        (dock pane), and on play-checkbox / execution-param edits. No-op
+        unless idle navigation is in charge."""
         if not self._nav_active():
             return
         if self.suspend_nav_rebuild:
@@ -291,9 +292,10 @@ class RouteExecutionService(HasTraits):
         self._current_phase_index = 0
         if plan:
             logger.info(f"Idle phase navigation: plan rebuilt, {len(plan)} phases")
-            self._apply_phase(plan[0])
-            self._update_phase_rep_status(0)
-            self._current_phase_index = 1
+            phase = min(phase, len(plan) - 1)
+            self._apply_phase(plan[phase])
+            self._update_phase_rep_status(phase)
+            self._current_phase_index = phase + 1
         else:
             self.model.execution_status = ""
         self._publish_phase_nav_state()
@@ -437,6 +439,8 @@ class RouteExecutionService(HasTraits):
         self.model.route_execution_service_paused = False
         publish_message(topic=ROUTES_EXECUTING, message=str(False))
         self._execution_plan = []
+        # The phase the run got to (the index points past the phase shown).
+        reached = max(0, self._current_phase_index - 1)
         self._current_phase_index = 0
 
         # Keep only user-toggled channels; clear path-driven ones
@@ -451,9 +455,10 @@ class RouteExecutionService(HasTraits):
             layer.execution_disabled = False
 
         # If the user played routes while the idle nav mode was on, hand the
-        # display back to phase navigation (#493).
+        # display back to phase navigation (#493) at the phase the run
+        # reached, so a finished run stays on its last phase.
         if self.model.phase_navigation_mode:
-            self.rebuild_phase_navigation()
+            self.rebuild_phase_navigation(phase=reached)
 
     # ----------------------------- Pause / resume ---------------------------
 
