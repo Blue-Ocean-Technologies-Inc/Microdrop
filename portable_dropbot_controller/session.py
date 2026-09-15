@@ -17,8 +17,8 @@ classic DropBot. This subclass puts both boards' proxies on the session so
 new backend code is written against that API, while the legacy ``uart``
 calls migrate as they are touched.
 
-Import from the package root, never its submodules: the package puts its
-own directory on ``sys.path`` for flat intra-package imports, so
+Import whatever the package root exports from the root: the package puts
+its own directory on ``sys.path`` for flat intra-package imports, so e.g.
 ``dropbot_portable.session`` is a second copy of the module the root
 exports, with distinct classes.
 """
