@@ -10,7 +10,7 @@
 
 """Pure helpers for the portable PMT capture routine.
 
-Ported from the driver repo's bench UI (``full_test_ui/tabs/pmt_tab.py``)
+Ported from the driver bench UI (``full_test_ui/tabs/pmt_tab.py``)
 so the CSVs Microdrop writes are interchangeable with the bench's. No Qt,
 no driver import: everything here is unit-testable without hardware.
 

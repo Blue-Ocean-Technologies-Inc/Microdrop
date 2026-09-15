@@ -126,7 +126,6 @@ state the years the file was created/last substantially revised):
 # Thanks for using Microdrop open source!
 ```
 
-The vendored portable driver keeps its upstream provenance and is excluded.
 The `insert-license` hook adds it to new files; `.copyright-header.txt` is
 the text it inserts.
 

@@ -6,10 +6,6 @@ line-length = 88
 target-version = "py312"
 src = ["."]
 
-extend-exclude = [
-    "portable_dropbot_controller/driver",  # vendored verbatim from the private driver repo
-]
-
 [lint]
 select = ["CPY001", "E", "F", "W", "I"]
 # CPY001 is a preview rule; explicit-preview-rules keeps every other rule on

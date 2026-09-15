@@ -13,6 +13,7 @@ publisher/topic pairing. Hardware-free, no Redis."""
 
 # Third-party imports.
 import pytest
+from dropbot_portable.commands_generated import DroSIGCmd
 from pydantic import ValidationError
 
 # Microdrop package imports.
@@ -34,7 +35,6 @@ from portable_dropbot_controller.consts import (
     pmt_capture_publisher,
     pmt_spots_updated_publisher,
 )
-from portable_dropbot_controller.driver.commands_generated import DroSIGCmd
 
 
 def test_publishers_are_bound_to_their_topics_and_models():

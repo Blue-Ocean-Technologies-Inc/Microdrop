@@ -10,24 +10,25 @@
 
 """The session object the backend mixins hold as ``self.proxy``.
 
-The vendored driver's ``DropletBotSession`` exposes the raw transport as
-``uart``; the generated per-board proxies (``proxy.py``) are the typed API
-the driver is converging on — the object its future conda package will
-hand out, the way ``dropbot.SerialProxy`` does today. This subclass puts
-both boards' proxies on the session so new backend code is written against
-that API, while the legacy ``uart`` calls migrate as they are touched.
+The ``dropbot_portable`` package's ``DropBotSession`` exposes the raw
+transport as ``uart``; the generated per-board proxies are the typed API
+the driver is converging on, the way ``dropbot.SerialProxy`` is for the
+classic DropBot. This subclass puts both boards' proxies on the session so
+new backend code is written against that API, while the legacy ``uart``
+calls migrate as they are touched.
 
-The vendored ``driver/`` package stays a verbatim copy of the driver repo;
-anything Microdrop-specific lives here instead.
+Import from the package root, never its submodules: the package puts its
+own directory on ``sys.path`` for flat intra-package imports, so
+``dropbot_portable.session`` is a second copy of the module the root
+exports, with distinct classes.
 """
 
-# Local imports.
-from .driver.proxy import MotorBoardProxy, SignalBoardProxy
-from .driver.session import DropletBotSession
+# Third-party imports.
+from dropbot_portable import DropBotSession, MotorBoardProxy, SignalBoardProxy
 
 
-class PortableDropbotSession(DropletBotSession):
-    """``DropletBotSession`` plus the generated board proxies.
+class PortableDropbotSession(DropBotSession):
+    """``DropBotSession`` plus the generated board proxies.
 
     The proxies wrap the same transport, so they share its connection state
     and reply matching; a call on a board that is not logged in simply times
