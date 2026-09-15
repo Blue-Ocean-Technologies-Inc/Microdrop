@@ -33,7 +33,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
     def _get_extra_dock_pane_classes(self):
         from .dock_panes import (
             PortableDropbotAdvancedControlsDockPane,
-            PortableDropbotCalibrationDockPane,
+            # PortableDropbotCalibrationDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotMotorsDockPane,
             PortableDropbotPmtCaptureDockPane,
@@ -41,7 +41,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         return [
             PortableDropbotMotorsDockPane,
-            PortableDropbotCalibrationDockPane,
+            # PortableDropbotCalibrationDockPane,
             PortableDropbotPmtCaptureDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotAdvancedControlsDockPane,
