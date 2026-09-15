@@ -35,6 +35,7 @@ import time
 from datetime import datetime
 
 # Third-party imports.
+from dropbot_portable.commands_generated import DroSIGCmd
 from pydantic import ValidationError
 
 # Enthought library imports.
@@ -53,7 +54,6 @@ from ..consts import (
     PMT_GAIN_BOUNDS,
     PMT_RF_OHMS,
     PMT_STREAM_AVG,
-    PMT_STREAM_DATA_CMD,
     PMT_STREAM_OSR,
     PMT_STREAM_WAIT_SLICE_S,
     PMT_UPDATED,
@@ -382,7 +382,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                         raise RuntimeError(f"gain {entry.gain}: no reply")
                     progress("stream")
                     # Subscribe before the start so no frame is missed.
-                    uart.subscribe(PMT_STREAM_DATA_CMD, assembler.feed)
+                    uart.subscribe(DroSIGCmd.CMD_PMT_STREAM_DATA, assembler.feed)
                     started = time.monotonic()
                     ok, reply = self._proxy_call(
                         "PMT capture: stream start",
@@ -403,7 +403,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                     self._proxy_call(
                         "PMT capture: stream stop", lambda: sig.pmt_stream(0, 0, 0)
                     )
-                    uart.unsubscribe(PMT_STREAM_DATA_CMD)
+                    uart.unsubscribe(DroSIGCmd.CMD_PMT_STREAM_DATA)
                     saved = self._save_pmt_capture(
                         entry, assembler, directory, uids, started, aborted
                     )
@@ -420,7 +420,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                     self._proxy_call(
                         "PMT capture: stream stop", lambda: sig.pmt_stream(0, 0, 0)
                     )
-                    uart.unsubscribe(PMT_STREAM_DATA_CMD)
+                    uart.unsubscribe(DroSIGCmd.CMD_PMT_STREAM_DATA)
                     any_spot_failed = True
                     result["error"] = str(error) or repr(error)
                     progress("failed", result["error"])
@@ -456,7 +456,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                         "the board — the tube may still be powered"
                     )
             if uart is not None:
-                uart.unsubscribe(PMT_STREAM_DATA_CMD)
+                uart.unsubscribe(DroSIGCmd.CMD_PMT_STREAM_DATA)
             self._apply_light_intensity()
             self._publish_pmt(acquiring=False)
         complete = (

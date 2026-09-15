@@ -13,7 +13,6 @@ publisher/topic pairing. Hardware-free, no Redis."""
 
 # Third-party imports.
 import pytest
-from dropbot_portable.commands_generated import DroSIGCmd
 from pydantic import ValidationError
 
 # Microdrop package imports.
@@ -25,7 +24,6 @@ from portable_dropbot_controller.consts import (
     PMT_GAIN_BOUNDS,
     PMT_SPOT_SLOTS,
     PMT_SPOTS_UPDATED,
-    PMT_STREAM_DATA_CMD,
     PmtCaptureDone,
     PmtCaptureEntry,
     PmtCaptureRequest,
@@ -72,10 +70,3 @@ def test_spots_updated_round_trips_through_json():
 def test_capture_done_defaults():
     done = PmtCaptureDone(ok=False, aborted=False, directory="", results=[])
     assert done.error == ""
-
-
-def test_stream_data_cmd_matches_the_driver():
-    # consts.py keeps this a literal so importing it never loads the
-    # vendored driver; this test is where that literal is checked against
-    # the generated enum it was copied from.
-    assert PMT_STREAM_DATA_CMD == int(DroSIGCmd.CMD_PMT_STREAM_DATA)

@@ -79,9 +79,6 @@ PMT_SPOT_SLOTS = 5
 #: boxcar samples per value; osr index 6 = 64x). Measured ~23 ms per value.
 PMT_STREAM_AVG = 16
 PMT_STREAM_OSR = 6
-#: Stream data frames arrive on this command id (DroSIGCmd.CMD_PMT_STREAM_DATA
-#: in the vendored driver's commands_generated.py).
-PMT_STREAM_DATA_CMD = 0x123F
 #: Abort/deadline polling slice while a capture stream is open.
 PMT_STREAM_WAIT_SLICE_S = 0.05
 #: Exposure per spot in seconds — the stream duration. At avg=16 the board

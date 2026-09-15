@@ -10,9 +10,11 @@
 
 """Pure helpers for the portable PMT capture routine.
 
-Ported from the driver bench UI (``full_test_ui/tabs/pmt_tab.py``)
-so the CSVs Microdrop writes are interchangeable with the bench's. No Qt,
-no driver import: everything here is unit-testable without hardware.
+Ported from the driver bench UI (``dropbot_portable.ui.tabs.pmt_tab``),
+whose stats and CSV writer are module-level but live in a Qt module and
+whose stream assembly is inline in a Qt method. Kept here so the CSVs
+Microdrop writes stay interchangeable with the bench's without the backend
+importing Qt. No Qt, no driver import: all unit-testable without hardware.
 
 Stream frame layout (``CMD_PMT_STREAM_DATA`` 0x123F, all little-endian)::
 
