@@ -86,6 +86,27 @@ class RouteExecutionService(HasTraits):
             self._user_toggled_channels | user_added
         ) - user_removed
 
+    def step_channels(self):
+        """The actuated channels that belong to the step.
+
+        While idle phase navigation is in charge the display also shows the
+        current phase's electrodes; those are a preview of the route, not
+        the step's static electrodes, so only what the user toggled (or the
+        step brought with it) is returned. Otherwise every actuated channel.
+        """
+        current = set(self.model.electrodes.actuated_channels)
+
+        if not (self._nav_active() and self._execution_plan):
+            return current
+
+        # The same diff as _capture_user_changes, without recording it: this
+        # runs from observers in the middle of a phase being applied, and
+        # recording there would take the phase's electrodes for the user's.
+        user_added = current - self._last_set_channels
+        user_removed = self._user_toggled_channels - current
+
+        return (self._user_toggled_channels | user_added) - user_removed
+
     def _build_execution_plan(self, routes_to_execute):
         """Phase plan for the given layers from the live sidebar params.
         Shared by timed playback and idle phase navigation (#493)."""
@@ -320,7 +341,8 @@ class RouteExecutionService(HasTraits):
     @observe(
         "model:routes:[duration, repetitions, repeat_duration, "
         "trail_length, trail_overlay, soft_start, soft_terminate, "
-        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock]"
+        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock, "
+        "recentre]"
     )
     def _rebuild_nav_on_edit(self, event):
         self.rebuild_phase_navigation()
@@ -376,9 +398,11 @@ class RouteExecutionService(HasTraits):
         # Merge path-phase channels with user-toggled channels
         merged_channels = phase_channels | self._user_toggled_channels
 
-        # Update display and track what we set
-        self.model.electrodes.actuated_channels = merged_channels
+        # Track what we set BEFORE setting it: observers of actuated_channels
+        # (the state message) diff against it, and must not see the phase's
+        # electrodes as the user's own clicks.
         self._last_set_channels = set(merged_channels)
+        self.model.electrodes.actuated_channels = merged_channels
 
         # Send to hardware
         # electrode_state_change_publisher.publish(merged_channels)
