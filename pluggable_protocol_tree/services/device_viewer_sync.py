@@ -139,6 +139,7 @@ def _execution_params_for_row(row) -> dict:
         "lane_right": int(getattr(row, "lane_right", 0) or 0),
         "lanes_in_out": bool(getattr(row, "lanes_in_out", True)),
         "rotation_lock": bool(getattr(row, "rotation_lock", True)),
+        "recentre": bool(getattr(row, "recentre", True)),
     }
 
 
@@ -167,6 +168,7 @@ def _col_values_from_execution_params(params: dict) -> dict:
         "lane_right": int(params.get("lane_right", 0)),
         "lanes_in_out": bool(params.get("lanes_in_out", True)),
         "rotation_lock": bool(params.get("rotation_lock", True)),
+        "recentre": bool(params.get("recentre", True)),
     }
 
     result["repeat_duration_controls"] = bool(float(result["repeat_duration"]))

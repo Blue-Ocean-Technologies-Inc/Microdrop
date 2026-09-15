@@ -40,6 +40,7 @@ from pluggable_protocol_tree.builtins.message_prompt_column import (
     make_message_prompt_column,
 )
 from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.recentre_column import make_recentre_column
 from pluggable_protocol_tree.builtins.repeat_duration_column import (
     make_repeat_duration_column,
 )
@@ -200,6 +201,7 @@ class PluggableProtocolTreePlugin(Plugin):
             make_lane_right_column(),
             make_lanes_in_out_column(),
             make_rotation_lock_column(),
+            make_recentre_column(),
             make_message_prompt_column(),
         ]
         try:

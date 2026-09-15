@@ -311,6 +311,7 @@ class PathExecutionService:
         lane_right: int = 0,
         lane_frame: Optional[str] = None,
         rotation_lock: bool = True,
+        recentre: bool = True,
         centroids: Optional[Dict[str, tuple]] = None,
         neighbours: Optional[Dict[str, List[str]]] = None,
     ) -> List[Dict[str, Any]]:
@@ -325,14 +326,16 @@ class PathExecutionService:
         paths are replayed ``repetitions`` times.
 
         The slug shape — ``lane_left`` / ``lane_right`` extra lanes across
-        the route, read in ``lane_frame``, with ``rotation_lock`` — applies
-        to every path of the step. At the default width of one electrode
-        this function is the trail algorithm it always was. A wider slug
-        takes its per-path phases from ``wide_path_geometry.slug_phases``
-        (see that module for the rules) and needs the device ``centroids``
-        and ``neighbours``; the plan-level work — merging paths, the repeat
-        duration cap and idle padding, linear repeats, timing — is the same
-        for every width.
+        the route, read in ``lane_frame``, with ``rotation_lock`` and, for
+        a locked slug, ``recentre`` — applies to every path of the step.
+        A plain trail, one electrode wide and free to turn, is the trail
+        algorithm it always was. A wider slug, or a locked trail longer than
+        one electrode, takes its per-path phases from
+        ``wide_path_geometry.slug_phases`` (see that module for the rules)
+        and needs the device ``centroids`` and ``neighbours``; a locked
+        trail given no lattice plays as the plain trail. The plan-level
+        work — merging paths, the repeat duration cap and idle padding,
+        linear repeats, timing — is the same for every shape.
         """
         duration = float(duration)
         repetitions = int(repetitions)
@@ -345,7 +348,13 @@ class PathExecutionService:
         width = int(lane_left) + int(lane_right) + 1
         lane_frame = lane_frame or wide_path_geometry.IN_OUT
 
-        if width > 1 and (centroids is None or neighbours is None):
+        has_lattice = centroids is not None and neighbours is not None
+        # A locked trail keeps its orientation through corners, which only
+        # the slug geometry does; without a lattice (callers that never
+        # pass one) it stays the plain trail.
+        slug = width > 1 or (rotation_lock and trail_length > 1 and has_lattice)
+
+        if width > 1 and not has_lattice:
             raise ValueError(
                 "A slug wider than one electrode needs the device centroids "
                 "and neighbours to lay its lanes out"
@@ -374,8 +383,8 @@ class PathExecutionService:
         for i, path in enumerate(paths):
             is_loop = PathExecutionService.is_loop_path(path)
 
-            if width > 1:
-                # A wide slug's phases come ready-made as electrode ids, laps,
+            if slug:
+                # A slug's phases come ready-made as electrode ids, laps,
                 # ramps and padding included; the merge below treats them as
                 # one open sequence.
                 electrode_phases = PathExecutionService.wide_path_phases(
@@ -394,6 +403,7 @@ class PathExecutionService:
                     soft_start,
                     soft_terminate,
                     linear_repeats,
+                    recentre=recentre,
                 )
                 max_open_path_length = max(max_open_path_length, len(electrode_phases))
                 path_info.append(
@@ -662,6 +672,7 @@ class PathExecutionService:
         soft_start: bool = False,
         soft_terminate: bool = False,
         linear_repeats: bool = False,
+        recentre: bool = True,
     ) -> List[List[str]]:
         """The phases of one path driven by a slug wider than one electrode,
         as lists of electrode ids, laid out as a width-1 path's would be.
@@ -692,6 +703,7 @@ class PathExecutionService:
                     repetitions=laps,
                     soft_start=ramp_up,
                     soft_terminate=ramp_down,
+                    recentre=recentre,
                 )
             ]
 

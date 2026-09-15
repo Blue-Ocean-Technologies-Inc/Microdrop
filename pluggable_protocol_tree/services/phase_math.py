@@ -62,10 +62,13 @@ def slug_shape_for_row(row) -> Dict:
         "lane_right": int(getattr(row, "lane_right", 0) or 0),
         "lane_frame": IN_OUT if getattr(row, "lanes_in_out", True) else LEFT_RIGHT,
         "rotation_lock": bool(getattr(row, "rotation_lock", True)),
+        "recentre": bool(getattr(row, "recentre", True)),
     }
 
 
-def _shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock) -> Dict:
+def _shape_with_lattice(
+    lane_left, lane_right, lane_frame, rotation_lock, recentre=True
+) -> Dict:
     """The plan builder's shape and lattice arguments. A slug wider than one
     electrode needs the lattice; without one (no device loaded yet, or a
     device viewer that does not publish it) the step runs at width 1 and
@@ -85,6 +88,7 @@ def _shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock) -> Dic
         "lane_right": int(lane_right),
         "lane_frame": lane_frame,
         "rotation_lock": bool(rotation_lock),
+        "recentre": bool(recentre),
         **lattice,
     }
 
@@ -105,6 +109,7 @@ def iter_phases(
     lane_right: int = 0,
     lane_frame: str = IN_OUT,
     rotation_lock: bool = True,
+    recentre: bool = True,
 ) -> Iterator[Set[str]]:
     """Yield each phase as the set of electrode IDs to actuate.
 
@@ -130,7 +135,9 @@ def iter_phases(
         soft_start=soft_start,
         soft_terminate=soft_end,
         linear_repeats=linear_repeats,
-        **_shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock),
+        **_shape_with_lattice(
+            lane_left, lane_right, lane_frame, rotation_lock, recentre
+        ),
     )
     for plan_item in plan:
         yield set(plan_item["activated_electrodes"])
@@ -176,6 +183,7 @@ def estimate_repeat_duration_s(
     lane_right: int = 0,
     lane_frame: str = IN_OUT,
     rotation_lock: bool = True,
+    recentre: bool = True,
 ) -> float:
     """Total wall-clock seconds the step would take in Route Reps-
     controlled mode (i.e. with ``repeat_duration_s = 0`` so the loop
@@ -204,6 +212,7 @@ def estimate_repeat_duration_s(
             lane_right=lane_right,
             lane_frame=lane_frame,
             rotation_lock=rotation_lock,
+            recentre=recentre,
         )
     )
     return len(phases) * float(step_duration_s)
@@ -225,6 +234,7 @@ def duration_loop_parts(
     lane_right: int = 0,
     lane_frame: str = IN_OUT,
     rotation_lock: bool = True,
+    recentre: bool = True,
 ) -> Tuple[List[Set[str]], List[Set[str]], Optional[Set[str]]]:
     """Decompose a step into the pieces the RoutesHandler needs to drive a
     *dynamic* duration-mode loop under volume threshold:
@@ -264,7 +274,9 @@ def duration_loop_parts(
             soft_start=with_soft_start,
             soft_terminate=False,
             linear_repeats=False,
-            **_shape_with_lattice(lane_left, lane_right, lane_frame, rotation_lock),
+            **_shape_with_lattice(
+                lane_left, lane_right, lane_frame, rotation_lock, recentre
+            ),
         )
 
     plan = build_plan(False)

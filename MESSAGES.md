@@ -151,7 +151,7 @@ live route sync so step cells only mutate on deliberate user action.
 
 **Payload schema**
 - Pydantic `StepParamsCommitMessage` at `device_viewer/models/step_params_commit.py` (canonical; `protocol_grid/models/step_params_commit.py` is the legacy copy).
-- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate, linear_repeats`, plus the slug shape (#682) `lane_left, lane_right, lanes_in_out, rotation_lock` — defaulted (0, 0, True, True) so messages from older senders still parse; on the tree side they are the hidden columns of the same ids.
+- Fields: `step_id, duration, repetitions, repeat_duration, trail_length, trail_overlay, soft_start, soft_terminate, linear_repeats`, plus the slug shape (#682) `lane_left, lane_right, lanes_in_out, rotation_lock, recentre` — defaulted (0, 0, True, True, True) so messages from older senders still parse; on the tree side they are the hidden columns of the same ids.
 
 **Subscriber side (protocol_grid, legacy)**
 - `protocol_grid/services/message_listener.py` — `listener_actor_routine` branches on `STEP_PARAMS_COMMIT`, deserializes, emits `step_params_commit_received`.

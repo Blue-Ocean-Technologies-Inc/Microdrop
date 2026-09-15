@@ -39,6 +39,7 @@ class StepParamsCommitMessage(BaseModel):
     lane_right: int = 0
     lanes_in_out: bool = True
     rotation_lock: bool = True
+    recentre: bool = True
 
     def serialize(self) -> str:
         return self.model_dump_json()
