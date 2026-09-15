@@ -70,7 +70,9 @@ Vocabulary used throughout:
 - **lane frame** — how the two lane counts are read. ``LEFT_RIGHT``: as
   screen-left / screen-right of travel. ``IN_OUT``: as inside / outside of
   the turn, so lanes can hug the outer rung of a track whichever way it
-  bends (see :func:`outer_sides` and :func:`lane_counts`).
+  bends (see :func:`outer_sides` and :func:`lane_counts`). A rotation-
+  locked block never re-reads its lanes at a corner, so it always uses
+  ``LEFT_RIGHT``; in / out is a distinction for blocks that turn.
 - **along / across leg** — for a translating block, a leg parallel to the
   heading it started with, or perpendicular to it.
 
@@ -438,7 +440,15 @@ def rehung_positions(route, headings, lanes, trail_length, trail_overlay, centro
 
 
 def translating_positions(
-    route, headings, lanes, trail_length, trail_overlay, centroids, pitch, closed=False
+    route,
+    headings,
+    lanes,
+    trail_length,
+    trail_overlay,
+    centroids,
+    pitch,
+    closed=False,
+    recentre=True,
 ):
     """Placements of a block that keeps the heading it started with.
 
@@ -448,10 +458,16 @@ def translating_positions(
     across a corner:
 
     - **along leg** (parallel to its heading): heads every ``T - overlay``
-      electrodes, the block hung behind each;
-    - **corner**: it slides on past the corner electrode until centred on
-      it, striding as on the along leg; those placements belong to the
-      corner;
+      electrodes, the block hung behind each. Coming off a corner the
+      block already lies over the first cells of the leg, so the corner
+      placement's head is the leading one of those in the new direction
+      of travel and the strides count from it (otherwise a 2x3 turning
+      with no overlay crept one cell where its stride is two);
+    - **corner**: from its last stride on the leg it slides on past the
+      corner electrode until centred on it, striding as on the along leg
+      and never stopping on the corner first (with no overlay that stop
+      would overlap the stride before it). Each slide placement belongs to
+      the leading cell it has reached, the corner once past it;
     - **across leg**: it strides ``W - overlay`` — a locked ``3x1 r`` going
       down strides like a ``1x3 d`` — in one straight run that ends in the
       lanes the *next* leg wants. When those mirror across the route (a
@@ -465,6 +481,13 @@ def translating_positions(
     Trails of four or more can show a one-cell backward adjustment where an
     across leg meets a return leg: centring an even trail on the corner
     puts the extra cell behind, and the return leg wants it ahead.
+
+    With ``recentre`` off the block is not centred on an across leg: it
+    keeps the position it arrived in, trailing back along the along leg it
+    came off, so the route runs along its edge rather than through its
+    middle. That saves the centring shift at a corner between two long
+    legs and costs one at a one-electrode jog, where the hung position
+    flips to the other side of the corner.
     """
     first = leaving_heading(headings)
     nx, ny = left_normal(first)
@@ -488,10 +511,16 @@ def translating_positions(
 
         return (x + back * first[0] * pitch, y + back * first[1] * pitch)
 
+    # How far back along the block's heading the last along leg left it:
+    # nothing when that leg ran with the heading, the whole block behind
+    # its head when it ran against.
+    arrived_back = 0
+
     def centred(point):
         # The leading cell of a block centred on ``point`` along its heading,
-        # an even trail keeping its extra cell behind.
-        ahead = (trail_length - 1) // 2
+        # an even trail keeping its extra cell behind — or, with re-centring
+        # off, hung as it arrived.
+        ahead = (trail_length - 1) // 2 if recentre else arrived_back
 
         return (
             point[0] + ahead * first[0] * pitch,
@@ -507,9 +536,18 @@ def translating_positions(
         heading = headings[index + 1]
 
         if is_along(heading):
-            for j in [*range(index + along_stride, end, along_stride), end]:
+            start = positions[-1].head
+            heads = list(range(start + along_stride, end, along_stride))
+
+            # The leg ends on its last electrode unless a corner slide
+            # takes the block on from here.
+            if end == last or is_along(headings[end + 1]):
+                heads.append(end)
+
+            for j in heads:
                 positions.append(Position(j, hung(j), first, lanes[j]))
 
+            arrived_back = 0 if axis(heading) == axis(first) else trail_length - 1
             index = end
             continue
 
@@ -520,9 +558,20 @@ def translating_positions(
         start = (
             positions[-1].anchor if is_along(leg_heading(index)) else centred(corner)
         )
+        travel = leg_heading(index)
+        back = 0 if axis(travel) == axis(first) else trail_length - 1
+
+        def leading_index(point):
+            # The route index of the block's leading cell in the direction
+            # of travel; the corner once the block has reached it.
+            x = point[0] - back * first[0] * pitch
+            y = point[1] - back * first[1] * pitch
+            behind = (corner[0] - x) * travel[0] + (corner[1] - y) * travel[1]
+
+            return index - round(max(behind, 0) / pitch)
 
         for _k, point in run_points(start, centred(corner), along_stride, pitch)[0]:
-            positions.append(Position(index, point, first, config))
+            positions.append(Position(leading_index(point), point, first, config))
 
         # Across: one straight run to the leg's last electrode, shifted to
         # the lanes wanted after it — or, when the route ends here, until
@@ -549,6 +598,25 @@ def translating_positions(
                 head = min(index + k, end) if forward else end
 
             positions.append(Position(head, point, first, config))
+
+        # Turning onto an along leg: the block centred on the corner covers
+        # (T - 1) // 2 cells ahead of it along its heading and T // 2 behind,
+        # so its head is the last of those the next leg runs over.
+        if end < last and is_along(headings[end + 1]):
+            with_heading = axis(headings[end + 1]) == axis(first)
+
+            if recentre:
+                covered = (trail_length - 1) // 2 if with_heading else trail_length // 2
+            else:
+                # Hung, the block reaches T - 1 cells onto a leg that runs
+                # back the way it came and none onto one that carries on.
+                arrived_with = arrived_back == 0
+                covered = 0 if arrived_with == with_heading else trail_length - 1
+
+            next_end = next(
+                (j for j in range(end + 1, last) if turns_at(j, headings)), last
+            )
+            positions[-1] = positions[-1]._replace(head=min(end + covered, next_end))
 
         index = end
 
@@ -593,12 +661,92 @@ def hold_phase(route, headings, lanes, centroids, pitch):
     return Phase(len(route) - 1, headings[-1], ids)
 
 
-def keep_count(ids, previous, head_id, centroids, target):
+def block_phases(
+    route,
+    headings,
+    positions,
+    trail_length,
+    trail_overlay,
+    translate,
+    centroids,
+    neighbours,
+    pitch,
+):
+    """The phases of a block's placements: its cells at each, topped up by
+    the flow rule, identical repeats and a redundant end step dropped."""
+    width = positions[0].lanes[0] + positions[0].lanes[1] + 1
+    target = width * trail_length
+    phases, previous = [], None
+
+    for position in positions:
+        ids = block_cells(
+            position.anchor,
+            position.heading,
+            *position.lanes,
+            trail_length,
+            centroids,
+            pitch,
+        )
+        ids = keep_count(
+            ids, previous, route[position.head], centroids, neighbours, target
+        )
+
+        # Re-hanging at a corner can reproduce the previous footprint (a
+        # 2x2 turning); an identical phase would be a no-op, so it is
+        # dropped.
+        if previous is None or set(ids) != set(previous):
+            # The direction of travel: the route's at the head for a
+            # translating block, the block's own for a re-hung one.
+            travel = headings[position.head] if translate else position.heading
+            phases.append(Phase(position.head, travel, ids))
+            previous = ids
+
+    # The last placement is forced onto the route's end (a leg-end fit, or
+    # a loop's return to its start). When the slug could step there straight
+    # from the phase before, the short step between is dropped: a 2x3
+    # closing a loop goes from its last stride to the start footprint in
+    # one move instead of via a one-electrode shuffle.
+    if len(phases) >= 3 and touching(
+        phases[-3].ids, phases[-1].ids, trail_overlay, neighbours
+    ):
+        del phases[-2]
+
+    return phases
+
+
+def continuous(phases, neighbours):
+    """Whether every phase touches the next, so a droplet can follow them."""
+    return all(
+        touching(a.ids, b.ids, 0, neighbours) for a, b in zip(phases, phases[1:])
+    )
+
+
+def touching(ids, other, trail_overlay, neighbours):
+    """Whether a slug could step from ``ids`` to ``other`` in one phase:
+    they share at least ``trail_overlay`` electrodes, and with no overlay
+    asked for, they share one or sit side by side."""
+    shared = len(set(ids) & set(other))
+
+    if trail_overlay:
+        return shared >= trail_overlay
+
+    return shared > 0 or any(
+        neighbour in other for cell in ids for neighbour in neighbours.get(cell, ())
+    )
+
+
+def keep_count(ids, previous, head_id, centroids, neighbours, target):
     """``ids`` topped up to ``target`` with the cells of ``previous`` nearest
     the head — the flow rule: a slug against an edge or in a neck keeps its
     actuation count, the liquid piling up behind the head. A slug born
     clipped comes on short, then fills out from its second phase by
-    dragging the cells it left behind."""
+    dragging the cells it left behind.
+
+    A carried cell must touch the slug (the block or a cell already
+    carried), since liquid cannot be in two places: the top-up grows
+    outward from the block, nearest the head first, and stops short of the
+    count rather than strand cells across a gap.
+    """
     if len(ids) >= target or not previous:
         return ids
 
@@ -607,8 +755,25 @@ def keep_count(ids, previous, head_id, centroids, target):
         (cell for cell in previous if cell not in ids),
         key=lambda cell: math.dist(centroids[cell], head),
     )
+    ids = list(ids)
 
-    return ids + carry[: target - len(ids)]
+    while len(ids) < target:
+        touching = next(
+            (
+                cell
+                for cell in carry
+                if any(neighbour in ids for neighbour in neighbours.get(cell, ()))
+            ),
+            None,
+        )
+
+        if touching is None:
+            break
+
+        ids.append(touching)
+        carry.remove(touching)
+
+    return ids
 
 
 def rows_along(ids, heading, centroids, pitch):
@@ -667,6 +832,7 @@ def slug_phases(
     lane_frame=LEFT_RIGHT,
     repetitions=1,
     soft_start=False,
+    recentre=True,
 ):
     """The phases of a slug driven along ``route`` (see the module docstring
     for the rules).
@@ -680,10 +846,12 @@ def slug_phases(
         advances ``trail_length - trail_overlay`` route electrodes; a
         translating block advances by its extent along the current leg
         minus the overlay, so the overlay may run up to
-        ``max(width, trail_length) - 1``.
+        ``max(width, trail_length) - 1``. An overlay too small for the
+        block to move without a gap plays as the smallest one that does.
     pitch : lattice spacing; measured from ``neighbours`` when None.
     rotation_lock : keep the block's orientation fixed through corners and
-        only translate it — what a square does regardless.
+        only translate it — what a square does regardless. A locked block
+        reads its lanes as screen left / right whatever ``lane_frame`` says.
     soft_terminate : after the last head, take the slug off a row at a
         time from its tail down to the head row.
     lane_frame : ``LEFT_RIGHT`` (``left``/``right`` are screen sides) or
@@ -693,6 +861,9 @@ def slug_phases(
         index the unrolled route.
     soft_start : before the first full phase, bring the block on a row at
         a time from its tail; a held short route does not ramp.
+    recentre : a rotation-locked block is centred on the route along an
+        across leg; off, it keeps the position it arrived in (see
+        :func:`translating_positions`). Nothing to a block that re-hangs.
 
     Returns
     -------
@@ -708,6 +879,9 @@ def slug_phases(
     width = left + right + 1
     translate = rotation_lock or width == trail_length
     cycle_length = len(route) - 1 if is_loop(route) else 0
+
+    if rotation_lock:
+        lane_frame = LEFT_RIGHT
 
     # A loop plays as one unrolled route (a cycle too short for the trail
     # simply holds, like any short route).
@@ -735,45 +909,49 @@ def slug_phases(
     else:
         lanes = lane_counts(headings, sides, left, right, lane_frame, translate)
 
-        if translate:
-            positions = translating_positions(
+        def phases_with(overlay):
+            if translate:
+                positions = translating_positions(
+                    route,
+                    headings,
+                    lanes,
+                    trail_length,
+                    overlay,
+                    centroids,
+                    pitch,
+                    closed=bool(cycle_length),
+                    recentre=recentre,
+                )
+            else:
+                positions = rehung_positions(
+                    route, headings, lanes, trail_length, overlay, centroids
+                )
+
+            return block_phases(
                 route,
                 headings,
-                lanes,
+                positions,
                 trail_length,
-                trail_overlay,
+                overlay,
+                translate,
                 centroids,
-                pitch,
-                closed=bool(cycle_length),
-            )
-        else:
-            positions = rehung_positions(
-                route, headings, lanes, trail_length, trail_overlay, centroids
-            )
-
-        phases, previous = [], None
-        target = width * trail_length
-
-        for position in positions:
-            ids = block_cells(
-                position.anchor,
-                position.heading,
-                *position.lanes,
-                trail_length,
-                centroids,
+                neighbours,
                 pitch,
             )
-            ids = keep_count(ids, previous, route[position.head], centroids, target)
 
-            # Re-hanging at a corner can reproduce the previous footprint (a
-            # 2x2 turning); an identical phase would be a no-op, so it is
-            # dropped.
-            if previous is None or set(ids) != set(previous):
-                # The direction of travel: the route's at the head for a
-                # translating block, the block's own for a re-hung one.
-                travel = headings[position.head] if translate else position.heading
-                phases.append(Phase(position.head, travel, ids))
-                previous = ids
+        # A long trail with a small overlay can leave a gap: a re-hung
+        # block whose stride crosses a corner hangs its tail off the route,
+        # and the electrodes before the corner are in neither phase. A
+        # droplet cannot cross a gap, so the overlay is raised until every
+        # phase touches the next; small overlays on a long trail all play
+        # as the smallest one that moves the slug continuously.
+        for overlay in range(
+            trail_overlay, max(width, trail_length, trail_overlay + 1)
+        ):
+            phases = phases_with(overlay)
+
+            if continuous(phases, neighbours):
+                break
 
     if soft_terminate and phases:
         phases += ramp_down(phases[-1], centroids, pitch)
