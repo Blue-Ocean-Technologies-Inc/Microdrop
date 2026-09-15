@@ -37,6 +37,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     GlyphActionColumn,
     ObjectColumn,
     SafeCancelTableHandler,
+    SteppedSliderEditor,
     VisibleColumn,
     make_table_row_header_resizable,
 )
@@ -212,62 +213,75 @@ soft_transition_settings_header = (
 )
 
 # The slug shape: lanes on each side of the route, how they are read, and
-# whether the slug rotates at corners. No lanes = the plain trail. The two
-# spinners are shown twice, labelled for the frame in force.
-lane_spinner = dict(editor=RangeEditor(low=0, high=20, mode="spinner"))
+# whether the slug rotates at corners. No lanes = the plain trail. The lane
+# sliders meet in the middle, where the route is, and grow away from it;
+# they are shown twice, with tooltips for the frame in force.
+# Both sliders run to the width cap; each stops where the other leaves off.
+lane_slider = dict(
+    low=0.0,
+    high=4.0,
+    step=1.0,
+    format="%d",
+    integer=True,
+    span_name="object.routes.max_lanes",
+)
 slug_shape_settings = (
-    UItem(
-        "object.routes.lanes_in_out",
-        tooltip="Lanes read as inside / outside of the turn, not screen left / right",
-    ),
     UItem(
         "object.routes.rotation_lock",
         tooltip="Keep the slug's orientation through corners: it only translates",
     ),
-)
-lanes_in_out_settings = HGroup(
-    VGroup(
-        Label("Lanes In", tooltip="Extra lanes inside the turn"),
-        UItem(
-            "object.routes.lane_left",
-            tooltip="Extra lanes inside the turn",
-            **lane_spinner,
-        ),
+    UItem(
+        "object.routes.lanes_in_out",
+        tooltip="Lanes read as inside / outside of the turn, not screen left / right",
+        visible_when="not object.routes_rotation_lock",
     ),
-    VGroup(
-        Label("Lanes Out", tooltip="Extra lanes outside the turn"),
-        UItem(
-            "object.routes.lane_right",
-            tooltip="Extra lanes outside the turn",
-            **lane_spinner,
-        ),
+    UItem(
+        "object.routes.recentre",
+        tooltip="Centre a locked slug on the route when it moves across its own "
+        "heading; off, it keeps the position it arrived in",
+        visible_when="object.routes_rotation_lock",
     ),
-    visible_when="object.routes_lanes_in_out",
-)
-lanes_left_right_settings = HGroup(
-    VGroup(
-        Label("Lanes Left", tooltip="Extra lanes to the screen-left of travel"),
-        UItem(
-            "object.routes.lane_left",
-            tooltip="Extra lanes to the screen-left of travel",
-            **lane_spinner,
-        ),
-    ),
-    VGroup(
-        Label("Lanes Right", tooltip="Extra lanes to the screen-right of travel"),
-        UItem(
-            "object.routes.lane_right",
-            tooltip="Extra lanes to the screen-right of travel",
-            **lane_spinner,
-        ),
-    ),
-    visible_when="not object.routes_lanes_in_out",
-)
-slug_shape_settings_header = (
-    Label("In/Out", tooltip="Lanes read as inside / outside of the turn"),
-    Label("Rot Lock", tooltip="The slug keeps its orientation through corners"),
 )
 
+slug_shape_settings_header = (
+    Label("Rot Lock", tooltip="The slug keeps its orientation through corners"),
+    Label(
+        "In/Out",
+        tooltip="Lanes read as inside / outside of the turn",
+        visible_when="not object.routes_rotation_lock",
+    ),
+    Label(
+        "Re-centre",
+        tooltip="A locked slug is centred on the route across legs",
+        visible_when="object.routes_rotation_lock",
+    ),
+)
+
+# Each lane row is an HGroup of one labelled column, like the rows above,
+# so it takes the same margins and lines up with them.
+lanes_left_right_settings = HGroup(
+    VGroup(
+        Label("Lanes", tooltip="Extra lanes to the screen-left and right of travel"),
+        HGroup(
+            UItem(
+                "object.routes.lane_left",
+                tooltip="Extra lanes to the screen-left of travel",
+                editor=SteppedSliderEditor(
+                    inverted=True,
+                    high_name="object.routes.max_lane_left",
+                    **lane_slider,
+                ),
+            ),
+            UItem(
+                "object.routes.lane_right",
+                tooltip="Extra lanes to the screen-right of travel",
+                editor=SteppedSliderEditor(
+                    high_name="object.routes.max_lane_right", **lane_slider
+                ),
+            ),
+        ),
+    ),
+)
 
 protocol_execution_settings_group = VGroup(
     HGroup(
@@ -284,14 +298,18 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
         VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
     ),
-    # The lane rows are rows of the outer group, not nested in another
-    # HGroup, so their two columns line up with the Reps row above.
-    lanes_in_out_settings,
-    lanes_left_right_settings,
+    VGroup(lanes_left_right_settings),
+    # Laid out like the ramp row above. In/Out only matters to a slug that
+    # turns and Re-centre only to one that does not, so the lock swaps them.
+    # The condition sits on the label and checkbox, not on their group: a
+    # group with visible_when gets a padded wrapper widget in the Qt backend,
+    # which knocks its column out of line with its neighbours.
     HGroup(
         VGroup(slug_shape_settings_header[0], slug_shape_settings[0]),
         VGroup(slug_shape_settings_header[1], slug_shape_settings[1]),
+        VGroup(slug_shape_settings_header[2], slug_shape_settings[2]),
     ),
+    Item("_"),
     # enabled_when='free_mode',
 )
 

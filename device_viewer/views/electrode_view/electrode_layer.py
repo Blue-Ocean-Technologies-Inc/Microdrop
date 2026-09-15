@@ -12,6 +12,7 @@
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsScene
+from shapely.ops import unary_union
 
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt
@@ -25,6 +26,10 @@ from microdrop_utils.pyside_helpers import get_qcolor_lighter_percent_from_facto
 
 # Local imports.
 from ...consts import (
+    SLUG_HALO_PEN_WIDTH,
+    SLUG_HALO_Z_VALUE,
+    SLUG_OUTLINE_PEN_WIDTH,
+    SLUG_OUTLINE_Z_VALUE,
     ZONE_BAND_Z_VALUE,
     ZONE_LAYER_Z_STEP,
     ZONE_OUTLINE_PEN_WIDTH,
@@ -44,6 +49,9 @@ from ...default_settings import (
     ROUTE_CCW_LOOP,
     ROUTE_CW_LOOP,
     ROUTE_SELECTED,
+    ROUTE_SHAPE_COLOR_POOL,
+    SLUG_HALO_ALPHA_FACTOR,
+    SLUG_HALO_COLOR,
     actuated_electrodes_key,
     connections_key,
     electrode_fill_key,
@@ -51,10 +59,16 @@ from ...default_settings import (
     electrode_text_key,
     hovered_actuation_key,
     hovered_electrode_key,
+    route_head_key,
+    route_shape_key,
     routes_key,
     zones_key,
 )
-from ..zone_view.zone_region_item import ZoneRegionItem, make_selection_highlight_item
+from ..zone_view.zone_region_item import (
+    ZoneRegionItem,
+    make_selection_highlight_item,
+    shapely_geometry_to_painter_path,
+)
 from .electrode_view_helpers import loop_is_ccw
 from .electrodes_view_base import (
     ElectrodeConnectionItem,
@@ -66,10 +80,6 @@ from .electrodes_view_base import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-#: How much of the routes alpha the slug preview tint takes: light enough
-#: to read the electrode's own state through it.
-FOOTPRINT_ALPHA_FACTOR = 0.35
 
 
 class ElectrodeLayer:
@@ -96,6 +106,10 @@ class ElectrodeLayer:
         self.zone_pending_item = None
         self.zone_band_item = None
         self.zone_move_ghost_item = None
+
+        # The selected route's slug outlined at its most recent phase.
+        self.slug_outline_item = None
+        self.slug_halo_item = None
 
         self.svg = electrodes.svg_model
 
@@ -220,12 +234,29 @@ class ElectrodeLayer:
         )
         parent_scene.addItem(self.reference_rect_path_item)
 
+        self.slug_halo_item = QGraphicsPathItem()
+        self.slug_outline_item = QGraphicsPathItem()
+
+        for item, z_value in (
+            (self.slug_halo_item, SLUG_HALO_Z_VALUE),
+            (self.slug_outline_item, SLUG_OUTLINE_Z_VALUE),
+        ):
+            item.setZValue(z_value)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            parent_scene.addItem(item)
+
     def remove_all_items_to_scene(self, parent_scene: "QGraphicsScene"):
         self.remove_electrodes_to_scene(parent_scene)
         self.remove_connections_to_scene(parent_scene)
         self.remove_endpoints_to_scene(parent_scene)
         self.remove_zones_to_scene(parent_scene)
         parent_scene.removeItem(self.reference_rect_item)
+
+        for item in (self.slug_halo_item, self.slug_outline_item):
+            if item is not None:
+                parent_scene.removeItem(item)
+
+        self.slug_halo_item = self.slug_outline_item = None
 
     def toggle_electrode_tooltips(self, checked):
         for electrode_id, electrode_view in self.electrode_views.items():
@@ -398,11 +429,12 @@ class ElectrodeLayer:
 
     def redraw_footprints(self, model: DeviceViewMainModel):
         """The live slug preview: every visible route layer tints the
-        electrodes its slug would actuate, in the layer's colour, so the
+        electrodes its slug would actuate, each layer in its own hue, so the
         user sees the actuations as they draw and as the sidebar settings
         change."""
         svg_model = model.electrodes.svg_model
         footprint_colors = {}
+        outline, outline_color = QPainterPath(), None
 
         if svg_model is not None:
             centroids = {
@@ -413,22 +445,65 @@ class ElectrodeLayer:
                 electrode_id: list(adjacent)
                 for electrode_id, adjacent in svg_model.neighbours.items()
             }
-            alpha = model.get_alpha(routes_key) * FOOTPRINT_ALPHA_FACTOR
+            alpha = model.get_alpha(route_shape_key)
+            head_alpha = model.get_alpha(route_head_key)
 
-            for route_layer in model.routes.layers:
+            # Each layer keeps the hue of its position, but the selected one
+            # is tinted last so its hint sits on top where slugs overlap.
+            layers = sorted(
+                enumerate(model.routes.layers),
+                key=lambda pair: pair[1] is model.routes.selected_layer,
+            )
+
+            for index, route_layer in layers:
                 if not route_layer.visible:
                     continue
 
-                color = QColor(route_layer.color)
+                color = QColor(
+                    ROUTE_SHAPE_COLOR_POOL[index % len(ROUTE_SHAPE_COLOR_POOL)]
+                )
                 color.setAlphaF(alpha)
 
-                for electrode_id in model.routes.slug_footprint(
+                footprint, latest = model.routes.slug_preview(
                     route_layer.route.route, centroids, neighbours
-                ):
+                )
+
+                for electrode_id in footprint:
                     footprint_colors[electrode_id] = color
+
+                # The route being drawn is the selected one: outline where
+                # its slug sits now, as one shape rather than per electrode.
+                if route_layer is model.routes.selected_layer and latest and head_alpha:
+                    shape = unary_union(
+                        [
+                            svg_model.polygons[electrode_id]
+                            for electrode_id in latest
+                            if electrode_id in svg_model.polygons
+                        ]
+                    )
+                    outline = shapely_geometry_to_painter_path(shape, self.path_scale)
+                    outline_color = QColor(color)
+                    outline_color.setAlphaF(head_alpha)
 
         for electrode_id, electrode_view in self.electrode_views.items():
             electrode_view.set_footprint(footprint_colors.get(electrode_id))
+
+        if self.slug_outline_item is not None:
+            if outline_color is not None:
+                pen = QPen(outline_color, SLUG_OUTLINE_PEN_WIDTH)
+                pen.setCosmetic(True)
+                pen.setStyle(Qt.PenStyle.DashLine)
+                self.slug_outline_item.setPen(pen)
+
+                halo_color = QColor(SLUG_HALO_COLOR)
+                halo_color.setAlphaF(outline_color.alphaF() * SLUG_HALO_ALPHA_FACTOR)
+                halo_pen = QPen(halo_color, SLUG_HALO_PEN_WIDTH)
+                halo_pen.setCosmetic(True)
+                halo_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                self.slug_halo_item.setPen(halo_pen)
+
+            self.slug_outline_item.setPath(outline)
+            self.slug_halo_item.setPath(outline)
 
     def redraw_electrode_labels(self, model: DeviceViewMainModel):
         alpha = model.get_alpha(electrode_text_key)

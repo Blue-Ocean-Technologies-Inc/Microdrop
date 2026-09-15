@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import filecmp
 from pathlib import Path
 
@@ -31,10 +32,13 @@ from traits.api import (
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import FileEditor, Group, HGroup, Item, View
 
+# Microdrop package imports.
 from microdrop_application.preferences_dialog import advanced_mode_tab
 
+# Microdrop style imports.
 from microdrop_style.text_styles import preferences_group_style_sheet
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.preferences_UI_helpers import (
@@ -43,6 +47,7 @@ from microdrop_utils.preferences_UI_helpers import (
     create_item_label_pair,
 )
 
+# Local imports.
 from .consts import (
     ALIGNMENT_FRAME_WIDTH_MAX_PX,
     ALIGNMENT_FRAME_WIDTH_MIN_PX,
@@ -79,6 +84,7 @@ from .consts import (
     GAMEPAD_RECONNECT_REQUEST,
     LAYERS_VIEW_MIN_HEIGHT,
     MASTER_SVG_FILE,
+    MAX_SLUG_WIDTH,
     NUMBER_OF_CHANNELS,
     PIN_MAP_SVG_FILE,
     ZONES_VIEW_MIN_HEIGHT,
@@ -86,6 +92,7 @@ from .consts import (
 )
 from .default_settings import default_alphas, default_visibility
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -171,6 +178,10 @@ class DeviceViewerPreferences(PreferencesHelper):
     NUMBER_OF_CHANNELS = Range(
         value=NUMBER_OF_CHANNELS, low=1, high=1024, mode="spinner"
     )
+
+    # Widest slug the route sidebar's lane sliders allow, route electrode
+    # included.
+    max_slug_width = Range(value=MAX_SLUG_WIDTH, low=1, high=21, mode="spinner")
 
     # getters for processed values from int set in spinner
     _auto_fit_margin_scale = Property(observe="AUTO_FIT_MARGIN_SCALE")
@@ -433,6 +444,21 @@ main_view_settings = (
 )
 
 
+########## Path settings ###########################
+path_settings = Group(
+    create_item_label_group(
+        "max_slug_width",
+        label_text="Max slug width (electrodes)",
+        item_tooltip="The widest slug the route sidebar allows, route electrode "
+        "included: the two lane counts add up to at most one less.",
+    ),
+    label="Paths",
+    show_labels=False,
+    show_border=True,
+    style_sheet=preferences_group_style_sheet,
+)
+
+
 ########## Gamepad settings ###########################
 def _gamepad_button_row(trait_name: str, rebind_trait: str, label: str) -> HGroup:
     """A button-index spinner paired with a live 'Rebind' capture button."""
@@ -509,6 +535,8 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         main_view_settings,
         Item("_"),  # Separator
         sidebar_settings_grid,
+        Item("_"),  # Separator
+        path_settings,
         Item("_"),  # Separator
         gamepad_settings,
         Item("_"),

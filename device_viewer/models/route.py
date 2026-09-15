@@ -32,6 +32,7 @@ from microdrop_utils.route_execution import PathExecutionService
 from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
 
 # Local imports.
+from ..consts import MAX_SLUG_WIDTH
 from ..default_settings import ROUTE_COLOR_POOL
 
 # Logger import.
@@ -307,11 +308,24 @@ class RouteLayerManager(HasTraits):
     # The slug shape (#682): extra lanes across the route on each side, read
     # as inside / outside of the turn — or screen left / right of travel when
     # ``lanes_in_out`` is off — and whether the slug keeps its orientation
-    # through corners. With no lanes the route is the plain trail it always was.
+    # through corners. A locked slug never turns, so it reads its lanes as
+    # left / right regardless (the geometry enforces it; the sidebar shows
+    # it), and ``recentre`` says whether it is centred on the route or kept
+    # hung as it arrived when it moves across its own heading. With no
+    # lanes the route is the plain trail it always was.
     lane_left = Range(low=0, high=20, value=0)
     lane_right = Range(low=0, high=20, value=0)
+
+    #: Widest slug allowed, route electrode included — the preference,
+    #: mirrored in by the main model. The lanes add up to one less.
+    max_width = Range(low=1, high=21, value=MAX_SLUG_WIDTH)
+    #: The lane sliders' length, and how far each may go given the other.
+    max_lanes = Property(observe="max_width")
+    max_lane_left = Property(observe="max_width, lane_right")
+    max_lane_right = Property(observe="max_width, lane_left")
     lanes_in_out = Bool(True)
     rotation_lock = Bool(True)
+    recentre = Bool(True)
 
     # True when linear_repeats is off AND no layer contains a loop route —
     # Repetitions / Repeat Duration are meaningless in that mode, so the
@@ -362,6 +376,7 @@ class RouteLayerManager(HasTraits):
             "lane_right": int(self.lane_right),
             "lanes_in_out": bool(self.lanes_in_out),
             "rotation_lock": bool(self.rotation_lock),
+            "recentre": bool(self.recentre),
         }
 
     def plan_arguments(self) -> dict:
@@ -380,27 +395,47 @@ class RouteLayerManager(HasTraits):
             "lane_right": int(self.lane_right),
             "lane_frame": IN_OUT if self.lanes_in_out else LEFT_RIGHT,
             "rotation_lock": bool(self.rotation_lock),
+            "recentre": bool(self.recentre),
         }
 
     def slug_footprint(self, route_ids, centroids, neighbours) -> set:
         """Every electrode the slug would actuate along ``route_ids`` with
         the current settings — the union of the plan's phases — for the
         live preview on the device. Empty for an empty route."""
-        if not route_ids:
-            return set()
+        return self.slug_preview(route_ids, centroids, neighbours)[0]
 
+    def slug_preview(self, route_ids, centroids, neighbours) -> tuple:
+        """``(footprint, latest)`` for the live preview: every electrode the
+        slug would actuate along ``route_ids``, and the electrodes of its
+        most recent phase — where the slug sits at the route's end, before
+        any ramp down. Both empty for an empty route.
+
+        One plan serves both. It is built without the ramp down and linear
+        repeats: they only repeat electrodes already in the footprint, and
+        would leave the head row, not the slug, as the last phase.
+        """
+        if not route_ids:
+            return set(), set()
+
+        arguments = {
+            **self.plan_arguments(),
+            "soft_terminate": False,
+            "linear_repeats": False,
+        }
         plan = PathExecutionService.calculate_execution_plan_from_params(
             paths=[list(route_ids)],
             centroids=centroids,
             neighbours=neighbours,
-            **self.plan_arguments(),
+            **arguments,
         )
-
-        return {
+        footprint = {
             electrode_id
             for item in plan
             for electrode_id in item["activated_electrodes"]
         }
+        latest = set(plan[-1]["activated_electrodes"]) if plan else set()
+
+        return footprint, latest
 
     def apply_execution_params(self, params: dict) -> None:
         """Apply params from the grid to the sidebar, then baseline them.
@@ -424,6 +459,7 @@ class RouteLayerManager(HasTraits):
                 lane_right=int(params.get("lane_right", 0)),
                 lanes_in_out=bool(params.get("lanes_in_out", True)),
                 rotation_lock=bool(params.get("rotation_lock", True)),
+                recentre=bool(params.get("recentre", True)),
             )
         self.mark_params_committed()
 
@@ -453,6 +489,34 @@ class RouteLayerManager(HasTraits):
                 return False
 
         return _Ctx()
+
+    def _get_max_lanes(self):
+        return self.max_width - 1
+
+    def _get_max_lane_left(self):
+        return max(self.max_width - 1 - self.lane_right, 0)
+
+    def _get_max_lane_right(self):
+        return max(self.max_width - 1 - self.lane_left, 0)
+
+    @observe("max_width, lane_left, lane_right")
+    def _keep_lanes_within_width(self, event):
+        """Trim the lanes to the width cap: the lane just changed gives way,
+        or both from the right when the cap itself shrank. Covers steps
+        loaded from a protocol as well as the sliders."""
+        excess = self.lane_left + self.lane_right - (self.max_width - 1)
+
+        if excess <= 0:
+            return
+
+        if event.name == "lane_left":
+            self.lane_left -= excess
+        elif event.name == "lane_right":
+            self.lane_right -= excess
+        else:
+            trimmed = min(excess, self.lane_right)
+            self.lane_right -= trimmed
+            self.lane_left -= excess - trimmed
 
     def _get_max_trail_overlay(self):
         """Computed upper bound for trail_overlay, recalculated when

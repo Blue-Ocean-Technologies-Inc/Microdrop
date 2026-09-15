@@ -8,11 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import html
 import math
 
+# Third-party imports.
 from PySide6.QtWidgets import QToolButton
 
+# Enthought library imports.
 from pyface.qt import QtWidgets
 from pyface.qt.QtCore import (
     Property as QtProperty,  # aliased: traits.api.Property (below) shadows it
@@ -61,6 +64,7 @@ from traits.api import (
     Property,
     Range,
     Str,
+    observe,
 )
 from traitsui.api import (
     BasicEditorFactory,
@@ -79,6 +83,7 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
+# Microdrop style imports.
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import (
     ACCENT_COLOR,
@@ -96,12 +101,14 @@ from microdrop_style.icons.icons import (
     ICON_SELECT_All,
 )
 
+# Microdrop utils imports.
 from microdrop_utils.pyside_helpers import (
     MarqueeComboBox,
     _ClickablePixmapLabel,
     _ScalingPixmapLabel,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -424,9 +431,49 @@ class RangeWithSteppedSpinViewHint(Range):
 ## --------------------------------------------------------
 
 
+def _slider_style(filled_side):
+    """A horizontal slider stylesheet with the accent fill on one side of
+    the handle: ``"sub"`` (left of it) or ``"add"`` (right of it)."""
+    empty_side = "add" if filled_side == "sub" else "sub"
+
+    return f"""
+        QSlider::groove:horizontal {{
+            height: 4px; border-radius: 2px; background: palette(midlight);
+        }}
+        QSlider::{filled_side}-page:horizontal {{
+            border-radius: 2px; background: palette(highlight);
+        }}
+        QSlider::{empty_side}-page:horizontal {{
+            border-radius: 2px; background: palette(midlight);
+        }}
+        QSlider::handle:horizontal {{
+            width: 14px; margin: -5px 0; border-radius: 7px;
+            background: palette(highlight); border: 2px solid palette(base);
+        }}
+    """
+
+
 class _SteppedSliderEditor(QtEditor):
     """A horizontal slider whose handle snaps to fixed increments (the
-    slider works in integer notches of ``step``), with a value readout."""
+    slider works in integer notches of ``step``), with a value readout.
+    ``inverted`` grows the value leftward with the readout on the left, so
+    two of them can meet in the middle and grow away from each other.
+
+    The value mapping is what inverts, and the fill follows the value: it
+    lies between the handle and the low end, so an inverted slider fills to
+    the right of its handle. Native styles (Windows included) ignore
+    ``invertedAppearance`` for the fill, so both fills are drawn by a
+    stylesheet and the pair matches.
+
+    ``span_name`` takes the slider's top end from a trait, and ``high_name``
+    a lower bound the handle may not pass: past it the handle snaps back.
+    Two sliders sharing a budget (the lanes of a width cap) keep one scale
+    this way, rather than each shrinking as the other grows."""
+
+    #: The slider's top end, synced from ``factory.span_name``.
+    span = Any()
+    #: The largest value the handle may take, synced from ``factory.high_name``.
+    high = Any()
 
     def init(self, parent):
         self.control = QtWidgets.QWidget()
@@ -438,27 +485,66 @@ class _SteppedSliderEditor(QtEditor):
             round((self.factory.high - self.factory.low) / self.factory.step)
         )
         self._slider.setPageStep(1)
+        self._slider.setStyleSheet(
+            _slider_style(filled_side="add" if self.factory.inverted else "sub")
+        )
         self._readout = QLabel()
-        layout.addWidget(self._slider)
-        layout.addWidget(self._readout)
+        widgets = [self._slider, self._readout]
+
+        for widget in reversed(widgets) if self.factory.inverted else widgets:
+            layout.addWidget(widget)
+
         self._slider.valueChanged.connect(self.update_object)
 
-    def update_object(self, notches):
+        if self.factory.span_name:
+            self.sync_value(self.factory.span_name, "span", "from")
+
+        if self.factory.high_name:
+            self.sync_value(self.factory.high_name, "high", "from")
+
+    @observe("span")
+    def _span_updated(self, event):
+        if self.control is None or event.new is None:
+            return
+
+        self._slider.setMaximum(
+            round((event.new - self.factory.low) / self.factory.step)
+        )
+        self.update_editor()
+
+    def _notches(self, position):
+        """Slider position <-> value notches; the same map both ways, and
+        mirrored for an inverted slider."""
+        return self._slider.maximum() - position if self.factory.inverted else position
+
+    def update_object(self, position):
         """Handles the user moving the slider handle."""
         # Round away float artifacts (0.1 * 3 -> 0.30000000000000004).
-        self.value = round(self.factory.low + notches * self.factory.step, 10)
+        value = round(
+            self.factory.low + self._notches(position) * self.factory.step, 10
+        )
+
+        if self.high is not None and value > self.high:
+            value = self.high
+            self.update_editor_handle(value)
+
+        self.value = int(value) if self.factory.integer else value
         # TraitsUI skips update_editor for editor-caused changes (the
         # `updating` guard), so refresh the readout here.
         self._readout.setText(self.factory.format % self.value)
 
+    def update_editor_handle(self, value):
+        """Put the handle on ``value`` without echoing back to the trait."""
+        self._slider.blockSignals(True)
+        self._slider.setValue(
+            self._notches(round((value - self.factory.low) / self.factory.step))
+        )
+        self._slider.blockSignals(False)
+
     def update_editor(self):
         """Updates the GUI when the Trait changes externally."""
         if self.control is not None:
-            self._slider.blockSignals(True)
-            self._slider.setValue(
-                round((self.value - self.factory.low) / self.factory.step)
-            )
-            self._slider.blockSignals(False)
+            self.update_editor_handle(self.value)
             self._readout.setText(self.factory.format % self.value)
 
 
@@ -472,6 +558,14 @@ class SteppedSliderEditor(BasicEditorFactory):
     step = Float(0.1)
     #: printf-style format of the value readout next to the slider.
     format = Str("%.1f")
+    #: The value grows leftward, readout on the left.
+    inverted = Bool(False)
+    #: Write an int to the trait (for an integer Range).
+    integer = Bool(False)
+    #: Extended name of the trait giving the slider's top end.
+    span_name = Str()
+    #: Extended name of the trait giving the largest value the handle may take.
+    high_name = Str()
 
     def _get_klass(self):
         return _SteppedSliderEditor

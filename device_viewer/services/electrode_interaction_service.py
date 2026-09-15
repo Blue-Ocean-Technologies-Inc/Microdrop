@@ -48,6 +48,8 @@ from device_viewer.default_settings import (
     electrode_fill_key,
     electrode_outline_key,
     electrode_text_key,
+    route_head_key,
+    route_shape_key,
     routes_key,
     zones_key,
 )
@@ -1110,7 +1112,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     # The preview follows every sidebar setting that changes the phases.
     @observe(
         "model.routes.[trail_length, trail_overlay, lane_left, lane_right, "
-        "lanes_in_out, rotation_lock, soft_start, soft_terminate, "
+        "lanes_in_out, rotation_lock, recentre, soft_start, soft_terminate, "
         "linear_repeats, repetitions, repeat_duration]"
     )
     def footprint_redraw(self, event):
@@ -1300,6 +1302,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if changed_key in (routes_key, connections_key):
             self.route_redraw(None)
+
+        if changed_key in (route_shape_key, route_head_key):
+            self.footprint_redraw(None)
 
         if changed_key == zones_key:
             self.zones_redraw(None)

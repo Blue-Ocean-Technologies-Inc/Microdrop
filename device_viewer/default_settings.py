@@ -8,7 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop style imports.
 from microdrop_style.colors import (
+    ACCENT_COLOR,
+    BLACK,
+    INFO_COLOR,
     PRIMARY_COLOR,
     PRIMARY_SHADE,
     SECONDARY_SHADE,
@@ -39,9 +43,32 @@ ROUTE_COLOR_POOL = (
     PRIMARY_SHADE[500],
     PRIMARY_SHADE[600],
 )
+# The slug preview's tint, one hue per route layer in layer order, so the
+# path being drawn stands apart from the ones before it. Neighbouring hues
+# alternate warm and cool, and none is the yellow, red, orange or pink
+# reserved above; the route lines keep the colours above.
+ROUTE_SHAPE_COLOR_POOL = (
+    INFO_COLOR,  # blue
+    "#C2185B",  # magenta
+    "#00A3B4",  # cyan
+    "#8D6E63",  # brown
+    ACCENT_COLOR,  # purple
+    "#9E9D24",  # olive
+    "#3949AB",  # indigo
+    PRIMARY_COLOR,  # green
+    "#546E7A",  # slate
+)
 AUTOROUTE_COLOR = "pink"
+# The halo under the selected route's slug outline, and how much of the
+# Route Head alpha it takes.
+SLUG_HALO_COLOR = BLACK
+SLUG_HALO_ALPHA_FACTOR = 0.6
 
 routes_key = "Route"
+#: The live slug preview: the electrodes a route's slug would actuate.
+route_shape_key = "Route Shape"
+#: The outline of the selected route's slug at its most recent phase.
+route_head_key = "Route Head"
 connections_key = "Connections"
 electrode_fill_key = "Electrode fill"
 actuated_electrodes_key = "Actuated electrodes"
@@ -57,6 +84,8 @@ hovered_actuated_lightness = 30
 
 alpha_keys = [
     routes_key,
+    route_shape_key,
+    route_head_key,
     connections_key,
     electrode_fill_key,
     actuated_electrodes_key,
@@ -71,5 +100,7 @@ alpha_keys = [
 values = [100] * len(alpha_keys[:-2]) + [20, 30]
 
 default_alphas = dict(zip(alpha_keys, values))
+# Light enough to read each electrode's own state through the preview tint.
+default_alphas[route_shape_key] = 35
 
 default_visibility = {key: True for key in default_alphas}
