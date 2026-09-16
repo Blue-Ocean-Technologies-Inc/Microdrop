@@ -47,6 +47,9 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconToggleEditor,
 )
 
+# Local imports.
+from ..consts import PMT_RESULTS_TABLE_MIN_HEIGHT, PMT_SPOT_TABLE_MIN_HEIGHT
+
 #: Boxcar averaging choices as "N (rate Hz)" — the value rate is the
 #: firmware's raw 1 kHz stream divided by N. The "i:" prefix keeps
 #: EnumEditor in numeric rather than alphabetical order.
@@ -114,6 +117,7 @@ capture = VGroup(
         "rows",
         editor=pmt_spot_table,
         enabled_when="connected and not busy",
+        height=PMT_SPOT_TABLE_MIN_HEIGHT,
     ),
     HGroup(
         UItem("start_button", enabled_when="connected and not busy and rows"),
@@ -130,7 +134,11 @@ results = VGroup(
         Label("Results"),
     ),
     VGroup(
-        UItem("results", editor=pmt_results_table),
+        UItem(
+            "results",
+            editor=pmt_results_table,
+            height=PMT_RESULTS_TABLE_MIN_HEIGHT,
+        ),
         visible_when="show_results",
     ),
 )

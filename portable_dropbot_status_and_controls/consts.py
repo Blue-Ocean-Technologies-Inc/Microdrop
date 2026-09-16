@@ -107,6 +107,11 @@ ACTOR_TOPIC_DICT = {
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000
 
+#: Minimum heights (px) that fit every PMT spot without a scrollbar: the spot
+#: table also carries its move up/down toolbar.
+PMT_SPOT_TABLE_MIN_HEIGHT = 230
+PMT_RESULTS_TABLE_MIN_HEIGHT = 190
+
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.
 MM_TO_FIRMWARE_UNITS = 1000
