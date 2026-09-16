@@ -121,6 +121,10 @@ PMT_RESULTS_TABLE_MIN_HEIGHT = 190
 PMT_LIVE_PLOT_HEIGHT = 220
 PMT_LIVE_PLOT_MIN_WIDTH = 320
 
+#: The spot table's exposure slider moves in these steps (s); finer
+#: precision means nothing for a PMT exposure.
+PMT_EXPOSURE_S_STEP = 0.1
+
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.
 MM_TO_FIRMWARE_UNITS = 1000

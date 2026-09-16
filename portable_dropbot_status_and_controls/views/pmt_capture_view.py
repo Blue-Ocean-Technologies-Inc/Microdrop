@@ -33,6 +33,7 @@ from traitsui.api import (
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
+    PMT_EXPOSURE_S_BOUNDS,
     PMT_RF_OHMS_BOUNDS,
     PMT_STREAM_AVG_CHOICES,
     PMT_STREAM_OSR_CHOICES,
@@ -51,10 +52,12 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
+    SteppedSliderEditor,
 )
 
 # Local imports.
 from ..consts import (
+    PMT_EXPOSURE_S_STEP,
     PMT_LIVE_PLOT_HEIGHT,
     PMT_LIVE_PLOT_MIN_WIDTH,
     PMT_RESULTS_TABLE_MIN_HEIGHT,
@@ -102,6 +105,11 @@ pmt_spot_table = TableEditor(
             label="Exposure (s)",
             format="%.1f",
             resize_mode="stretch",
+            editor=SteppedSliderEditor(
+                low=PMT_EXPOSURE_S_BOUNDS[0],
+                high=PMT_EXPOSURE_S_BOUNDS[1],
+                step=PMT_EXPOSURE_S_STEP,
+            ),
         ),
     ],
     reorderable=True,
