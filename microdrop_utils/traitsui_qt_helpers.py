@@ -8,11 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import html
 import math
 
+# Third-party imports.
 from PySide6.QtWidgets import QToolButton
 
+# Enthought library imports.
 from pyface.qt import QtWidgets
 from pyface.qt.QtCore import (
     Property as QtProperty,  # aliased: traits.api.Property (below) shadows it
@@ -56,6 +59,7 @@ from traits.api import (
     Bool,
     Callable,
     Float,
+    HasTraits,
     Int,
     List,
     Property,
@@ -79,6 +83,7 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
+# Microdrop style imports.
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.colors import (
     ACCENT_COLOR,
@@ -96,12 +101,14 @@ from microdrop_style.icons.icons import (
     ICON_SELECT_All,
 )
 
+# Microdrop utils imports.
 from microdrop_utils.pyside_helpers import (
     MarqueeComboBox,
     _ClickablePixmapLabel,
     _ScalingPixmapLabel,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -112,6 +119,9 @@ logger = get_logger(__name__)
 DOUBLE_SPINBOX_UNBOUNDED_MAX = 1e12
 
 DEFAULT_GLYPH_POINT_SIZE_PX = 16
+
+#: The running-step row highlight, matching the protocol tree's active row.
+ACTIVE_ROW_BACKGROUND = "#005ac8"
 
 #: Qt's default child-layout margin and item spacing (QStyle
 #: PM_LayoutLeftMargin / PM_LayoutHorizontalSpacing on the app styles).
@@ -268,6 +278,67 @@ class GlyphActionColumn(ObjectColumn):
     def on_click(self, object):
         if self.fire:
             setattr(object, self.fire, True)
+
+
+class LinkColumn(ObjectColumn):
+    """Read-only table column that renders its text as an underlined link and
+    fires a named Event (or sets a Bool) on the row when a non-empty cell is
+    clicked — e.g. to open the file a row names.
+
+        LinkColumn(name="file", label="File", fire="open_file")
+    """
+
+    #: Name of the Event/Bool trait on the row set True when the link is clicked.
+    fire = Str()
+
+    def traits_init(self):
+        self.editable = False
+        font = QFont()
+        font.setUnderline(True)
+        self.text_font = font
+
+    def get_text_color(self, object):
+        return PRIMARY_COLOR
+
+    def on_click(self, object):
+        if self.fire and self.get_value(object):
+            setattr(object, self.fire, True)
+
+
+class ActiveRowColumnMixin(HasTraits):
+    """Paints a row in the running-step highlight (solid blue, white text)
+    while the row's ``active_trait`` is True — the protocol tree's look for
+    the step being executed. Mix in ahead of a column class::
+
+        class ActiveRowObjectColumn(ActiveRowColumnMixin, ObjectColumn): ...
+    """
+
+    #: Name of the Bool trait on the row that marks it as the active one.
+    active_trait = Str("active")
+
+    def _is_active(self, object):
+        return bool(getattr(object, self.active_trait, False))
+
+    def get_cell_color(self, object):
+        if self._is_active(object):
+            return ACTIVE_ROW_BACKGROUND
+
+        return super().get_cell_color(object)
+
+    def get_text_color(self, object):
+        if self._is_active(object):
+            return WHITE
+
+        return super().get_text_color(object)
+
+
+class ActiveRowObjectColumn(ActiveRowColumnMixin, ObjectColumn):
+    """ObjectColumn with the active-row highlight."""
+
+
+class ActiveRowCheckboxColumn(ActiveRowColumnMixin, CustomCheckboxColumn):
+    """Glyph checkbox column with the active-row highlight (the stock
+    CheckboxColumn renderer paints its own background, so it cannot)."""
 
 
 class EditBlankingColumn(ObjectColumn):
