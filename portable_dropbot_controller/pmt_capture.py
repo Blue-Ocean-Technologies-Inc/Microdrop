@@ -234,7 +234,10 @@ def capture_filename(kind, gain, now=None):
     """``pmt_<kind>_<YYYYmmdd-HHMMSS>_gain<gain>.csv``.
 
     The capture routine passes ``f"spot{slot}"`` (unchanged from before
-    ``kind`` existed); the buffered acquire passes ``"acquire"``.
+    ``kind`` existed), or ``f"{label}_spot{slot}"`` when the request
+    carries a label (a protocol step's capture), so the label ends up
+    prefixed onto the filename with no signature change here; the
+    buffered acquire passes ``"acquire"``.
     """
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
     return f"pmt_{kind}_{stamp}_gain{gain}.csv"

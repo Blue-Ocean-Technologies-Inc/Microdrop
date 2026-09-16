@@ -64,6 +64,7 @@ from ..consts import (
     PMT_PARK_LOCATION,
     PMT_STREAM_AVG,
     PMT_STREAM_OSR,
+    PMT_STREAM_PREEMPT_TIMEOUT_S,
     PMT_STREAM_PUBLISH_INTERVAL_S,
     PMT_STREAM_WAIT_SLICE_S,
     PMT_UPDATED,
@@ -306,18 +307,71 @@ class PortableDropbotPmtMixinService(HasTraits):
                 "Portable Dropbot PMT capture abort ignored: no capture running"
             )
 
-    def _refuse_pmt_capture(self, error):
-        """The done publish IS the ack; a refusal needs one too."""
+    def _refuse_pmt_capture(self, error, request_id="", label=""):
+        """The done publish IS the ack; a refusal needs one too. request_id
+        and label are echoed like a successful done, so a protocol step's
+        wait_for_topics never hangs on a refusal it can't match."""
         pmt_capture_done_publisher.publish(
             {
                 "ok": False,
                 "aborted": False,
                 "directory": "",
                 "results": [],
+                "request_id": request_id,
+                "label": label,
                 "error": error,
             }
         )
         logger.warning(f"Portable Dropbot PMT capture refused: {error}")
+
+    def _pmt_capture_request_ids(self, message):
+        """Best-effort request_id/label off a raw capture payload that
+        failed full validation, so even a malformed request's refusal can
+        still echo them; unreadable input reads as empty, per the module
+        docstring's ack-always contract."""
+
+        try:
+            raw = json.loads(str(message))
+        except Exception:
+            return "", ""
+
+        return str(raw.get("request_id", "")), str(raw.get("label", ""))
+
+    def _claim_pmt_capture(self):
+        """Try to claim the capture session; empty string means claimed.
+
+        The read-check-set of the three `_pmt_*ing` flags and the abort
+        event's creation is held under one lock so two requests racing in
+        on different worker threads cannot both claim it — one would
+        otherwise drive the tube from two threads at once, and an abort
+        arriving in that window would find no event to set.
+        """
+
+        with self._pmt_claim:
+            reason = self._pmt_busy_reason()
+
+            if not reason:
+                self._pmt_capturing = True
+                self._pmt_capture_abort = threading.Event()
+
+        return reason
+
+    def _preempt_pmt_stream(self):
+        """A protocol step's capture stops a running live stream instead of
+        being refused: set its stop event and join its teardown thread,
+        bounded by PMT_STREAM_PREEMPT_TIMEOUT_S, before the caller retries
+        the claim. Never called while holding `_pmt_claim` — the stream's
+        own teardown takes that same lock to clear `_pmt_streaming`."""
+        stop_event = self._pmt_stream_stop_event
+        thread = self._pmt_stream_thread
+
+        if stop_event is not None:
+            stop_event.set()
+
+        if thread is not None:
+            thread.join(timeout=PMT_STREAM_PREEMPT_TIMEOUT_S)
+
+        logger.info("Portable Dropbot PMT capture: stopped the live stream to capture")
 
     def on_pmt_capture_request(self, message):
         """Validate, claim, and hand the routine to a daemon thread; the
@@ -328,28 +382,31 @@ class PortableDropbotPmtMixinService(HasTraits):
             request = PmtCaptureRequest.model_validate_json(str(message))
         except ValidationError as error:
             self._publish_error("PMT capture", error)
-            self._refuse_pmt_capture(str(error).splitlines()[0])
+            request_id, label = self._pmt_capture_request_ids(message)
+            self._refuse_pmt_capture(str(error).splitlines()[0], request_id, label)
             return
 
         if not request.entries:
-            self._refuse_pmt_capture("no spots ticked")
+            self._refuse_pmt_capture(
+                "no spots ticked", request.request_id, request.label
+            )
             return
 
-        # Claim the session: the read-check-set of the three `_pmt_*ing`
-        # flags and the abort event's creation is held under one lock so
-        # two requests racing in on different worker threads cannot both
-        # claim it — one would otherwise drive the tube from two threads
-        # at once, and an abort arriving in that window would find no
-        # event to set.
-        with self._pmt_claim:
-            reason = self._pmt_busy_reason()
+        reason = self._claim_pmt_capture()
 
-            if not reason:
-                self._pmt_capturing = True
-                self._pmt_capture_abort = threading.Event()
+        # A step's capture stops a running stream instead of refusing —
+        # only the stream blocker is ever preempted, never a capture or
+        # acquire already in progress.
+        stream_is_only_blocker = self._pmt_streaming and not (
+            self._pmt_capturing or self._pmt_acquiring
+        )
+
+        if reason and request.stop_live_stream and stream_is_only_blocker:
+            self._preempt_pmt_stream()
+            reason = self._claim_pmt_capture()
 
         if reason:
-            self._refuse_pmt_capture(reason)
+            self._refuse_pmt_capture(reason, request.request_id, request.label)
             return
 
         abort = self._pmt_capture_abort
@@ -362,7 +419,9 @@ class PortableDropbotPmtMixinService(HasTraits):
             self._pmt_capturing = False
             self._pmt_capture_abort = None
             logger.exception(f"Portable Dropbot PMT capture directory FAILED: {error}")
-            self._refuse_pmt_capture(str(error) or repr(error))
+            self._refuse_pmt_capture(
+                str(error) or repr(error), request.request_id, request.label
+            )
             return
 
         logger.info(
@@ -589,6 +648,8 @@ class PortableDropbotPmtMixinService(HasTraits):
             "results": results,
             "adc_full_scale": self._pmt_adc_full_scale,
             "rf_ohms": request.rf_ohms,
+            "request_id": request.request_id,
+            "label": request.label,
             "error": request_error,
         }
 
@@ -663,6 +724,8 @@ class PortableDropbotPmtMixinService(HasTraits):
             "adc_full_scale": self._pmt_adc_full_scale,
             "vref_v": PMT_VREF_V,
             "rf_ohms": request.rf_ohms,
+            "request_id": request.request_id,
+            "label": request.label,
             **uids,
             "sample_period_s": round(period, 6),
             "effective_rate_hz": round(1.0 / period, 2),
@@ -675,7 +738,16 @@ class PortableDropbotPmtMixinService(HasTraits):
             "aborted": aborted,
             "error": "",
         }
-        path = directory / capture_filename(f"spot{entry.slot}", entry.gain)
+
+        # A step's label is prefixed onto the CSV name (pmt_<label>_spot<n>_
+        # ..._gain<g>.csv); a pane-initiated request leaves it empty, so
+        # the name is unchanged from before labels existed.
+        if request.label:
+            kind = f"{request.label}_spot{entry.slot}"
+        else:
+            kind = f"spot{entry.slot}"
+
+        path = directory / capture_filename(kind, entry.gain)
         write_capture_csv(path, samples, [i * period for i in sample_index], meta)
         result["csv_path"] = str(path)
         logger.info(

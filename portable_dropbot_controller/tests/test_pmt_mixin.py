@@ -19,6 +19,7 @@ the pydantic models, so a renamed or missing field fails here too."""
 # Standard library imports.
 import json
 import struct
+import threading
 import time
 from pathlib import Path
 
@@ -376,6 +377,8 @@ def test_second_request_while_running_is_refused(published):
             "results": [],
             "adc_full_scale": PMT_ADC_FULL_SCALE,
             "rf_ohms": PMT_RF_OHMS,
+            "request_id": "",
+            "label": "",
             "error": "a PMT capture is running",
         }
     ]
@@ -416,6 +419,48 @@ def test_malformed_request_still_publishes_a_done_refusal(published):
     assert done["error"] != ""
     # The error signal fires too; the done ack does not replace it.
     assert h.errors
+
+
+def test_done_echoes_request_id_and_label_on_success(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    payload = json.loads(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    payload["request_id"] = "abc-123:end"
+    payload["label"] = "step1.2-end"
+    _run(h, json.dumps(payload))
+    done = published["done"][-1]
+    assert done["ok"] is True
+    assert done["request_id"] == "abc-123:end"
+    assert done["label"] == "step1.2-end"
+
+
+def test_done_echoes_request_id_and_label_on_refusal(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_capturing = True
+    payload = json.loads(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    payload["request_id"] = "xyz-456:start"
+    payload["label"] = "step2-start"
+    h.on_pmt_capture_request(json.dumps(payload))
+    done = published["done"][-1]
+    assert done["error"] == "a PMT capture is running"
+    assert done["request_id"] == "xyz-456:start"
+    assert done["label"] == "step2-start"
+
+
+def test_capture_with_label_prefixes_csv_filename_and_meta(published, tmp_path):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    payload = json.loads(_request([{"slot": 2, "gain": 30, "exposure_s": 1.0}]))
+    payload["label"] = "step1.2-end"
+    payload["request_id"] = "uuid123:end"
+    _run(h, json.dumps(payload))
+    done = published["done"][-1]
+    csv_path = Path(done["results"][0]["csv_path"])
+    assert csv_path.name.startswith("pmt_step1.2-end_spot2_")
+    csv_lines = csv_path.read_text().splitlines()
+    assert "# request_id=uuid123:end" in csv_lines
+    assert "# label=step1.2-end" in csv_lines
 
 
 def test_capture_with_no_proxy_still_acks_a_failed_done(published):
@@ -585,6 +630,39 @@ def test_live_stream_start_while_running_is_a_live_update(published, monkeypatch
 
     h.on_pmt_stream_stop_request("")
     h._pmt_stream_thread.join(timeout=5)
+
+
+def test_stop_live_stream_preempts_running_stream_then_captures(published, monkeypatch):
+    monkeypatch.setattr(mod, "PMT_STREAM_PUBLISH_INTERVAL_S", 0.01)
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.on_pmt_stream_start_request(json.dumps({"gain": 10, "avg": 16, "osr": 6}))
+    _wait_for_stream_batch(published)
+
+    payload = json.loads(_request([{"slot": 1, "gain": 50, "exposure_s": 1.0}]))
+    payload["stop_live_stream"] = True
+    _run(h, json.dumps(payload))
+
+    done = published["done"][-1]
+    assert done["ok"] is True
+    # The stream's own teardown cleared these before the retried claim.
+    assert h._pmt_streaming is False
+    assert h._pmt_stream_stop_event is None
+    assert published["stream"][-1]["streaming"] is False
+    # The capture itself ran, after the stream's teardown freed the claim.
+    assert "move 2" in h.log and "gain 50" in h.log
+
+
+def test_capture_without_stop_live_stream_still_refused_while_streaming(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_streaming = True
+    h._pmt_stream_stop_event = threading.Event()
+    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    assert published["done"][-1]["error"] == "the live stream is running"
+    # Never preempted: the stop event is untouched and no capture ran.
+    assert not h._pmt_stream_stop_event.is_set()
+    assert h.log == []
 
 
 def test_live_stream_refused_while_capturing(published):
