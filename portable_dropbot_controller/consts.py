@@ -79,6 +79,14 @@ PMT_SPOT_SLOTS = 5
 #: boxcar samples per value; osr index 6 = 64x). Measured ~23 ms per value.
 PMT_STREAM_AVG = 16
 PMT_STREAM_OSR = 6
+#: Firmware boxcar averaging: each streamed value is the mean of N raw 1 kHz
+#: samples (value rate 1000/N Hz, ~16/N packets per second).
+PMT_STREAM_AVG_CHOICES = (1, 2, 4, 8, 16, 32, 64, 128)
+#: ADS70x6 on-chip oversampling as the firmware's index: 0 = off, n = 2**n
+#: conversions per value. A no-op on the old ADC128S052.
+PMT_STREAM_OSR_CHOICES = tuple(range(8))
+#: How often the live stream's collected samples are published to the pane.
+PMT_STREAM_PUBLISH_INTERVAL_S = 0.25
 #: Abort/deadline polling slice while a capture stream is open.
 PMT_STREAM_WAIT_SLICE_S = 0.05
 #: Exposure per spot in seconds — the stream duration. At avg=16 the board
@@ -94,6 +102,17 @@ DEFAULT_PMT_EXPOSURE_S = 10.0
 PMT_ADC_FULL_SCALE = 65536
 PMT_VREF_V = 4.98
 PMT_RF_OHMS = 499_000.0
+#: Rf is a per-board hardware value the firmware cannot report, so the pane
+#: lets the operator enter the measured one.
+PMT_RF_OHMS_BOUNDS = (1.0, 10_000_000.0)
+#: spi_adc_diag adc_type -> (name, full-scale counts); type 0 is no ADC. Until
+#: a query answers, PMT_ADC_FULL_SCALE (the ADS7076) is assumed.
+PMT_ADC_TYPES = {
+    1: ("ADC128S052 (12-bit)", 4096),
+    2: ("ADS7076 (16-bit)", 65536),
+}
+#: The buffered acquire samples at a fixed 1 kHz (10240 samples, ~10.3 s).
+PMT_ACQUIRE_SAMPLE_RATE_HZ = 1000
 #: Capture output folder under the experiment directory.
 PMT_CAPTURE_SUBDIR = "captures/pmt"
 
@@ -197,6 +216,12 @@ PMT_UPDATED = "portable_dropbot/signals/pmt_updated"
 PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"
 PMT_CAPTURE_PROGRESS = "portable_dropbot/signals/pmt_capture_progress"
 PMT_CAPTURE_DONE = "portable_dropbot/signals/pmt_capture_done"
+#: Live stream state plus each batch of samples (PmtStreamUpdated).
+PMT_STREAM_UPDATED = "portable_dropbot/signals/pmt_stream_updated"
+#: The signal board's detected PMT ADC (PmtAdcUpdated).
+PMT_ADC_UPDATED = "portable_dropbot/signals/pmt_adc_updated"
+#: Outcome of a buffered acquire saved to CSV (PmtAcquireDone).
+PMT_ACQUIRE_DONE = "portable_dropbot/signals/pmt_acquire_done"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
@@ -257,7 +282,14 @@ PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"
 # PMT.
 PMT_POWER = "portable_dropbot/requests/pmt_power"
 PMT_SET_GAIN = "portable_dropbot/requests/pmt_set_gain"
+#: Buffered acquire (PmtAcquireRequest), collected and saved to CSV.
 PMT_ACQUIRE = "portable_dropbot/requests/pmt_acquire"
+#: Start a live stream (PmtStreamRequest); sent again while streaming it is
+#: a live avg/osr/gain update, with no restart or sample gap.
+PMT_STREAM_START = "portable_dropbot/requests/pmt_stream_start"
+PMT_STREAM_STOP = "portable_dropbot/requests/pmt_stream_stop"
+#: Query the PMT ADC type; answers on PMT_ADC_UPDATED.
+PMT_ADC_QUERY = "portable_dropbot/requests/pmt_adc_query"
 #: Re-read the motor board's PMT position table and publish PMT_SPOTS_UPDATED.
 PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"
 #: Run the multi-spot capture routine (PmtCaptureRequest); one CSV per spot.
@@ -316,10 +348,75 @@ class PmtCaptureEntry(BaseModel):
     exposure_s: float = Field(ge=PMT_EXPOSURE_S_BOUNDS[0], le=PMT_EXPOSURE_S_BOUNDS[1])
 
 
-class PmtCaptureRequest(BaseModel):
+class PmtStreamSettings(BaseModel):
+    """Stream averaging, oversampling index and the Rf used for conversion."""
+
+    avg: int = Field(default=PMT_STREAM_AVG, ge=1, le=PMT_STREAM_AVG_CHOICES[-1])
+    osr: int = Field(default=PMT_STREAM_OSR, ge=0, le=PMT_STREAM_OSR_CHOICES[-1])
+    rf_ohms: float = Field(
+        default=PMT_RF_OHMS, ge=PMT_RF_OHMS_BOUNDS[0], le=PMT_RF_OHMS_BOUNDS[1]
+    )
+
+
+class PmtCaptureRequest(PmtStreamSettings):
     """Capture order is list order; only ticked spots are sent."""
 
     entries: list[PmtCaptureEntry]
+
+
+class PmtStreamRequest(PmtStreamSettings):
+    """Start, or live-update, the pane's stream at this gain."""
+
+    gain: int = Field(ge=PMT_GAIN_BOUNDS[0], le=PMT_GAIN_BOUNDS[1])
+
+
+class PmtStreamUpdated(BaseModel):
+    """Stream state; while streaming, the raw counts collected since the last
+    publish. `error` is set when a start was refused or failed."""
+
+    streaming: bool
+    avg: int = PMT_STREAM_AVG
+    osr: int = PMT_STREAM_OSR
+    samples: list[int] = []
+    packets: int = 0
+    error: str = ""
+
+
+class PmtAdcUpdated(BaseModel):
+    """The detected ADC; `full_scale` is 0 when the type is unknown or the
+    query failed (`error`), and the pane keeps its previous full scale."""
+
+    adc_type: int
+    name: str
+    full_scale: int
+    error: str = ""
+
+
+class PmtAcquireRequest(BaseModel):
+    """A buffered acquire at this gain, saved with this Rf in its preamble."""
+
+    gain: int = Field(ge=PMT_GAIN_BOUNDS[0], le=PMT_GAIN_BOUNDS[1])
+    rf_ohms: float = Field(
+        default=PMT_RF_OHMS, ge=PMT_RF_OHMS_BOUNDS[0], le=PMT_RF_OHMS_BOUNDS[1]
+    )
+
+
+class PmtAcquireDone(BaseModel):
+    """Outcome of a buffered acquire; csv_path empty when nothing was saved."""
+
+    ok: bool
+    gain: int
+    n_samples: int = 0
+    mean_counts: float = 0.0
+    sd_counts: float = 0.0
+    min_counts: int = 0
+    max_counts: int = 0
+    packets_received: int = 0
+    packets_expected: int = 0
+    adc_full_scale: int = PMT_ADC_FULL_SCALE
+    rf_ohms: float = PMT_RF_OHMS
+    csv_path: str = ""
+    error: str = ""
 
 
 class PmtCaptureProgress(BaseModel):
@@ -355,6 +452,10 @@ class PmtCaptureDone(BaseModel):
     aborted: bool
     directory: str
     results: list[PmtSpotResult]
+    #: The conversion the CSVs were written with, so the pane shows the same
+    #: current the files carry.
+    adc_full_scale: int = PMT_ADC_FULL_SCALE
+    rf_ohms: float = PMT_RF_OHMS
     error: str = ""
 
 
@@ -369,4 +470,19 @@ pmt_capture_progress_publisher = ValidatedTopicPublisher(
 )
 pmt_capture_done_publisher = ValidatedTopicPublisher(
     topic=PMT_CAPTURE_DONE, validator_class=PmtCaptureDone
+)
+pmt_stream_start_publisher = ValidatedTopicPublisher(
+    topic=PMT_STREAM_START, validator_class=PmtStreamRequest
+)
+pmt_stream_updated_publisher = ValidatedTopicPublisher(
+    topic=PMT_STREAM_UPDATED, validator_class=PmtStreamUpdated
+)
+pmt_adc_updated_publisher = ValidatedTopicPublisher(
+    topic=PMT_ADC_UPDATED, validator_class=PmtAdcUpdated
+)
+pmt_acquire_publisher = ValidatedTopicPublisher(
+    topic=PMT_ACQUIRE, validator_class=PmtAcquireRequest
+)
+pmt_acquire_done_publisher = ValidatedTopicPublisher(
+    topic=PMT_ACQUIRE_DONE, validator_class=PmtAcquireDone
 )

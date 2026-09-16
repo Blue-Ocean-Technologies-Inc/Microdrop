@@ -17,9 +17,12 @@ from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
     MOTOR_PARAMS_UPDATED,
+    PMT_ACQUIRE_DONE,
+    PMT_ADC_UPDATED,
     PMT_CAPTURE_DONE,
     PMT_CAPTURE_PROGRESS,
     PMT_SPOTS_UPDATED,
+    PMT_STREAM_UPDATED,
     PMT_UPDATED,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
@@ -87,6 +90,9 @@ ACTOR_TOPIC_DICT = {
         PMT_SPOTS_UPDATED,
         PMT_CAPTURE_PROGRESS,
         PMT_CAPTURE_DONE,
+        PMT_STREAM_UPDATED,
+        PMT_ADC_UPDATED,
+        PMT_ACQUIRE_DONE,
     ],
     #: The advanced-only pane also tracks the Edit-menu Advanced Mode
     #: toggle, which is what unlocks its controls.
@@ -97,6 +103,9 @@ ACTOR_TOPIC_DICT = {
         ADVANCED_MODE_CHANGE,
     ],
 }
+
+#: Rolling window of live PMT stream values kept for the plot and stats.
+PMT_LIVE_WINDOW_SAMPLES = 3000
 
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.
