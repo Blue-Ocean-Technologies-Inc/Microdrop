@@ -85,10 +85,13 @@ down: in one phase at overlay 0, in two at overlay 1
 **Clipping and the actuation count.** Electrodes that do not exist (beyond
 the device edge, inside a reservoir neck) are left out of a block; nothing is
 faked in their place. Instead the actuation count stays constant: a clipped
-block is topped up with the previous phase's cells nearest the head, so the
-liquid piles up behind the constriction (`keep_count`). A slug born against
-an edge comes on short and fills out from its second phase, dragging the cells
-it left behind. The count only comes down at the end of the route, and only
+block is topped up with the device electrodes nearest where its unclipped
+centre would be, distance along the heading costing more than across it, so a
+wall shifts the slug sideways and only a neck stretches it
+(`top_up_to_centre`). A slug born against an edge is full from its first
+phase. Once every phase is known, a topped-up phase whose neighbours already
+share the overlay, with the head moving no further than the stride, is dropped
+(`trim_wraps`). The count only comes down at the end of the route, and only
 with **Soft end** on: the block's rows go off one per phase from its tail,
 down to the head row (`ramp_down`). **Soft start**
 is the mirror at the other end: before the first full phase the rows come on
@@ -225,9 +228,10 @@ turns each into cells with one `block_cells` call.
 |---|---|
 | `trail_phases(route, T, overlay, soft_terminate, soft_start)` | the shipped algorithm on the route itself — width-1 behaviour |
 | `hold_phase(route, headings, lanes, centroids, pitch)` | a route shorter than its trail: one phase, the union of 1-deep blocks at every electrode |
-| `keep_count(ids, previous, head_id, centroids, target)` | clipping: a short block topped up with the previous phase's cells nearest the head |
+| `top_up_to_centre(ids, centre, heading, reuse, target, centroids, neighbours, pitch)` | clipping: a short block topped up with the electrodes nearest its unclipped centre, touching the slug |
+| `trim_wraps(phases, wrapped, overlay, stride, neighbours)` | drops topped-up phases that only filled time, without a gap or a longer stride |
 | `rows_along`, `ramp_up`, `ramp_down` | the block's rows across a heading; soft start brings them on tail first, soft end takes them off the same way |
-| `slug_phases(route, centroids, neighbours, left, right, T, overlay, pitch=None, rotation_lock, soft_terminate, lane_frame, repetitions, soft_start)` | the dispatcher: unroll a loop → headings → width 1 to `trail_phases` → lanes → hold if short, else positions from one of the two schedules → cells, `keep_count`, drop repeats → ramps |
+| `slug_phases(route, centroids, neighbours, left, right, T, overlay, pitch=None, rotation_lock, soft_terminate, lane_frame, repetitions, soft_start)` | the dispatcher: unroll a loop → headings → width 1 to `trail_phases` → lanes → hold if short, else positions from one of the two schedules → cells, `top_up_to_centre`, drop repeats, `trim_wraps` → ramps |
 
 Every phase is a `Phase(head, heading, ids)`: the route index it belongs
 to, the direction of travel there, and the electrodes on. Phases are simply

@@ -84,10 +84,12 @@ number.
 Electrodes that do not exist — beyond the device edge, inside a reservoir
 neck — are left out of a block; nothing is faked in their place. Instead the
 **actuation count stays constant**: a clipped block is topped up with the
-previous phase's cells nearest the head (:func:`keep_count`). The count only
-comes down at the end of the route, and only with **soft end** on; **soft
-start** brings it up the same way, a row at a time (:func:`ramp_down`,
-:func:`ramp_up`).
+device electrodes nearest where its unclipped centre would be, so a wall
+shifts the slug sideways and only a neck stretches it
+(:func:`top_up_to_centre`). Once every phase is known, topped-up phases that
+only filled time are trimmed (:func:`trim_wraps`). The count only comes down
+at the end of the route, and only with **soft end** on; **soft start** brings
+it up the same way, a row at a time (:func:`ramp_down`, :func:`ramp_up`).
 """
 
 # Standard library imports.
@@ -102,6 +104,11 @@ from microdrop_utils import route_execution
 #: electrode centroid and still count as that electrode. Half a pitch: any
 #: further and the position is between electrodes, i.e. a hole.
 SNAP_TOLERANCE = 0.5
+
+#: How much more a cell's distance along a block's heading counts than its
+#: distance across it when a clipped block makes up its count: enough that a
+#: wall shifts the slug sideways rather than stretching it along the route.
+ALONG_COST = 1.5
 
 #: Lane frames: the two lane counts read as screen-left / screen-right of
 #: travel, or as inside / outside of the turn.
@@ -672,14 +679,13 @@ def block_phases(
     neighbours,
     pitch,
 ):
-    """The phases of a block's placements: its cells at each, topped up by
-    the flow rule, identical repeats and a redundant end step dropped."""
+    """The phases of a block's placements: its cells at each, topped up to
+    the actuation count where clipped, identical repeats and a redundant end
+    step dropped, and topped-up phases that only filled time trimmed."""
     width = positions[0].lanes[0] + positions[0].lanes[1] + 1
     target = width * trail_length
-    phases, previous = [], None
-
-    for position in positions:
-        ids = block_cells(
+    blocks = [
+        block_cells(
             position.anchor,
             position.heading,
             *position.lanes,
@@ -687,8 +693,30 @@ def block_phases(
             centroids,
             pitch,
         )
-        ids = keep_count(
-            ids, previous, route[position.head], centroids, neighbours, target
+        for position in positions
+    ]
+    phases, wrapped, previous = [], [], None
+
+    for index, position in enumerate(positions):
+        # Ties between equally near cells go to ones the neighbouring
+        # blocks use anyway, to save switching electrodes on and off.
+        reuse = set(blocks[index - 1] if index else ())
+
+        if index + 1 < len(blocks):
+            reuse |= set(blocks[index + 1])
+
+        centre = block_centre(
+            position.anchor, position.heading, *position.lanes, trail_length, pitch
+        )
+        ids = top_up_to_centre(
+            blocks[index],
+            centre,
+            position.heading,
+            reuse,
+            target,
+            centroids,
+            neighbours,
+            pitch,
         )
 
         # Re-hanging at a corner can reproduce the previous footprint (a
@@ -699,6 +727,7 @@ def block_phases(
             # translating block, the block's own for a re-hung one.
             travel = headings[position.head] if translate else position.heading
             phases.append(Phase(position.head, travel, ids))
+            wrapped.append(len(ids) > len(blocks[index]))
             previous = ids
 
     # The last placement is forced onto the route's end (a leg-end fit, or
@@ -710,8 +739,41 @@ def block_phases(
         phases[-3].ids, phases[-1].ids, trail_overlay, neighbours
     ):
         del phases[-2]
+        del wrapped[-2]
 
-    return phases
+    stride = max(
+        stride_of(trail_length, trail_overlay), stride_of(width, trail_overlay)
+    )
+
+    return trim_wraps(phases, wrapped, trail_overlay, stride, neighbours)
+
+
+def trim_wraps(phases, wrapped, trail_overlay, stride, neighbours):
+    """``phases`` without the topped-up ones that only filled time.
+
+    Once every phase is known, a phase that was topped up (``wrapped``) is
+    dropped when the phase kept before it and the phase after it already
+    step into each other with ``trail_overlay``, and the head moves no
+    further between them than ``stride`` — so dropping it never leaves a gap
+    and never moves the slug faster than asked.
+    """
+    kept = []
+
+    for index, phase in enumerate(phases):
+        following = phases[index + 1] if index + 1 < len(phases) else None
+
+        if (
+            wrapped[index]
+            and kept
+            and following is not None
+            and touching(kept[-1].ids, following.ids, trail_overlay, neighbours)
+            and following.head - kept[-1].head <= stride
+        ):
+            continue
+
+        kept.append(phase)
+
+    return kept
 
 
 def continuous(phases, neighbours):
@@ -735,43 +797,75 @@ def touching(ids, other, trail_overlay, neighbours):
     )
 
 
-def keep_count(ids, previous, head_id, centroids, neighbours, target):
-    """``ids`` topped up to ``target`` with the cells of ``previous`` nearest
-    the head — the flow rule: a slug against an edge or in a neck keeps its
-    actuation count, the liquid piling up behind the head. A slug born
-    clipped comes on short, then fills out from its second phase by
-    dragging the cells it left behind.
+def block_centre(anchor, heading, left, right, trail_length, pitch):
+    """The centre of the block whose leading cell sits on ``anchor``, as it
+    would be with nothing clipped: the mean of every lattice point it spans,
+    on the device or not."""
+    nx, ny = left_normal(heading)
+    along = -(trail_length - 1) / 2
+    lane = (left - right) / 2
 
-    A carried cell must touch the slug (the block or a cell already
-    carried), since liquid cannot be in two places: the top-up grows
-    outward from the block, nearest the head first, and stops short of the
-    count rather than strand cells across a gap.
+    return (
+        anchor[0] + (along * heading[0] + lane * nx) * pitch,
+        anchor[1] + (along * heading[1] + lane * ny) * pitch,
+    )
+
+
+def top_up_to_centre(ids, centre, heading, reuse, target, centroids, neighbours, pitch):
+    """``ids`` topped up to ``target`` — the flow rule: a slug against an
+    edge or in a neck keeps its actuation count.
+
+    The cells added are the device electrodes nearest ``centre``, where the
+    unclipped block's centre would be, with distance along ``heading``
+    costing :data:`ALONG_COST` times distance across it. A wall therefore
+    shifts the slug sideways (a clipped lane reappears on the other side of
+    the route) and only a neck, clipped on both sides, stretches it along
+    the route — the slug stays centred where the plain block would be, full
+    from its first phase. Ties go to cells in ``reuse``, then by position.
+
+    An added cell must touch the slug (the block or a cell already added),
+    since liquid cannot be in two places: the top-up grows outward and
+    stops short of the count rather than strand cells across a gap.
     """
-    if len(ids) >= target or not previous:
+    if len(ids) >= target:
         return ids
 
-    head = centroids[head_id]
-    carry = sorted(
-        (cell for cell in previous if cell not in ids),
-        key=lambda cell: math.dist(centroids[cell], head),
-    )
+    nx, ny = left_normal(heading)
+
+    def cost(cell):
+        dx = (centroids[cell][0] - centre[0]) / pitch
+        dy = (centroids[cell][1] - centre[1]) / pitch
+        along = dx * heading[0] + dy * heading[1]
+        across = dx * nx + dy * ny
+
+        return round(math.hypot(along * ALONG_COST, across), 6)
+
     ids = list(ids)
+    pool = sorted(
+        (cell for cell in centroids if cell not in ids),
+        key=lambda cell: (
+            cost(cell),
+            cell not in reuse,
+            centroids[cell][1],
+            centroids[cell][0],
+        ),
+    )
 
     while len(ids) < target:
-        touching = next(
+        added = next(
             (
                 cell
-                for cell in carry
+                for cell in pool
                 if any(neighbour in ids for neighbour in neighbours.get(cell, ()))
             ),
             None,
         )
 
-        if touching is None:
+        if added is None:
             break
 
-        ids.append(touching)
-        carry.remove(touching)
+        ids.append(added)
+        pool.remove(added)
 
     return ids
 
