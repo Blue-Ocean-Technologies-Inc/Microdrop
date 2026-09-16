@@ -17,9 +17,14 @@ import numpy as np
 import pyqtgraph as pg
 
 # Enthought library imports.
+from pyface.qt import QtGui, QtWidgets
 from traits.api import Int, Str
 from traitsui.api import BasicEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
+
+# Microdrop style imports.
+from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.icons.icons import ICON_FIT_SCREEN
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -36,19 +41,41 @@ class _LivePlotEditor(QtEditor):
     y_label_value = Str()
 
     def init(self, parent):
-        self.control = pg.PlotWidget()
-        self.control.setMinimumHeight(self.factory.min_height)
-        self.control.setLabel("bottom", self.factory.x_label)
-        self._curve = self.control.plot(pen="y")
+        self._plot = pg.PlotWidget()
+        self._plot.setMinimumHeight(self.factory.min_height)
+        self._plot.setLabel("bottom", self.factory.x_label)
+        self._curve = self._plot.plot(pen="y")
+
+        # A pan or zoom turns pyqtgraph's auto-range off for good; this
+        # button turns it back on so the view follows the data again.
+        reset_button = QtWidgets.QToolButton()
+        reset_button.setFont(QtGui.QFont(ICON_FONT_FAMILY))
+        reset_button.setText(ICON_FIT_SCREEN)
+        reset_button.setToolTip("Reset view: rescale to the data")
+        reset_button.clicked.connect(self._reset_view)
+
+        toolbar = QtWidgets.QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.addStretch()
+        toolbar.addWidget(reset_button)
+
+        self.control = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(self.control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(toolbar)
+        layout.addWidget(self._plot)
 
         self.sync_value(self.factory.y_label, "y_label_value", mode="from")
-        self.control.setLabel("left", self.y_label_value)
+        self._plot.setLabel("left", self.y_label_value)
 
         self.update_editor()
 
+    def _reset_view(self):
+        self._plot.enableAutoRange()
+
     def _y_label_value_changed(self, new):
         if self.control is not None:
-            self.control.setLabel("left", new)
+            self._plot.setLabel("left", new)
 
     def update_editor(self):
         if self.control is None:
