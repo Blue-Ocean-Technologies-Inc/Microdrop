@@ -107,6 +107,10 @@ ACTOR_TOPIC_DICT = {
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000
 
+#: How often the PMT status line's exposure countdown refreshes; it shows
+#: tenths of a second.
+PMT_COUNTDOWN_TICK_S = 0.1
+
 #: Minimum heights (px) that fit every PMT spot without a scrollbar: the spot
 #: table also carries its move up/down toolbar.
 PMT_SPOT_TABLE_MIN_HEIGHT = 230

@@ -30,7 +30,6 @@ from traitsui.api import (
     VGroup,
     View,
 )
-from traitsui.extras.checkbox_column import CheckboxColumn
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
@@ -39,12 +38,19 @@ from portable_dropbot_controller.consts import (
     PMT_STREAM_OSR_CHOICES,
 )
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT
+
 # Microdrop utils imports.
 from microdrop_utils.pyqtgraph_editors import LivePlotEditor
 from microdrop_utils.traitsui_qt_helpers import (
+    ActiveRowCheckboxColumn,
+    ActiveRowObjectColumn,
     DoubleSpinBoxEditor,
     HtmlLabelEditor,
+    IconButtonEditor,
     IconToggleEditor,
+    LinkColumn,
 )
 
 # Local imports.
@@ -77,20 +83,21 @@ _hint_label = HtmlLabelEditor(
 )
 
 #: One row per configured spot; the toolbar's move up/down buttons act on
-#: the selected row and define capture order.
+#: the selected row and define capture order. The spot a running capture is
+#: on is highlighted like the protocol tree's executing step.
 pmt_spot_table = TableEditor(
     columns=[
         # Sized to its text so "Spot n · xx.xx mm" is never elided.
-        ObjectColumn(
+        ActiveRowObjectColumn(
             name="label",
             label="Spot",
             editable=False,
             resize_mode="resize_to_contents",
         ),
-        CheckboxColumn(name="capture", label="Capture"),
-        ObjectColumn(name="gain", label="Gain"),
+        ActiveRowCheckboxColumn(name="capture", label="Capture"),
+        ActiveRowObjectColumn(name="gain", label="Gain"),
         # The last column takes all the remaining width.
-        ObjectColumn(
+        ActiveRowObjectColumn(
             name="exposure_s",
             label="Exposure (s)",
             format="%.1f",
@@ -120,8 +127,10 @@ pmt_results_table = TableEditor(
         ObjectColumn(
             name="sd_counts", label="SD (counts)", format="%.1f", editable=False
         ),
+        ObjectColumn(name="mean_voltage", label="Mean voltage", editable=False),
         ObjectColumn(name="mean_current", label="Mean current", editable=False),
-        ObjectColumn(name="file", label="File", editable=False),
+        # Click to open the CSV in the system's default application.
+        LinkColumn(name="file", label="File", fire="open_file"),
         ObjectColumn(name="error", label="Error", editable=False),
     ],
     sortable=False,
@@ -151,6 +160,21 @@ results = VGroup(
         Label("Results"),
     ),
     VGroup(
+        HGroup(
+            UItem(
+                "previous_frame_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_CHEVRON_LEFT, tooltip="Previous run"
+                ),
+                enabled_when="has_previous_frame",
+            ),
+            UItem("frame_label", style="readonly"),
+            UItem(
+                "next_frame_button",
+                editor=IconButtonEditor(glyph=ICON_CHEVRON_RIGHT, tooltip="Next run"),
+                enabled_when="has_next_frame",
+            ),
+        ),
         UItem(
             "results",
             editor=pmt_results_table,
@@ -207,7 +231,12 @@ conversion = VGroup(
         Label("Conversion"),
     ),
     VGroup(
-        Item("rf_ohms", label="Rf (Ω)", editor=_rf_spin_box),
+        Item(
+            "rf_ohms",
+            label="Rf (Ω)",
+            editor=_rf_spin_box,
+            enabled_when="not capturing and not acquiring",
+        ),
         Item("adc_display", style="readonly", label="ADC"),
         Item("vref_display", style="readonly", label="Vref"),
         UItem("conversion_note", editor=_hint_label),

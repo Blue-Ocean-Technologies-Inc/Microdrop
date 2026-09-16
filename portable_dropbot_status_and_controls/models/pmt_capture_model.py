@@ -14,6 +14,8 @@ acquire settings shared by both, and the per-spot results of the last
 capture. Mutated only on the GUI thread."""
 
 # Standard library imports.
+import time
+from datetime import datetime
 from pathlib import Path
 
 # Third-party imports.
@@ -25,6 +27,7 @@ from traits.api import (
     Bool,
     Button,
     Enum,
+    Event,
     Float,
     HasTraits,
     Instance,
@@ -68,6 +71,8 @@ class PmtSpotRow(HasTraits):
     position_um = Int
     #: Read-only ID column: "Spot 3 · 24.50 mm".
     label = Property(Str, observe="slot, position_um")
+    #: The spot the running capture is on; the table highlights its row.
+    active = Bool(False)
     capture = Bool(True, desc="Capture this spot")
     gain = Range(
         *PMT_GAIN_BOUNDS, DEFAULT_PMT_GAIN, desc="PMT gain (MCP41010 wiper position)"
@@ -92,9 +97,22 @@ class PmtSpotResultRow(HasTraits):
     n_samples = Int
     mean_counts = Float
     sd_counts = Float
+    mean_voltage = Str
     mean_current = Str
+    #: Full path of the spot's CSV; `file` is its name for the table.
+    csv_path = Str
     file = Str
     error = Str
+    #: Fired by the File column's link; the controller opens `csv_path`.
+    open_file = Event
+
+
+class PmtResultFrame(HasTraits):
+    """One capture run's per-spot results: a page of the Results table."""
+
+    #: Time the run's results arrived, "HH:MM:SS".
+    taken = Str
+    rows = List(Instance(PmtSpotResultRow))
 
 
 class PortableDropbotPmtCaptureModel(BaseStatusModel):
@@ -116,13 +134,34 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     #: True between Start and the backend's done message.
     capturing = Bool(False)
     progress = Str("-", desc="Current stage / last outcome")
+    #: Monotonic time the current spot's exposure ends; 0 when nothing is
+    #: counting down. The controller ticks update_countdown() meanwhile.
+    exposure_deadline = Float(0.0)
+    #: The stage text the countdown is appended to.
+    _countdown_prefix = Str()
     results_directory = Str("", desc="Folder the last capture wrote to")
-    #: The last capture's per-spot outcomes, in capture order.
-    results = List(Instance(PmtSpotResultRow))
 
     start_button = Button("Start capture")
     abort_button = Button("Abort")
     refresh_button = Button("Refresh spots")
+
+    # ---- Results ----------------------------------------------------------
+    #: Every capture run's results since the pane opened, oldest first; the
+    #: Results table pages through them one run at a time.
+    result_frames = List(Instance(PmtResultFrame))
+    #: Index of the frame on show; -1 before the first capture.
+    frame_index = Int(-1)
+    #: The shown frame's rows, in capture order.
+    results = Property(
+        List(Instance(PmtSpotResultRow)), observe="result_frames.items, frame_index"
+    )
+    #: "Run 2 / 3 · 14:05:09", or a hint before the first capture.
+    frame_label = Property(Str, observe="result_frames.items, frame_index")
+    #: Top-level flags so the arrows' enabled_when reacts.
+    has_previous_frame = Property(Bool, observe="frame_index")
+    has_next_frame = Property(Bool, observe="result_frames.items, frame_index")
+    previous_frame_button = Button("Previous run")
+    next_frame_button = Button("Next run")
 
     # ---- Shared live-stream / acquire settings --------------------------
     #: PMT gain (MCP41010 wiper), used by both the live stream and acquire.
@@ -185,6 +224,26 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     def _get_busy(self):
         return self.capturing or self.streaming or self.acquiring
 
+    def _get_results(self):
+        if 0 <= self.frame_index < len(self.result_frames):
+            return self.result_frames[self.frame_index].rows
+
+        return []
+
+    def _get_frame_label(self):
+        if not self.result_frames:
+            return "no captures yet"
+
+        frame = self.result_frames[self.frame_index]
+
+        return f"Run {self.frame_index + 1} / {len(self.result_frames)} · {frame.taken}"
+
+    def _get_has_previous_frame(self):
+        return self.frame_index > 0
+
+    def _get_has_next_frame(self):
+        return self.frame_index < len(self.result_frames) - 1
+
     def _get_live_axis_label(self):
         return {"Current": "A", "Volts": "V", "Counts": "counts"}[self.live_units]
 
@@ -217,9 +276,9 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
             )
 
         return (
-            f"mean {self.format_current(values.mean())}  "
-            f"min {self.format_current(values.min())}  "
-            f"max {self.format_current(values.max())}  ({packets})"
+            f"mean {self.format_quantity(values.mean(), 'A')}  "
+            f"min {self.format_quantity(values.min(), 'A')}  "
+            f"max {self.format_quantity(values.max(), 'A')}  ({packets})"
         )
 
     def append_live(self, samples, packets):
@@ -260,9 +319,9 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
         return volts / rf_ohms
 
     @staticmethod
-    def format_current(amps):
-        """A current in amps, formatted with a compact unit (µA, nA, …)."""
-        return f"{ureg.Quantity(float(amps), 'A').to_compact():.4g~P}"
+    def format_quantity(value, unit):
+        """A value in `unit` (e.g. "A", "V") with a compact prefix (µA, mV)."""
+        return f"{ureg.Quantity(float(value), unit).to_compact():.4g~P}"
 
     def merge_spots(self, spots):
         """Adopt a fresh (slot, position_um) list without losing settings.
@@ -282,6 +341,31 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
             if slot not in known
         ]
         self.rows = kept + new
+
+    def start_exposure_countdown(self, exposure_s, now=None):
+        """Count the current progress line down over `exposure_s` seconds."""
+        now = time.monotonic() if now is None else now
+        self._countdown_prefix = self.progress
+        self.exposure_deadline = now + exposure_s
+
+        self.update_countdown(now)
+
+    def update_countdown(self, now=None):
+        """Refresh the progress line's remaining time, to a tenth of a second."""
+        if not self.exposure_deadline:
+            return
+
+        now = time.monotonic() if now is None else now
+        remaining = max(self.exposure_deadline - now, 0.0)
+        self.progress = f"{self._countdown_prefix} · {remaining:.1f} s left"
+
+    def stop_countdown(self):
+        self.exposure_deadline = 0.0
+
+    def mark_active_spot(self, slot):
+        """Highlight the row of the spot being captured; 0 clears it."""
+        for row in self.rows:
+            row.active = row.slot == slot
 
     def capture_entries(self):
         """The ticked rows, in table order, as PmtCaptureEntry payloads."""
@@ -317,22 +401,29 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
         """A buffered acquire at the current gain and Rf."""
         return {"gain": int(self.gain), "rf_ohms": float(self.rf_ohms)}
 
-    def set_results(self, done):
-        """Adopt a capture's per-spot results, converted with THEIR OWN
-        adc_full_scale/rf_ohms — the pane's current settings may have
-        changed since the capture ran."""
+    def add_result_frame(self, done):
+        """Append a capture's per-spot results as a new frame and show it.
+
+        Converted with the capture's OWN adc_full_scale/rf_ohms — the pane's
+        current settings may have changed since the capture ran.
+        """
         rows = []
 
         for result in done.results:
-            mean_current = (
-                self.format_current(
+            mean_voltage = mean_current = "-"
+
+            if not result.error:
+                mean_voltage = self.format_quantity(
+                    self.counts_to_volts(result.mean_counts, done.adc_full_scale),
+                    "V",
+                )
+                mean_current = self.format_quantity(
                     self.counts_to_amps(
                         result.mean_counts, done.adc_full_scale, done.rf_ohms
-                    )
+                    ),
+                    "A",
                 )
-                if not result.error
-                else "-"
-            )
+
             rows.append(
                 PmtSpotResultRow(
                     slot=result.slot,
@@ -341,10 +432,20 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
                     n_samples=result.n_samples,
                     mean_counts=result.mean_counts,
                     sd_counts=result.sd_counts,
+                    mean_voltage=mean_voltage,
                     mean_current=mean_current,
+                    csv_path=result.csv_path,
                     file=Path(result.csv_path).name if result.csv_path else "",
                     error=result.error,
                 )
             )
 
-        self.results = rows
+        frame = PmtResultFrame(taken=datetime.now().strftime("%H:%M:%S"), rows=rows)
+        self.result_frames.append(frame)
+        self.frame_index = len(self.result_frames) - 1
+
+    def show_previous_frame(self):
+        self.frame_index = max(self.frame_index - 1, 0)
+
+    def show_next_frame(self):
+        self.frame_index = min(self.frame_index + 1, len(self.result_frames) - 1)

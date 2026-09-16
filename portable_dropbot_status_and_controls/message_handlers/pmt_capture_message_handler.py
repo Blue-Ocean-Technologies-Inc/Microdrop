@@ -58,6 +58,8 @@ class PortableDropbotPmtCaptureMessageHandler(BaseMessageHandler):
         self.model.connected = False
         self.model.streaming = False
         self.model.acquiring = False
+        self.model.mark_active_spot(0)
+        self.model.stop_countdown()
         # Force realtime mode off so the UI reflects the hardware state
         # (same as the shared base handler).
         self._on_realtime_mode_updated_triggered(
@@ -71,19 +73,27 @@ class PortableDropbotPmtCaptureMessageHandler(BaseMessageHandler):
     def _on_pmt_capture_progress_triggered(self, body):
         p = PmtCaptureProgress.model_validate_json(str(body))
         self.model.capturing = True
+        self.model.mark_active_spot(p.slot)
+        self.model.stop_countdown()
         self.model.progress = (
             f"Spot {p.slot} ({p.index + 1}/{p.total}): {p.stage} {p.detail}".rstrip()
         )
 
+        # The stream stage is the exposure wait: count it down on the line.
+        if p.stage == "stream" and p.exposure_s:
+            self.model.start_exposure_countdown(p.exposure_s)
+
     def _on_pmt_capture_done_triggered(self, body):
         done = PmtCaptureDone.model_validate_json(str(body))
         self.model.capturing = False
+        self.model.mark_active_spot(0)
+        self.model.stop_countdown()
 
         # A refusal carries directory="" and no results — never overwrite the
         # previous run's path or results table with that.
         if done.directory:
             self.model.results_directory = done.directory
-            self.model.set_results(done)
+            self.model.add_result_frame(done)
 
         saved = sum(1 for r in done.results if r.csv_path)
         failed = [r for r in done.results if r.error]
@@ -126,10 +136,11 @@ class PortableDropbotPmtCaptureMessageHandler(BaseMessageHandler):
 
             return
 
-        mean_current = self.model.format_current(
+        mean_current = self.model.format_quantity(
             self.model.counts_to_amps(
                 done.mean_counts, done.adc_full_scale, done.rf_ohms
-            )
+            ),
+            "A",
         )
         file_name = Path(done.csv_path).name if done.csv_path else "(not saved)"
         self.model.acquire_summary = (

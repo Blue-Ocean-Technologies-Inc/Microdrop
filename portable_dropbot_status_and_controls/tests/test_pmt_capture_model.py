@@ -133,10 +133,10 @@ def test_live_values_convert_counts_to_the_selected_unit():
     assert m.live_values[0] == m.counts_to_amps(32768, 65536, 499_000.0)
 
 
-def test_set_results_converts_with_the_captures_own_scale():
+def test_add_result_frame_converts_with_the_captures_own_scale():
     m = PortableDropbotPmtCaptureModel()
     # The pane's current settings differ from what the capture actually
-    # used — set_results must use the payload's, not these.
+    # used — add_result_frame must use the payload's, not these.
     m.adc_full_scale = 4096
     m.rf_ohms = 1_000.0
 
@@ -171,11 +171,58 @@ def test_set_results_converts_with_the_captures_own_scale():
         adc_full_scale=65536,
         rf_ohms=499_000.0,
     )
-    m.set_results(done)
+    m.add_result_frame(done)
 
     assert [r.file for r in m.results] == ["spot1.csv", ""]
-    assert m.results[0].mean_current == m.format_current(
-        m.counts_to_amps(32768.0, 65536, 499_000.0)
+    assert m.results[0].csv_path == "/tmp/pmt/spot1.csv"
+    assert m.results[0].mean_voltage == m.format_quantity(
+        m.counts_to_volts(32768.0, 65536), "V"
     )
+    assert m.results[0].mean_current == m.format_quantity(
+        m.counts_to_amps(32768.0, 65536, 499_000.0), "A"
+    )
+    assert m.results[1].mean_voltage == "-"
     assert m.results[1].mean_current == "-"
     assert m.results[1].error == "no stream frames received"
+
+
+def test_result_frames_page_through_runs_and_clamp_at_the_ends():
+    m = PortableDropbotPmtCaptureModel()
+    assert m.results == []
+    assert m.frame_label == "no captures yet"
+
+    for _ in range(2):
+        m.add_result_frame(
+            PmtCaptureDone(ok=True, aborted=False, directory="/tmp", results=[])
+        )
+
+    assert m.frame_index == 1
+    assert m.frame_label.startswith("Run 2 / 2")
+    assert m.has_previous_frame and not m.has_next_frame
+
+    m.show_next_frame()
+    assert m.frame_index == 1
+
+    m.show_previous_frame()
+    m.show_previous_frame()
+    assert m.frame_index == 0
+    assert not m.has_previous_frame and m.has_next_frame
+
+
+def test_exposure_countdown_appends_tenths_left_and_stops():
+    m = PortableDropbotPmtCaptureModel()
+    m.progress = "Spot 2 (1/3): stream"
+
+    m.start_exposure_countdown(10.0, now=100.0)
+    assert m.progress == "Spot 2 (1/3): stream · 10.0 s left"
+
+    m.update_countdown(now=103.46)
+    assert m.progress == "Spot 2 (1/3): stream · 6.5 s left"
+
+    m.update_countdown(now=111.0)
+    assert m.progress == "Spot 2 (1/3): stream · 0.0 s left"
+
+    m.stop_countdown()
+    m.update_countdown(now=112.0)
+    assert m.exposure_deadline == 0.0
+    assert m.progress == "Spot 2 (1/3): stream · 0.0 s left"

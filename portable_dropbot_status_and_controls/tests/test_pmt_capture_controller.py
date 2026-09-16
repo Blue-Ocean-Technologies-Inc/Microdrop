@@ -24,6 +24,8 @@ from portable_dropbot_status_and_controls.controllers.pmt_capture_controller imp
     PmtCaptureController,
 )
 from portable_dropbot_status_and_controls.models.pmt_capture_model import (
+    PmtResultFrame,
+    PmtSpotResultRow,
     PmtSpotRow,
     PortableDropbotPmtCaptureModel,
 )
@@ -116,3 +118,24 @@ def test_acquire_sets_state_and_publishes_request(monkeypatch):
     assert model.acquiring is True
     assert model.acquire_summary == "acquiring (~20 s)..."
     assert sent["acquire"] == [model.acquire_request()]
+
+
+def test_file_link_opens_the_rows_csv_and_arrows_page_frames(monkeypatch):
+    model, _controller, _sent = _wire(monkeypatch)
+    opened = []
+    monkeypatch.setattr(mod, "open_file", opened.append)
+
+    first = PmtResultFrame(rows=[PmtSpotResultRow(csv_path="/tmp/a.csv")])
+    second = PmtResultFrame(rows=[PmtSpotResultRow(csv_path="/tmp/b.csv")])
+    model.result_frames = [first, second]
+    model.frame_index = 1
+
+    model.results[0].open_file = True
+    assert opened == ["/tmp/b.csv"]
+
+    model.previous_frame_button = True
+    assert model.frame_index == 0
+    assert model.results[0].csv_path == "/tmp/a.csv"
+
+    model.next_frame_button = True
+    assert model.frame_index == 1

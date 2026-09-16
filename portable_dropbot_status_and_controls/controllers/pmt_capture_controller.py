@@ -14,7 +14,8 @@ and the buffered acquire. Spots, progress, live data and outcomes come back
 through the message handler."""
 
 # Enthought library imports.
-from traits.api import observe
+from pyface.timer.api import CallbackTimer
+from traits.api import Instance, observe
 from traitsui.api import Controller
 
 # Microdrop package imports.
@@ -29,6 +30,10 @@ from portable_dropbot_controller.consts import (
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.file_handler import open_file
+
+# Local imports.
+from ..consts import PMT_COUNTDOWN_TICK_S
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -37,6 +42,9 @@ logger = get_logger(__name__)
 
 
 class PmtCaptureController(Controller):
+    #: Ticks the status line's exposure countdown on the GUI thread.
+    _countdown_timer = Instance(CallbackTimer)
+
     # ------------------------------------------------------------------ #
     # Multi-spot capture                                                    #
     # ------------------------------------------------------------------ #
@@ -60,6 +68,40 @@ class PmtCaptureController(Controller):
     @observe("model:refresh_button")
     def _refresh_spots(self, event):
         publish_message(topic=PMT_SPOTS_READ, message="")
+
+    @observe("model:exposure_deadline")
+    def _run_exposure_countdown(self, event):
+        # Tick only while a spot's exposure is counting down.
+        if event.new:
+            self._countdown_timer.start()
+        else:
+            self._countdown_timer.stop()
+
+    def __countdown_timer_default(self):
+        return CallbackTimer(
+            interval=PMT_COUNTDOWN_TICK_S, callback=self.model.update_countdown
+        )
+
+    # ------------------------------------------------------------------ #
+    # Results                                                              #
+    # ------------------------------------------------------------------ #
+
+    @observe("model:previous_frame_button")
+    def _show_previous_frame(self, event):
+        self.model.show_previous_frame()
+
+    @observe("model:next_frame_button")
+    def _show_next_frame(self, event):
+        self.model.show_next_frame()
+
+    @observe("model:result_frames:items:rows:items:open_file")
+    def _open_result_file(self, event):
+        path = event.object.csv_path
+
+        try:
+            open_file(path)
+        except OSError as error:
+            logger.error(f"Could not open PMT capture file {path}: {error}")
 
     # ------------------------------------------------------------------ #
     # Live stream                                                          #
