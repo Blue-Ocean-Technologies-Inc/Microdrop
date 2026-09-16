@@ -150,8 +150,9 @@ class PortableDropbotCalibrationDockPane(PortableDropbotSecondaryDockPane):
 
 class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for multi-spot PMT capture: the configured spots as a
-    reorderable table of capture / gain / exposure, and the routine that
-    visits them and writes one CSV per spot."""
+    reorderable table of capture / gain / exposure and the routine that
+    visits them and writes one CSV per spot, plus the shared live stream
+    (with a rolling plot) and buffered acquire."""
 
     id = PKG + ".pmt_capture_dock_pane"
     name = "PMT Capture"
@@ -174,8 +175,8 @@ class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
 class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for everything beyond the everyday status-pane
     controls, one collapsible group per subsystem: per-channel heater
-    control (with PID tuning), the vendor's raw lighting controls,
-    and the PMT (power, gain, acquire)."""
+    control (with PID tuning) and the PMT power/gain (the live stream
+    and buffered acquire live in the PMT Capture pane)."""
 
     id = PKG + ".more_controls_dock_pane"
     name = "More Portable Dropbot Controls"

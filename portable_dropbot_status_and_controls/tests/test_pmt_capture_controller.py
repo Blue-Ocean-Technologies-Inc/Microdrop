@@ -8,11 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Buttons -> topics for the PMT Capture pane. The validated publisher and
+"""Buttons -> topics for the PMT Capture pane. The validated publishers and
 publish_message are patched; no Redis."""
 
 # Microdrop package imports.
-from portable_dropbot_controller.consts import PMT_CAPTURE_ABORT, PMT_SPOTS_READ
+from portable_dropbot_controller.consts import (
+    PMT_CAPTURE_ABORT,
+    PMT_SPOTS_READ,
+    PMT_STREAM_STOP,
+)
 from portable_dropbot_status_and_controls.controllers import (
     pmt_capture_controller as mod,
 )
@@ -26,9 +30,17 @@ from portable_dropbot_status_and_controls.models.pmt_capture_model import (
 
 
 def _wire(monkeypatch):
-    sent = {"capture": [], "raw": []}
+    sent = {"capture": [], "stream": [], "acquire": [], "raw": []}
     monkeypatch.setattr(
         mod.pmt_capture_publisher, "publish", lambda p, **k: sent["capture"].append(p)
+    )
+    monkeypatch.setattr(
+        mod.pmt_stream_start_publisher,
+        "publish",
+        lambda p, **k: sent["stream"].append(p),
+    )
+    monkeypatch.setattr(
+        mod.pmt_acquire_publisher, "publish", lambda p, **k: sent["acquire"].append(p)
     )
     monkeypatch.setattr(
         mod,
@@ -39,12 +51,18 @@ def _wire(monkeypatch):
     return model, PmtCaptureController(model), sent
 
 
-def test_start_publishes_ticked_entries_and_marks_capturing(monkeypatch):
+def test_start_publishes_ticked_entries_and_stream_settings(monkeypatch):
     model, _controller, sent = _wire(monkeypatch)
     model.rows = [PmtSpotRow(slot=2, position_um=0, gain=90, exposure_s=1.5)]
+    model.stream_avg = 32
     model.start_button = True
     assert sent["capture"] == [
-        {"entries": [{"slot": 2, "gain": 90, "exposure_s": 1.5}]}
+        {
+            "entries": [{"slot": 2, "gain": 90, "exposure_s": 1.5}],
+            "avg": 32,
+            "osr": model.stream_osr,
+            "rf_ohms": model.rf_ohms,
+        }
     ]
     assert model.capturing is True
 
@@ -62,3 +80,39 @@ def test_abort_and_refresh_topics(monkeypatch):
     model.abort_button = True
     model.refresh_button = True
     assert sent["raw"] == [(PMT_CAPTURE_ABORT, ""), (PMT_SPOTS_READ, "")]
+
+
+def test_stream_start_clears_live_data_and_publishes_request(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.append_live([1, 2, 3], packets=1)
+    model.gain = 200
+    model.stream_start_button = True
+    assert len(model.live_counts) == 0 and model.live_packets == 0
+    assert sent["stream"] == [model.stream_request()]
+
+
+def test_stream_stop_publishes_the_stop_topic(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.stream_stop_button = True
+    assert sent["raw"] == [(PMT_STREAM_STOP, "")]
+
+
+def test_avg_osr_gain_republish_only_while_streaming(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.stream_avg = 32  # not streaming yet: no republish
+    assert sent["stream"] == []
+
+    model.streaming = True
+    model.stream_osr = 4
+    model.gain = 50
+    assert len(sent["stream"]) == 2
+    assert sent["stream"][-1] == model.stream_request()
+
+
+def test_acquire_sets_state_and_publishes_request(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.gain = 128
+    model.acquire_button = True
+    assert model.acquiring is True
+    assert model.acquire_summary == "acquiring (~20 s)..."
+    assert sent["acquire"] == [model.acquire_request()]
