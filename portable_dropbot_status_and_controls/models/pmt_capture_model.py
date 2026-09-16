@@ -11,7 +11,9 @@
 """Qt-free state for the PMT Capture pane: the multi-spot capture table
 (capture tick, gain, exposure) in capture order, the live stream + buffered
 acquire settings shared by both, and the per-spot results of the last
-capture. Mutated only on the GUI thread."""
+capture. Trait mutations are safe from any thread — attach_step/detach_step
+are called from the message handler's Dramatiq worker thread; only Qt
+object creation needs the GUI thread (see the controller)."""
 
 # Standard library imports.
 import time
@@ -20,9 +22,11 @@ from pathlib import Path
 
 # Third-party imports.
 import numpy as np
+from pydantic import ValidationError
 
 # Enthought library imports.
 from traits.api import (
+    Any,
     Array,
     Bool,
     Button,
@@ -52,6 +56,7 @@ from portable_dropbot_controller.consts import (
     PMT_STREAM_OSR,
     PMT_STREAM_OSR_CHOICES,
     PMT_VREF_V,
+    PmtStepCapture,
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -60,6 +65,11 @@ from microdrop_utils.ureg_helpers import ureg
 
 # Local imports.
 from ..consts import PMT_LIVE_WINDOW_SAMPLES, PORTABLE_DROPBOT_IMAGE
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class PmtSpotRow(HasTraits):
@@ -73,6 +83,8 @@ class PmtSpotRow(HasTraits):
     label = Property(Str, observe="slot, position_um")
     #: The spot the running capture is on; the table highlights its row.
     active = Bool(False)
+    #: Manual mode's own tick, unused while a step is attached (see
+    #: at_start/at_end below).
     capture = Bool(True, desc="Capture this spot")
     gain = Range(
         *PMT_GAIN_BOUNDS, DEFAULT_PMT_GAIN, desc="PMT gain (MCP41010 wiper position)"
@@ -82,6 +94,10 @@ class PmtSpotRow(HasTraits):
         DEFAULT_PMT_EXPOSURE_S,
         desc="Stream duration for this spot, seconds",
     )
+    #: Attached-step ticks — captured at the step's start / end (or both);
+    #: hidden and unused in manual mode.
+    at_start = Bool(False, desc="Capture this spot at the step's start")
+    at_end = Bool(False, desc="Capture this spot at the step's end")
 
     def _get_label(self):
         return f"Spot {self.slot} · {self.position_um / 1000:.2f} mm"
@@ -112,13 +128,22 @@ class PmtResultFrame(HasTraits):
 
     #: Time the run's results arrived, "HH:MM:SS".
     taken = Str
+    #: The step tag from PmtCaptureDone.label (e.g. "step1.2-end"), shown
+    #: instead of the time when a protocol run named the capture.
+    label = Str
     rows = List(Instance(PmtSpotResultRow))
 
 
 class PortableDropbotPmtCaptureModel(BaseStatusModel):
     """Spot rows in capture order, the running capture's state, the live
     stream + buffered acquire (sharing gain/avg/osr/rf_ohms with capture),
-    and the last capture's per-spot results."""
+    and the last capture's per-spot results.
+
+    "Pane follows step" (#601 increment 2): selecting a protocol step loads
+    its pmt_capture cell into the table (attach_step); a group or empty
+    selection returns to manual mode (detach_step), restoring the table's
+    own state from the snapshot taken at the moment it was left.
+    """
 
     DEFAULT_ICON_PATH = PORTABLE_DROPBOT_IMAGE
 
@@ -131,6 +156,25 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     #: Table rows; list order is capture order.
     rows = List(Instance(PmtSpotRow))
     selected_row = Instance(PmtSpotRow)
+
+    # ---- Attached step (pane follows step) -------------------------------
+    #: uuid of the step whose pmt_capture cell the table mirrors; empty in
+    #: manual mode.
+    attached_step_id = Str("", desc="Step the PMT table is attached to")
+    #: Read-only header line: "Editing step <id>" / "Manual capture".
+    attached_label = Str("Manual capture")
+    #: True while attach_step/detach_step are applying a loaded cell or the
+    #: manual snapshot to the rows — the controller must not echo these
+    #: mutations back out as a set-cell publish.
+    loading_step = Bool(False)
+    #: The step_id/value of the last set-cell the controller pushed, so the
+    #: message handler can tell a ROW_SELECTED echo of its own write (skip)
+    #: from a genuine external change (reload).
+    last_pushed_step_id = Str("")
+    last_pushed_value = Any(None)
+    #: The table's own state, saved on the first attach and restored on
+    #: detach; None until manual mode has been left at least once.
+    _manual_snapshot = Any(None)
     #: True between Start and the backend's done message.
     capturing = Bool(False)
     progress = Str("-", desc="Current stage / last outcome")
@@ -235,8 +279,9 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
             return "no captures yet"
 
         frame = self.result_frames[self.frame_index]
+        tag = frame.label or frame.taken
 
-        return f"Run {self.frame_index + 1} / {len(self.result_frames)} · {frame.taken}"
+        return f"Run {self.frame_index + 1} / {len(self.result_frames)} · {tag}"
 
     def _get_has_previous_frame(self):
         return self.frame_index > 0
@@ -342,6 +387,193 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
         ]
         self.rows = kept + new
 
+    @staticmethod
+    def _parse_step_capture(cell_value):
+        """Tolerant parse of a pmt_capture cell: missing or invalid reads as
+        no capture rather than failing the step load."""
+        if not cell_value:
+            return None
+
+        try:
+            return PmtStepCapture.model_validate(cell_value)
+        except ValidationError as error:
+            logger.warning(f"Invalid pmt_capture cell value, ignored: {error}")
+            return None
+
+    @staticmethod
+    def _short_step_id(step_id):
+        """First 8 characters of a uuid-like id; already-short ids pass
+        through unchanged."""
+        return step_id[:8] if len(step_id) > 8 else step_id
+
+    def _save_manual_snapshot(self):
+        """Capture the table's own state before the first attach, so
+        detach_step can restore it exactly."""
+        self._manual_snapshot = {
+            "rows": [
+                {
+                    "slot": row.slot,
+                    "capture": row.capture,
+                    "gain": row.gain,
+                    "exposure_s": row.exposure_s,
+                }
+                for row in self.rows
+            ],
+            "avg": self.stream_avg,
+            "osr": self.stream_osr,
+            "rf_ohms": self.rf_ohms,
+        }
+
+    def attach_step(self, step_id, cell_value, step_label=""):
+        """Load a step's pmt_capture cell into the table: rows the cell
+        names take its gain/exposure/ticks and order, board spots absent
+        from it are unticked and moved after. Avg/OSR/Rf load too.
+
+        The first attach out of manual mode snapshots the table so
+        detach_step can restore it; a step-to-step reattach does not
+        overwrite that snapshot.
+        """
+
+        if not self.attached_step_id:
+            self._save_manual_snapshot()
+
+        parsed = self._parse_step_capture(cell_value)
+        by_slot = {row.slot: row for row in self.rows}
+
+        self.loading_step = True
+
+        try:
+            ordered = []
+            seen_slots = set()
+
+            for entry in parsed.entries if parsed else []:
+                row = by_slot.get(entry.slot)
+
+                if row is None:
+                    logger.warning(
+                        f"Step {step_id} pmt_capture names slot {entry.slot}, "
+                        "not on the board; skipped"
+                    )
+                    continue
+
+                row.gain = entry.gain
+                row.exposure_s = entry.exposure_s
+                row.at_start = entry.at_start
+                row.at_end = entry.at_end
+                ordered.append(row)
+                seen_slots.add(row.slot)
+
+            remaining = [row for row in self.rows if row.slot not in seen_slots]
+
+            for row in remaining:
+                row.at_start = False
+                row.at_end = False
+
+            self.rows = ordered + remaining
+
+            if parsed:
+                self.stream_avg = parsed.avg
+                self.stream_osr = parsed.osr
+                self.rf_ohms = parsed.rf_ohms
+        finally:
+            self.loading_step = False
+
+        self.attached_step_id = step_id
+        self.attached_label = (
+            f"Editing step {step_label or self._short_step_id(step_id)}"
+        )
+
+    def detach_step(self):
+        """Return to manual mode, restoring the snapshot taken on the first
+        attach (a no-op if the pane is already unattached)."""
+
+        if not self.attached_step_id:
+            return
+
+        self.attached_step_id = ""
+        self.attached_label = "Manual capture"
+        self.last_pushed_step_id = ""
+        self.last_pushed_value = None
+
+        self.loading_step = True
+
+        try:
+            self._restore_manual_snapshot()
+        finally:
+            self.loading_step = False
+
+    def _restore_manual_snapshot(self):
+        snapshot = self._manual_snapshot
+        by_slot = {row.slot: row for row in self.rows}
+
+        if snapshot is None:
+            # Nothing was ever saved (e.g. a step was attached before the
+            # operator touched manual mode) — just clear the step ticks.
+            for row in self.rows:
+                row.at_start = row.at_end = False
+
+            return
+
+        ordered = []
+        seen_slots = set()
+
+        for saved in snapshot["rows"]:
+            row = by_slot.get(saved["slot"])
+
+            if row is None:
+                continue
+
+            row.capture = saved["capture"]
+            row.gain = saved["gain"]
+            row.exposure_s = saved["exposure_s"]
+            row.at_start = row.at_end = False
+            ordered.append(row)
+            seen_slots.add(row.slot)
+
+        remaining = [row for row in self.rows if row.slot not in seen_slots]
+
+        for row in remaining:
+            row.at_start = row.at_end = False
+
+        self.rows = ordered + remaining
+        self.stream_avg = snapshot["avg"]
+        self.stream_osr = snapshot["osr"]
+        self.rf_ohms = snapshot["rf_ohms"]
+        self._manual_snapshot = None
+
+    def step_cell_value(self):
+        """The attached rows as a pmt_capture cell value (a PmtStepCapture
+        dict), or None once nothing is ticked. Entries with neither tick
+        are dropped."""
+        entries = [
+            {
+                "slot": row.slot,
+                "gain": int(row.gain),
+                "exposure_s": float(row.exposure_s),
+                "at_start": row.at_start,
+                "at_end": row.at_end,
+            }
+            for row in self.rows
+            if row.at_start or row.at_end
+        ]
+
+        if not entries:
+            return None
+
+        return {
+            "avg": int(self.stream_avg),
+            "osr": int(self.stream_osr),
+            "rf_ohms": float(self.rf_ohms),
+            "entries": entries,
+        }
+
+    def record_pushed_value(self, value):
+        """Remember a set-cell value just pushed for the attached step, so
+        the message handler's echo suppression can recognize its
+        rebroadcast (see last_pushed_step_id/last_pushed_value)."""
+        self.last_pushed_step_id = self.attached_step_id
+        self.last_pushed_value = value
+
     def start_exposure_countdown(self, exposure_s, now=None):
         """Count the current progress line down over `exposure_s` seconds."""
         now = time.monotonic() if now is None else now
@@ -368,15 +600,22 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
             row.active = row.slot == slot
 
     def capture_entries(self):
-        """The ticked rows, in table order, as PmtCaptureEntry payloads."""
+        """The rows to run right now, in table order, as PmtCaptureEntry
+        payloads: manual mode's own `capture` tick, or — while attached —
+        every row ticked `at_start` or `at_end` (a test-run of the step's
+        setup)."""
+        if self.attached_step_id:
+            rows = [row for row in self.rows if row.at_start or row.at_end]
+        else:
+            rows = [row for row in self.rows if row.capture]
+
         return [
             {
                 "slot": row.slot,
                 "gain": int(row.gain),
                 "exposure_s": float(row.exposure_s),
             }
-            for row in self.rows
-            if row.capture
+            for row in rows
         ]
 
     def capture_request(self):
@@ -440,7 +679,11 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
                 )
             )
 
-        frame = PmtResultFrame(taken=datetime.now().strftime("%H:%M:%S"), rows=rows)
+        frame = PmtResultFrame(
+            taken=datetime.now().strftime("%H:%M:%S"),
+            label=done.label,
+            rows=rows,
+        )
         self.result_frames.append(frame)
         self.frame_index = len(self.result_frames) - 1
 

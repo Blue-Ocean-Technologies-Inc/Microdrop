@@ -14,6 +14,7 @@ import os
 # Microdrop package imports.
 from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
     MOTOR_PARAMS_UPDATED,
@@ -93,6 +94,10 @@ ACTOR_TOPIC_DICT = {
         PMT_STREAM_UPDATED,
         PMT_ADC_UPDATED,
         PMT_ACQUIRE_DONE,
+        #: "Pane follows step" (#601 increment 2): loads/clears the attached
+        #: step's PMT setup and locks editing while a protocol runs.
+        PROTOCOL_TREE_ROW_SELECTED,
+        PROTOCOL_RUNNING,
     ],
     #: The advanced-only pane also tracks the Edit-menu Advanced Mode
     #: toggle, which is what unlocks its controls.

@@ -9,8 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """The PMT Capture pane's message handler: the ADC full-scale rule (keep
-the previous value when a query answers "unknown"), and that disconnecting
-cannot leave streaming/acquiring stuck True in the UI."""
+the previous value when a query answers "unknown"), that disconnecting
+cannot leave streaming/acquiring stuck True in the UI, and the "pane
+follows step" row-selected attach/detach with its echo suppression."""
 
 # Standard library imports.
 import time
@@ -19,10 +20,12 @@ import time
 import pytest
 
 # Microdrop package imports.
+from pluggable_protocol_tree.models.cell_sync import ProtocolTreeRowSelectedMessage
 from portable_dropbot_controller.consts import (
     PmtAdcUpdated,
     PmtCaptureDone,
 )
+from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
 from portable_dropbot_status_and_controls.message_handlers import (
     pmt_capture_message_handler as mod,
 )
@@ -82,3 +85,63 @@ def test_capture_done_populates_results(handler):
     )
     assert handler.model.results == []
     assert handler.model.capturing is False
+
+
+def test_row_selected_with_step_id_attaches(handler):
+    handler.model.merge_spots([(1, 1000)])
+    cell = {
+        "avg": 16,
+        "osr": 6,
+        "rf_ohms": 499_000.0,
+        "entries": [{"slot": 1, "gain": 128, "exposure_s": 10.0, "at_start": True}],
+    }
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={PMT_CAPTURE_COLUMN_ID: cell}
+    )
+    handler._on_row_selected_triggered(msg.serialize())
+    assert handler.model.attached_step_id == "step-1"
+    assert handler.model.rows[0].at_start is True
+
+
+def test_row_selected_without_step_id_detaches(handler):
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.attach_step("step-1", None)
+    msg = ProtocolTreeRowSelectedMessage(step_id=None)
+    handler._on_row_selected_triggered(msg.serialize())
+    assert handler.model.attached_step_id == ""
+
+
+def test_row_selected_echo_of_own_push_is_ignored(handler):
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.attach_step("step-1", None)
+    pushed_value = {"avg": 16, "osr": 6, "rf_ohms": 499_000.0, "entries": []}
+    handler.model.record_pushed_value(pushed_value)
+    # A distinguishing mutation the echo must NOT clobber, since it should
+    # be recognized as our own push and skipped rather than reapplied.
+    handler.model.rows[0].gain = 200
+
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={PMT_CAPTURE_COLUMN_ID: pushed_value}
+    )
+    handler._on_row_selected_triggered(msg.serialize())
+    assert handler.model.rows[0].gain == 200
+
+
+def test_row_selected_foreign_change_reloads(handler):
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.attach_step("step-1", None)
+    handler.model.record_pushed_value(
+        {"avg": 16, "osr": 6, "rf_ohms": 499_000.0, "entries": []}
+    )
+    different = {
+        "avg": 16,
+        "osr": 6,
+        "rf_ohms": 499_000.0,
+        "entries": [{"slot": 1, "gain": 50, "exposure_s": 3.0, "at_end": True}],
+    }
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={PMT_CAPTURE_COLUMN_ID: different}
+    )
+    handler._on_row_selected_triggered(msg.serialize())
+    assert handler.model.rows[0].gain == 50
+    assert handler.model.rows[0].at_end is True

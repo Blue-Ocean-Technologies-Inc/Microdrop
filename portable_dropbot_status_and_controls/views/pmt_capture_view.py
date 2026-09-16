@@ -8,12 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""PMT Capture pane view: the spot table (reorderable, editable while
-idle), the run buttons and status line, then three chevron-collapsed
-groups — the last capture's per-spot Results table, the Live stream &
-acquire controls (shared gain/avg/osr/Rf), and the Conversion settings.
-Business logic lives in the model; this module is instantiable standalone
-against just the model:
+"""PMT Capture pane view: a header line naming the attached step (or
+manual mode), the spot table (reorderable, editable while idle) — a Capture
+tick column in manual mode, Start/End tick columns while a step is
+attached, switched with two TableEditors on the same `rows` since
+TraitsUI cannot swap a table's columns in place — the run buttons and
+status line, then three chevron-collapsed groups: the last capture's
+per-spot Results table, the Live stream & acquire controls (shared
+gain/avg/osr/Rf), and the Conversion settings. Business logic lives in the
+model; this module is instantiable standalone against just the model:
 
     PortableDropbotPmtCaptureModel(rows=[...]).edit_traits(view=PmtCaptureView)
 """
@@ -88,7 +91,10 @@ _hint_label = HtmlLabelEditor(
 #: One row per configured spot; the toolbar's move up/down buttons act on
 #: the selected row and define capture order. The spot a running capture is
 #: on is highlighted like the protocol tree's executing step.
-pmt_spot_table = TableEditor(
+#:
+#: Manual mode: the pane's own Capture tick. Shown while unattached
+#: (visible_when="not attached_step_id" on its UItem, below).
+pmt_spot_table_manual = TableEditor(
     columns=[
         # Sized to its text so "Spot n · xx.xx mm" is never elided.
         ActiveRowObjectColumn(
@@ -110,6 +116,35 @@ pmt_spot_table = TableEditor(
                 high=PMT_EXPOSURE_S_BOUNDS[1],
                 step=PMT_EXPOSURE_S_STEP,
             ),
+        ),
+    ],
+    reorderable=True,
+    show_toolbar=True,
+    sortable=False,
+    deletable=False,
+    auto_size=False,
+    selected="selected_row",
+)
+
+#: Attached mode: Start/End ticks replace the single Capture tick, so a
+#: spot can be captured at the step's start, its end, or both. Shown while
+#: a step is attached (visible_when="attached_step_id").
+pmt_spot_table_attached = TableEditor(
+    columns=[
+        ActiveRowObjectColumn(
+            name="label",
+            label="Spot",
+            editable=False,
+            resize_mode="resize_to_contents",
+        ),
+        ActiveRowCheckboxColumn(name="at_start", label="Start"),
+        ActiveRowCheckboxColumn(name="at_end", label="End"),
+        ActiveRowObjectColumn(name="gain", label="Gain"),
+        ActiveRowObjectColumn(
+            name="exposure_s",
+            label="Exposure (s)",
+            format="%.1f",
+            resize_mode="stretch",
         ),
     ],
     reorderable=True,
@@ -146,12 +181,26 @@ pmt_results_table = TableEditor(
     auto_size=False,
 )
 
+#: enabled_when shared by both spot-table variants: idle, and never while a
+#: protocol runs (the tree refuses the pane's set-cell then anyway, but the
+#: table locking too keeps the operator from editing a frozen setup).
+_spot_table_enabled_when = "connected and not busy and not protocol_running"
+
 capture = VGroup(
+    Item("attached_label", style="readonly", label="Mode"),
     UItem(
         "rows",
-        editor=pmt_spot_table,
-        enabled_when="connected and not busy",
+        editor=pmt_spot_table_manual,
+        enabled_when=_spot_table_enabled_when,
         height=PMT_SPOT_TABLE_MIN_HEIGHT,
+        visible_when="not attached_step_id",
+    ),
+    UItem(
+        "rows",
+        editor=pmt_spot_table_attached,
+        enabled_when=_spot_table_enabled_when,
+        height=PMT_SPOT_TABLE_MIN_HEIGHT,
+        visible_when="attached_step_id",
     ),
     HGroup(
         UItem("start_button", enabled_when="connected and not busy and rows"),
@@ -199,18 +248,30 @@ live = VGroup(
     ),
     VGroup(
         HGroup(
-            Item("gain", enabled_when="connected and not capturing and not acquiring"),
+            Item(
+                "gain",
+                enabled_when=(
+                    "connected and not capturing and not acquiring "
+                    "and not protocol_running"
+                ),
+            ),
             Item(
                 "stream_avg",
                 label="Avg",
                 editor=EnumEditor(values=_stream_avg_labels),
-                enabled_when="connected and not capturing and not acquiring",
+                enabled_when=(
+                    "connected and not capturing and not acquiring "
+                    "and not protocol_running"
+                ),
             ),
             Item(
                 "stream_osr",
                 label="OSR",
                 editor=EnumEditor(values=_stream_osr_labels),
-                enabled_when="connected and not capturing and not acquiring",
+                enabled_when=(
+                    "connected and not capturing and not acquiring "
+                    "and not protocol_running"
+                ),
             ),
         ),
         HGroup(
@@ -243,7 +304,7 @@ conversion = VGroup(
             "rf_ohms",
             label="Rf (Ω)",
             editor=_rf_spin_box,
-            enabled_when="not capturing and not acquiring",
+            enabled_when="not capturing and not acquiring and not protocol_running",
         ),
         Item("adc_display", style="readonly", label="ADC"),
         Item("vref_display", style="readonly", label="Vref"),

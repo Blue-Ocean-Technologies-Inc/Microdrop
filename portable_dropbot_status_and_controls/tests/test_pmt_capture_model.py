@@ -186,6 +186,16 @@ def test_add_result_frame_converts_with_the_captures_own_scale():
     assert m.results[1].error == "no stream frames received"
 
 
+def test_add_result_frame_labels_with_the_dones_label():
+    m = PortableDropbotPmtCaptureModel()
+    m.add_result_frame(
+        PmtCaptureDone(
+            ok=True, aborted=False, directory="/tmp", results=[], label="step1.2-end"
+        )
+    )
+    assert m.frame_label == "Run 1 / 1 · step1.2-end"
+
+
 def test_result_frames_page_through_runs_and_clamp_at_the_ends():
     m = PortableDropbotPmtCaptureModel()
     assert m.results == []
@@ -207,6 +217,125 @@ def test_result_frames_page_through_runs_and_clamp_at_the_ends():
     m.show_previous_frame()
     assert m.frame_index == 0
     assert not m.has_previous_frame and m.has_next_frame
+
+
+def test_attach_step_loads_cell_order_gain_exposure_and_ticks():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000), (2, 2000), (3, 3000)])
+
+    m.attach_step(
+        "step-1",
+        {
+            "avg": 32,
+            "osr": 4,
+            "rf_ohms": 250_000.0,
+            "entries": [
+                {
+                    "slot": 3,
+                    "gain": 200,
+                    "exposure_s": 5.0,
+                    "at_start": True,
+                    "at_end": False,
+                },
+                {
+                    "slot": 1,
+                    "gain": 90,
+                    "exposure_s": 2.5,
+                    "at_start": False,
+                    "at_end": True,
+                },
+            ],
+        },
+    )
+
+    assert m.attached_step_id == "step-1"
+    assert m.attached_label == "Editing step step-1"
+    assert [r.slot for r in m.rows] == [3, 1, 2]
+    assert (m.rows[0].gain, m.rows[0].exposure_s) == (200, 5.0)
+    assert m.rows[0].at_start is True and m.rows[0].at_end is False
+    assert m.rows[1].at_start is False and m.rows[1].at_end is True
+    # Slot 2 was absent from the cell: unticked, moved after.
+    assert m.rows[2].at_start is False and m.rows[2].at_end is False
+    assert (m.stream_avg, m.stream_osr, m.rf_ohms) == (32, 4, 250_000.0)
+
+
+def test_attach_step_with_invalid_cell_reads_as_no_capture():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000)])
+    m.attach_step("step-1", {"entries": [{"slot": 1}]})  # missing required fields
+    assert m.attached_step_id == "step-1"
+    assert m.rows[0].at_start is False and m.rows[0].at_end is False
+
+
+def test_attach_step_with_no_cell_unticks_every_row():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000), (2, 2000)])
+    m.rows[0].at_start = True
+    m.attach_step("step-1", None)
+    assert all(not r.at_start and not r.at_end for r in m.rows)
+
+
+def test_detach_step_restores_the_manual_snapshot():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000), (2, 2000)])
+    m.rows[0].capture = False
+    m.rows[1].gain = 77
+    m.stream_avg = 32
+    original_order = [r.slot for r in m.rows]
+
+    m.attach_step(
+        "step-1",
+        {"entries": [{"slot": 2, "gain": 5, "exposure_s": 1.0, "at_end": True}]},
+    )
+    assert m.attached_step_id == "step-1"
+
+    m.detach_step()
+    assert m.attached_step_id == ""
+    assert m.attached_label == "Manual capture"
+    assert [r.slot for r in m.rows] == original_order
+    assert m.rows[0].capture is False
+    assert m.rows[1].gain == 77
+    assert m.stream_avg == 32
+    assert all(not r.at_start and not r.at_end for r in m.rows)
+
+
+def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
+    m = PortableDropbotPmtCaptureModel()
+    m.rows = [
+        PmtSpotRow(slot=1, position_um=0, at_start=True),
+        PmtSpotRow(slot=2, position_um=0),  # neither tick: dropped
+    ]
+    m.stream_avg = 16
+    m.stream_osr = 6
+    m.rf_ohms = 499_000.0
+    assert m.step_cell_value() == {
+        "avg": 16,
+        "osr": 6,
+        "rf_ohms": 499_000.0,
+        "entries": [
+            {
+                "slot": 1,
+                "gain": DEFAULT_PMT_GAIN,
+                "exposure_s": DEFAULT_PMT_EXPOSURE_S,
+                "at_start": True,
+                "at_end": False,
+            }
+        ],
+    }
+
+    m.rows[0].at_start = False
+    assert m.step_cell_value() is None
+
+
+def test_capture_entries_uses_start_or_end_ticks_while_attached():
+    m = PortableDropbotPmtCaptureModel()
+    m.rows = [
+        PmtSpotRow(slot=1, position_um=0, capture=False, at_start=True),
+        PmtSpotRow(slot=2, position_um=0, capture=True),  # manual tick, no step tick
+        PmtSpotRow(slot=3, position_um=0, at_end=True),
+    ]
+    m.attached_step_id = "step-1"
+    assert [e["slot"] for e in m.capture_entries()] == [1, 3]
 
 
 def test_exposure_countdown_appends_tenths_left_and_stops():

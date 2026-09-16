@@ -17,6 +17,7 @@ from portable_dropbot_controller.consts import (
     PMT_SPOTS_READ,
     PMT_STREAM_STOP,
 )
+from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
 from portable_dropbot_status_and_controls.controllers import (
     pmt_capture_controller as mod,
 )
@@ -32,7 +33,7 @@ from portable_dropbot_status_and_controls.models.pmt_capture_model import (
 
 
 def _wire(monkeypatch):
-    sent = {"capture": [], "stream": [], "acquire": [], "raw": []}
+    sent = {"capture": [], "stream": [], "acquire": [], "raw": [], "set_cell": []}
     monkeypatch.setattr(
         mod.pmt_capture_publisher, "publish", lambda p, **k: sent["capture"].append(p)
     )
@@ -48,6 +49,11 @@ def _wire(monkeypatch):
         mod,
         "publish_message",
         lambda topic, message: sent["raw"].append((topic, message)),
+    )
+    monkeypatch.setattr(
+        mod.protocol_tree_set_cell_publisher,
+        "publish",
+        lambda **kw: sent["set_cell"].append(kw),
     )
     model = PortableDropbotPmtCaptureModel()
     return model, PmtCaptureController(model), sent
@@ -118,6 +124,51 @@ def test_acquire_sets_state_and_publishes_request(monkeypatch):
     assert model.acquiring is True
     assert model.acquire_summary == "acquiring (~20 s)..."
     assert sent["acquire"] == [model.acquire_request()]
+
+
+def test_attached_edit_publishes_set_cell(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.rows = [PmtSpotRow(slot=1, position_um=0, at_start=True)]
+    model.attached_step_id = "step-1"
+
+    model.rows[0].gain = 200
+
+    assert len(sent["set_cell"]) == 1
+    assert sent["set_cell"][0]["step_id"] == "step-1"
+    assert sent["set_cell"][0]["col_id"] == PMT_CAPTURE_COLUMN_ID
+    assert sent["set_cell"][0]["value"]["entries"][0]["gain"] == 200
+    assert model.last_pushed_step_id == "step-1"
+    assert model.last_pushed_value == sent["set_cell"][0]["value"]
+
+
+def test_unattached_edit_publishes_nothing(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.rows = [PmtSpotRow(slot=1, position_um=0)]
+    model.rows[0].gain = 200
+    assert sent["set_cell"] == []
+
+
+def test_attached_edit_during_a_run_publishes_nothing(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.rows = [PmtSpotRow(slot=1, position_um=0, at_start=True)]
+    model.attached_step_id = "step-1"
+    model.protocol_running = True
+
+    model.rows[0].gain = 200
+
+    assert sent["set_cell"] == []
+
+
+def test_loading_a_step_does_not_push(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.merge_spots([(1, 1000)])
+
+    model.attach_step(
+        "step-1",
+        {"entries": [{"slot": 1, "gain": 90, "exposure_s": 1.0, "at_end": True}]},
+    )
+
+    assert sent["set_cell"] == []
 
 
 def test_file_link_opens_the_rows_csv_and_arrows_page_frames(monkeypatch):

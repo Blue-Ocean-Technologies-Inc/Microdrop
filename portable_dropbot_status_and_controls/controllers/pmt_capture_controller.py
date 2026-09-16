@@ -11,7 +11,13 @@
 """Buttons -> request topics for the PMT Capture pane: the multi-spot
 capture, the live stream (with live avg/osr/gain updates while running),
 and the buffered acquire. Spots, progress, live data and outcomes come back
-through the message handler."""
+through the message handler.
+
+"Pane follows step" (#601 increment 2): while a step is attached and no
+protocol is running, every table/settings edit publishes the step's
+pmt_capture cell over protocol_tree_set_cell_publisher — the model's
+loading_step flag suppresses this while attach_step/detach_step are
+themselves applying a loaded cell or the manual snapshot."""
 
 # Enthought library imports.
 from pyface.timer.api import CallbackTimer
@@ -19,6 +25,7 @@ from traits.api import Instance, observe
 from traitsui.api import Controller
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import protocol_tree_set_cell_publisher
 from portable_dropbot_controller.consts import (
     PMT_CAPTURE_ABORT,
     PMT_SPOTS_READ,
@@ -27,6 +34,7 @@ from portable_dropbot_controller.consts import (
     pmt_capture_publisher,
     pmt_stream_start_publisher,
 )
+from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -83,6 +91,38 @@ class PmtCaptureController(Controller):
     def __countdown_timer_default(self):
         return CallbackTimer(
             interval=PMT_COUNTDOWN_TICK_S, callback=self.model.update_countdown
+        )
+
+    # ------------------------------------------------------------------ #
+    # Pane follows step                                                     #
+    # ------------------------------------------------------------------ #
+
+    @observe("model:rows:items:gain")
+    @observe("model:rows:items:exposure_s")
+    @observe("model:rows:items:at_start")
+    @observe("model:rows:items:at_end")
+    @observe("model:rows:items")
+    @observe("model:rows")
+    @observe("model:stream_avg")
+    @observe("model:stream_osr")
+    @observe("model:rf_ohms")
+    def _push_attached_step(self, event):
+        # Not attached, mid-run (the tree refuses set-cell then anyway), or
+        # attach_step/detach_step applying a loaded cell or the manual
+        # snapshot — none of those are an operator edit to push.
+        if (
+            not self.model.attached_step_id
+            or self.model.protocol_running
+            or self.model.loading_step
+        ):
+            return
+
+        value = self.model.step_cell_value()
+        self.model.record_pushed_value(value)
+        protocol_tree_set_cell_publisher.publish(
+            step_id=self.model.attached_step_id,
+            col_id=PMT_CAPTURE_COLUMN_ID,
+            value=value,
         )
 
     # ------------------------------------------------------------------ #
