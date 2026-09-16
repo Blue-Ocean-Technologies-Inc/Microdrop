@@ -46,13 +46,16 @@ import time
 from datetime import datetime
 
 # Local imports.
-from .consts import PMT_SPOT_SLOTS
+from .consts import PMT_PARK_LOCATION, PMT_SPOT_SLOTS
 
 #: Absolute-index step that reads as a u16 counter wrap rather than a
 #: duplicated/aliased frame.
 _WRAP_THRESHOLD = 0x8000
 _HEADER = struct.Struct("<HH")
-_POSITIONS = struct.Struct(f">{PMT_SPOT_SLOTS}i")
+#: Park location followed by one int32 per spot (PMTPositionParams.pos).
+_POSITIONS = struct.Struct(f">{PMT_PARK_LOCATION + PMT_SPOT_SLOTS}i")
+#: Firmware from before the park extension serves five locations.
+_LEGACY_POSITIONS_BYTES = 5 * 4
 
 
 def decode_stream_frame(data):
@@ -238,16 +241,24 @@ def capture_filename(kind, gain, now=None):
 
 
 def decode_pmt_positions(reply):
-    """Decode a ``GET_PARAMS`` reply for ``pmt_defaults`` into slot positions.
+    """Decode a ``GET_PARAMS`` reply for ``pmt_defaults`` into spot positions.
 
-    The reply echoes the flash key, a NUL, then the raw struct: five
-    big-endian int32 Y-axis positions in µm (the driver's
-    ``PMTPositionParams`` layout), index 0 = slot 1.
+    The reply echoes the flash key, a NUL, then the raw struct: big-endian
+    int32 Y-axis positions in µm, one per motor location (the driver's
+    ``PMTPositionParams``). Location 1 is park and is dropped, so index 0 of
+    the result is spot 1 (location 2). A five-location table from older
+    firmware is zero-padded, as the driver itself does, so its missing last
+    spot reads as unused.
     """
     raw = bytes(reply)
     blob = raw.split(b"\x00", 1)[1] if b"\x00" in raw else raw
-    if len(blob) < _POSITIONS.size:
+
+    if len(blob) < _LEGACY_POSITIONS_BYTES:
         raise ValueError(
-            f"PMT position table is {len(blob)} bytes, expected {_POSITIONS.size}"
+            f"PMT position table is {len(blob)} bytes, "
+            f"expected at least {_LEGACY_POSITIONS_BYTES}"
         )
-    return list(_POSITIONS.unpack_from(blob))
+
+    positions = _POSITIONS.unpack_from(blob.ljust(_POSITIONS.size, b"\x00"))
+
+    return list(positions[PMT_PARK_LOCATION:])

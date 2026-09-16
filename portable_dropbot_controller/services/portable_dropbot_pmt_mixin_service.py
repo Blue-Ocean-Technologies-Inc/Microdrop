@@ -61,6 +61,7 @@ from ..consts import (
     PMT_ADC_TYPES,
     PMT_CAPTURE_SUBDIR,
     PMT_GAIN_BOUNDS,
+    PMT_PARK_LOCATION,
     PMT_STREAM_AVG,
     PMT_STREAM_OSR,
     PMT_STREAM_PUBLISH_INTERVAL_S,
@@ -469,7 +470,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                     progress("move")
                     ok, location = self._proxy_call(
                         f"PMT capture: move to spot {entry.slot}",
-                        lambda: motor.pmt_ctrl(entry.slot),
+                        lambda: motor.pmt_ctrl(entry.slot + PMT_PARK_LOCATION),
                     )
 
                     if not ok or location is None:
@@ -652,6 +653,7 @@ class PortableDropbotPmtMixinService(HasTraits):
             "source": "Microdrop portable PMT capture",
             "taken": datetime.now().isoformat(timespec="seconds"),
             "slot": entry.slot,
+            "motor_location": entry.slot + PMT_PARK_LOCATION,
             "position_um": self._pmt_spot_positions.get(entry.slot, ""),
             "gain": entry.gain,
             "exposure_s": entry.exposure_s,

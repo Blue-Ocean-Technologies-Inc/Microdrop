@@ -114,7 +114,7 @@ class _Uart:
         return "abc123"
 
     def getBoardParameter(self, board, name):
-        return b"_dp_pmt\x00" + struct.pack(">5i", 1000, 0, 24500, 0, 0)
+        return b"_dp_pmt\x00" + struct.pack(">6i", 0, 1000, 0, 24500, 0, 0)
 
     def pmt_acquire_collect(self):
         self.log.append("acquire_collect")
@@ -300,11 +300,11 @@ def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
         "adc_diag",
         "led 0",
         "power 1",
-        "move 3",
+        "move 4",
         "gain 100",
         f"stream 1 {PMT_STREAM_AVG} {PMT_STREAM_OSR}",
         "stream 0 0 0",
-        "move 1",
+        "move 2",
         "gain 50",
         f"stream 1 {PMT_STREAM_AVG} {PMT_STREAM_OSR}",
         "stream 0 0 0",
@@ -466,7 +466,7 @@ def test_abort_stops_after_current_spot(published):
     done = published["done"][-1]
     assert done["aborted"] is True
     assert [r["slot"] for r in done["results"]] == [1]
-    assert "move 2" not in h.log
+    assert "move 3" not in h.log
     assert h.log[-2:] == ["power 0", "light restored"]
 
 

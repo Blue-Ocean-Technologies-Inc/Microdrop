@@ -72,8 +72,11 @@ TEMP_PID_PERIOD_MS_BOUNDS = (1, 60_000)
 PMT_GAIN_BOUNDS = (0, 255)
 DEFAULT_PMT_GAIN = 128
 
-#: Firmware slot count of the PMT position table (PMTPositionParams.pos):
-#: MotorBoardProxy.pmt_ctrl(slot) takes 1..PMT_SPOT_SLOTS.
+#: The PMT motor's firmware locations are 1..6, and location 1 is the park
+#: position (homing ends there), not a measurement spot. Spots are numbered
+#: 1..PMT_SPOT_SLOTS for the operator; spot n is motor location
+#: n + PMT_PARK_LOCATION (MotorBoardProxy.pmt_ctrl).
+PMT_PARK_LOCATION = 1
 PMT_SPOT_SLOTS = 5
 #: Stream averaging / oversampling, the driver bench UI's defaults (avg=16
 #: boxcar samples per value; osr index 6 = 64x). Measured ~23 ms per value.

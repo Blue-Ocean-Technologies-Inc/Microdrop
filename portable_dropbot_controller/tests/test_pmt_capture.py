@@ -154,8 +154,9 @@ def test_capture_filename():
     )
 
 
-def test_decode_pmt_positions_reads_five_big_endian_int32_after_the_key():
-    blob = struct.pack(">5i", 1000, 24500, 0, 61000, -5)
+def test_decode_pmt_positions_drops_the_park_location():
+    blob = struct.pack(">6i", 0, 1000, 24500, 0, 61000, -5)
+
     assert decode_pmt_positions(b"_dp_pmt\x00" + blob + b"trailing") == [
         1000,
         24500,
@@ -163,5 +164,12 @@ def test_decode_pmt_positions_reads_five_big_endian_int32_after_the_key():
         61000,
         -5,
     ]
+
+
+def test_decode_pmt_positions_pads_a_legacy_five_location_table():
+    blob = struct.pack(">5i", 0, 1000, 24500, 0, 61000)
+
+    assert decode_pmt_positions(b"_dp_pmt\x00" + blob) == [1000, 24500, 0, 61000, 0]
+
     with pytest.raises(ValueError):
         decode_pmt_positions(b"_dp_pmt\x00" + blob[:8])

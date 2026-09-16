@@ -284,7 +284,7 @@ The PMT Capture pane (`portable_dropbot_status_and_controls`) and the PMT mixin 
 
 **Spot table**
 - On `PORTABLE_DROPBOT_CONNECTED` (and the pane's Refresh button) the pane publishes `PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"` (empty message).
-- The backend reads the motor board's `pmt_defaults` flash parameter (five int32 Y positions in µm, one per `pmt_ctrl` slot) and publishes `PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"` — `PmtSpotsUpdated {spots: [{slot, position_um}]}`, non-zero slots only. The pane merges it into its rows by slot, keeping the operator's tick/gain/exposure and order. A future add/remove-spot feature only has to republish this topic.
+- The backend reads the motor board's `pmt_defaults` flash parameter (one int32 Y position in µm per motor location 1–6; location 1 is park and never offered, so spot `slot` n is `pmt_ctrl` location n + 1) and publishes `PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"` — `PmtSpotsUpdated {spots: [{slot, position_um}]}`, non-zero slots only. The pane merges it into its rows by slot, keeping the operator's tick/gain/exposure and order. A future add/remove-spot feature only has to republish this topic.
 
 **ADC query**
 - The pane publishes `PMT_ADC_QUERY = "portable_dropbot/requests/pmt_adc_query"` (empty message) on connect, so the pane's conversion (counts -> volts -> amps) has a real full scale before the operator does anything.
