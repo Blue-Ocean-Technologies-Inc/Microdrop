@@ -129,3 +129,44 @@ def test_spots_updated_round_trips_through_json():
 def test_capture_done_defaults():
     done = PmtCaptureDone(ok=False, aborted=False, directory="", results=[])
     assert done.error == ""
+    assert done.request_id == ""
+    assert done.label == ""
+
+
+def test_capture_request_defaults_request_id_label_stop_live_stream():
+    request = PmtCaptureRequest(
+        entries=[PmtCaptureEntry(slot=1, gain=10, exposure_s=1.0)]
+    )
+    assert request.request_id == ""
+    assert request.label == ""
+    assert request.stop_live_stream is False
+
+
+def test_capture_request_rejects_invalid_label():
+    PmtCaptureRequest(
+        entries=[PmtCaptureEntry(slot=1, gain=10, exposure_s=1.0)],
+        label="step1.2-end",
+    )
+    with pytest.raises(ValidationError):
+        PmtCaptureRequest(
+            entries=[PmtCaptureEntry(slot=1, gain=10, exposure_s=1.0)],
+            label="bad label!",
+        )
+    with pytest.raises(ValidationError):
+        PmtCaptureRequest(
+            entries=[PmtCaptureEntry(slot=1, gain=10, exposure_s=1.0)],
+            label="x" * 65,
+        )
+
+
+def test_capture_done_echoes_request_id_and_label():
+    done = PmtCaptureDone(
+        ok=True,
+        aborted=False,
+        directory="d",
+        results=[],
+        request_id="row-uuid:end",
+        label="step1.2-end",
+    )
+    assert done.request_id == "row-uuid:end"
+    assert done.label == "step1.2-end"

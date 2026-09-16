@@ -118,6 +118,19 @@ PMT_ADC_TYPES = {
 PMT_ACQUIRE_SAMPLE_RATE_HZ = 1000
 #: Capture output folder under the experiment directory.
 PMT_CAPTURE_SUBDIR = "captures/pmt"
+#: A capture label goes into CSV file names, so only filename-safe characters
+#: (a regex character-class body) and a bounded length.
+PMT_CAPTURE_LABEL_CHARS = "A-Za-z0-9._-"
+PMT_CAPTURE_LABEL_PATTERN = rf"^[{PMT_CAPTURE_LABEL_CHARS}]*$"
+PMT_CAPTURE_LABEL_MAX_LENGTH = 64
+#: A protocol step waits for its capture for the summed exposures plus this
+#: much per spot (PMT move up to 30 s, gain, stream start/stop and CSV write)
+#: plus a fixed margin, before the step fails as unacknowledged.
+PMT_STEP_PER_SPOT_OVERHEAD_S = 35.0
+PMT_STEP_TIMEOUT_MARGIN_S = 15.0
+#: A step's capture stops a running live stream first; how long to wait for
+#: the stream's teardown (stream stop + power off) before refusing anyway.
+PMT_STREAM_PREEMPT_TIMEOUT_S = 10.0
 
 #: Protocol-step contracts (portable_dropbot_protocol_controls drives
 #: these). The heater channel a protocol's temperature column targets:
@@ -365,6 +378,32 @@ class PmtCaptureRequest(PmtStreamSettings):
     """Capture order is list order; only ticked spots are sent."""
 
     entries: list[PmtCaptureEntry]
+    #: Echoed on PmtCaptureDone so a protocol step waits for its own capture
+    #: only; empty for pane-initiated captures.
+    request_id: str = ""
+    #: Filename-safe tag prefixed onto the CSV names (e.g. "step1.2-end").
+    label: str = Field(
+        default="",
+        pattern=PMT_CAPTURE_LABEL_PATTERN,
+        max_length=PMT_CAPTURE_LABEL_MAX_LENGTH,
+    )
+    #: Stop a running live stream and capture, instead of refusing — protocol
+    #: steps set it; the pane keeps the refusal.
+    stop_live_stream: bool = False
+
+
+class PmtStepCaptureEntry(PmtCaptureEntry):
+    """One spot of a protocol step's PMT setup: captured at the step's start,
+    its end, or both. An entry with neither tick is dropped on write."""
+
+    at_start: bool = False
+    at_end: bool = False
+
+
+class PmtStepCapture(PmtStreamSettings):
+    """The value of a step's PMT capture cell; list order is capture order."""
+
+    entries: list[PmtStepCaptureEntry] = []
 
 
 class PmtStreamRequest(PmtStreamSettings):
@@ -462,6 +501,9 @@ class PmtCaptureDone(BaseModel):
     #: current the files carry.
     adc_full_scale: int = PMT_ADC_FULL_SCALE
     rf_ohms: float = PMT_RF_OHMS
+    #: The request's request_id and label, echoed on success and refusal alike.
+    request_id: str = ""
+    label: str = ""
     error: str = ""
 
 

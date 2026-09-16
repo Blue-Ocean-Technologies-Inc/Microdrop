@@ -28,3 +28,8 @@ SET_MAGNET_FIELD_ID = "set_magnet"
 #: the heater on this step, or leave it untouched (no setpoint publish,
 #: no reached-ack wait).
 SET_TEMPERATURE_FIELD_ID = "set_temperature"
+
+#: The PMT capture column (row trait / protocol-file key). Its cell holds a
+#: PmtStepCapture dict or None; the PMT Capture pane writes it over
+#: PROTOCOL_TREE_SET_CELL, so the pane imports this id.
+PMT_CAPTURE_COLUMN_ID = "pmt_capture"
