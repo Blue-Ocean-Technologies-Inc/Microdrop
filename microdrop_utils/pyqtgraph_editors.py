@@ -42,7 +42,10 @@ class _LivePlotEditor(QtEditor):
 
     def init(self, parent):
         self._plot = pg.PlotWidget()
-        self._plot.setMinimumHeight(self.factory.min_height)
+        # Fixed height: an expanding plot would soak up every pixel the
+        # dock pane gains, growing and shrinking as other groups toggle.
+        self._plot.setFixedHeight(self.factory.height)
+        self._plot.setMinimumWidth(self.factory.min_width)
         self._plot.setLabel("bottom", self.factory.x_label)
         self._curve = self._plot.plot(pen="y")
 
@@ -64,6 +67,9 @@ class _LivePlotEditor(QtEditor):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(toolbar)
         layout.addWidget(self._plot)
+        self.control.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
 
         self.sync_value(self.factory.y_label, "y_label_value", mode="from")
         self._plot.setLabel("left", self.y_label_value)
@@ -104,4 +110,6 @@ class LivePlotEditor(BasicEditorFactory):
 
     y_label = Str()
     x_label = Str("sample")
-    min_height = Int(180)
+    #: Fixed plot height (px); the width fills the pane down to min_width.
+    height = Int(220)
+    min_width = Int(320)
