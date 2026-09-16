@@ -69,7 +69,10 @@ class PmtCaptureController(Controller):
     def _refresh_spots(self, event):
         publish_message(topic=PMT_SPOTS_READ, message="")
 
-    @observe("model:exposure_deadline")
+    # dispatch="ui": the deadline is set by the message handler on a Dramatiq
+    # worker thread, and a Qt timer created or started there never fires —
+    # that thread has no event loop.
+    @observe("model:exposure_deadline", dispatch="ui")
     def _run_exposure_countdown(self, event):
         # Tick only while a spot's exposure is counting down.
         if event.new:
