@@ -441,7 +441,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                     aborted = True
                     break
 
-                def progress(stage, detail=""):
+                def progress(stage, detail="", exposure_s=0.0):
                     pmt_capture_progress_publisher.publish(
                         {
                             "index": index,
@@ -449,6 +449,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                             "slot": entry.slot,
                             "stage": stage,
                             "detail": detail,
+                            "exposure_s": exposure_s,
                         }
                     )
 
@@ -485,7 +486,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                     if not ok or not set_ok:
                         raise RuntimeError(f"gain {entry.gain}: no reply")
 
-                    progress("stream")
+                    progress("stream", exposure_s=entry.exposure_s)
                     # Subscribe before the start so no frame is missed.
                     uart.subscribe(DroSIGCmd.CMD_PMT_STREAM_DATA, assembler.feed)
                     started = time.monotonic()

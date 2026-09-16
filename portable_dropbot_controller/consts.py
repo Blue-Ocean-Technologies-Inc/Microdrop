@@ -431,6 +431,9 @@ class PmtCaptureProgress(BaseModel):
     #: "move" | "gain" | "stream" | "saved" | "failed"
     stage: str
     detail: str = ""
+    #: On the "stream" stage, the exposure about to run, so the pane can
+    #: count it down; 0 on every other stage.
+    exposure_s: float = 0.0
 
 
 class PmtSpotResult(BaseModel):
