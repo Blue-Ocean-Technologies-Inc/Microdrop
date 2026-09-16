@@ -8,9 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Tests for the PMT capture helpers: stream packet assembly, cadence
-calibration, stats, the bench-compatible CSV, and the position-table decode.
-Pure functions, no driver, no hardware."""
+"""Tests for the PMT capture helpers: frame decode, stream packet assembly
+(capture and live), cadence calibration, stats, the bench-compatible CSV,
+and the position-table decode. Pure functions, no driver, no hardware."""
 
 # Standard library imports.
 import csv
@@ -22,11 +22,13 @@ import pytest
 
 # Microdrop package imports.
 from portable_dropbot_controller.pmt_capture import (
+    LiveStreamBuffer,
     StreamAssembler,
     calibrate_period,
     capture_filename,
     capture_stats,
     decode_pmt_positions,
+    decode_stream_frame,
     write_capture_csv,
 )
 
@@ -35,6 +37,33 @@ def _packet(idx, values):
     return struct.pack("<HH", idx, len(values)) + struct.pack(
         f"<{len(values)}H", *values
     )
+
+
+def test_decode_stream_frame_returns_index_and_values():
+    assert decode_stream_frame(_packet(3, [10, 20, 30])) == (3, (10, 20, 30))
+
+
+def test_decode_stream_frame_rejects_short_or_empty_frames():
+    assert decode_stream_frame(b"\x00\x01") is None
+    assert decode_stream_frame(struct.pack("<HH", 0, 0)) is None
+    assert decode_stream_frame(struct.pack("<HH", 0, 4) + b"\x00\x00") is None
+
+
+def test_live_stream_buffer_drains_and_resets():
+    buf = LiveStreamBuffer()
+    assert buf.feed(0x123F, _packet(0, [1, 2])) is True
+    assert buf.feed(0x123F, _packet(1, [3, 4, 5])) is True
+    samples, packets = buf.drain()
+    assert samples == [1, 2, 3, 4, 5]
+    assert packets == 2
+    # Draining resets both counters.
+    assert buf.drain() == ([], 0)
+
+
+def test_live_stream_buffer_ignores_undecodable_frames():
+    buf = LiveStreamBuffer()
+    assert buf.feed(0x123F, b"\x00\x01") is False
+    assert buf.drain() == ([], 0)
 
 
 def test_assembler_keeps_samples_in_packet_order():
@@ -117,7 +146,12 @@ def test_write_capture_csv_preamble_and_columns(tmp_path):
 
 def test_capture_filename():
     now = datetime(2026, 9, 8, 14, 5, 9)
-    assert capture_filename(3, 128, now) == "pmt_spot3_20260908-140509_gain128.csv"
+    assert (
+        capture_filename("spot3", 128, now) == "pmt_spot3_20260908-140509_gain128.csv"
+    )
+    assert (
+        capture_filename("acquire", 50, now) == "pmt_acquire_20260908-140509_gain50.csv"
+    )
 
 
 def test_decode_pmt_positions_reads_five_big_endian_int32_after_the_key():

@@ -8,7 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Pure helpers for the portable PMT capture routine.
+"""Pure helpers for the portable PMT sessions: the multi-spot capture, the
+PMT Capture pane's live stream, and the buffered acquire. All three claim
+the same hardware in turn (see the mixin service's shared claim) but each
+has its own sample-collection shape here:
+
+- ``StreamAssembler`` — a capture spot's whole exposure, kept in strict
+  packet order with duplicate/wrap handling, for ``calibrate_period`` and
+  the CSV.
+- ``LiveStreamBuffer`` — the live stream's samples between one publish
+  tick and the next; no ordering or duplicate bookkeeping needed, a
+  dropped frame just skips part of one UI update.
+- the buffered acquire has no assembler here — its packets come back
+  through the driver's own collector (``uart.pmt_acquire_collect``), which
+  returns a complete ``PmtCapture`` in one call.
 
 Ported from the driver bench UI (``dropbot_portable.ui.tabs.pmt_tab``),
 whose stats and CSV writer are module-level but live in a Qt module and
@@ -42,6 +55,22 @@ _HEADER = struct.Struct("<HH")
 _POSITIONS = struct.Struct(f">{PMT_SPOT_SLOTS}i")
 
 
+def decode_stream_frame(data):
+    """Decode one ``CMD_PMT_STREAM_DATA`` frame; return ``(idx, values)``,
+    or ``None`` when the frame is too short or its declared count doesn't
+    fit the payload — a torn or truncated frame, never valid data."""
+
+    if len(data) < _HEADER.size:
+        return None
+
+    idx, n = _HEADER.unpack_from(data)
+
+    if not n or len(data) < _HEADER.size + 2 * n:
+        return None
+
+    return idx, struct.unpack_from(f"<{n}H", data, _HEADER.size)
+
+
 class StreamAssembler:
     """Assemble one stream session's frames into an ordered sample list.
 
@@ -65,13 +94,15 @@ class StreamAssembler:
 
     def feed(self, cmd, data, now=None):
         """Record one frame; return True when it added samples."""
-        if len(data) < _HEADER.size:
+        decoded = decode_stream_frame(data)
+
+        if decoded is None:
             return False
-        idx, n = _HEADER.unpack_from(data)
-        if not n or len(data) < _HEADER.size + 2 * n:
-            return False
-        values = struct.unpack_from(f"<{n}H", data, _HEADER.size)
+
+        idx, values = decoded
+        n = len(values)
         arrival = time.monotonic() if now is None else now
+
         with self._lock:
             prev = self._last_idx
             if prev >= 0 and prev - idx > _WRAP_THRESHOLD:
@@ -98,6 +129,47 @@ class StreamAssembler:
         """Return copies of (samples, per-sample absolute index, arrivals)."""
         with self._lock:
             return list(self._samples), list(self._sample_index), list(self._arrivals)
+
+
+class LiveStreamBuffer:
+    """Accumulate one live-stream session's frames between publish ticks.
+
+    ``feed`` is the transport subscriber callback and runs on the RX
+    thread; ``drain`` runs on the publish loop's thread, so state is
+    guarded by a lock. Unlike ``StreamAssembler`` there is no duplicate or
+    wrap tracking: a dropped or aliased live frame only skips part of one
+    UI update, which isn't worth the bookkeeping a recorded capture needs.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._samples = []
+        self._packets = 0
+
+    def feed(self, cmd, data):
+        """Record one frame; return True when it added samples."""
+        decoded = decode_stream_frame(data)
+
+        if decoded is None:
+            return False
+
+        _idx, values = decoded
+
+        with self._lock:
+            self._samples.extend(values)
+            self._packets += 1
+
+        return True
+
+    def drain(self):
+        """Return (samples, packets) collected since the last drain, and
+        reset both counters."""
+        with self._lock:
+            samples, packets = self._samples, self._packets
+            self._samples = []
+            self._packets = 0
+
+        return samples, packets
 
 
 def calibrate_period(assembler, avg):
@@ -155,10 +227,14 @@ def write_capture_csv(path, samples, times_s, meta):
     return len(samples)
 
 
-def capture_filename(slot, gain, now=None):
-    """``pmt_spot<slot>_<YYYYmmdd-HHMMSS>_gain<gain>.csv``."""
+def capture_filename(kind, gain, now=None):
+    """``pmt_<kind>_<YYYYmmdd-HHMMSS>_gain<gain>.csv``.
+
+    The capture routine passes ``f"spot{slot}"`` (unchanged from before
+    ``kind`` existed); the buffered acquire passes ``"acquire"``.
+    """
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
-    return f"pmt_spot{slot}_{stamp}_gain{gain}.csv"
+    return f"pmt_{kind}_{stamp}_gain{gain}.csv"
 
 
 def decode_pmt_positions(reply):

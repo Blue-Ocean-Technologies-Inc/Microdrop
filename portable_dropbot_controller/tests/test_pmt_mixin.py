@@ -8,16 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Behaviour of the PMT capture routine against a scripted session: call
-order, guaranteed teardown, CSV output, and the done/progress payloads.
-The mixin is composed onto a stub base that stands in for the controller
-base's proxy helpers. No Redis: the validated publishers are patched, but
-the payloads they receive are still round-tripped through the Task 1
-pydantic models, so a renamed or missing field fails here too."""
+"""Behaviour of the three PMT sessions (capture, live stream, buffered
+acquire) against a scripted session: call order, the shared claim's
+refusals, guaranteed teardown, CSV output, and the done/progress/updated
+payloads. The mixin is composed onto a stub base that stands in for the
+controller base's proxy helpers. No Redis: the validated publishers are
+patched, but the payloads they receive are still round-tripped through
+the pydantic models, so a renamed or missing field fails here too."""
 
 # Standard library imports.
 import json
 import struct
+import time
+from pathlib import Path
 
 # Third-party imports.
 import pytest
@@ -27,11 +30,16 @@ from traits.api import Any, HasTraits, List
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
+    PMT_ADC_FULL_SCALE,
+    PMT_RF_OHMS,
     PMT_STREAM_AVG,
     PMT_STREAM_OSR,
+    PmtAcquireDone,
+    PmtAdcUpdated,
     PmtCaptureDone,
     PmtCaptureProgress,
     PmtSpotsUpdated,
+    PmtStreamUpdated,
 )
 from portable_dropbot_controller.services import (
     portable_dropbot_pmt_mixin_service as mod,
@@ -47,10 +55,50 @@ def _frame(idx, values):
     )
 
 
+class _PmtCapture:
+    """Stand-in for the driver's PmtCapture: the fields the buffered
+    acquire reads (samples/n_received/n_expected/missing/aborted/busy/
+    error/complete)."""
+
+    def __init__(
+        self,
+        samples,
+        n_expected=None,
+        missing=None,
+        aborted=False,
+        busy=False,
+        error=None,
+    ):
+        self.samples = samples
+        self.n_received = len(samples)
+        self.n_expected = n_expected if n_expected is not None else len(samples)
+        self.missing = missing or []
+        self.aborted = aborted
+        self.busy = busy
+        self.error = error
+
+    @property
+    def complete(self):
+        return (
+            self.error is None
+            and not self.aborted
+            and self.n_expected > 0
+            and self.n_received >= self.n_expected
+        )
+
+
+class _AdcDiagReply:
+    def __init__(self, adc_type):
+        self.adc_type = adc_type
+
+
 class _Uart:
     def __init__(self, log):
         self.log = log
         self.subscribers = {}
+        #: What the buffered acquire's collector returns; tests override
+        #: this per case.
+        self.acquire_capture = _PmtCapture([100, 200, 300])
 
     def subscribe(self, cmd, callback):
         self.subscribers[cmd] = callback
@@ -68,15 +116,27 @@ class _Uart:
     def getBoardParameter(self, board, name):
         return b"_dp_pmt\x00" + struct.pack(">5i", 1000, 0, 24500, 0, 0)
 
+    def pmt_acquire_collect(self):
+        self.log.append("acquire_collect")
+        return self.acquire_capture
+
 
 class _Sig:
-    def __init__(self, log, uart, stream_start_reply=object(), fail_starts=0):
+    def __init__(
+        self, log, uart, stream_start_reply=object(), fail_starts=0, adc_type=2
+    ):
         self.log = log
         self.uart = uart
         self.stream_start_reply = stream_start_reply
         #: Number of upcoming stream-start calls that answer with no
         #: reply before returning `stream_start_reply` as normal.
         self.fail_starts = fail_starts
+        #: spi_adc_diag's reply code; 2 = ADS7076 (the assumed default).
+        self.adc_type = adc_type
+
+    def spi_adc_diag(self):
+        self.log.append("adc_diag")
+        return _AdcDiagReply(self.adc_type)
 
     def pmt_power(self, enable):
         self.log.append(f"power {enable}")
@@ -114,9 +174,9 @@ class _Motor:
 
 
 class _Session:
-    def __init__(self, log, stream_start_reply=object(), fail_starts=0):
+    def __init__(self, log, stream_start_reply=object(), fail_starts=0, adc_type=2):
         self.uart = _Uart(log)
-        self.sig = _Sig(log, self.uart, stream_start_reply, fail_starts)
+        self.sig = _Sig(log, self.uart, stream_start_reply, fail_starts, adc_type)
         self.motor = _Motor(log)
 
 
@@ -142,7 +202,15 @@ class _Harness(PortableDropbotPmtMixinService, _Base):
 
 @pytest.fixture
 def published(monkeypatch, tmp_path):
-    out = {"progress": [], "done": [], "spots": [], "pmt": []}
+    out = {
+        "progress": [],
+        "done": [],
+        "spots": [],
+        "pmt": [],
+        "stream": [],
+        "adc": [],
+        "acquire": [],
+    }
     monkeypatch.setattr(
         mod.pmt_capture_progress_publisher,
         "publish",
@@ -162,6 +230,25 @@ def published(monkeypatch, tmp_path):
         "publish",
         lambda p, **k: out["spots"].append(
             PmtSpotsUpdated.model_validate(p).model_dump()
+        ),
+    )
+    monkeypatch.setattr(
+        mod.pmt_stream_updated_publisher,
+        "publish",
+        lambda p, **k: out["stream"].append(
+            PmtStreamUpdated.model_validate(p).model_dump()
+        ),
+    )
+    monkeypatch.setattr(
+        mod.pmt_adc_updated_publisher,
+        "publish",
+        lambda p, **k: out["adc"].append(PmtAdcUpdated.model_validate(p).model_dump()),
+    )
+    monkeypatch.setattr(
+        mod.pmt_acquire_done_publisher,
+        "publish",
+        lambda p, **k: out["acquire"].append(
+            PmtAcquireDone.model_validate(p).model_dump()
         ),
     )
     monkeypatch.setattr(
@@ -210,6 +297,7 @@ def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
         ),
     )
     assert h.log == [
+        "adc_diag",
         "led 0",
         "power 1",
         "move 3",
@@ -286,9 +374,29 @@ def test_second_request_while_running_is_refused(published):
             "aborted": False,
             "directory": "",
             "results": [],
-            "error": "a PMT capture is already running",
+            "adc_full_scale": PMT_ADC_FULL_SCALE,
+            "rf_ohms": PMT_RF_OHMS,
+            "error": "a PMT capture is running",
         }
     ]
+    assert h.log == []
+
+
+def test_capture_refused_while_streaming(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_streaming = True
+    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    assert published["done"][-1]["error"] == "the live stream is running"
+    assert h.log == []
+
+
+def test_capture_refused_while_acquiring(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_acquiring = True
+    h.on_pmt_capture_request(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    assert published["done"][-1]["error"] == "a buffered acquire is running"
     assert h.log == []
 
 
@@ -360,3 +468,215 @@ def test_abort_stops_after_current_spot(published):
     assert [r["slot"] for r in done["results"]] == [1]
     assert "move 2" not in h.log
     assert h.log[-2:] == ["power 0", "light restored"]
+
+
+def test_adc_query_stores_full_scale_and_feeds_capture_meta(published, tmp_path):
+    h = _Harness()
+    h.proxy = _Session(h.log, adc_type=1)  # ADC128S052, 4096 counts
+    h.on_pmt_adc_query_request("")
+    assert published["adc"] == [
+        {"adc_type": 1, "name": "ADC128S052 (12-bit)", "full_scale": 4096, "error": ""}
+    ]
+    assert h._pmt_adc_full_scale == 4096
+
+    # A subsequent capture's meta and done payload carry the queried scale.
+    _run(h, _request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    done = published["done"][-1]
+    assert done["adc_full_scale"] == 4096
+    csv_text = Path(done["results"][0]["csv_path"]).read_text()
+    assert "# adc_full_scale=4096" in csv_text.splitlines()
+
+
+def test_adc_query_reports_unknown_type_with_zero_full_scale(published):
+    h = _Harness()
+    h.proxy = _Session(h.log, adc_type=3)
+    h.on_pmt_adc_query_request("")
+    assert published["adc"] == [
+        {"adc_type": 3, "name": "unknown (3)", "full_scale": 0, "error": ""}
+    ]
+    # An unknown reading never overwrites the last known-good full scale.
+    assert h._pmt_adc_full_scale == PMT_ADC_FULL_SCALE
+
+
+def test_adc_query_refused_while_a_session_is_running(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_capturing = True
+    h.on_pmt_adc_query_request("")
+    assert published["adc"][-1] == {
+        "adc_type": -1,
+        "name": "",
+        "full_scale": 0,
+        "error": "a PMT capture is running",
+    }
+    assert h.log == []
+
+
+def _wait_for_stream_batch(published, timeout=2.0):
+    """Poll for the live-stream thread's first non-empty batch instead of
+    sleeping a fixed amount; PMT_STREAM_PUBLISH_INTERVAL_S is patched down
+    to keep this fast."""
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        if any(p["samples"] for p in published["stream"]):
+            return
+
+        time.sleep(0.005)
+
+    pytest.fail("no live-stream batch published in time")
+
+
+def test_live_stream_batches_then_stop_tears_down(published, monkeypatch):
+    monkeypatch.setattr(mod, "PMT_STREAM_PUBLISH_INTERVAL_S", 0.01)
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.on_pmt_stream_start_request(json.dumps({"gain": 77, "avg": 16, "osr": 6}))
+    assert h._pmt_streaming is True
+
+    # Wait for a batch before inspecting the list: the ack (published
+    # before the while loop starts) is guaranteed to already be there —
+    # both are appended in order by the same background thread — but the
+    # ack alone can race this assertion right after `start` returns.
+    _wait_for_stream_batch(published)
+    assert published["stream"][0] == {
+        "streaming": True,
+        "avg": 16,
+        "osr": 6,
+        "samples": [],
+        "packets": 0,
+        "error": "",
+    }
+
+    h.on_pmt_stream_stop_request("")
+    h._pmt_stream_thread.join(timeout=5)
+
+    assert h._pmt_streaming is False
+    assert h._pmt_stream_stop_event is None
+    assert published["stream"][-1]["streaming"] is False
+    assert published["stream"][-1]["error"] == ""
+    assert h.proxy.uart.subscribers == {}
+    assert "power 0" in h.log
+    assert h.log[-1] == "light restored"
+
+
+def test_live_stream_start_while_running_is_a_live_update(published, monkeypatch):
+    monkeypatch.setattr(mod, "PMT_STREAM_PUBLISH_INTERVAL_S", 0.01)
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.on_pmt_stream_start_request(json.dumps({"gain": 10, "avg": 16, "osr": 6}))
+    _wait_for_stream_batch(published)
+
+    h.on_pmt_stream_start_request(json.dumps({"gain": 20, "avg": 32, "osr": 3}))
+    # A membership check, not `[-1]`: the background thread's own batch
+    # loop keeps publishing concurrently and may append after this ack.
+    assert {
+        "streaming": True,
+        "avg": 32,
+        "osr": 3,
+        "samples": [],
+        "packets": 0,
+        "error": "",
+    } in published["stream"]
+    assert "gain 20" in h.log
+    assert "stream 1 32 3" in h.log
+    # Still one session: no second thread/claim was taken.
+    assert h._pmt_streaming is True
+
+    h.on_pmt_stream_stop_request("")
+    h._pmt_stream_thread.join(timeout=5)
+
+
+def test_live_stream_refused_while_capturing(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_capturing = True
+    h.on_pmt_stream_start_request(json.dumps({"gain": 10}))
+    assert published["stream"] == [
+        {
+            "streaming": False,
+            "avg": PMT_STREAM_AVG,
+            "osr": PMT_STREAM_OSR,
+            "samples": [],
+            "packets": 0,
+            "error": "a PMT capture is running",
+        }
+    ]
+    assert h.log == []
+
+
+def test_live_stream_stop_with_no_stream_running_is_a_no_op(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.on_pmt_stream_stop_request("")
+    assert published["stream"] == []
+
+
+def test_acquire_writes_csv_and_publishes_stats(published, tmp_path):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.proxy.uart.acquire_capture = _PmtCapture([10, 20, 30, 40])
+    h.on_pmt_acquire_request(json.dumps({"gain": 90}))
+    h._pmt_acquire_thread.join(timeout=5)
+
+    done = published["acquire"][-1]
+    assert done["ok"] is True
+    assert done["gain"] == 90
+    assert done["n_samples"] == 4
+    assert done["mean_counts"] == pytest.approx(25.0)
+    assert done["packets_received"] == 4 and done["packets_expected"] == 4
+    assert done["csv_path"] != ""
+    assert Path(done["csv_path"]).exists()
+    assert "adc_diag" in h.log
+    assert "acquire_collect" in h.log
+    assert "power 0" in h.log
+    assert h.log[-1] == "light restored"
+    assert h._pmt_acquiring is False
+
+
+def test_acquire_incomplete_collect_is_not_ok_but_still_saves(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.proxy.uart.acquire_capture = _PmtCapture([1, 2, 3], n_expected=10)
+    h.on_pmt_acquire_request(json.dumps({"gain": 5}))
+    h._pmt_acquire_thread.join(timeout=5)
+
+    done = published["acquire"][-1]
+    assert done["ok"] is False
+    assert done["csv_path"] != ""
+    assert "incomplete" in done["error"]
+
+
+def test_acquire_refused_while_capturing(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_capturing = True
+    h.on_pmt_acquire_request(json.dumps({"gain": 50}))
+    assert published["acquire"] == [
+        {
+            "ok": False,
+            "gain": 50,
+            "n_samples": 0,
+            "mean_counts": 0.0,
+            "sd_counts": 0.0,
+            "min_counts": 0,
+            "max_counts": 0,
+            "packets_received": 0,
+            "packets_expected": 0,
+            "adc_full_scale": PMT_ADC_FULL_SCALE,
+            "rf_ohms": PMT_RF_OHMS,
+            "csv_path": "",
+            "error": "a PMT capture is running",
+        }
+    ]
+    assert h.log == []
+
+
+def test_acquire_old_single_gain_payload_still_validates(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.on_pmt_acquire_request(json.dumps({"gain": 42}))
+    h._pmt_acquire_thread.join(timeout=5)
+    done = published["acquire"][-1]
+    assert done["gain"] == 42
+    assert done["rf_ohms"] == pytest.approx(PMT_RF_OHMS)
