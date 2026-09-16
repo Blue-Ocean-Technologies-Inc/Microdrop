@@ -112,6 +112,11 @@ PMT_LIVE_WINDOW_SAMPLES = 3000
 PMT_SPOT_TABLE_MIN_HEIGHT = 230
 PMT_RESULTS_TABLE_MIN_HEIGHT = 190
 
+#: The live plot keeps a fixed height so toggling other groups never resizes
+#: it; its width fills the pane down to this minimum (px).
+PMT_LIVE_PLOT_HEIGHT = 220
+PMT_LIVE_PLOT_MIN_WIDTH = 320
+
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.
 MM_TO_FIRMWARE_UNITS = 1000

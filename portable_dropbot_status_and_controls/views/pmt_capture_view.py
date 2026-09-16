@@ -48,7 +48,12 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Local imports.
-from ..consts import PMT_RESULTS_TABLE_MIN_HEIGHT, PMT_SPOT_TABLE_MIN_HEIGHT
+from ..consts import (
+    PMT_LIVE_PLOT_HEIGHT,
+    PMT_LIVE_PLOT_MIN_WIDTH,
+    PMT_RESULTS_TABLE_MIN_HEIGHT,
+    PMT_SPOT_TABLE_MIN_HEIGHT,
+)
 
 #: Boxcar averaging choices as "N (rate Hz)" — the value rate is the
 #: firmware's raw 1 kHz stream divided by N. The "i:" prefix keeps
@@ -75,10 +80,22 @@ _hint_label = HtmlLabelEditor(
 #: the selected row and define capture order.
 pmt_spot_table = TableEditor(
     columns=[
-        ObjectColumn(name="label", label="Spot", editable=False),
+        # Sized to its text so "Spot n · xx.xx mm" is never elided.
+        ObjectColumn(
+            name="label",
+            label="Spot",
+            editable=False,
+            resize_mode="resize_to_contents",
+        ),
         CheckboxColumn(name="capture", label="Capture"),
         ObjectColumn(name="gain", label="Gain"),
-        ObjectColumn(name="exposure_s", label="Exposure (s)", format="%.1f"),
+        # The last column takes all the remaining width.
+        ObjectColumn(
+            name="exposure_s",
+            label="Exposure (s)",
+            format="%.1f",
+            resize_mode="stretch",
+        ),
     ],
     reorderable=True,
     show_toolbar=True,
@@ -171,7 +188,14 @@ live = VGroup(
         ),
         Item("live_units", label="Units"),
         Item("live_summary", style="readonly", label="Live"),
-        UItem("live_values", editor=LivePlotEditor(y_label="live_axis_label")),
+        UItem(
+            "live_values",
+            editor=LivePlotEditor(
+                y_label="live_axis_label",
+                height=PMT_LIVE_PLOT_HEIGHT,
+                min_width=PMT_LIVE_PLOT_MIN_WIDTH,
+            ),
+        ),
         Item("acquire_summary", style="readonly", label="Acquire"),
         visible_when="show_live",
     ),
