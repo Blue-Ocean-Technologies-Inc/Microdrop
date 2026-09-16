@@ -340,6 +340,12 @@ class ActiveRowCheckboxColumn(ActiveRowColumnMixin, CustomCheckboxColumn):
     """Glyph checkbox column with the active-row highlight (the stock
     CheckboxColumn renderer paints its own background, so it cannot)."""
 
+    def traits_init(self):
+        super().traits_init()
+        # The glyph toggles in on_click; an editable column would also open
+        # TraitsUI's own checkbox editor over the cell on the same click.
+        self.editable = False
+
 
 class EditBlankingColumn(ObjectColumn):
     """ObjectColumn whose in-cell editor *replaces* rather than overlaps the
