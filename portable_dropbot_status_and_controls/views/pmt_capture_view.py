@@ -88,6 +88,13 @@ _hint_label = HtmlLabelEditor(
     template='<span style="color:#888; font-style:italic;">{}</span>'
 )
 
+#: Both spot tables' exposure cell: a slider stepping in PMT_EXPOSURE_S_STEP.
+_exposure_slider = SteppedSliderEditor(
+    low=PMT_EXPOSURE_S_BOUNDS[0],
+    high=PMT_EXPOSURE_S_BOUNDS[1],
+    step=PMT_EXPOSURE_S_STEP,
+)
+
 #: One row per configured spot; the toolbar's move up/down buttons act on
 #: the selected row and define capture order. The spot a running capture is
 #: on is highlighted like the protocol tree's executing step.
@@ -111,11 +118,7 @@ pmt_spot_table_manual = TableEditor(
             label="Exposure (s)",
             format="%.1f",
             resize_mode="stretch",
-            editor=SteppedSliderEditor(
-                low=PMT_EXPOSURE_S_BOUNDS[0],
-                high=PMT_EXPOSURE_S_BOUNDS[1],
-                step=PMT_EXPOSURE_S_STEP,
-            ),
+            editor=_exposure_slider,
         ),
     ],
     reorderable=True,
@@ -145,6 +148,7 @@ pmt_spot_table_attached = TableEditor(
             label="Exposure (s)",
             format="%.1f",
             resize_mode="stretch",
+            editor=_exposure_slider,
         ),
     ],
     reorderable=True,
