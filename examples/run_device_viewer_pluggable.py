@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import contextlib
 import os
 import signal
@@ -15,9 +16,11 @@ import sys
 import time
 from functools import partial
 
+# Enthought library imports.
 from envisage.ui.tasks.tasks_application import TasksApplication
 from pyface.qt.QtWidgets import QApplication
 
+# Microdrop utils imports.
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
 
 microdrop_runner_setup()
@@ -111,7 +114,13 @@ def main(plugins, contexts, application, persist):
                 time.sleep(0.001)
 
 
-if __name__ == "__main__":
+def cli():
+    """Parse the command line and run the selected plugin layers.
+
+    Also the target of the ``microdrop`` console script, which is how a packed
+    install (no source checkout to run this file from) launches the app.
+    """
+
     # Required before anything spawns a process on Windows,
     # and a no-op elsewhere.
     import multiprocessing
@@ -188,3 +197,7 @@ if __name__ == "__main__":
         application=FRONTEND_APPLICATION if has_frontend else BACKEND_APPLICATION,
         persist=not has_frontend,
     )
+
+
+if __name__ == "__main__":
+    cli()
