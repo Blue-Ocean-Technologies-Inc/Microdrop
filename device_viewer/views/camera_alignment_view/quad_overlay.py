@@ -17,16 +17,13 @@ Used in two places: the start-point picker dialog (over the captured
 camera frame, in camera-pixel coordinates) and the endpoint
 viewer/adjuster (over the device scene, in scene coordinates)."""
 
+# Third-party imports.
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsPolygonItem
 
-# The endpoint look (defaults — each overlay can be restyled live):
-# orange frame, deeper-orange dots with a white ring so they stay
-# conspicuous over any feed. ALIGNMENT_SNAP_RADIUS_PX is the distance
-# (in VIEW pixels, zoom-aware like the handles themselves) within
-# which a dragged handle snaps onto a snap point.
+# Local imports.
 from ...consts import (
     ALIGNMENT_FRAME_WIDTH_PX,
     ALIGNMENT_HANDLE_COLOR_HEX,
@@ -38,9 +35,16 @@ from ...consts import (
     ALIGNMENT_SNAP_MARKER_SIZE_PX,
     ALIGNMENT_SNAP_RADIUS_PX,
 )
+from ...utils.snapping import nearest_point_index_within, scene_view_scale
 
-# NB: import stays above SnapPointMarkersItem — its default argument
-# needs ALIGNMENT_SNAP_MARKER_SIZE_PX at class-definition time.
+# The ALIGNMENT_* consts are the endpoint look (defaults — each overlay
+# can be restyled live): orange frame, deeper-orange dots with a white
+# ring so they stay conspicuous over any feed. ALIGNMENT_SNAP_RADIUS_PX
+# is the distance (in VIEW pixels, zoom-aware like the handles
+# themselves) within which a dragged handle snaps onto a snap point.
+#
+# NB: their import stays above SnapPointMarkersItem — its default
+# argument needs ALIGNMENT_SNAP_MARKER_SIZE_PX at class-definition time.
 
 
 class SnapPointMarkersItem(QGraphicsItem):
@@ -326,16 +330,18 @@ class QuadOverlay:
         Programmatic set_quad placements are never snapped."""
         if self._syncing:
             return pos
-        deltas = self._snap_points - [pos.x(), pos.y()]
-        nearest = int(np.argmin((deltas * deltas).sum(axis=1)))
-        # Zoom-awareness assumes the scene has exactly one view (true
-        # for the alignment panes, which each own their scene) — with
-        # several views this would use the first one's zoom for all.
-        views = self._scene.views()
-        scale = views[0].transform().m11() if views else 1.0
-        if np.hypot(*deltas[nearest]) * scale <= self._snap_radius_px:
-            return QPointF(*self._snap_points[nearest])
-        return pos
+
+        nearest = nearest_point_index_within(
+            self._snap_points,
+            pos.x(),
+            pos.y(),
+            self._snap_radius_px / scene_view_scale(self._scene),
+        )
+
+        if nearest is None:
+            return pos
+
+        return QPointF(*self._snap_points[nearest])
 
     def _sync_frame(self):
         self._frame.setPolygon(QPolygonF([handle.pos() for handle in self._handles]))
