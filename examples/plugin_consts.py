@@ -8,9 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 
+# Microdrop package imports.
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
@@ -30,7 +32,6 @@ from opendrop_controller.plugin import OpenDropControllerPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.plugin import PluginManagementPlugin
-from portable_dropbot_controller.plugin import PortableDropbotControllerPlugin
 from portable_dropbot_protocol_controls.plugin import (
     PortableDropbotProtocolControlsPlugin,
 )
@@ -46,12 +47,14 @@ from volume_threshold_protocol_controls.plugin import (
     VolumeThresholdProtocolControlsPlugin,
 )
 
+# Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import (
     dramatiq_workers_context,
     load_dramatiq_worker_settings,
     redis_server_context,
 )
 
+# Logger import.
 from logger.plugin import LoggerPlugin
 
 # The order of plugins matters. This determines whose start routine will be run
@@ -128,9 +131,12 @@ OPENDROP_BACKEND_PLUGINS = [
     OpenDropControllerPlugin,
 ]
 
-PORTABLE_DROPBOT_BACKEND_PLUGINS = [
-    PortableDropbotControllerPlugin,
-]
+
+def _lazy_load_portable_dropbot_plugins():
+    from portable_dropbot_controller.plugin import PortableDropbotControllerPlugin
+
+    return [PortableDropbotControllerPlugin]
+
 
 DROPBOT_BACKEND_PLUGINS = [
     # PeripheralControllerPlugin / HeaterControllerPlugin are group-managed —
