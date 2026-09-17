@@ -1864,6 +1864,29 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.info("Svg data changed")
             self.name += device_modified_tag
 
+    @observe("model:electrodes:svg_model:connections")
+    def _on_connections_changed(self, event):
+        """Connections were generated or hand edited: swap the main
+        view's connection items and repaint the routes over them."""
+        if self.current_electrode_layer is None:
+            return
+
+        self.current_electrode_layer.rebuild_connection_items(self.scene)
+
+        orphaned_segments = [
+            segment
+            for route_layer in self.model.routes.layers
+            for segment in route_layer.route.get_segments()
+            if segment not in event.new
+        ]
+
+        if orphaned_segments:
+            logger.warning(
+                f"Routes run over connections that no longer exist: {orphaned_segments}"
+            )
+
+        self.scene.interaction_service.route_redraw(None)
+
     @observe("model.electrodes.electrodes.items.channel")
     def _on_electrode_channel_changed(self, event=None):
         """Re-publish geometry whenever any electrode's channel assignment changes
