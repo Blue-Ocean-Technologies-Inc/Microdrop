@@ -1,3 +1,15 @@
+## [v1.22.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.22.0) (2026-09-17)
+
+### Feat
+
+- **device_viewer**: add Edit Connections dialog ([`53cf1b0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/53cf1b06162735e8e301537092a81ba087256f6d))
+- **device_viewer**: redraw main view on connections change ([`8da5552`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8da555283fe5edc67b1cdd8a07fd0ba97f6ae3d7))
+- **device_viewer**: edit connections on the SVG model ([`2eecb5b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2eecb5bdf496af893adad37d799c924d59b80769))
+
+### Refactor
+
+- **device_viewer**: share nearest-point snapping ([`7df9f11`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7df9f1187265c3e31d6c613cac88873637594553))
+
 ## [v1.21.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.21.0) (2026-09-17)
 
 ### Feat
