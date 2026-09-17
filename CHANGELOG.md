@@ -1,3 +1,18 @@
+## [v1.21.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.21.0) (2026-09-17)
+
+### Feat
+
+- **examples**: add cli() entry point to the runner ([`90a2418`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/90a2418e83b03faf324fa37f8679eca649532455))
+
+### Docs
+
+- consolidate project instructions into AGENTS.md ([`eef4b28`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eef4b2826ce91b127fd5b3d26f2d4fee57921165))
+- **agents**: spell out the blank-line rules for function bodies ([`07416ba`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/07416ba59e780c261f26b54df7715af7ecc9e8a3))
+
+### Chore
+
+- keep superpowers specs and plans local ([`856f6ec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/856f6ec6102377eec51c09c436c29ce210fa0534))
+
 ## [v1.20.2](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.20.2) (2026-09-08)
 
 ### Refactor
