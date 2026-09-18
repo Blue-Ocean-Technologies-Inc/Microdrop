@@ -413,6 +413,30 @@ class RangeColumn(EditBlankingColumn):
         )
 
 
+class ActiveRowDoubleSpinBoxColumn(ActiveRowColumnMixin, EditBlankingColumn):
+    """Float cell edited in place with a spin box (arrows step by ``step``),
+    with the active-row highlight. Unlike RangeColumn the bounds and
+    precision are the column's own, so they need no Range trait on the row.
+
+        ActiveRowDoubleSpinBoxColumn(name="exposure_s", label="Exposure (s)",
+                                     low=1.0, high=600.0, decimals=1, step=0.1)
+    """
+
+    low = Float(0.0)
+    high = Float(100.0)
+    decimals = Int(1)
+    step = Float(0.1)
+
+    def make_cell_editor(self, object):
+        return self._editor_with_reset(
+            DoubleSpinBoxEditor,
+            low=self.low,
+            high=self.high,
+            decimals=self.decimals,
+            step=self.step,
+        )
+
+
 class EnumSelectColumn(EditBlankingColumn):
     """Edit-in-cell column whose editor is a dropdown (EnumEditor) of choices
     taken per-row from a ``List(Str)`` trait named by ``values_name``. The
