@@ -102,9 +102,12 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         """Vendor-style raw illumination brightness, 0-255 straight
         to the firmware — no % scaling."""
         raw = min(max(0, int(float(str(message)))), LIGHT_INTENSITY_RAW_MAX)
+        # The generated proxy packs the firmware's own width (1 byte here,
+        # 2 bytes for the fluorescence LED); the uart facade's
+        # setLEDIntensity clamps to 0-100 and halves whatever it is given.
         ok, result = self._proxy_call(
             f"illumination raw {raw}",
-            lambda: self.proxy.uart.setLEDIntensity(raw, fluorescence=False),
+            lambda: self.proxy.sig.illumination_ctrl(raw),
         )
         logger.info(
             f"Portable Dropbot illumination raw --> {raw}: "
@@ -117,7 +120,7 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         raw = min(max(0, int(float(str(message)))), FLUORESCENCE_LED_RAW_MAX)
         ok, result = self._proxy_call(
             f"fluorescence LED raw {raw}",
-            lambda: self.proxy.uart.setLEDIntensity(raw, fluorescence=True),
+            lambda: self.proxy.sig.fluorescence_ctrl(raw),
         )
         logger.info(
             f"Portable Dropbot fluorescence LED raw --> {raw}: "
