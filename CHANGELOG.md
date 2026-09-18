@@ -1,3 +1,79 @@
+## [v1.23.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.23.0) (2026-09-18)
+
+### Feat
+
+- **portable-ui**: pick the PMT exposure slider's range ([`753cc96`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/753cc96270ca028995e303db88c5fd0c915b04e5))
+- **portable**: PMT step captures in the protocol report ([`e1ab929`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e1ab929e3aa04afd36e3a474e0d8bb5402f47baa))
+- **portable-ui**: spin box for the PMT exposure cell ([`7bbec41`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7bbec41609d12bc113359c05df98de20bc9367ac))
+- **portable-ui**: PMT Capture pane follows the selected step ([`7a410ee`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7a410eeddbc56515e9df831105c474ac2e4382ba))
+- **portable**: PMT capture protocol column ([`9b0a873`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9b0a8738fb67a7bb655e159c1c970abe7aaae287))
+- **portable**: protocol step captures in the PMT routine ([`a68c32c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a68c32cc8eac5982a469c83448119e06c150a009))
+- **portable**: PMT step capture contracts ([`6d88337`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6d8833709024f480e8c77aa763d3ec5ed14bf3e4))
+- **portable-ui**: PMT run history, file links and countdown ([`f714b00`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f714b00a9adf894743c014b45582e55b2e3cf85f))
+- **portable**: exposure time in PMT capture progress ([`2c03862`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2c03862a687b354a442979d6cb62ff7f74889869))
+- **utils**: link and active-row highlight table columns ([`95a9160`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/95a91607416511fc04747211ed351299424ab0ff))
+- **utils**: reset-view button on the live plot editor ([`af331a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af331a75879b727da85a442da9e74f1d1ee73f25))
+- **portable-ui**: PMT live view, results and acquire ([`ae9209c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ae9209c0a566618ba239526324118283c04fd4d3))
+- **utils**: live pyqtgraph plot TraitsUI editor ([`069a7ca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/069a7cac9202759bc8a48360d5c3dcfd0d56dd1f))
+- **portable**: PMT live stream, ADC query and acquire CSV ([`b95c87b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b95c87bde01854b8a7bc2318b58aa14a6bbe42a0))
+- **portable**: PMT stream, ADC and acquire contracts ([`e8e8440`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e8e8440fbebcfe1906dd951c22a2d21a7c3dec66))
+- **portable-ui**: PMT Capture dock pane ([`59dbf4a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/59dbf4a1053785fd80d4f43fc73fb2f1b473726a))
+- **portable-ui**: PMT capture controller and handler ([`72407bb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/72407bbcafe79e194b52e762cdafda1cb53bb1f5))
+- **portable-ui**: PMT capture pane model ([`c6616ad`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c6616ad4fa0df1328b3b3a842e8bd7f5faef407c))
+- **portable**: PMT spot table and capture routine ([`2f7e132`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2f7e132d63b9a86634572e7076627d1d91b84bde))
+- **portable**: pure PMT capture helpers ([`8ad83e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8ad83e85495a374589499b8df473aef9bf91351b))
+- **portable**: PMT capture topics and contracts ([`e87cfe9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e87cfe9c9a41fb94ce3fad6ce07a9fff4e1cde48))
+
+### Fix
+
+- **portable**: drive the lamps through the generated proxy ([`a87f56a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a87f56ac9239493acc58b0f0d3434836697048c3))
+- **portable-ui**: full-width PMT spot table and live plot ([`68d686c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/68d686cc9b964c743cb45e4aa69e62cda2f8c262))
+- **portable-ui**: PMT results table as a plain list ([`69a289a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/69a289aeb512cd37375a5abc9670182017694696))
+- **status-panes**: destroy the pane control before its editors ([`395690e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/395690e9d70566381daefb334c7e978538c646f5))
+- **portable-ui**: stepped exposure slider in the step table ([`821bb5d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/821bb5d8c457e1c6b45ae51c0c7585342f4289fb))
+- **portable-ui**: step the PMT exposure slider by 0.1 s ([`09e0f73`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/09e0f73698540e511021c3216903178088b7758d))
+- **utils**: one editor on the glyph checkbox column ([`20ba51a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/20ba51a702c199a4e5da1a79a3a40b9aee6d9dbe))
+- **portable-ui**: tick the PMT exposure countdown ([`91e74bd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91e74bd116ef1f2b0afb6380fd4de03513798e41))
+- **portable-ui**: size the PMT spot table and live plot ([`1adcdf0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1adcdf087cad80b56df29a4b6e26583a5ee94f79))
+- **utils**: keep the live plot a fixed height ([`deb2369`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/deb23691009acf385c02f4b322925d18e92ad960))
+- **portable-ui**: give the PMT tables room for every spot ([`0703ecc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0703ecc906a59fe3643de558621633251080dbe9))
+- **portable**: number PMT spots past the park location ([`e1f0140`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e1f014019f279b4de2563419e6f57a92f5a6f0b2))
+- **portable-ui**: hide the calibration dock pane ([`bc60330`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bc6033099dd19b307ea74d72e4eee21620e69558))
+- **portable-ui**: keep the last PMT results path on refusal ([`c68c27f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c68c27ffc5163b4338c7cc797c11b31fe6399e33))
+- **portable**: sane PMT exposure default and bounds ([`5495989`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5495989340db3ed561653dc36d99f9dab029697b))
+- **portable**: run the PMT capture off the actor thread ([`0f76506`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0f76506d64dc8314422ef004566bb25d9fe3b69a))
+- **portable-ui**: describe PMT row's editable traits ([`15aa9b1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/15aa9b147ff281df0c23b9a00dbf02e0b8dc87eb))
+- **portable**: harden PMT capture teardown and its checks ([`0bf9ff2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0bf9ff213613cb0e2fb6396699a59096051e29df))
+
+### Refactor
+
+- **portable-ui**: drop the acquire from More Controls ([`898b475`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/898b4752fabc6e2d793d2bf16d8ba69c1ec25d06))
+- **portable**: take the PMT stream command id from the driver ([`03b6c77`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/03b6c77d1061c276fc24a05b65980820a780c6b5))
+- **portable**: use the dropbot-portable package driver ([`6c8732b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6c8732b94f527f0fb7952a5a33d465e2aba407af))
+- **portable**: keep PMT consts free of the driver import ([`5643c71`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5643c71f423671c38f00b6643e24bc9ca0c76b81))
+- **portable**: hold the board proxies on the session ([`d21af79`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d21af79ba8976259d96fbc1a8cb834d71813a155))
+
+### Perf
+
+- **examples**: lazy-load the portable backend plugin ([`b0ffe89`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b0ffe89abfde7c3128ff4343a7d488e7671c147d))
+
+### Docs
+
+- **portable**: design the PMT protocol column ([`148db85`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/148db85eb40872edd158d7e8cd44e32add572eb0))
+- **portable**: scope the package-root import rule ([`3435ef9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3435ef9dc5dd9961cf4b27c42d821d22923bafb8))
+- **portable**: PMT capture runs on a thread ([`901d14f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/901d14f43a3bc2849f44af8fccfe3ef6f9f639e6))
+- **messages**: portable PMT capture flow ([`69cf618`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/69cf618293d2a2989227bfab295991ec5fdafd94))
+- **portable**: design spec for the PMT capture pane (#601 increment 1) ([`8acab00`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8acab00250d9857431133876c1c6c23d66da0001))
+
+### Test
+
+- **portable-ui**: respect the new PMT exposure minimum ([`0423803`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/04238031a1982757d7c6de0502e434f0e7eac03b))
+
+### Chore
+
+- **portable**: let the import stamper label the vendored driver ([`7002ca4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7002ca4ac70c9ad5ce0a548be074977c847c0d6f))
+- **portable**: re-vendor the driver from python-driver main ([`88d4107`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/88d41075d8fd4444f4fb42cbda4b9e8e2671b8d7))
+
 ## [v1.22.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.22.0) (2026-09-17)
 
 ### Feat
