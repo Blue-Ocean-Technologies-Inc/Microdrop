@@ -8,14 +8,18 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 import threading
 from datetime import datetime
 
+# Third-party imports.
 import dramatiq
+
+# Enthought library imports.
 from traits.api import Any, Bool, HasTraits, Instance, Int, Str, provides
 
-from logger.logger_service import get_logger
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     TimestampedMessage,
     generate_class_method_dramatiq_listener_actor,
@@ -23,25 +27,29 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from .consts import (
     ALARM_RAISED,
     CONNECT_TO_PORT,
     ERROR_RAISED,
     FLUORESCENCE_LED_RAW_MAX,
     MOTORS_UPDATED,
-    REFRESH_PORTS,
-    STATUS_FAILURE_DISCONNECT_LIMIT,
     PKG,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
     REALTIME_MODE_UPDATED,
+    REFRESH_PORTS,
     RETRY_CONNECTION,
+    STATUS_FAILURE_DISCONNECT_LIMIT,
     STATUS_UPDATED,
 )
 from .interfaces.i_portable_dropbot_controller_base import (
     IPortableDropbotControllerBase,
 )
 from .preferences import PortableDropbotPreferences
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__, level="INFO")
 
@@ -87,13 +95,15 @@ class PortableDropbotControllerBase(HasTraits):
             try:
                 self.proxy.disconnect()
             except Exception as exc:
-                logger.warning(f"Error disconnecting Portable Dropbot "
-                               f"during cleanup: {exc}")
+                logger.warning(
+                    f"Error disconnecting Portable Dropbot during cleanup: {exc}"
+                )
         self.proxy = None
         self.portable_dropbot_connection_active = False
 
-    def listener_actor_routine(self, timestamped_message: TimestampedMessage,
-                               topic: str):
+    def listener_actor_routine(
+        self, timestamped_message: TimestampedMessage, topic: str
+    ):
         topics_tree = topic.split("/")
         if len(topics_tree) < 3:
             return
@@ -121,27 +131,28 @@ class PortableDropbotControllerBase(HasTraits):
             else:
                 logger.warning(
                     f"Request for '{specific_sub_topic}' denied: "
-                    f"Portable Dropbot is disconnected.")
+                    f"Portable Dropbot is disconnected."
+                )
 
         if requested_method:
-            if self.timestamps.get(topic, datetime.min) \
-                    > timestamped_message.timestamp_dt:
+            if (
+                self.timestamps.get(topic, datetime.min)
+                > timestamped_message.timestamp_dt
+            ):
                 logger.debug(f"Stale message on {topic} ignored.")
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
             logger.debug(f"Handling {topic} --> {requested_method}")
-            err_msg = invoke_class_method(self, requested_method,
-                                          timestamped_message)
+            err_msg = invoke_class_method(self, requested_method, timestamped_message)
             if err_msg:
                 logger.error(f"Error handling topic {topic}: {err_msg}")
 
     def traits_init(self):
         logger.info("Starting PortableDropbotController listener")
-        self.dramatiq_listener_actor = \
-            generate_class_method_dramatiq_listener_actor(
-                listener_name=self.listener_name,
-                class_method=self.listener_actor_routine,
-            )
+        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
+            listener_name=self.listener_name,
+            class_method=self.listener_actor_routine,
+        )
 
     # ------------------------------------------------------------------ #
     # Publish helpers                                                      #
@@ -150,23 +161,28 @@ class PortableDropbotControllerBase(HasTraits):
         publish_message(topic=PORTABLE_DROPBOT_CONNECTED, message="True")
 
     def _publish_disconnected(self):
-        publish_message(topic=PORTABLE_DROPBOT_DISCONNECTED,
-                        message="True")
+        publish_message(topic=PORTABLE_DROPBOT_DISCONNECTED, message="True")
 
     def _publish_realtime_mode(self):
-        publish_message(topic=REALTIME_MODE_UPDATED,
-                        message="True" if self.realtime_mode else "False")
+        publish_message(
+            topic=REALTIME_MODE_UPDATED,
+            message="True" if self.realtime_mode else "False",
+        )
 
     def _publish_error(self, context, error):
         logger.error(f"Portable Dropbot {context} failed: {error}")
-        publish_message(topic=ERROR_RAISED, message=json.dumps(
-            {"context": context, "error": str(error)}))
+        publish_message(
+            topic=ERROR_RAISED,
+            message=json.dumps({"context": context, "error": str(error)}),
+        )
 
     def _publish_alarm(self, cmd, alarms):
         """Wired into the driver's on_alarm callback: the decoded
         alarm strings, straight to whoever is showing status."""
-        publish_message(topic=ALARM_RAISED, message=json.dumps(
-            {"command": str(cmd), "alarms": list(alarms)}))
+        publish_message(
+            topic=ALARM_RAISED,
+            message=json.dumps({"command": str(cmd), "alarms": list(alarms)}),
+        )
 
     # ------------------------------------------------------------------ #
     # Guarded driver access                                                #
@@ -177,15 +193,13 @@ class PortableDropbotControllerBase(HasTraits):
         reported as an error signal rather than a traceback. Returns
         (ok, result)."""
         if self.proxy is None:
-            logger.warning(f"Portable Dropbot not connected: "
-                           f"ignoring {context}.")
+            logger.warning(f"Portable Dropbot not connected: ignoring {context}.")
             return False, None
         try:
             with self._proxy_lock:
                 return True, call()
         except OSError as error:
-            logger.warning(f"Portable Dropbot vanished during "
-                           f"{context}: {error}")
+            logger.warning(f"Portable Dropbot vanished during {context}: {error}")
             self.on_disconnected_signal("")
             return False, None
         except Exception as error:
@@ -197,8 +211,7 @@ class PortableDropbotControllerBase(HasTraits):
     # ------------------------------------------------------------------ #
     #: Raw u16 status fields carried as value × 100 on the wire (the
     #: driver's own SysStatusSignalBoard.to_dict scaling).
-    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "hv_vol",
-                             "dev_temp", "dev_hum")
+    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "hv_vol", "dev_temp", "dev_hum")
 
     def _publish_status_snapshot(self):
         """One driver status read fans out to both panes: the signal
@@ -271,28 +284,35 @@ class PortableDropbotControllerBase(HasTraits):
 
     def _apply_actuation(self):
         """Push the current HV setpoints (both Int) to the device."""
-        logger.debug(f"Applying actuation setpoints: {self.voltage} V, "
-                     f"{self.frequency} Hz")
+        logger.debug(
+            f"Applying actuation setpoints: {self.voltage} V, {self.frequency} Hz"
+        )
         self._proxy_call(
             "set actuation",
-            lambda: self.proxy.set_actuation(int(self.voltage),
-                                             int(self.frequency)))
+            lambda: self.proxy.set_actuation(int(self.voltage), int(self.frequency)),
+        )
 
     def _apply_light_intensity(self):
         """Push the light brightness to the device: the % setpoint
         scaled to the fluorescence LED's 16-bit range — that is the
         LED that actually lights this instrument — or 0 while the
         light is switched off."""
-        raw = (round(int(self.light_intensity)
-                     * FLUORESCENCE_LED_RAW_MAX / 100)
-               if self.light_on else 0)
-        logger.debug(f"Applying light intensity: {self.light_intensity} % "
-                     f"(raw {raw}, light "
-                     f"{'on' if self.light_on else 'off'})")
+        raw = (
+            round(int(self.light_intensity) * FLUORESCENCE_LED_RAW_MAX / 100)
+            if self.light_on
+            else 0
+        )
+        logger.debug(
+            f"Applying light intensity: {self.light_intensity} % "
+            f"(raw {raw}, light "
+            f"{'on' if self.light_on else 'off'})"
+        )
+        # The generated proxy sends the 16-bit value as is; the uart
+        # facade's setLEDIntensity clamps its argument to 0-100 and halves
+        # it, which left this lamp at 50/65535 at "100 %".
         self._proxy_call(
-            "set light intensity",
-            lambda: self.proxy.uart.setLEDIntensity(raw,
-                                                    fluorescence=True))
+            "set light intensity", lambda: self.proxy.sig.fluorescence_ctrl(raw)
+        )
 
     # ------------------------------------------------------------------ #
     # Shared-signal handlers                                               #
