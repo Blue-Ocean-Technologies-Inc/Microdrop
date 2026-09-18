@@ -49,13 +49,13 @@ from microdrop_style.icons.icons import ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT
 from microdrop_utils.pyqtgraph_editors import LivePlotEditor
 from microdrop_utils.traitsui_qt_helpers import (
     ActiveRowCheckboxColumn,
-    ActiveRowDoubleSpinBoxColumn,
     ActiveRowObjectColumn,
     DoubleSpinBoxEditor,
     HtmlLabelEditor,
     IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
+    SteppedSliderEditor,
 )
 
 # Local imports.
@@ -88,6 +88,13 @@ _hint_label = HtmlLabelEditor(
     template='<span style="color:#888; font-style:italic;">{}</span>'
 )
 
+#: Both spot tables' exposure cell: a slider stepping in PMT_EXPOSURE_S_STEP.
+_exposure_slider = SteppedSliderEditor(
+    low=PMT_EXPOSURE_S_BOUNDS[0],
+    high=PMT_EXPOSURE_S_BOUNDS[1],
+    step=PMT_EXPOSURE_S_STEP,
+)
+
 #: One row per configured spot; the toolbar's move up/down buttons act on
 #: the selected row and define capture order. The spot a running capture is
 #: on is highlighted like the protocol tree's executing step.
@@ -106,15 +113,12 @@ pmt_spot_table_manual = TableEditor(
         ActiveRowCheckboxColumn(name="capture", label="Capture"),
         ActiveRowObjectColumn(name="gain", label="Gain"),
         # The last column takes all the remaining width.
-        ActiveRowDoubleSpinBoxColumn(
+        ActiveRowObjectColumn(
             name="exposure_s",
             label="Exposure (s)",
             format="%.1f",
             resize_mode="stretch",
-            low=PMT_EXPOSURE_S_BOUNDS[0],
-            high=PMT_EXPOSURE_S_BOUNDS[1],
-            decimals=1,
-            step=PMT_EXPOSURE_S_STEP,
+            editor=_exposure_slider,
         ),
     ],
     reorderable=True,
@@ -139,15 +143,12 @@ pmt_spot_table_attached = TableEditor(
         ActiveRowCheckboxColumn(name="at_start", label="Start"),
         ActiveRowCheckboxColumn(name="at_end", label="End"),
         ActiveRowObjectColumn(name="gain", label="Gain"),
-        ActiveRowDoubleSpinBoxColumn(
+        ActiveRowObjectColumn(
             name="exposure_s",
             label="Exposure (s)",
             format="%.1f",
             resize_mode="stretch",
-            low=PMT_EXPOSURE_S_BOUNDS[0],
-            high=PMT_EXPOSURE_S_BOUNDS[1],
-            decimals=1,
-            step=PMT_EXPOSURE_S_STEP,
+            editor=_exposure_slider,
         ),
     ],
     reorderable=True,
