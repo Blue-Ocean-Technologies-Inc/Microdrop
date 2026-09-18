@@ -26,11 +26,16 @@ satisfy a step (the droplet-check `step_uuid` correlation pattern).
 # Standard library imports.
 import json
 import re
+from pathlib import Path
 
 # Enthought library imports.
 from traits.api import Any, List, Str
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import (
+    protocol_logging_data_contribution_publisher,
+    protocol_logging_metadata_contribution_publisher,
+)
 from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
@@ -39,12 +44,15 @@ from pluggable_protocol_tree.models.column import (
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 from portable_dropbot_controller.consts import (
+    PMT_ADC_FULL_SCALE,
     PMT_CAPTURE_ABORT,
     PMT_CAPTURE_DONE,
     PMT_CAPTURE_LABEL_CHARS,
     PMT_CAPTURE_LABEL_MAX_LENGTH,
+    PMT_RF_OHMS,
     PMT_STEP_PER_SPOT_OVERHEAD_S,
     PMT_STEP_TIMEOUT_MARGIN_S,
+    PMT_VREF_V,
     pmt_capture_publisher,
 )
 
@@ -193,11 +201,46 @@ class PmtCaptureHandler(BaseColumnHandler):
             raise
 
         done = json.loads(done_raw)
+        self._contribute_to_report(phase, done)
 
         if not done.get("ok"):
             raise RuntimeError(done.get("error") or "PMT capture failed")
 
         logger.info(f"Finished PMT capture for step {row.dotted_path()} ({phase})")
+
+    def _contribute_to_report(self, phase, done):
+        """Put the capture into the run's report: the captures folder as a
+        metadata link, and one data row per spot (numeric columns feed the
+        report's Data Summary and Data Trends). Sent before the ok check so
+        a partly failed capture still reports the spots it saved; the step
+        stamp comes from the logger."""
+
+        if done.get("directory"):
+            protocol_logging_metadata_contribution_publisher.publish(
+                {"PMT Captures Folder": done["directory"]}
+            )
+
+        full_scale = done.get("adc_full_scale") or PMT_ADC_FULL_SCALE
+        rf_ohms = done.get("rf_ohms") or PMT_RF_OHMS
+
+        for result in done.get("results", []):
+            mean_volts = result["mean_counts"] * PMT_VREF_V / full_scale
+            csv_path = result.get("csv_path", "")
+
+            protocol_logging_data_contribution_publisher.publish(
+                {
+                    "PMT phase": phase,
+                    "PMT spot": result["slot"],
+                    "PMT gain": result["gain"],
+                    "PMT exposure (s)": result["exposure_s"],
+                    "PMT samples": result["n_samples"],
+                    "PMT mean (counts)": result["mean_counts"],
+                    "PMT mean (V)": mean_volts,
+                    "PMT mean (A)": mean_volts / rf_ohms,
+                    "PMT file": Path(csv_path).name if csv_path else "",
+                    "PMT error": result.get("error", ""),
+                }
+            )
 
     def on_post_protocol_end(self, ctx):
         # Unconditional: an interrupted run must never leave a capture

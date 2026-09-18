@@ -12,48 +12,70 @@
 data summary, data trends (plotly), device heatmap, media, notes.
 Imports only shared utils + plotly — no protocol_grid coupling."""
 
+# Standard library imports.
 import html as _html
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+# Third-party imports.
 import pandas as pd
 
-from logger.logger_service import get_logger
-
+# Microdrop package imports.
 from pluggable_protocol_tree.services.logging.consts import RUN_TIMESTAMP_FMT
 from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
+
+# Logger import.
+from logger.logger_service import get_logger
 
 # Optional visualisation deps, hoisted to module top: a missing lib degrades
 # the corresponding report section to a placeholder instead of failing import.
 try:
     import plotly.express as px
-except Exception:                              # pragma: no cover
+except Exception:  # pragma: no cover
     px = None
 try:
     from microdrop_utils.plotly_helpers import (
         create_plotly_svg_dropbot_device_heatmap,
     )
-except Exception:                              # pragma: no cover
+except Exception:  # pragma: no cover
     create_plotly_svg_dropbot_device_heatmap = None
 
 logger = get_logger(__name__)
 
-_NUMERIC_EXCLUDE = {"step_idx", "utc_time", "instrument_time_us",
-                    "step_id", "actuated_channels"}
+_NUMERIC_EXCLUDE = {
+    "step_idx",
+    "utc_time",
+    "instrument_time_us",
+    "step_id",
+    "actuated_channels",
+}
 
 # Metadata keys whose values are filesystem paths and should render as
 # clickable file:// anchors instead of raw strings. Legacy parity with
 # protocol_grid.services.protocol_data_logger.
 _PATH_METADATA_KEYS = {"Experiment Directory", "Device SVG", "Protocol Path"}
+#: Contributed metadata (PROTOCOL_LOGGING_METADATA_CONTRIBUTION) names a
+#: path by its key's suffix, e.g. "PMT Captures Folder".
+_PATH_METADATA_KEY_SUFFIXES = (" Directory", " Folder", " Path")
+
+
+def _is_path_metadata_key(key) -> bool:
+    return key in _PATH_METADATA_KEYS or str(key).endswith(_PATH_METADATA_KEY_SUFFIXES)
 
 
 class LoggingReport:
     @staticmethod
-    def build_html(*, entries: List[dict], columns: List[str],
-                   metadata: Dict, media: Dict[str, List[str]],
-                   device_context, notes: Optional[List[str]] = None,
-                   data_files: Optional[List] = None) -> str:
+    def build_html(
+        *,
+        entries: List[dict],
+        columns: List[str],
+        metadata: Dict,
+        media: Dict[str, List[str]],
+        device_context,
+        notes: Optional[List[str]] = None,
+        data_files: Optional[List] = None,
+    ) -> str:
         sections = [
             LoggingReport._metadata_section(metadata),
             LoggingReport._data_files_section(data_files or []),
@@ -101,7 +123,8 @@ class LoggingReport:
                 uri = p.as_uri()
                 items.append(
                     f'<li><a href="{_html.escape(uri, quote=True)}">'
-                    f"{_html.escape(p.name)}</a></li>")
+                    f"{_html.escape(p.name)}</a></li>"
+                )
             except (ValueError, OSError):
                 items.append(f"<li>{_html.escape(str(f))}</li>")
         return f"<h2>Data Files</h2><ul>{''.join(items)}</ul>"
@@ -115,15 +138,14 @@ class LoggingReport:
         the escaped string so this can never raise on test fixtures like
         Path('.')."""
         text = str(value)
-        if key not in _PATH_METADATA_KEYS or not text:
+        if not _is_path_metadata_key(key) or not text:
             return _html.escape(text)
         try:
             p = Path(text)
             uri = p.as_uri()
         except (ValueError, OSError):
             return _html.escape(text)
-        return (f'<a href="{_html.escape(uri, quote=True)}">'
-                f"{_html.escape(p.name)}</a>")
+        return f'<a href="{_html.escape(uri, quote=True)}">{_html.escape(p.name)}</a>'
 
     @staticmethod
     def _numeric_columns(columns: List[str]) -> List[str]:
@@ -141,18 +163,22 @@ class LoggingReport:
             s = pd.to_numeric(df[col], errors="coerce").dropna()
             if s.empty:
                 continue
-            rows += (f"<tr><th>{_html.escape(col)}</th>"
-                     f"<td>{s.mean():.4g}</td><td>{s.std():.4g}</td>"
-                     f"<td>{s.min():.4g}</td><td>{s.max():.4g}</td></tr>")
+            rows += (
+                f"<tr><th>{_html.escape(col)}</th>"
+                f"<td>{s.mean():.4g}</td><td>{s.std():.4g}</td>"
+                f"<td>{s.min():.4g}</td><td>{s.max():.4g}</td></tr>"
+            )
         if not rows:
             return "<h2>Data Summary</h2><p>No numeric data.</p>"
-        return ("<h2>Data Summary</h2><table>"
-                "<tr><th>Column</th><th>mean</th><th>std</th>"
-                f"<th>min</th><th>max</th></tr>{rows}</table>")
+        return (
+            "<h2>Data Summary</h2><table>"
+            "<tr><th>Column</th><th>mean</th><th>std</th>"
+            f"<th>min</th><th>max</th></tr>{rows}</table>"
+        )
 
     @staticmethod
     def _trends_section(entries: List[dict], columns: List[str], device_context) -> str:
-        if px is None:                         # pragma: no cover
+        if px is None:  # pragma: no cover
             return "<h2>Data Trends</h2><p>plotly unavailable.</p>"
         if not entries:
             return "<h2>Data Trends</h2><p>No data.</p>"
@@ -165,8 +191,7 @@ class LoggingReport:
         # pulls in the version-correct plotly.js from the CDN; subsequent
         # figures reuse it. Never use plotly-latest.min.js (1.x) which can't
         # decode the typed-array output from plotly >= 3.x.
-        heatmap = LoggingReport._heatmap(
-            df, device_context, include_plotlyjs=True)
+        heatmap = LoggingReport._heatmap(df, device_context, include_plotlyjs=True)
         plotly_js_emitted = bool(heatmap)
 
         # Steps are categorical along the y-axis: just the 1-indexed step
@@ -180,33 +205,45 @@ class LoggingReport:
             s = pd.to_numeric(df[col], errors="coerce")
             if s.dropna().empty:
                 continue
-            agg = (df.assign(_v=s)
-                    .groupby("step_idx")["_v"]
-                    .agg(["mean", "std"])
-                    .reset_index()
-                    .sort_values("step_idx", ascending=False))
+            agg = (
+                df.assign(_v=s)
+                .groupby("step_idx")["_v"]
+                .agg(["mean", "std"])
+                .reset_index()
+                .sort_values("step_idx", ascending=False)
+            )
             agg["step_label"] = agg["step_idx"].apply(lambda i: f"Step {int(i)}")
             fig = px.bar(
-                agg, x="mean", y="step_label", error_x="std",
-                orientation="h", title=col,
+                agg,
+                x="mean",
+                y="step_label",
+                error_x="std",
+                orientation="h",
+                title=col,
                 labels={"mean": f"Mean {col}", "step_label": "Protocol Steps"},
                 template="plotly_white",
-                color_discrete_sequence=["#17a2b8"])
+                color_discrete_sequence=["#17a2b8"],
+            )
             fig.update_layout(
                 yaxis=dict(type="category", title="Protocol Steps"),
                 xaxis=dict(title=f"Mean {col}"),
                 margin=dict(l=20, r=20, t=50, b=20),
                 # Grow height with step count so labels don't overlap.
-                height=250 + (len(agg) * 35))
-            charts.append(fig.to_html(
-                full_html=False,
-                include_plotlyjs="cdn" if not plotly_js_emitted else False))
+                height=250 + (len(agg) * 35),
+            )
+            charts.append(
+                fig.to_html(
+                    full_html=False,
+                    include_plotlyjs="cdn" if not plotly_js_emitted else False,
+                )
+            )
             plotly_js_emitted = True
         return "<h2>Data Trends</h2>" + heatmap + "".join(charts)
 
     @staticmethod
-    def _heatmap(df: pd.DataFrame, device_context, *,
-                 include_plotlyjs: bool = False) -> str:
+    def _heatmap(
+        df: pd.DataFrame, device_context, *, include_plotlyjs: bool = False
+    ) -> str:
         svg = getattr(device_context, "device_svg_path", None)
         if not svg or "actuated_channels" not in df:
             return ""
@@ -217,13 +254,11 @@ class LoggingReport:
             # Defaults ("Actuation Times" / "seconds") trigger the helper's
             # format_time_tooltip auto-scaling (sec --> min --> hours). Passing
             # "s" instead of "seconds" disables it and shows raw floats.
-            fig = create_plotly_svg_dropbot_device_heatmap(
-                str(svg), durations)
-            return ("<h3>Device actuation heatmap</h3>"
-                    + fig.to_html(
-                        full_html=False,
-                        include_plotlyjs="cdn" if include_plotlyjs else False))
-        except Exception as e:                 # pragma: no cover - defensive
+            fig = create_plotly_svg_dropbot_device_heatmap(str(svg), durations)
+            return "<h3>Device actuation heatmap</h3>" + fig.to_html(
+                full_html=False, include_plotlyjs="cdn" if include_plotlyjs else False
+            )
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"heatmap generation failed: {e}")
             return ""
 
@@ -238,27 +273,33 @@ class LoggingReport:
         the leading NaN from ``.diff()`` is treated as a zero-step gap —
         same biased average the legacy report ships).
         """
-        if "actuated_channels" not in df.columns \
-                or "instrument_time_us" not in df.columns or df.empty:
+        if (
+            "actuated_channels" not in df.columns
+            or "instrument_time_us" not in df.columns
+            or df.empty
+        ):
             return {}
         # Reuse the persistence rollover correction so the heatmap agrees
         # with the on-disk corr_instrument_time_us in the data file.
-        corr = LoggingPersistence._correct_rollover(
-            df["instrument_time_us"].tolist())
+        corr = LoggingPersistence._correct_rollover(df["instrument_time_us"].tolist())
         if not corr or len([v for v in corr if v is not None]) < 2:
             return {}
         df = df.assign(_corr_us=corr)
-        avg_interval_s = float(
-            df.sort_values("_corr_us")["_corr_us"].diff().fillna(0).mean()
-        ) * 1e-6
+        avg_interval_s = (
+            float(df.sort_values("_corr_us")["_corr_us"].diff().fillna(0).mean()) * 1e-6
+        )
         if avg_interval_s <= 0:
             return {}
-        counts = (df.explode("actuated_channels")["actuated_channels"]
-                    .dropna()
-                    .astype(int)
-                    .value_counts())
-        return {int(ch): float(round(n * avg_interval_s, 6))
-                for ch, n in counts.to_dict().items()}
+        counts = (
+            df.explode("actuated_channels")["actuated_channels"]
+            .dropna()
+            .astype(int)
+            .value_counts()
+        )
+        return {
+            int(ch): float(round(n * avg_interval_s, 6))
+            for ch, n in counts.to_dict().items()
+        }
 
     @staticmethod
     def _media_section(media: Dict[str, List[str]]) -> str:
@@ -297,11 +338,15 @@ class LoggingReport:
             link_html = (
                 f'<a href="{_html.escape(file_url, quote=True)}">'
                 f"{_html.escape(display_name)}</a>"
-                if file_url else _html.escape(str(p)))
+                if file_url
+                else _html.escape(str(p))
+            )
             extra = ""
             if file_url and kind == "image":
-                extra = (f'<br><br><img src="{_html.escape(file_url, quote=True)}"'
-                         f' width="360" height="240">')
+                extra = (
+                    f'<br><br><img src="{_html.escape(file_url, quote=True)}"'
+                    f' width="360" height="240">'
+                )
             elif file_url and kind == "video":
                 # Click swaps the placeholder div for a <video> tag,
                 # matching the legacy report. Single-quoted inner HTML
@@ -316,10 +361,10 @@ class LoggingReport:
                     " type=&quot;video/x-matroska&quot;>"
                     "Your browser does not support the video tag."
                     "</video>'\" "
-                    "style=\"cursor:pointer;width:360px;height:240px;"
+                    'style="cursor:pointer;width:360px;height:240px;'
                     "background:#000;display:flex;align-items:center;"
-                    "justify-content:center;\">"
-                    "<div style=\"font-size:50px;color:white;\">&#9658;</div>"
+                    'justify-content:center;">'
+                    '<div style="font-size:50px;color:white;">&#9658;</div>'
                     "</div>"
                 )
             parts.append(f"<b>{idx}.</b> {link_html}{extra}<br><br>")

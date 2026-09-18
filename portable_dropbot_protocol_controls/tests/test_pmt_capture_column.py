@@ -360,3 +360,88 @@ def test_on_post_protocol_end_skips_in_preview_mode():
         handler.on_post_protocol_end(ctx)
 
     assert published == []
+
+
+# --- handler: report contributions ---------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _report_publishers():
+    """The done path always contributes to the run report; keep those
+    publishers off the wire in every test and hand their payloads back."""
+    sent = {"metadata": [], "data": []}
+
+    with (
+        patch(f"{MODULE}.protocol_logging_metadata_contribution_publisher") as metadata,
+        patch(f"{MODULE}.protocol_logging_data_contribution_publisher") as data,
+    ):
+        metadata.publish.side_effect = lambda p, **k: sent["metadata"].append(p)
+        data.publish.side_effect = lambda p, **k: sent["data"].append(p)
+
+        yield sent
+
+
+def test_done_contributes_folder_and_one_row_per_spot(_report_publishers):
+    handler = PmtCaptureHandler()
+    row = _row(STEP_VALUE)
+    ctx = _ctx()
+    ctx.wait_for.return_value = json.dumps(
+        {
+            "ok": True,
+            "aborted": False,
+            "directory": "/exp/captures/pmt",
+            "adc_full_scale": 65536,
+            "rf_ohms": 499_000.0,
+            "results": [
+                {
+                    "slot": 1,
+                    "gain": 128,
+                    "exposure_s": 2.0,
+                    "n_samples": 124,
+                    "mean_counts": 32768.0,
+                    "sd_counts": 3.0,
+                    "min_counts": 1,
+                    "max_counts": 2,
+                    "csv_path": "/exp/captures/pmt/pmt_step1-start_spot1_x_gain128.csv",
+                    "error": "",
+                }
+            ],
+        }
+    )
+
+    with patch(f"{MODULE}.pmt_capture_publisher"):
+        handler.on_pre_step(row, ctx)
+
+    assert _report_publishers["metadata"] == [
+        {"PMT Captures Folder": "/exp/captures/pmt"}
+    ]
+    (data_row,) = _report_publishers["data"]
+    assert data_row["PMT phase"] == "start"
+    assert data_row["PMT spot"] == 1
+    assert data_row["PMT mean (counts)"] == 32768.0
+    assert data_row["PMT mean (V)"] == pytest.approx(32768.0 * 4.98 / 65536)
+    assert data_row["PMT mean (A)"] == pytest.approx(32768.0 * 4.98 / 65536 / 499_000.0)
+    assert data_row["PMT file"] == "pmt_step1-start_spot1_x_gain128.csv"
+
+
+def test_failed_capture_still_contributes_before_raising(_report_publishers):
+    handler = PmtCaptureHandler()
+    row = _row(STEP_VALUE)
+    ctx = _ctx()
+    ctx.wait_for.return_value = json.dumps(
+        {
+            "ok": False,
+            "error": "spot 1 failed",
+            "directory": "/exp/captures/pmt",
+            "results": [],
+        }
+    )
+
+    with patch(f"{MODULE}.pmt_capture_publisher"):
+        with pytest.raises(RuntimeError, match="spot 1 failed"):
+            handler.on_pre_step(row, ctx)
+
+    assert _report_publishers["metadata"] == [
+        {"PMT Captures Folder": "/exp/captures/pmt"}
+    ]
+    assert _report_publishers["data"] == []
