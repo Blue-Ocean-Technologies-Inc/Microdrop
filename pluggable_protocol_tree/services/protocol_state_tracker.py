@@ -34,14 +34,21 @@ The pane wires the ``dock_pane`` reference when the dock pane mounts;
 in headless tests it stays ``None`` and the observers are no-ops.
 """
 
+# Standard library imports.
 import math
 from pathlib import Path
 
+# Third-party imports.
 import pandas as pd
+
+# Enthought library imports.
 from traits.api import Any, Bool, File, HasTraits, Instance, Str, observe
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import PKG_name
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -107,7 +114,7 @@ class PluggableProtocolStateTracker(HasTraits):
 
     def display_name(self) -> str:
         tag = self.modified_tag if self.is_modified else ""
-        return f"{self.pkg_display_name}{"\t\t-\t\t"}{self.protocol_name}{tag}"
+        return f"{self.pkg_display_name}{'\t\t-\t\t'}{self.protocol_name}{tag}"
 
     def update_display_name(self) -> None:
         if self.dock_pane is None:
@@ -153,6 +160,17 @@ class PluggableProtocolStateTracker(HasTraits):
             current = manager.table.at[path, col_id]
             baseline = self.baseline_table.at[path, col_id]
         except KeyError:
+            return
+        except ValueError:
+            # pandas refuses scalar access on a table whose index or columns
+            # are not unique (a duplicate path or column id). The cell cannot
+            # be diffed; fall back to the structural comparison.
+            logger.warning(
+                f"Protocol table is not uniquely indexed; cannot diff cell "
+                f"{path}/{col_id}, marking the structure dirty instead"
+            )
+            self.structure_dirty = True
+            self._recompute_is_modified()
             return
         key = (path, col_id)
         if _values_equal(current, baseline):

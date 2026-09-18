@@ -956,6 +956,17 @@ class DeviceViewerDockPane(TraitsDockPane):
             # free-hand draw, wiping the in-progress route and selected
             # layer and kicking the user out of draw mode. Routes only ever
             # flow DV -> tree, never back, so there is nothing else to sync.
+            if self.model.routes.commit_enabled:
+                # The echo carries the step's stored params. While the
+                # sidebar holds uncommitted edits (say new lanes, then a
+                # route drawn before committing) applying it would revert
+                # them; they reach the step when the user commits.
+                logger.debug(
+                    f"Device Viewer: kept uncommitted sidebar params over the "
+                    f"protocol echo for step {message_model.step_id}"
+                )
+                return
+
             logger.info(
                 f"Device Viewer: Applying new execution params from protocol "
                 f"side for step {message_model.step_id};\n\n "
@@ -1160,7 +1171,22 @@ class DeviceViewerDockPane(TraitsDockPane):
         if current == self._last_published_id_to_channel:
             return
         self._last_published_id_to_channel = dict(current)
-        msg = GeometryChangedMessage(id_to_channel=current)
+        svg_model = self.model.electrodes.svg_model
+        centroids = neighbours = None
+
+        if svg_model is not None:
+            centroids = {
+                electrode_id: (polygon.centroid.x, polygon.centroid.y)
+                for electrode_id, polygon in svg_model.polygons.items()
+            }
+            neighbours = {
+                electrode_id: list(adjacent)
+                for electrode_id, adjacent in svg_model.neighbours.items()
+            }
+
+        msg = GeometryChangedMessage(
+            id_to_channel=current, centroids=centroids, neighbours=neighbours
+        )
         publish_message(
             topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
             message=msg.serialize(),
@@ -2018,10 +2044,10 @@ class DeviceViewerDockPane(TraitsDockPane):
             logger.error(e, exc_info=True)
 
     @observe(
-        "model.routes.duration, model.routes.repetitions, "
-        "model.routes.repeat_duration, model.routes.trail_length, "
-        "model.routes.trail_overlay, model.routes.soft_start, "
-        "model.routes.soft_terminate, model.routes.linear_repeats"
+        "model:routes:[duration, repetitions, repeat_duration, "
+        "trail_length, trail_overlay, soft_start, soft_terminate, "
+        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock, "
+        "recentre]"
     )
     def execution_params_change_handler(self, event=None):
         """Free-mode state messages carry the sidebar execution params so

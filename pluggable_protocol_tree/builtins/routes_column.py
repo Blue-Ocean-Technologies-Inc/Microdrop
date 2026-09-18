@@ -38,31 +38,41 @@ DurationColumnHandler (90), so the duration sleep only starts after
 ALL phases have completed and been ack'd.
 """
 
+# Standard library imports.
 import logging
 import time
 
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 from traits.api import List, Str
 
+# Microdrop package imports.
 from electrode_controller.consts import electrode_state_change_publisher
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_application.dialogs.pyface_wrapper import NO, YES, confirm
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY,
     ELECTRODES_STATE_APPLIED,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.models.display_state import (
     ProtocolTreeDisplayMessage,
 )
 from pluggable_protocol_tree.services.phase_math import (
-    another_loop_fits, duration_loop_parts, iter_phases, loop_completion_fits,
+    another_loop_fits,
+    duration_loop_parts,
+    iter_phases,
+    loop_completion_fits,
+    slug_shape_for_row,
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
-from microdrop_application.dialogs.pyface_wrapper import confirm, YES, NO
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 logger = logging.getLogger(__name__)
 
@@ -117,15 +127,19 @@ def _confirm_finish_loop_over_budget():
     """Operator prompt when a seek-resume lands partway through a loop that
     can no longer finish within the route-rep budget (#477). Returns True to
     finish the loop and advance, False to leave the run paused."""
-    from microdrop_application.dialogs.pyface_wrapper import confirm, YES
-    return confirm(
-        None,
-        "The set route-rep time is up, but the current loop is not back at its "
-        "start position. Finish this loop (electrodes return to start) and then "
-        "move to the next step?",
-        title="Loop needs more time",
-        cancel=False,
-    ) == YES
+    from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
+    return (
+        confirm(
+            None,
+            "The set route-rep time is up, but the current loop is not back at its "
+            "start position. Finish this loop (electrodes return to start) and then "
+            "move to the next step?",
+            title="Loop needs more time",
+            cancel=False,
+        )
+        == YES
+    )
 
 
 def _prompt_time_expired():
@@ -161,10 +175,14 @@ def _prompt_time_expired():
 
 class RoutesColumnModel(BaseColumnModel):
     """List[List[str]] trait. Default = empty list."""
+
     def trait_for_row(self):
-        return List(List(Str), value=list(self.default_value or []),
-                    desc="Per-step list of routes; each route is an "
-                         "ordered list of electrode IDs.")
+        return List(
+            List(Str),
+            value=list(self.default_value or []),
+            desc="Per-step list of routes; each route is an "
+            "ordered list of electrode IDs.",
+        )
 
 
 class RoutesSummaryView(BaseColumnView):
@@ -190,17 +208,34 @@ class RoutesHandler(BaseColumnHandler):
     the per-step duration as consumed via ``ctx.scratch`` so the
     DurationColumnHandler at priority 90 doesn't dwell a second time.
     """
+
     priority = 30
     wait_for_topics = [ELECTRODES_STATE_APPLIED]
     # Provider default for the Protocol Settings ack-wait grid: 5.0s of
     # headroom for cold-broker first-publish (~1-2s); typical ack <100ms.
     default_ack_time_s = 5.0
 
-    def _run_phase(self, phase, *, ctx, mapping, static_routes, step_uuid,
-                   step_label, preview_mode, per_phase_dwell, stop_event,
-                   pause_event, signals, phase_index, phase_total,
-                   hold_for_buffer=False, honor_pause=True,
-                   emit_phase_started=True, time_expired=None):
+    def _run_phase(
+        self,
+        phase,
+        *,
+        ctx,
+        mapping,
+        static_routes,
+        step_uuid,
+        step_label,
+        preview_mode,
+        per_phase_dwell,
+        stop_event,
+        pause_event,
+        signals,
+        phase_index,
+        phase_total,
+        hold_for_buffer=False,
+        honor_pause=True,
+        emit_phase_started=True,
+        time_expired=None,
+    ):
         """Run ONE phase: clear the early-advance event, honour stop/pause,
         publish display (+ hardware when not preview), wait the ack, and
         dwell (cut short by phase_advance_event). Returns False if a Stop
@@ -233,11 +268,13 @@ class RoutesHandler(BaseColumnHandler):
         # buffer left over from a phase that ended early.
         ctx.phase_advance_event.clear()
         ctx.reset_phase_time_buffer()
+
         # A pending mid-run seek (operator navigated away while paused) must
         # cut this phase's dwell/hold short on resume so the leftover time
         # doesn't run before the executor redirects (#471).
         def _seek_pending():
             return ctx.protocol.cursor.resume_target is not None
+
         if stop_event.is_set():
             return False
         # Pause check at the phase boundary — block here so the
@@ -263,13 +300,14 @@ class RoutesHandler(BaseColumnHandler):
         for e in electrodes:
             if e not in mapping:
                 logger.warning(
-                    f"electrode {e!r} has no channel mapping; "
-                    f"actuation channel skipped"
+                    f"electrode {e!r} has no channel mapping; actuation channel skipped"
                 )
 
         if signals is not None and emit_phase_started:
             signals.phase_started = (
-                phase_index, phase_total, per_phase_dwell,
+                phase_index,
+                phase_total,
+                per_phase_dwell,
             )
 
         # 1. Display: synchronous, no ack. editable tracks Advanced Mode so
@@ -303,10 +341,14 @@ class RoutesHandler(BaseColumnHandler):
             if self.ack_time_s > 0:
                 ctx.wait_for(ELECTRODES_STATE_APPLIED, timeout=self.ack_time_s)
 
-        _cooperative_sleep(per_phase_dwell, stop_event, pause_event,
-                           phase_advance_event=ctx.phase_advance_event,
-                           seek_pending=_seek_pending,
-                           time_expired=time_expired)
+        _cooperative_sleep(
+            per_phase_dwell,
+            stop_event,
+            pause_event,
+            phase_advance_event=ctx.phase_advance_event,
+            seek_pending=_seek_pending,
+            time_expired=time_expired,
+        )
 
         # Consume any phase-time buffer a sibling column added (only relevant
         # when this step opted into holding — see below) and tell the status
@@ -337,10 +379,10 @@ class RoutesHandler(BaseColumnHandler):
             # once and adds nothing. A non-zero gap (e.g. the dwell ended early
             # on a stale advance) still gets the bounded grace. Deliberate
             # operator holds below (pause / buffer) refresh past this cap.
-            grace_deadline = min(time.monotonic() + _HOLD_GRACE_S,
-                                 phase_start + per_phase_dwell)
-            while (not stop_event.is_set()
-                   and not ctx.phase_advance_event.is_set()):
+            grace_deadline = min(
+                time.monotonic() + _HOLD_GRACE_S, phase_start + per_phase_dwell
+            )
+            while not stop_event.is_set() and not ctx.phase_advance_event.is_set():
                 if _seek_pending():
                     break
                 # Rep-duration budget crossed while holding (e.g. a stuck
@@ -358,11 +400,14 @@ class RoutesHandler(BaseColumnHandler):
                 extra = _take_and_emit()
                 if extra > 0:
                     _cooperative_sleep(
-                        extra, stop_event, pause_event,
+                        extra,
+                        stop_event,
+                        pause_event,
                         phase_advance_event=ctx.phase_advance_event,
                         buffer_provider=_take_and_emit,
                         seek_pending=_seek_pending,
-                        time_expired=time_expired)
+                        time_expired=time_expired,
+                    )
                     grace_deadline = time.monotonic() + _HOLD_GRACE_S
                     continue
                 if time.monotonic() >= grace_deadline:
@@ -370,10 +415,22 @@ class RoutesHandler(BaseColumnHandler):
                 time.sleep(_SLICE_S)
         return True
 
-    def _run_dynamic_duration_loop(self, row, *, ctx, mapping, static_routes,
-                                   step_uuid, step_label, preview_mode,
-                                   per_phase_dwell, stop_event, pause_event,
-                                   signals, budget):
+    def _run_dynamic_duration_loop(
+        self,
+        row,
+        *,
+        ctx,
+        mapping,
+        static_routes,
+        step_uuid,
+        step_label,
+        preview_mode,
+        per_phase_dwell,
+        stop_event,
+        pause_event,
+        signals,
+        budget,
+    ):
         """Duration mode + a phase-hold hook: run full unit cycles while a
         guaranteed FULL loop still fits the RAW wall-clock budget, then enter
         an explicit idle phase (electrodes off) until the budget elapses.
@@ -406,6 +463,7 @@ class RoutesHandler(BaseColumnHandler):
             trail_length=int(getattr(row, "trail_length", 1)),
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
             soft_start=bool(getattr(row, "soft_start", False)),
+            **slug_shape_for_row(row),
         )
         # No routes -> unit_cycle is the single static phase and return_phase
         # is None; the loop below repeats that static actuation across the
@@ -455,8 +513,7 @@ class RoutesHandler(BaseColumnHandler):
             nonlocal running_idx
             running_idx += 1
             if signals is not None:
-                signals.dyn_phase_started = (cycle_pos + 1, cycle_len,
-                                             per_phase_dwell)
+                signals.dyn_phase_started = (cycle_pos + 1, cycle_len, per_phase_dwell)
             # guard_budget: only the main active-loop phases pass True. It wakes
             # the dwell/hold the instant the RAW budget is crossed (within a
             # slice) so the overrun prompt fires even while a phase is held open
@@ -465,20 +522,32 @@ class RoutesHandler(BaseColumnHandler):
             # ramp-up and seek-resume finishes pass False (never break early).
             time_expired = (
                 (lambda: not overrun_prompted and raw_elapsed() >= budget)
-                if (guard_budget and budget > 0) else None)
+                if (guard_budget and budget > 0)
+                else None
+            )
             # hold_for_buffer=True: this loop only runs when a column requested
             # the phase-hold hook, so honour the same post-dwell hold/dialog as
             # the static path. honor_pause=False: this loop owns the pause/seek
             # checkpoints (the executor re-enters the step on a seek).
             return self._run_phase(
-                phase, ctx=ctx, mapping=mapping, static_routes=static_routes,
-                step_uuid=step_uuid, step_label=step_label,
-                preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
-                stop_event=stop_event, pause_event=pause_event,
-                signals=signals, phase_index=cycle_pos + 1,
-                phase_total=cycle_len + 1, hold_for_buffer=True,
-                honor_pause=False, emit_phase_started=False,
-                time_expired=time_expired)
+                phase,
+                ctx=ctx,
+                mapping=mapping,
+                static_routes=static_routes,
+                step_uuid=step_uuid,
+                step_label=step_label,
+                preview_mode=preview_mode,
+                per_phase_dwell=per_phase_dwell,
+                stop_event=stop_event,
+                pause_event=pause_event,
+                signals=signals,
+                phase_index=cycle_pos + 1,
+                phase_total=cycle_len + 1,
+                hold_for_buffer=True,
+                honor_pause=False,
+                emit_phase_started=False,
+                time_expired=time_expired,
+            )
 
         def _go_idle():
             # Explicit idle: electrodes off once, then hold to the budget. A
@@ -488,7 +557,8 @@ class RoutesHandler(BaseColumnHandler):
             logger.info(
                 f"[dyn-loop] entering IDLE (electrodes off): elapsed="
                 f"{raw_elapsed():.2f}s of rep-duration budget {budget:.2f}s "
-                f"-> idle for ~{idle_for:.2f}s until the budget elapses")
+                f"-> idle for ~{idle_for:.2f}s until the budget elapses"
+            )
             if not preview_mode:
                 electrode_state_change_publisher.publish(actuated_channels=[])
             if signals is not None:
@@ -497,8 +567,11 @@ class RoutesHandler(BaseColumnHandler):
                 if cursor.resume_target is not None:
                     return
                 _cooperative_sleep(
-                    min(0.1, budget - raw_elapsed()), stop_event, pause_event,
-                    seek_pending=lambda: cursor.resume_target is not None)
+                    min(0.1, budget - raw_elapsed()),
+                    stop_event,
+                    pause_event,
+                    seek_pending=lambda: cursor.resume_target is not None,
+                )
 
         def _resume_at(target):
             """Resolve a (just-cleared) same-step seek to phase ``target`` to
@@ -514,7 +587,8 @@ class RoutesHandler(BaseColumnHandler):
                 _go_idle()
                 return None
             if k > 0 and not loop_completion_fits(
-                    raw_elapsed(), k, cycle_len, per_phase_dwell, budget):
+                raw_elapsed(), k, cycle_len, per_phase_dwell, budget
+            ):
                 if ctx.prompt_gui(lambda: _confirm_finish_loop_over_budget()):
                     # Finish this loop (back to start), then advance.
                     for j in range(k, cycle_len):
@@ -552,8 +626,10 @@ class RoutesHandler(BaseColumnHandler):
                     # is noticed: on wake the next phase's dwell breaks at once
                     # (over budget) and the post-phase overrun check prompts.
                     _wait_through_pause(
-                        pause_event, stop_event,
-                        lambda: not overrun_prompted and raw_elapsed() >= budget)
+                        pause_event,
+                        stop_event,
+                        lambda: not overrun_prompted and raw_elapsed() >= budget,
+                    )
                     if stop_event.is_set():
                         return
                 if cursor.resume_target is not None:
@@ -577,8 +653,13 @@ class RoutesHandler(BaseColumnHandler):
                 # full loop (the first loop runs unconditionally). Ask the
                 # operator once per step what to do. Skipped in preview (a
                 # visual dry-run shouldn't block on a dialog).
-                if (not preview_mode and not overrun_prompted and budget > 0
-                        and i < cycle_len and raw_elapsed() >= budget):
+                if (
+                    not preview_mode
+                    and not overrun_prompted
+                    and budget > 0
+                    and i < cycle_len
+                    and raw_elapsed() >= budget
+                ):
                     overrun_prompted = True
                     decision = ctx.prompt_gui(_prompt_time_expired) or "finish"
                     if decision == "next":
@@ -594,7 +675,8 @@ class RoutesHandler(BaseColumnHandler):
             elapsed = raw_elapsed()
             worst_loop = cycle_len * per_phase_dwell
             fits = per_phase_dwell > 0 and another_loop_fits(
-                elapsed, cycle_len, per_phase_dwell, budget)
+                elapsed, cycle_len, per_phase_dwell, budget
+            )
             # Explain the keep-looping-vs-idle decision so the operator can see
             # how the dynamic loop is spending the rep-duration budget (#477).
             logger.info(
@@ -603,7 +685,8 @@ class RoutesHandler(BaseColumnHandler):
                 f"({cycle_len} phases x {per_phase_dwell:.2f}s), "
                 f"available={max(0.0, budget - elapsed):.2f}s, "
                 f"rep-duration budget={budget:.2f}s -> "
-                f"{'run another loop' if fits else 'stop looping, go idle'}")
+                f"{'run another loop' if fits else 'stop looping, go idle'}"
+            )
             if not fits:
                 break
         if not stop_event.is_set():
@@ -648,25 +731,39 @@ class RoutesHandler(BaseColumnHandler):
 
         if in_duration_mode and phase_hold:
             self._run_dynamic_duration_loop(
-                row, ctx=ctx, mapping=mapping, static_routes=routes,
-                step_uuid=step_uuid, step_label=step_label,
-                preview_mode=preview_mode, per_phase_dwell=per_phase_dwell,
-                stop_event=stop_event, pause_event=pause_event,
-                signals=signals, budget=budget)
+                row,
+                ctx=ctx,
+                mapping=mapping,
+                static_routes=routes,
+                step_uuid=step_uuid,
+                step_label=step_label,
+                preview_mode=preview_mode,
+                per_phase_dwell=per_phase_dwell,
+                stop_event=stop_event,
+                pause_event=pause_event,
+                signals=signals,
+                budget=budget,
+            )
         else:
-            phases = list(iter_phases(
-                static_electrodes=list(getattr(row, "electrodes", []) or []),
-                routes=list(getattr(row, "routes", []) or []),
-                trail_length=int(getattr(row, "trail_length", 1)),
-                trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                soft_start=bool(getattr(row, "soft_start", False)),
-                soft_end=bool(getattr(row, "soft_end", False)),
-                repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
-                                   if in_duration_mode else 0.0),
-                linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=int(getattr(row, "route_repetitions", 1)),
-                step_duration_s=float(getattr(row, "duration_s", 1.0)),
-            ))
+            phases = list(
+                iter_phases(
+                    static_electrodes=list(getattr(row, "electrodes", []) or []),
+                    routes=list(getattr(row, "routes", []) or []),
+                    trail_length=int(getattr(row, "trail_length", 1)),
+                    trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                    soft_start=bool(getattr(row, "soft_start", False)),
+                    soft_end=bool(getattr(row, "soft_end", False)),
+                    repeat_duration_s=(
+                        float(getattr(row, "repeat_duration", 0.0))
+                        if in_duration_mode
+                        else 0.0
+                    ),
+                    linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                    n_repeats=int(getattr(row, "route_repetitions", 1)),
+                    step_duration_s=float(getattr(row, "duration_s", 1.0)),
+                    **slug_shape_for_row(row),
+                )
+            )
             cursor = ctx.protocol.cursor
             total_phases = len(phases)
             cursor.phase_total = total_phases
@@ -688,7 +785,8 @@ class RoutesHandler(BaseColumnHandler):
                 routes=list(getattr(row, "routes", []) or []),
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                soft_start=bool(getattr(row, "soft_start", False)))
+                soft_start=bool(getattr(row, "soft_start", False)),
+            )
             start_set = _dlp_cycle[0] if _dlp_cycle else None
             finish_to_start = False
             # Budget-expiry predicate: lets a paused/dwelling phase wake the
@@ -696,9 +794,10 @@ class RoutesHandler(BaseColumnHandler):
             # paused). Disabled once prompted so the loop-completion phases dwell
             # normally. None in count mode (no budget).
             time_expired = (
-                (lambda: not overrun_prompted
-                 and (_monotonic() - step_start) >= budget)
-                if (in_duration_mode and budget > 0) else None)
+                (lambda: not overrun_prompted and (_monotonic() - step_start) >= budget)
+                if (in_duration_mode and budget > 0)
+                else None
+            )
             while phase_i < total_phases:
                 if stop_event.is_set():
                     break
@@ -715,28 +814,40 @@ class RoutesHandler(BaseColumnHandler):
                 # then resumed (pause_event is already clear by now).
                 if cursor.resume_target is not None:
                     action, target_phase = cursor.decision_at_phase(phase_i)
-                    if action == "jump":          # same step -> jump in place
+                    if action == "jump":  # same step -> jump in place
                         cursor.clear_seek()
                         phase_i = max(0, min(int(target_phase), total_phases - 1))
                         continue
-                    if action == "abort":         # different step -> let the
-                        seek_abort = True         # executor's frame walk redirect
+                    if action == "abort":  # different step -> let the
+                        seek_abort = True  # executor's frame walk redirect
                         break
                 if not self._run_phase(
-                        phases[phase_i], ctx=ctx, mapping=mapping,
-                        static_routes=routes, step_uuid=step_uuid,
-                        step_label=step_label, preview_mode=preview_mode,
-                        per_phase_dwell=per_phase_dwell, stop_event=stop_event,
-                        pause_event=pause_event, signals=signals,
-                        phase_index=phase_i + 1, phase_total=total_phases,
-                        hold_for_buffer=phase_hold, honor_pause=False,
-                        time_expired=time_expired):
+                    phases[phase_i],
+                    ctx=ctx,
+                    mapping=mapping,
+                    static_routes=routes,
+                    step_uuid=step_uuid,
+                    step_label=step_label,
+                    preview_mode=preview_mode,
+                    per_phase_dwell=per_phase_dwell,
+                    stop_event=stop_event,
+                    pause_event=pause_event,
+                    signals=signals,
+                    phase_index=phase_i + 1,
+                    phase_total=total_phases,
+                    hold_for_buffer=phase_hold,
+                    honor_pause=False,
+                    time_expired=time_expired,
+                ):
                     break
                 phase_i += 1
                 # "Complete loop" choice: stop the instant the droplet is back at
                 # the loop origin — don't run the remaining predetermined reps.
-                if (finish_to_start and start_set is not None
-                        and phases[phase_i - 1] == start_set):
+                if (
+                    finish_to_start
+                    and start_set is not None
+                    and phases[phase_i - 1] == start_set
+                ):
                     break
                 # Overrun guard (#477 follow-up): duration mode with the budget
                 # used up before the phases finished (e.g. the budget is shorter
@@ -746,9 +857,14 @@ class RoutesHandler(BaseColumnHandler):
                 # return-to-start phase, so when only THAT phase remains the step
                 # is completing normally (it ends back at start) — not an
                 # overrun. Only prompt while a real move phase still remains.
-                if (in_duration_mode and not preview_mode and budget > 0
-                        and not overrun_prompted and phase_i < total_phases - 1
-                        and _monotonic() - step_start >= budget):
+                if (
+                    in_duration_mode
+                    and not preview_mode
+                    and budget > 0
+                    and not overrun_prompted
+                    and phase_i < total_phases - 1
+                    and _monotonic() - step_start >= budget
+                ):
                     overrun_prompted = True
                     decision = ctx.prompt_gui(_prompt_time_expired) or "finish"
                     if decision == "next":
@@ -774,14 +890,24 @@ class RoutesHandler(BaseColumnHandler):
             # ACTUAL emitted phase count so it accounts for loop cycles,
             # ramps, and routes. Skipped when the budget already overran
             # (skip-to-next, or the operator let it finish past the budget).
-            if (in_duration_mode and not stop_event.is_set()
-                    and not overrun_prompted and not skip_to_next):
-                pad = max(0.0, float(getattr(row, "repeat_duration", 0.0))
-                              - len(phases) * per_phase_dwell)
+            if (
+                in_duration_mode
+                and not stop_event.is_set()
+                and not overrun_prompted
+                and not skip_to_next
+            ):
+                pad = max(
+                    0.0,
+                    float(getattr(row, "repeat_duration", 0.0))
+                    - len(phases) * per_phase_dwell,
+                )
                 if pad > 0:
                     _cooperative_sleep(
-                        pad, stop_event, pause_event,
-                        seek_pending=lambda: cursor.resume_target is not None)
+                        pad,
+                        stop_event,
+                        pause_event,
+                        seek_pending=lambda: cursor.resume_target is not None,
+                    )
 
         # Tell DurationColumnHandler we already covered the dwell.
         ctx.scratch[DURATION_CONSUMED_KEY] = True
@@ -801,14 +927,20 @@ def _wait_through_pause(pause_event, stop_event, time_expired=None) -> None:
     NOT itself clear the pause."""
     while pause_event is not None and pause_event.is_set():
         if pause_event.wait_cleared(timeout=_SLICE_S):
-            return                       # resumed
+            return  # resumed
         if stop_event.is_set() or (time_expired is not None and time_expired()):
-            return                       # caller re-checks stop / budget
+            return  # caller re-checks stop / budget
 
 
-def _cooperative_sleep(seconds: float, stop_event, pause_event=None,
-                       phase_advance_event=None, buffer_provider=None,
-                       seek_pending=None, time_expired=None) -> None:
+def _cooperative_sleep(
+    seconds: float,
+    stop_event,
+    pause_event=None,
+    phase_advance_event=None,
+    buffer_provider=None,
+    seek_pending=None,
+    time_expired=None,
+) -> None:
     """Sleep for ``seconds``, waking every _SLICE_S to check stop_event
     (and pause_event if provided). Used so a Stop or Pause press lands
     within ~50ms even mid-dwell. On pause: block in
@@ -864,10 +996,11 @@ def make_routes_column():
     # saved protocols and user-tuned wait times.
     return Column(
         model=RoutesColumnModel(
-            col_id="routes", col_name="Routes", default_value=[],
+            col_id="routes",
+            col_name="Routes",
+            default_value=[],
         ),
         view=RoutesSummaryView(),
         handler=RoutesHandler(),
-        preference_display_name="Electrodes / Routes"
+        preference_display_name="Electrodes / Routes",
     )
-
