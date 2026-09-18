@@ -92,6 +92,7 @@ _hint_label = HtmlLabelEditor(
 _exposure_slider = SteppedSliderEditor(
     low=PMT_EXPOSURE_S_BOUNDS[0],
     high=PMT_EXPOSURE_S_BOUNDS[1],
+    high_name="exposure_max",
     step=PMT_EXPOSURE_S_STEP,
 )
 
@@ -192,6 +193,11 @@ _spot_table_enabled_when = "connected and not busy and not protocol_running"
 
 capture = VGroup(
     Item("attached_label", style="readonly", label="Mode"),
+    Item(
+        "exposure_range",
+        label="Exposure range",
+        enabled_when=_spot_table_enabled_when,
+    ),
     UItem(
         "rows",
         editor=pmt_spot_table_manual,

@@ -19,7 +19,10 @@ from portable_dropbot_controller.consts import (
     PmtCaptureDone,
     PmtSpotResult,
 )
-from portable_dropbot_status_and_controls.consts import PMT_LIVE_WINDOW_SAMPLES
+from portable_dropbot_status_and_controls.consts import (
+    PMT_EXPOSURE_RANGES,
+    PMT_LIVE_WINDOW_SAMPLES,
+)
 from portable_dropbot_status_and_controls.models.pmt_capture_model import (
     PmtSpotRow,
     PortableDropbotPmtCaptureModel,
@@ -336,6 +339,22 @@ def test_capture_entries_uses_start_or_end_ticks_while_attached():
     ]
     m.attached_step_id = "step-1"
     assert [e["slot"] for e in m.capture_entries()] == [1, 3]
+
+
+def test_exposure_range_sets_every_rows_slider_bound():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000), (2, 2000)])
+    assert {r.exposure_max for r in m.rows} == {PMT_EXPOSURE_RANGES[m.exposure_range]}
+
+    m.exposure_range = "1–10 s"
+    assert {r.exposure_max for r in m.rows} == {10.0}
+
+    m.merge_spots([(1, 1000), (2, 2000), (3, 3000)])  # a new row follows too
+    assert m.rows[2].exposure_max == 10.0
+    # The pick never rewrites an exposure that is already above it.
+    m.rows[0].exposure_s = 45.0
+    m.exposure_range = "1–10 s"
+    assert m.rows[0].exposure_s == 45.0
 
 
 def test_exposure_countdown_appends_tenths_left_and_stops():

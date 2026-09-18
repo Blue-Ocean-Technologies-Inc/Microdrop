@@ -505,20 +505,36 @@ class _SteppedSliderEditor(QtEditor):
     """A horizontal slider whose handle snaps to fixed increments (the
     slider works in integer notches of ``step``), with a value readout."""
 
+    #: The slider's upper bound; the factory's ``high`` unless ``high_name``
+    #: names a trait on the edited object to follow instead.
+    high = Float()
+
     def init(self, parent):
         self.control = QtWidgets.QWidget()
         layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, self.control)
         layout.setContentsMargins(0, 0, 0, 0)
         self._slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(0)
-        self._slider.setMaximum(
-            round((self.factory.high - self.factory.low) / self.factory.step)
-        )
         self._slider.setPageStep(1)
         self._readout = QLabel()
         layout.addWidget(self._slider)
         layout.addWidget(self._readout)
+
+        self.high = self.factory.high
+
+        if self.factory.high_name:
+            self.sync_value(self.factory.high_name, "high", "from")
+
         self._slider.valueChanged.connect(self.update_object)
+
+    def _high_changed(self):
+        if self.control is None:
+            return
+
+        self._slider.setMaximum(
+            round((self.high - self.factory.low) / self.factory.step)
+        )
+        self.update_editor()
 
     def update_object(self, notches):
         """Handles the user moving the slider handle."""
@@ -546,6 +562,9 @@ class SteppedSliderEditor(BasicEditorFactory):
 
     low = Float(0.0)
     high = Float(1.0)
+    #: Extended name of a trait on the edited object supplying the upper
+    #: bound at run time (e.g. a range the user picks); overrides ``high``.
+    high_name = Str()
     step = Float(0.1)
     #: printf-style format of the value readout next to the slider.
     format = Str("%.1f")

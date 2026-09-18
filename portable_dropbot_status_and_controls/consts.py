@@ -129,6 +129,14 @@ PMT_LIVE_PLOT_MIN_WIDTH = 320
 #: The spot table's exposure slider moves in these steps (s); finer
 #: precision means nothing for a PMT exposure.
 PMT_EXPOSURE_S_STEP = 0.1
+#: Spans the exposure slider can cover (label -> upper bound, s): a narrow
+#: span makes the 0.1 s notches easy to hit, the widest reaches the bound.
+PMT_EXPOSURE_RANGES = {
+    "1–10 s": 10.0,
+    "1–60 s": 60.0,
+    "1–600 s": 600.0,
+}
+DEFAULT_PMT_EXPOSURE_RANGE = "1–60 s"
 
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.

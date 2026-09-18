@@ -65,7 +65,12 @@ from template_status_and_controls.base_model import BaseStatusModel
 from microdrop_utils.ureg_helpers import ureg
 
 # Local imports.
-from ..consts import PMT_LIVE_WINDOW_SAMPLES, PORTABLE_DROPBOT_IMAGE
+from ..consts import (
+    DEFAULT_PMT_EXPOSURE_RANGE,
+    PMT_EXPOSURE_RANGES,
+    PMT_LIVE_WINDOW_SAMPLES,
+    PORTABLE_DROPBOT_IMAGE,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -95,6 +100,9 @@ class PmtSpotRow(HasTraits):
         DEFAULT_PMT_EXPOSURE_S,
         desc="Stream duration for this spot, seconds",
     )
+    #: Upper bound of the row's exposure slider, from the pane's exposure
+    #: range pick; the value itself is never clamped to it.
+    exposure_max = Float(PMT_EXPOSURE_S_BOUNDS[1])
     #: Attached-step ticks — captured at the step's start / end (or both);
     #: hidden and unused in manual mode.
     at_start = Bool(False, desc="Capture this spot at the step's start")
@@ -207,6 +215,10 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     has_next_frame = Property(Bool, observe="result_frames.items, frame_index")
     previous_frame_button = Button("Previous run")
     next_frame_button = Button("Next run")
+
+    #: Which span the exposure sliders cover: a narrow range makes the 0.1 s
+    #: notches easy to hit, a wide one reaches long exposures.
+    exposure_range = Enum(DEFAULT_PMT_EXPOSURE_RANGE, tuple(PMT_EXPOSURE_RANGES))
 
     # ---- Shared live-stream / acquire settings --------------------------
     #: PMT gain (MCP41010 wiper), used by both the live stream and acquire.
@@ -369,6 +381,13 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     def format_quantity(value, unit):
         """A value in `unit` (e.g. "A", "V") with a compact prefix (µA, mV)."""
         return f"{ureg.Quantity(float(value), unit).to_compact():.4g~P}"
+
+    @observe("exposure_range, rows.items")
+    def _apply_exposure_range(self, event):
+        exposure_max = PMT_EXPOSURE_RANGES[self.exposure_range]
+
+        for row in self.rows:
+            row.exposure_max = exposure_max
 
     def merge_spots(self, spots):
         """Adopt a fresh (slot, position_um) list without losing settings.
