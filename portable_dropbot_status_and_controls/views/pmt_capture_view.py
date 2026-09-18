@@ -191,12 +191,17 @@ pmt_results_table = TableEditor(
 #: table locking too keeps the operator from editing a frozen setup).
 _spot_table_enabled_when = "connected and not busy and not protocol_running"
 
+#: Labelled rows live in their own sub-groups: a group with any labelled
+#: item lays out as a label/editor grid, which would push the unlabelled
+#: table (and the plot below) into the editor column instead of full width.
 capture = VGroup(
-    Item("attached_label", style="readonly", label="Mode"),
-    Item(
-        "exposure_range",
-        label="Exposure range",
-        enabled_when=_spot_table_enabled_when,
+    VGroup(
+        Item("attached_label", style="readonly", label="Mode"),
+        Item(
+            "exposure_range",
+            label="Exposure range",
+            enabled_when=_spot_table_enabled_when,
+        ),
     ),
     UItem(
         "rows",
@@ -217,8 +222,10 @@ capture = VGroup(
         UItem("abort_button", enabled_when="capturing"),
         UItem("refresh_button", enabled_when="connected and not busy"),
     ),
-    Item("progress", style="readonly", label="Status"),
-    Item("results_directory", style="readonly", label="Saved to"),
+    VGroup(
+        Item("progress", style="readonly", label="Status"),
+        Item("results_directory", style="readonly", label="Saved to"),
+    ),
 )
 
 results = VGroup(
@@ -289,8 +296,10 @@ live = VGroup(
             UItem("stream_stop_button", enabled_when="streaming"),
             UItem("acquire_button", enabled_when="connected and not busy"),
         ),
-        Item("live_units", label="Units"),
-        Item("live_summary", style="readonly", label="Live"),
+        VGroup(
+            Item("live_units", label="Units"),
+            Item("live_summary", style="readonly", label="Live"),
+        ),
         UItem(
             "live_values",
             editor=LivePlotEditor(
@@ -299,7 +308,7 @@ live = VGroup(
                 min_width=PMT_LIVE_PLOT_MIN_WIDTH,
             ),
         ),
-        Item("acquire_summary", style="readonly", label="Acquire"),
+        VGroup(Item("acquire_summary", style="readonly", label="Acquire")),
         visible_when="show_live",
     ),
 )
