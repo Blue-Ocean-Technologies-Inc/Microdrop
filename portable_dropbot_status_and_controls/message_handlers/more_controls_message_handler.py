@@ -8,21 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import Instance
 
+# Microdrop package imports.
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
+# Local imports.
 from ..models.more_controls_model import PortableDropbotMoreControlsModel
 
 
 class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
     """Connection greying (inherited), the TEMP_UPDATED stream
     (per-channel readings and PID readbacks), and the PMT_UPDATED
-    stream (actual power state and acquire outcomes)."""
+    stream (actual power state)."""
 
     model = Instance(PortableDropbotMoreControlsModel)
 
@@ -41,16 +45,10 @@ class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
             self.model.temp_info_display = (
                 f"ch{channel}: {data['current_c']:.2f} °C "
                 f"(target {data['target_c']:.2f} °C, "
-                f"output {data['output_pct']:.1f} %)")
+                f"output {data['output_pct']:.1f} %)"
+            )
 
     def _on_pmt_updated_triggered(self, body):
         data = json.loads(str(body))
         if "power" in data:
             self.model.pmt_power = bool(data["power"])
-        if "acquiring" in data:
-            self.model.acquiring = bool(data["acquiring"])
-        if "acquired_packets" in data:
-            packets = data["acquired_packets"]
-            self.model.pmt_status_display = (
-                f"Acquired {packets} packets" if packets is not None
-                else "Acquire FAILED — see log")

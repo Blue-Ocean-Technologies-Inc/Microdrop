@@ -8,11 +8,24 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop utils imports.
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+
 microdrop_runner_setup()
 
-from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
-from examples.plugin_consts import *
+from examples.plugin_consts import (  # noqa: E402
+    BACKEND_APPLICATION,
+    BACKEND_PLUGINS,
+    DROPBOT_BACKEND_PLUGINS,
+    OPENDROP_BACKEND_PLUGINS,
+    REQUIRED_CONTEXT,
+    REQUIRED_PLUGINS,
+    _lazy_load_portable_dropbot_plugins,
+)
+from examples.run_device_viewer_pluggable import (  # noqa: E402
+    main as run_device_viewer_pluggable,
+)
+
 
 def main(args):
     """Run only the backend plugins."""
@@ -27,13 +40,13 @@ def main(args):
     elif args.device == "opendrop":
         plugins += OPENDROP_BACKEND_PLUGINS
     elif args.device == "portable":
-        plugins += PORTABLE_DROPBOT_BACKEND_PLUGINS
+        plugins += _lazy_load_portable_dropbot_plugins()
 
     run_device_viewer_pluggable(
         plugins=plugins,
         contexts=REQUIRED_CONTEXT,
         application=BACKEND_APPLICATION,
-        persist=True
+        persist=True,
     )
 
 
@@ -46,13 +59,15 @@ if __name__ == "__main__":
 
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the frontend device viewer plugins.")
+    parser = argparse.ArgumentParser(
+        description="Run the frontend device viewer plugins."
+    )
 
     parser.add_argument(
         "--device",
         type=str,
         choices=["dropbot", "opendrop", "portable"],
         default="dropbot",  # Sets a default if the user doesn't provide the flag
-        help="Specify the device to use: 'dropbot' or 'opendrop'"
+        help="Specify the device to use: 'dropbot' or 'opendrop'",
     )
     main(parser.parse_args())

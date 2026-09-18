@@ -8,10 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import atexit
 import json
 import time
 
+# Third-party imports.
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import (
@@ -22,16 +24,20 @@ from apscheduler.schedulers.base import (
 from apscheduler.triggers.interval import IntervalTrigger
 from serial.tools import list_ports
 
+# Enthought library imports.
 from traits.api import Bool, HasTraits, Instance, Str, provides
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
-from ..driver.session import DropletBotSession
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+from ..session import PortableDropbotSession
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -253,7 +259,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
     def _attempt_connect(self, port_name: str, autodetect: bool = False) -> bool:
         session = None
         try:
-            session = DropletBotSession()
+            session = PortableDropbotSession()
             if not session.connect(
                 port=port_name,
                 baudrate=int(self.preferences.baud_rate),
@@ -300,7 +306,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
             # Align the HV master enable with realtime mode (HV
             # follows the Realtime toggle): a freshly connected board
             # must not sit energized while realtime is off.
-            session.uart.hv_enable(1 if self.realtime_mode else 0, 0)
+            session.sig.hv_enable(1 if self.realtime_mode else 0, 0)
             self._publish_connected()
             self._publish_status_snapshot()
             logger.info(f"Connected to Portable Dropbot on {port_name}")

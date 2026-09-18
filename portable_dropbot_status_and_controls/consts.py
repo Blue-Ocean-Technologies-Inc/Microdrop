@@ -8,13 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import os
 
+# Microdrop package imports.
 from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
     MOTOR_PARAMS_UPDATED,
+    PMT_ACQUIRE_DONE,
+    PMT_ADC_UPDATED,
+    PMT_CAPTURE_DONE,
+    PMT_CAPTURE_PROGRESS,
+    PMT_SPOTS_UPDATED,
+    PMT_STREAM_UPDATED,
     PMT_UPDATED,
     PORTABLE_DROPBOT_CONNECTED,
     PORTABLE_DROPBOT_DISCONNECTED,
@@ -46,6 +55,7 @@ MOTORS_LISTENER = f"{PKG}_motors_listener"
 CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
 MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
 ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
+PMT_CAPTURE_LISTENER = f"{PKG}_pmt_capture_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -75,6 +85,20 @@ ACTOR_TOPIC_DICT = {
         TEMP_UPDATED,
         PMT_UPDATED,
     ],
+    PMT_CAPTURE_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        PMT_SPOTS_UPDATED,
+        PMT_CAPTURE_PROGRESS,
+        PMT_CAPTURE_DONE,
+        PMT_STREAM_UPDATED,
+        PMT_ADC_UPDATED,
+        PMT_ACQUIRE_DONE,
+        #: "Pane follows step" (#601 increment 2): loads/clears the attached
+        #: step's PMT setup and locks editing while a protocol runs.
+        PROTOCOL_TREE_ROW_SELECTED,
+        PROTOCOL_RUNNING,
+    ],
     #: The advanced-only pane also tracks the Edit-menu Advanced Mode
     #: toggle, which is what unlocks its controls.
     ADVANCED_CONTROLS_LISTENER: [
@@ -84,6 +108,35 @@ ACTOR_TOPIC_DICT = {
         ADVANCED_MODE_CHANGE,
     ],
 }
+
+#: Rolling window of live PMT stream values kept for the plot and stats.
+PMT_LIVE_WINDOW_SAMPLES = 3000
+
+#: How often the PMT status line's exposure countdown refreshes; it shows
+#: tenths of a second.
+PMT_COUNTDOWN_TICK_S = 0.1
+
+#: Minimum heights (px) that fit every PMT spot without a scrollbar: the spot
+#: table also carries its move up/down toolbar.
+PMT_SPOT_TABLE_MIN_HEIGHT = 230
+PMT_RESULTS_TABLE_MIN_HEIGHT = 190
+
+#: The live plot keeps a fixed height so toggling other groups never resizes
+#: it; its width fills the pane down to this minimum (px).
+PMT_LIVE_PLOT_HEIGHT = 220
+PMT_LIVE_PLOT_MIN_WIDTH = 320
+
+#: The spot table's exposure slider moves in these steps (s); finer
+#: precision means nothing for a PMT exposure.
+PMT_EXPOSURE_S_STEP = 0.1
+#: Spans the exposure slider can cover (label -> upper bound, s): a narrow
+#: span makes the 0.1 s notches easy to hit, the widest reaches the bound.
+PMT_EXPOSURE_RANGES = {
+    "1–10 s": 10.0,
+    "1–60 s": 60.0,
+    "1–600 s": 600.0,
+}
+DEFAULT_PMT_EXPOSURE_RANGE = "1–60 s"
 
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.

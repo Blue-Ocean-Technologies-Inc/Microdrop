@@ -36,12 +36,12 @@ from examples.plugin_consts import (  # noqa: E402
     MOCK_DROPBOT_FRONTEND_PLUGINS,
     OPENDROP_BACKEND_PLUGINS,
     OPENDROP_FRONTEND_PLUGINS,
-    PORTABLE_DROPBOT_BACKEND_PLUGINS,
     PORTABLE_DROPBOT_FRONTEND_PLUGINS,
     REQUIRED_CONTEXT,
     REQUIRED_PLUGINS,
     SERVER_CONTEXT,
     SERVICE_PLUGINS,
+    _lazy_load_portable_dropbot_plugins,
 )
 
 from logger.logger_service import get_logger  # noqa: E402
@@ -176,7 +176,7 @@ def cli():
         elif args.device == "opendrop":
             plugins += OPENDROP_BACKEND_PLUGINS
         elif args.device == "portable":
-            plugins += PORTABLE_DROPBOT_BACKEND_PLUGINS
+            plugins += _lazy_load_portable_dropbot_plugins()
         elif args.device == "mock":
             plugins += MOCK_DROPBOT_BACKEND_PLUGINS
 
