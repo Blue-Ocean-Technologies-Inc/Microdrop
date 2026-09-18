@@ -40,6 +40,7 @@ from traits.api import (
     Property,
     Range,
     Str,
+    observe,
 )
 
 # Microdrop package imports.
@@ -195,10 +196,10 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     result_frames = List(Instance(PmtResultFrame))
     #: Index of the frame on show; -1 before the first capture.
     frame_index = Int(-1)
-    #: The shown frame's rows, in capture order.
-    results = Property(
-        List(Instance(PmtSpotResultRow)), observe="result_frames.items, frame_index"
-    )
+    #: The shown frame's rows, in capture order. A plain list refreshed by
+    #: _show_frame, not a Property: the TableEditor's item listener walks
+    #: the old value, and a Property's old value is Undefined.
+    results = List(Instance(PmtSpotResultRow))
     #: "Run 2 / 3 · 14:05:09", or a hint before the first capture.
     frame_label = Property(Str, observe="result_frames.items, frame_index")
     #: Top-level flags so the arrows' enabled_when reacts.
@@ -268,11 +269,12 @@ class PortableDropbotPmtCaptureModel(BaseStatusModel):
     def _get_busy(self):
         return self.capturing or self.streaming or self.acquiring
 
-    def _get_results(self):
+    @observe("frame_index, result_frames.items")
+    def _show_frame(self, event):
         if 0 <= self.frame_index < len(self.result_frames):
-            return self.result_frames[self.frame_index].rows
-
-        return []
+            self.results = self.result_frames[self.frame_index].rows
+        else:
+            self.results = []
 
     def _get_frame_label(self):
         if not self.result_frames:
