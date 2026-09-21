@@ -133,7 +133,10 @@ capture = VGroup(
         visible_when="attached_step_id",
     ),
     HGroup(
-        UItem("start_button", enabled_when="connected and not running and rows"),
+        UItem(
+            "start_button",
+            enabled_when="connected and not running and not protocol_running and rows",
+        ),
         UItem("abort_button", enabled_when="running"),
     ),
     VGroup(
