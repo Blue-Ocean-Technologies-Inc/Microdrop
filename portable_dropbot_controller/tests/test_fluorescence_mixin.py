@@ -24,7 +24,7 @@ import threading
 import pytest
 
 # Enthought library imports.
-from traits.api import Any, Bool, HasTraits, List
+from traits.api import Any, Bool, HasTraits, List, Str
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
@@ -67,8 +67,16 @@ class _Base(HasTraits):
     portable_dropbot_connection_active = Bool(True)
     errors = List()
     log = List()
+    #: Contexts whose _proxy_call simulates a mid-call disconnect (the
+    #: base's own OSError -> on_disconnected_signal path) instead of
+    #: running call().
+    disconnect_on = List(Str)
 
     def _proxy_call(self, context, call):
+        if context in self.disconnect_on:
+            self.portable_dropbot_connection_active = False
+            return False, None
+
         return True, call()
 
     def _publish_error(self, context, error):
@@ -369,6 +377,22 @@ def test_disconnect_aborts_the_capture(rig):
     _run(h, _request([_entry(1)]))
 
     assert rig["done"][-1]["error"] == "aborted"
+    assert h.log[-2:] == ["light restored", "camera None None"]
+
+
+def test_disconnect_mid_filter_move_is_reported_as_aborted(rig):
+    """A disconnect _proxy_call catches during the filter move must not fall
+    through to the "no reply" stage error — Tasks 8-10 match on "aborted"
+    for both an explicit abort and a disconnect."""
+    h = rig["h"]
+    h.disconnect_on = ["fluorescence capture: filter 1"]
+
+    _run(h, _request([_entry(1), _entry(2)]))
+
+    done = rig["done"][-1]
+    assert done["ok"] is False and done["error"] == "aborted"
+    assert done["paths"] == []
+    assert "filter 2" not in h.log
     assert h.log[-2:] == ["light restored", "camera None None"]
 
 

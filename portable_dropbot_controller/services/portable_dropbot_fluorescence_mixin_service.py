@@ -324,6 +324,12 @@ class FluorescenceCaptureMixinService(HasTraits):
             lambda: self.proxy.motor.fluorescence_ctrl(position),
         )
 
+        if not ok and abort.is_set():
+            # _proxy_call's own OSError handling already declared us
+            # disconnected, which the connection observer turned into an
+            # abort; that is the run's real outcome, not a stage failure.
+            raise _CaptureAborted()
+
         if not ok or moved is None:
             # The vendor's alarm text (stall, move timeout, position unknown)
             # is already on ALARM_RAISED through the driver's on_alarm hook.
@@ -338,6 +344,9 @@ class FluorescenceCaptureMixinService(HasTraits):
             f"fluorescence capture: LED {entry.led_percent} %",
             lambda: self.proxy.sig.fluorescence_ctrl(raw),
         )
+
+        if not ok and abort.is_set():
+            raise _CaptureAborted()
 
         if not ok or not lit:
             raise RuntimeError(f"LED {entry.led_percent} %: no reply")
