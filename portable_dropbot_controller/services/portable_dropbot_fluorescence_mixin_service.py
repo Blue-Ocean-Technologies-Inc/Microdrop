@@ -255,7 +255,13 @@ class FluorescenceCaptureMixinService(HasTraits):
                 self._fluorescence_abort = None
                 self._fluorescence_capturing = False
 
-        fluorescence_capture_done_publisher.publish(done)
+        # The claim is already released above; a failed ack must not
+        # escape the daemon thread.
+        try:
+            fluorescence_capture_done_publisher.publish(done)
+        except Exception as error:
+            logger.error(f"Fluorescence capture done not published: {error}")
+
         logger.info(
             f"Portable Dropbot fluorescence capture --> "
             f"{'ok' if done['ok'] else 'FAILED: ' + done['error']}; "
