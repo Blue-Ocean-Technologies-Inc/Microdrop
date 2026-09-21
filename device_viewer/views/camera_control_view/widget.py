@@ -56,7 +56,15 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
-from microdrop_utils.v4l2_fps_getter import LinuxCameraDeviceContainer, get_video_inputs
+from microdrop_utils.v4l2_fps_getter import (
+    V4L2_FOCUS_ABSOLUTE,
+    V4L2_FOCUS_AUTO,
+    LinuxCameraDeviceContainer,
+    get_v4l2_control,
+    get_v4l2_control_range,
+    get_video_inputs,
+    set_v4l2_controls,
+)
 
 # Local imports.
 from ...consts import (
@@ -126,6 +134,10 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
+        # /dev/videoN path the v4l2 manual-focus fallback last drove, and its
+        # cached focus_absolute (min, max) — see _apply_focus.
+        self._v4l2_focus_path = None
+        self._v4l2_focus_range = None
         # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
         # Kept separate from combo box userData because shiboken cannot serialize
         # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
@@ -478,6 +490,13 @@ class CameraControlWidget(QWidget):
 
         elif isinstance(selected_device, QCameraDevice):
             return selected_device.description()
+
+    def _selected_v4l2_device_path(self):
+        """Return the selected camera's ``/dev/videoN`` path, or ``None``
+        off Linux or while a provider source is selected."""
+        container = self._linux_device_containers.get(self.combo_cameras.currentText())
+
+        return container.device_path if container else None
 
     # ------------------------------------------------------------------ #
     # Provider sources (CAMERA_SOURCES extension point)                    #
@@ -936,8 +955,10 @@ class CameraControlWidget(QWidget):
     def apply_camera_controls(self, request):
         """Apply a CameraControlsRequest dict to the active QCamera (turning
         it on first if it is off) and answer with the camera's readback on
-        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED. A provider feed (no QCamera)
-        or an unsupported mode answers ok=False rather than raising."""
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED. Manual focus falls back to
+        v4l2-ctl on cameras where Qt cannot drive it (see _apply_focus). A
+        provider feed (no QCamera) or an unsupported mode answers ok=False
+        rather than raising."""
         request = request if isinstance(request, dict) else {}
         reply = {"request_id": str(request.get("request_id", "")), "ok": False}
 
@@ -985,13 +1006,51 @@ class CameraControlWidget(QWidget):
         if focus_distance is None:
             camera.setFocusMode(QCamera.FocusMode.FocusModeAuto)
 
+            # Restore continuous auto focus on the v4l2 side too, if the
+            # fallback below was last driving this camera's focus.
+            if self._v4l2_focus_path is not None:
+                if not set_v4l2_controls(self._v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}):
+                    logger.warning(
+                        f"v4l2 auto focus restore failed for {self._v4l2_focus_path}"
+                    )
+
+                self._v4l2_focus_path = None
+
             return
 
-        if not camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
+        if camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
+            camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
+            camera.setFocusDistance(float(focus_distance))
+            self._v4l2_focus_path = None
+
+            return
+
+        # GStreamer backend (Portable Pi): QCamera reports no manual focus
+        # support although the camera's v4l2 focus_absolute control works.
+        path = self._selected_v4l2_device_path()
+
+        if path is None:
             raise RuntimeError("this camera has no manual focus")
 
-        camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
-        camera.setFocusDistance(float(focus_distance))
+        if path != self._v4l2_focus_path or self._v4l2_focus_range is None:
+            self._v4l2_focus_range = get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE)
+
+        if self._v4l2_focus_range is None:
+            raise RuntimeError(
+                "this camera has no manual focus (no v4l2 focus_absolute control)"
+            )
+
+        lo, hi = self._v4l2_focus_range
+        raw = round(lo + float(focus_distance) * (hi - lo))
+
+        # Auto off first — focus_absolute is inactive while auto is on.
+        if not set_v4l2_controls(
+            path, **{V4L2_FOCUS_AUTO: 0, V4L2_FOCUS_ABSOLUTE: raw}
+        ):
+            raise RuntimeError("v4l2 focus set failed")
+
+        self._v4l2_focus_path = path
+        logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
 
     def _exposure_ms_readback(self):
         camera = self.camera
@@ -1002,6 +1061,12 @@ class CameraControlWidget(QWidget):
         return camera.manualExposureTime() * 1000.0
 
     def _focus_distance_readback(self):
+        if self._v4l2_focus_path is not None:
+            lo, hi = self._v4l2_focus_range
+            raw = get_v4l2_control(self._v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
+
+            return (raw - lo) / (hi - lo) if raw is not None else None
+
         camera = self.camera
 
         if camera.focusMode() != QCamera.FocusMode.FocusModeManual:

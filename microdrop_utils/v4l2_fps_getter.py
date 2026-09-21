@@ -8,26 +8,35 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import argparse
-import subprocess
 import platform
 import re
-from PySide6.QtMultimedia import QCamera, QMediaDevices, QCameraDevice
+import subprocess
+
+# Enthought library imports.
+from pyface.qt.QtMultimedia import QCameraDevice, QMediaDevices
 
 os_name = platform.system()
 
+V4L2_FOCUS_ABSOLUTE = "focus_absolute"
+V4L2_FOCUS_AUTO = "focus_automatic_continuous"
 
-def get_v4l2_fps(device_path: str, width: int, height: int, pixel_format: str = "JPEG") -> list[float]:
+
+def get_v4l2_fps(
+    device_path: str, width: int, height: int, pixel_format: str = "JPEG"
+) -> list[float]:
     """
-    Finds the supported FPS for a V4L2 device node at a given resolution and pixel format.
+    Finds the supported FPS for a V4L2 device node at a given resolution and
+    pixel format.
 
     Args:
         device_path: Device node path (e.g. ``"/dev/video0"``).
         width: Resolution width (e.g. 1920).
         height: Resolution height (e.g. 1080).
         pixel_format: Pixel format to match (default ``"JPEG"``).
-                      Common values: ``"JPEG"``, ``"MJPG"``, ``"YUYV"``, ``"NV12"``, ``"H264"``.
-                      Use ``"*"`` to match all formats.
+                      Common values: ``"JPEG"``, ``"MJPG"``, ``"YUYV"``,
+                      ``"NV12"``, ``"H264"``. Use ``"*"`` to match all formats.
     """
     print(f"Querying formats for {device_path}...")
 
@@ -77,7 +86,9 @@ def get_v4l2_fps(device_path: str, width: int, height: int, pixel_format: str = 
     return supported_fps
 
 
-def get_v4l2_all_fps(device_path: str, pixel_format: str = "JPEG") -> dict[tuple[int, int], list[float]]:
+def get_v4l2_all_fps(
+    device_path: str, pixel_format: str = "JPEG"
+) -> dict[tuple[int, int], list[float]]:
     """Query all supported resolutions and their fps values for a V4L2 device.
 
     Args:
@@ -92,7 +103,9 @@ def get_v4l2_all_fps(device_path: str, pixel_format: str = "JPEG") -> dict[tuple
     try:
         result = subprocess.run(
             ["v4l2-ctl", f"--device={device_path}", "--list-formats-ext"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
     except (FileNotFoundError, subprocess.CalledProcessError):
         return {}
@@ -129,6 +142,116 @@ def get_v4l2_all_fps(device_path: str, pixel_format: str = "JPEG") -> dict[tuple
     return fps_map
 
 
+def parse_v4l2_control_range(
+    list_ctrls_output: str, name: str
+) -> tuple[int, int] | None:
+    """Extract a control's (min, max) from ``v4l2-ctl --list-ctrls`` text.
+
+    Args:
+        list_ctrls_output: Full stdout of ``v4l2-ctl --list-ctrls``.
+        name: Control name to find (e.g. ``"focus_absolute"``).
+
+    Returns:
+        ``(min, max)`` for the matching control line, or ``None`` if the
+        control is not present.
+    """
+    for line in list_ctrls_output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(f"{name} "):
+            continue
+
+        min_match = re.search(r"\bmin=(-?\d+)", stripped)
+        max_match = re.search(r"\bmax=(-?\d+)", stripped)
+        if min_match and max_match:
+            return int(min_match.group(1)), int(max_match.group(1))
+
+    return None
+
+
+def get_v4l2_control_range(device_path: str, name: str) -> tuple[int, int] | None:
+    """Query a device's (min, max) for one v4l2 control via ``v4l2-ctl``.
+
+    Args:
+        device_path: Device node path (e.g. ``"/dev/video0"``).
+        name: Control name to find (e.g. ``"focus_absolute"``).
+    """
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", f"--device={device_path}", "--list-ctrls"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        print("Error: v4l2-utils is not installed. Run: sudo apt install v4l-utils")
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to query controls for {device_path}: {e}")
+        return None
+
+    return parse_v4l2_control_range(result.stdout, name)
+
+
+def set_v4l2_controls(device_path: str, **controls) -> bool:
+    """Set one or more v4l2 controls on a device via ``v4l2-ctl``.
+
+    Args:
+        device_path: Device node path (e.g. ``"/dev/video0"``).
+        **controls: Control name -> value, applied in the given order
+                    (e.g. ``focus_automatic_continuous=0, focus_absolute=450``).
+
+    Returns:
+        True on success, False if ``v4l2-ctl`` is missing or the call fails.
+    """
+
+    args = ["v4l2-ctl", f"--device={device_path}"]
+
+    for control_name, value in controls.items():
+        args.append(f"--set-ctrl={control_name}={value}")
+
+    try:
+        subprocess.run(args, capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        print("Error: v4l2-utils is not installed. Run: sudo apt install v4l-utils")
+
+        return False
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to set controls on {device_path}: {e}")
+
+        return False
+
+    return True
+
+
+def get_v4l2_control(device_path: str, name: str) -> int | None:
+    """Read a v4l2 control's current integer value via ``v4l2-ctl``.
+
+    Args:
+        device_path: Device node path (e.g. ``"/dev/video0"``).
+        name: Control name to read (e.g. ``"focus_absolute"``).
+    """
+
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", f"--device={device_path}", f"--get-ctrl={name}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        print("Error: v4l2-utils is not installed. Run: sudo apt install v4l-utils")
+
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to read control {name} on {device_path}: {e}")
+
+        return None
+
+    match = re.search(r":\s*(-?\d+)", result.stdout)
+
+    return int(match.group(1)) if match else None
+
+
 def get_real_linux_nodes() -> list[int]:
     """Query V4L2 for the primary video capture nodes, bypassing Qt.
 
@@ -159,7 +282,10 @@ def get_real_linux_nodes() -> list[int]:
             elif current_cam:
                 # First indented line under a header = primary /dev/videoN node.
                 # Skip Pi-internal ISP and codec devices.
-                if "pispbe" not in current_cam.lower() and "hevc" not in current_cam.lower():
+                if (
+                    "pispbe" not in current_cam.lower()
+                    and "hevc" not in current_cam.lower()
+                ):
                     node_num = line.strip().split("video")[-1]
                     real_nodes.append(int(node_num))
 
@@ -207,6 +333,7 @@ class LinuxCameraDeviceContainer:
         fps_list = self.fps_map.get((width, height), [])
         return max(fps_list) if fps_list else 0.0
 
+
 def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     """Discover cameras and return them as ``LinuxCamera`` instances.
 
@@ -224,6 +351,7 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
 
     return cameras
 
+
 def get_video_inputs() -> list[QCameraDevice | LinuxCameraDeviceContainer]:
     """Discover cameras and return them as ``QCamera`` instances."""
 
@@ -238,14 +366,19 @@ def get_video_inputs() -> list[QCameraDevice | LinuxCameraDeviceContainer]:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Query supported FPS for a V4L2 camera at a given resolution and pixel format."
+        description=(
+            "Query supported FPS for a V4L2 camera at a given resolution "
+            "and pixel format."
+        )
     )
     parser.add_argument("device", help="Device node path (e.g. /dev/video0)")
     parser.add_argument("width", type=int, help="Resolution width (e.g. 1920)")
     parser.add_argument("height", type=int, help="Resolution height (e.g. 1080)")
     parser.add_argument(
-        "-f", "--format", default="JPEG",
-        help="Pixel format to match (default: JPEG). Use '*' for all formats."
+        "-f",
+        "--format",
+        default="JPEG",
+        help="Pixel format to match (default: JPEG). Use '*' for all formats.",
     )
     args = parser.parse_args()
 
@@ -253,7 +386,10 @@ if __name__ == "__main__":
 
     fmt_label = "all formats" if args.format == "*" else args.format
     if fps_list:
-        print(f"\nSupported FPS for {args.device} at {args.width}x{args.height} ({fmt_label}):")
+        print(
+            f"\nSupported FPS for {args.device} at "
+            f"{args.width}x{args.height} ({fmt_label}):"
+        )
         for fps in fps_list:
             print(f" - {fps} FPS")
         print(f"\nMax FPS: {max(fps_list)}")
