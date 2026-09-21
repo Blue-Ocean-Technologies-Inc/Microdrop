@@ -17,6 +17,8 @@ from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
+    FLUORESCENCE_CAPTURE_DONE,
+    FLUORESCENCE_CAPTURE_PROGRESS,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
     PMT_ADC_UPDATED,
@@ -56,6 +58,7 @@ CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
 MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
 ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
 PMT_CAPTURE_LISTENER = f"{PKG}_pmt_capture_listener"
+FLUORESCENCE_CAPTURE_LISTENER = f"{PKG}_fluorescence_capture_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -96,6 +99,15 @@ ACTOR_TOPIC_DICT = {
         PMT_ACQUIRE_DONE,
         #: "Pane follows step" (#601 increment 2): loads/clears the attached
         #: step's PMT setup and locks editing while a protocol runs.
+        PROTOCOL_TREE_ROW_SELECTED,
+        PROTOCOL_RUNNING,
+    ],
+    FLUORESCENCE_CAPTURE_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        FLUORESCENCE_CAPTURE_PROGRESS,
+        FLUORESCENCE_CAPTURE_DONE,
+        #: "Pane follows step", same mechanism as the PMT capture pane.
         PROTOCOL_TREE_ROW_SELECTED,
         PROTOCOL_RUNNING,
     ],

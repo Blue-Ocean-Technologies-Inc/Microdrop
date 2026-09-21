@@ -33,3 +33,8 @@ SET_TEMPERATURE_FIELD_ID = "set_temperature"
 #: PmtStepCapture dict or None; the PMT Capture pane writes it over
 #: PROTOCOL_TREE_SET_CELL, so the pane imports this id.
 PMT_CAPTURE_COLUMN_ID = "pmt_capture"
+
+#: The fluorescence capture column (row trait / protocol-file key). Its cell
+#: holds a FluorescenceStepCapture dict or None; the Fluorescence Capture
+#: pane writes it over PROTOCOL_TREE_SET_CELL, so the pane imports this id.
+FLUORESCENCE_CAPTURE_COLUMN_ID = "fluorescence_capture"
