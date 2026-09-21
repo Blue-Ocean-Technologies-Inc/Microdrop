@@ -23,12 +23,22 @@ standalone against just the model:
 """
 
 # Enthought library imports.
-from traitsui.api import HGroup, Item, ObjectColumn, TableEditor, UItem, VGroup, View
+from traitsui.api import (
+    HGroup,
+    Item,
+    Label,
+    ObjectColumn,
+    TableEditor,
+    UItem,
+    VGroup,
+    View,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     ActiveRowCheckboxColumn,
     ActiveRowObjectColumn,
+    IconToggleEditor,
     LinkColumn,
     SteppedSliderEditor,
 )
@@ -106,7 +116,7 @@ fluorescence_row_table_attached = TableEditor(
 #: The last capture's saved files, read-only, newest first.
 fluorescence_results_table = TableEditor(
     columns=[
-        ObjectColumn(name="path", label="Path", editable=False, resize_mode="stretch"),
+        ObjectColumn(name="path", label="Path", editable=False),
         # Click to open the PNG in the system's default application.
         LinkColumn(name="file", label="File", fire="open_file"),
     ],
@@ -152,15 +162,20 @@ capture = VGroup(
     ),
 )
 
-#: Only one small results table (unlike PMT's three collapsible groups), so
-#: no chevron toggle — a labelled Item is enough, and safe to label directly
-#: since no other control shares its row.
+#: Results, behind a chevron toggle like the PMT pane's: the table only
+#: takes space once the operator opens it.
 results = VGroup(
-    Item(
-        "result_rows",
-        editor=fluorescence_results_table,
-        label="Results",
-        height=PMT_RESULTS_TABLE_MIN_HEIGHT,
+    HGroup(
+        UItem("show_results", editor=IconToggleEditor()),
+        Label("Results"),
+    ),
+    VGroup(
+        UItem(
+            "result_rows",
+            editor=fluorescence_results_table,
+            height=PMT_RESULTS_TABLE_MIN_HEIGHT,
+        ),
+        visible_when="show_results",
     ),
 )
 

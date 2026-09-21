@@ -144,6 +144,8 @@ class PortableDropbotFluorescenceCaptureModel(BaseStatusModel):
     abort_button = Button("Abort")
 
     # ---- Results ------------------------------------------------------
+    #: Chevron toggle for the results table below the run controls.
+    show_results = Bool(False)
     #: Saved capture paths, newest first — the source of truth.
     results = List(Str)
     #: Display rows derived from results — kept a plain list refreshed by
