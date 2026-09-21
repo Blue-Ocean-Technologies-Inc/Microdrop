@@ -105,12 +105,17 @@ class PortableDropbotControllerBase(HasTraits):
         self, timestamped_message: TimestampedMessage, topic: str
     ):
         topics_tree = topic.split("/")
+
         if len(topics_tree) < 3:
             return
 
         primary_sub_topic = topics_tree[1]
         specific_sub_topic = topics_tree[-1]
         requested_method = None
+        # Replies matched by request_id skip the per-topic recency filter: a
+        # newer, unrelated media capture must not drop an older one that the
+        # fluorescence routine is still waiting on.
+        drop_stale = True
 
         if topic == PORTABLE_DROPBOT_CONNECTED:
             self.portable_dropbot_connection_active = True
@@ -134,18 +139,32 @@ class PortableDropbotControllerBase(HasTraits):
                     f"Portable Dropbot is disconnected."
                 )
 
-        if requested_method:
+        elif hasattr(self, f"on_{specific_sub_topic}_signal"):
+            # Any other subscribed topic is another plugin's signal (the
+            # camera's controls_applied / media_captured): it answers a
+            # routine already under way, so it runs whatever the connection
+            # state.
+            requested_method = f"on_{specific_sub_topic}_signal"
+            drop_stale = False
+
+        if not requested_method:
+            return
+
+        if drop_stale:
             if (
                 self.timestamps.get(topic, datetime.min)
                 > timestamped_message.timestamp_dt
             ):
                 logger.debug(f"Stale message on {topic} ignored.")
                 return
+
             self.timestamps[topic] = timestamped_message.timestamp_dt
-            logger.debug(f"Handling {topic} --> {requested_method}")
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-            if err_msg:
-                logger.error(f"Error handling topic {topic}: {err_msg}")
+
+        logger.debug(f"Handling {topic} --> {requested_method}")
+        err_msg = invoke_class_method(self, requested_method, timestamped_message)
+
+        if err_msg:
+            logger.error(f"Error handling topic {topic}: {err_msg}")
 
     def traits_init(self):
         logger.info("Starting PortableDropbotController listener")
