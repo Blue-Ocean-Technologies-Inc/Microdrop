@@ -18,25 +18,34 @@ Redis app_globals — it never imports another plugin's classes/panes. The
 Qt-aware flush scheduler is injected by the view; the service default is
 Qt-free."""
 
+# Standard library imports.
 import json
 import threading
 from datetime import datetime, timedelta
 
+# Enthought library imports.
 from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
 
-from device_viewer.consts import LIQUID_CAPACITANCE_KEY, FILLER_CAPACITANCE_KEY, MEDIA_CAPTURES_KEY
+# Microdrop package imports.
+from device_viewer.consts import (
+    FILLER_CAPACITANCE_KEY,
+    LIQUID_CAPACITANCE_KEY,
+    MEDIA_CAPTURES_KEY,
+)
 from device_viewer.models.media import MediaCaptureMessageModel
-from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-
 from pluggable_protocol_tree.consts import DEFAULT_LOGS_SETTLING_SECONDS
 from pluggable_protocol_tree.services.logging import listener as _listener
 from pluggable_protocol_tree.services.logging.consts import (
-    RUN_TIMESTAMP_FMT, TIME_FMT,
+    RUN_TIMESTAMP_FMT,
+    TIME_FMT,
 )
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 from pluggable_protocol_tree.services.logging.persistence import LoggingPersistence
 from pluggable_protocol_tree.services.logging.reporting import LoggingReport
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -101,7 +110,7 @@ class ProtocolLoggingController(HasTraits):
     # is notified with the report path (or None) after a flush.
     settling_provider = Callable
     flush_scheduler = Callable
-    completion_callback = Callable          # Optional — None when not provided.
+    completion_callback = Callable  # Optional — None when not provided.
     # Optional — notified with the error message when a report the user asked
     # for could not be generated, so the failure isn't silent. None = not wired.
     report_failure_callback = Callable
@@ -154,27 +163,31 @@ class ProtocolLoggingController(HasTraits):
         self._device_context = device_context
         self._ingestion = LoggingIngestion()
         self._ingestion.update_capacitance_per_unit_area(
-            getattr(device_context, "capacitance_per_unit_area", None))
+            getattr(device_context, "capacitance_per_unit_area", None)
+        )
         self._step_idx = 0
         self._n_steps = int(n_steps)
         self._start_time = datetime.now().strftime(RUN_TIMESTAMP_FMT)
         self._start_dt = datetime.now()
-        self._ingestion.log_metadata({
-            "Experiment Directory": str(device_context.experiment_directory),
-            "Device SVG": str(getattr(device_context, "device_svg_path", "")),
-            "Steps": f"0 / {self._n_steps}",
-        })
+        self._ingestion.log_metadata(
+            {
+                "Experiment Directory": str(device_context.experiment_directory),
+                "Device SVG": str(getattr(device_context, "device_svg_path", "")),
+                "Steps": f"0 / {self._n_steps}",
+            }
+        )
         # Reset the shared media-captures bucket so only THIS run's camera
         # output ends up in this run's report — _flush drains it back. The
         # camera capture path (device_viewer's _cache_media_capture actor)
-        # appends serialised MediaCaptureMessageModel JSON to
-        # app_globals[MEDIA_CAPTURES_KEY] but never publishes the
-        # DEVICE_VIEWER_MEDIA_CAPTURED topic, so the listener can't see
-        # captures live (legacy parity bug); reading the bucket at flush
-        # time closes the gap.
+        # publishes DEVICE_VIEWER_MEDIA_CAPTURED live on every capture since
+        # #695, and the listener routes it straight to on_media while a run
+        # is active. The app_globals[MEDIA_CAPTURES_KEY] bucket is still
+        # drained at flush for captures made outside a run (e.g. before
+        # start_logging); LoggingIngestion.log_media dedupes by path, so a
+        # capture landing both ways is listed once.
         try:
             app_globals[MEDIA_CAPTURES_KEY] = []
-        except Exception as e:                # pragma: no cover - defensive
+        except Exception as e:  # pragma: no cover - defensive
             logger.debug(f"could not reset media_captures bucket: {e}")
         _listener.set_active_logger(self)
 
@@ -183,8 +196,9 @@ class ProtocolLoggingController(HasTraits):
             return
         row, _step_index, _step_total = event.new
         self._step_idx += 1
-        self._ingestion.set_step(step_id=getattr(row, "uuid", ""),
-                                 step_idx=self._step_idx)
+        self._ingestion.set_step(
+            step_id=getattr(row, "uuid", ""), step_idx=self._step_idx
+        )
 
     def stop_logging(self, *, generate_report: bool = True) -> None:
         if self._ingestion is None:
@@ -217,13 +231,13 @@ class ProtocolLoggingController(HasTraits):
             return
         try:
             captures = list(app_globals.get(MEDIA_CAPTURES_KEY) or [])
-        except Exception as e:                    # pragma: no cover - defensive
+        except Exception as e:  # pragma: no cover - defensive
             logger.debug(f"could not read media_captures bucket: {e}")
             return
         for payload in captures:
             try:
                 ing.log_media(MediaCaptureMessageModel.model_validate_json(payload))
-            except Exception as e:                # pragma: no cover - defensive
+            except Exception as e:  # pragma: no cover - defensive
                 logger.warning(f"media drain entry failed: {e}")
 
     def _flush(self) -> None:
@@ -237,15 +251,24 @@ class ProtocolLoggingController(HasTraits):
         report_error = None
         try:
             json_path, csv_path = LoggingPersistence.write_data_files(
-                self._device_context.experiment_directory, self._start_time,
-                ing.entries, ing.columns)
+                self._device_context.experiment_directory,
+                self._start_time,
+                ing.entries,
+                ing.columns,
+            )
             if self._generate_report:
                 html = LoggingReport.build_html(
-                    entries=ing.entries, columns=ing.columns, metadata=ing.metadata,
-                    media=ing.media, device_context=self._device_context,
-                    notes=None, data_files=[json_path, csv_path])
+                    entries=ing.entries,
+                    columns=ing.columns,
+                    metadata=ing.metadata,
+                    media=ing.media,
+                    device_context=self._device_context,
+                    notes=None,
+                    data_files=[json_path, csv_path],
+                )
                 report_path = LoggingReport.write_report(
-                    self._device_context.experiment_directory, html)
+                    self._device_context.experiment_directory, html
+                )
                 self.all_report_paths.append(report_path)
                 logger.info(f"Report written to {report_path}")
 
@@ -264,8 +287,11 @@ class ProtocolLoggingController(HasTraits):
                 logger.error(f"logging completion callback failed: {e}")
         # If the user asked for a report and it failed, surface it instead of
         # leaving them with the same silent no-op as an intentional skip.
-        if (report_error is not None and self._generate_report
-                and self.report_failure_callback is not None):
+        if (
+            report_error is not None
+            and self._generate_report
+            and self.report_failure_callback is not None
+        ):
             try:
                 self.report_failure_callback(report_error)
             except Exception as e:
@@ -295,7 +321,7 @@ class ProtocolLoggingController(HasTraits):
             return
         try:
             ing.log_media(MediaCaptureMessageModel.model_validate_json(message))
-        except Exception as e:                 # pragma: no cover - defensive
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"media log failed: {e}")
 
     def on_calibration(self, message) -> None:
@@ -310,8 +336,8 @@ class ProtocolLoggingController(HasTraits):
         if data is None:
             return
         cpa = _capacitance_per_unit_area(
-            data.get(LIQUID_CAPACITANCE_KEY),
-            data.get(FILLER_CAPACITANCE_KEY))
+            data.get(LIQUID_CAPACITANCE_KEY), data.get(FILLER_CAPACITANCE_KEY)
+        )
         if cpa is not None:
             ing.update_capacitance_per_unit_area(cpa)
 
