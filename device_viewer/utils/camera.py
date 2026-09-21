@@ -8,7 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
+import queue
 import shlex
 import shutil
 import subprocess
@@ -16,23 +18,46 @@ import tempfile
 import threading
 from pathlib import Path
 from typing import List, Tuple
-import queue
 
+# Third-party imports.
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, QSize, QUrl, Signal, QObject, QRunnable, Slot
-from PySide6.QtGui import QImage, QTransform, Qt, QPainter
-from PySide6.QtMultimedia import (QMediaFormat, QMediaRecorder, QVideoFrame,
-                                  QVideoFrameFormat)
+from PySide6.QtCore import (
+    QObject,
+    QPointF,
+    QRectF,
+    QRunnable,
+    QSize,
+    QUrl,
+    Signal,
+    Slot,
+)
+from PySide6.QtGui import QImage, QPainter, Qt, QTransform
+from PySide6.QtMultimedia import (
+    QMediaFormat,
+    QMediaRecorder,
+    QVideoFrame,
+    QVideoFrameFormat,
+)
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 
-from device_viewer.consts import (FFMPEG_DEFAULT_CRF, FFMPEG_PRESETS,
-                                  FFMPEG_VIDEO_CODECS,
-                                  QT_RECORDER_FORMAT_MKV,
-                                  QT_RECORDER_FORMAT_MP4,
-                                  RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+# Microdrop package imports.
+from device_viewer.consts import (
+    FFMPEG_DEFAULT_CRF,
+    FFMPEG_PRESETS,
+    FFMPEG_VIDEO_CODECS,
+    QT_RECORDER_FORMAT_MKV,
+    QT_RECORDER_FORMAT_MP4,
+    RECORDING_TRANSFORM_SIDECAR_SUFFIX,
+)
 from device_viewer.models.media import MediaType
 from device_viewer.views.camera_control_view.utils import _cache_media_capture
-from logger.logger_service import get_logger, debug_throttled
+
+# Microdrop utils imports.
+from microdrop_utils.datetime_helpers import get_current_utc_datetime
+
+# Logger import.
+from logger.logger_service import debug_throttled, get_logger
+
 logger = get_logger(__name__)
 
 #: Bound on frames buffered between the GUI thread and the raw recorder's
@@ -40,32 +65,58 @@ logger = get_logger(__name__)
 #: frames are dropped so the GUI thread never stalls.
 RAW_RECORDER_QUEUE_MAX_FRAMES = 60
 
+
 def qtransform_serialize(transform: QTransform) -> str:
-    return json.dumps([transform.m11(), transform.m12(), transform.m13(),
-                        transform.m21(), transform.m22(), transform.m23(),
-                        transform.m31(), transform.m32(), transform.m33()])
+    return json.dumps(
+        [
+            transform.m11(),
+            transform.m12(),
+            transform.m13(),
+            transform.m21(),
+            transform.m22(),
+            transform.m23(),
+            transform.m31(),
+            transform.m32(),
+            transform.m33(),
+        ]
+    )
+
 
 def qtransform_deserialize(data: str) -> QTransform:
     params = json.loads(data)
-    return QTransform(params[0], params[1], params[2],
-                      params[3], params[4], params[5],
-                      params[6], params[7], params[8])
+    return QTransform(
+        params[0],
+        params[1],
+        params[2],
+        params[3],
+        params[4],
+        params[5],
+        params[6],
+        params[7],
+        params[8],
+    )
+
 
 def qpointf_list_serialize(list_qpointf: List[QPointF]) -> List[Tuple[float, float]]:
     return json.dumps([el.toTuple() for el in list_qpointf])
 
+
 def qpointf_list_deserialize(data: str) -> List[QPointF]:
     return [QPointF(*coord_tuple) for coord_tuple in json.loads(data)]
 
-def get_transformed_frame(src_image: QImage,
-                          src_rect: QRectF, target_rect: QRectF,
-                          transform: QTransform,
-                          target_resolution: tuple[int, int]):
+
+def get_transformed_frame(
+    src_image: QImage,
+    src_rect: QRectF,
+    target_rect: QRectF,
+    transform: QTransform,
+    target_resolution: tuple[int, int],
+):
     tw, th = target_resolution
 
     # Create the output image at the FINAL resolution immediately
     output_image = QImage(tw, th, QImage.Format_RGBA8888)
-    output_image.fill(Qt.black) # Black bars for aspect ratio mismatch
+    output_image.fill(Qt.black)  # Black bars for aspect ratio mismatch
 
     painter = QPainter(output_image)
 
@@ -88,6 +139,32 @@ def get_transformed_frame(src_image: QImage,
 
     painter.end()
     return output_image
+
+
+def media_filename(
+    step_description=None, step_id=None, file_extension=".png", timestamp=None
+):
+    """The capture/recording file name for a step (description + id), an
+    id alone, a description alone (a requester's own tag, e.g. the
+    fluorescence capture's ``flu_<label>_f<position>``), or free mode.
+    Only alphanumerics, '-' and '_' survive from the description."""
+    stamp = timestamp or get_current_utc_datetime()
+
+    if step_description:
+        clean_desc = "".join(
+            c for c in step_description if c.isalnum() or c in (" ", "-", "_")
+        ).rstrip()
+        clean_desc = clean_desc.replace(" ", "_")
+
+        if step_id:
+            return f"{clean_desc}_{step_id}_{stamp}{file_extension}"
+
+        return f"{clean_desc}_{stamp}{file_extension}"
+
+    if step_id:
+        return f"step_{step_id}_{stamp}{file_extension}"
+
+    return f"free_mode_{stamp}{file_extension}"
 
 
 class SaveSignals(QObject):
@@ -146,7 +223,7 @@ class VideoRecorderBase(QObject):
     recording_stopped = Signal(str)  # Emits output path
     error_occurred = Signal(str)
 
-    def __init__(self, video_item: 'QGraphicsVideoItem', parent=None):
+    def __init__(self, video_item: "QGraphicsVideoItem", parent=None):
         super().__init__(parent)
         self._video_item = video_item
         self.current_image = None  # screenshots fall back to the live sink
@@ -185,9 +262,12 @@ def supported_qt_video_codec_names(file_format_token) -> List[str]:
     given container (QT_RECORDER_FORMAT_* token). Must run with the
     application up — the backend reports a reduced set headless."""
     media_format = QMediaFormat(QT_MEDIA_FILE_FORMATS[file_format_token])
-    return [QMediaFormat.videoCodecName(codec)
-            for codec in media_format.supportedVideoCodecs(
-                QMediaFormat.ConversionMode.Encode)]
+    return [
+        QMediaFormat.videoCodecName(codec)
+        for codec in media_format.supportedVideoCodecs(
+            QMediaFormat.ConversionMode.Encode
+        )
+    ]
 
 
 def qt_video_codec_from_name(name: str):
@@ -215,9 +295,15 @@ class NativeVideoRecorder(VideoRecorderBase):
     Public surface: see VideoRecorderBase.
     """
 
-    def __init__(self, session, video_item: 'QGraphicsVideoItem',
-                 file_format=None, video_codec=None, video_bitrate=None,
-                 parent=None):
+    def __init__(
+        self,
+        session,
+        video_item: "QGraphicsVideoItem",
+        file_format=None,
+        video_codec=None,
+        video_bitrate=None,
+        parent=None,
+    ):
         """``file_format`` is a QT_RECORDER_FORMAT_* token (None lets the
         backend infer the container from the output file's extension).
         ``video_codec`` is a QMediaFormat codec display name (see
@@ -232,20 +318,21 @@ class NativeVideoRecorder(VideoRecorderBase):
         session.setRecorder(self._recorder)
         if file_format is not None:
             media_format = QMediaFormat(QT_MEDIA_FILE_FORMATS[file_format])
-            codec = (qt_video_codec_from_name(video_codec)
-                     if video_codec else None)
+            codec = qt_video_codec_from_name(video_codec) if video_codec else None
             if codec is None:
                 codec = QMediaFormat.VideoCodec.H264
                 if video_codec:
-                    logger.warning(f"Unknown video codec {video_codec!r}; "
-                                   f"falling back to H.264")
+                    logger.warning(
+                        f"Unknown video codec {video_codec!r}; falling back to H.264"
+                    )
             media_format.setVideoCodec(codec)
             self._recorder.setMediaFormat(media_format)
         if video_bitrate:
             # setVideoBitRate is IGNORED in the default constant-quality
             # encoding mode — the bitrate only applies in a bitrate mode.
             self._recorder.setEncodingMode(
-                QMediaRecorder.EncodingMode.AverageBitRateEncoding)
+                QMediaRecorder.EncodingMode.AverageBitRateEncoding
+            )
             self._recorder.setVideoBitRate(video_bitrate)
         else:
             # Pin quality-driven encoding explicitly (the quality level is
@@ -254,15 +341,18 @@ class NativeVideoRecorder(VideoRecorderBase):
             # encode — so a backend default change can't silently demote
             # recordings.
             self._recorder.setEncodingMode(
-                QMediaRecorder.EncodingMode.ConstantQualityEncoding)
+                QMediaRecorder.EncodingMode.ConstantQualityEncoding
+            )
             self._recorder.setQuality(QMediaRecorder.Quality.VeryHighQuality)
         self._recorder.errorOccurred.connect(self._on_recorder_error)
         self._recorder.recorderStateChanged.connect(self._on_recorder_state_changed)
 
     @property
     def is_recording(self) -> bool:
-        return (self._recorder.recorderState()
-                == QMediaRecorder.RecorderState.RecordingState)
+        return (
+            self._recorder.recorderState()
+            == QMediaRecorder.RecorderState.RecordingState
+        )
 
     def start(self, output_path, resolution, fps):
         """Start recording the RAW camera stream. ``resolution`` is the
@@ -274,8 +364,9 @@ class NativeVideoRecorder(VideoRecorderBase):
         if self.is_recording:
             return
         if resolution:
-            self._recorder.setVideoResolution(QSize(*[int(side)
-                                                      for side in resolution]))
+            self._recorder.setVideoResolution(
+                QSize(*[int(side) for side in resolution])
+            )
         self._recorder.setOutputLocation(QUrl.fromLocalFile(str(output_path)))
         self._recorder.setVideoFrameRate(fps)
         self._recorder.record()
@@ -289,7 +380,8 @@ class NativeVideoRecorder(VideoRecorderBase):
             f"codec={QMediaFormat.videoCodecName(applied_format.videoCodec())}, "
             f"encoding mode={self._recorder.encodingMode().name}, "
             f"video bitrate={self._recorder.videoBitRate():,} bps, "
-            f"quality={self._recorder.quality().name}")
+            f"quality={self._recorder.quality().name}"
+        )
 
     def stop(self):
         """Stop recording; recording_stopped fires on the state change."""
@@ -300,10 +392,8 @@ class NativeVideoRecorder(VideoRecorderBase):
     def _on_recorder_state_changed(self, state):
         if state == QMediaRecorder.RecorderState.RecordingState:
             self._was_recording = True
-            self.recording_started.emit(
-                self._recorder.actualLocation().toLocalFile())
-        elif (state == QMediaRecorder.RecorderState.StoppedState
-                and self._was_recording):
+            self.recording_started.emit(self._recorder.actualLocation().toLocalFile())
+        elif state == QMediaRecorder.RecorderState.StoppedState and self._was_recording:
             self._was_recording = False
             path = self._recorder.actualLocation().toLocalFile()
             self._finalize_recording(path)
@@ -319,14 +409,11 @@ def write_transform_sidecar(video_item, video_path):
     device-aligned (warped) view offline — the same parameters the
     legacy pipeline fed to get_transformed_frame for every frame."""
     sidecar = {
-        "transform": json.loads(
-            qtransform_serialize(video_item.transform())),
-        "scene_bounding_rect": list(
-            video_item.sceneBoundingRect().getRect()),
+        "transform": json.loads(qtransform_serialize(video_item.transform())),
+        "scene_bounding_rect": list(video_item.sceneBoundingRect().getRect()),
         "bounding_rect": list(video_item.boundingRect().getRect()),
     }
-    sidecar_path = Path(video_path).with_suffix(
-        RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+    sidecar_path = Path(video_path).with_suffix(RECORDING_TRANSFORM_SIDECAR_SUFFIX)
     try:
         sidecar_path.write_text(json.dumps(sidecar, indent=2))
         logger.info(f"Wrote recording transform sidecar: {sidecar_path}")
@@ -365,8 +452,7 @@ def _plane_layout(pix_fmt, width, height):
     if pix_fmt in ("nv12", "nv21"):
         return [(width, height), (width, height // 2)]
     if pix_fmt == "yuv420p":
-        return [(width, height),
-                (width // 2, height // 2), (width // 2, height // 2)]
+        return [(width, height), (width // 2, height // 2), (width // 2, height // 2)]
     if pix_fmt == "yuv422p":
         return [(width, height), (width // 2, height), (width // 2, height)]
     raise ValueError(f"Unhandled pixel format {pix_fmt}")
@@ -397,12 +483,17 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
     Public surface: see VideoRecorderBase.
     """
 
-    def __init__(self, video_item: 'QGraphicsVideoItem', ffmpeg_binary="ffmpeg",
-                 parent=None, frame_sink=None,
-                 video_codec=FFMPEG_VIDEO_CODECS[0],
-                 preset=FFMPEG_PRESETS[0],
-                 crf=FFMPEG_DEFAULT_CRF,
-                 extra_output_args=""):
+    def __init__(
+        self,
+        video_item: "QGraphicsVideoItem",
+        ffmpeg_binary="ffmpeg",
+        parent=None,
+        frame_sink=None,
+        video_codec=FFMPEG_VIDEO_CODECS[0],
+        preset=FFMPEG_PRESETS[0],
+        crf=FFMPEG_DEFAULT_CRF,
+        extra_output_args="",
+    ):
         super().__init__(video_item, parent)
         self.ffmpeg_binary = ffmpeg_binary
         self.video_codec = video_codec
@@ -418,8 +509,9 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         # item. Passing the capture session's own sink keeps recordings at
         # full camera rate while the DISPLAY item receives rate-capped
         # preview frames (see CameraControlWidget._forward_preview_frame).
-        self._frame_sink = (frame_sink if frame_sink is not None
-                            else video_item.videoSink())
+        self._frame_sink = (
+            frame_sink if frame_sink is not None else video_item.videoSink()
+        )
 
         self._process = None
         self._stderr_file = None
@@ -447,8 +539,10 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             self._process.wait()
             if self._process.returncode != 0 and self._stderr_file:
                 self._stderr_file.seek(0)
-                logger.error(f"FFmpeg Error: "
-                             f"{self._stderr_file.read().decode('utf-8', errors='ignore')}")
+                logger.error(
+                    f"FFmpeg Error: "
+                    f"{self._stderr_file.read().decode('utf-8', errors='ignore')}"
+                )
         if self._stderr_file:
             self._stderr_file.close()
             self._stderr_file = None
@@ -486,8 +580,11 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             return
 
         if self._queue.full():
-            debug_throttled(logger, "raw_recorder_queue_full",
-                            "Raw recorder encoder behind; dropping frame")
+            debug_throttled(
+                logger,
+                "raw_recorder_queue_full",
+                "Raw recorder encoder behind; dropping frame",
+            )
             return
 
         if not frame.map(QVideoFrame.MapMode.ReadOnly):
@@ -503,14 +600,14 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
                 bytes_per_line = frame.bytesPerLine(plane)
                 plane_data = np.frombuffer(frame.bits(plane), np.uint8)
                 if bytes_per_line == row_bytes:
-                    payload_np[offset:offset + plane_bytes] = \
-                        plane_data[:plane_bytes]
+                    payload_np[offset : offset + plane_bytes] = plane_data[:plane_bytes]
                 else:
                     # Strip the per-row stride padding while copying.
-                    payload_np[offset:offset + plane_bytes].reshape(
-                        rows, row_bytes)[:] = (
-                        plane_data[:bytes_per_line * rows]
-                        .reshape(rows, bytes_per_line)[:, :row_bytes])
+                    payload_np[offset : offset + plane_bytes].reshape(rows, row_bytes)[
+                        :
+                    ] = plane_data[: bytes_per_line * rows].reshape(
+                        rows, bytes_per_line
+                    )[:, :row_bytes]
                 offset += plane_bytes
         finally:
             frame.unmap()
@@ -518,13 +615,15 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         try:
             self._queue.put_nowait(payload)
         except queue.Full:
-            debug_throttled(logger, "raw_recorder_queue_full",
-                            "Raw recorder encoder behind; dropping frame")
+            debug_throttled(
+                logger,
+                "raw_recorder_queue_full",
+                "Raw recorder encoder behind; dropping frame",
+            )
 
     def _disconnect_frame_sink(self):
         try:
-            self._frame_sink.videoFrameChanged.disconnect(
-                self._on_frame_arrived)
+            self._frame_sink.videoFrameChanged.disconnect(self._on_frame_arrived)
         except Exception as e:
             logger.debug(f"Raw recorder frame sink already disconnected: {e}")
 
@@ -536,19 +635,39 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             self._disconnect_frame_sink()
             self.error_occurred.emit(
                 f"Raw recording does not support the camera's "
-                f"{pixel_format.name} pixel format")
+                f"{pixel_format.name} pixel format"
+            )
             return False
 
         width, height = frame.width(), frame.height()
         self._layout = _plane_layout(pix_fmt, width, height)
         self._frame_payload_bytes = sum(
-            row_bytes * rows for row_bytes, rows in self._layout)
+            row_bytes * rows for row_bytes, rows in self._layout
+        )
         command = [
-            self.ffmpeg_binary, "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "rawvideo", "-pix_fmt", pix_fmt,
-            "-s", f"{width}x{height}", "-r", f"{self._fps}", "-i", "-",
-            "-c:v", self.video_codec, "-pix_fmt", "yuv420p",
-            "-preset", self.preset, "-crf", str(self.crf),
+            self.ffmpeg_binary,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            pix_fmt,
+            "-s",
+            f"{width}x{height}",
+            "-r",
+            f"{self._fps}",
+            "-i",
+            "-",
+            "-c:v",
+            self.video_codec,
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            self.preset,
+            "-crf",
+            str(self.crf),
             *shlex.split(self.extra_output_args),
             self._output_path,
         ]
@@ -557,23 +676,32 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         self._stderr_file = tempfile.TemporaryFile()
         try:
             self._process = subprocess.Popen(
-                command, stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL, stderr=self._stderr_file)
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=self._stderr_file,
+            )
         except Exception as e:
             self._recording_active = False
             self._stderr_file.close()
             self._stderr_file = None
             self.error_occurred.emit(f"Failed to start ffmpeg: {e}")
             return False
-        self._io_thread = threading.Thread(target=self._io_writer,
-                                           daemon=True,
-                                           name="raw-recorder-io")
+        self._io_thread = threading.Thread(
+            target=self._io_writer, daemon=True, name="raw-recorder-io"
+        )
         self._io_thread.start()
-        logger.info(f"Raw pipeline: {width}x{height} {pix_fmt} "
-                    f"@ {self._fps} fps -> {self.video_codec} "
-                    f"(preset {self.preset}, crf {self.crf}"
-                    + (f", extra args {self.extra_output_args!r}"
-                       if self.extra_output_args else "") + ")")
+        logger.info(
+            f"Raw pipeline: {width}x{height} {pix_fmt} "
+            f"@ {self._fps} fps -> {self.video_codec} "
+            f"(preset {self.preset}, crf {self.crf}"
+            + (
+                f", extra args {self.extra_output_args!r}"
+                if self.extra_output_args
+                else ""
+            )
+            + ")"
+        )
         return True
 
     def _io_writer(self):

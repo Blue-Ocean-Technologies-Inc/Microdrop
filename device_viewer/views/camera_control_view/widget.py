@@ -12,9 +12,8 @@
 import time
 from pathlib import Path
 
-from apptools.preferences.api import Preferences
-
 # Enthought library imports.
+from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import (
     QThreadPool,
     QTimer,
@@ -56,7 +55,6 @@ from microdrop_application.helpers import get_current_experiment_directory
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 
 # Microdrop utils imports.
-from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import LinuxCameraDeviceContainer, get_video_inputs
 
@@ -77,6 +75,7 @@ from ...utils.camera import (
     NativeVideoRecorder,
     RawFFMPEGVideoRecorder,
     get_transformed_frame,
+    media_filename,
 )
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .utils import _cache_media_capture, _show_media_capture_status_message
@@ -848,11 +847,14 @@ class CameraControlWidget(QWidget):
 
     def _capture_image_routine(self, capture_data=None):
         directory, step_description, step_id, show_dialog = None, None, None, True
+        request_id = ""
+
         if isinstance(capture_data, dict):
             directory = capture_data.get("directory")
             step_description = capture_data.get("step_description")
             step_id = capture_data.get("step_id")
             show_dialog = capture_data.get("show_dialog", True)
+            request_id = str(capture_data.get("request_id", ""))
 
         filename = self._generate_capture_filename(step_description, step_id)
         base_dir = Path(directory) if directory else get_current_experiment_directory()
@@ -862,9 +864,9 @@ class CameraControlWidget(QWidget):
         # sensor captures are the owning plugin's concern — the
         # fluorescence capture chain writes its own per-burst folders —
         # so this pipeline no longer special-cases raw-capable feeds.
-        self._capture_display_image(save_path, show_dialog)
+        self._capture_display_image(save_path, show_dialog, request_id)
 
-    def _capture_display_image(self, save_path, show_dialog):
+    def _capture_display_image(self, save_path, show_dialog, request_id=""):
         # Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
 
@@ -874,8 +876,9 @@ class CameraControlWidget(QWidget):
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _post_image_capture(saved_path):
-            _cache_media_capture(MediaType.IMAGE, saved_path)
+            _cache_media_capture(MediaType.IMAGE, saved_path, request_id)
             media_capture_event_model.captured = saved_path
+
             if show_dialog:
                 _show_media_capture_status_message(
                     MediaType.IMAGE, saved_path, self.status_bar_manager
@@ -926,17 +929,7 @@ class CameraControlWidget(QWidget):
     def _generate_media_filename(
         self, step_description=None, step_id=None, file_extension=".png"
     ):
-        timestamp = get_current_utc_datetime()
-        if step_description and step_id:
-            clean_desc = "".join(
-                c for c in step_description if c.isalnum() or c in (" ", "-", "_")
-            ).rstrip()
-            clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}{file_extension}"
-        elif step_id:
-            return f"step_{step_id}_{timestamp}{file_extension}"
-        else:
-            return f"free_mode_{timestamp}{file_extension}"
+        return media_filename(step_description, step_id, file_extension)
 
     def _generate_capture_filename(self, step_description=None, step_id=None):
         return self._generate_media_filename(step_description, step_id, ".png")
