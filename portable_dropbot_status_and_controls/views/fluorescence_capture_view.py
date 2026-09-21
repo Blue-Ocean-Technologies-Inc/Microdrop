@@ -30,10 +30,15 @@ from microdrop_utils.traitsui_qt_helpers import (
     ActiveRowCheckboxColumn,
     ActiveRowObjectColumn,
     LinkColumn,
+    SteppedSliderEditor,
 )
 
 # Local imports.
 from ..consts import PMT_RESULTS_TABLE_MIN_HEIGHT, PMT_SPOT_TABLE_MIN_HEIGHT
+
+#: Both filter tables' focus cell: a slider stepping across the 0.0-1.0
+#: focus_distance range.
+_focus_slider = SteppedSliderEditor(low=0.0, high=1.0, step=0.05, format="%.2f")
 
 #: Manual mode: the pane's own Capture tick. Shown while unattached
 #: (visible_when="not attached_step_id" on its UItem, below). Reorderable —
@@ -55,6 +60,7 @@ fluorescence_row_table_manual = TableEditor(
             label="Focus",
             format="%.2f",
             resize_mode="stretch",
+            editor=_focus_slider,
         ),
     ],
     reorderable=True,
@@ -86,6 +92,7 @@ fluorescence_row_table_attached = TableEditor(
             label="Focus",
             format="%.2f",
             resize_mode="stretch",
+            editor=_focus_slider,
         ),
     ],
     reorderable=True,
