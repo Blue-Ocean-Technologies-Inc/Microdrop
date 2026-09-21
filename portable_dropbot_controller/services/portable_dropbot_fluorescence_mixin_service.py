@@ -348,7 +348,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         if not ok and abort.is_set():
             raise _CaptureAborted()
 
-        if not ok or not lit:
+        if not ok or lit is None:
             raise RuntimeError(f"LED {entry.led_percent} %: no reply")
 
         self._enter_fluorescence_stage(abort, progress, "camera")

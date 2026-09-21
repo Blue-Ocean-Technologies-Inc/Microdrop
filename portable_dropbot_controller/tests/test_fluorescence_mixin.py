@@ -53,7 +53,7 @@ class _Sig:
     def fluorescence_ctrl(self, raw):
         self.log.append(f"led {raw}")
 
-        return True
+        return raw
 
 
 class _Session:
@@ -244,6 +244,19 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     assert {p["request_id"] for p in rig["progress"]} == {"r1"}
     assert h._fluorescence_capturing is False
     assert h._fluorescence_abort is None
+
+
+def test_led_zero_percent_is_a_valid_dark_frame(rig):
+    """led_raw(0) == 0, and an echoing driver returns that same 0 - falsy,
+    but not the None that signals no reply."""
+    h = rig["h"]
+
+    _run(h, _request([_entry(1, led=0)]))
+
+    done = rig["done"][-1]
+    assert done["ok"] is True
+    assert "led 0" in h.log
+    assert len(done["paths"]) == 1
 
 
 def test_frame_request_carries_directory_label_and_reply_id(rig, tmp_path):
