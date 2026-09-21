@@ -64,6 +64,7 @@ from ...consts import (
     CAPTURES_DIR_NAME,
     RECORDER_BACKEND_FFMPEG,
     RECORDINGS_DIR_NAME,
+    camera_controls_applied_publisher,
     device_viewer_recording_state_publisher,
     media_capture_event_model,
     recording_state_model,
@@ -93,6 +94,10 @@ class CameraControlWidget(QWidget):
     camera_active_signal = Signal(bool)
     screen_capture_signal = Signal(object)
     screen_recording_signal = Signal(object)
+
+    #: A CameraControlsRequest dict, emitted by the dock pane's topic handler
+    #: (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_controls_signal = Signal(object)
 
     def __init__(
         self,
@@ -167,6 +172,7 @@ class CameraControlWidget(QWidget):
         self.camera_active_signal.connect(self.on_camera_active)
         self.screen_capture_signal.connect(self.capture_button_handler)
         self.screen_recording_signal.connect(self.on_recording_active)
+        self.camera_controls_signal.connect(self.apply_camera_controls)
 
         # UI Initialization
         self._init_ui()
@@ -925,6 +931,83 @@ class CameraControlWidget(QWidget):
         else:
             self.toggle_camera()
             QTimer.singleShot(1000, lambda: self._capture_image_and_close(capture_data))
+
+    @Slot(object)
+    def apply_camera_controls(self, request):
+        """Apply a CameraControlsRequest dict to the active QCamera (turning
+        it on first if it is off) and answer with the camera's readback on
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED. A provider feed (no QCamera)
+        or an unsupported mode answers ok=False rather than raising."""
+        request = request if isinstance(request, dict) else {}
+        reply = {"request_id": str(request.get("request_id", "")), "ok": False}
+
+        if self._active_feed is not None or not self.camera:
+            reply["error"] = "no QCamera is selected"
+            camera_controls_applied_publisher.publish(reply)
+
+            return
+
+        if not self.camera.isActive():
+            self.turn_on_camera()
+
+        try:
+            self._apply_exposure(request.get("exposure_ms"))
+            self._apply_focus(request.get("focus_distance"))
+        except RuntimeError as error:
+            reply["error"] = str(error)
+            logger.error(f"Camera controls not applied: {error}")
+        else:
+            reply.update(
+                ok=True,
+                exposure_ms=self._exposure_ms_readback(),
+                focus_distance=self._focus_distance_readback(),
+            )
+
+        camera_controls_applied_publisher.publish(reply)
+
+    def _apply_exposure(self, exposure_ms):
+        camera = self.camera
+
+        if exposure_ms is None:
+            camera.setExposureMode(QCamera.ExposureMode.ExposureAuto)
+
+            return
+
+        if not camera.isExposureModeSupported(QCamera.ExposureMode.ExposureManual):
+            raise RuntimeError("this camera has no manual exposure")
+
+        camera.setExposureMode(QCamera.ExposureMode.ExposureManual)
+        camera.setManualExposureTime(float(exposure_ms) / 1000.0)
+
+    def _apply_focus(self, focus_distance):
+        camera = self.camera
+
+        if focus_distance is None:
+            camera.setFocusMode(QCamera.FocusMode.FocusModeAuto)
+
+            return
+
+        if not camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
+            raise RuntimeError("this camera has no manual focus")
+
+        camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
+        camera.setFocusDistance(float(focus_distance))
+
+    def _exposure_ms_readback(self):
+        camera = self.camera
+
+        if camera.exposureMode() != QCamera.ExposureMode.ExposureManual:
+            return None
+
+        return camera.manualExposureTime() * 1000.0
+
+    def _focus_distance_readback(self):
+        camera = self.camera
+
+        if camera.focusMode() != QCamera.FocusMode.FocusModeManual:
+            return None
+
+        return camera.focusDistance()
 
     def _generate_media_filename(
         self, step_description=None, step_id=None, file_extension=".png"
