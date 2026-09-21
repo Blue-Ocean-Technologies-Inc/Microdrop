@@ -9,7 +9,13 @@
 # Thanks for using Microdrop open source!
 
 # Third-party imports.
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Microdrop package imports.
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -194,6 +200,28 @@ MOTOR_PARAM_FIELDS = (
 #: Fluorescence filter wheel positions the hardware knows.
 FILTER_POSITIONS = (0, 1, 2, 3, 4)
 
+#: Fluorescence capture (#695), per filter position: LED level in % of
+#: FLUORESCENCE_LED_RAW_MAX and camera exposure. The exposure bound is the
+#: contract's; the camera clamps to its own range (the Pi's DH Camera:
+#: 0.3-204.7 ms, no gain).
+FLUORESCENCE_LED_PERCENT_BOUNDS = (0, 100)
+FLUORESCENCE_EXPOSURE_MS_BOUNDS = (0.1, 10_000.0)
+FLUORESCENCE_DEFAULT_LED_PERCENT = 50
+FLUORESCENCE_DEFAULT_EXPOSURE_MS = 50.0
+#: Settle after the LED and a new exposure, before the frame grab.
+FLUORESCENCE_SETTLE_S = 0.5
+#: How long the routine waits on the frontend for the camera's controls
+#: readback, and for the saved frame.
+FLUORESCENCE_CAMERA_CONTROLS_TIMEOUT_S = 5.0
+FLUORESCENCE_FRAME_TIMEOUT_S = 15.0
+#: Abort polling slice while the routine waits on the frontend.
+FLUORESCENCE_WAIT_SLICE_S = 0.05
+#: A protocol step waits for its capture this long per entry (filter move up
+#: to 60 s, plus the camera round trips) plus a fixed margin, before the
+#: step fails as unacknowledged.
+FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S = 70.0
+FLUORESCENCE_STEP_TIMEOUT_MARGIN_S = 15.0
+
 #: Seconds between monitor ticks: a port scan while disconnected, a
 #: status poll (published to the panes) while connected.
 MONITOR_INTERVAL_S = 2
@@ -238,6 +266,11 @@ PMT_STREAM_UPDATED = "portable_dropbot/signals/pmt_stream_updated"
 PMT_ADC_UPDATED = "portable_dropbot/signals/pmt_adc_updated"
 #: Outcome of a buffered acquire saved to CSV (PmtAcquireDone).
 PMT_ACQUIRE_DONE = "portable_dropbot/signals/pmt_acquire_done"
+#: Fluorescence Capture pane and column: per-stage progress of a running
+#: capture (FluorescenceCaptureProgress) and its outcome
+#: (FluorescenceCaptureDone).
+FLUORESCENCE_CAPTURE_PROGRESS = "portable_dropbot/signals/fluorescence_capture_progress"
+FLUORESCENCE_CAPTURE_DONE = "portable_dropbot/signals/fluorescence_capture_done"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
@@ -312,6 +345,12 @@ PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"
 PMT_CAPTURE = "portable_dropbot/requests/pmt_capture"
 #: Stop the running capture after the current spot's teardown.
 PMT_CAPTURE_ABORT = "portable_dropbot/requests/pmt_capture_abort"
+#: Run the fluorescence capture routine (FluorescenceCaptureRequest): per
+#: entry, filter wheel -> LED -> camera controls -> one saved frame.
+FLUORESCENCE_CAPTURE = "portable_dropbot/requests/fluorescence_capture"
+#: Stop the running fluorescence capture; its teardown still runs. Raw
+#: publish_message with an empty message, exactly like PMT_CAPTURE_ABORT.
+FLUORESCENCE_CAPTURE_ABORT = "portable_dropbot/requests/fluorescence_capture_abort"
 # Power system (advanced): fan and buzzer only.
 SET_FAN = "portable_dropbot/requests/set_fan"
 SET_BUZZER = "portable_dropbot/requests/set_buzzer"
@@ -328,13 +367,17 @@ MOTOR_STOP = "portable_dropbot/requests/motor_stop"
 MOTOR_HOME = "portable_dropbot/requests/motor_home"
 REFRESH_MOTORS = "portable_dropbot/requests/refresh_motors"
 
-# Topics the actor declared by this plugin subscribes to.
+# Topics the actor declared by this plugin subscribes to. The two device
+# viewer signals are the camera's replies to the fluorescence capture
+# routine; the listener dispatches them to on_<last segment>_signal.
 ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "portable_dropbot/requests/#",
         "hardware/requests/#",
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
     ]
 }
 
@@ -533,4 +576,105 @@ pmt_acquire_publisher = ValidatedTopicPublisher(
 )
 pmt_acquire_done_publisher = ValidatedTopicPublisher(
     topic=PMT_ACQUIRE_DONE, validator_class=PmtAcquireDone
+)
+
+# --------------------------------------------------------------------- #
+# Fluorescence capture message contracts (topic + schema, one unit)      #
+# --------------------------------------------------------------------- #
+
+
+class FluorescenceCaptureEntry(BaseModel):
+    """One filter position to image, with its LED level, exposure and focus."""
+
+    filter_position: int
+    led_percent: int = Field(
+        ge=FLUORESCENCE_LED_PERCENT_BOUNDS[0], le=FLUORESCENCE_LED_PERCENT_BOUNDS[1]
+    )
+    exposure_ms: float = Field(
+        ge=FLUORESCENCE_EXPOSURE_MS_BOUNDS[0], le=FLUORESCENCE_EXPOSURE_MS_BOUNDS[1]
+    )
+    #: QCamera's 0.0 (near) to 1.0 (far) scale, so the contract stays
+    #: camera-agnostic; None = continuous auto focus.
+    focus_distance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @field_validator("filter_position")
+    @classmethod
+    def _filter_position_known(cls, value):
+        if value not in FILTER_POSITIONS:
+            raise ValueError(
+                f"filter position {value} is not one of {FILTER_POSITIONS}"
+            )
+
+        return value
+
+
+class FluorescenceCaptureRequest(BaseModel):
+    """Capture order is list order; only ticked filter positions are sent."""
+
+    entries: list[FluorescenceCaptureEntry]
+    #: Echoed on progress and done, so a protocol step waits for its own
+    #: capture only; empty for pane-initiated captures.
+    request_id: str = ""
+    #: Filename-safe tag in the frame names (e.g. "step1.2-end", "manual").
+    label: str = Field(
+        default="",
+        pattern=PMT_CAPTURE_LABEL_PATTERN,
+        max_length=PMT_CAPTURE_LABEL_MAX_LENGTH,
+    )
+    #: Experiment folder the frames go under (in its captures/); empty = the
+    #: current experiment directory.
+    directory: str = ""
+
+
+class FluorescenceStepCaptureEntry(FluorescenceCaptureEntry):
+    """One filter position of a protocol step's fluorescence setup: captured
+    at the step's start, its end, or both. An entry with neither tick is
+    dropped on write."""
+
+    at_start: bool = False
+    at_end: bool = False
+
+
+class FluorescenceStepCapture(BaseModel):
+    """The value of a step's fluorescence capture cell; list order is
+    capture order."""
+
+    entries: list[FluorescenceStepCaptureEntry] = []
+
+
+class FluorescenceCaptureProgress(BaseModel):
+    """Per-stage progress of the running capture."""
+
+    request_id: str
+    index: int
+    total: int
+    filter_position: int
+    #: "filter" | "led" | "camera" | "frame" | "teardown"
+    stage: str
+    detail: str = ""
+
+
+class FluorescenceCaptureDone(BaseModel):
+    """Outcome of a capture request; the frames saved before any failure or
+    abort are still listed."""
+
+    request_id: str
+    ok: bool
+    label: str = ""
+    #: The captures folder the frames were saved in.
+    directory: str = ""
+    #: Saved PNGs, in capture order.
+    paths: list[str] = []
+    #: The failing stage and why, "aborted", or "busy" for a refusal.
+    error: str = ""
+
+
+fluorescence_capture_publisher = ValidatedTopicPublisher(
+    topic=FLUORESCENCE_CAPTURE, validator_class=FluorescenceCaptureRequest
+)
+fluorescence_capture_progress_publisher = ValidatedTopicPublisher(
+    topic=FLUORESCENCE_CAPTURE_PROGRESS, validator_class=FluorescenceCaptureProgress
+)
+fluorescence_capture_done_publisher = ValidatedTopicPublisher(
+    topic=FLUORESCENCE_CAPTURE_DONE, validator_class=FluorescenceCaptureDone
 )
