@@ -46,7 +46,7 @@ alpha_table_editor = TableEditor(
         RangeColumn(
             name="alpha",
             label="",
-            width=65,
+            width=90,
         ),
     ],
     # Define the context menu:
