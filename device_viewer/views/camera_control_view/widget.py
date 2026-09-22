@@ -57,6 +57,9 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import (
+    V4L2_EXPOSURE_AUTO,
+    V4L2_EXPOSURE_AUTO_MANUAL,
+    V4L2_EXPOSURE_AUTO_ON,
     V4L2_FOCUS_ABSOLUTE,
     V4L2_FOCUS_AUTO,
     LinuxCameraDeviceContainer,
@@ -138,6 +141,9 @@ class CameraControlWidget(QWidget):
         # cached focus_absolute (min, max) — see _apply_focus.
         self._v4l2_focus_path = None
         self._v4l2_focus_range = None
+        #: v4l2 node the auto-exposure fallback last switched to auto; None
+        #: while Qt (or manual exposure) drives the camera's exposure.
+        self._v4l2_auto_exposure_path = None
         # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
         # Kept separate from combo box userData because shiboken cannot serialize
         # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
@@ -992,10 +998,36 @@ class CameraControlWidget(QWidget):
         if exposure_ms is None:
             camera.setExposureMode(QCamera.ExposureMode.ExposureAuto)
 
+            # GStreamer backend (Portable Pi): Qt's auto exposure is a no-op
+            # there, leaving the camera in manual — switch it over v4l2.
+            path = self._selected_v4l2_device_path()
+
+            if path is not None:
+                if set_v4l2_controls(
+                    path, **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_ON}
+                ):
+                    self._v4l2_auto_exposure_path = path
+                else:
+                    logger.warning(f"v4l2 auto exposure failed for {path}")
+
             return
 
         if not camera.isExposureModeSupported(QCamera.ExposureMode.ExposureManual):
             raise RuntimeError("this camera has no manual exposure")
+
+        # Back to manual on the v4l2 side first, if the fallback above left
+        # the camera on auto — its exposure time is ignored otherwise.
+        if self._v4l2_auto_exposure_path is not None:
+            if not set_v4l2_controls(
+                self._v4l2_auto_exposure_path,
+                **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_MANUAL},
+            ):
+                logger.warning(
+                    f"v4l2 manual exposure restore failed for "
+                    f"{self._v4l2_auto_exposure_path}"
+                )
+
+            self._v4l2_auto_exposure_path = None
 
         camera.setExposureMode(QCamera.ExposureMode.ExposureManual)
         camera.setManualExposureTime(float(exposure_ms) / 1000.0)
@@ -1055,7 +1087,10 @@ class CameraControlWidget(QWidget):
     def _exposure_ms_readback(self):
         camera = self.camera
 
-        if camera.exposureMode() != QCamera.ExposureMode.ExposureManual:
+        if (
+            self._v4l2_auto_exposure_path is not None
+            or camera.exposureMode() != QCamera.ExposureMode.ExposureManual
+        ):
             return None
 
         return camera.manualExposureTime() * 1000.0

@@ -21,6 +21,10 @@ os_name = platform.system()
 
 V4L2_FOCUS_ABSOLUTE = "focus_absolute"
 V4L2_FOCUS_AUTO = "focus_automatic_continuous"
+#: UVC auto-exposure menu: 1 = manual, 3 = aperture priority (auto time).
+V4L2_EXPOSURE_AUTO = "auto_exposure"
+V4L2_EXPOSURE_AUTO_MANUAL = 1
+V4L2_EXPOSURE_AUTO_ON = 3
 
 
 def get_v4l2_fps(
