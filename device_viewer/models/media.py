@@ -56,6 +56,9 @@ class CameraControlsRequest(BaseModel):
     request_id: str = ""
     #: Manual exposure time; None = auto exposure.
     exposure_ms: float | None = Field(default=None, gt=0)
+    #: Leave auto exposure for manual at the exposure auto last chose (so
+    #: the picture does not jump); exposure_ms is ignored.
+    hold_auto_exposure: bool = False
     #: QCamera focus distance, 0.0 (near) to 1.0 (far); None = continuous
     #: auto focus.
     focus_distance: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -67,7 +70,10 @@ class CameraControlsApplied(BaseModel):
 
     request_id: str = ""
     ok: bool
+    #: The exposure in effect — auto's current pick while exposure_auto —
+    #: or None when the camera does not report it.
     exposure_ms: float | None = None
+    exposure_auto: bool = False
     focus_distance: float | None = None
     error: str = ""
 

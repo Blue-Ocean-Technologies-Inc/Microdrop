@@ -57,9 +57,11 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import (
+    V4L2_EXPOSURE_ABSOLUTE,
     V4L2_EXPOSURE_AUTO,
     V4L2_EXPOSURE_AUTO_MANUAL,
     V4L2_EXPOSURE_AUTO_ON,
+    V4L2_EXPOSURE_UNITS_PER_MS,
     V4L2_FOCUS_ABSOLUTE,
     V4L2_FOCUS_AUTO,
     LinuxCameraDeviceContainer,
@@ -978,7 +980,11 @@ class CameraControlWidget(QWidget):
             self.turn_on_camera()
 
         try:
-            self._apply_exposure(request.get("exposure_ms"))
+            if request.get("hold_auto_exposure"):
+                self._hold_auto_exposure()
+            else:
+                self._apply_exposure(request.get("exposure_ms"))
+
             self._apply_focus(request.get("focus_distance"))
         except RuntimeError as error:
             reply["error"] = str(error)
@@ -987,6 +993,7 @@ class CameraControlWidget(QWidget):
             reply.update(
                 ok=True,
                 exposure_ms=self._exposure_ms_readback(),
+                exposure_auto=self._exposure_is_auto(),
                 focus_distance=self._focus_distance_readback(),
             )
 
@@ -1084,16 +1091,43 @@ class CameraControlWidget(QWidget):
         self._v4l2_focus_path = path
         logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
 
-    def _exposure_ms_readback(self):
-        camera = self.camera
+    def _hold_auto_exposure(self):
+        """Switch to manual exposure at the time auto last chose."""
+        exposure_ms = self._current_exposure_ms()
 
-        if (
+        if exposure_ms is None:
+            raise RuntimeError("the camera does not report its auto exposure")
+
+        self._apply_exposure(exposure_ms)
+
+    def _exposure_is_auto(self):
+        return (
             self._v4l2_auto_exposure_path is not None
-            or camera.exposureMode() != QCamera.ExposureMode.ExposureManual
-        ):
-            return None
+            or self.camera.exposureMode() != QCamera.ExposureMode.ExposureManual
+        )
 
-        return camera.manualExposureTime() * 1000.0
+    def _current_exposure_ms(self):
+        """The exposure the camera is using right now (auto's pick
+        included), or None when it does not report it."""
+
+        # The v4l2 fallback drives auto: the camera writes its pick into
+        # exposure_time_absolute, which Qt never sees.
+        if self._v4l2_auto_exposure_path is not None:
+            raw = get_v4l2_control(
+                self._v4l2_auto_exposure_path, V4L2_EXPOSURE_ABSOLUTE
+            )
+
+            return raw / V4L2_EXPOSURE_UNITS_PER_MS if raw else None
+
+        exposure_s = self.camera.exposureTime()
+
+        return exposure_s * 1000.0 if exposure_s > 0 else None
+
+    def _exposure_ms_readback(self):
+        if self._exposure_is_auto():
+            return self._current_exposure_ms()
+
+        return self.camera.manualExposureTime() * 1000.0
 
     def _focus_distance_readback(self):
         if self._v4l2_focus_path is not None:
