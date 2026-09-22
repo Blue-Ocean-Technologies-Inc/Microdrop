@@ -34,6 +34,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         from .dock_panes import (
             PortableDropbotAdvancedControlsDockPane,
             # PortableDropbotCalibrationDockPane,
+            PortableDropbotFluorescenceCaptureDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotMotorsDockPane,
             PortableDropbotPmtCaptureDockPane,
@@ -43,6 +44,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
             PortableDropbotMotorsDockPane,
             # PortableDropbotCalibrationDockPane,
             PortableDropbotPmtCaptureDockPane,
+            PortableDropbotFluorescenceCaptureDockPane,
             PortableDropbotMoreControlsDockPane,
             PortableDropbotAdvancedControlsDockPane,
         ]

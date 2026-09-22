@@ -9,39 +9,61 @@
 # Thanks for using Microdrop open source!
 
 # sys imports
+
+# Standard library imports.
+import os
+import pickle
 from pathlib import Path
 
-# Local imports.
-from .helpers import get_microdrop_redis_globals_manager
-from .preferences import MicrodropPreferences
-from dropbot_controller.consts import START_DEVICE_MONITORING
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-from dropbot_tools_menu.menus import dropbot_tools_menu_factory
-from microdrop_style.helpers import is_dark_mode
-from microdrop_style.icons.icons import ICON_MENU
-from .consts import (scibots_icon_path, sidebar_menu_options,
-                     hamburger_btn_stylesheet, EXPERIMENT_DIR, CHANGELOG_PATH)
+# Third-party imports.
+from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 # Enthought library imports.
-from traits.etsconfig.api import ETSConfig
-from traits.api import Bool, Instance, List, Property, observe, Directory, Event
-
-from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 from envisage.ui.tasks.api import TasksApplication
-
-from pyface.tasks.api import TaskWindowLayout
+from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
 from pyface.image_resource import ImageResource
+from pyface.qt import QtWidgets
 from pyface.splash_screen import SplashScreen
+from pyface.tasks.api import TaskWindowLayout
+from traits.api import Bool, Directory, Event, Instance, List, Property, observe
+from traits.etsconfig.api import ETSConfig
 
-from PySide6.QtWidgets import (QToolBar, QLabel,
-                               QPushButton, QVBoxLayout,
-                               QHBoxLayout, QWidget, QFrame)
-from PySide6.QtCore import Qt, QEvent, QSize
-from PySide6.QtGui import QPixmap, QFont
+# Microdrop package imports.
+from dropbot_controller.consts import START_DEVICE_MONITORING
+from dropbot_tools_menu.menus import dropbot_tools_menu_factory
+from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 
+# Microdrop style imports.
+from microdrop_style.helpers import is_dark_mode
+from microdrop_style.icons.icons import ICON_MENU
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Local imports.
+from .consts import (
+    CHANGELOG_PATH,
+    EXPERIMENT_DIR,
+    hamburger_btn_stylesheet,
+    scibots_icon_path,
+    sidebar_menu_options,
+)
+from .helpers import get_microdrop_redis_globals_manager
+from .preferences import MicrodropPreferences
+
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -60,12 +82,14 @@ def _show_beta_disclaimer():
         return
 
     disclaimer_text = """
-    <b>Microdrop</b> is an open-source <b>beta</b> provided for testing and evaluation.<br><br>
+    <b>Microdrop</b> is an open-source <b>beta</b> provided for testing and
+    evaluation.<br><br>
     It may contain bugs or unexpected behaviour.<br><br>
-    Please validate results in your own workflows and ensure your data is properly backed up.<br><br>
+    Please validate results in your own workflows and ensure your data is
+    properly backed up.<br><br>
     Provided under <b>AGPLv3</b> without warranty. Use at your own risk."""
 
-    dialog = disclaimer(None, message=disclaimer_text)
+    disclaimer(None, message=disclaimer_text)
 
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("Beta disclaimer accepted.")
@@ -82,6 +106,7 @@ def _show_whats_new():
     greeted with the entire history.
     """
     from microdrop_application.dialogs.pyface_wrapper import information
+
     from microdrop_utils.markdown_helpers import changelog_sections_added_since
     from microdrop_utils.pyside_helpers import markdown_text_to_html
 
@@ -96,18 +121,48 @@ def _show_whats_new():
         return
 
     new_sections = changelog_sections_added_since(
-        cache.read_text(encoding="utf-8"), current_changelog)
+        cache.read_text(encoding="utf-8"), current_changelog
+    )
     if not new_sections.strip():
         return
 
-    information(None, markdown_text_to_html(new_sections), title="What's New?",
-                cancel=False)
+    information(
+        None, markdown_text_to_html(new_sections), title="What's New?", cancel=False
+    )
 
     cache.write_text(current_changelog, encoding="utf-8")
 
 
+def describe_dock_widgets(main_window):
+    """Describe every dock widget's geometry, for a window pyface refused to save.
+
+    Runs during application shutdown, so it must never raise itself; any
+    failure while introspecting the window is returned as text instead.
+    """
+    try:
+        lines = []
+
+        for widget in main_window.findChildren(QtWidgets.QDockWidget):
+            geometry = widget.geometry()
+            tabified_titles = [
+                tabbed.windowTitle()
+                for tabbed in main_window.tabifiedDockWidgets(widget)
+            ]
+            lines.append(
+                f"{widget.windowTitle()!r} visible={widget.isVisible()} "
+                f"area={main_window.dockWidgetArea(widget)} "
+                f"geometry={geometry.x()},{geometry.y()} "
+                f"{geometry.width()}x{geometry.height()} "
+                f"floating={widget.isFloating()} tabified_with={tabified_titles}"
+            )
+
+        return "\n".join(lines)
+    except Exception as error:
+        return f"Could not describe dock widgets: {error}"
+
+
 class MicrodropApplication(TasksApplication):
-    """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
+    """Device Viewer application based on enthought envisage's tasks application."""
 
     #### 'IApplication' interface #############################################
 
@@ -119,19 +174,21 @@ class MicrodropApplication(TasksApplication):
 
     #### 'TasksApplication' interface #########################################
 
-    ###### DONE USING ETSConfig NOW #################################################################
+    ###### DONE USING ETSConfig NOW ##########################################
 
-    # #: The directory on the local file system used to persist application data. Should be same as state_location for convenience.
+    # #: The directory on the local file system used to persist application
+    # #: data. Should be same as state_location for convenience.
     # home = application_home_directory
     #
     # #: The directory on the local file system used to persist window layout
     # #: information.
     # state_location = application_home_directory / ".save_state"
     #
-    # #: We don't use this directory, but it defaults to "~/enthought" and keeps creating it so we set it to our save location
+    # #: We don't use this directory, but it defaults to "~/enthought" and
+    # #: keeps creating it so we set it to our save location
     # user_data = application_home_directory / "Experimental_Data "
 
-    #################################################################################################
+    ###########################################################################
 
     #: The filename that the application uses to persist window layout
     #: information.
@@ -140,7 +197,7 @@ class MicrodropApplication(TasksApplication):
     # The default window-level layout for the application.
     default_layout = List(TaskWindowLayout)
 
-    # Whether to restore the previous application-level layout when the applicaton is started.
+    # Whether to restore the previous application-level layout on startup.
     always_use_default_layout = Property(Bool)
 
     # experiments directory
@@ -158,7 +215,9 @@ class MicrodropApplication(TasksApplication):
 
     ######### Extra 'Application' Events #############################################
 
-    extra_plugins_loaded = Event(desc="Trigger if extra plugins are loaded post app initialization")
+    extra_plugins_loaded = Event(
+        desc="Trigger if extra plugins are loaded post app initialization"
+    )
 
     ###########################################################################
     # Private interface.
@@ -166,33 +225,42 @@ class MicrodropApplication(TasksApplication):
 
     #### Trait initializers ###################################################
 
-    # note: The _default after a trait name to define a method is a convention to indicate that the trait is a
-    # default value for another trait.
+    # note: The _default after a trait name to define a method is a
+    # convention to indicate that the trait is a default value for another
+    # trait.
 
     def _default_layout_default(self):
         """
-        Trait initializer for the default_layout task, which is the active task to be displayed. It is gotten from the
-        preferences.
-
+        Trait initializer for the default_layout task, which is the active
+        task to be displayed. It is gotten from the preferences.
         """
         active_task = self.preferences_helper.default_task
         tasks = [factory.id for factory in self.task_factories]
-        return [
-            TaskWindowLayout(*tasks, active_task=active_task, size=(800, 600))
-        ]
+        return [TaskWindowLayout(*tasks, active_task=active_task, size=(800, 600))]
 
     def _preferences_helper_default(self):
         """
-        Retireve the preferences from the preferences file using the DeviceViewerPreferences class.
+        Retrieve the preferences from the preferences file using the
+        DeviceViewerPreferences class.
         """
         return MicrodropPreferences(preferences=self.preferences)
 
     def _icon_default(self):
-        icon_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Icon.png'
+        icon_path = (
+            Path(__file__).parent.parent
+            / "microdrop_style"
+            / "icons"
+            / "Microdrop_Icon.png"
+        )
         return ImageResource(str(icon_path))
 
     def _splash_screen_default(self):
-        splash_image_path = Path(__file__).parent.parent / 'microdrop_style' / 'icons' / 'Microdrop_Primary_Logo_FHD.png'
+        splash_image_path = (
+            Path(__file__).parent.parent
+            / "microdrop_style"
+            / "icons"
+            / "Microdrop_Primary_Logo_FHD.png"
+        )
 
         class _TopMostSplashScreen(SplashScreen):
             """SplashScreen forced to stay on top of every other window.
@@ -212,13 +280,13 @@ class MicrodropApplication(TasksApplication):
                 available = control.screen().availableGeometry()
                 target = available.size() * 0.6
                 pixmap = control.pixmap()
-                if (pixmap.width() > target.width()
-                        or pixmap.height() > target.height()):
-                    control.setPixmap(pixmap.scaled(
-                        target, Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation))
-                    control.move(available.center()
-                                 - control.rect().center())
+                if pixmap.width() > target.width() or pixmap.height() > target.height():
+                    control.setPixmap(
+                        pixmap.scaled(
+                            target, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                        )
+                    )
+                    control.move(available.center() - control.rect().center())
                 control.setWindowFlags(control.windowFlags() | Qt.WindowStaysOnTopHint)
                 control.raise_()
                 control.activateWindow()
@@ -226,12 +294,13 @@ class MicrodropApplication(TasksApplication):
 
         return _TopMostSplashScreen(
             image=ImageResource(str(splash_image_path)),
-            text="Microdrop-Next-Gen v.beta"
+            text="Microdrop-Next-Gen v.beta",
         )
 
     #### Trait property getter/setters ########################################
 
-    # the _get and _set tags in the methods are used to define a getter and setter for a trait property.
+    # the _get and _set tags in the methods are used to define a getter and
+    # setter for a trait property.
 
     def _get_always_use_default_layout(self):
         return self.preferences_helper.always_use_default_layout
@@ -262,7 +331,7 @@ class MicrodropApplication(TasksApplication):
 
         self.experiment_changed = True
 
-    @observe('application_initialized')
+    @observe("application_initialized")
     def _on_application_initialized(self, event):
         logger.critical("Application Initialized")
         _show_beta_disclaimer()
@@ -271,25 +340,65 @@ class MicrodropApplication(TasksApplication):
         logger.info("Requesting Dropbot Search")
         publish_message(message="", topic=START_DEVICE_MONITORING)
 
-    ############################# Initialization ############################################################
+    ############################# Initialization #############################
     def traits_init(self):
         self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Initialized microdrop application. Current experiment directory: {self.current_experiment_directory}")
+        logger.info(
+            "Initialized microdrop application. Current experiment "
+            f"directory: {self.current_experiment_directory}"
+        )
 
     #### Handler for Layout Restore Errors if any ##########################
     def start(self):
         try:
             logger.debug("Starting new Microdrop application instance.")
             return super().start()
-        except Exception as e:
-            
+        except Exception:
             import traceback
+
             logger.debug("Error restoring layout, falling back to default layout.")
             traceback.print_exc()
-            
+
             self.preferences_helper.always_use_default_layout = True
-            
+
             return super().start()
+
+    #### State persistence: survive layout-extraction failures ##############
+    def _save_state(self):
+        """Override so a layout pyface cannot serialise never blocks exit.
+
+        ``TasksApplication.exit()`` calls this unguarded via
+        ``_prepare_exit()``. Pyface's ``MainWindowLayout.get_layout_for_area``
+        (pyface/ui/qt/tasks/main_window_layout.py) raises ``RuntimeError``
+        when a dock-widget arrangement can't be expressed as nested
+        splitters; left unguarded, that escapes ``exit()`` before any window
+        is destroyed, so the window and app never close. Here it degrades to
+        "layout not saved" for that window instead.
+        """
+        window_layouts = []
+
+        for window in self.windows:
+            try:
+                window_layouts.append(window.get_window_layout())
+            except RuntimeError as error:
+                logger.warning(
+                    f"Could not save window layout for {window!r}: {error}\n"
+                    f"{describe_dock_widgets(window.control)}"
+                )
+
+        if window_layouts:
+            self._state.previous_window_layouts = window_layouts
+
+        filename = os.path.join(self.state_location, self.state_filename)
+        logger.debug(f"Saving application state to {filename}")
+
+        try:
+            with open(filename, "wb") as f:
+                pickle.dump(self._state, f, protocol=self.layout_save_protocol)
+        except Exception:
+            logger.exception("Error while saving application state")
+        else:
+            logger.debug("Application state successfully saved")
 
         # if not hasattr(window.control, "_left_toolbar"):
         #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
@@ -308,26 +417,26 @@ class MicrodropSidebar(QToolBar):
     def __init__(self, parent=None, task=None):
         super().__init__("Permanent Sidebar", parent)
         self.task = task
-        
-        #self.setOrientation(Qt.Vertical)
-        #self.setMovable(False)
-       # self.setFloatable(False)
-       # self.setAllowedAreas(Qt.LeftToolBarArea)
-        #self.setFixedWidth(160)
+
+        # self.setOrientation(Qt.Vertical)
+        # self.setMovable(False)
+        # self.setFloatable(False)
+        # self.setAllowedAreas(Qt.LeftToolBarArea)
+        # self.setFixedWidth(160)
         self.setObjectName("PermanentLeftToolbar")
 
         container = QWidget()
         self.layout = QVBoxLayout()
-       # self.layout.setContentsMargins(0, 10, 0, 10)
-       # self.layout.setSpacing(15)
-       # self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        # self.layout.setContentsMargins(0, 10, 0, 10)
+        # self.layout.setSpacing(15)
+        # self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
         # Logo
         self.logo_label = QLabel()
         pixmap = QPixmap(scibots_icon_path)
         if not pixmap.isNull():
             self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
-        #self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        # self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
 
         # Hamburger button
@@ -355,13 +464,17 @@ class MicrodropSidebar(QToolBar):
             btn = SidebarMenuButton(icon_code, option, icon_font, color_str)
             self.menu_layout.addWidget(btn)
             self.menu_buttons.append((btn, option))
-        
+
         self.menu_widget.setVisible(False)
         self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
         # connections
         button_names = [name for name, _ in sidebar_menu_options]
-        self.menu_buttons[button_names.index("Exit")][0].clicked.connect(self._handle_exit)
-        self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(self._handle_diagnostics)
+        self.menu_buttons[button_names.index("Exit")][0].clicked.connect(
+            self._handle_exit
+        )
+        self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(
+            self._handle_diagnostics
+        )
 
         container.setLayout(self.layout)
         self.addWidget(container)
@@ -401,15 +514,20 @@ class MicrodropSidebar(QToolBar):
             color_str = "black"
         for btn, _ in self.menu_buttons:
             btn.set_color(color_str)
-        # Apply hamburger button stylesheet with three color placeholders (normal, hover, pressed)
-        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet % (color_str, color_str, color_str))
+        # Apply hamburger button stylesheet with three color placeholders
+        # (normal, hover, pressed)
+        self.hamburger_btn.setStyleSheet(
+            hamburger_btn_stylesheet % (color_str, color_str, color_str)
+        )
 
 
 class SidebarMenuButton(QFrame):
-    def __init__(self, icon_code, label, icon_font, color_str, text_font=None, parent=None):
+    def __init__(
+        self, icon_code, label, icon_font, color_str, text_font=None, parent=None
+    ):
         super().__init__(parent)
         self.setObjectName("SidebarMenuButton")
-        self.setStyleSheet(f"QFrame#SidebarMenuButton {{ background: none; }}")
+        self.setStyleSheet("QFrame#SidebarMenuButton { background: none; }")
         self.setCursor(Qt.PointingHandCursor)
         self.icon_label = QLabel(icon_code)
         self.icon_label.setFont(icon_font)
@@ -439,4 +557,5 @@ class SidebarMenuButton(QFrame):
         super().mousePressEvent(event)
 
     from PySide6.QtCore import Signal
+
     clicked = Signal()

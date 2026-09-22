@@ -30,6 +30,9 @@ from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 
 # Local imports.
 from .consts import PKG, PKG_name
+from .protocol_columns.fluorescence_capture_column import (
+    make_fluorescence_capture_column,
+)
 from .protocol_columns.magnet_column import make_magnet_column
 from .protocol_columns.pmt_capture_column import make_pmt_capture_column
 from .protocol_columns.temperature_column import make_temperature_column
@@ -58,4 +61,5 @@ class PortableDropbotProtocolControlsPlugin(Plugin):
             make_magnet_column(),
             make_temperature_column(),
             make_pmt_capture_column(),
+            make_fluorescence_capture_column(),
         ]

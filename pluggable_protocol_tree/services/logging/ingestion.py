@@ -13,11 +13,14 @@ the ProtocolLoggingController. Append paths are lock-guarded because
 capacitance/actuation arrive on a dramatiq worker thread while step
 context updates arrive on the GUI thread."""
 
+# Standard library imports.
 import json
 import threading
 
+# Enthought library imports.
 from traits.api import Any, Dict, Float, HasTraits, Int, List, Str
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -35,8 +38,8 @@ class LoggingIngestion(HasTraits):
     _step_idx = Int(0)
     _actuated_channels = List()
     _actuated_area = Float(0.0)
-    _cpa = Any()                     # Optional[float]; None -> force is None
-    _lock = Any()                    # threading.Lock, set in traits_init
+    _cpa = Any()  # Optional[float]; None -> force is None
+    _lock = Any()  # threading.Lock, set in traits_init
 
     def _media_default(self):
         return {"video": [], "image": [], "other": []}
@@ -83,17 +86,24 @@ class LoggingIngestion(HasTraits):
         type_obj = getattr(model, "type", None)
         bucket = getattr(type_obj, "value", None) or type_obj or "other"
         bucket = str(bucket).lower()
+
         if bucket not in self.media:
             bucket = "other"
+
+        path = str(model.path)
+
         with self._lock:
-            self.media[bucket].append(str(model.path))
+            # The live DEVICE_VIEWER_MEDIA_CAPTURED path and the flush-time
+            # app_globals drain both deliver the same file.
+            if path not in self.media[bucket]:
+                self.media[bucket].append(path)
 
     def log_capacitance(self, message) -> bool:
         """Parse a CAPACITANCE_UPDATED payload and append one row stamped
         with the current step + current phase actuation. Returns False
         (skips) when no step is set yet or the payload is unparseable —
         matches legacy lenient behavior."""
-        if not self._step_id:           # no step set yet -> skip (legacy parity)
+        if not self._step_id:  # no step set yet -> skip (legacy parity)
             return False
         try:
             data = json.loads(message)
@@ -108,17 +118,19 @@ class LoggingIngestion(HasTraits):
         if cap is None or volt is None:
             return False
         force = self._calculate_force(volt)
-        self.log_data({
-            "step_idx": self._step_idx,
-            "utc_time": int(data.get("reception_time", 0) or 0),
-            "instrument_time_us": int(data.get("instrument_time_us", 0) or 0),
-            "step_id": self._step_id,
-            "Capacitance (pF)": cap,
-            "Voltage (V)": volt,
-            "Force Over Unit Area (mN/mm^2)": force,
-            "Actuated Area (mm^2)": self._actuated_area,
-            "actuated_channels": list(self._actuated_channels),
-        })
+        self.log_data(
+            {
+                "step_idx": self._step_idx,
+                "utc_time": int(data.get("reception_time", 0) or 0),
+                "instrument_time_us": int(data.get("instrument_time_us", 0) or 0),
+                "step_id": self._step_id,
+                "Capacitance (pF)": cap,
+                "Voltage (V)": volt,
+                "Force Over Unit Area (mN/mm^2)": force,
+                "Actuated Area (mm^2)": self._actuated_area,
+                "actuated_channels": list(self._actuated_channels),
+            }
+        )
         return True
 
     # --- force ---
@@ -126,8 +138,8 @@ class LoggingIngestion(HasTraits):
         if self._cpa is None or voltage <= 0:
             return None
         try:
-            return round(0.5 * self._cpa * (voltage ** 2), 6)
-        except Exception as e:        # pragma: no cover - defensive
+            return round(0.5 * self._cpa * (voltage**2), 6)
+        except Exception as e:  # pragma: no cover - defensive
             logger.error(f"force calc failed: {e}")
             return None
 

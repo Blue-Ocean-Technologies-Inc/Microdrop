@@ -8,8 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Microdrop package imports.
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 
 
@@ -59,9 +61,9 @@ def test_calculate_force_formula():
 
 def test_calculate_force_none_without_cpa_or_nonpositive_voltage():
     ing = LoggingIngestion()
-    assert ing._calculate_force(10.0) is None       # no c-per-area
+    assert ing._calculate_force(10.0) is None  # no c-per-area
     ing.update_capacitance_per_unit_area(2.0)
-    assert ing._calculate_force(0.0) is None         # voltage <= 0
+    assert ing._calculate_force(0.0) is None  # voltage <= 0
 
 
 def test_log_media_buckets_by_type():
@@ -74,6 +76,7 @@ def test_log_media_buckets_by_type():
 
     class _T:
         value = "video"
+
     ing.log_media(_M("a.mp4", _T()))
     assert ing.media["video"] == ["a.mp4"]
 
@@ -83,14 +86,21 @@ def test_log_media_accepts_plain_string_type():
 
     class _M:
         path = "b.png"
-        type = "IMAGE"          # plain string, not an enum
+        type = "IMAGE"  # plain string, not an enum
+
     ing.log_media(_M())
     assert ing.media["image"] == ["b.png"]
 
 
 def _msg(cap="12.5pF", volt="100V", instr=1000, recv=1700000000):
-    return json.dumps({"capacitance": cap, "voltage": volt,
-                       "instrument_time_us": instr, "reception_time": recv})
+    return json.dumps(
+        {
+            "capacitance": cap,
+            "voltage": volt,
+            "instrument_time_us": instr,
+            "reception_time": recv,
+        }
+    )
 
 
 def test_log_capacitance_stamps_step_and_phase_and_force():
@@ -116,7 +126,7 @@ def test_log_capacitance_per_phase_attribution():
     ing.set_step(step_id="s", step_idx=1)
     ing.set_actuation(actuated_channels=[1], actuated_area=1.0)
     ing.log_capacitance(_msg())
-    ing.set_actuation(actuated_channels=[2, 3], actuated_area=2.0)   # next phase
+    ing.set_actuation(actuated_channels=[2, 3], actuated_area=2.0)  # next phase
     ing.log_capacitance(_msg())
     assert ing.entries[0]["actuated_channels"] == [1]
     assert ing.entries[1]["actuated_channels"] == [2, 3]
@@ -127,13 +137,13 @@ def test_log_capacitance_bare_numbers_and_invalid():
     ing.set_step(step_id="s", step_idx=1)
     assert ing.log_capacitance(_msg(cap="9.0", volt="50")) is True
     assert ing.entries[-1]["Capacitance (pF)"] == 9.0
-    assert ing.log_capacitance(_msg(cap="-", volt="-")) is False   # skipped
+    assert ing.log_capacitance(_msg(cap="-", volt="-")) is False  # skipped
     assert ing.log_capacitance("not json") is False
 
 
 def test_log_capacitance_requires_step_set():
     ing = LoggingIngestion()
-    assert ing.log_capacitance(_msg()) is False    # no step set yet
+    assert ing.log_capacitance(_msg()) is False  # no step set yet
 
 
 def test_log_capacitance_force_none_without_cpa():
@@ -142,3 +152,25 @@ def test_log_capacitance_force_none_without_cpa():
     ing.set_actuation(actuated_channels=[1], actuated_area=1.0)
     assert ing.log_capacitance(_msg()) is True
     assert ing.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
+
+
+def test_log_media_lists_a_path_once(tmp_path):
+    """The camera path both publishes DEVICE_VIEWER_MEDIA_CAPTURED live and
+    leaves the file in the app_globals bucket drained at flush; the report
+    must show it once. A duck-typed stand-in for MediaCaptureMessageModel
+    keeps this test independent of device_viewer (plugin-decoupling
+    contract, .importlinter), matching the sibling tests above."""
+
+    class _M:
+        def __init__(self, path, type_):
+            self.path = path
+            self.type = type_
+
+    png = tmp_path / "frame.png"
+    png.write_bytes(b"")
+    ing = LoggingIngestion()
+
+    ing.log_media(_M(png, "image"))
+    ing.log_media(_M(png, "image"))
+
+    assert ing.media["image"] == [str(png)]

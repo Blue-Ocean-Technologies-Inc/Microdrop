@@ -9,23 +9,17 @@
 # Thanks for using Microdrop open source!
 
 """Buttons -> request topics for the PMT Capture pane: the multi-spot
-capture, the live stream (with live avg/osr/gain updates while running),
-and the buffered acquire. Spots, progress, live data and outcomes come back
-through the message handler.
-
-"Pane follows step" (#601 increment 2): while a step is attached and no
-protocol is running, every table/settings edit publishes the step's
-pmt_capture cell over protocol_tree_set_cell_publisher — the model's
-loading_step flag suppresses this while attach_step/detach_step are
-themselves applying a loaded cell or the manual snapshot."""
+capture (start/abort, results and "pane follows step" shared with every
+capture pane — see capture_pane_controller.py), the spot refresh, the live
+stream (with live avg/osr/gain updates while running), and the buffered
+acquire. Spots, progress, live data and outcomes come back through the
+message handler."""
 
 # Enthought library imports.
 from pyface.timer.api import CallbackTimer
 from traits.api import Instance, observe
-from traitsui.api import Controller
 
 # Microdrop package imports.
-from pluggable_protocol_tree.consts import protocol_tree_set_cell_publisher
 from portable_dropbot_controller.consts import (
     PMT_CAPTURE_ABORT,
     PMT_SPOTS_READ,
@@ -38,10 +32,10 @@ from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.file_handler import open_file
 
 # Local imports.
 from ..consts import PMT_COUNTDOWN_TICK_S
+from .capture_pane_controller import CapturePaneController
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -49,29 +43,20 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class PmtCaptureController(Controller):
+class PmtCaptureController(CapturePaneController):
+    STEP_COLUMN_ID = PMT_CAPTURE_COLUMN_ID
+    ABORT_TOPIC = PMT_CAPTURE_ABORT
+    ROW_NOUN = "spot"
+
     #: Ticks the status line's exposure countdown on the GUI thread.
     _countdown_timer = Instance(CallbackTimer)
 
-    # ------------------------------------------------------------------ #
-    # Multi-spot capture                                                    #
-    # ------------------------------------------------------------------ #
-
-    @observe("model:start_button")
-    def _start_capture(self, event):
-        entries = self.model.capture_entries()
-        if not entries:
-            self.model.progress = "No spot ticked"
-            return
-
-        self.model.capturing = True
-        self.model.progress = "starting..."
-        logger.info(f"Requested PMT capture of {len(entries)} spot(s)")
+    def _publish_capture_request(self):
         pmt_capture_publisher.publish(self.model.capture_request())
 
-    @observe("model:abort_button")
-    def _abort_capture(self, event):
-        publish_message(topic=PMT_CAPTURE_ABORT, message="")
+    # ------------------------------------------------------------------ #
+    # Spots and the exposure countdown                                      #
+    # ------------------------------------------------------------------ #
 
     @observe("model:refresh_button")
     def _refresh_spots(self, event):
@@ -93,58 +78,10 @@ class PmtCaptureController(Controller):
             interval=PMT_COUNTDOWN_TICK_S, callback=self.model.update_countdown
         )
 
-    # ------------------------------------------------------------------ #
-    # Pane follows step                                                     #
-    # ------------------------------------------------------------------ #
-
-    @observe("model:rows:items:gain")
-    @observe("model:rows:items:exposure_s")
-    @observe("model:rows:items:at_start")
-    @observe("model:rows:items:at_end")
-    @observe("model:rows:items")
-    @observe("model:rows")
-    @observe("model:stream_avg")
-    @observe("model:stream_osr")
-    @observe("model:rf_ohms")
-    def _push_attached_step(self, event):
-        # Not attached, mid-run (the tree refuses set-cell then anyway), or
-        # attach_step/detach_step applying a loaded cell or the manual
-        # snapshot — none of those are an operator edit to push.
-        if (
-            not self.model.attached_step_id
-            or self.model.protocol_running
-            or self.model.loading_step
-        ):
-            return
-
-        value = self.model.step_cell_value()
-        self.model.record_pushed_value(value)
-        protocol_tree_set_cell_publisher.publish(
-            step_id=self.model.attached_step_id,
-            col_id=PMT_CAPTURE_COLUMN_ID,
-            value=value,
-        )
-
-    # ------------------------------------------------------------------ #
-    # Results                                                              #
-    # ------------------------------------------------------------------ #
-
-    @observe("model:previous_frame_button")
-    def _show_previous_frame(self, event):
-        self.model.show_previous_frame()
-
-    @observe("model:next_frame_button")
-    def _show_next_frame(self, event):
-        self.model.show_next_frame()
-
-    @observe("model:result_frames:items:rows:items:open_file")
-    def _open_result_file(self, event):
-        path = event.object.csv_path
-
-        try:
-            open_file(path)
-        except OSError as error:
-            logger.error(f"Could not open PMT capture file {path}: {error}")
+    @observe("model:stream_avg, model:stream_osr, model:rf_ohms")
+    def _push_attached_pane_settings(self, event):
+        # The step cell carries these beside its entries.
+        self._push_attached_step(event)
 
     # ------------------------------------------------------------------ #
     # Live stream                                                          #

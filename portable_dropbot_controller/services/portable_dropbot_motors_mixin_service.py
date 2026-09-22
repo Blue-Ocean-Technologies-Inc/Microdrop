@@ -8,12 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from ..consts import (
     FILTER_POSITIONS,
     MAGNET_APPLIED,
@@ -24,6 +28,7 @@ from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -143,16 +148,22 @@ class PortableDropbotMotorsMixinService(HasTraits):
 
     def on_set_filter_request(self, message):
         position = int(str(message))
+
         if position not in FILTER_POSITIONS:
             logger.warning(f"Filter position out of range: {position}")
             return
+
         logger.info(f"Portable Dropbot filter position {position} requested")
+        # The generated motor proxy waits up to 60 s for the move reply;
+        # the uart facade's setFilter gives up after 5 s and reports a
+        # wheel still turning as a failure.
         ok, result = self._proxy_call(
-            f"filter {position}", lambda: self.proxy.uart.setFilter(position)
+            f"filter {position}",
+            lambda: self.proxy.motor.fluorescence_ctrl(position),
         )
         logger.info(
             f"Portable Dropbot filter --> {position}: "
-            f"{'ok' if ok and result not in (None, False) else 'FAILED'}"
+            f"{'ok' if ok and result is not None else 'FAILED'}"
         )
         self._publish_status_snapshot()
 

@@ -8,18 +8,26 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
-
-from pydantic import BaseModel, FilePath, StrictBool
 from enum import Enum
-from traits.api import HasTraits, Bool, Event, observe, Str
 
+# Third-party imports.
+from pydantic import BaseModel, Field, FilePath, StrictBool
+
+# Enthought library imports.
+from traits.api import Bool, Event, HasTraits, Str, observe
+
+# Microdrop package imports.
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
-app_globals = get_microdrop_redis_globals_manager()
-
+# Logger import.
 from logger.logger_service import get_logger
+
+app_globals = get_microdrop_redis_globals_manager()
 logger = get_logger(__name__)
 
 
@@ -36,6 +44,39 @@ class MediaType(str, Enum):
 class MediaCaptureMessageModel(BaseModel):
     path: FilePath  # Validates input points to an existing path
     type: MediaType  # Restricted to the Enum values above
+    #: Echo of the capture request's request_id (a DEVICE_VIEWER_SCREEN_CAPTURE
+    #: capture_data key), so a requester can match the saved file to its own
+    #: request; empty for button captures.
+    request_id: str = ""
+
+
+class CameraControlsRequest(BaseModel):
+    """Set the active camera's exposure and focus; None means auto."""
+
+    request_id: str = ""
+    #: Manual exposure time; None = auto exposure.
+    exposure_ms: float | None = Field(default=None, gt=0)
+    #: Leave auto exposure for manual at the exposure auto last chose (so
+    #: the picture does not jump); exposure_ms is ignored. Fails on a camera
+    #: that does not report auto's pick (see CameraControlsApplied).
+    hold_auto_exposure: bool = False
+    #: QCamera focus distance, 0.0 (near) to 1.0 (far); None = continuous
+    #: auto focus.
+    focus_distance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class CameraControlsApplied(BaseModel):
+    """The camera's readback after a CameraControlsRequest, echoing its
+    request_id; ok=False carries why (no active camera, unsupported mode)."""
+
+    request_id: str = ""
+    ok: bool
+    #: The exposure in effect — auto's current pick while exposure_auto —
+    #: or None when the camera does not report it.
+    exposure_ms: float | None = None
+    exposure_auto: bool = False
+    focus_distance: float | None = None
+    error: str = ""
 
 
 class RecordingActiveState(BaseModel):
@@ -44,7 +85,9 @@ class RecordingActiveState(BaseModel):
 
     Expects a bool arg.
     """
+
     state: StrictBool
+
 
 class RecordingStatePublisher(ValidatedTopicPublisher):
     validator_class = RecordingActiveState
@@ -94,6 +137,7 @@ class RecordingStateModel(HasTraits):
 
 if __name__ == "__main__":
     from pathlib import Path
+
     from pydantic import ValidationError
 
     media = MediaCaptureMessageModel(path=Path(__file__), type=MediaType.VIDEO)
@@ -106,17 +150,21 @@ if __name__ == "__main__":
         )
     except ValidationError as e:
         print(e)
-        # Path does not point to a file [type=path_not_file, input_value=WindowsPath('C:/Users/Inf...dia_capture_model.json'), input_type=WindowsPath]
+        # Path validation error: file not found
 
     try:
-        media = MediaCaptureMessageModel(path=Path(__file__).with_suffix(".json"), type="picture")
+        media = MediaCaptureMessageModel(
+            path=Path(__file__).with_suffix(".json"), type="picture"
+        )
     except ValidationError as e:
         print(e)
-        # Input should be 'video', 'image' or 'other' [type=enum, input_value='picture', input_type=str]
+        # MediaType validation error: invalid type
 
     rec_pub_model = RecordingStatePublisher()
     rec_pub_model.publish(state=True)
 
-    rec_valid_model = RecordingActiveState.model_validate_json(json.dumps({"state": True}))
+    rec_valid_model = RecordingActiveState.model_validate_json(
+        json.dumps({"state": True})
+    )
 
     print(rec_valid_model.state)

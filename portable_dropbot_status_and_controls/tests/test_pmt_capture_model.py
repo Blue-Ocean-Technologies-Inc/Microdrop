@@ -177,7 +177,7 @@ def test_add_result_frame_converts_with_the_captures_own_scale():
     m.add_result_frame(done)
 
     assert [r.file for r in m.results] == ["spot1.csv", ""]
-    assert m.results[0].csv_path == "/tmp/pmt/spot1.csv"
+    assert m.results[0].path == "/tmp/pmt/spot1.csv"
     assert m.results[0].mean_voltage == m.format_quantity(
         m.counts_to_volts(32768.0, 65536), "V"
     )

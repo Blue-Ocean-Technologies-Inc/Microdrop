@@ -12,11 +12,18 @@
 import os
 
 # Microdrop package imports.
-from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+    PROTOCOL_GRID_DISPLAY_STATE,
+    PROTOCOL_RUNNING,
+)
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CALIBRATION_UPDATED,
+    FLUORESCENCE_CAPTURE_DONE,
+    FLUORESCENCE_CAPTURE_PROGRESS,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
     PMT_ADC_UPDATED,
@@ -56,6 +63,7 @@ CALIBRATION_LISTENER = f"{PKG}_calibration_listener"
 MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
 ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
 PMT_CAPTURE_LISTENER = f"{PKG}_pmt_capture_listener"
+FLUORESCENCE_CAPTURE_LISTENER = f"{PKG}_fluorescence_capture_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -99,6 +107,19 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_TREE_ROW_SELECTED,
         PROTOCOL_RUNNING,
     ],
+    FLUORESCENCE_CAPTURE_LISTENER: [
+        PORTABLE_DROPBOT_CONNECTED,
+        PORTABLE_DROPBOT_DISCONNECTED,
+        FLUORESCENCE_CAPTURE_PROGRESS,
+        FLUORESCENCE_CAPTURE_DONE,
+        #: Manual controls: the camera's exposure/focus readback, and the
+        #: manual frame grab's saved file.
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
+        #: "Pane follows step", same mechanism as the PMT capture pane.
+        PROTOCOL_TREE_ROW_SELECTED,
+        PROTOCOL_RUNNING,
+    ],
     #: The advanced-only pane also tracks the Edit-menu Advanced Mode
     #: toggle, which is what unlocks its controls.
     ADVANCED_CONTROLS_LISTENER: [
@@ -116,10 +137,9 @@ PMT_LIVE_WINDOW_SAMPLES = 3000
 #: tenths of a second.
 PMT_COUNTDOWN_TICK_S = 0.1
 
-#: Minimum heights (px) that fit every PMT spot without a scrollbar: the spot
-#: table also carries its move up/down toolbar.
-PMT_SPOT_TABLE_MIN_HEIGHT = 230
-PMT_RESULTS_TABLE_MIN_HEIGHT = 190
+#: Capture panes (PMT, fluorescence): the results table's minimum height
+#: (px); the row table hugs its rows instead.
+CAPTURE_RESULTS_TABLE_MIN_HEIGHT = 190
 
 #: The live plot keeps a fixed height so toggling other groups never resizes
 #: it; its width fills the pane down to this minimum (px).
@@ -137,6 +157,15 @@ PMT_EXPOSURE_RANGES = {
     "1–600 s": 600.0,
 }
 DEFAULT_PMT_EXPOSURE_RANGE = "1–60 s"
+
+FLUORESCENCE_EXPOSURE_MS_STEP = 0.1
+#: Spans the fluorescence exposure slider can cover (label -> upper bound,
+#: ms), up to FLUORESCENCE_EXPOSURE_MS_BOUNDS' cap.
+FLUORESCENCE_EXPOSURE_RANGES = {
+    "0.1–20 ms": 20.0,
+    "0.1–200 ms": 200.0,
+}
+DEFAULT_FLUORESCENCE_EXPOSURE_RANGE = "0.1–200 ms"
 
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.

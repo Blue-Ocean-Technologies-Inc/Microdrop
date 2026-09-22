@@ -578,9 +578,15 @@ class _SteppedSliderEditor(QtEditor):
         if self.control is None or event.new is None:
             return
 
+        # A lower maximum clamps the handle and emits valueChanged, which
+        # would write the clamped value back; the bound only limits where
+        # the handle can go, never the value.
+        self._slider.blockSignals(True)
         self._slider.setMaximum(
             round((event.new - self.factory.low) / self.factory.step)
         )
+        self._slider.blockSignals(False)
+
         self.update_editor()
 
     def _notches(self, position):
@@ -915,6 +921,36 @@ def make_table_row_header_resizable(table_view):
     vertical_header.viewport().installEventFilter(resizer)
     # Hover move events are needed for the grip-zone cursor feedback
     vertical_header.viewport().setMouseTracking(True)
+
+
+def fit_table_editor_height_to_rows(editor):
+    """Fix a TableEditor's table to exactly its header plus its rows, and
+    keep the editor from growing past that — a short table then leaves no
+    blank band below its last row. Refits whenever rows come or go."""
+    table_view = editor.table_view
+    model = table_view.model()
+
+    def fit():
+        header_height = table_view.horizontalHeader().sizeHint().height()
+        rows_height = table_view.verticalHeader().length()
+
+        table_view.setFixedHeight(
+            header_height + rows_height + 2 * table_view.frameWidth()
+        )
+
+    for signal in (
+        model.modelReset,
+        model.rowsInserted,
+        model.rowsRemoved,
+        model.layoutChanged,
+    ):
+        signal.connect(fit)
+
+    policy = editor.control.sizePolicy()
+    policy.setVerticalPolicy(QSizePolicy.Policy.Maximum)
+    editor.control.setSizePolicy(policy)
+
+    fit()
 
 
 class SafeCancelTableHandler(Handler):

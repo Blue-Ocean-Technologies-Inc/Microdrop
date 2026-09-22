@@ -13,7 +13,10 @@ from pathlib import Path
 
 # Microdrop package imports.
 from device_viewer.models.media import (
+    CameraControlsApplied,
+    CameraControlsRequest,
     MediaCaptureEventModel,
+    MediaCaptureMessageModel,
     RecordingStateModel,
     RecordingStatePublisher,
 )
@@ -27,6 +30,9 @@ from dropbot_controller.consts import (
     HALTED,
     REALTIME_MODE_UPDATED,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 # ---------------------------------------------------------------------------
 # Package identity
@@ -46,6 +52,11 @@ DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
+# Another plugin sets the active camera's exposure/focus (CameraControlsRequest)
+# and gets the camera's readback (CameraControlsApplied) — the Portable
+# DropBot's fluorescence capture drives these per filter position.
+DEVICE_VIEWER_CAMERA_SET_CONTROLS = "ui/device_viewer/camera/set_controls"
+DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED = "ui/device_viewer/camera/controls_applied"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 # Sidebar route preview/playback is running (payload "True"/"False"). Published
@@ -113,6 +124,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_GRID_DISPLAY_STATE,
         CAPACITANCE_UPDATED,
         DEVICE_VIEWER_SCREEN_CAPTURE,
+        DEVICE_VIEWER_CAMERA_SET_CONTROLS,
         DEVICE_VIEWER_CAMERA_ACTIVE,
         DEVICE_VIEWER_SCREEN_RECORDING,
         DROPLETS_DETECTED,
@@ -163,6 +175,20 @@ recording_state_model = RecordingStateModel(
 # event-driven alternative to polling the captures folder (e.g. the
 # fluorescence image viewer refreshes on it).
 media_capture_event_model = MediaCaptureEventModel()
+
+# Validated publishers for the camera seam. media_captured_publisher is fed
+# by the capture path itself (see camera_control_view/utils.py) so the run
+# report gets each file live, not only from the app_globals bucket at flush.
+camera_controls_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SET_CONTROLS, validator_class=CameraControlsRequest
+)
+camera_controls_applied_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+    validator_class=CameraControlsApplied,
+)
+media_captured_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_MEDIA_CAPTURED, validator_class=MediaCaptureMessageModel
+)
 
 APP_GLOBALS_KEYS = [
     CHANNEL_AREAS_KEY,

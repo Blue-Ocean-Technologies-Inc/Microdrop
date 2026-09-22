@@ -8,15 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from envisage.api import ServiceOffer
 from envisage.ids import SERVICE_OFFERS
 from envisage.plugin import Plugin
 from traits.api import List
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Local imports.
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -28,6 +30,9 @@ from .services.portable_dropbot_calibration_mixin_service import (
 )
 from .services.portable_dropbot_electrodes_mixin_service import (
     PortableDropbotElectrodesMixinService,
+)
+from .services.portable_dropbot_fluorescence_mixin_service import (
+    FluorescenceCaptureMixinService,
 )
 from .services.portable_dropbot_monitor_mixin_service import (
     PortableDropbotMonitorMixinService,
@@ -48,6 +53,9 @@ from .services.portable_dropbot_temp_mixin_service import (
     PortableDropbotTempMixinService,
 )
 
+# Logger import.
+from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -56,27 +64,46 @@ class PortableDropbotControllerPlugin(Plugin):
     name = f"{PKG_name} Plugin"
 
     service_offers = List(contributes_to=SERVICE_OFFERS)
-    actor_topic_routing = List([ACTOR_TOPIC_DICT],
-                               contributes_to=ACTOR_TOPIC_ROUTES)
+    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     def _service_offers_default(self):
         return [
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_monitor_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_states_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_electrodes_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_motors_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_calibration_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_temp_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_pmt_service),
-            ServiceOffer(protocol=IPortableDropbotControlMixinService,
-                         factory=self._create_system_service),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_monitor_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_states_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_electrodes_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_motors_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_calibration_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_temp_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_pmt_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_fluorescence_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_system_service,
+            ),
         ]
 
     @staticmethod
@@ -108,31 +135,33 @@ class PortableDropbotControllerPlugin(Plugin):
         return PortableDropbotPmtMixinService
 
     @staticmethod
+    def _create_fluorescence_service(*args, **kwargs):
+        return FluorescenceCaptureMixinService
+
+    @staticmethod
     def _create_system_service(*args, **kwargs):
         return PortableDropbotSystemMixinService
 
     def start(self):
         services = self.application.get_services(
-            IPortableDropbotControlMixinService) \
-            + [PortableDropbotControllerBase]
-        logger.info(f"Initializing Portable Dropbot services: "
-                    f"{services}")
+            IPortableDropbotControlMixinService
+        ) + [PortableDropbotControllerBase]
+        logger.info(f"Initializing Portable Dropbot services: {services}")
 
         class PortableDropbotController(*services):
             pass
 
         self.portable_dropbot_controller = PortableDropbotController()
-        self.portable_dropbot_controller.preferences = \
-            PortableDropbotPreferences(
-                preferences=self.application.preferences)
+        self.portable_dropbot_controller.preferences = PortableDropbotPreferences(
+            preferences=self.application.preferences
+        )
 
         app_globals = get_microdrop_redis_globals_manager()
         app_globals.update(
-            self.portable_dropbot_controller.preferences
-            .preferences_name_map)
+            self.portable_dropbot_controller.preferences.preferences_name_map
+        )
 
-        self.portable_dropbot_controller \
-            .on_start_device_monitoring_request()
+        self.portable_dropbot_controller.on_start_device_monitoring_request()
 
     def stop(self):
         if hasattr(self, "portable_dropbot_controller"):

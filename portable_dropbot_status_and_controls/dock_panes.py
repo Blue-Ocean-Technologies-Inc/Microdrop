@@ -21,6 +21,7 @@ from microdrop_style.icons.icons import ICON_DROP_EC
 from .consts import (
     ADVANCED_CONTROLS_LISTENER,
     CALIBRATION_LISTENER,
+    FLUORESCENCE_CAPTURE_LISTENER,
     MORE_CONTROLS_LISTENER,
     MOTORS_LISTENER,
     PKG,
@@ -31,6 +32,9 @@ from .controllers.advanced_controls_controller import (
     AdvancedControlsController,
 )
 from .controllers.calibration_controller import CalibrationController
+from .controllers.fluorescence_capture_controller import (
+    FluorescenceCaptureController,
+)
 from .controllers.more_controls_controller import MoreControlsController
 from .controllers.motors_controller import MotorsController
 from .controllers.pmt_capture_controller import PmtCaptureController
@@ -42,6 +46,9 @@ from .message_handlers.advanced_controls_message_handler import (
 )
 from .message_handlers.calibration_message_handler import (
     PortableDropbotCalibrationMessageHandler,
+)
+from .message_handlers.fluorescence_capture_message_handler import (
+    PortableDropbotFluorescenceCaptureMessageHandler,
 )
 from .message_handlers.message_handler import (
     PortableDropbotStatusAndControlsMessageHandler,
@@ -59,12 +66,16 @@ from .models.advanced_controls_model import (
     PortableDropbotAdvancedControlsModel,
 )
 from .models.calibration_model import PortableDropbotCalibrationModel
+from .models.fluorescence_capture_model import (
+    PortableDropbotFluorescenceCaptureModel,
+)
 from .models.model import PortableDropbotStatusAndControlsModel
 from .models.more_controls_model import PortableDropbotMoreControlsModel
 from .models.motors_model import PortableDropbotMotorsModel
 from .models.pmt_capture_model import PortableDropbotPmtCaptureModel
 from .views.advanced_controls_view import AdvancedControlsView
 from .views.calibration_view import CalibrationView
+from .views.fluorescence_capture_view import FluorescenceCaptureView
 from .views.more_controls_view import MoreControlsView
 from .views.motors_view import MotorsView
 from .views.pmt_capture_view import PmtCaptureView
@@ -169,6 +180,29 @@ class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
         return PortableDropbotPmtCaptureMessageHandler(
             model=self.model,
             name=PMT_CAPTURE_LISTENER,
+        )
+
+
+class PortableDropbotFluorescenceCaptureDockPane(PortableDropbotSecondaryDockPane):
+    """Dock pane for fluorescence capture: per ticked filter-wheel position,
+    move the wheel, set the LED, set the camera exposure, and grab a
+    still frame to captures/."""
+
+    id = PKG + ".fluorescence_capture_dock_pane"
+    name = "Fluorescence Capture"
+
+    view = FluorescenceCaptureView
+
+    def _create_model(self):
+        return PortableDropbotFluorescenceCaptureModel()
+
+    def _create_controller(self):
+        return FluorescenceCaptureController(self.model)
+
+    def _create_message_handler(self):
+        return PortableDropbotFluorescenceCaptureMessageHandler(
+            model=self.model,
+            name=FLUORESCENCE_CAPTURE_LISTENER,
         )
 
 

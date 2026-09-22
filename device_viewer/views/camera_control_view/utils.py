@@ -21,7 +21,7 @@ from pyface.qt.QtCore import QUrl
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from ...consts import MEDIA_CAPTURES_KEY
+from ...consts import MEDIA_CAPTURES_KEY, media_captured_publisher
 from ...models.media import MediaCaptureMessageModel, MediaType
 
 # Logger import.
@@ -32,9 +32,9 @@ app_globals = get_microdrop_redis_globals_manager()
 
 
 @dramatiq.actor
-def _cache_media_capture(name: MediaType, save_path: str):
+def _cache_media_capture(name: MediaType, save_path: str, request_id: str = ""):
     media_capture_message = MediaCaptureMessageModel(
-        path=Path(save_path), type=name.lower()
+        path=Path(save_path), type=name.lower(), request_id=request_id
     )
 
     message = media_capture_message.model_dump_json()
@@ -44,6 +44,10 @@ def _cache_media_capture(name: MediaType, save_path: str):
 
     else:
         app_globals[MEDIA_CAPTURES_KEY] += [message]
+
+    # Live notification for the run report and for whoever asked for this
+    # frame (request_id); the bucket above stays for the flush-time drain.
+    media_captured_publisher.publish(media_capture_message.model_dump(mode="json"))
 
     logger.info(app_globals[MEDIA_CAPTURES_KEY])
 

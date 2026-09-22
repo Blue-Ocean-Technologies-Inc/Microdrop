@@ -12,9 +12,8 @@
 import time
 from pathlib import Path
 
-from apptools.preferences.api import Preferences
-
 # Enthought library imports.
+from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import (
     QThreadPool,
     QTimer,
@@ -56,9 +55,19 @@ from microdrop_application.helpers import get_current_experiment_directory
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 
 # Microdrop utils imports.
-from microdrop_utils.datetime_helpers import get_current_utc_datetime
 from microdrop_utils.pyside_helpers import MarqueeComboBox
-from microdrop_utils.v4l2_fps_getter import LinuxCameraDeviceContainer, get_video_inputs
+from microdrop_utils.v4l2_fps_getter import (
+    V4L2_EXPOSURE_AUTO,
+    V4L2_EXPOSURE_AUTO_MANUAL,
+    V4L2_EXPOSURE_AUTO_ON,
+    V4L2_FOCUS_ABSOLUTE,
+    V4L2_FOCUS_AUTO,
+    LinuxCameraDeviceContainer,
+    get_v4l2_control,
+    get_v4l2_control_range,
+    get_video_inputs,
+    set_v4l2_controls,
+)
 
 # Local imports.
 from ...consts import (
@@ -66,6 +75,7 @@ from ...consts import (
     CAPTURES_DIR_NAME,
     RECORDER_BACKEND_FFMPEG,
     RECORDINGS_DIR_NAME,
+    camera_controls_applied_publisher,
     device_viewer_recording_state_publisher,
     media_capture_event_model,
     recording_state_model,
@@ -77,6 +87,7 @@ from ...utils.camera import (
     NativeVideoRecorder,
     RawFFMPEGVideoRecorder,
     get_transformed_frame,
+    media_filename,
 )
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .utils import _cache_media_capture, _show_media_capture_status_message
@@ -94,6 +105,10 @@ class CameraControlWidget(QWidget):
     camera_active_signal = Signal(bool)
     screen_capture_signal = Signal(object)
     screen_recording_signal = Signal(object)
+
+    #: A CameraControlsRequest dict, emitted by the dock pane's topic handler
+    #: (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_controls_signal = Signal(object)
 
     def __init__(
         self,
@@ -122,6 +137,13 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
+        # /dev/videoN path the v4l2 manual-focus fallback last drove, and its
+        # cached focus_absolute (min, max) — see _apply_focus.
+        self._v4l2_focus_path = None
+        self._v4l2_focus_range = None
+        #: v4l2 node the auto-exposure fallback last switched to auto; None
+        #: while Qt (or manual exposure) drives the camera's exposure.
+        self._v4l2_auto_exposure_path = None
         # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
         # Kept separate from combo box userData because shiboken cannot serialize
         # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
@@ -168,6 +190,7 @@ class CameraControlWidget(QWidget):
         self.camera_active_signal.connect(self.on_camera_active)
         self.screen_capture_signal.connect(self.capture_button_handler)
         self.screen_recording_signal.connect(self.on_recording_active)
+        self.camera_controls_signal.connect(self.apply_camera_controls)
 
         # UI Initialization
         self._init_ui()
@@ -473,6 +496,13 @@ class CameraControlWidget(QWidget):
 
         elif isinstance(selected_device, QCameraDevice):
             return selected_device.description()
+
+    def _selected_v4l2_device_path(self):
+        """Return the selected camera's ``/dev/videoN`` path, or ``None``
+        off Linux or while a provider source is selected."""
+        container = self._linux_device_containers.get(self.combo_cameras.currentText())
+
+        return container.device_path if container else None
 
     # ------------------------------------------------------------------ #
     # Provider sources (CAMERA_SOURCES extension point)                    #
@@ -848,11 +878,14 @@ class CameraControlWidget(QWidget):
 
     def _capture_image_routine(self, capture_data=None):
         directory, step_description, step_id, show_dialog = None, None, None, True
+        request_id = ""
+
         if isinstance(capture_data, dict):
             directory = capture_data.get("directory")
             step_description = capture_data.get("step_description")
             step_id = capture_data.get("step_id")
             show_dialog = capture_data.get("show_dialog", True)
+            request_id = str(capture_data.get("request_id", ""))
 
         filename = self._generate_capture_filename(step_description, step_id)
         base_dir = Path(directory) if directory else get_current_experiment_directory()
@@ -862,9 +895,9 @@ class CameraControlWidget(QWidget):
         # sensor captures are the owning plugin's concern — the
         # fluorescence capture chain writes its own per-burst folders —
         # so this pipeline no longer special-cases raw-capable feeds.
-        self._capture_display_image(save_path, show_dialog)
+        self._capture_display_image(save_path, show_dialog, request_id)
 
-    def _capture_display_image(self, save_path, show_dialog):
+    def _capture_display_image(self, save_path, show_dialog, request_id=""):
         # Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
 
@@ -874,8 +907,9 @@ class CameraControlWidget(QWidget):
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _post_image_capture(saved_path):
-            _cache_media_capture(MediaType.IMAGE, saved_path)
+            _cache_media_capture(MediaType.IMAGE, saved_path, request_id)
             media_capture_event_model.captured = saved_path
+
             if show_dialog:
                 _show_media_capture_status_message(
                     MediaType.IMAGE, saved_path, self.status_bar_manager
@@ -923,20 +957,191 @@ class CameraControlWidget(QWidget):
             self.toggle_camera()
             QTimer.singleShot(1000, lambda: self._capture_image_and_close(capture_data))
 
+    @Slot(object)
+    def apply_camera_controls(self, request):
+        """Apply a CameraControlsRequest dict to the active QCamera (turning
+        it on first if it is off) and answer with the camera's readback on
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED. Manual focus falls back to
+        v4l2-ctl on cameras where Qt cannot drive it (see _apply_focus). A
+        provider feed (no QCamera) or an unsupported mode answers ok=False
+        rather than raising."""
+        request = request if isinstance(request, dict) else {}
+        reply = {"request_id": str(request.get("request_id", "")), "ok": False}
+
+        if self._active_feed is not None or not self.camera:
+            reply["error"] = "no QCamera is selected"
+            camera_controls_applied_publisher.publish(reply)
+
+            return
+
+        if not self.camera.isActive():
+            self.turn_on_camera()
+
+        try:
+            if request.get("hold_auto_exposure"):
+                self._hold_auto_exposure()
+            else:
+                self._apply_exposure(request.get("exposure_ms"))
+
+            self._apply_focus(request.get("focus_distance"))
+        except RuntimeError as error:
+            reply["error"] = str(error)
+            logger.error(f"Camera controls not applied: {error}")
+        else:
+            reply.update(
+                ok=True,
+                exposure_ms=self._exposure_ms_readback(),
+                exposure_auto=self._exposure_is_auto(),
+                focus_distance=self._focus_distance_readback(),
+            )
+
+        camera_controls_applied_publisher.publish(reply)
+
+    def _apply_exposure(self, exposure_ms):
+        camera = self.camera
+
+        if exposure_ms is None:
+            camera.setExposureMode(QCamera.ExposureMode.ExposureAuto)
+
+            # GStreamer backend (Portable Pi): Qt's auto exposure is a no-op
+            # there, leaving the camera in manual — switch it over v4l2.
+            path = self._selected_v4l2_device_path()
+
+            if path is not None:
+                if set_v4l2_controls(
+                    path, **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_ON}
+                ):
+                    self._v4l2_auto_exposure_path = path
+                else:
+                    logger.warning(f"v4l2 auto exposure failed for {path}")
+
+            return
+
+        if not camera.isExposureModeSupported(QCamera.ExposureMode.ExposureManual):
+            raise RuntimeError("this camera has no manual exposure")
+
+        # Back to manual on the v4l2 side first, if the fallback above left
+        # the camera on auto — its exposure time is ignored otherwise.
+        if self._v4l2_auto_exposure_path is not None:
+            if not set_v4l2_controls(
+                self._v4l2_auto_exposure_path,
+                **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_MANUAL},
+            ):
+                logger.warning(
+                    f"v4l2 manual exposure restore failed for "
+                    f"{self._v4l2_auto_exposure_path}"
+                )
+
+            self._v4l2_auto_exposure_path = None
+
+        camera.setExposureMode(QCamera.ExposureMode.ExposureManual)
+        camera.setManualExposureTime(float(exposure_ms) / 1000.0)
+
+    def _apply_focus(self, focus_distance):
+        camera = self.camera
+
+        if focus_distance is None:
+            camera.setFocusMode(QCamera.FocusMode.FocusModeAuto)
+
+            # Restore continuous auto focus on the v4l2 side too, if the
+            # fallback below was last driving this camera's focus.
+            if self._v4l2_focus_path is not None:
+                if not set_v4l2_controls(self._v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}):
+                    logger.warning(
+                        f"v4l2 auto focus restore failed for {self._v4l2_focus_path}"
+                    )
+
+                self._v4l2_focus_path = None
+
+            return
+
+        if camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
+            camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
+            camera.setFocusDistance(float(focus_distance))
+            self._v4l2_focus_path = None
+
+            return
+
+        # GStreamer backend (Portable Pi): QCamera reports no manual focus
+        # support although the camera's v4l2 focus_absolute control works.
+        path = self._selected_v4l2_device_path()
+
+        if path is None:
+            raise RuntimeError("this camera has no manual focus")
+
+        if path != self._v4l2_focus_path or self._v4l2_focus_range is None:
+            self._v4l2_focus_range = get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE)
+
+        if self._v4l2_focus_range is None:
+            raise RuntimeError(
+                "this camera has no manual focus (no v4l2 focus_absolute control)"
+            )
+
+        lo, hi = self._v4l2_focus_range
+        raw = round(lo + float(focus_distance) * (hi - lo))
+
+        # Auto off first — focus_absolute is inactive while auto is on.
+        if not set_v4l2_controls(
+            path, **{V4L2_FOCUS_AUTO: 0, V4L2_FOCUS_ABSOLUTE: raw}
+        ):
+            raise RuntimeError("v4l2 focus set failed")
+
+        self._v4l2_focus_path = path
+        logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
+
+    def _hold_auto_exposure(self):
+        """Switch to manual exposure at the time auto last chose."""
+        exposure_ms = self._current_exposure_ms()
+
+        if exposure_ms is None:
+            raise RuntimeError("the camera does not report its auto exposure")
+
+        self._apply_exposure(exposure_ms)
+
+    def _exposure_is_auto(self):
+        return (
+            self._v4l2_auto_exposure_path is not None
+            or self.camera.exposureMode() != QCamera.ExposureMode.ExposureManual
+        )
+
+    def _current_exposure_ms(self):
+        """The exposure the camera is using right now (auto's pick
+        included), or None when it does not report it."""
+
+        # Under the v4l2 fallback's auto, UVC exposure_time_absolute keeps
+        # the last manual value, not auto's pick (checked on the Pi's DH
+        # Camera) — nothing reports what auto chose.
+        if self._v4l2_auto_exposure_path is not None:
+            return None
+
+        exposure_s = self.camera.exposureTime()
+
+        return exposure_s * 1000.0 if exposure_s > 0 else None
+
+    def _exposure_ms_readback(self):
+        if self._exposure_is_auto():
+            return self._current_exposure_ms()
+
+        return self.camera.manualExposureTime() * 1000.0
+
+    def _focus_distance_readback(self):
+        if self._v4l2_focus_path is not None:
+            lo, hi = self._v4l2_focus_range
+            raw = get_v4l2_control(self._v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
+
+            return (raw - lo) / (hi - lo) if raw is not None else None
+
+        camera = self.camera
+
+        if camera.focusMode() != QCamera.FocusMode.FocusModeManual:
+            return None
+
+        return camera.focusDistance()
+
     def _generate_media_filename(
         self, step_description=None, step_id=None, file_extension=".png"
     ):
-        timestamp = get_current_utc_datetime()
-        if step_description and step_id:
-            clean_desc = "".join(
-                c for c in step_description if c.isalnum() or c in (" ", "-", "_")
-            ).rstrip()
-            clean_desc = clean_desc.replace(" ", "_")
-            return f"{clean_desc}_{step_id}_{timestamp}{file_extension}"
-        elif step_id:
-            return f"step_{step_id}_{timestamp}{file_extension}"
-        else:
-            return f"free_mode_{timestamp}{file_extension}"
+        return media_filename(step_description, step_id, file_extension)
 
     def _generate_capture_filename(self, step_description=None, step_id=None):
         return self._generate_media_filename(step_description, step_id, ".png")

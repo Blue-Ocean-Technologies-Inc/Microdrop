@@ -554,6 +554,23 @@ class DeviceViewerDockPane(TraitsDockPane):
 
             self.camera_control_widget.screen_capture_signal.emit(capture_data)
 
+    def _on_set_controls_triggered(self, message):
+        """Another plugin's CameraControlsRequest (exposure/focus); applied on
+        the GUI thread by the camera widget, which answers the applied
+        signal itself."""
+
+        if not self.camera_control_widget:
+            return
+
+        try:
+            request = json.loads(message) if message and message.strip() else {}
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Unparseable camera controls request: {message!r}")
+
+            return
+
+        self.camera_control_widget.camera_controls_signal.emit(request)
+
     def _on_screen_recording_triggered(self, message):
         """
         Handle screen recording events from the device viewer.
