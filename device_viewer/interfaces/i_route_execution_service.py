@@ -8,13 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-from traits.api import observe, Interface, Instance, Bool, Any, Int
+# Enthought library imports.
+from traits.api import Any, Bool, Instance, Int, Interface, observe
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
+
 class IRouteExecutionService(Interface):
-    model = Instance('device_viewer.interfaces.i_main_model.IDeviceViewMainModel')
+    model = Instance("device_viewer.interfaces.i_main_model.IDeviceViewMainModel")
 
     # Execution state
     _is_executing = Bool(False)
@@ -34,6 +38,10 @@ class IRouteExecutionService(Interface):
 
     def stop_execution(self):
         """Stop a running route execution."""
+
+    def step_channels(self):
+        """The actuated channels that belong to the step, without the
+        electrodes idle phase navigation is only previewing."""
 
     def pause_execution(self):
         """Pause a running route execution."""

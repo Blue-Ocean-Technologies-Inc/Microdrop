@@ -23,23 +23,33 @@ because they touch only the Qt-free ProtocolStatusModel. Widget-touching
 observers live elsewhere (the dock pane) and use ``dispatch="ui"``.
 """
 
+# Standard library imports.
 import json
 import time
 
+# Enthought library imports.
 from traits.api import Any, Callable, HasTraits, Instance
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from microdrop_application.menus import is_advanced_mode
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.consts import (
-    ELECTRODE_TO_CHANNEL_KEY, ELECTRODES_STATE_CHANGE,
+    ELECTRODE_TO_CHANNEL_KEY,
+    ELECTRODES_STATE_CHANGE,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
 from pluggable_protocol_tree.services.phase_math import (
-    duration_loop_parts, iter_phases,
+    duration_loop_parts,
+    iter_phases,
+    slug_shape_for_row,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -115,12 +125,18 @@ class ProtocolStatusController(HasTraits):
         step_index = self._step_index_of(row.path)
         step_total = self._count_steps()
         self.model.on_step_start(
-            self.clock(), step_index, step_total, tuple(row.path),
-            row.name, self._next_name(row),
-            frame_index=frame_index, frame_total=frame_total)
+            self.clock(),
+            step_index,
+            step_total,
+            tuple(row.path),
+            row.name,
+            self._next_name(row),
+            frame_index=frame_index,
+            frame_total=frame_total,
+        )
         logger.debug(
-            f"status: step {step_index}/{step_total} @ {tuple(row.path)} "
-            f"({row.name!r})")
+            f"status: step {step_index}/{step_total} @ {tuple(row.path)} ({row.name!r})"
+        )
 
     def _on_step_repetition(self, event):
         chain = event.new
@@ -135,7 +151,8 @@ class ProtocolStatusController(HasTraits):
     def _on_phase_started(self, event):
         phase_index, phase_total, phase_duration_s = event.new
         self.model.on_phase_start(
-            self.clock(), phase_index, phase_total, phase_duration_s)
+            self.clock(), phase_index, phase_total, phase_duration_s
+        )
 
     def _on_phase_extended(self, event):
         self.model.on_phase_extended(event.new)
@@ -241,21 +258,30 @@ class ProtocolStatusController(HasTraits):
                 bool(getattr(row, "repeat_duration_controls", False))
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
             )
-            reps = (int(getattr(row, "route_repetitions", 1))
-                    if n_repeats is None else int(n_repeats))
-            return list(iter_phases(
-                static_electrodes=list(getattr(row, "electrodes", []) or []),
-                routes=list(getattr(row, "routes", []) or []),
-                trail_length=int(getattr(row, "trail_length", 1)),
-                trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                soft_start=bool(getattr(row, "soft_start", False)),
-                soft_end=bool(getattr(row, "soft_end", False)),
-                repeat_duration_s=(float(getattr(row, "repeat_duration", 0.0))
-                                   if in_duration_mode else 0.0),
-                linear_repeats=bool(getattr(row, "linear_repeats", False)),
-                n_repeats=reps,
-                step_duration_s=float(getattr(row, "duration_s", 1.0)),
-            ))
+            reps = (
+                int(getattr(row, "route_repetitions", 1))
+                if n_repeats is None
+                else int(n_repeats)
+            )
+            return list(
+                iter_phases(
+                    static_electrodes=list(getattr(row, "electrodes", []) or []),
+                    routes=list(getattr(row, "routes", []) or []),
+                    trail_length=int(getattr(row, "trail_length", 1)),
+                    trail_overlay=int(getattr(row, "trail_overlay", 0)),
+                    soft_start=bool(getattr(row, "soft_start", False)),
+                    soft_end=bool(getattr(row, "soft_end", False)),
+                    repeat_duration_s=(
+                        float(getattr(row, "repeat_duration", 0.0))
+                        if in_duration_mode
+                        else 0.0
+                    ),
+                    linear_repeats=bool(getattr(row, "linear_repeats", False)),
+                    n_repeats=reps,
+                    step_duration_s=float(getattr(row, "duration_s", 1.0)),
+                    **slug_shape_for_row(row),
+                )
+            )
         except Exception:
             return []
 
@@ -275,8 +301,7 @@ class ProtocolStatusController(HasTraits):
         if row is None:
             return
         try:
-            mapping = self.manager.protocol_metadata.get(
-                ELECTRODE_TO_CHANNEL_KEY, {})
+            mapping = self.manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY, {})
         except Exception:
             mapping = {}
         if self.model.dyn_loop_active:
@@ -288,10 +313,15 @@ class ProtocolStatusController(HasTraits):
                 routes=list(getattr(row, "routes", []) or []),
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),
-                soft_start=bool(getattr(row, "soft_start", False)))
+                soft_start=bool(getattr(row, "soft_start", False)),
+                **slug_shape_for_row(row),
+            )
             idle_idx = len(unit_cycle)
-            electrodes = ([] if int(phase_index) >= idle_idx
-                          else sorted(unit_cycle[int(phase_index)]))
+            electrodes = (
+                []
+                if int(phase_index) >= idle_idx
+                else sorted(unit_cycle[int(phase_index)])
+            )
             channels = sorted(mapping[e] for e in electrodes if e in mapping)
         else:
             phases = self._phases_for(row)
@@ -313,8 +343,9 @@ class ProtocolStatusController(HasTraits):
             editable=bool(is_advanced_mode()),
         )
         try:
-            publish_message(topic=PROTOCOL_TREE_DISPLAY_STATE,
-                            message=display_msg.serialize())
+            publish_message(
+                topic=PROTOCOL_TREE_DISPLAY_STATE, message=display_msg.serialize()
+            )
         except Exception as e:
             logger.warning(f"seek display publish failed: {e}")
         if not preview:
@@ -322,7 +353,9 @@ class ProtocolStatusController(HasTraits):
                 publish_message(
                     topic=ELECTRODES_STATE_CHANGE,
                     message=json.dumps(
-                        {"electrodes": electrodes, "channels": channels}))
+                        {"electrodes": electrodes, "channels": channels}
+                    ),
+                )
             except Exception as e:
                 logger.warning(f"seek hardware publish failed: {e}")
 
@@ -344,8 +377,8 @@ class ProtocolStatusController(HasTraits):
             phase_total = self.model.phase_total
         phase0 = max(0, min(int(phase_index), phase_total - 1))
         logger.debug(
-            f"seek_to: step {step_idx}/{step_total} @ {tuple(step_path)} "
-            f"phase={phase0}")
+            f"seek_to: step {step_idx}/{step_total} @ {tuple(step_path)} phase={phase0}"
+        )
 
         if self.executor is not None:
             self.executor.seek(tuple(step_path), phase0)
@@ -353,10 +386,17 @@ class ProtocolStatusController(HasTraits):
         # Only re-seat the step (and reset its timer) when the step actually
         # changes; a phase-only nav within the same step keeps the step clock.
         if tuple(step_path) != self.model.current_step_path:
-            self.model.seek_step(now, step_idx, step_total, tuple(step_path),
-                                 row.name, self._next_name(row))
+            self.model.seek_step(
+                now,
+                step_idx,
+                step_total,
+                tuple(step_path),
+                row.name,
+                self._next_name(row),
+            )
         self.model.seek_phase(
-            now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0)))
+            now, phase0 + 1, phase_total, float(getattr(row, "duration_s", 0.0))
+        )
 
     def _frame_index_for_rep(self, step_path, rep):
         """Execution-frame index of the ``rep``-th (1-based) occurrence of the
@@ -388,7 +428,8 @@ class ProtocolStatusController(HasTraits):
         self.model.frame_index = int(frame_index) + 1
         self.model.set_step_rep(rep, total)
         self.model.set_rep_chain(
-            self._fmt_chain([("", rep, total)]) if total > 1 else "")
+            self._fmt_chain([("", rep, total)]) if total > 1 else ""
+        )
 
     def seek_to_step_rep(self, step_path, rep, rep_total):
         """Seek (while paused) to repetition ``rep`` (1-based) of the step at
@@ -410,6 +451,4 @@ class ProtocolStatusController(HasTraits):
         # double-counted the step itself in the count beside it.
         if not rep_chain:
             return ""
-        return " · ".join(
-            f"Step Rep {idx}/{total}" for _name, idx, total in rep_chain
-        )
+        return " · ".join(f"Step Rep {idx}/{total}" for _name, idx, total in rep_chain)

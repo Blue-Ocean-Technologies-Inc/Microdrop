@@ -8,8 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
-from ..models.messages import DeviceViewerMessageModel
+# Local imports.
 from ..models.main_model import DeviceViewMainModel
+from ..models.messages import DeviceViewerMessageModel
+
 
 def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessageModel:
     """Returns a deep-copied DeviceViewerMessageModel from our existing models.
@@ -26,8 +28,17 @@ def gui_models_to_message_model(model: DeviceViewMainModel) -> DeviceViewerMessa
     if not model.step_id:
         exec_params = model.routes._current_params()
 
+    # Idle phase navigation lights the current phase on top of the step's
+    # own electrodes; only the latter are the step's to record.
+    service = model.route_execution_service
+    channels = (
+        service.step_channels()
+        if service is not None
+        else model.electrodes.actuated_channels
+    )
+
     return DeviceViewerMessageModel(
-        channels_activated=model.electrodes.actuated_channels,
+        channels_activated=channels,
         routes=[(layer.route.route, layer.color) for layer in model.routes.layers],
         step_info={"step_id": model.step_id, "step_label": model.step_label},
         uuid=model.uuid,

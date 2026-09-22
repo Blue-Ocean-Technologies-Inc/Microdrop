@@ -1,0 +1,1560 @@
+[
+ {
+  "name": "line T1",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 1,
+   "trail_overlay": 0,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0605"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "line T3 O2",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 3,
+   "trail_overlay": 2,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0405",
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "line T3 O0",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 3,
+   "trail_overlay": 0,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0405",
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "line soft start and end T3",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 3,
+   "trail_overlay": 2,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ],
+   "soft_start": true,
+   "soft_terminate": true
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0405",
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705",
+     "e0605"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "L T2 O1",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 2,
+   "trail_overlay": 1,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0504",
+     "e0503"
+    ]
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0503"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "ring reps 2 no repeat duration",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 2,
+   "repeat_duration": 0,
+   "trail_length": 1,
+   "trail_overlay": 0,
+   "paths": [
+    [
+     "e0303",
+     "e0403",
+     "e0503",
+     "e0504",
+     "e0505",
+     "e0405",
+     "e0305",
+     "e0304",
+     "e0303"
+    ]
+   ],
+   "repeat_duration_mode": false
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0503"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 8.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 9.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 10.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0503"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 11.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 12.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 13.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 14.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 15.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 16.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "ring T3 O0 reps 2 repeat duration 20",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 2,
+   "repeat_duration": 20,
+   "trail_length": 3,
+   "trail_overlay": 0,
+   "paths": [
+    [
+     "e0303",
+     "e0403",
+     "e0503",
+     "e0504",
+     "e0505",
+     "e0405",
+     "e0305",
+     "e0304",
+     "e0303"
+    ]
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 8.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 9.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 10.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 11.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 12.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 13.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 14.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 15.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 16.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 17.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 18.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 19.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "ring soft start and end",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 2,
+   "trail_overlay": 1,
+   "paths": [
+    [
+     "e0303",
+     "e0403",
+     "e0503",
+     "e0504",
+     "e0505",
+     "e0405",
+     "e0305",
+     "e0304",
+     "e0303"
+    ]
+   ],
+   "repeat_duration_mode": false,
+   "soft_start": true,
+   "soft_terminate": true
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0503"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 8.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 9.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 10.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "line linear repeats 3",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 3,
+   "repeat_duration": 0,
+   "trail_length": 1,
+   "trail_overlay": 0,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ],
+   "linear_repeats": true
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0605"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 8.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 9.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 10.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0605"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 11.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 12.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 13.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 14.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 15.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 16.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0605"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 17.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "two paths and activated electrodes",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 2,
+   "trail_overlay": 1,
+   "paths": [
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ],
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0504",
+     "e0503"
+    ]
+   ],
+   "activated_electrodes": [
+    "e0909",
+    "e0808"
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0909",
+     "e0305",
+     "e0205",
+     "e0808"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0909",
+     "e0405",
+     "e0305",
+     "e0808"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0909",
+     "e0405",
+     "e0808",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0605",
+     "e0505",
+     "e0909",
+     "e0808",
+     "e0504"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0705",
+     "e0503",
+     "e0605",
+     "e0909",
+     "e0808",
+     "e0504"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "ring and line together",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 2,
+   "repeat_duration": 0,
+   "trail_length": 2,
+   "trail_overlay": 1,
+   "paths": [
+    [
+     "e0303",
+     "e0403",
+     "e0503",
+     "e0504",
+     "e0505",
+     "e0405",
+     "e0305",
+     "e0304",
+     "e0303"
+    ],
+    [
+     "e0205",
+     "e0305",
+     "e0405",
+     "e0505",
+     "e0605",
+     "e0705"
+    ]
+   ],
+   "repeat_duration_mode": false
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0205",
+     "e0305",
+     "e0303",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 1.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405",
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 2.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0405",
+     "e0503",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 3.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0605",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 4.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0605",
+     "e0705",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 5.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 6.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 7.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 8.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 9.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0503",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 10.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0503"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 11.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0504",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 12.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0405",
+     "e0505"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 13.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0405"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 14.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0305",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 15.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0304"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   },
+   {
+    "time": 16.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0303",
+     "e0403"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ },
+ {
+  "name": "no paths",
+  "params": {
+   "duration": 1.0,
+   "repetitions": 1,
+   "repeat_duration": 0,
+   "trail_length": 1,
+   "trail_overlay": 0,
+   "paths": [],
+   "activated_electrodes": [
+    "e0101"
+   ]
+  },
+  "plan": [
+   {
+    "time": 0.0,
+    "duration": 1.0,
+    "activated_electrodes": [
+     "e0101"
+    ],
+    "step_uid": "",
+    "step_id": "",
+    "step_description": "Step"
+   }
+  ]
+ }
+]

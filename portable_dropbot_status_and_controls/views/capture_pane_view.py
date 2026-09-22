@@ -64,17 +64,17 @@ def number_column(name, label):
     )
 
 
-def slider_column(name, label, low, high, step, value_format, high_name=""):
-    """A slider-edited column sharing the table's spare width. `high_name`
-    names the row trait holding a run-time upper bound (the exposure
-    range pick)."""
+def slider_column(name, label, low, high, step, value_format, span_name=""):
+    """A slider-edited column sharing the table's spare width. `span_name`
+    names the row trait holding the slider's run-time top end (the
+    exposure range pick); the value itself is never clamped to it."""
     return ActiveRowObjectColumn(
         name=name,
         label=label,
         format=value_format,
         resize_mode="stretch",
         editor=SteppedSliderEditor(
-            low=low, high=high, high_name=high_name, step=step, format=value_format
+            low=low, high=high, span_name=span_name, step=step, format=value_format
         ),
     )
 

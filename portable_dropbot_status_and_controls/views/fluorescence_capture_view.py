@@ -72,7 +72,7 @@ def _setting_columns():
             *FLUORESCENCE_EXPOSURE_MS_BOUNDS,
             step=FLUORESCENCE_EXPOSURE_MS_STEP,
             value_format="%.1f",
-            high_name="exposure_max",
+            span_name="exposure_max",
         ),
     ]
 
@@ -116,7 +116,7 @@ manual_controls = VGroup(
                 label="Exposure (ms)",
                 editor=SteppedSliderEditor(
                     low=FLUORESCENCE_EXPOSURE_MS_BOUNDS[0],
-                    high_name="manual_exposure_max",
+                    span_name="manual_exposure_max",
                     step=FLUORESCENCE_EXPOSURE_MS_STEP,
                     format="%.1f",
                 ),

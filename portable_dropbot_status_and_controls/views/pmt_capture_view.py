@@ -101,7 +101,7 @@ def _setting_columns():
             *PMT_EXPOSURE_S_BOUNDS,
             step=PMT_EXPOSURE_S_STEP,
             value_format="%.1f",
-            high_name="exposure_max",
+            span_name="exposure_max",
         ),
     ]
 

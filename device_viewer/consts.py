@@ -221,6 +221,10 @@ ZONES_VIEW_MIN_HEIGHT = 250
 # Default electrode channel count; configurable in Device Viewer preferences.
 NUMBER_OF_CHANNELS = 120
 
+# Widest slug the route sidebar allows, route electrode included (#682):
+# the two lane counts may add up to one less. Configurable in preferences.
+MAX_SLUG_WIDTH = 5
+
 # device view zoom sensitivity
 ZOOM_SENSITIVITY = 5
 # device view margin when auto fit
@@ -443,6 +447,16 @@ ZONE_SUBTRACT_PREVIEW_COLOR = "#d32f2f"
 ZONE_REGION_Z_VALUE = 0.5
 ZONE_PENDING_Z_VALUE = 0.6
 ZONE_BAND_Z_VALUE = 0.7
+# The selected route's slug outline: over the electrodes and zones, under
+# the electrode labels (1) and the route lines.
+SLUG_OUTLINE_Z_VALUE = 0.9
+# Screen pixels, whatever the zoom: thick enough to stand out over the
+# electrode outlines and the shape tint.
+SLUG_OUTLINE_PEN_WIDTH = 4
+# A dark solid line under the outline, this much wider, so the outline
+# reads over any electrode colour; drawn just below it.
+SLUG_HALO_PEN_WIDTH = 8
+SLUG_HALO_Z_VALUE = 0.89
 
 # Per-zone layer offset stacked on ZONE_REGION_Z_VALUE: the first zone in the
 # sidebar tree is the TOP layer, so it gets the largest offset. The step is

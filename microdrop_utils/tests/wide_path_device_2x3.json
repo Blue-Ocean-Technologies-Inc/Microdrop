@@ -1,0 +1,833 @@
+{
+ "source": "device_viewer/resources/devices/2x3device.svg",
+ "centroids": {
+  "electrode000": [
+   6.890293321874999,
+   20.579817790625
+  ],
+  "electrode001": [
+   6.890293454166667,
+   18.933724091666665
+  ],
+  "electrode002": [
+   8.530918744791666,
+   20.574349249999997
+  ],
+  "electrode003": [
+   28.21841964909136,
+   22.21497427604167
+  ],
+  "electrode004": [
+   13.452793558333333,
+   20.574349249999997
+  ],
+  "electrode005": [
+   10.171543506249998,
+   20.579817790624997
+  ],
+  "electrode006": [
+   8.530918347916666,
+   18.93372409166666
+  ],
+  "electrode007": [
+   10.171543506250002,
+   18.93372409166666
+  ],
+  "electrode008": [
+   21.655918542318204,
+   22.225911733268944
+  ],
+  "electrode009": [
+   15.093418319791667,
+   20.579817790625
+  ],
+  "electrode010": [
+   18.374668504166664,
+   18.93372409166666
+  ],
+  "electrode011": [
+   21.65591855625,
+   20.579817790625
+  ],
+  "electrode012": [
+   24.937168476041663,
+   18.93372409166666
+  ],
+  "electrode013": [
+   29.859044083333327,
+   15.647005763541666
+  ],
+  "electrode014": [
+   26.577793634375002,
+   17.293098933333333
+  ],
+  "electrode015": [
+   23.29654331770833,
+   15.652474304166665
+  ],
+  "electrode016": [
+   24.937168476041663,
+   17.293098933333336
+  ],
+  "electrode017": [
+   28.21841971875,
+   17.29309893333333
+  ],
+  "electrode018": [
+   26.577793502083335,
+   15.647005763541667
+  ],
+  "electrode019": [
+   23.296543714583333,
+   17.29309893333333
+  ],
+  "electrode020": [
+   21.65591855625,
+   15.647005763541666
+  ],
+  "electrode021": [
+   24.937168740624998,
+   15.647005763541667
+  ],
+  "electrode022": [
+   21.655918556249997,
+   17.293098933333333
+  ],
+  "electrode023": [
+   8.530918347916666,
+   11.561849283333332
+  ],
+  "electrode024": [
+   8.530918488605156,
+   5.783245830633691
+  ],
+  "electrode025": [
+   28.21841971875,
+   11.561849283333334
+  ],
+  "electrode026": [
+   28.2184192131874,
+   5.783246154773976
+  ],
+  "electrode027": [
+   31.100149440030872,
+   16.272975472273057
+  ],
+  "electrode028": [
+   5.649188378364769,
+   16.27297525023192
+  ],
+  "electrode029": [
+   15.093418584374998,
+   11.561849283333332
+  ],
+  "electrode030": [
+   15.093418720600683,
+   5.7832458809352705
+  ],
+  "electrode031": [
+   21.655918556249997,
+   11.561849283333334
+  ],
+  "electrode032": [
+   21.655918270410204,
+   5.783245724435236
+  ],
+  "electrode033": [
+   20.015293530208332,
+   18.93372409166666
+  ],
+  "electrode034": [
+   24.937168740624998,
+   20.579817790625
+  ],
+  "electrode035": [
+   21.65591827041022,
+   30.443576950454823
+  ],
+  "electrode036": [
+   21.655918556249997,
+   24.664974138541666
+  ],
+  "electrode037": [
+   8.530918347916664,
+   22.214974276041662
+  ],
+  "electrode038": [
+   15.093418591340896,
+   22.22591173326903
+  ],
+  "electrode039": [
+   18.365553740625,
+   20.574349249999997
+  ],
+  "electrode040": [
+   16.743158109374995,
+   20.574349249999997
+  ],
+  "electrode041": [
+   28.218419213187484,
+   30.44357652011622
+  ],
+  "electrode042": [
+   28.21841971875,
+   24.664974138541666
+  ],
+  "electrode043": [
+   5.649188377088819,
+   19.95384830457768
+  ],
+  "electrode044": [
+   31.100149441306854,
+   19.95384808253656
+  ],
+  "electrode045": [
+   29.859042760416663,
+   17.293098933333333
+  ],
+  "electrode046": [
+   28.218418395833332,
+   15.652474304166665
+  ],
+  "electrode047": [
+   13.452793558333335,
+   17.29309893333333
+  ],
+  "electrode048": [
+   15.093418584374996,
+   17.293098933333333
+  ],
+  "electrode049": [
+   11.812168532291665,
+   15.647005763541667
+  ],
+  "electrode050": [
+   11.812168532291665,
+   17.293098933333336
+  ],
+  "electrode051": [
+   13.452793558333333,
+   15.652474304166665
+  ],
+  "electrode052": [
+   10.171543506249998,
+   15.647005763541667
+  ],
+  "electrode053": [
+   8.530918347916666,
+   17.293098933333333
+  ],
+  "electrode054": [
+   10.17154350625,
+   17.293098933333333
+  ],
+  "electrode055": [
+   20.015293530208332,
+   20.579817790625004
+  ],
+  "electrode056": [
+   21.65591855625,
+   18.93372409166666
+  ],
+  "electrode057": [
+   2.4621858961401086,
+   11.845878882031418
+  ],
+  "electrode058": [
+   34.28715060306938,
+   11.845878949356042
+  ],
+  "electrode059": [
+   28.218419718749995,
+   18.933724091666665
+  ],
+  "electrode060": [
+   26.577793502083335,
+   20.579817790624997
+  ],
+  "electrode061": [
+   29.859044083333327,
+   20.579817790624997
+  ],
+  "electrode062": [
+   26.577793634374995,
+   18.933724091666665
+  ],
+  "electrode063": [
+   28.218418395833332,
+   20.57434925
+  ],
+  "electrode064": [
+   29.85904276041666,
+   18.933724091666665
+  ],
+  "electrode065": [
+   15.093418584374996,
+   18.93372409166666
+  ],
+  "electrode066": [
+   13.452793558333335,
+   18.933724091666665
+  ],
+  "electrode067": [
+   11.812168532291663,
+   18.933724091666665
+  ],
+  "electrode068": [
+   11.812168532291665,
+   20.579817790625
+  ],
+  "electrode069": [
+   20.015293530208332,
+   15.647005763541667
+  ],
+  "electrode070": [
+   20.015293530208332,
+   17.293098933333333
+  ],
+  "electrode071": [
+   18.374668504166664,
+   17.293098933333333
+  ],
+  "electrode072": [
+   16.734043345833335,
+   17.293098933333333
+  ],
+  "electrode073": [
+   34.28715060440028,
+   24.380944867925923
+  ],
+  "electrode074": [
+   2.462185894809211,
+   24.380944935250543
+  ],
+  "electrode075": [
+   8.530918347916666,
+   24.664974138541663
+  ],
+  "electrode076": [
+   8.530918488605154,
+   30.443576844256427
+  ],
+  "electrode077": [
+   15.093418584375002,
+   24.664974138541663
+  ],
+  "electrode078": [
+   15.093418720600695,
+   30.443576793954783
+  ],
+  "electrode079": [
+   16.73404334583333,
+   18.93372409166666
+  ],
+  "electrode080": [
+   23.296543714583333,
+   18.933724091666665
+  ],
+  "electrode081": [
+   23.296543317708334,
+   20.57434925
+  ],
+  "electrode082": [
+   18.365553740624996,
+   15.652474304166667
+  ],
+  "electrode083": [
+   16.743158109375,
+   15.652474304166665
+  ],
+  "electrode084": [
+   15.093418319791667,
+   15.647005763541666
+  ],
+  "electrode085": [
+   21.65591854231821,
+   14.000911779102278
+  ],
+  "electrode086": [
+   28.218419649091253,
+   14.011849271159026
+  ],
+  "electrode087": [
+   8.530918744791665,
+   15.652474304166665
+  ],
+  "electrode088": [
+   6.890293454166667,
+   17.293098933333333
+  ],
+  "electrode089": [
+   6.890293321874999,
+   15.647005763541664
+  ],
+  "electrode090": [
+   8.530918347916666,
+   14.011849271159111
+  ],
+  "electrode091": [
+   15.093418591340896,
+   14.00091177910236
+  ]
+ },
+ "neighbours": {
+  "electrode000": [
+   "electrode001",
+   "electrode002",
+   "electrode043"
+  ],
+  "electrode001": [
+   "electrode000",
+   "electrode006",
+   "electrode043",
+   "electrode088"
+  ],
+  "electrode002": [
+   "electrode000",
+   "electrode005",
+   "electrode006",
+   "electrode037"
+  ],
+  "electrode003": [
+   "electrode042",
+   "electrode063"
+  ],
+  "electrode004": [
+   "electrode009",
+   "electrode066",
+   "electrode068"
+  ],
+  "electrode005": [
+   "electrode002",
+   "electrode007",
+   "electrode068"
+  ],
+  "electrode006": [
+   "electrode001",
+   "electrode002",
+   "electrode007",
+   "electrode053"
+  ],
+  "electrode007": [
+   "electrode005",
+   "electrode006",
+   "electrode054",
+   "electrode067"
+  ],
+  "electrode008": [
+   "electrode011",
+   "electrode036"
+  ],
+  "electrode009": [
+   "electrode004",
+   "electrode038",
+   "electrode040",
+   "electrode065"
+  ],
+  "electrode010": [
+   "electrode033",
+   "electrode039",
+   "electrode071",
+   "electrode079"
+  ],
+  "electrode011": [
+   "electrode008",
+   "electrode055",
+   "electrode056",
+   "electrode081"
+  ],
+  "electrode012": [
+   "electrode016",
+   "electrode034",
+   "electrode062",
+   "electrode080"
+  ],
+  "electrode013": [
+   "electrode027",
+   "electrode045",
+   "electrode046"
+  ],
+  "electrode014": [
+   "electrode016",
+   "electrode017",
+   "electrode018",
+   "electrode062"
+  ],
+  "electrode015": [
+   "electrode019",
+   "electrode020",
+   "electrode021"
+  ],
+  "electrode016": [
+   "electrode012",
+   "electrode014",
+   "electrode019",
+   "electrode021"
+  ],
+  "electrode017": [
+   "electrode014",
+   "electrode045",
+   "electrode046",
+   "electrode059"
+  ],
+  "electrode018": [
+   "electrode014",
+   "electrode021",
+   "electrode046"
+  ],
+  "electrode019": [
+   "electrode015",
+   "electrode016",
+   "electrode022",
+   "electrode080"
+  ],
+  "electrode020": [
+   "electrode015",
+   "electrode022",
+   "electrode069",
+   "electrode085"
+  ],
+  "electrode021": [
+   "electrode015",
+   "electrode016",
+   "electrode018"
+  ],
+  "electrode022": [
+   "electrode019",
+   "electrode020",
+   "electrode056",
+   "electrode070"
+  ],
+  "electrode023": [
+   "electrode024",
+   "electrode090"
+  ],
+  "electrode024": [
+   "electrode023"
+  ],
+  "electrode025": [
+   "electrode026",
+   "electrode086"
+  ],
+  "electrode026": [
+   "electrode025"
+  ],
+  "electrode027": [
+   "electrode013",
+   "electrode045",
+   "electrode058"
+  ],
+  "electrode028": [
+   "electrode057",
+   "electrode088",
+   "electrode089"
+  ],
+  "electrode029": [
+   "electrode030",
+   "electrode091"
+  ],
+  "electrode030": [
+   "electrode029"
+  ],
+  "electrode031": [
+   "electrode032",
+   "electrode085"
+  ],
+  "electrode032": [
+   "electrode031"
+  ],
+  "electrode033": [
+   "electrode010",
+   "electrode055",
+   "electrode056",
+   "electrode070"
+  ],
+  "electrode034": [
+   "electrode012",
+   "electrode060",
+   "electrode081"
+  ],
+  "electrode035": [
+   "electrode036"
+  ],
+  "electrode036": [
+   "electrode008",
+   "electrode035"
+  ],
+  "electrode037": [
+   "electrode002",
+   "electrode075"
+  ],
+  "electrode038": [
+   "electrode009",
+   "electrode077"
+  ],
+  "electrode039": [
+   "electrode010",
+   "electrode040",
+   "electrode055"
+  ],
+  "electrode040": [
+   "electrode009",
+   "electrode039",
+   "electrode079"
+  ],
+  "electrode041": [
+   "electrode042"
+  ],
+  "electrode042": [
+   "electrode003",
+   "electrode041"
+  ],
+  "electrode043": [
+   "electrode000",
+   "electrode001",
+   "electrode074"
+  ],
+  "electrode044": [
+   "electrode061",
+   "electrode064",
+   "electrode073"
+  ],
+  "electrode045": [
+   "electrode013",
+   "electrode017",
+   "electrode027",
+   "electrode064"
+  ],
+  "electrode046": [
+   "electrode013",
+   "electrode017",
+   "electrode018",
+   "electrode086"
+  ],
+  "electrode047": [
+   "electrode048",
+   "electrode050",
+   "electrode051",
+   "electrode066"
+  ],
+  "electrode048": [
+   "electrode047",
+   "electrode065",
+   "electrode072",
+   "electrode084"
+  ],
+  "electrode049": [
+   "electrode050",
+   "electrode051",
+   "electrode052"
+  ],
+  "electrode050": [
+   "electrode047",
+   "electrode049",
+   "electrode054",
+   "electrode067"
+  ],
+  "electrode051": [
+   "electrode047",
+   "electrode049",
+   "electrode084"
+  ],
+  "electrode052": [
+   "electrode049",
+   "electrode054",
+   "electrode087"
+  ],
+  "electrode053": [
+   "electrode006",
+   "electrode054",
+   "electrode087",
+   "electrode088"
+  ],
+  "electrode054": [
+   "electrode007",
+   "electrode050",
+   "electrode052",
+   "electrode053"
+  ],
+  "electrode055": [
+   "electrode011",
+   "electrode033",
+   "electrode039"
+  ],
+  "electrode056": [
+   "electrode011",
+   "electrode022",
+   "electrode033",
+   "electrode080"
+  ],
+  "electrode057": [
+   "electrode028"
+  ],
+  "electrode058": [
+   "electrode027"
+  ],
+  "electrode059": [
+   "electrode017",
+   "electrode062",
+   "electrode063",
+   "electrode064"
+  ],
+  "electrode060": [
+   "electrode034",
+   "electrode062",
+   "electrode063"
+  ],
+  "electrode061": [
+   "electrode044",
+   "electrode063",
+   "electrode064"
+  ],
+  "electrode062": [
+   "electrode012",
+   "electrode014",
+   "electrode059",
+   "electrode060"
+  ],
+  "electrode063": [
+   "electrode003",
+   "electrode059",
+   "electrode060",
+   "electrode061"
+  ],
+  "electrode064": [
+   "electrode044",
+   "electrode045",
+   "electrode059",
+   "electrode061"
+  ],
+  "electrode065": [
+   "electrode009",
+   "electrode048",
+   "electrode066",
+   "electrode079"
+  ],
+  "electrode066": [
+   "electrode004",
+   "electrode047",
+   "electrode065",
+   "electrode067"
+  ],
+  "electrode067": [
+   "electrode007",
+   "electrode050",
+   "electrode066",
+   "electrode068"
+  ],
+  "electrode068": [
+   "electrode004",
+   "electrode005",
+   "electrode067"
+  ],
+  "electrode069": [
+   "electrode020",
+   "electrode070",
+   "electrode082"
+  ],
+  "electrode070": [
+   "electrode022",
+   "electrode033",
+   "electrode069",
+   "electrode071"
+  ],
+  "electrode071": [
+   "electrode010",
+   "electrode070",
+   "electrode072",
+   "electrode082"
+  ],
+  "electrode072": [
+   "electrode048",
+   "electrode071",
+   "electrode079",
+   "electrode083"
+  ],
+  "electrode073": [
+   "electrode044"
+  ],
+  "electrode074": [
+   "electrode043"
+  ],
+  "electrode075": [
+   "electrode037",
+   "electrode076"
+  ],
+  "electrode076": [
+   "electrode075"
+  ],
+  "electrode077": [
+   "electrode038",
+   "electrode078"
+  ],
+  "electrode078": [
+   "electrode077"
+  ],
+  "electrode079": [
+   "electrode010",
+   "electrode040",
+   "electrode065",
+   "electrode072"
+  ],
+  "electrode080": [
+   "electrode012",
+   "electrode019",
+   "electrode056",
+   "electrode081"
+  ],
+  "electrode081": [
+   "electrode011",
+   "electrode034",
+   "electrode080"
+  ],
+  "electrode082": [
+   "electrode069",
+   "electrode071",
+   "electrode083"
+  ],
+  "electrode083": [
+   "electrode072",
+   "electrode082",
+   "electrode084"
+  ],
+  "electrode084": [
+   "electrode048",
+   "electrode051",
+   "electrode083",
+   "electrode091"
+  ],
+  "electrode085": [
+   "electrode020",
+   "electrode031"
+  ],
+  "electrode086": [
+   "electrode025",
+   "electrode046"
+  ],
+  "electrode087": [
+   "electrode052",
+   "electrode053",
+   "electrode089",
+   "electrode090"
+  ],
+  "electrode088": [
+   "electrode001",
+   "electrode028",
+   "electrode053",
+   "electrode089"
+  ],
+  "electrode089": [
+   "electrode028",
+   "electrode087",
+   "electrode088"
+  ],
+  "electrode090": [
+   "electrode023",
+   "electrode087"
+  ],
+  "electrode091": [
+   "electrode029",
+   "electrode084"
+  ]
+ }
+}
