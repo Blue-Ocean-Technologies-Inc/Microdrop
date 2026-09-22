@@ -8,13 +8,26 @@
 #
 # Thanks for using Microdrop open source!
 
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QMainWindow
-from traits.api import Instance, observe
-from traitsui.api import View, Item, Group, Action, Menu, TableEditor
+# Third-party imports.
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 
+# Enthought library imports.
+from traits.api import Instance, observe
+from traitsui.api import Action, Group, Item, Menu, TableEditor, View
+
+# Microdrop package imports.
 from device_viewer.default_settings import default_alphas, default_visibility
+
+# Microdrop style imports.
 from microdrop_style.helpers import style_app
-from microdrop_utils.traitsui_qt_helpers import VisibleColumn, RangeColumn, ObjectColumn, SafeCancelTableHandler
+
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import (
+    ObjectColumn,
+    RangeColumn,
+    SafeCancelTableHandler,
+    VisibleColumn,
+)
 
 alpha_table_editor = TableEditor(
     columns=[
@@ -45,29 +58,30 @@ alpha_table_editor = TableEditor(
 
 
 class AlphaTableHandler(SafeCancelTableHandler):
-
     def reset_defaults(self, info, object):
         model = info.object
         for alpha_value in model.alpha_map:
             alpha_value.alpha = default_alphas[alpha_value.key]
             alpha_value.visible = default_visibility[alpha_value.key]
 
+
 alpha_table_view = View(
     Group(
-        Item('alpha_map', editor=alpha_table_editor, show_label=False),
-        label='Alpha Settings',
+        Item("alpha_map", editor=alpha_table_editor, show_label=False),
+        label="Alpha Settings",
         show_border=True,
     ),
-    handler=AlphaTableHandler()
-
+    handler=AlphaTableHandler(),
 )
 
-if __name__ == '__main__':
-    from traits.api import HasTraits, List, Str, Bool, Range
+if __name__ == "__main__":
     import sys
+
+    from traits.api import Bool, HasTraits, List, Range, Str
 
     class AlphaValue(HasTraits):
         """A class to represent an alpha value with a key."""
+
         key = Str()  # The key for the alpha value
         alpha = Range(0, 100, mode="spinner")  # The alpha value associated with the key
         visible = Bool(True)  # Whether the alpha value is visible in the UI
@@ -80,8 +94,13 @@ if __name__ == '__main__':
             print(event)
 
     alpha_model = AlphaModel()
-    alpha_model.alpha_map = [AlphaValue(key=key, alpha=int(default_alphas[key])) for key in default_alphas.keys()]
-    # alpha_model.alpha_map.append(AlphaValue(key="example alpha setting with long name", alpha=75))
+    alpha_model.alpha_map = [
+        AlphaValue(key=key, alpha=int(default_alphas[key]))
+        for key in default_alphas.keys()
+    ]
+    # alpha_model.alpha_map.append(
+    #     AlphaValue(key="example alpha setting with long name", alpha=75)
+    # )
 
     app = QApplication.instance()
     style_app(app)
