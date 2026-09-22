@@ -265,7 +265,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         logger.info(
             f"Portable Dropbot fluorescence capture --> "
             f"{'ok' if done['ok'] else 'FAILED: ' + done['error']}; "
-            f"{len(done['paths'])} frame(s) in {done['directory']}"
+            f"{len(done['frames'])} frame(s) in {done['directory']}"
         )
 
     def _run_fluorescence_capture(self, request, directory, abort):
@@ -275,7 +275,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         # request_id empty, so the routine mints its own id for them.
         reply_base = request.request_id or uuid.uuid4().hex
         total = len(request.entries)
-        paths = []
+        frames = []
         error = ""
         progress = self._fluorescence_progress(
             request, 0, total, request.entries[0].filter_position
@@ -286,16 +286,15 @@ class FluorescenceCaptureMixinService(HasTraits):
                 progress = self._fluorescence_progress(
                     request, index, total, entry.filter_position
                 )
-                paths.append(
-                    self._capture_fluorescence_entry(
-                        request,
-                        entry,
-                        f"{reply_base}:{index}",
-                        directory,
-                        abort,
-                        progress,
-                    )
+                path = self._capture_fluorescence_entry(
+                    request,
+                    entry,
+                    f"{reply_base}:{index}",
+                    directory,
+                    abort,
+                    progress,
                 )
+                frames.append({"filter_position": entry.filter_position, "path": path})
         except _CaptureAborted:
             error = "aborted"
             logger.info("Portable Dropbot fluorescence capture aborted")
@@ -313,7 +312,7 @@ class FluorescenceCaptureMixinService(HasTraits):
             "ok": not error,
             "label": request.label,
             "directory": str(Path(directory) / CAPTURES_DIR_NAME),
-            "paths": paths,
+            "frames": frames,
             "error": error,
         }
 

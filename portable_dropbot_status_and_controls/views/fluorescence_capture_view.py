@@ -113,10 +113,16 @@ fluorescence_row_table_attached = TableEditor(
     selected="selected_row",
 )
 
-#: The last capture's saved files, read-only, newest first.
+#: The captures' saved files, read-only, newest first: the filter each
+#: frame was taken through and its file name.
 fluorescence_results_table = TableEditor(
     columns=[
-        ObjectColumn(name="path", label="Path", editable=False),
+        ObjectColumn(
+            name="filter_position",
+            label="Filter",
+            editable=False,
+            resize_mode="resize_to_contents",
+        ),
         # Click to open the PNG in the system's default application.
         LinkColumn(name="file", label="File", fire="open_file"),
     ],

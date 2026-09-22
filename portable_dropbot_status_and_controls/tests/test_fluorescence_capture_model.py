@@ -18,6 +18,7 @@ from portable_dropbot_controller.consts import (
     FILTER_POSITIONS,
     FLUORESCENCE_DEFAULT_EXPOSURE_MS,
     FLUORESCENCE_DEFAULT_LED_PERCENT,
+    FluorescenceCapturedFrame,
 )
 from portable_dropbot_status_and_controls.models.fluorescence_capture_model import (
     FluorescenceRow,
@@ -226,10 +227,22 @@ def test_record_pushed_value_remembers_step_and_value():
 
 def test_record_results_prepends_newest_first_and_builds_display_rows():
     m = PortableDropbotFluorescenceCaptureModel()
-    m.record_results(["/tmp/flu/a.png", "/tmp/flu/b.png"])
-    assert m.results == ["/tmp/flu/b.png", "/tmp/flu/a.png"]
+    m.record_results(
+        [
+            FluorescenceCapturedFrame(filter_position=0, path="/tmp/flu/a.png"),
+            FluorescenceCapturedFrame(filter_position=2, path="/tmp/flu/b.png"),
+        ]
+    )
+    assert [f.path for f in m.results] == ["/tmp/flu/b.png", "/tmp/flu/a.png"]
 
-    m.record_results(["/tmp/flu/c.png"])
-    assert m.results == ["/tmp/flu/c.png", "/tmp/flu/b.png", "/tmp/flu/a.png"]
+    m.record_results(
+        [FluorescenceCapturedFrame(filter_position=4, path="/tmp/flu/c.png")]
+    )
+    assert [f.path for f in m.results] == [
+        "/tmp/flu/c.png",
+        "/tmp/flu/b.png",
+        "/tmp/flu/a.png",
+    ]
     assert [r.file for r in m.result_rows] == ["c.png", "b.png", "a.png"]
+    assert [r.filter_position for r in m.result_rows] == [4, 2, 0]
     assert m.result_rows[0].path == "/tmp/flu/c.png"

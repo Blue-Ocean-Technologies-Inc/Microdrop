@@ -33,6 +33,7 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_EXPOSURE_MS_BOUNDS,
     FLUORESCENCE_LED_PERCENT_BOUNDS,
     PKG,
+    FluorescenceCapturedFrame,
     FluorescenceCaptureDone,
     FluorescenceCaptureEntry,
     FluorescenceCaptureProgress,
@@ -162,10 +163,23 @@ def test_step_capture_round_trips_json_with_ticks():
     assert FluorescenceStepCapture().entries == []
 
 
-def test_done_defaults_to_no_paths_and_no_error():
+def test_done_defaults_to_no_frames_and_no_error():
     done = FluorescenceCaptureDone(request_id="r1", ok=True)
 
-    assert (done.label, done.directory, done.paths, done.error) == ("", "", [], "")
+    assert (done.label, done.directory, done.frames, done.error) == ("", "", [], "")
+
+
+def test_done_round_trips_a_frame_through_json():
+    done = FluorescenceCaptureDone(
+        request_id="r1",
+        ok=True,
+        frames=[FluorescenceCapturedFrame(filter_position=2, path="/tmp/f2.png")],
+    )
+    again = FluorescenceCaptureDone.model_validate_json(done.model_dump_json())
+
+    assert again.frames == [
+        FluorescenceCapturedFrame(filter_position=2, path="/tmp/f2.png")
+    ]
 
 
 def test_progress_requires_its_position_fields():

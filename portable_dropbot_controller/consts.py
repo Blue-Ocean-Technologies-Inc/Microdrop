@@ -654,6 +654,13 @@ class FluorescenceCaptureProgress(BaseModel):
     detail: str = ""
 
 
+class FluorescenceCapturedFrame(BaseModel):
+    """One saved frame and the filter-wheel position it was taken through."""
+
+    filter_position: int
+    path: str
+
+
 class FluorescenceCaptureDone(BaseModel):
     """Outcome of a capture request; the frames saved before any failure or
     abort are still listed."""
@@ -664,7 +671,7 @@ class FluorescenceCaptureDone(BaseModel):
     #: The captures folder the frames were saved in.
     directory: str = ""
     #: Saved PNGs, in capture order.
-    paths: list[str] = []
+    frames: list[FluorescenceCapturedFrame] = []
     #: The failing stage and why, "aborted", or "busy" for a refusal.
     error: str = ""
 

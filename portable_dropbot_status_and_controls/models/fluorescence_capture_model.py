@@ -44,6 +44,7 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_DEFAULT_LED_PERCENT,
     FLUORESCENCE_EXPOSURE_MS_BOUNDS,
     FLUORESCENCE_LED_PERCENT_BOUNDS,
+    FluorescenceCapturedFrame,
     FluorescenceStepCapture,
 )
 from template_status_and_controls.base_model import BaseStatusModel
@@ -87,8 +88,10 @@ class FluorescenceRow(HasTraits):
 
 
 class FluorescenceResultRow(HasTraits):
-    """One saved capture file, for the results table's link column."""
+    """One saved capture file: the filter it was taken through and a link."""
 
+    #: Filter-wheel position the frame was captured through.
+    filter_position = Int
     path = Str
     #: `path`'s file name, for the table; `path` is what open_file uses.
     file = Str
@@ -146,8 +149,9 @@ class PortableDropbotFluorescenceCaptureModel(BaseStatusModel):
     # ---- Results ------------------------------------------------------
     #: Chevron toggle for the results table below the run controls.
     show_results = Bool(False)
-    #: Saved capture paths, newest first — the source of truth.
-    results = List(Str)
+    #: Saved frames (filter position + path), newest first — the source of
+    #: truth.
+    results = List(Instance(FluorescenceCapturedFrame))
     #: Display rows derived from results — kept a plain list refreshed by
     #: record_results, not a Property: the TableEditor's item listener on
     #: open_file walks the old value, and a Property's old value is
@@ -375,12 +379,16 @@ class PortableDropbotFluorescenceCaptureModel(BaseStatusModel):
             "directory": "",
         }
 
-    def record_results(self, paths):
-        """Prepend a capture's saved paths (newest first — paths arrive in
+    def record_results(self, frames):
+        """Prepend a capture's saved frames (newest first — frames arrive in
         capture order) and rebuild the display rows the results table
-        renders (open_file needs real HasTraits rows, not plain strings)."""
-        self.results = list(reversed(paths)) + self.results
+        renders (open_file needs HasTraits rows, not the message models)."""
+        self.results = list(reversed(frames)) + self.results
         self.result_rows = [
-            FluorescenceResultRow(path=path, file=Path(path).name)
-            for path in self.results
+            FluorescenceResultRow(
+                filter_position=frame.filter_position,
+                path=frame.path,
+                file=Path(frame.path).name,
+            )
+            for frame in self.results
         ]

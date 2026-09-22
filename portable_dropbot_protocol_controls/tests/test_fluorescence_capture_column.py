@@ -389,7 +389,12 @@ def test_done_contributes_the_captures_folder(_report_publisher):
         {
             "ok": True,
             "directory": "/exp/captures",
-            "paths": ["/exp/captures/flu_step1.2-start_f0_x.png"],
+            "frames": [
+                {
+                    "filter_position": 0,
+                    "path": "/exp/captures/flu_step1.2-start_f0_x.png",
+                }
+            ],
         }
     )
 

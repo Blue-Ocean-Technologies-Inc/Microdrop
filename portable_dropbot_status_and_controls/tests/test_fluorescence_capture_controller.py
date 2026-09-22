@@ -138,7 +138,9 @@ def test_file_link_opens_the_rows_path(monkeypatch):
     opened = []
     monkeypatch.setattr(mod, "open_file", opened.append)
 
-    model.result_rows = [FluorescenceResultRow(path="/tmp/flu/a.png", file="a.png")]
+    model.result_rows = [
+        FluorescenceResultRow(filter_position=0, path="/tmp/flu/a.png", file="a.png")
+    ]
     model.result_rows[0].open_file = True
 
     assert opened == ["/tmp/flu/a.png"]

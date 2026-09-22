@@ -104,12 +104,12 @@ class PortableDropbotFluorescenceCaptureMessageHandler(BaseMessageHandler):
         if done.directory:
             self.model.last_directory = done.directory
 
-        if done.paths:
-            self.model.record_results(done.paths)
+        if done.frames:
+            self.model.record_results(done.frames)
 
         if done.error:
             self.model.status = f"FAILED: {done.error}"
         elif done.ok:
-            self.model.status = f"{len(done.paths)} frame(s) saved"
+            self.model.status = f"{len(done.frames)} frame(s) saved"
         else:
             self.model.status = "FAILED: aborted"

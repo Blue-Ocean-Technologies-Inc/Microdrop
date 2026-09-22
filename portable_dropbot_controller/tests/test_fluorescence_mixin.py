@@ -225,10 +225,10 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     assert done["ok"] is True and done["error"] == ""
     assert done["request_id"] == "r1"
     assert done["directory"] == str(tmp_path / "captures")
-    assert [p.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for p in done["paths"]] == [
-        "flu_manual_f2.png",
-        "flu_manual_f0.png",
-    ]
+    assert [
+        f["path"].rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for f in done["frames"]
+    ] == ["flu_manual_f2.png", "flu_manual_f0.png"]
+    assert [f["filter_position"] for f in done["frames"]] == [2, 0]
     stages = [(p["filter_position"], p["stage"]) for p in rig["progress"]]
     assert stages == [
         (2, "filter"),
@@ -256,7 +256,7 @@ def test_led_zero_percent_is_a_valid_dark_frame(rig):
     done = rig["done"][-1]
     assert done["ok"] is True
     assert "led 0" in h.log
-    assert len(done["paths"]) == 1
+    assert len(done["frames"]) == 1
 
 
 def test_frame_request_carries_directory_label_and_reply_id(rig, tmp_path):
@@ -298,7 +298,7 @@ def test_a_pane_request_without_id_still_matches_its_replies(rig):
     done = rig["done"][-1]
     assert done["ok"] is True
     assert done["request_id"] == ""
-    assert len(done["paths"]) == 1
+    assert len(done["frames"]) == 1
 
 
 def test_filter_failure_skips_the_rest_and_still_restores(rig):
@@ -311,7 +311,7 @@ def test_filter_failure_skips_the_rest_and_still_restores(rig):
     done = rig["done"][-1]
     assert done["ok"] is False
     assert done["error"].startswith("filter 1: no reply")
-    assert done["paths"] == []
+    assert done["frames"] == []
 
 
 def test_camera_refusal_fails_the_entry_without_a_frame(rig):
@@ -350,7 +350,7 @@ def test_frame_timeout_keeps_earlier_frames(rig, monkeypatch):
     done = rig["done"][-1]
     assert done["ok"] is False
     assert done["error"].startswith("frame: no reply for r8:1")
-    assert len(done["paths"]) == 1
+    assert len(done["frames"]) == 1
 
 
 def test_abort_mid_run_stops_before_the_next_stage_and_restores(rig):
@@ -361,7 +361,7 @@ def test_abort_mid_run_stops_before_the_next_stage_and_restores(rig):
 
     done = rig["done"][-1]
     assert done["ok"] is False and done["error"] == "aborted"
-    assert done["paths"] == []
+    assert done["frames"] == []
     assert "filter 2" not in h.log
     assert h.log[-2:] == ["light restored", "camera None None"]
 
@@ -404,7 +404,7 @@ def test_disconnect_mid_filter_move_is_reported_as_aborted(rig):
 
     done = rig["done"][-1]
     assert done["ok"] is False and done["error"] == "aborted"
-    assert done["paths"] == []
+    assert done["frames"] == []
     assert "filter 2" not in h.log
     assert h.log[-2:] == ["light restored", "camera None None"]
 
@@ -423,7 +423,7 @@ def test_request_while_capturing_is_refused_as_busy(rig):
             "ok": False,
             "label": "step2-start",
             "directory": "",
-            "paths": [],
+            "frames": [],
             "error": "busy",
         }
     ]
