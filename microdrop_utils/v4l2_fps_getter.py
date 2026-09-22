@@ -25,9 +25,6 @@ V4L2_FOCUS_AUTO = "focus_automatic_continuous"
 V4L2_EXPOSURE_AUTO = "auto_exposure"
 V4L2_EXPOSURE_AUTO_MANUAL = 1
 V4L2_EXPOSURE_AUTO_ON = 3
-#: UVC exposure time, in 100 µs units; auto mode writes its pick here too.
-V4L2_EXPOSURE_ABSOLUTE = "exposure_time_absolute"
-V4L2_EXPOSURE_UNITS_PER_MS = 10
 
 
 def get_v4l2_fps(

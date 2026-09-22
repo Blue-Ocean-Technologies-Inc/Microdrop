@@ -145,6 +145,9 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     #: The camera's last readback of any exposure request (manual or a
     #: capture's) — what the camera actually took, or why it refused.
     camera_readback = Str("-", desc="The camera's last exposure readback")
+    #: True while the camera is on auto and reporting the exposure auto
+    #: chose — only then can leaving auto hold that exposure.
+    auto_exposure_reported = Bool(False)
 
     def _get_manual_exposure_max(self):
         return self.EXPOSURE_RANGES[self.exposure_range]
@@ -177,6 +180,10 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
 
         exposure = (
             "" if applied.exposure_ms is None else f"{applied.exposure_ms:.1f} ms"
+        )
+
+        self.auto_exposure_reported = (
+            applied.exposure_auto and applied.exposure_ms is not None
         )
 
         if applied.exposure_auto:

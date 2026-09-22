@@ -65,9 +65,12 @@ class FluorescenceCaptureController(CapturePaneController):
     @observe("model:manual_auto_exposure")
     def _toggle_auto_exposure(self, event):
         # Turning auto off holds the exposure auto chose rather than jumping
-        # to the slider; the readback then moves the slider there.
+        # to the slider (the readback then moves the slider there) — when
+        # the camera reports it; otherwise the slider's exposure applies.
+        hold = not event.new and self.model.auto_exposure_reported
+
         camera_controls_publisher.publish(
-            self.model.manual_camera_request(hold_auto_exposure=not event.new)
+            self.model.manual_camera_request(hold_auto_exposure=hold)
         )
 
     @observe("model:manual_exposure_ms")

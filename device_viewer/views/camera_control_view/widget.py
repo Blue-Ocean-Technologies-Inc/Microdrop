@@ -57,11 +57,9 @@ from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import (
-    V4L2_EXPOSURE_ABSOLUTE,
     V4L2_EXPOSURE_AUTO,
     V4L2_EXPOSURE_AUTO_MANUAL,
     V4L2_EXPOSURE_AUTO_ON,
-    V4L2_EXPOSURE_UNITS_PER_MS,
     V4L2_FOCUS_ABSOLUTE,
     V4L2_FOCUS_AUTO,
     LinuxCameraDeviceContainer,
@@ -1110,14 +1108,11 @@ class CameraControlWidget(QWidget):
         """The exposure the camera is using right now (auto's pick
         included), or None when it does not report it."""
 
-        # The v4l2 fallback drives auto: the camera writes its pick into
-        # exposure_time_absolute, which Qt never sees.
+        # Under the v4l2 fallback's auto, UVC exposure_time_absolute keeps
+        # the last manual value, not auto's pick (checked on the Pi's DH
+        # Camera) — nothing reports what auto chose.
         if self._v4l2_auto_exposure_path is not None:
-            raw = get_v4l2_control(
-                self._v4l2_auto_exposure_path, V4L2_EXPOSURE_ABSOLUTE
-            )
-
-            return raw / V4L2_EXPOSURE_UNITS_PER_MS if raw else None
+            return None
 
         exposure_s = self.camera.exposureTime()
 
