@@ -37,6 +37,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     GlyphActionColumn,
     ObjectColumn,
     SafeCancelTableHandler,
+    SteppedSliderEditor,
     VisibleColumn,
     make_table_row_header_resizable,
 )
@@ -211,6 +212,76 @@ soft_transition_settings_header = (
     Label("Lin Reps", tooltip="Replay linear paths Repetitions times"),
 )
 
+# The slug shape: lanes on each side of the route, how they are read, and
+# whether the slug rotates at corners. No lanes = the plain trail. The lane
+# sliders meet in the middle, where the route is, and grow away from it;
+# they are shown twice, with tooltips for the frame in force.
+# Both sliders run to the width cap; each stops where the other leaves off.
+lane_slider = dict(
+    low=0.0,
+    high=4.0,
+    step=1.0,
+    format="%d",
+    integer=True,
+    span_name="object.routes.max_lanes",
+)
+slug_shape_settings = (
+    UItem(
+        "object.routes.rotation_lock",
+        tooltip="Keep the slug's orientation through corners: it only translates",
+    ),
+    UItem(
+        "object.routes.lanes_in_out",
+        tooltip="Lanes read as inside / outside of the turn, not screen left / right",
+        visible_when="not object.routes_rotation_lock",
+    ),
+    UItem(
+        "object.routes.recentre",
+        tooltip="Centre a locked slug on the route when it moves across its own "
+        "heading; off, it keeps the position it arrived in",
+        visible_when="object.routes_rotation_lock",
+    ),
+)
+
+slug_shape_settings_header = (
+    Label("Rot Lock", tooltip="The slug keeps its orientation through corners"),
+    Label(
+        "In/Out",
+        tooltip="Lanes read as inside / outside of the turn",
+        visible_when="not object.routes_rotation_lock",
+    ),
+    Label(
+        "Re-centre",
+        tooltip="A locked slug is centred on the route across legs",
+        visible_when="object.routes_rotation_lock",
+    ),
+)
+
+# Each lane row is an HGroup of one labelled column, like the rows above,
+# so it takes the same margins and lines up with them.
+lanes_left_right_settings = HGroup(
+    VGroup(
+        Label("Lanes", tooltip="Extra lanes to the screen-left and right of travel"),
+        HGroup(
+            UItem(
+                "object.routes.lane_left",
+                tooltip="Extra lanes to the screen-left of travel",
+                editor=SteppedSliderEditor(
+                    inverted=True,
+                    high_name="object.routes.max_lane_left",
+                    **lane_slider,
+                ),
+            ),
+            UItem(
+                "object.routes.lane_right",
+                tooltip="Extra lanes to the screen-right of travel",
+                editor=SteppedSliderEditor(
+                    high_name="object.routes.max_lane_right", **lane_slider
+                ),
+            ),
+        ),
+    ),
+)
 
 protocol_execution_settings_group = VGroup(
     HGroup(
@@ -227,6 +298,18 @@ protocol_execution_settings_group = VGroup(
         VGroup(soft_transition_settings_header[1], soft_transition_settings[1]),
         VGroup(soft_transition_settings_header[2], soft_transition_settings[2]),
     ),
+    VGroup(lanes_left_right_settings),
+    # Laid out like the ramp row above. In/Out only matters to a slug that
+    # turns and Re-centre only to one that does not, so the lock swaps them.
+    # The condition sits on the label and checkbox, not on their group: a
+    # group with visible_when gets a padded wrapper widget in the Qt backend,
+    # which knocks its column out of line with its neighbours.
+    HGroup(
+        VGroup(slug_shape_settings_header[0], slug_shape_settings[0]),
+        VGroup(slug_shape_settings_header[1], slug_shape_settings[1]),
+        VGroup(slug_shape_settings_header[2], slug_shape_settings[2]),
+    ),
+    Item("_"),
     # enabled_when='free_mode',
 )
 
@@ -285,13 +368,6 @@ run_controls = HGroup(
         visible_when=f"not {executing}",
         springy=True,
     ),  # commit to step
-    Item(
-        "phase_navigation_mode",
-        label="Phases",
-        tooltip="Step through route phases without running the protocol "
-        "(synced with the protocol tree)",
-        visible_when=f"not {executing}",
-    ),  # idle phase-navigation mode (#493)
     enabled_when="not object.protocol_running",
 )
 
@@ -301,9 +377,20 @@ execution_status_bar = HGroup(
     # style_sheet='* { font-size: 15px; }',
 )
 
+# Idle phase-navigation mode (#493). Sits under the play buttons so it stays
+# in reach when the execution settings are collapsed.
+phase_navigation_toggle = Item(
+    "phase_navigation_mode",
+    label="Phases",
+    tooltip="Step through route phases without running the protocol "
+    "(synced with the protocol tree)",
+    visible_when=f"not {executing}",
+)
+
 RouteLayerView = View(
     VGroup(
         run_controls,
+        phase_navigation_toggle,
         execution_status_bar,
         Item("object.routes.layers", editor=layer_table_editor, show_label=False),
     ),

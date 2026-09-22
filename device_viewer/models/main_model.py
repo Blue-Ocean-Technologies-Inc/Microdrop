@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from pyface.undo.api import UndoManager
 from traits.api import (
     UUID,
@@ -28,10 +29,13 @@ from traits.api import (
 )
 from traits.observation.events import TraitChangeEvent
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Microdrop utils imports.
 from microdrop_utils.decorators import debounce
 
+# Local imports.
 from ..consts import (
     DEFAULT_ZONE_TYPES,
     DEVICE_REPO_DIR_KEY,
@@ -59,6 +63,7 @@ from .perspective import PerspectiveModel
 from .route import RouteLayerManager
 from .zones import ZoneLayerManager, ZoneType
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -90,6 +95,11 @@ class DeviceViewMainModel(HasTraits):
     # Repetitions / Repeat Duration spinners re-evaluate `enabled_when`
     # reliably when a loop is added/removed or Lin Reps is toggled.
     routes_repeats_frozen = DelegatesTo("routes", prefix="repeats_frozen")
+
+    # Mirror of routes.lanes_in_out so the lane spinners' labels switch
+    # frame reliably (visible_when on a nested path does not re-evaluate).
+    routes_lanes_in_out = DelegatesTo("routes", prefix="lanes_in_out")
+    routes_rotation_lock = DelegatesTo("routes", prefix="rotation_lock")
 
     # route Execution status display
     execution_status = Str("")
@@ -269,6 +279,9 @@ class DeviceViewMainModel(HasTraits):
 
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
+
+        if self.preferences:
+            self.routes.max_width = self.preferences.max_slug_width
         self.calibration = CalibrationModel(electrodes=self.electrodes)
         self.zones = ZoneLayerManager(globals_key=ZONES_KEY)
 
@@ -296,6 +309,12 @@ class DeviceViewMainModel(HasTraits):
             self.alpha_map = _alpha_map
 
         self._seed_zone_types_from_preferences()
+
+    @observe("preferences:max_slug_width", post_init=True)
+    def _max_slug_width_changed(self, event):
+        """The sliders follow the preference as soon as it is applied."""
+        if self.routes is not None and self.preferences is not None:
+            self.routes.max_width = self.preferences.max_slug_width
 
     # ------------------------- Properties ------------------------
 

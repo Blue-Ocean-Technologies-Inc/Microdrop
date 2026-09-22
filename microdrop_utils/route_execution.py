@@ -29,24 +29,34 @@ path_execution_service`` during PPT-9 (#371) and centralized here from
 so it deliberately stays a plain class rather than HasTraits.
 """
 
+# Standard library imports.
 from typing import Any, Dict, List, Optional
 
+# Microdrop utils imports.
+from microdrop_utils import wide_path_geometry
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 class PathExecutionService:
-
     @staticmethod
     def is_loop_path(path: List[str]) -> bool:
         return len(path) >= 2 and path[0] == path[-1]  # (first == last electrode)
 
     @staticmethod
-    def calculate_effective_repetitions_for_path(path: List[str], original_repetitions: int,
-                                            duration: float, repeat_duration: float,
-                                            trail_length: int, trail_overlay: int) -> int:
-        """Calculate how many full loop cycles fit within repeat_duration for a given path.
+    def calculate_effective_repetitions_for_path(
+        path: List[str],
+        original_repetitions: int,
+        duration: float,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+    ) -> int:
+        """Calculate how many full loop cycles fit within repeat_duration for a
+        given path.
 
         When repeat_duration > 0, each loop independently calculates how many full
         cycles fit within that duration. Any remaining balance time is handled as
@@ -57,7 +67,9 @@ class PathExecutionService:
         if not PathExecutionService.is_loop_path(path):
             return 1
 
-        cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+        cycle_phases = PathExecutionService.calculate_loop_cycle_phases(
+            path, trail_length, trail_overlay
+        )
 
         if repeat_duration <= 0:
             return original_repetitions
@@ -73,9 +85,14 @@ class PathExecutionService:
         return max_reps_by_duration
 
     @staticmethod
-    def calculate_loop_balance_idle_phases(path: List[str], effective_repetitions: int,
-                                           duration: float, repeat_duration: float,
-                                           trail_length: int, trail_overlay: int) -> int:
+    def calculate_loop_balance_idle_phases(
+        path: List[str],
+        effective_repetitions: int,
+        duration: float,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+    ) -> int:
         """Calculate how many idle phases are needed after a loop finishes its cycles
         to pad out the remaining time to repeat_duration.
 
@@ -85,11 +102,15 @@ class PathExecutionService:
         if repeat_duration <= 0 or not PathExecutionService.is_loop_path(path):
             return 0
 
-        cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+        cycle_phases = PathExecutionService.calculate_loop_cycle_phases(
+            path, trail_length, trail_overlay
+        )
         cycle_length = len(cycle_phases)
 
         if effective_repetitions > 1:
-            active_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1  # +1 return phase
+            active_phases = (
+                (effective_repetitions - 1) * cycle_length + cycle_length + 1
+            )  # +1 return phase
         else:
             active_phases = cycle_length + 1  # +1 return phase
 
@@ -120,7 +141,9 @@ class PathExecutionService:
         return ramp_phases
 
     @staticmethod
-    def calculate_soft_terminate_phases(last_phase_indices: List[int]) -> List[List[int]]:
+    def calculate_soft_terminate_phases(
+        last_phase_indices: List[int],
+    ) -> List[List[int]]:
         """Generate ramp-down phases for soft terminate.
 
         Given the last full phase (e.g. [3, 4, 5] for trail_length=3), produces
@@ -138,16 +161,23 @@ class PathExecutionService:
         return ramp_phases
 
     @staticmethod
-    def calculate_trail_phases_for_path(path: List[str], trail_length: int, trail_overlay: int,
-                                        soft_start: bool = False, soft_terminate: bool = False) -> List[List[int]]:
+    def calculate_trail_phases_for_path(
+        path: List[str],
+        trail_length: int,
+        trail_overlay: int,
+        soft_start: bool = False,
+        soft_terminate: bool = False,
+    ) -> List[List[int]]:
         """calculate phase electrode indices for a path.
 
         Args:
             path: List of electrode IDs in the path.
             trail_length: Number of electrodes active simultaneously.
             trail_overlay: Number of electrodes that overlap between consecutive phases.
-            soft_start: If True, prepend ramp-up phases (1, 2, ... trail_length electrodes).
-            soft_terminate: If True, append ramp-down phases (trail_length-1, ... 2, 1 electrodes).
+            soft_start: If True, prepend ramp-up phases (1, 2, ... trail_length
+                electrodes).
+            soft_terminate: If True, append ramp-down phases (trail_length-1,
+                ... 2, 1 electrodes).
         """
         path_length = len(path)
         if path_length == 0:
@@ -196,8 +226,9 @@ class PathExecutionService:
                 else:
                     phases[-1] = adjusted_last_phase
 
-            # if the last phase still has fewer electrodes than trail_length after adjustment,
-            # it means the path is shorter than trail_length, so remove the incomplete phase
+            # if the last phase still has fewer electrodes than trail_length after
+            # adjustment, the path is shorter than trail_length, so remove the
+            # incomplete phase
             # and merge it with the previous phase (if it exists)
             elif len(last_phase) < trail_length:
                 if len(phases) > 1:
@@ -217,9 +248,13 @@ class PathExecutionService:
         return phases
 
     @staticmethod
-    def calculate_loop_cycle_phases(path: List[str], trail_length: int, trail_overlay: int) -> List[List[int]]:
+    def calculate_loop_cycle_phases(
+        path: List[str], trail_length: int, trail_overlay: int
+    ) -> List[List[int]]:
         if not PathExecutionService.is_loop_path(path):
-            result = PathExecutionService.calculate_trail_phases_for_path(path, trail_length, trail_overlay)
+            result = PathExecutionService.calculate_trail_phases_for_path(
+                path, trail_length, trail_overlay
+            )
             logger.debug(f"Open path phases: {result}")
             return result
 
@@ -272,6 +307,13 @@ class PathExecutionService:
         soft_start: bool = False,
         soft_terminate: bool = False,
         linear_repeats: Optional[bool] = None,
+        lane_left: int = 0,
+        lane_right: int = 0,
+        lane_frame: Optional[str] = None,
+        rotation_lock: bool = True,
+        recentre: bool = True,
+        centroids: Optional[Dict[str, tuple]] = None,
+        neighbours: Optional[Dict[str, List[str]]] = None,
     ) -> List[Dict[str, Any]]:
         """Build the full phase-by-phase execution plan for a step.
 
@@ -282,28 +324,55 @@ class PathExecutionService:
         ``repetitions`` times. ``soft_start`` / ``soft_terminate`` add ramp
         phases on top. When ``linear_repeats`` is True, linear (non-loop)
         paths are replayed ``repetitions`` times.
+
+        The slug shape — ``lane_left`` / ``lane_right`` extra lanes across
+        the route, read in ``lane_frame``, with ``rotation_lock`` and, for
+        a locked slug, ``recentre`` — applies to every path of the step.
+        A plain trail, one electrode wide and free to turn, is the trail
+        algorithm it always was. A wider slug, or a locked trail longer than
+        one electrode, takes its per-path phases from
+        ``wide_path_geometry.slug_phases`` (see that module for the rules)
+        and needs the device ``centroids`` and ``neighbours``; a locked
+        trail given no lattice plays as the plain trail. The plan-level
+        work — merging paths, the repeat duration cap and idle padding,
+        linear repeats, timing — is the same for every shape.
         """
         duration = float(duration)
         repetitions = int(repetitions)
-        repeat_duration = (int(float(repeat_duration))
-                           if repeat_duration_mode else 0)
+        repeat_duration = int(float(repeat_duration)) if repeat_duration_mode else 0
         trail_length = int(trail_length)
         trail_overlay = int(trail_overlay)
         linear_repeats = bool(linear_repeats)
         activated_electrodes = list(activated_electrodes or [])
         paths = list(paths or [])
+        width = int(lane_left) + int(lane_right) + 1
+        lane_frame = lane_frame or wide_path_geometry.IN_OUT
+
+        has_lattice = centroids is not None and neighbours is not None
+        # A locked trail keeps its orientation through corners, which only
+        # the slug geometry does; without a lattice (callers that never
+        # pass one) it stays the plain trail.
+        slug = width > 1 or (rotation_lock and trail_length > 1 and has_lattice)
+
+        if width > 1 and not has_lattice:
+            raise ValueError(
+                "A slug wider than one electrode needs the device centroids "
+                "and neighbours to lay its lanes out"
+            )
 
         execution_plan = []
 
         if not paths:
-            execution_plan.append({
-                "time": 0.0,
-                "duration": duration,
-                "activated_electrodes": list(activated_electrodes),
-                "step_uid": step_uid,
-                "step_id": step_id,
-                "step_description": step_description
-            })
+            execution_plan.append(
+                {
+                    "time": 0.0,
+                    "duration": duration,
+                    "activated_electrodes": list(activated_electrodes),
+                    "step_uid": step_uid,
+                    "step_id": step_id,
+                    "step_description": step_description,
+                }
+            )
             return execution_plan
 
         # calculate effective repetitions for each path
@@ -314,32 +383,89 @@ class PathExecutionService:
         for i, path in enumerate(paths):
             is_loop = PathExecutionService.is_loop_path(path)
 
+            if slug:
+                # A slug's phases come ready-made as electrode ids, laps,
+                # ramps and padding included; the merge below treats them as
+                # one open sequence.
+                electrode_phases = PathExecutionService.wide_path_phases(
+                    path,
+                    repetitions,
+                    duration,
+                    repeat_duration,
+                    trail_length,
+                    trail_overlay,
+                    lane_left,
+                    lane_right,
+                    lane_frame,
+                    rotation_lock,
+                    centroids,
+                    neighbours,
+                    soft_start,
+                    soft_terminate,
+                    linear_repeats,
+                    recentre=recentre,
+                )
+                max_open_path_length = max(max_open_path_length, len(electrode_phases))
+                path_info.append(
+                    {
+                        "path": path,
+                        "is_loop": False,
+                        "electrode_phases": electrode_phases,
+                        "loop_total_phases": len(electrode_phases),
+                    }
+                )
+                continue
+
             if is_loop:
-                effective_repetitions = PathExecutionService.calculate_effective_repetitions_for_path(
-                    path, repetitions, duration, repeat_duration, trail_length, trail_overlay
+                effective_repetitions = (
+                    PathExecutionService.calculate_effective_repetitions_for_path(
+                        path,
+                        repetitions,
+                        duration,
+                        repeat_duration,
+                        trail_length,
+                        trail_overlay,
+                    )
                 )
                 path_repetitions[i] = effective_repetitions
 
-                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(path, trail_length, trail_overlay)
+                cycle_phases = PathExecutionService.calculate_loop_cycle_phases(
+                    path, trail_length, trail_overlay
+                )
                 cycle_length = len(cycle_phases)
 
                 # Compute soft start/terminate ramp phases for this loop
                 soft_start_phases = []
                 soft_terminate_phases = []
                 if soft_start and cycle_phases:
-                    soft_start_phases = PathExecutionService.calculate_soft_start_phases(cycle_phases[0])
+                    soft_start_phases = (
+                        PathExecutionService.calculate_soft_start_phases(
+                            cycle_phases[0]
+                        )
+                    )
                 if soft_terminate and cycle_phases:
-                    soft_terminate_phases = PathExecutionService.calculate_soft_terminate_phases(cycle_phases[-1])
+                    soft_terminate_phases = (
+                        PathExecutionService.calculate_soft_terminate_phases(
+                            cycle_phases[-1]
+                        )
+                    )
 
                 # Active cycle phases (reps × cycle + return)
                 if effective_repetitions > 1:
-                    active_phases = (effective_repetitions - 1) * cycle_length + cycle_length + 1
+                    active_phases = (
+                        (effective_repetitions - 1) * cycle_length + cycle_length + 1
+                    )
                 else:
                     active_phases = cycle_length + 1
 
                 # Idle padding to fill remaining repeat_duration
                 idle_phases = PathExecutionService.calculate_loop_balance_idle_phases(
-                    path, effective_repetitions, duration, repeat_duration, trail_length, trail_overlay
+                    path,
+                    effective_repetitions,
+                    duration,
+                    repeat_duration,
+                    trail_length,
+                    trail_overlay,
                 )
 
                 loop_total_phases = (
@@ -351,10 +477,14 @@ class PathExecutionService:
             else:  # open path
                 open_reps = repetitions if linear_repeats else 1
                 path_repetitions[i] = open_reps
-                # For open paths, soft start/terminate phases are baked into the trail phases
+                # For open paths, soft start/terminate phases are baked into the
+                # trail phases
                 cycle_phases = PathExecutionService.calculate_trail_phases_for_path(
-                    path, trail_length, trail_overlay,
-                    soft_start=soft_start, soft_terminate=soft_terminate
+                    path,
+                    trail_length,
+                    trail_overlay,
+                    soft_start=soft_start,
+                    soft_terminate=soft_terminate,
                 )
                 cycle_length = len(cycle_phases)
                 total_open_phases = cycle_length * open_reps
@@ -365,24 +495,28 @@ class PathExecutionService:
                 soft_start_phases = []
                 soft_terminate_phases = []
 
-            path_info.append({
-                "path": path,
-                "is_loop": is_loop,
-                "cycle_length": cycle_length,
-                "cycle_phases": cycle_phases,
-                "loop_total_phases": loop_total_phases,
-                "active_phases": active_phases,
-                "idle_phases": idle_phases,
-                "effective_repetitions": path_repetitions[i],
-                "soft_start_phases": soft_start_phases,
-                "soft_terminate_phases": soft_terminate_phases,
-            })
+            path_info.append(
+                {
+                    "path": path,
+                    "is_loop": is_loop,
+                    "cycle_length": cycle_length,
+                    "cycle_phases": cycle_phases,
+                    "loop_total_phases": loop_total_phases,
+                    "active_phases": active_phases,
+                    "idle_phases": idle_phases,
+                    "effective_repetitions": path_repetitions[i],
+                    "soft_start_phases": soft_start_phases,
+                    "soft_terminate_phases": soft_terminate_phases,
+                }
+            )
 
         # calculate total phases based on the longest duration needed
         max_loop_total_phases = 0
         for path_data in path_info:
             if path_data["is_loop"]:
-                max_loop_total_phases = max(max_loop_total_phases, path_data["loop_total_phases"])
+                max_loop_total_phases = max(
+                    max_loop_total_phases, path_data["loop_total_phases"]
+                )
 
         total_phases = max(max_loop_total_phases, max_open_path_length)
 
@@ -391,6 +525,13 @@ class PathExecutionService:
             phase_electrodes = set(activated_electrodes)
 
             for path_idx, path_data in enumerate(path_info):
+                if "electrode_phases" in path_data:
+                    if phase_idx < path_data["loop_total_phases"]:
+                        phase_electrodes.update(
+                            path_data["electrode_phases"][phase_idx]
+                        )
+                    continue
+
                 path = path_data["path"]
                 is_loop = path_data["is_loop"]
                 cycle_length = path_data["cycle_length"]
@@ -452,7 +593,10 @@ class PathExecutionService:
                             is_return_phase = False
                         else:
                             # Last repetition (with return phase)
-                            phase_in_last_rep = adjusted_idx - (effective_repetitions - 1) * cycle_length
+                            phase_in_last_rep = (
+                                adjusted_idx
+                                - (effective_repetitions - 1) * cycle_length
+                            )
                             if phase_in_last_rep < cycle_length:
                                 phase_in_cycle = phase_in_last_rep
                                 is_return_phase = False
@@ -488,7 +632,9 @@ class PathExecutionService:
                     # cycle_length * repetitions; we wrap phase_idx around the
                     # cycle so the trail replays from the start each rep.
                     if phase_idx < path_total_phases:
-                        phase_in_cycle = phase_idx % cycle_length if cycle_length > 0 else 0
+                        phase_in_cycle = (
+                            phase_idx % cycle_length if cycle_length > 0 else 0
+                        )
                         if phase_in_cycle < len(cycle_phases):
                             electrode_indices = cycle_phases[phase_in_cycle]
                             for electrode_idx in electrode_indices:
@@ -496,16 +642,98 @@ class PathExecutionService:
                                     electrode_id = path[electrode_idx]
                                     phase_electrodes.add(electrode_id)
 
-            execution_plan.append({
-                "time": phase_idx * duration,
-                "duration": duration,
-                "activated_electrodes": list(phase_electrodes),
-                "step_uid": step_uid,
-                "step_id": step_id,
-                "step_description": step_description
-            })
+            execution_plan.append(
+                {
+                    "time": phase_idx * duration,
+                    "duration": duration,
+                    "activated_electrodes": list(phase_electrodes),
+                    "step_uid": step_uid,
+                    "step_id": step_id,
+                    "step_description": step_description,
+                }
+            )
 
         return execution_plan
+
+    @staticmethod
+    def wide_path_phases(
+        path: List[str],
+        repetitions: int,
+        duration: float,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+        lane_left: int,
+        lane_right: int,
+        lane_frame: str,
+        rotation_lock: bool,
+        centroids: Dict[str, tuple],
+        neighbours: Dict[str, List[str]],
+        soft_start: bool = False,
+        soft_terminate: bool = False,
+        linear_repeats: bool = False,
+        recentre: bool = True,
+    ) -> List[List[str]]:
+        """The phases of one path driven by a slug wider than one electrode,
+        as lists of electrode ids, laid out as a width-1 path's would be.
+
+        ``slug_phases`` already plays a loop's laps and both ramps. What is
+        added here is the step-level layout the width-1 code applies to a
+        loop — the repeat-duration cap on its laps and idle phases holding
+        the return position before the ramp down — and the replay of an
+        open path for linear repeats. The cap and padding use the same
+        arithmetic as ``calculate_effective_repetitions_for_path`` and
+        ``calculate_loop_balance_idle_phases``, with the lap measured in
+        phases of the wide slug rather than of the trail.
+        """
+
+        def phases(laps, ramp_up=False, ramp_down=False):
+            return [
+                list(phase.ids)
+                for phase in wide_path_geometry.slug_phases(
+                    path,
+                    centroids,
+                    neighbours,
+                    lane_left,
+                    lane_right,
+                    trail_length,
+                    trail_overlay,
+                    rotation_lock=rotation_lock,
+                    lane_frame=lane_frame,
+                    repetitions=laps,
+                    soft_start=ramp_up,
+                    soft_terminate=ramp_down,
+                    recentre=recentre,
+                )
+            ]
+
+        if not PathExecutionService.is_loop_path(path):
+            once = phases(1, soft_start, soft_terminate)
+
+            return once * (repetitions if linear_repeats else 1)
+
+        lap_phases = len(phases(2)) - len(phases(1))
+        effective_repetitions = repetitions
+
+        if repeat_duration > 0 and lap_phases > 0 and duration > 0:
+            effective_repetitions = max(
+                int(((repeat_duration / duration) - 1) / lap_phases), 1
+            )
+
+        active = phases(effective_repetitions)
+        ramped = phases(effective_repetitions, soft_start, soft_terminate)
+        idle_phases = 0
+
+        if repeat_duration > 0:
+            balance_time = repeat_duration - len(active) * duration
+            idle_phases = max(int(balance_time / duration), 0)
+
+        # [ramp up][laps][idle at the return position][ramp down]
+        ramp_down_count = len(ramped) - len(phases(effective_repetitions, soft_start))
+        before_ramp_down = len(ramped) - ramp_down_count
+        idle = [list(ramped[before_ramp_down - 1])] * idle_phases
+
+        return ramped[:before_ramp_down] + idle + ramped[before_ramp_down:]
 
     @staticmethod
     def calculate_phase_rep_breakdown(
@@ -537,15 +765,23 @@ class PathExecutionService:
             if not PathExecutionService.is_loop_path(path):
                 continue
             has_loops = True
-            effective_reps = PathExecutionService.calculate_effective_repetitions_for_path(
-                path, repetitions, duration, repeat_duration,
-                trail_length, trail_overlay,
+            effective_reps = (
+                PathExecutionService.calculate_effective_repetitions_for_path(
+                    path,
+                    repetitions,
+                    duration,
+                    repeat_duration,
+                    trail_length,
+                    trail_overlay,
+                )
             )
-            cycle_length = len(PathExecutionService.calculate_loop_cycle_phases(
-                path, trail_length, trail_overlay))
+            cycle_length = len(
+                PathExecutionService.calculate_loop_cycle_phases(
+                    path, trail_length, trail_overlay
+                )
+            )
             if cycle_length > max_cycle_length or (
-                cycle_length == max_cycle_length
-                and effective_reps > max_effective_reps
+                cycle_length == max_cycle_length and effective_reps > max_effective_reps
             ):
                 max_cycle_length = cycle_length
                 max_effective_reps = effective_reps
@@ -558,18 +794,26 @@ class PathExecutionService:
             # traversal = one rep; total reps = the raw Repetitions count.
             max_open_cycle = 0
             for path in paths:
-                max_open_cycle = max(max_open_cycle, len(
-                    PathExecutionService.calculate_trail_phases_for_path(
-                        path, trail_length, trail_overlay,
-                        soft_start=soft_start,
-                        soft_terminate=soft_terminate,
-                    )))
+                max_open_cycle = max(
+                    max_open_cycle,
+                    len(
+                        PathExecutionService.calculate_trail_phases_for_path(
+                            path,
+                            trail_length,
+                            trail_overlay,
+                            soft_start=soft_start,
+                            soft_terminate=soft_terminate,
+                        )
+                    ),
+                )
             return max(max_open_cycle, 1), max(int(repetitions), 1)
         # Open paths only, no linear repeats — entire plan is one rep
         return max(plan_length, 1), 1
 
     @staticmethod
-    def get_active_channels_from_map(id_to_channel: Dict[str, int], active_electrodes: List[str]) -> set:
+    def get_active_channels_from_map(
+        id_to_channel: Dict[str, int], active_electrodes: List[str]
+    ) -> set:
         """Get active channels from a direct id_to_channel mapping."""
         active_channels = set()
         for electrode_id in active_electrodes:

@@ -15,42 +15,68 @@ pane via TASK_EXTENSIONS. Other plugins contribute IColumn instances
 by declaring `List(contributes_to=PROTOCOL_COLUMNS)` in their own
 plugin class."""
 
-from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS
+# Enthought library imports.
+from envisage.api import TASK_EXTENSIONS, ExtensionPoint, Plugin
 from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from envisage.ui.tasks.task_extension import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import Instance, List, Str, Either, on_trait_change
+from traits.api import Either, Instance, List, Str, on_trait_change
 
-from microdrop_application.consts import PKG as microdrop_application_PKG
+# Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
-
+from microdrop_application.consts import PKG as microdrop_application_PKG
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
-from pluggable_protocol_tree.builtins.linear_repeats_column import make_linear_repeats_column
-from pluggable_protocol_tree.builtins.message_prompt_column import make_message_prompt_column
+from pluggable_protocol_tree.builtins.lane_left_column import make_lane_left_column
+from pluggable_protocol_tree.builtins.lane_right_column import make_lane_right_column
+from pluggable_protocol_tree.builtins.lanes_in_out_column import (
+    make_lanes_in_out_column,
+)
+from pluggable_protocol_tree.builtins.linear_repeats_column import (
+    make_linear_repeats_column,
+)
+from pluggable_protocol_tree.builtins.message_prompt_column import (
+    make_message_prompt_column,
+)
 from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.repeat_duration_column import make_repeat_duration_column
+from pluggable_protocol_tree.builtins.recentre_column import make_recentre_column
+from pluggable_protocol_tree.builtins.repeat_duration_column import (
+    make_repeat_duration_column,
+)
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.rotation_lock_column import (
+    make_rotation_lock_column,
+)
 from pluggable_protocol_tree.builtins.route_repetitions_column import (
     make_route_repetitions_column,
 )
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
 from pluggable_protocol_tree.builtins.soft_end_column import make_soft_end_column
 from pluggable_protocol_tree.builtins.soft_start_column import make_soft_start_column
-from pluggable_protocol_tree.builtins.trail_length_column import make_trail_length_column
-from pluggable_protocol_tree.builtins.trail_overlay_column import make_trail_overlay_column
+from pluggable_protocol_tree.builtins.trail_length_column import (
+    make_trail_length_column,
+)
+from pluggable_protocol_tree.builtins.trail_overlay_column import (
+    make_trail_overlay_column,
+)
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
-    ACTOR_TOPIC_DICT, EXECUTOR_LISTENER_NAME,
-    PKG, PKG_name, PROTOCOL_COLUMNS, PROTOCOL_QUICK_ACTIONS,
+    ACTOR_TOPIC_DICT,
+    EXECUTOR_LISTENER_NAME,
+    PKG,
+    PROTOCOL_COLUMNS,
+    PROTOCOL_QUICK_ACTIONS,
+    PKG_name,
 )
-from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_column import IColumn
+from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -71,7 +97,8 @@ class PluggableProtocolTreePlugin(Plugin):
     #: on ``isinstance(c, ICompoundColumn)`` to expand compounds and
     #: keep plain columns as-is.
     _column_extension_point = ExtensionPoint(
-        List(Either(IColumn, ICompoundColumn)), id=PROTOCOL_COLUMNS,
+        List(Either(IColumn, ICompoundColumn)),
+        id=PROTOCOL_COLUMNS,
         desc="Columns contributed by other plugins (IColumn or ICompoundColumn).",
     )
 
@@ -83,13 +110,15 @@ class PluggableProtocolTreePlugin(Plugin):
     #: IQuickAction instances rendered as buttons on the tree's
     #: quick-actions toolbar. Tree plugin itself contributes none.
     _quick_action_extension_point = ExtensionPoint(
-        List(Instance(IQuickAction)), id=PROTOCOL_QUICK_ACTIONS,
+        List(Instance(IQuickAction)),
+        id=PROTOCOL_QUICK_ACTIONS,
         desc="IQuickAction instances contributed by sibling plugins.",
     )
 
     contributed_quick_actions = List(
         desc="Quick actions contributed by other plugins (populated "
-             "from the extension point at plugin start).")
+        "from the extension point at plugin start)."
+    )
 
     # Standard plumbing
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
@@ -108,18 +137,22 @@ class PluggableProtocolTreePlugin(Plugin):
         from pluggable_protocol_tree.services.preferences import (
             ProtocolPreferencesPane,
         )
+
         return [ProtocolPreferencesPane]
 
     def _preferences_categories_default(self):
         from pluggable_protocol_tree.services.preferences import (
             protocol_tree_tab,
         )
+
         return [protocol_tree_tab]
 
     def _contributed_task_extensions_default(self):
         from pluggable_protocol_tree.menus import (
-            new_experiment_factory, protocol_menu_factory,
+            new_experiment_factory,
+            protocol_menu_factory,
         )
+
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
@@ -127,7 +160,7 @@ class PluggableProtocolTreePlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=new_experiment_factory,
-                        path='MenuBar/File',
+                        path="MenuBar/File",
                         absolute_position="first",
                     ),
                     SchemaAddition(
@@ -141,11 +174,12 @@ class PluggableProtocolTreePlugin(Plugin):
 
     def _make_dock_pane(self, *args, **kwargs):
         from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
+
         columns = self._assemble_columns()
         quick_actions = self._assemble_quick_actions()
         return PluggableProtocolDockPane(
-            columns=columns, quick_actions=quick_actions,
-            *args, **kwargs)
+            columns=columns, quick_actions=quick_actions, *args, **kwargs
+        )
 
     def _assemble_columns(self):
         builtins = [
@@ -163,19 +197,41 @@ class PluggableProtocolTreePlugin(Plugin):
             make_soft_end_column(),
             make_repeat_duration_column(),
             make_linear_repeats_column(),
+            make_lane_left_column(),
+            make_lane_right_column(),
+            make_lanes_in_out_column(),
+            make_rotation_lock_column(),
+            make_recentre_column(),
             make_message_prompt_column(),
         ]
         try:
             contributed = list(self.contributed_columns)
         except Exception:
-            contributed = []     # no extension registry attached (e.g. headless)
+            contributed = []  # no extension registry attached (e.g. headless)
         out = []
-        for c in (builtins + contributed):
+        for c in builtins + contributed:
             if isinstance(c, ICompoundColumn):
                 out.extend(_expand_compound(c))
             else:
                 out.append(c)
-        return out
+
+        # The tree's table is a DataFrame keyed by col_id; a second column
+        # with the same id would make its columns non-unique and break every
+        # scalar lookup on it. First one wins, builtins first.
+        seen, unique = set(), []
+
+        for column in out:
+            if column.model.col_id in seen:
+                logger.warning(
+                    f"Protocol tree: dropping a second column with id "
+                    f"{column.model.col_id!r}"
+                )
+                continue
+
+            seen.add(column.model.col_id)
+            unique.append(column)
+
+        return unique
 
     def _assemble_quick_actions(self):
         """Return contributed quick actions in deterministic order
@@ -206,12 +262,9 @@ class PluggableProtocolTreePlugin(Plugin):
             # Don't swallow silently — a TraitError here used to drop
             # every contribution from every plugin and surface only as
             # an empty dock pane. Log it so the developer sees it.
-            logger.warning(
-                f"failed to read PROTOCOL_COLUMNS extension point: {e}"
-            )
+            logger.warning(f"failed to read PROTOCOL_COLUMNS extension point: {e}")
         try:
-            self.contributed_quick_actions = list(
-                self._quick_action_extension_point)
+            self.contributed_quick_actions = list(self._quick_action_extension_point)
         except Exception as e:
             logger.warning(
                 f"failed to read PROTOCOL_QUICK_ACTIONS extension point: {e}"
@@ -250,8 +303,10 @@ class PluggableProtocolTreePlugin(Plugin):
         The synthetic ``_items`` event needs ``on_trait_change`` (observe()
         rejects the name — no real trait exists); ``event`` is the
         ExtensionPointChangedEvent. Mirrors message_router/plugin.py."""
-        logger.info(f"PROTOCOL_COLUMNS changed: added={event.added}, "
-                    f"removed={event.removed}, index={event.index}")
+        logger.info(
+            f"PROTOCOL_COLUMNS changed: added={event.added}, "
+            f"removed={event.removed}, index={event.index}"
+        )
         try:
             self.contributed_columns = list(self._column_extension_point)
         except Exception as e:
@@ -267,10 +322,13 @@ class PluggableProtocolTreePlugin(Plugin):
         reassignment lets the message router diff old vs new and add/retract
         subscriptions in a single change event."""
         routing = [ACTOR_TOPIC_DICT]
-        executor_topics = sorted({
-            topic for col in self._assemble_columns()
-            for topic in (col.handler.wait_for_topics or [])
-        })
+        executor_topics = sorted(
+            {
+                topic
+                for col in self._assemble_columns()
+                for topic in (col.handler.wait_for_topics or [])
+            }
+        )
         if executor_topics:
             routing.append({EXECUTOR_LISTENER_NAME: executor_topics})
         self.actor_topic_routing = routing

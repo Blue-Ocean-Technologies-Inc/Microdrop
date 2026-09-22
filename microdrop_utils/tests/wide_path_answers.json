@@ -1,0 +1,3177 @@
+[
+  {
+    "id": "1x2",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 0,
+    "right": 0,
+    "trail": 2,
+    "overlay": 1,
+    "pick": "A = B = C = D",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0305",
+          "e0405"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0405",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0503",
+          "e0504"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2x1",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 0,
+    "trail": 1,
+    "overlay": 0,
+    "pick": "A",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0405",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0504"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0503"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "pick": "A",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0405",
+          "e0505",
+          "e0605"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0504",
+          "e0604"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0503",
+          "e0603"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2x2",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 0,
+    "trail": 2,
+    "overlay": 1,
+    "pick": "E",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0503",
+          "e0504"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x2",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 2,
+    "overlay": 1,
+    "pick": "C",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0504",
+          "e0505",
+          "e0604",
+          "e0605"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0503",
+          "e0504",
+          "e0603",
+          "e0604"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x3",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 3,
+    "overlay": 2,
+    "pick": "E",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205",
+          "e0206",
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506",
+          "e0604",
+          "e0605",
+          "e0606"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0503",
+          "e0504",
+          "e0505",
+          "e0603",
+          "e0604",
+          "e0605"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "4x4",
+    "lattice": "square",
+    "route": [
+      "e0105",
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 2,
+    "right": 1,
+    "trail": 4,
+    "overlay": 3,
+    "pick": "E",
+    "phases": [
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0103",
+          "e0104",
+          "e0105",
+          "e0106",
+          "e0203",
+          "e0204",
+          "e0205",
+          "e0206",
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205",
+          "e0206",
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0503",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0503",
+          "e0504",
+          "e0505",
+          "e0506",
+          "e0603",
+          "e0604",
+          "e0605",
+          "e0606"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x1 bottom edge",
+    "lattice": "square",
+    "route": [
+      "e0310",
+      "e0410",
+      "e0510",
+      "e0509",
+      "e0508"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0309",
+          "e0310"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0310",
+          "e0409",
+          "e0410"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0410",
+          "e0509",
+          "e0510"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0410",
+          "e0510",
+          "e0610"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0409",
+          "e0509",
+          "e0609"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0408",
+          "e0508",
+          "e0608"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 right edge",
+    "lattice": "square",
+    "route": [
+      "e0805",
+      "e0905",
+      "e1005",
+      "e1004",
+      "e1003"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0804",
+          "e0805",
+          "e0806"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0904",
+          "e0905",
+          "e0906"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e1004",
+          "e1005",
+          "e1006"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0905",
+          "e1005",
+          "e1006"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0904",
+          "e1004",
+          "e1005"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0903",
+          "e1003",
+          "e1004"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x3 bottom edge",
+    "lattice": "square",
+    "route": [
+      "e0210",
+      "e0310",
+      "e0410",
+      "e0510",
+      "e0509",
+      "e0508"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 3,
+    "overlay": 2,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0209",
+          "e0210",
+          "e0309",
+          "e0310",
+          "e0409",
+          "e0410"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0209",
+          "e0210",
+          "e0309",
+          "e0310",
+          "e0409",
+          "e0410",
+          "e0509",
+          "e0510"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0210",
+          "e0309",
+          "e0310",
+          "e0409",
+          "e0410",
+          "e0509",
+          "e0510",
+          "e0609",
+          "e0610"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "e0408",
+          "e0409",
+          "e0410",
+          "e0508",
+          "e0509",
+          "e0510",
+          "e0608",
+          "e0609",
+          "e0610"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x2 right edge",
+    "lattice": "square",
+    "route": [
+      "e0805",
+      "e0905",
+      "e1005",
+      "e1004",
+      "e1003"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 2,
+    "overlay": 1,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0804",
+          "e0805",
+          "e0806",
+          "e0904",
+          "e0905",
+          "e0906"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0904",
+          "e0905",
+          "e0906",
+          "e1004",
+          "e1005",
+          "e1006"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0903",
+          "e0904",
+          "e0905",
+          "e1003",
+          "e1004",
+          "e1005"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "4x4 bottom edge",
+    "lattice": "square",
+    "route": [
+      "e0110",
+      "e0210",
+      "e0310",
+      "e0410",
+      "e0510",
+      "e0509",
+      "e0508"
+    ],
+    "left": 2,
+    "right": 1,
+    "trail": 4,
+    "overlay": 3,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0108",
+          "e0109",
+          "e0110",
+          "e0208",
+          "e0209",
+          "e0210",
+          "e0308",
+          "e0309",
+          "e0310",
+          "e0408",
+          "e0409",
+          "e0410"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "e0108",
+          "e0109",
+          "e0110",
+          "e0208",
+          "e0209",
+          "e0210",
+          "e0308",
+          "e0309",
+          "e0310",
+          "e0408",
+          "e0409",
+          "e0410",
+          "e0508",
+          "e0509",
+          "e0510"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "e0110",
+          "e0208",
+          "e0209",
+          "e0210",
+          "e0308",
+          "e0309",
+          "e0310",
+          "e0408",
+          "e0409",
+          "e0410",
+          "e0508",
+          "e0509",
+          "e0510",
+          "e0608",
+          "e0609",
+          "e0610"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x1 device band",
+    "lattice": "device",
+    "route": [
+      "electrode006",
+      "electrode007",
+      "electrode067",
+      "electrode050",
+      "electrode049"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "pick": "A",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "electrode002",
+          "electrode006",
+          "electrode053"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "electrode005",
+          "electrode007",
+          "electrode054"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "electrode050",
+          "electrode067",
+          "electrode068"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "electrode007",
+          "electrode066",
+          "electrode067"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "electrode047",
+          "electrode050",
+          "electrode054"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "electrode049",
+          "electrode051",
+          "electrode052"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2x2 into the neck",
+    "lattice": "device",
+    "route": [
+      "electrode067",
+      "electrode066",
+      "electrode065",
+      "electrode048",
+      "electrode084",
+      "electrode091",
+      "electrode029"
+    ],
+    "left": 1,
+    "right": 0,
+    "trail": 2,
+    "overlay": 1,
+    "pick": "G",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "electrode047",
+          "electrode050",
+          "electrode066",
+          "electrode067"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "electrode047",
+          "electrode048",
+          "electrode065",
+          "electrode066"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "electrode047",
+          "electrode048",
+          "electrode051",
+          "electrode084"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "electrode048",
+          "electrode051",
+          "electrode084",
+          "electrode091"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "u",
+        "ids": [
+          "electrode029",
+          "electrode051",
+          "electrode084",
+          "electrode091"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "u",
+        "ids": [
+          "electrode029",
+          "electrode091"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "u",
+        "ids": [
+          "electrode029"
+        ]
+      }
+    ],
+    "soft_terminate": true,
+    "note": "Soft end re-derived 2026-09-11: rows drop instead of cells. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "4x4 into the neck",
+    "lattice": "device",
+    "route": [
+      "electrode006",
+      "electrode007",
+      "electrode067",
+      "electrode066",
+      "electrode065",
+      "electrode048",
+      "electrode084",
+      "electrode091"
+    ],
+    "left": 2,
+    "right": 1,
+    "trail": 4,
+    "overlay": 3,
+    "pick": "F",
+    "phases": [
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "electrode002",
+          "electrode004",
+          "electrode005",
+          "electrode006",
+          "electrode007",
+          "electrode047",
+          "electrode049",
+          "electrode050",
+          "electrode051",
+          "electrode052",
+          "electrode053",
+          "electrode054",
+          "electrode066",
+          "electrode067",
+          "electrode068",
+          "electrode087"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "electrode004",
+          "electrode005",
+          "electrode007",
+          "electrode009",
+          "electrode047",
+          "electrode048",
+          "electrode049",
+          "electrode050",
+          "electrode051",
+          "electrode052",
+          "electrode054",
+          "electrode065",
+          "electrode066",
+          "electrode067",
+          "electrode068",
+          "electrode084"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "electrode004",
+          "electrode009",
+          "electrode040",
+          "electrode047",
+          "electrode048",
+          "electrode049",
+          "electrode050",
+          "electrode051",
+          "electrode065",
+          "electrode066",
+          "electrode067",
+          "electrode068",
+          "electrode072",
+          "electrode079",
+          "electrode083",
+          "electrode084"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "u",
+        "ids": [
+          "electrode004",
+          "electrode009",
+          "electrode040",
+          "electrode047",
+          "electrode048",
+          "electrode049",
+          "electrode050",
+          "electrode051",
+          "electrode065",
+          "electrode066",
+          "electrode067",
+          "electrode072",
+          "electrode079",
+          "electrode083",
+          "electrode084",
+          "electrode091"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x1 rotation lock",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 2,
+    "pick": "L",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      }
+    ],
+    "rotation_lock": true,
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "1x3 rotation lock",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 0,
+    "right": 0,
+    "trail": 3,
+    "overlay": 2,
+    "pick": "L",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0205",
+          "e0305",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0305",
+          "e0405",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0405",
+          "e0505",
+          "e0605"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0504",
+          "e0604"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0503",
+          "e0603"
+        ]
+      }
+    ],
+    "rotation_lock": true,
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x2 rotation lock",
+    "lattice": "square",
+    "route": [
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 2,
+    "overlay": 2,
+    "pick": "L",
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      }
+    ],
+    "rotation_lock": true,
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x1 hairpin in/out",
+    "pick": "A",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 0,
+    "lane_frame": "in/out",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0605",
+          "e0705"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0606",
+          "e0706"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "l",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0406",
+          "e0407",
+          "e0408"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307",
+          "e0308"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207",
+          "e0208"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 hairpin in/out, rotation lock",
+    "pick": "L2",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0406",
+          "e0407",
+          "e0408"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307",
+          "e0308"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207",
+          "e0208"
+        ]
+      }
+    ],
+    "rotation_lock": true,
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2."
+  },
+  {
+    "id": "3x1 wide hairpin in/out",
+    "pick": "A",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0507",
+      "e0407",
+      "e0307",
+      "e0207"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 0,
+    "lane_frame": "in/out",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0605",
+          "e0705"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0606",
+          "e0706"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "d",
+        "ids": [
+          "e0507",
+          "e0607",
+          "e0707"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0507",
+          "e0508",
+          "e0509"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0407",
+          "e0408",
+          "e0409"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0307",
+          "e0308",
+          "e0309"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "l",
+        "ids": [
+          "e0207",
+          "e0208",
+          "e0209"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 wide hairpin in/out, rotation lock",
+    "pick": "L2",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0507",
+      "e0407",
+      "e0307",
+      "e0207"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "d",
+        "ids": [
+          "e0507",
+          "e0508",
+          "e0509"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0407",
+          "e0408",
+          "e0409"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0307",
+          "e0308",
+          "e0309"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "l",
+        "ids": [
+          "e0207",
+          "e0208",
+          "e0209"
+        ]
+      }
+    ],
+    "rotation_lock": true,
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-10 after the cross-leg rule (picks Q and the edited tight hairpin): the block now slides past the second corner instead of jumping across the route."
+  },
+  {
+    "id": "2x1 hairpin, rotation lock, overlay 0",
+    "pick": "Q",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0406",
+          "e0407"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2x1 hairpin, rotation lock, overlay 1",
+    "pick": "Q",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 1,
+    "trail": 1,
+    "overlay": 1,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0406",
+          "e0407"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "1x3 leg shorter than trail",
+    "lattice": "square",
+    "route": [
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503",
+      "e0502"
+    ],
+    "left": 0,
+    "right": 0,
+    "trail": 3,
+    "overlay": 2,
+    "pick": "A = B = D",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0405",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0502",
+          "e0503",
+          "e0504"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2x4 route shorter than trail",
+    "lattice": "square",
+    "route": [
+      "e0405",
+      "e0505",
+      "e0504"
+    ],
+    "left": 1,
+    "right": 0,
+    "trail": 4,
+    "overlay": 3,
+    "pick": "H",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0504",
+          "e0505"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 loop seam",
+    "pick": "S1",
+    "lattice": "square",
+    "route": [
+      "e0303",
+      "e0403",
+      "e0503",
+      "e0504",
+      "e0505",
+      "e0405",
+      "e0305",
+      "e0304",
+      "e0303"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "lane_frame": "in/out",
+    "rotation_lock": false,
+    "repetitions": 2,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "u",
+        "ids": [
+          "e0203",
+          "e0303",
+          "e0403"
+        ]
+      },
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0302",
+          "e0303",
+          "e0304"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0402",
+          "e0403",
+          "e0404"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0502",
+          "e0503",
+          "e0504"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "d",
+        "ids": [
+          "e0403",
+          "e0503",
+          "e0603"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "d",
+        "ids": [
+          "e0404",
+          "e0504",
+          "e0604"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0405",
+          "e0505",
+          "e0605"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "l",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "u",
+        "ids": [
+          "e0205",
+          "e0305",
+          "e0405"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "u",
+        "ids": [
+          "e0204",
+          "e0304",
+          "e0404"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "u",
+        "ids": [
+          "e0203",
+          "e0303",
+          "e0403"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "r",
+        "ids": [
+          "e0302",
+          "e0303",
+          "e0304"
+        ]
+      },
+      {
+        "head": 9,
+        "heading": "r",
+        "ids": [
+          "e0402",
+          "e0403",
+          "e0404"
+        ]
+      },
+      {
+        "head": 10,
+        "heading": "r",
+        "ids": [
+          "e0502",
+          "e0503",
+          "e0504"
+        ]
+      },
+      {
+        "head": 10,
+        "heading": "d",
+        "ids": [
+          "e0403",
+          "e0503",
+          "e0603"
+        ]
+      },
+      {
+        "head": 11,
+        "heading": "d",
+        "ids": [
+          "e0404",
+          "e0504",
+          "e0604"
+        ]
+      },
+      {
+        "head": 12,
+        "heading": "d",
+        "ids": [
+          "e0405",
+          "e0505",
+          "e0605"
+        ]
+      },
+      {
+        "head": 12,
+        "heading": "l",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 13,
+        "heading": "l",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 14,
+        "heading": "l",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 14,
+        "heading": "u",
+        "ids": [
+          "e0205",
+          "e0305",
+          "e0405"
+        ]
+      },
+      {
+        "head": 15,
+        "heading": "u",
+        "ids": [
+          "e0204",
+          "e0304",
+          "e0404"
+        ]
+      },
+      {
+        "head": 16,
+        "heading": "u",
+        "ids": [
+          "e0203",
+          "e0303",
+          "e0403"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "1x3 loop stride",
+    "pick": "T1",
+    "lattice": "square",
+    "route": [
+      "e0303",
+      "e0403",
+      "e0503",
+      "e0504",
+      "e0505",
+      "e0405",
+      "e0305",
+      "e0304",
+      "e0303"
+    ],
+    "left": 0,
+    "right": 0,
+    "trail": 3,
+    "overlay": 0,
+    "repetitions": 2,
+    "phases": [
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0403",
+          "e0503"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0405",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "u",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 11,
+        "heading": "d",
+        "ids": [
+          "e0403",
+          "e0503",
+          "e0504"
+        ]
+      },
+      {
+        "head": 14,
+        "heading": "l",
+        "ids": [
+          "e0305",
+          "e0405",
+          "e0505"
+        ]
+      },
+      {
+        "head": 17,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0403"
+        ]
+      },
+      {
+        "head": 18,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0403",
+          "e0503"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x2 overlay 0 at a corner",
+    "pick": "K1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0605",
+      "e0604",
+      "e0603",
+      "e0602"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 2,
+    "overlay": 0,
+    "rotation_lock": false,
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205",
+          "e0206",
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0604",
+          "e0605",
+          "e0704",
+          "e0705"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "u",
+        "ids": [
+          "e0502",
+          "e0503",
+          "e0602",
+          "e0603",
+          "e0702",
+          "e0703"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x3 hairpin in/out",
+    "pick": "U1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 3,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "phases": [
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205",
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0503",
+          "e0504",
+          "e0505",
+          "e0603",
+          "e0604",
+          "e0605"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506",
+          "e0604",
+          "e0605",
+          "e0606"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0405",
+          "e0406",
+          "e0407",
+          "e0505",
+          "e0506",
+          "e0507",
+          "e0605",
+          "e0606",
+          "e0607"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0406",
+          "e0407",
+          "e0408",
+          "e0506",
+          "e0507",
+          "e0508",
+          "e0606",
+          "e0607",
+          "e0608"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307",
+          "e0308",
+          "e0406",
+          "e0407",
+          "e0408",
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207",
+          "e0208",
+          "e0306",
+          "e0307",
+          "e0308",
+          "e0406",
+          "e0407",
+          "e0408"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+  },
+  {
+    "id": "3x1 jog in/out, rotation lock",
+    "pick": "M1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0606",
+      "e0706",
+      "e0806"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "r",
+        "ids": [
+          "e0606",
+          "e0607",
+          "e0608"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "r",
+        "ids": [
+          "e0706",
+          "e0707",
+          "e0708"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "r",
+        "ids": [
+          "e0806",
+          "e0807",
+          "e0808"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 hairpin in/out, more inside than outside",
+    "pick": "V1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 2,
+    "right": 0,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0205",
+          "e0206",
+          "e0207"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0305",
+          "e0306",
+          "e0307"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0405",
+          "e0406",
+          "e0407"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0204",
+          "e0205",
+          "e0206"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x1 top edge in/out, rotation lock",
+    "pick": "E1",
+    "lattice": "square",
+    "route": [
+      "e0201",
+      "e0301",
+      "e0401",
+      "e0501",
+      "e0502",
+      "e0402",
+      "e0302",
+      "e0202"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0200",
+          "e0201"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0201",
+          "e0300",
+          "e0301"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0301",
+          "e0400",
+          "e0401"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0401",
+          "e0500",
+          "e0501"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0500",
+          "e0501",
+          "e0502"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0501",
+          "e0502",
+          "e0503"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0502",
+          "e0503",
+          "e0504"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0402",
+          "e0403",
+          "e0404"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0302",
+          "e0303",
+          "e0304"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0202",
+          "e0203",
+          "e0204"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x2 wide hairpin in/out",
+    "pick": "W1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0507",
+      "e0407",
+      "e0307",
+      "e0207"
+    ],
+    "left": 0,
+    "right": 2,
+    "trail": 2,
+    "overlay": 1,
+    "lane_frame": "in/out",
+    "rotation_lock": false,
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0203",
+          "e0204",
+          "e0205",
+          "e0303",
+          "e0304",
+          "e0305"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0303",
+          "e0304",
+          "e0305",
+          "e0403",
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0405",
+          "e0503",
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0605",
+          "e0606",
+          "e0705",
+          "e0706"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0606",
+          "e0607",
+          "e0706",
+          "e0707"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0407",
+          "e0408",
+          "e0409",
+          "e0507",
+          "e0508",
+          "e0509"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0307",
+          "e0308",
+          "e0309",
+          "e0407",
+          "e0408",
+          "e0409"
+        ]
+      },
+      {
+        "head": 8,
+        "heading": "l",
+        "ids": [
+          "e0207",
+          "e0208",
+          "e0209",
+          "e0307",
+          "e0308",
+          "e0309"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3x2 soft start",
+    "pick": "Z3",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0504",
+      "e0503",
+      "e0502"
+    ],
+    "left": 1,
+    "right": 1,
+    "trail": 2,
+    "overlay": 1,
+    "rotation_lock": false,
+    "phases": [
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205",
+          "e0206"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0204",
+          "e0205",
+          "e0206",
+          "e0304",
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0304",
+          "e0305",
+          "e0306",
+          "e0404",
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0406",
+          "e0504",
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0504",
+          "e0505",
+          "e0604",
+          "e0605"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "u",
+        "ids": [
+          "e0403",
+          "e0404",
+          "e0503",
+          "e0504",
+          "e0603",
+          "e0604"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "u",
+        "ids": [
+          "e0402",
+          "e0403",
+          "e0502",
+          "e0503",
+          "e0602",
+          "e0603"
+        ]
+      }
+    ],
+    "soft_start": true
+  },
+  {
+    "id": "2x1 S-bend bar",
+    "pick": "X1",
+    "lattice": "square",
+    "route": [
+      "e0203",
+      "e0303",
+      "e0403",
+      "e0404",
+      "e0504",
+      "e0604"
+    ],
+    "left": 0,
+    "right": 1,
+    "trail": 1,
+    "overlay": 0,
+    "lane_frame": "in/out",
+    "rotation_lock": false,
+    "note": "Reported by the maintainer 2026-09-11: the departing row must take the next leg's side.",
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0202",
+          "e0203"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0302",
+          "e0303"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0402",
+          "e0403"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "d",
+        "ids": [
+          "e0303",
+          "e0403"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "d",
+        "ids": [
+          "e0304",
+          "e0404"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0404",
+          "e0405"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "r",
+        "ids": [
+          "e0504",
+          "e0505"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "r",
+        "ids": [
+          "e0604",
+          "e0605"
+        ]
+      }
+    ]
+  }
+]
