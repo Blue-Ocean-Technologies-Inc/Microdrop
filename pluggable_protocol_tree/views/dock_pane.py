@@ -1629,6 +1629,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 trail_overlay=trail_overlay,
                 step_duration_s=duration_s,
                 repeat_duration_s=float(getattr(row, "repeat_duration", 0.0) or 0.0),
+                **slug_shape_for_row(row),
             )
             if int(getattr(row, "route_repetitions", 1) or 1) != int(effective):
                 row.route_repetitions = int(effective)

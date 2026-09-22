@@ -28,12 +28,14 @@ from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
 from ..services import phase_math
 from ..services.phase_math import (
     duration_loop_parts,
+    effective_repetitions_for_duration,
     iter_phases,
     set_device_lattice,
     slug_shape_for_row,
 )
 
 L_ROUTE = ["e0205", "e0305", "e0405", "e0505", "e0504", "e0503"]
+RING = ["e0303", "e0403", "e0503", "e0504", "e0505", "e0405", "e0305", "e0304", "e0303"]
 
 
 @pytest.fixture
@@ -127,3 +129,19 @@ def test_the_lattice_is_module_state_set_by_the_sync_controller():
     set_device_lattice(None, None)
 
     assert phase_math._device_lattice == {"centroids": None, "neighbours": None}
+
+
+def test_effective_repetitions_count_the_wide_loop_in_laps_of_the_slug(lattice):
+    # The Route Reps knob derived from a duration: two laps of the 3x1
+    # bar (12 phases each) fit 30 s, where the trail's cycle would say 3.
+    reps = effective_repetitions_for_duration(
+        routes=[RING],
+        step_duration_s=1.0,
+        repeat_duration_s=30.0,
+        lane_left=1,
+        lane_right=1,
+        lane_frame=LEFT_RIGHT,
+        rotation_lock=False,
+    )
+
+    assert reps == 2

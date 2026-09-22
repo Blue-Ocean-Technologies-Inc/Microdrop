@@ -150,10 +150,16 @@ def effective_repetitions_for_duration(
     trail_overlay: int = 0,
     step_duration_s: float = 1.0,
     repeat_duration_s: float = 0.0,
+    lane_left: int = 0,
+    lane_right: int = 0,
+    lane_frame: str = IN_OUT,
+    rotation_lock: bool = True,
+    recentre: bool = True,
 ) -> int:
     """How many full loop cycles fit inside ``repeat_duration_s`` — the
     centralized breakdown's rep count (one rep = one cycle of the longest
-    loop route, like the device viewer's status display).
+    loop route, like the device viewer's status display), with a cycle
+    measured in phases of the slug shape the step plays.
 
     Returns 1 if no loop routes or the budget is too small for one cycle.
     """
@@ -165,6 +171,9 @@ def effective_repetitions_for_duration(
         repeat_duration=repeat_duration_s,
         trail_length=trail_length,
         trail_overlay=trail_overlay,
+        **_shape_with_lattice(
+            lane_left, lane_right, lane_frame, rotation_lock, recentre
+        ),
     )
     return total_reps
 
