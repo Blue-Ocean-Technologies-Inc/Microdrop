@@ -70,7 +70,7 @@ def test_start_publishes_ticked_entries_with_a_fresh_request_id(monkeypatch):
 
 def test_start_with_nothing_ticked_publishes_nothing(monkeypatch):
     model, _controller, sent = _wire(monkeypatch)
-    model.rows = [FluorescenceRow(filter_position=0, capture=False)]
+    model.rows = [FluorescenceRow(filter_position=1, capture=False)]
     model.start_button = True
     assert sent["capture"] == [] and model.running is False
     assert model.status == "No filter ticked"
@@ -122,7 +122,7 @@ def test_loading_a_step_does_not_push(monkeypatch):
         {
             "entries": [
                 {
-                    "filter_position": 0,
+                    "filter_position": 1,
                     "led_percent": 90,
                     "exposure_ms": 1.0,
                     "at_end": True,
@@ -139,7 +139,7 @@ def test_file_link_opens_the_rows_path(monkeypatch):
     monkeypatch.setattr(mod, "open_file", opened.append)
 
     model.result_rows = [
-        FluorescenceResultRow(filter_position=0, path="/tmp/flu/a.png", file="a.png")
+        FluorescenceResultRow(filter_position=1, path="/tmp/flu/a.png", file="a.png")
     ]
     model.result_rows[0].open_file = True
 

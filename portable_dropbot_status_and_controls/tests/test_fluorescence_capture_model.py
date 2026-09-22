@@ -77,11 +77,11 @@ def test_capture_entries_attached_mode_uses_start_or_end_ticks():
 
 def test_capture_request_wraps_entries_with_request_id_and_label():
     m = PortableDropbotFluorescenceCaptureModel()
-    m.rows = [FluorescenceRow(filter_position=0, led_percent=50, exposure_ms=50.0)]
+    m.rows = [FluorescenceRow(filter_position=1, led_percent=50, exposure_ms=50.0)]
     assert m.capture_request(request_id="r1", label="manual") == {
         "entries": [
             {
-                "filter_position": 0,
+                "filter_position": 1,
                 "led_percent": 50,
                 "exposure_ms": 50.0,
                 "focus_distance": None,
@@ -109,7 +109,7 @@ def test_attach_step_loads_cell_order_settings_and_ticks():
                     "at_end": False,
                 },
                 {
-                    "filter_position": 0,
+                    "filter_position": 1,
                     "led_percent": 20,
                     "exposure_ms": 5.0,
                     "focus_distance": None,
@@ -122,7 +122,7 @@ def test_attach_step_loads_cell_order_settings_and_ticks():
 
     assert m.attached_step_id == "step-1"
     assert m.attached_label == "Editing step step-1"
-    assert [r.filter_position for r in m.rows] == [3, 0, 1, 2, 4]
+    assert [r.filter_position for r in m.rows] == [3, 1, 2, 4, 5]
     assert (m.rows[0].led_percent, m.rows[0].exposure_ms) == (90, 12.5)
     assert m.rows[0].auto_focus is False and m.rows[0].focus_distance == 0.75
     assert m.rows[0].at_start is True and m.rows[0].at_end is False
@@ -152,7 +152,7 @@ def test_attach_step_ignores_an_entry_naming_an_invalid_filter_position():
 
 def test_attach_step_with_invalid_cell_reads_as_no_capture():
     m = PortableDropbotFluorescenceCaptureModel()
-    m.attach_step("step-1", {"entries": [{"filter_position": 0}]})  # missing fields
+    m.attach_step("step-1", {"entries": [{"filter_position": 1}]})  # missing fields
     assert m.attached_step_id == "step-1"
     assert all(not r.at_start and not r.at_end for r in m.rows)
 
@@ -197,13 +197,13 @@ def test_detach_step_restores_the_manual_snapshot():
 def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
     m = PortableDropbotFluorescenceCaptureModel()
     m.rows = [
-        FluorescenceRow(filter_position=0, at_start=True, led_percent=60),
+        FluorescenceRow(filter_position=1, at_start=True, led_percent=60),
         FluorescenceRow(filter_position=1),  # neither tick: dropped
     ]
     assert m.step_cell_value() == {
         "entries": [
             {
-                "filter_position": 0,
+                "filter_position": 1,
                 "led_percent": 60,
                 "exposure_ms": m.rows[0].exposure_ms,
                 "focus_distance": None,
@@ -229,7 +229,7 @@ def test_record_results_prepends_newest_first_and_builds_display_rows():
     m = PortableDropbotFluorescenceCaptureModel()
     m.record_results(
         [
-            FluorescenceCapturedFrame(filter_position=0, path="/tmp/flu/a.png"),
+            FluorescenceCapturedFrame(filter_position=1, path="/tmp/flu/a.png"),
             FluorescenceCapturedFrame(filter_position=2, path="/tmp/flu/b.png"),
         ]
     )
@@ -244,5 +244,5 @@ def test_record_results_prepends_newest_first_and_builds_display_rows():
         "/tmp/flu/a.png",
     ]
     assert [r.file for r in m.result_rows] == ["c.png", "b.png", "a.png"]
-    assert [r.filter_position for r in m.result_rows] == [4, 2, 0]
+    assert [r.filter_position for r in m.result_rows] == [4, 2, 1]
     assert m.result_rows[0].path == "/tmp/flu/c.png"

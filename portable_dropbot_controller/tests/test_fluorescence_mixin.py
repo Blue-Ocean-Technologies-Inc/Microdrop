@@ -204,7 +204,7 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     _run(
         h,
         _request(
-            [_entry(2, led=40, exposure=50.0), _entry(0, led=100, focus=0.3)],
+            [_entry(2, led=40, exposure=50.0), _entry(1, led=100, focus=0.3)],
             request_id="r1",
         ),
     )
@@ -214,10 +214,10 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
         f"led {led_raw(40)}",
         "camera 50.0 None",
         "frame flu_manual_f2",
-        "filter 0",
+        "filter 1",
         f"led {FLUORESCENCE_LED_RAW_MAX}",
         "camera 50.0 0.3",
-        "frame flu_manual_f0",
+        "frame flu_manual_f1",
         "light restored",
         "camera None None",
     ]
@@ -227,19 +227,19 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     assert done["directory"] == str(tmp_path / "captures")
     assert [
         f["path"].rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for f in done["frames"]
-    ] == ["flu_manual_f2.png", "flu_manual_f0.png"]
-    assert [f["filter_position"] for f in done["frames"]] == [2, 0]
+    ] == ["flu_manual_f2.png", "flu_manual_f1.png"]
+    assert [f["filter_position"] for f in done["frames"]] == [2, 1]
     stages = [(p["filter_position"], p["stage"]) for p in rig["progress"]]
     assert stages == [
         (2, "filter"),
         (2, "led"),
         (2, "camera"),
         (2, "frame"),
-        (0, "filter"),
-        (0, "led"),
-        (0, "camera"),
-        (0, "frame"),
-        (0, "teardown"),
+        (1, "filter"),
+        (1, "led"),
+        (1, "camera"),
+        (1, "frame"),
+        (1, "teardown"),
     ]
     assert {p["request_id"] for p in rig["progress"]} == {"r1"}
     assert h._fluorescence_capturing is False

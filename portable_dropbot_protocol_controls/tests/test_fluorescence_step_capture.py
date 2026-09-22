@@ -23,7 +23,7 @@ from portable_dropbot_protocol_controls.fluorescence_step_capture import (
 )
 
 ENTRY_START = {
-    "filter_position": 0,
+    "filter_position": 1,
     "led_percent": 50,
     "exposure_ms": 50.0,
     "focus_distance": None,
@@ -31,7 +31,7 @@ ENTRY_START = {
     "at_end": False,
 }
 ENTRY_END = {
-    "filter_position": 1,
+    "filter_position": 2,
     "led_percent": 60,
     "exposure_ms": 40.0,
     "focus_distance": 0.5,
@@ -39,7 +39,7 @@ ENTRY_END = {
     "at_end": True,
 }
 ENTRY_BOTH = {
-    "filter_position": 2,
+    "filter_position": 3,
     "led_percent": 70,
     "exposure_ms": 30.0,
     "focus_distance": None,
@@ -47,7 +47,7 @@ ENTRY_BOTH = {
     "at_end": True,
 }
 ENTRY_NEITHER = {
-    "filter_position": 3,
+    "filter_position": 4,
     "led_percent": 10,
     "exposure_ms": 20.0,
     "focus_distance": None,
@@ -66,7 +66,7 @@ def test_parse_step_capture_none_and_empty_dict_are_no_capture():
 def test_parse_step_capture_round_trips_a_valid_cell():
     step = parse_step_capture(STEP_VALUE)
 
-    assert [e.filter_position for e in step.entries] == [0, 1, 2]
+    assert [e.filter_position for e in step.entries] == [1, 2, 3]
     assert step.entries[1].focus_distance == 0.5
 
 
@@ -80,7 +80,7 @@ def test_parse_step_capture_invalid_cell_logs_and_reads_as_none(caplog):
 def test_normalize_step_capture_drops_entries_with_neither_tick():
     normalized = normalize_step_capture({"entries": [ENTRY_START, ENTRY_NEITHER]})
 
-    assert [e["filter_position"] for e in normalized["entries"]] == [0]
+    assert [e["filter_position"] for e in normalized["entries"]] == [1]
 
 
 def test_normalize_step_capture_all_unticked_collapses_to_none():
@@ -93,14 +93,14 @@ def test_normalize_step_capture_none_stays_none():
 
 def test_normalize_step_capture_preserves_order():
     normalized = normalize_step_capture(STEP_VALUE)
-    assert [e["filter_position"] for e in normalized["entries"]] == [0, 1, 2]
+    assert [e["filter_position"] for e in normalized["entries"]] == [1, 2, 3]
 
 
 def test_entries_for_phase_filters_by_tick():
     step = parse_step_capture(STEP_VALUE)
 
-    assert [e.filter_position for e in entries_for_phase(step, PHASE_START)] == [0, 2]
-    assert [e.filter_position for e in entries_for_phase(step, PHASE_END)] == [1, 2]
+    assert [e.filter_position for e in entries_for_phase(step, PHASE_START)] == [1, 3]
+    assert [e.filter_position for e in entries_for_phase(step, PHASE_END)] == [2, 3]
 
 
 def test_entries_for_phase_unknown_phase_raises():

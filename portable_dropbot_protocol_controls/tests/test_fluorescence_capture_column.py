@@ -42,7 +42,7 @@ MODULE = (
 )
 
 ENTRY_START = {
-    "filter_position": 0,
+    "filter_position": 1,
     "led_percent": 50,
     "exposure_ms": 50.0,
     "focus_distance": None,
@@ -50,7 +50,7 @@ ENTRY_START = {
     "at_end": False,
 }
 ENTRY_END = {
-    "filter_position": 1,
+    "filter_position": 2,
     "led_percent": 60,
     "exposure_ms": 40.0,
     "focus_distance": 0.5,
@@ -58,7 +58,7 @@ ENTRY_END = {
     "at_end": True,
 }
 ENTRY_BOTH = {
-    "filter_position": 2,
+    "filter_position": 3,
     "led_percent": 70,
     "exposure_ms": 30.0,
     "focus_distance": None,
@@ -66,7 +66,7 @@ ENTRY_BOTH = {
     "at_end": True,
 }
 ENTRY_NEITHER = {
-    "filter_position": 3,
+    "filter_position": 4,
     "led_percent": 10,
     "exposure_ms": 20.0,
     "focus_distance": None,
@@ -100,7 +100,7 @@ def test_set_value_drops_unticked_entries():
     row = _row()
     model.set_value(row, {"entries": [ENTRY_START, ENTRY_NEITHER]})
     stored = getattr(row, FLUORESCENCE_CAPTURE_COLUMN_ID)
-    assert [e["filter_position"] for e in stored["entries"]] == [0]
+    assert [e["filter_position"] for e in stored["entries"]] == [1]
 
 
 def test_set_value_all_entries_unticked_collapses_to_none():
@@ -170,7 +170,7 @@ def test_pre_step_publishes_only_start_ticked_entries():
         handler.on_pre_step(row, ctx)
 
     payload = publisher.publish.call_args[0][0]
-    assert [e["filter_position"] for e in payload["entries"]] == [0, 2]
+    assert [e["filter_position"] for e in payload["entries"]] == [1, 3]
 
 
 def test_post_step_publishes_only_end_ticked_entries():
@@ -183,7 +183,7 @@ def test_post_step_publishes_only_end_ticked_entries():
         handler.on_post_step(row, ctx)
 
     payload = publisher.publish.call_args[0][0]
-    assert [e["filter_position"] for e in payload["entries"]] == [1, 2]
+    assert [e["filter_position"] for e in payload["entries"]] == [2, 3]
 
 
 def test_no_capture_cell_is_a_noop():
@@ -239,7 +239,7 @@ def test_request_payload_includes_request_id_label_and_directory():
     assert payload["label"] == "step1.2-start"
     assert payload["directory"] == ""
     assert payload["entries"][0] == {
-        "filter_position": 0,
+        "filter_position": 1,
         "led_percent": 50,
         "exposure_ms": 50.0,
         "focus_distance": None,
@@ -391,8 +391,8 @@ def test_done_contributes_the_captures_folder(_report_publisher):
             "directory": "/exp/captures",
             "frames": [
                 {
-                    "filter_position": 0,
-                    "path": "/exp/captures/flu_step1.2-start_f0_x.png",
+                    "filter_position": 1,
+                    "path": "/exp/captures/flu_step1.2-start_f1_x.png",
                 }
             ],
         }

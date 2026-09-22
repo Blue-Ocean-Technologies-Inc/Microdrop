@@ -101,7 +101,7 @@ def test_led_raw_scales_and_clamps():
 
 def test_frame_description_tags_label_and_position():
     assert frame_description("step1.2-end", 3) == "flu_step1.2-end_f3"
-    assert frame_description("manual", 0) == "flu_manual_f0"
+    assert frame_description("manual", 1) == "flu_manual_f1"
     assert frame_description("", 2) == "flu_manual_f2"
 
 

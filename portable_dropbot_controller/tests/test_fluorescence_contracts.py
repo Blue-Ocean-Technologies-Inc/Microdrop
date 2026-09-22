@@ -114,7 +114,7 @@ def test_entry_accepts_every_filter_position(position):
     "overrides",
     [
         {"filter_position": -1},
-        {"filter_position": 5},
+        {"filter_position": 6},
         {"led_percent": -1},
         {"led_percent": 101},
         {"exposure_ms": 0.05},

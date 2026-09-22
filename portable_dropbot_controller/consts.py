@@ -197,8 +197,9 @@ MOTOR_PARAM_FIELDS = (
     ("acc_rst", "i"),
 )
 
-#: Fluorescence filter wheel positions the hardware knows.
-FILTER_POSITIONS = (0, 1, 2, 3, 4)
+#: Fluorescence filter wheel positions the hardware knows — 1-based; the
+#: firmware faults on position 0.
+FILTER_POSITIONS = (1, 2, 3, 4, 5)
 
 #: Fluorescence capture (#695), per filter position: LED level in % of
 #: FLUORESCENCE_LED_RAW_MAX and camera exposure. The exposure bound is the
