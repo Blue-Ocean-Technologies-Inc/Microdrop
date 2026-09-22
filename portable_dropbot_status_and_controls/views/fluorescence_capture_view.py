@@ -10,9 +10,10 @@
 
 """Fluorescence Capture pane view, built from the capture-pane layout shared
 with the PMT pane (see capture_pane_view.py): the filter table (Filter,
-ticks, LED %, then the exposure slider), the run controls, the collapsible
-Manual controls (wheel and camera exposure applied live, a one-frame grab,
-the camera's readback), and the saved frames paged per capture run.
+ticks, LED %, Auto exposure, then the exposure slider), the run controls,
+the collapsible Manual controls (wheel and camera exposure applied live, a
+one-frame grab, the camera's readback), and the saved frames paged per
+capture run.
 Business logic lives in the model; this module is instantiable standalone
 against just the model:
 
@@ -53,6 +54,7 @@ from .capture_pane_view import (
     number_column,
     results_group,
     slider_column,
+    tick_column,
 )
 
 
@@ -63,6 +65,7 @@ def _filter_column():
 def _setting_columns():
     return [
         number_column("led_percent", "LED %"),
+        tick_column("auto_exposure", "Auto exposure"),
         slider_column(
             "exposure_ms",
             "Exposure (ms)",

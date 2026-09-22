@@ -209,8 +209,10 @@ FLUORESCENCE_LED_PERCENT_BOUNDS = (0, 100)
 FLUORESCENCE_EXPOSURE_MS_BOUNDS = (0.1, 10_000.0)
 FLUORESCENCE_DEFAULT_LED_PERCENT = 50
 FLUORESCENCE_DEFAULT_EXPOSURE_MS = 50.0
-#: Settle after the LED and a new exposure, before the frame grab.
+#: Settle after the LED and a new exposure, before the frame grab — longer
+#: under auto exposure, which must converge on the new filter's light.
 FLUORESCENCE_SETTLE_S = 0.5
+FLUORESCENCE_AUTO_EXPOSURE_SETTLE_S = 2.0
 #: How long the routine waits on the frontend for the camera's controls
 #: readback, and for the saved frame.
 FLUORESCENCE_CAMERA_CONTROLS_TIMEOUT_S = 5.0
@@ -591,7 +593,8 @@ class FluorescenceCaptureEntry(BaseModel):
     led_percent: int = Field(
         ge=FLUORESCENCE_LED_PERCENT_BOUNDS[0], le=FLUORESCENCE_LED_PERCENT_BOUNDS[1]
     )
-    exposure_ms: float = Field(
+    #: None = the camera's auto exposure.
+    exposure_ms: float | None = Field(
         ge=FLUORESCENCE_EXPOSURE_MS_BOUNDS[0], le=FLUORESCENCE_EXPOSURE_MS_BOUNDS[1]
     )
     #: QCamera's 0.0 (near) to 1.0 (far) scale, so the contract stays

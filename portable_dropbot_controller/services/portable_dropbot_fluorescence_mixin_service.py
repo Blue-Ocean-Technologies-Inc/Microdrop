@@ -53,6 +53,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
+    FLUORESCENCE_AUTO_EXPOSURE_SETTLE_S,
     FLUORESCENCE_CAMERA_CONTROLS_TIMEOUT_S,
     FLUORESCENCE_FRAME_TIMEOUT_S,
     FLUORESCENCE_SETTLE_S,
@@ -378,7 +379,13 @@ class FluorescenceCaptureMixinService(HasTraits):
             )
 
         # The LED and the new exposure settle before the grab.
-        if abort.wait(FLUORESCENCE_SETTLE_S):
+        settle_s = (
+            FLUORESCENCE_AUTO_EXPOSURE_SETTLE_S
+            if entry.exposure_ms is None
+            else FLUORESCENCE_SETTLE_S
+        )
+
+        if abort.wait(settle_s):
             raise _CaptureAborted()
 
         self._enter_fluorescence_stage(abort, progress, "frame")

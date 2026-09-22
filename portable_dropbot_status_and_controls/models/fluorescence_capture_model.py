@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 """Qt-free state for the Fluorescence Capture pane: one row per filter-wheel
-position (Capture tick, LED %, exposure) on the shared
+position (Capture tick, LED %, auto exposure, exposure) on the shared
 capture-pane state (see capture_pane_model.py), keyed by filter_position —
 plus the Manual controls: the wheel and camera exposure set directly
 (applied live; the LED is the status pane's Light control) and a single
@@ -53,6 +53,11 @@ from ..consts import (
 )
 from .capture_pane_model import CapturePaneModel, CaptureRow
 
+#: request_ids of the Manual controls' camera requests: a plain exposure
+#: change, and leaving auto exposure at the exposure auto chose.
+MANUAL_CAMERA_REQUEST_ID = "manual"
+MANUAL_HOLD_EXPOSURE_REQUEST_ID = "manual-hold-exposure"
+
 
 class FluorescenceRow(CaptureRow):
     """One filter-wheel position as a table row."""
@@ -73,12 +78,14 @@ class FluorescenceRow(CaptureRow):
         desc="Camera exposure for this filter position, milliseconds",
         setting=True,
     )
+    #: True = the camera's auto exposure; exposure_ms is then unused.
+    auto_exposure = Bool(False, desc="Camera auto exposure", setting=True)
 
     def capture_entry(self):
         return {
             "filter_position": self.filter_position,
             "led_percent": int(self.led_percent),
-            "exposure_ms": float(self.exposure_ms),
+            "exposure_ms": None if self.auto_exposure else float(self.exposure_ms),
             # The camera (the Pi's DH Camera) has no software focus control;
             # None leaves it on its own focus.
             "focus_distance": None,
@@ -86,7 +93,10 @@ class FluorescenceRow(CaptureRow):
 
     def load_step_entry(self, entry):
         self.led_percent = entry.led_percent
-        self.exposure_ms = entry.exposure_ms
+        self.auto_exposure = entry.exposure_ms is None
+
+        if entry.exposure_ms is not None:
+            self.exposure_ms = entry.exposure_ms
 
 
 class FluorescenceResultRow(HasTraits):
@@ -139,14 +149,22 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     def _get_manual_exposure_max(self):
         return self.EXPOSURE_RANGES[self.exposure_range]
 
-    def manual_camera_request(self, request_id=""):
+    def manual_camera_request(self, hold_auto_exposure=False):
         """The manual exposure as a CameraControlsRequest payload; None
-        means auto, and focus always stays the camera's own."""
+        means auto, and focus always stays the camera's own.
+        `hold_auto_exposure` leaves auto at the exposure auto last chose."""
+        request_id = (
+            MANUAL_HOLD_EXPOSURE_REQUEST_ID
+            if hold_auto_exposure
+            else MANUAL_CAMERA_REQUEST_ID
+        )
+
         return {
             "request_id": request_id,
             "exposure_ms": (
                 None if self.manual_auto_exposure else float(self.manual_exposure_ms)
             ),
+            "hold_auto_exposure": hold_auto_exposure,
             "focus_distance": None,
         }
 
@@ -158,10 +176,42 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
             return
 
         exposure = (
-            "auto" if applied.exposure_ms is None else f"{applied.exposure_ms:.1f} ms"
+            "" if applied.exposure_ms is None else f"{applied.exposure_ms:.1f} ms"
         )
 
-        self.camera_readback = f"exposure {exposure}"
+        if applied.exposure_auto:
+            exposure = f"auto ({exposure})" if exposure else "auto"
+
+        self.camera_readback = f"exposure {exposure or 'unknown'}"
+
+        # Leaving auto: the slider takes the exposure auto had chosen, so the
+        # operator sees it and carries on from there.
+        if (
+            applied.request_id == MANUAL_HOLD_EXPOSURE_REQUEST_ID
+            and applied.exposure_ms is not None
+        ):
+            low, high = FLUORESCENCE_EXPOSURE_MS_BOUNDS
+            exposure_ms = min(max(applied.exposure_ms, low), high)
+
+            self.widen_exposure_range_to(exposure_ms)
+            self.manual_exposure_ms = exposure_ms
+
+    def widen_exposure_range_to(self, exposure_ms):
+        """Switch to the narrowest exposure range reaching `exposure_ms`, if
+        the current one stops short of it (the slider pins at its end
+        otherwise)."""
+        if exposure_ms <= self.EXPOSURE_RANGES[self.exposure_range]:
+            return
+
+        self.exposure_range = min(
+            (
+                label
+                for label, top in self.EXPOSURE_RANGES.items()
+                if top >= exposure_ms
+            ),
+            key=self.EXPOSURE_RANGES.get,
+            default=max(self.EXPOSURE_RANGES, key=self.EXPOSURE_RANGES.get),
+        )
 
     def add_manual_frame(self, path):
         """Add a manual frame grab as its own results run."""

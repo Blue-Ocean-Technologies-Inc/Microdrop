@@ -62,11 +62,19 @@ class FluorescenceCaptureController(CapturePaneController):
             topic=SET_FILTER, message=str(self.model.manual_filter_position)
         )
 
-    @observe("model:manual_auto_exposure, model:manual_exposure_ms")
-    def _set_camera_controls(self, event):
+    @observe("model:manual_auto_exposure")
+    def _toggle_auto_exposure(self, event):
+        # Turning auto off holds the exposure auto chose rather than jumping
+        # to the slider; the readback then moves the slider there.
         camera_controls_publisher.publish(
-            self.model.manual_camera_request(request_id="manual")
+            self.model.manual_camera_request(hold_auto_exposure=not event.new)
         )
+
+    @observe("model:manual_exposure_ms")
+    def _set_manual_exposure(self, event):
+        # The slider is inactive under auto.
+        if not self.model.manual_auto_exposure:
+            camera_controls_publisher.publish(self.model.manual_camera_request())
 
     @observe("model:manual_capture_button")
     def _capture_manual_frame(self, event):
