@@ -9,8 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """PortableDropbotProtocolControlsPlugin — contributes the portable
-instrument's built-in peripherals (magnet, heater) to the pluggable
-protocol tree as compound columns.
+instrument's built-in peripherals (magnet, heater, PMT) to the pluggable
+protocol tree as protocol columns.
 
 The classic rig keeps these in separate plugin repos because they are
 separate boards; the portable has them all behind one backend, so the
@@ -21,15 +21,17 @@ handlers stay in portable_dropbot_controller.
 
 # Enthought library imports.
 from envisage.api import Plugin
-from traits.api import Instance, List
+from traits.api import Either, List
 
 # Microdrop package imports.
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
+from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 
 # Local imports.
 from .consts import PKG, PKG_name
 from .protocol_columns.magnet_column import make_magnet_column
+from .protocol_columns.pmt_capture_column import make_pmt_capture_column
 from .protocol_columns.temperature_column import make_temperature_column
 
 # Logger import.
@@ -42,9 +44,18 @@ class PortableDropbotProtocolControlsPlugin(Plugin):
     id = PKG + ".plugin"
     name = f"{PKG_name} Plugin"
 
+    #: ICompoundColumn is parallel to (not a subtype of) IColumn — magnet
+    #: and temperature are compounds, PMT capture a plain Column — so the
+    #: trait mirrors the extension point's own Either typing
+    #: (pluggable_protocol_tree/plugin.py).
     contributed_protocol_columns = List(
-        Instance(ICompoundColumn), contributes_to=PROTOCOL_COLUMNS
+        Either(IColumn, ICompoundColumn),
+        contributes_to=PROTOCOL_COLUMNS,
     )
 
     def _contributed_protocol_columns_default(self):
-        return [make_magnet_column(), make_temperature_column()]
+        return [
+            make_magnet_column(),
+            make_temperature_column(),
+            make_pmt_capture_column(),
+        ]

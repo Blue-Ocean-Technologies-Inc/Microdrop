@@ -13,8 +13,7 @@
 Zone types are tracked by id (id == name unless that collides, then a
 generated id); regions store their member electrode ids as the source of
 truth, and the drawn outline is *computed* as the union boundary of the
-member electrodes' polygons. See docs/superpowers/specs/
-2026-08-26-electrode-zones-design.md.
+member electrodes' polygons.
 """
 
 # Standard library imports.

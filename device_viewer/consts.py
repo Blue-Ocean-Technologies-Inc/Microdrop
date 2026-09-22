@@ -331,6 +331,27 @@ ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX, ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX = 1, 30
 ALIGNMENT_DEVICE_RENDER_WIDTH_PX = 1400
 
 # ---------------------------------------------------------------------------
+# Edit Connections dialog
+# ---------------------------------------------------------------------------
+#: Line colors are '#rrggbb' hex strings; widths and radii are in VIEW
+#: pixels (cosmetic pens, zoom-aware hit tests), so the editor handles
+#: the same at any zoom. The centroid dots reuse the alignment snap
+#: marker color and alpha.
+CONNECTIONS_EDITOR_LINE_COLOR_HEX = "#ffffff"
+CONNECTIONS_EDITOR_SELECTED_LINE_COLOR_HEX = "#ff6400"
+CONNECTIONS_EDITOR_PENDING_LINE_COLOR_HEX = "#ffa000"
+CONNECTIONS_EDITOR_LINE_WIDTH_PX = 2
+CONNECTIONS_EDITOR_SELECTED_LINE_WIDTH_PX = 4
+CONNECTIONS_EDITOR_CENTROID_SIZE_PX = 10
+
+#: A press within the grab radius of a centroid starts a line (anything
+#: farther pans); the dragged end snaps onto a centroid within the snap
+#: radius; a click within the pick tolerance of a line selects it.
+CONNECTIONS_EDITOR_GRAB_RADIUS_PX = 12
+CONNECTIONS_EDITOR_SNAP_RADIUS_PX = 30
+CONNECTIONS_EDITOR_PICK_TOLERANCE_PX = 6
+
+# ---------------------------------------------------------------------------
 # Resources & UI text
 # ---------------------------------------------------------------------------
 # main view device layout

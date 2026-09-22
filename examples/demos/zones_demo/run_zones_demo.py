@@ -30,9 +30,8 @@ radio:
 Right-click a region for its context menu: Edit region, Change type, Delete
 region. Undo/redo cover every zone mutation.
 
-The feature has been ported into device_viewer (see
-docs/superpowers/specs/2026-08-26-electrode-zones-design.md); this demo
-remains the standalone interaction reference.
+The feature has been ported into device_viewer; this demo remains the
+standalone interaction reference.
 """
 
 # Standard library imports.

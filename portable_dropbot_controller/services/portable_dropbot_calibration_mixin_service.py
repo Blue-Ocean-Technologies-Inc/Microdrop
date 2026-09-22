@@ -11,19 +11,29 @@
 """Capacitance-calibration requests: the vendor's hardware-validated
 ML calibration macro plus the ML-path/gain/cal-caps provisioning
 around it, driven from the calibration pane."""
+
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
-from logger.logger_service import get_logger
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from ..consts import (
-    CAL_CAPS_CHOICES, CAL_FREQUENCY, CAL_VOLTAGE, CALIBRATION_UPDATED,
+    CAL_CAPS_CHOICES,
+    CAL_FREQUENCY,
+    CAL_VOLTAGE,
+    CALIBRATION_UPDATED,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -34,8 +44,7 @@ class PortableDropbotCalibrationMixinService(HasTraits):
     name = Str("Portable Dropbot Calibration Mixin")
 
     def _publish_calibration(self, **payload):
-        publish_message(topic=CALIBRATION_UPDATED,
-                        message=json.dumps(payload))
+        publish_message(topic=CALIBRATION_UPDATED, message=json.dumps(payload))
 
     def on_run_cap_calibration_request(self, message):
         """The validated multi-slope calibration macro, verbatim from
@@ -46,12 +55,13 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         the pogos always come back down; each step's outcome streams
         to the pane."""
         if self.proxy is None:
-            logger.warning("Portable Dropbot not connected: ignoring "
-                           "capacitance calibration request.")
+            logger.warning(
+                "Portable Dropbot not connected: ignoring "
+                "capacitance calibration request."
+            )
             return
-        logger.info("Portable Dropbot ML capacitance calibration macro "
-                    "started")
-        uart = self.proxy.uart
+        logger.info("Portable Dropbot ML capacitance calibration macro started")
+        uart, sig = self.proxy.uart, self.proxy.sig
 
         def clear_electrodes():
             return uart.setElectrodeStates([False] * uart.board_channels)
@@ -59,14 +69,14 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         steps = (
             ("clear electrodes", clear_electrodes),
             ("release pogos", lambda: uart.setPogo(0)),
-            (f"set {CAL_VOLTAGE} V / {CAL_FREQUENCY} Hz",
-             lambda: self.proxy.set_actuation(CAL_VOLTAGE,
-                                              CAL_FREQUENCY)),
-            ("enable HV (bypass)", lambda: uart.hv_enable(1, 1)),
+            (
+                f"set {CAL_VOLTAGE} V / {CAL_FREQUENCY} Hz",
+                lambda: self.proxy.set_actuation(CAL_VOLTAGE, CAL_FREQUENCY),
+            ),
+            ("enable HV (bypass)", lambda: sig.hv_enable(1, 1)),
             ("re-clear electrodes", clear_electrodes),
-            ("multi-slope calibration",
-             lambda: uart.cap_calibrate_ml(0)),
-            ("disable HV", lambda: uart.hv_enable(0, 0)),
+            ("multi-slope calibration", lambda: sig.cap_calibrate_ml(0)),
+            ("disable HV", lambda: sig.hv_enable(0, 0)),
             ("restore V/F", lambda: (self._apply_actuation(), True)[1]),
             ("press pogos", lambda: uart.setPogo(1)),
         )
@@ -76,33 +86,35 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         all_ok = True
         with self._proxy_lock:
             for stage, call in steps:
-                ok, result = self._proxy_call(f"calibration: {stage}",
-                                              call)
+                ok, result = self._proxy_call(f"calibration: {stage}", call)
                 ok = ok and result is not None and result is not False
                 all_ok = all_ok and ok
                 self._publish_calibration(stage=stage, ok=ok)
-                logger.info(f"Calibration step {stage!r}: "
-                            f"{'ok' if ok else 'FAILED'}")
+                logger.info(f"Calibration step {stage!r}: {'ok' if ok else 'FAILED'}")
         self._publish_calibration(stage="done", ok=all_ok)
-        logger.info(f"Portable Dropbot ML capacitance calibration macro "
-                    f"--> {'ok' if all_ok else 'FAILED'}")
+        logger.info(
+            f"Portable Dropbot ML capacitance calibration macro "
+            f"--> {'ok' if all_ok else 'FAILED'}"
+        )
 
     def on_set_ml_realtime_request(self, message):
         on = str(message) == "True"
         ok, mode = self._proxy_call(
-            "ML realtime path",
-            lambda: self.proxy.uart.cap_ml_realtime(1 if on else 0))
+            "ML realtime path", lambda: self.proxy.sig.cap_ml_realtime(1 if on else 0)
+        )
         if ok and mode is not None:
-            self._publish_calibration(ml_realtime=mode == 1)
-        logger.info(f"Portable Dropbot ML realtime path --> {on}: "
-                    f"{'ok' if ok and mode is not None else 'FAILED'}")
+            self._publish_calibration(ml_realtime=mode.current == 1)
+        logger.info(
+            f"Portable Dropbot ML realtime path --> {on}: "
+            f"{'ok' if ok and mode is not None else 'FAILED'}"
+        )
 
     def on_read_electrode_gain_request(self, message):
         ok, gain = self._proxy_call(
-            "read electrode gain",
-            lambda: self.proxy.uart.cap_elec_gain(0))
+            "read electrode gain", lambda: self.proxy.sig.cap_elec_gain(0)
+        )
         if ok and gain is not None:
-            self._publish_calibration(electrode_gain=int(gain))
+            self._publish_calibration(electrode_gain=int(gain.current))
         else:
             logger.warning("Portable Dropbot electrode gain read FAILED")
 
@@ -110,18 +122,20 @@ class PortableDropbotCalibrationMixinService(HasTraits):
         permille = int(float(str(message)))
         ok, gain = self._proxy_call(
             f"set electrode gain {permille}",
-            lambda: self.proxy.uart.cap_elec_gain(permille))
+            lambda: self.proxy.sig.cap_elec_gain(permille),
+        )
         if ok and gain is not None:
-            self._publish_calibration(electrode_gain=int(gain))
-        logger.info(f"Portable Dropbot electrode gain --> {permille} "
-                    f"permille: "
-                    f"{'ok' if ok and gain is not None else 'FAILED'}")
+            self._publish_calibration(electrode_gain=int(gain.current))
+        logger.info(
+            f"Portable Dropbot electrode gain --> {permille} "
+            f"permille: "
+            f"{'ok' if ok and gain is not None else 'FAILED'}"
+        )
 
     def on_read_cal_caps_request(self, message):
-        ok, n = self._proxy_call("read cal caps",
-                                 lambda: self.proxy.uart.cal_caps_get())
+        ok, n = self._proxy_call("read cal caps", lambda: self.proxy.sig.cal_caps_get())
         if ok and n is not None:
-            self._publish_calibration(cal_caps=int(n))
+            self._publish_calibration(cal_caps=int(n.cal_caps))
         else:
             logger.warning("Portable Dropbot cal-caps read FAILED")
 
@@ -131,9 +145,11 @@ class PortableDropbotCalibrationMixinService(HasTraits):
             logger.warning(f"Invalid cal-caps count: {n}")
             return
         ok, echoed = self._proxy_call(
-            f"set cal caps {n}",
-            lambda: self.proxy.uart.cal_caps_set(n))
+            f"set cal caps {n}", lambda: self.proxy.sig.cal_caps_set(n)
+        )
         if ok and echoed is not None:
-            self._publish_calibration(cal_caps=int(echoed))
-        logger.info(f"Portable Dropbot cal caps --> {n}: "
-                    f"{'ok' if ok and echoed is not None else 'FAILED'}")
+            self._publish_calibration(cal_caps=int(echoed.cal_caps))
+        logger.info(
+            f"Portable Dropbot cal caps --> {n}: "
+            f"{'ok' if ok and echoed is not None else 'FAILED'}"
+        )

@@ -141,7 +141,12 @@ class ElectrodeLayer:
                 8,
             )
 
-        # Create the connections between the electrodes
+        self._build_connection_items()
+
+    def _build_connection_items(self):
+        """Create the connections between the electrodes."""
+        modifier = self.path_scale
+
         connections = {
             key: (
                 QPointF(coord1[0] * modifier, coord1[1] * modifier),
@@ -153,8 +158,22 @@ class ElectrodeLayer:
             # dict, then (id2, id1) wont, and viice versa
         }
 
-        for key, (src, dst) in connections.items():
-            self.connection_items[key] = ElectrodeConnectionItem(key, src, dst)
+        self.connection_items = {
+            key: ElectrodeConnectionItem(key, src, dst)
+            for key, (src, dst) in connections.items()
+        }
+
+    def rebuild_connection_items(self, parent_scene: "QGraphicsScene"):
+        """Swap the connection items for the SVG model's current
+        connections. The endpoints are re-added too, so they keep
+        stacking above the connections at equal z."""
+        self.remove_connections_to_scene(parent_scene)
+        self.remove_endpoints_to_scene(parent_scene)
+
+        self._build_connection_items()
+
+        self.add_connections_to_scene(parent_scene)
+        self.add_endpoints_to_scene(parent_scene)
 
     ################# add electrodes/connections from scene #################
     def add_electrodes_to_scene(self, parent_scene: "QGraphicsScene"):

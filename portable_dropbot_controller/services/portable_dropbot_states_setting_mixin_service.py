@@ -8,10 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from ..consts import (
     FLUORESCENCE_LED_RAW_MAX,
     LIGHT_INTENSITY_RAW_MAX,
@@ -20,6 +20,9 @@ from ..consts import (
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,14 +42,14 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         # pads), and leaving realtime kills it.
         if self.realtime_mode:
             ok, status = self._proxy_call(
-                "HV enable", lambda: self.proxy.uart.hv_enable(1, 0)
+                "HV enable", lambda: self.proxy.sig.hv_enable(1, 0)
             )
         else:
             # Leaving realtime mode releases every electrode, exactly
             # as the other backends do — then de-energizes HV.
             self._proxy_call("clear channels", lambda: self.proxy.clear_channels())
             ok, status = self._proxy_call(
-                "HV disable", lambda: self.proxy.uart.hv_enable(0, 0)
+                "HV disable", lambda: self.proxy.sig.hv_enable(0, 0)
             )
 
         logger.info(
@@ -99,9 +102,12 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         """Vendor-style raw illumination brightness, 0-255 straight
         to the firmware — no % scaling."""
         raw = min(max(0, int(float(str(message)))), LIGHT_INTENSITY_RAW_MAX)
+        # The generated proxy packs the firmware's own width (1 byte here,
+        # 2 bytes for the fluorescence LED); the uart facade's
+        # setLEDIntensity clamps to 0-100 and halves whatever it is given.
         ok, result = self._proxy_call(
             f"illumination raw {raw}",
-            lambda: self.proxy.uart.setLEDIntensity(raw, fluorescence=False),
+            lambda: self.proxy.sig.illumination_ctrl(raw),
         )
         logger.info(
             f"Portable Dropbot illumination raw --> {raw}: "
@@ -114,7 +120,7 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         raw = min(max(0, int(float(str(message)))), FLUORESCENCE_LED_RAW_MAX)
         ok, result = self._proxy_call(
             f"fluorescence LED raw {raw}",
-            lambda: self.proxy.uart.setLEDIntensity(raw, fluorescence=True),
+            lambda: self.proxy.sig.fluorescence_ctrl(raw),
         )
         logger.info(
             f"Portable Dropbot fluorescence LED raw --> {raw}: "

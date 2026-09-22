@@ -21,7 +21,7 @@ demo*.dot
 **/dist
 **/build
 
-# Agent working plans stay local — only the curated docs/superpowers/specs/
-# design documents are committed
-docs/superpowers/plans/
+# Agent (superpowers) specs, plans, and SDD state stay local
+docs/superpowers/
+.superpowers/
 docs/plans/

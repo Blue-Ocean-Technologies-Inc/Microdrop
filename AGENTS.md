@@ -6,9 +6,27 @@ Suite — Envisage plugins, Traits/TraitsUI models, Pyface — with PySide6/Qt
 widgets and a Dramatiq + Redis pub/sub message layer between frontend and
 hardware backends.
 
-Architecture, message topics, and plugin patterns are documented in
-`docs/CLAUDE.md`, `MESSAGES.md`, and `DRAMATIQ_DOCS.md`. This file covers
-the working environment and the code style.
+This is the single project-instructions file. `docs/CLAUDE.md` and the
+launcher repo's `CLAUDE.md` only import it. Message topics are in
+`MESSAGES.md`, Dramatiq notes in `DRAMATIQ_DOCS.md`.
+
+## What is MicroDrop?
+
+MicroDrop is an open-source digital microfluidics (DMF) control system built
+by [Sci-Bots](https://sci-bots.com/). DMF uses electric fields to manipulate
+tiny droplets on a chip — lab-on-a-chip for biology, chemistry, and
+diagnostics.
+
+Supported hardware:
+
+- **[DropBot](https://sci-bots.com/products/dropbot)** — Sci-Bots' DMF
+  platform. Teensy 3.x-based, USB serial RPC. Full capacitance sensing,
+  short detection, multi-channel actuation.
+- **[OpenDrop](https://www.gaudi.ch/OpenDrop/)** — open-source DMF platform
+  by GaudiLabs. Simpler hardware, community-driven.
+
+Key repos: [MicroDrop](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop)
+(issues at `/issues/`), [dropbot.py](https://github.com/Blue-Ocean-Technologies-Inc/dropbot.py).
 
 ## Repository Layout
 
@@ -19,36 +37,167 @@ Plugin packages live at the repo root, one directory per Envisage plugin
 cross-plugin tests are in `examples/`; docs and design specs in `docs/`.
 
 This repo is normally checked out as the `microdrop-py/src` submodule of
-the `pixi-microdrop` launcher repo, which owns the environment. The heater,
-magnet, and fluorescence plugins for the classic DropBot rig live in their
-own repos and are deliberately not part of this tree.
+the `pixi-microdrop` launcher repo, which owns the environment. The
+submodule remote is `https://github.com/Blue-Ocean-Technologies-Inc/Microdrop.git`,
+main branch `main`. The heater, magnet, and fluorescence plugins for the
+classic DropBot rig live in their own repos and are deliberately not part
+of this tree.
 
 ## Environment
 
 The environment is managed by **pixi** from `microdrop-py/` in the outer
 repo (`pyproject.toml` is the pixi manifest, `pixi.lock` the lockfile).
 Run everything through it — the interpreter in `.pixi/envs/default` has
-the right Qt/numpy DLL setup that a bare `python` does not:
+the right Qt/numpy DLL setup that a bare `python` does not. Redis must be
+running before the app starts (`redis-server`, or
+`python examples/start_redis_server.py`).
 
 ```bash
 cd microdrop-py
-pixi run python -m examples.run_device_viewer_pluggable   # full app
+pixi run python -m examples.run_device_viewer_pluggable            # full app
+pixi run python -m examples.run_device_viewer_pluggable_frontend   # frontend only (needs redis + backend)
+pixi run python -m examples.run_device_viewer_pluggable_backend    # backend only
 ```
 
 Run modules with `-m` from `src/` rather than by file path, so package
-imports resolve without `sys.path` surprises. Redis must be running before
-the app starts (`redis-server`, or `python examples/start_redis_server.py`).
+imports resolve without `sys.path` surprises.
 
-After changing dependencies in `pyproject.toml`, relock with `pixi install`
-(or `pixi lock`) and commit `pixi.lock` alongside it.
+Useful environment variables:
 
-## Dependencies
+- `USE_CV2=1` — force OpenCV camera backend instead of QMultimedia
+- `DEBUG_QT_PLUGINS=1` — Qt plugin debug logs
+- `QT_LOGGING_RULES="*=true"` — maximal Qt debug logging
+- `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=` / `QT_FFMPEG_ENCODING_HW_DEVICE_TYPES=`
+  — force software encoding/decoding
+
+### Dependencies
 
 Runtime pins live in `[tool.pixi.dependencies]` in `microdrop-py/pyproject.toml`.
 The core stack: `traits`, `traitsui`, `pyface`, `envisage`, `apptools`
 (Enthought); `pyside6` (Qt); `dramatiq`, `redis-py` (messaging); `shapely`,
 `pydantic`, `numpy`/`pandas` (data). Consult the manifest rather than this
-list for versions.
+list for versions. After changing dependencies in `pyproject.toml`, relock
+with `pixi install` (or `pixi lock`) and commit `pixi.lock` alongside it.
+
+## Architecture
+
+Three-layer, message-driven system:
+
+1. **Frontend** (PySide6/Qt6 GUI) — interactive SVG device viewer + protocol
+   grid, built on the [Envisage](https://docs.enthought.com/envisage/)
+   plugin framework.
+2. **Message Server** (Redis + Dramatiq) — pub/sub message router with
+   MQTT-style topic matching. Can run on localhost, LAN, or cloud, which
+   enables remote hardware control.
+3. **Backend** (DropBot Controller) — receives messages via Dramatiq
+   workers, translates them to hardware commands via `SerialProxy`
+   (auto-generated Python RPC from C++ firmware via `arduino-rpc` +
+   protobuf), sends over USB serial.
+
+**Data flow**: user clicks electrode → frontend publishes
+`electrodes_state_change` (toggles on/off state, does NOT apply voltage) →
+Redis routes to backend worker → backend calls
+`proxy.state_of_channels = [...]` → SerialProxy sends RPC over USB →
+firmware applies high voltage → capacitance feedback flows back → GUI
+updates.
+
+### Plugin System (Envisage)
+
+Every major component is an Envisage plugin. Plugins are instantiated in
+run scripts via `plugin_consts.py`, and **load order matters** — earlier
+plugins' service contributions take priority.
+
+Three plugin categories:
+
+- **Required:** `CorePlugin`, `MessageRouterPlugin`, `LoggerPlugin`
+- **Frontend (UI):** `MicrodropPlugin`, `DeviceViewerPlugin`,
+  `ManualControlsPlugin`, `DropbotStatusPlugin`,
+  `ProtocolGridControllerUIPlugin`, etc.
+- **Backend (hardware):** `DropbotControllerPlugin`,
+  `ElectrodeControllerPlugin`, `PeripheralControllerPlugin`
+
+Standard plugin layout:
+
+```
+<plugin_name>/
+├── plugin.py       # Envisage Plugin class
+├── consts.py       # Constants, ACTOR_TOPIC_DICT
+├── MVC.py          # Model-View-Controller (UI plugins)
+└── services/       # Service implementations
+```
+
+`DropbotControllerPlugin` composes mixin services implementing
+`IDropbotControlMixinService`: `DropbotMonitorMixinService`,
+`DropbotStatesSettingMixinService`, `DropbotSelfTestsMixinService`,
+`DropletDetectionMixinService`, `DropbotChangeSettingsService`.
+
+### Message Passing (Dramatiq + Redis)
+
+All inter-plugin communication goes through a pub/sub message router —
+plugins never call each other directly.
+
+- `publish_message(topic, message)` from
+  `microdrop_utils/dramatiq_pub_sub_helpers.py` sends messages;
+  `MessageRouterActor` in the same file receives and fans them out
+- Topics follow MQTT-style naming: `dropbot/requests/set_voltage`,
+  `dropbot/signals/connected`; wildcards `+` (single level) and `#`
+  (multi-level) are supported
+- `ValidatedTopicPublisher` (same module) provides Pydantic-validated
+  publishing
+- `MESSAGES.md` is the full topic map of which plugins send/receive what
+
+Handler naming distinguishes the two sides:
+
+- **Frontend** (`DramatiqControllerBase` in
+  `microdrop_utils/dramatiq_controller_base.py`): methods named
+  `_on_{topic}_triggered()` are called reflectively when a matching topic
+  arrives; used for UI state updates
+- **Backend** (`DropbotControllerBase` in
+  `dropbot_controller/dropbot_controller_base.py`): methods named
+  `on_{specific_sub_topic}_request()` or `on_{specific_sub_topic}_signal()`;
+  `_request` handlers only run when a DropBot is connected
+
+### SVG Device Handling
+
+Electrode layouts are defined in SVG files. Metadata is parsed from SVG
+path elements (`data-channels` attribute). Centers are computed from path
+vertices and neighbors from distance calculations. Straight path commands
+(M, L, H, V, Z) contribute endpoints; curved segments (arcs, Béziers —
+e.g. Inkscape circles) are flattened into polygon vertices by sampling
+(`CURVE_SEGMENT_SAMPLES` per segment). See `device_viewer/utils/dmf_utils.py`.
+
+Electrode zones (#596): `device_viewer/models/zones.py` holds
+`ZoneLayerManager` (types by id, regions whose electrode set is the source
+of truth, outlines computed by shapely union + gap closing). Regions
+persist in the device SVG's `Zones` layer, zone types in preferences, and
+the whole snapshot in app_globals under `ZONES_KEY`.
+
+### DropBot Python API
+
+```python
+import dropbot as db
+proxy = db.SerialProxy()  # auto-detects connected DropBot
+
+# Read / set state
+proxy.voltage, proxy.frequency, proxy.state_of_channels, proxy.number_of_channels
+proxy.voltage = 100
+proxy.frequency = 1e4
+proxy.hv_output_enabled = True
+proxy.state_of_channels = channel_array  # 1D numpy array, 0/1
+proxy.update_state(hv_output_enabled=True, hv_output_selected=True, voltage=100, frequency=10e3)
+
+# Measurements
+proxy.measure_voltage(), proxy.measure_capacitance(), proxy.measure_temperature(), proxy.detect_shorts()
+
+# Signals: connected, disconnected, no-power, halted, shorts-detected,
+#   capacitance-updated, capacitance-exceeded, channels-updated,
+#   drops-detected, output_enabled, output_disabled
+proxy.signals.signal('capacitance-updated').connect(callback_fn)
+
+# Thread safety
+with proxy.transaction_lock:
+    pass
+```
 
 ## Testing
 
@@ -126,7 +275,6 @@ state the years the file was created/last substantially revised):
 # Thanks for using Microdrop open source!
 ```
 
-The vendored portable driver keeps its upstream provenance and is excluded.
 The `insert-license` hook adds it to new files; `.copyright-header.txt` is
 the text it inserts.
 
@@ -385,3 +533,34 @@ rather than trusting the ids above. Quote label names containing spaces
 - A PR created with agent assistance must say so in its description
 - `CHANGELOG.md` is generated by commitizen from the commit messages — do
   not edit it by hand
+
+### Releases
+
+- **This repo (the app)**: version = git tags (`.cz.toml`,
+  `version_provider = "scm"`). Cut a release from an up-to-date `main`:
+  `pixi exec --spec "commitizen>=4,<5" -- cz bump` (derives the bump from
+  conventional commits since the last `v*` tag, updates CHANGELOG.md, tags
+  `vX.Y.Z`), then `git push origin main --follow-tags` (requires
+  branch-protection bypass, i.e. an admin).
+- **heater/magnet plugin repos**: releases are fully automatic — every push
+  to `main` with release-worthy conventional commits bumps, updates
+  CHANGELOG.md, publishes the conda package to
+  `prefix.dev/microdrop-plugins`, and tags. Non-release commits
+  (docs/ci/chore/non-conventional) skip publishing.
+
+## Key Documentation
+
+- `README.md` — user-facing front page (getting started, architecture
+  overview, plugin links, developer workflow)
+- `MESSAGES.md` — complete pub/sub topic map (who sends/receives what)
+- `DRAMATIQ_DOCS.md` — Dramatiq broker/encoder/actor API notes
+- `docs/ENVISAGE_TRAITS_GUIDE.md` — Envisage/Traits/TraitsUI framework guide
+  + how this repo uses them
+- `docs/DESIGN_HISTORY.md` — archived pre-development research &
+  tech-selection rationale (why Envisage/Redis/Dramatiq)
+- `docs/microdrop-architecture.html` + `docs/PRESENTATION-GUIDE.md` —
+  self-contained architecture presentation and its slide/brand/CSS guide.
+  Corrections not to revert: `electrodes_state_change` toggles state only
+  (not voltage); the architecture is three-way decoupled
+  (Frontend/Backend/Server); the DropBot API slides reflect the actual
+  Python API.

@@ -30,18 +30,24 @@ This base class provides:
      or _create_status_bar_widgets() to customise / add widgets (see
      RealtimeModeIconMixin for an opt-in realtime-mode toggle).
 """
-from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
-from microdrop_style.colors import WHITE, GREY
-from microdrop_style.helpers import is_dark_mode
-from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
+
+# Enthought library imports.
+from pyface.qt.QtGui import QApplication, QFont, QLabel
 from pyface.tasks.api import TraitsDockPane
-from pyface.qt.QtGui import QApplication, QLabel, QFont
 from traits.api import Any, Instance, List, Str, observe
 from traitsui.api import Handler
 
-from logger.logger_service import get_logger
+# Microdrop style imports.
+from microdrop_style.colors import GREY, WHITE
+from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+from microdrop_style.helpers import is_dark_mode
+from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 
+# Local imports.
 from .interfaces import IMessageHandler
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -67,9 +73,7 @@ def build_status_icon_tooltip(title, states, hint=None) -> str:
         f'<li><strong style="color: {color};">{label}</strong></li>'
         for color, label in states
     )
-    hint_html = (
-        f'<div style="margin-top: 3px;"><em>{hint}</em></div>' if hint else ""
-    )
+    hint_html = f'<div style="margin-top: 3px;"><em>{hint}</em></div>' if hint else ""
     return f"""
     <div style="font-family: sans-serif; font-size: 10pt; line-height: 1;">
       <strong style="font-size: 1.1em; color: {title_color}">{title}</strong>
@@ -178,7 +182,19 @@ class BaseStatusDockPane(TraitsDockPane):
         if self.message_handler is not None:
             self.message_handler.teardown()
             self.message_handler = None
-        super().destroy()
+
+        # Take the Qt control out of the window BEFORE disposing the TraitsUI
+        # editors — the reverse of TraitsDockPane.destroy. Pulling the dock
+        # widget out relayouts its children, and a table view sizing a
+        # resize_to_contents column reaches into an editor that dispose()
+        # has already emptied (AttributeError inside a Qt override, which
+        # aborts the whole window shutdown — the app then never exits).
+        super(TraitsDockPane, self).destroy()
+
+        ui, self.ui = self.ui, None
+
+        if ui is not None:
+            ui.dispose()
 
     def _teardown_status_bar(self):
         """Withdraw this pane's status-bar contributions and signal hookups.
@@ -194,7 +210,7 @@ class BaseStatusDockPane(TraitsDockPane):
                     self._refresh_status_bar_tooltip
                 )
             except (RuntimeError, TypeError):
-                pass                    # never connected / already gone
+                pass  # never connected / already gone
             contributed = self._contribution_plugin.status_bar_icons
             for widget in self._contributed_status_bar_widgets:
                 if widget in contributed:
@@ -270,10 +286,8 @@ class BaseStatusDockPane(TraitsDockPane):
         Subclass overrides MUST re-apply the @observe decorator above —
         an undecorated override silently drops the observer registration."""
         if self._contributed_status_bar_widgets:
-            return                      # already populated (observer + hot-mount)
-        plugin = self.task.window.application.get_plugin(
-            self.status_bar_plugin_id
-        )
+            return  # already populated (observer + hot-mount)
+        plugin = self.task.window.application.get_plugin(self.status_bar_plugin_id)
         if plugin is None:
             logger.warning(
                 f"{self.id}: no plugin {self.status_bar_plugin_id!r} to carry "

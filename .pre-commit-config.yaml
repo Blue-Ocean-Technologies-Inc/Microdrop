@@ -27,7 +27,6 @@ repos:
     hooks:
       - id: insert-license
         files: \.py$
-        exclude: ^portable_dropbot_controller/driver/
         args: [--license-filepath, .copyright-header.txt, --comment-style, "#"]
   - repo: https://github.com/Blue-Ocean-Technologies-Inc/microdrop-dev-hooks
     rev: v0.1.0

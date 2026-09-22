@@ -39,6 +39,7 @@ from pyface.undo.api import CommandStack, UndoManager
 from traits.api import Bool, Instance, Str, observe, provides
 from traits.observation._set_change_event import SetChangeEvent
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
+from traitsui.api import UI
 from traitsui.view import View
 
 # Microdrop package imports.
@@ -107,6 +108,7 @@ from ..consts import (
 from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
+from ..models.connections_editor import ConnectionsEditorModel
 from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
@@ -139,6 +141,7 @@ from .camera_alignment_view.alignment_settings import (
     AlignmentSettingsModel,
 )
 from .camera_control_view.widget import CameraControlWidget
+from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
 from .mode_picker.widget import ModePicker, ModePickerViewModel
@@ -193,6 +196,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     # The open Camera Alignment dialog's model; None while closed. The
     # @observe handlers below re-hook automatically on every assignment.
     _alignment_model = Instance(CameraAlignmentModel)
+
+    #: The open Edit Connections dialog; None while closed.
+    _connections_editor_ui = Instance(UI)
 
     # Variables
     _undoing = Bool(
@@ -871,6 +877,13 @@ class DeviceViewerDockPane(TraitsDockPane):
             self._alignment_ui = None
         self._alignment_model = None
 
+    def _close_connections_editor(self):
+        if self._connections_editor_ui is not None:
+            if self._connections_editor_ui.control is not None:
+                self._connections_editor_ui.dispose()
+
+            self._connections_editor_ui = None
+
     def _statusbar_message(self, message):
         status_bar_manager = self.task.window.status_bar_manager
         if status_bar_manager is not None:
@@ -1358,6 +1371,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # A different device has a different saved endpoint — close the
         # old device's alignment dialog before rebuilding the view.
         self._close_alignment_dialog()
+        self._close_connections_editor()
 
         # Trigger an update to redraw and re-initialize view using model.
         self.set_view_from_model(self.model.electrodes)
@@ -1368,7 +1382,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         name = _dock_pane_name + "\t\t-\t\t" + Path(svg_file).stem
 
-        if self.model.electrodes.svg_model.auto_found_connections:
+        if self.model.electrodes.svg_model.connections_modified:
             name += " (modified)"
 
         self.name = name
@@ -1877,18 +1891,77 @@ class DeviceViewerDockPane(TraitsDockPane):
     def generate_svg_connections(self):
         self.model.electrodes.svg_model.generate_connections_from_neighbouring_electrodes()
 
+    def edit_svg_connections(self):
+        """Open the Edit Connections dialog: the device SVG rendered
+        alone with a dot on every electrode centroid, to drag new
+        connections between and delete existing ones. Edits land on the
+        SVG model directly — ``_on_connections_changed`` redraws the
+        main view, and Save writes them to the file."""
+        if self.current_electrode_layer is None:
+            warning(
+                None,
+                "No device is loaded — load a device SVG first.",
+                title="Edit Connections",
+            )
+
+            return
+
+        image, scene_rect = self._render_device_image()
+
+        if image is None:
+            error(
+                None,
+                "The loaded device has no drawable geometry.",
+                title="Edit Connections",
+            )
+
+            return
+
+        self._close_connections_editor()
+
+        self._connections_editor_ui = ConnectionsEditorPane(
+            model=ConnectionsEditorModel(svg_model=self.model.electrodes.svg_model),
+            device_image=image,
+            scene_rect=scene_rect,
+            path_scale=self.current_electrode_layer.path_scale,
+            device_name=self._current_device_key() or "",
+        ).edit_traits(parent=self.device_view.window())
+
     #################################################################################################################
     ###### Trait Observers -- Model and Model Traits ########
     #################################################################################################################
 
     @observe("model:electrodes:svg_model:area_scale", post_init=True)
-    @observe("model:electrodes:svg_model:auto_found_connections")
+    @observe("model:electrodes:svg_model:connections_modified")
     @observe("model.electrodes.electrodes.items.channel", post_init=True)
     def _svg_data_changed(self, event):
         logger.debug(f"Svg data changed event: {event}")
         if "modified" not in self.name:
             logger.info("Svg data changed")
             self.name += device_modified_tag
+
+    @observe("model:electrodes:svg_model:connections")
+    def _on_connections_changed(self, event):
+        """Connections were generated or hand edited: swap the main
+        view's connection items and repaint the routes over them."""
+        if self.current_electrode_layer is None:
+            return
+
+        self.current_electrode_layer.rebuild_connection_items(self.scene)
+
+        orphaned_segments = [
+            segment
+            for route_layer in self.model.routes.layers
+            for segment in route_layer.route.get_segments()
+            if segment not in event.new
+        ]
+
+        if orphaned_segments:
+            logger.warning(
+                f"Routes run over connections that no longer exist: {orphaned_segments}"
+            )
+
+        self.scene.interaction_service.route_redraw(None)
 
     @observe("model.electrodes.electrodes.items.channel")
     def _on_electrode_channel_changed(self, event=None):
