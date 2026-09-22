@@ -10,18 +10,31 @@
 
 """Buttons -> request topics for the Fluorescence Capture pane — all of it
 shared with every capture pane (see capture_pane_controller.py) but the
-request itself. Progress and outcomes come back through the message
-handler."""
+request itself — plus the Manual controls, each applied live: a filter pick
+moves the wheel, an LED edit sets the LED, a camera edit sets exposure and
+focus, and Capture frame grabs one frame into the experiment's captures.
+Progress, readbacks and outcomes come back through the message handler."""
 
 # Standard library imports.
+import json
 import uuid
 
+# Enthought library imports.
+from traits.api import observe
+
 # Microdrop package imports.
+from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE, camera_controls_publisher
+from microdrop_application.helpers import get_current_experiment_directory
 from portable_dropbot_controller.consts import (
     FLUORESCENCE_CAPTURE_ABORT,
+    SET_FILTER,
+    SET_FLUORESCENCE_LED_RAW,
     fluorescence_capture_publisher,
 )
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from .capture_pane_controller import CapturePaneController
@@ -38,3 +51,43 @@ class FluorescenceCaptureController(CapturePaneController):
         )
 
         fluorescence_capture_publisher.publish(request)
+
+    # ------------------------------------------------------------------ #
+    # Manual controls                                                       #
+    # ------------------------------------------------------------------ #
+
+    @observe("model:manual_filter_position")
+    def _move_filter(self, event):
+        publish_message(
+            topic=SET_FILTER, message=str(self.model.manual_filter_position)
+        )
+
+    @observe("model:manual_led_on, model:manual_led_percent")
+    def _set_led(self, event):
+        publish_message(
+            topic=SET_FLUORESCENCE_LED_RAW, message=str(self.model.manual_led_raw())
+        )
+
+    @observe("model:manual_auto_exposure, model:manual_exposure_ms")
+    @observe("model:manual_auto_focus, model:manual_focus_distance")
+    def _set_camera_controls(self, event):
+        camera_controls_publisher.publish(
+            self.model.manual_camera_request(request_id="manual")
+        )
+
+    @observe("model:manual_capture_button")
+    def _capture_manual_frame(self, event):
+        request_id = f"manual-{uuid.uuid4()}"
+        frame_request = {
+            "directory": str(get_current_experiment_directory()),
+            "step_description": (f"flu_manual_f{self.model.manual_filter_position}"),
+            "show_dialog": False,
+            "request_id": request_id,
+        }
+
+        self.model.manual_capture_request_id = request_id
+        self.model.progress = "capturing a manual frame..."
+
+        publish_message(
+            topic=DEVICE_VIEWER_SCREEN_CAPTURE, message=json.dumps(frame_request)
+        )

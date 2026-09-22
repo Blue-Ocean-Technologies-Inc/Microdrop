@@ -12,7 +12,12 @@
 import os
 
 # Microdrop package imports.
-from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+    PROTOCOL_GRID_DISPLAY_STATE,
+    PROTOCOL_RUNNING,
+)
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
@@ -107,6 +112,10 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         FLUORESCENCE_CAPTURE_PROGRESS,
         FLUORESCENCE_CAPTURE_DONE,
+        #: Manual controls: the camera's exposure/focus readback, and the
+        #: manual frame grab's saved file.
+        DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
+        DEVICE_VIEWER_MEDIA_CAPTURED,
         #: "Pane follows step", same mechanism as the PMT capture pane.
         PROTOCOL_TREE_ROW_SELECTED,
         PROTOCOL_RUNNING,

@@ -11,7 +11,9 @@
 """Fluorescence Capture pane view, built from the capture-pane layout shared
 with the PMT pane (see capture_pane_view.py): the filter table (Filter,
 ticks, Auto focus, LED %, then the exposure and focus sliders), the run
-controls, and the saved frames paged per capture run. Business logic lives
+controls, the collapsible Manual controls (wheel, LED and camera applied
+live, a one-frame grab, the camera's readback), and the saved frames paged
+per capture run. Business logic lives
 in the model; this module is instantiable standalone against just the
 model:
 
@@ -21,17 +23,31 @@ model:
 """
 
 # Enthought library imports.
-from traitsui.api import ObjectColumn, TableEditor, VGroup, View
+from traitsui.api import (
+    HGroup,
+    Item,
+    Label,
+    ObjectColumn,
+    TableEditor,
+    UItem,
+    VGroup,
+    View,
+)
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import FLUORESCENCE_EXPOSURE_MS_BOUNDS
 
 # Microdrop utils imports.
-from microdrop_utils.traitsui_qt_helpers import LinkColumn
+from microdrop_utils.traitsui_qt_helpers import (
+    IconToggleEditor,
+    LinkColumn,
+    SteppedSliderEditor,
+)
 
 # Local imports.
 from ..consts import FLUORESCENCE_EXPOSURE_MS_STEP
 from .capture_pane_view import (
+    ROW_TABLE_ENABLED_WHEN,
     capture_group,
     capture_row_tables,
     key_column,
@@ -92,9 +108,58 @@ fluorescence_results_table = TableEditor(
     auto_size=False,
 )
 
+#: Everything set directly, applied the moment it changes; the camera line
+#: reads back what the camera actually took (for table captures too).
+manual_controls = VGroup(
+    HGroup(
+        UItem("show_manual", editor=IconToggleEditor()),
+        Label("Manual controls"),
+    ),
+    VGroup(
+        VGroup(
+            Item("manual_filter_position", label="Filter"),
+            Item("manual_led_on", label="LED on"),
+            Item(
+                "manual_led_percent",
+                label="LED %",
+                enabled_when="manual_led_on",
+            ),
+            Item("manual_auto_exposure", label="Auto exposure"),
+            Item(
+                "manual_exposure_ms",
+                label="Exposure (ms)",
+                editor=SteppedSliderEditor(
+                    low=FLUORESCENCE_EXPOSURE_MS_BOUNDS[0],
+                    high_name="manual_exposure_max",
+                    step=FLUORESCENCE_EXPOSURE_MS_STEP,
+                    format="%.1f",
+                ),
+                enabled_when="not manual_auto_exposure",
+            ),
+            Item("manual_auto_focus", label="Auto focus"),
+            Item(
+                "manual_focus_distance",
+                label="Focus",
+                editor=SteppedSliderEditor(low=0.0, high=1.0, step=0.05, format="%.2f"),
+                enabled_when="not manual_auto_focus",
+            ),
+            Item("camera_readback", style="readonly", label="Camera"),
+        ),
+        HGroup(
+            UItem(
+                "manual_capture_button",
+                enabled_when="connected and not manual_capture_request_id",
+            ),
+        ),
+        enabled_when=ROW_TABLE_ENABLED_WHEN,
+        visible_when="show_manual",
+    ),
+)
+
 FluorescenceCaptureView = View(
     VGroup(
         capture_group(fluorescence_row_table_manual, fluorescence_row_table_attached),
+        manual_controls,
         results_group(fluorescence_results_table),
     ),
     resizable=True,

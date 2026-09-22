@@ -10,12 +10,14 @@
 
 """Connection greying and "pane follows step" (both inherited — see
 capture_pane_message_handler.py) plus the Fluorescence Capture pane's
-capture progress and outcome."""
+capture progress and outcome, the camera's exposure/focus readback, and the
+manual frame grab's saved file."""
 
 # Enthought library imports.
 from traits.api import Instance
 
 # Microdrop package imports.
+from device_viewer.consts import CameraControlsApplied, MediaCaptureMessageModel
 from portable_dropbot_controller.consts import (
     FluorescenceCaptureDone,
     FluorescenceCaptureProgress,
@@ -52,3 +54,29 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
             self.model.progress = f"{len(done.frames)} frame(s) saved"
         else:
             self.model.progress = "FAILED: aborted"
+
+    # ------------------------------------------------------------------ #
+    # Manual controls (device_viewer's camera topics: last segments        #
+    # "controls_applied" and "media_captured")                             #
+    # ------------------------------------------------------------------ #
+
+    def _on_controls_applied_triggered(self, body):
+        """Any exposure/focus readback — the manual controls' or a
+        capture's — so the pane shows what the camera actually took."""
+        applied = CameraControlsApplied.model_validate_json(str(body))
+
+        self.model.show_camera_readback(applied)
+
+    def _on_media_captured_triggered(self, body):
+        """The saved file of the manual frame grab in flight; every other
+        capture's file is not ours."""
+        captured = MediaCaptureMessageModel.model_validate_json(str(body))
+        request_id = self.model.manual_capture_request_id
+
+        if not request_id or captured.request_id != request_id:
+            return
+
+        self.model.manual_capture_request_id = ""
+        self.model.results_directory = str(captured.path.parent)
+        self.model.add_manual_frame(captured.path)
+        self.model.progress = f"manual frame saved: {captured.path.name}"
