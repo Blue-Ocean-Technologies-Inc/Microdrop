@@ -83,8 +83,9 @@ fluorescence_results_table = TableEditor(
             editable=False,
             resize_mode="resize_to_contents",
         ),
-        # Click to open the PNG in the system's default application.
-        LinkColumn(name="file", label="File", fire="open_file"),
+        # Click to open the PNG in the system's default application; takes
+        # all the width the Filter column leaves.
+        LinkColumn(name="file", label="File", fire="open_file", resize_mode="stretch"),
     ],
     sortable=False,
     editable=False,
