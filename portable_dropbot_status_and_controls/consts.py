@@ -160,11 +160,10 @@ DEFAULT_PMT_EXPOSURE_RANGE = "1–60 s"
 
 FLUORESCENCE_EXPOSURE_MS_STEP = 0.1
 #: Spans the fluorescence exposure slider can cover (label -> upper bound,
-#: ms): the Pi's DH Camera tops out at 204.7 ms.
+#: ms), up to FLUORESCENCE_EXPOSURE_MS_BOUNDS' cap.
 FLUORESCENCE_EXPOSURE_RANGES = {
     "0.1–20 ms": 20.0,
     "0.1–200 ms": 200.0,
-    "0.1–10000 ms": 10_000.0,
 }
 DEFAULT_FLUORESCENCE_EXPOSURE_RANGE = "0.1–200 ms"
 

@@ -202,11 +202,11 @@ MOTOR_PARAM_FIELDS = (
 FILTER_POSITIONS = (1, 2, 3, 4, 5)
 
 #: Fluorescence capture (#695), per filter position: LED level in % of
-#: FLUORESCENCE_LED_RAW_MAX and camera exposure. The exposure bound is the
-#: contract's; the camera clamps to its own range (the Pi's DH Camera:
-#: 0.3-204.7 ms, no gain).
+#: FLUORESCENCE_LED_RAW_MAX and camera exposure. The exposure bound caps at
+#: what the Pi's DH Camera can do (0.3-204.7 ms, no gain); below 0.3 ms the
+#: camera clamps.
 FLUORESCENCE_LED_PERCENT_BOUNDS = (0, 100)
-FLUORESCENCE_EXPOSURE_MS_BOUNDS = (0.1, 10_000.0)
+FLUORESCENCE_EXPOSURE_MS_BOUNDS = (0.1, 200.0)
 FLUORESCENCE_DEFAULT_LED_PERCENT = 50
 FLUORESCENCE_DEFAULT_EXPOSURE_MS = 50.0
 #: Settle after the LED and a new exposure, before the frame grab — longer
