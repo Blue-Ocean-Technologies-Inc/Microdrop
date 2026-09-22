@@ -848,6 +848,36 @@ def make_table_row_header_resizable(table_view):
     vertical_header.viewport().setMouseTracking(True)
 
 
+def fit_table_editor_height_to_rows(editor):
+    """Fix a TableEditor's table to exactly its header plus its rows, and
+    keep the editor from growing past that — a short table then leaves no
+    blank band below its last row. Refits whenever rows come or go."""
+    table_view = editor.table_view
+    model = table_view.model()
+
+    def fit():
+        header_height = table_view.horizontalHeader().sizeHint().height()
+        rows_height = table_view.verticalHeader().length()
+
+        table_view.setFixedHeight(
+            header_height + rows_height + 2 * table_view.frameWidth()
+        )
+
+    for signal in (
+        model.modelReset,
+        model.rowsInserted,
+        model.rowsRemoved,
+        model.layoutChanged,
+    ):
+        signal.connect(fit)
+
+    policy = editor.control.sizePolicy()
+    policy.setVerticalPolicy(QSizePolicy.Policy.Maximum)
+    editor.control.setSizePolicy(policy)
+
+    fit()
+
+
 class SafeCancelTableHandler(Handler):
     """
     In tables, we want the cancel event not to close the view. Instead it

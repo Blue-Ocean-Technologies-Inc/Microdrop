@@ -16,7 +16,8 @@ TraitsUI cannot swap a table's columns in place), the run buttons and status
 lines, and the Results group paging one capture run at a time.
 
 Tick and number columns hug their contents; slider columns share the width
-left over, so every slider gets room to be dragged."""
+left over, so every slider gets room to be dragged. The row table's height
+hugs its rows (see CapturePaneController.init)."""
 
 # Enthought library imports.
 from traitsui.api import HGroup, Item, Label, TableEditor, UItem, VGroup
@@ -34,7 +35,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Local imports.
-from ..consts import CAPTURE_RESULTS_TABLE_MIN_HEIGHT, CAPTURE_ROW_TABLE_HEIGHT
+from ..consts import CAPTURE_RESULTS_TABLE_MIN_HEIGHT
 
 #: Idle, and never while a protocol runs (the tree refuses the pane's
 #: set-cell then anyway, but the table locking too keeps the operator from
@@ -119,14 +120,12 @@ def capture_group(manual_table, attached_table, extra_buttons=()):
             "rows",
             editor=manual_table,
             enabled_when=ROW_TABLE_ENABLED_WHEN,
-            height=-CAPTURE_ROW_TABLE_HEIGHT,
             visible_when="not attached_step_id",
         ),
         UItem(
             "rows",
             editor=attached_table,
             enabled_when=ROW_TABLE_ENABLED_WHEN,
-            height=-CAPTURE_ROW_TABLE_HEIGHT,
             visible_when="attached_step_id",
         ),
         HGroup(

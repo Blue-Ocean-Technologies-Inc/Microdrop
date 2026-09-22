@@ -137,10 +137,8 @@ PMT_LIVE_WINDOW_SAMPLES = 3000
 #: tenths of a second.
 PMT_COUNTDOWN_TICK_S = 0.1
 
-#: Capture panes (PMT, fluorescence): the row table's fixed height (px) —
-#: its move up/down toolbar, header and five rows, nothing more — and the
-#: results table's minimum.
-CAPTURE_ROW_TABLE_HEIGHT = 210
+#: Capture panes (PMT, fluorescence): the results table's minimum height
+#: (px); the row table hugs its rows instead.
 CAPTURE_RESULTS_TABLE_MIN_HEIGHT = 190
 
 #: The live plot keeps a fixed height so toggling other groups never resizes

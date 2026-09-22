@@ -26,6 +26,7 @@ from pluggable_protocol_tree.consts import protocol_tree_set_cell_publisher
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import open_file
+from microdrop_utils.traitsui_qt_helpers import fit_table_editor_height_to_rows
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -46,6 +47,14 @@ class CapturePaneController(Controller):
     def _publish_capture_request(self):
         """Publish the pane's capture request for the ticked rows."""
         raise NotImplementedError
+
+    def init(self, info):
+        # Both row tables (manual and attached) hug their rows, so the run
+        # buttons sit right under the last one.
+        for editor in info.ui.get_editors("rows"):
+            fit_table_editor_height_to_rows(editor)
+
+        return super().init(info)
 
     # ------------------------------------------------------------------ #
     # Capture                                                               #
