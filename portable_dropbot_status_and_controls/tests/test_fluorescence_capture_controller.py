@@ -20,6 +20,9 @@ from portable_dropbot_status_and_controls.controllers import (
 from portable_dropbot_status_and_controls.controllers.fluorescence_capture_controller import (  # noqa: E501
     FluorescenceCaptureController,
 )
+from portable_dropbot_status_and_controls.models.capture_pane_model import (
+    CaptureResultFrame,
+)
 from portable_dropbot_status_and_controls.models.fluorescence_capture_model import (
     FluorescenceResultRow,
     FluorescenceRow,
@@ -65,15 +68,15 @@ def test_start_publishes_ticked_entries_with_a_fresh_request_id(monkeypatch):
     ]
     assert payload["label"] == "manual"
     assert payload["request_id"]  # a fresh uuid4, non-empty
-    assert model.running is True
+    assert model.capturing is True
 
 
 def test_start_with_nothing_ticked_publishes_nothing(monkeypatch):
     model, _controller, sent = _wire(monkeypatch)
     model.rows = [FluorescenceRow(filter_position=1, capture=False)]
     model.start_button = True
-    assert sent["capture"] == [] and model.running is False
-    assert model.status == "No filter ticked"
+    assert sent["capture"] == [] and model.capturing is False
+    assert model.progress == "No filter ticked"
 
 
 def test_abort_publishes_the_abort_topic(monkeypatch):
@@ -133,14 +136,26 @@ def test_loading_a_step_does_not_push(monkeypatch):
     assert sent["set_cell"] == []
 
 
-def test_file_link_opens_the_rows_path(monkeypatch):
+def test_file_link_opens_the_rows_path_and_arrows_page_frames(monkeypatch):
     model, _controller, _sent = _wire(monkeypatch)
     opened = []
     monkeypatch.setattr(mod, "open_file", opened.append)
 
-    model.result_rows = [
-        FluorescenceResultRow(filter_position=1, path="/tmp/flu/a.png", file="a.png")
-    ]
-    model.result_rows[0].open_file = True
+    first = CaptureResultFrame(
+        rows=[FluorescenceResultRow(filter_position=1, path="/tmp/flu/a.png")]
+    )
+    second = CaptureResultFrame(
+        rows=[FluorescenceResultRow(filter_position=1, path="/tmp/flu/b.png")]
+    )
+    model.result_frames = [first, second]
+    model.frame_index = 1
 
-    assert opened == ["/tmp/flu/a.png"]
+    model.results[0].open_file = True
+    assert opened == ["/tmp/flu/b.png"]
+
+    model.previous_frame_button = True
+    assert model.frame_index == 0
+    assert model.results[0].path == "/tmp/flu/a.png"
+
+    model.next_frame_button = True
+    assert model.frame_index == 1

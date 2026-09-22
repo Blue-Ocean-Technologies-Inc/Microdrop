@@ -11,7 +11,7 @@
 """The Fluorescence Capture pane model's pure rules: the fixed filter-position
 rows, ticked-row -> request payloads, the attach/detach/step-cell round trip
 (copied from the PMT capture model, keyed by filter_position instead of
-slot), and the newest-first results list."""
+slot), and the results paged one capture run at a time."""
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
@@ -19,6 +19,7 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_DEFAULT_EXPOSURE_MS,
     FLUORESCENCE_DEFAULT_LED_PERCENT,
     FluorescenceCapturedFrame,
+    FluorescenceCaptureDone,
 )
 from portable_dropbot_status_and_controls.models.fluorescence_capture_model import (
     FluorescenceRow,
@@ -225,24 +226,49 @@ def test_record_pushed_value_remembers_step_and_value():
     assert m.last_pushed_value == {"entries": []}
 
 
-def test_record_results_prepends_newest_first_and_builds_display_rows():
+def test_add_result_frame_builds_rows_in_capture_order():
     m = PortableDropbotFluorescenceCaptureModel()
-    m.record_results(
-        [
-            FluorescenceCapturedFrame(filter_position=1, path="/tmp/flu/a.png"),
+    done = FluorescenceCaptureDone(
+        request_id="r1",
+        ok=True,
+        label="manual",
+        directory="/tmp/flu",
+        frames=[
             FluorescenceCapturedFrame(filter_position=2, path="/tmp/flu/b.png"),
-        ]
+            FluorescenceCapturedFrame(filter_position=4, path="/tmp/flu/c.png"),
+        ],
     )
-    assert [f.path for f in m.results] == ["/tmp/flu/b.png", "/tmp/flu/a.png"]
 
-    m.record_results(
-        [FluorescenceCapturedFrame(filter_position=4, path="/tmp/flu/c.png")]
-    )
-    assert [f.path for f in m.results] == [
-        "/tmp/flu/c.png",
-        "/tmp/flu/b.png",
-        "/tmp/flu/a.png",
-    ]
-    assert [r.file for r in m.result_rows] == ["c.png", "b.png", "a.png"]
-    assert [r.filter_position for r in m.result_rows] == [4, 2, 1]
-    assert m.result_rows[0].path == "/tmp/flu/c.png"
+    m.add_result_frame(done)
+
+    assert [r.filter_position for r in m.results] == [2, 4]
+    assert [r.file for r in m.results] == ["b.png", "c.png"]
+    assert m.results[0].path == "/tmp/flu/b.png"
+
+
+def test_add_result_frame_pages_through_runs_with_the_dones_label():
+    m = PortableDropbotFluorescenceCaptureModel()
+    assert m.results == []
+    assert m.frame_label == "no captures yet"
+
+    for label in ("manual", "step1.2-end"):
+        m.add_result_frame(
+            FluorescenceCaptureDone(
+                request_id="r",
+                ok=True,
+                label=label,
+                directory="/tmp/flu",
+                frames=[
+                    FluorescenceCapturedFrame(filter_position=1, path="/tmp/flu/a.png")
+                ],
+            )
+        )
+
+    assert m.frame_index == 1
+    assert m.frame_label.startswith("Run 2 / 2")
+    assert m.frame_label.endswith("step1.2-end")
+    assert m.has_previous_frame and not m.has_next_frame
+
+    m.show_previous_frame()
+    assert m.frame_index == 0
+    assert m.frame_label.endswith("manual")

@@ -128,10 +128,11 @@ PMT_LIVE_WINDOW_SAMPLES = 3000
 #: tenths of a second.
 PMT_COUNTDOWN_TICK_S = 0.1
 
-#: Minimum heights (px) that fit every PMT spot without a scrollbar: the spot
-#: table also carries its move up/down toolbar.
-PMT_SPOT_TABLE_MIN_HEIGHT = 230
-PMT_RESULTS_TABLE_MIN_HEIGHT = 190
+#: Capture panes (PMT, fluorescence): the row table's fixed height (px) —
+#: its move up/down toolbar, header and five rows, nothing more — and the
+#: results table's minimum.
+CAPTURE_ROW_TABLE_HEIGHT = 210
+CAPTURE_RESULTS_TABLE_MIN_HEIGHT = 190
 
 #: The live plot keeps a fixed height so toggling other groups never resizes
 #: it; its width fills the pane down to this minimum (px).
@@ -149,6 +150,16 @@ PMT_EXPOSURE_RANGES = {
     "1–600 s": 600.0,
 }
 DEFAULT_PMT_EXPOSURE_RANGE = "1–60 s"
+
+FLUORESCENCE_EXPOSURE_MS_STEP = 0.1
+#: Spans the fluorescence exposure slider can cover (label -> upper bound,
+#: ms): the Pi's DH Camera tops out at 204.7 ms.
+FLUORESCENCE_EXPOSURE_RANGES = {
+    "0.1–20 ms": 20.0,
+    "0.1–200 ms": 200.0,
+    "0.1–10000 ms": 10_000.0,
+}
+DEFAULT_FLUORESCENCE_EXPOSURE_RANGE = "0.1–200 ms"
 
 #: The motor firmware moves in 0.001 mm integer units; the panel's
 #: Manual Move fields take mm, like the driver's own test UI.

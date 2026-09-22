@@ -8,15 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
-"""PMT Capture pane view: a header line naming the attached step (or
-manual mode), the spot table (reorderable, editable while idle) — a Capture
-tick column in manual mode, Start/End tick columns while a step is
-attached, switched with two TableEditors on the same `rows` since
-TraitsUI cannot swap a table's columns in place — the run buttons and
-status line, then three chevron-collapsed groups: the last capture's
-per-spot Results table, the Live stream & acquire controls (shared
-gain/avg/osr/Rf), and the Conversion settings. Business logic lives in the
-model; this module is instantiable standalone against just the model:
+"""PMT Capture pane view, built from the capture-pane layout shared with
+the Fluorescence Capture pane (see capture_pane_view.py): the spot table
+(Spot, ticks, Gain, then the exposure slider), the run controls plus Refresh
+spots, and the per-spot results paged per capture run — then two
+chevron-collapsed groups of its own: the Live stream & acquire controls
+(shared gain/avg/osr/Rf) and the Conversion settings. Business logic lives
+in the model; this module is instantiable standalone against just the
+model:
 
     PortableDropbotPmtCaptureModel(rows=[...]).edit_traits(view=PmtCaptureView)
 """
@@ -42,20 +41,13 @@ from portable_dropbot_controller.consts import (
     PMT_STREAM_OSR_CHOICES,
 )
 
-# Microdrop style imports.
-from microdrop_style.icons.icons import ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT
-
 # Microdrop utils imports.
 from microdrop_utils.pyqtgraph_editors import LivePlotEditor
 from microdrop_utils.traitsui_qt_helpers import (
-    ActiveRowCheckboxColumn,
-    ActiveRowObjectColumn,
     DoubleSpinBoxEditor,
     HtmlLabelEditor,
-    IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
-    SteppedSliderEditor,
 )
 
 # Local imports.
@@ -63,8 +55,14 @@ from ..consts import (
     PMT_EXPOSURE_S_STEP,
     PMT_LIVE_PLOT_HEIGHT,
     PMT_LIVE_PLOT_MIN_WIDTH,
-    PMT_RESULTS_TABLE_MIN_HEIGHT,
-    PMT_SPOT_TABLE_MIN_HEIGHT,
+)
+from .capture_pane_view import (
+    capture_group,
+    capture_row_tables,
+    key_column,
+    number_column,
+    results_group,
+    slider_column,
 )
 
 #: Boxcar averaging choices as "N (rate Hz)" — the value rate is the
@@ -88,79 +86,31 @@ _hint_label = HtmlLabelEditor(
     template='<span style="color:#888; font-style:italic;">{}</span>'
 )
 
-#: Both spot tables' exposure cell: a slider stepping in PMT_EXPOSURE_S_STEP.
-_exposure_slider = SteppedSliderEditor(
-    low=PMT_EXPOSURE_S_BOUNDS[0],
-    high=PMT_EXPOSURE_S_BOUNDS[1],
-    high_name="exposure_max",
-    step=PMT_EXPOSURE_S_STEP,
+
+def _spot_column():
+    # "Spot n · xx.xx mm", sized so it is never elided.
+    return key_column("label", "Spot")
+
+
+def _setting_columns():
+    return [
+        number_column("gain", "Gain"),
+        slider_column(
+            "exposure_s",
+            "Exposure (s)",
+            *PMT_EXPOSURE_S_BOUNDS,
+            step=PMT_EXPOSURE_S_STEP,
+            value_format="%.1f",
+            high_name="exposure_max",
+        ),
+    ]
+
+
+pmt_spot_table_manual, pmt_spot_table_attached = capture_row_tables(
+    _spot_column, _setting_columns
 )
 
-#: One row per configured spot; the toolbar's move up/down buttons act on
-#: the selected row and define capture order. The spot a running capture is
-#: on is highlighted like the protocol tree's executing step.
-#:
-#: Manual mode: the pane's own Capture tick. Shown while unattached
-#: (visible_when="not attached_step_id" on its UItem, below).
-pmt_spot_table_manual = TableEditor(
-    columns=[
-        # Sized to its text so "Spot n · xx.xx mm" is never elided.
-        ActiveRowObjectColumn(
-            name="label",
-            label="Spot",
-            editable=False,
-            resize_mode="resize_to_contents",
-        ),
-        ActiveRowCheckboxColumn(name="capture", label="Capture"),
-        ActiveRowObjectColumn(name="gain", label="Gain"),
-        # The last column takes all the remaining width.
-        ActiveRowObjectColumn(
-            name="exposure_s",
-            label="Exposure (s)",
-            format="%.1f",
-            resize_mode="stretch",
-            editor=_exposure_slider,
-        ),
-    ],
-    reorderable=True,
-    show_toolbar=True,
-    sortable=False,
-    deletable=False,
-    auto_size=False,
-    selected="selected_row",
-)
-
-#: Attached mode: Start/End ticks replace the single Capture tick, so a
-#: spot can be captured at the step's start, its end, or both. Shown while
-#: a step is attached (visible_when="attached_step_id").
-pmt_spot_table_attached = TableEditor(
-    columns=[
-        ActiveRowObjectColumn(
-            name="label",
-            label="Spot",
-            editable=False,
-            resize_mode="resize_to_contents",
-        ),
-        ActiveRowCheckboxColumn(name="at_start", label="Start"),
-        ActiveRowCheckboxColumn(name="at_end", label="End"),
-        ActiveRowObjectColumn(name="gain", label="Gain"),
-        ActiveRowObjectColumn(
-            name="exposure_s",
-            label="Exposure (s)",
-            format="%.1f",
-            resize_mode="stretch",
-            editor=_exposure_slider,
-        ),
-    ],
-    reorderable=True,
-    show_toolbar=True,
-    sortable=False,
-    deletable=False,
-    auto_size=False,
-    selected="selected_row",
-)
-
-#: The last capture's per-spot outcomes, read-only.
+#: One capture run's per-spot outcomes, read-only.
 pmt_results_table = TableEditor(
     columns=[
         ObjectColumn(name="slot", label="Spot", editable=False),
@@ -186,77 +136,13 @@ pmt_results_table = TableEditor(
     auto_size=False,
 )
 
-#: enabled_when shared by both spot-table variants: idle, and never while a
-#: protocol runs (the tree refuses the pane's set-cell then anyway, but the
-#: table locking too keeps the operator from editing a frozen setup).
-_spot_table_enabled_when = "connected and not busy and not protocol_running"
-
-#: Labelled rows live in their own sub-groups: a group with any labelled
-#: item lays out as a label/editor grid, which would push the unlabelled
-#: table (and the plot below) into the editor column instead of full width.
-capture = VGroup(
-    VGroup(
-        Item("attached_label", style="readonly", label="Mode"),
-        Item(
-            "exposure_range",
-            label="Exposure range",
-            enabled_when=_spot_table_enabled_when,
-        ),
-    ),
-    UItem(
-        "rows",
-        editor=pmt_spot_table_manual,
-        enabled_when=_spot_table_enabled_when,
-        height=PMT_SPOT_TABLE_MIN_HEIGHT,
-        visible_when="not attached_step_id",
-    ),
-    UItem(
-        "rows",
-        editor=pmt_spot_table_attached,
-        enabled_when=_spot_table_enabled_when,
-        height=PMT_SPOT_TABLE_MIN_HEIGHT,
-        visible_when="attached_step_id",
-    ),
-    HGroup(
-        UItem("start_button", enabled_when="connected and not busy and rows"),
-        UItem("abort_button", enabled_when="capturing"),
-        UItem("refresh_button", enabled_when="connected and not busy"),
-    ),
-    VGroup(
-        Item("progress", style="readonly", label="Status"),
-        Item("results_directory", style="readonly", label="Saved to"),
-    ),
+capture = capture_group(
+    pmt_spot_table_manual,
+    pmt_spot_table_attached,
+    extra_buttons=(UItem("refresh_button", enabled_when="connected and not busy"),),
 )
 
-results = VGroup(
-    HGroup(
-        UItem("show_results", editor=IconToggleEditor()),
-        Label("Results"),
-    ),
-    VGroup(
-        HGroup(
-            UItem(
-                "previous_frame_button",
-                editor=IconButtonEditor(
-                    glyph=ICON_CHEVRON_LEFT, tooltip="Previous run"
-                ),
-                enabled_when="has_previous_frame",
-            ),
-            UItem("frame_label", style="readonly"),
-            UItem(
-                "next_frame_button",
-                editor=IconButtonEditor(glyph=ICON_CHEVRON_RIGHT, tooltip="Next run"),
-                enabled_when="has_next_frame",
-            ),
-        ),
-        UItem(
-            "results",
-            editor=pmt_results_table,
-            height=PMT_RESULTS_TABLE_MIN_HEIGHT,
-        ),
-        visible_when="show_results",
-    ),
-)
+results = results_group(pmt_results_table)
 
 live = VGroup(
     HGroup(

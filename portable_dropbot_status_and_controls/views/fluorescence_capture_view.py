@@ -8,14 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Fluorescence Capture pane view: a header line naming the attached step
-(or manual mode), the filter table (a Capture tick column in manual mode, or
-Start/End tick columns while a step is attached, switched with two
-TableEditors on the same `rows` since TraitsUI cannot swap a table's columns
-in place — the same pattern as the PMT Capture pane's spot table), the run
-buttons and status line, then the last capture's results as a table of file
-links. Business logic lives in the model; this module is instantiable
-standalone against just the model:
+"""Fluorescence Capture pane view, built from the capture-pane layout shared
+with the PMT pane (see capture_pane_view.py): the filter table (Filter,
+ticks, Auto focus, LED %, then the exposure and focus sliders), the run
+controls, and the saved frames paged per capture run. Business logic lives
+in the model; this module is instantiable standalone against just the
+model:
 
     PortableDropbotFluorescenceCaptureModel().edit_traits(
         view=FluorescenceCaptureView
@@ -23,98 +21,60 @@ standalone against just the model:
 """
 
 # Enthought library imports.
-from traitsui.api import (
-    HGroup,
-    Item,
-    Label,
-    ObjectColumn,
-    TableEditor,
-    UItem,
-    VGroup,
-    View,
-)
+from traitsui.api import ObjectColumn, TableEditor, VGroup, View
+
+# Microdrop package imports.
+from portable_dropbot_controller.consts import FLUORESCENCE_EXPOSURE_MS_BOUNDS
 
 # Microdrop utils imports.
-from microdrop_utils.traitsui_qt_helpers import (
-    ActiveRowCheckboxColumn,
-    ActiveRowObjectColumn,
-    IconToggleEditor,
-    LinkColumn,
-    SteppedSliderEditor,
-)
+from microdrop_utils.traitsui_qt_helpers import LinkColumn
 
 # Local imports.
-from ..consts import PMT_RESULTS_TABLE_MIN_HEIGHT, PMT_SPOT_TABLE_MIN_HEIGHT
-
-#: Both filter tables' focus cell: a slider stepping across the 0.0-1.0
-#: focus_distance range.
-_focus_slider = SteppedSliderEditor(low=0.0, high=1.0, step=0.05, format="%.2f")
-
-#: Manual mode: the pane's own Capture tick. Shown while unattached
-#: (visible_when="not attached_step_id" on its UItem, below). Reorderable —
-#: table order is capture order, independent of filter_position.
-fluorescence_row_table_manual = TableEditor(
-    columns=[
-        ActiveRowObjectColumn(
-            name="filter_position",
-            label="Filter",
-            editable=False,
-            resize_mode="resize_to_contents",
-        ),
-        ActiveRowCheckboxColumn(name="capture", label="Capture"),
-        ActiveRowObjectColumn(name="led_percent", label="LED %"),
-        ActiveRowObjectColumn(name="exposure_ms", label="Exposure (ms)", format="%.1f"),
-        ActiveRowCheckboxColumn(name="auto_focus", label="Auto focus"),
-        ActiveRowObjectColumn(
-            name="focus_distance",
-            label="Focus",
-            format="%.2f",
-            resize_mode="stretch",
-            editor=_focus_slider,
-        ),
-    ],
-    reorderable=True,
-    show_toolbar=True,
-    sortable=False,
-    deletable=False,
-    auto_size=False,
-    selected="selected_row",
+from ..consts import FLUORESCENCE_EXPOSURE_MS_STEP
+from .capture_pane_view import (
+    capture_group,
+    capture_row_tables,
+    key_column,
+    number_column,
+    results_group,
+    slider_column,
+    tick_column,
 )
 
-#: Attached mode: Start/End ticks replace the single Capture tick, so a
-#: filter position can be captured at the step's start, its end, or both.
-#: Shown while a step is attached (visible_when="attached_step_id").
-fluorescence_row_table_attached = TableEditor(
-    columns=[
-        ActiveRowObjectColumn(
-            name="filter_position",
-            label="Filter",
-            editable=False,
-            resize_mode="resize_to_contents",
+
+def _filter_column():
+    return key_column("filter_position", "Filter")
+
+
+def _setting_columns():
+    return [
+        tick_column("auto_focus", "Auto focus"),
+        number_column("led_percent", "LED %"),
+        slider_column(
+            "exposure_ms",
+            "Exposure (ms)",
+            *FLUORESCENCE_EXPOSURE_MS_BOUNDS,
+            step=FLUORESCENCE_EXPOSURE_MS_STEP,
+            value_format="%.1f",
+            high_name="exposure_max",
         ),
-        ActiveRowCheckboxColumn(name="at_start", label="Start"),
-        ActiveRowCheckboxColumn(name="at_end", label="End"),
-        ActiveRowObjectColumn(name="led_percent", label="LED %"),
-        ActiveRowObjectColumn(name="exposure_ms", label="Exposure (ms)", format="%.1f"),
-        ActiveRowCheckboxColumn(name="auto_focus", label="Auto focus"),
-        ActiveRowObjectColumn(
-            name="focus_distance",
-            label="Focus",
-            format="%.2f",
-            resize_mode="stretch",
-            editor=_focus_slider,
+        slider_column(
+            "focus_distance",
+            "Focus",
+            0.0,
+            1.0,
+            step=0.05,
+            value_format="%.2f",
         ),
-    ],
-    reorderable=True,
-    show_toolbar=True,
-    sortable=False,
-    deletable=False,
-    auto_size=False,
-    selected="selected_row",
+    ]
+
+
+fluorescence_row_table_manual, fluorescence_row_table_attached = capture_row_tables(
+    _filter_column, _setting_columns
 )
 
-#: The captures' saved files, read-only, newest first: the filter each
-#: frame was taken through and its file name.
+#: One capture run's saved frames, read-only, in capture order: the filter
+#: each frame was taken through and its file.
 fluorescence_results_table = TableEditor(
     columns=[
         ObjectColumn(
@@ -131,62 +91,11 @@ fluorescence_results_table = TableEditor(
     auto_size=False,
 )
 
-#: Idle, and never while a protocol runs (the tree refuses the pane's
-#: set-cell then anyway, but the table locking too keeps the operator from
-#: editing a frozen setup).
-_row_table_enabled_when = "connected and not running and not protocol_running"
-
-#: Labelled rows live in their own sub-group: a group with any labelled item
-#: lays out as a label/editor grid, which would push the unlabelled table
-#: into the editor column instead of full width (the #686 layout lesson).
-capture = VGroup(
-    Item("attached_label", style="readonly", label="Mode"),
-    UItem(
-        "rows",
-        editor=fluorescence_row_table_manual,
-        enabled_when=_row_table_enabled_when,
-        height=PMT_SPOT_TABLE_MIN_HEIGHT,
-        visible_when="not attached_step_id",
-    ),
-    UItem(
-        "rows",
-        editor=fluorescence_row_table_attached,
-        enabled_when=_row_table_enabled_when,
-        height=PMT_SPOT_TABLE_MIN_HEIGHT,
-        visible_when="attached_step_id",
-    ),
-    HGroup(
-        UItem(
-            "start_button",
-            enabled_when="connected and not running and not protocol_running and rows",
-        ),
-        UItem("abort_button", enabled_when="running"),
-    ),
-    VGroup(
-        Item("status", style="readonly", label="Status"),
-        Item("last_directory", style="readonly", label="Saved to"),
-    ),
-)
-
-#: Results, behind a chevron toggle like the PMT pane's: the table only
-#: takes space once the operator opens it.
-results = VGroup(
-    HGroup(
-        UItem("show_results", editor=IconToggleEditor()),
-        Label("Results"),
-    ),
-    VGroup(
-        UItem(
-            "result_rows",
-            editor=fluorescence_results_table,
-            height=PMT_RESULTS_TABLE_MIN_HEIGHT,
-        ),
-        visible_when="show_results",
-    ),
-)
-
 FluorescenceCaptureView = View(
-    VGroup(capture, results),
+    VGroup(
+        capture_group(fluorescence_row_table_manual, fluorescence_row_table_attached),
+        results_group(fluorescence_results_table),
+    ),
     resizable=True,
     scrollable=True,
 )

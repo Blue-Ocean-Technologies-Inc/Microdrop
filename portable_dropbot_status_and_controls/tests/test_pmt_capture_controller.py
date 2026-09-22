@@ -24,8 +24,10 @@ from portable_dropbot_status_and_controls.controllers import (
 from portable_dropbot_status_and_controls.controllers.pmt_capture_controller import (
     PmtCaptureController,
 )
+from portable_dropbot_status_and_controls.models.capture_pane_model import (
+    CaptureResultFrame,
+)
 from portable_dropbot_status_and_controls.models.pmt_capture_model import (
-    PmtResultFrame,
     PmtSpotResultRow,
     PmtSpotRow,
     PortableDropbotPmtCaptureModel,
@@ -171,13 +173,13 @@ def test_loading_a_step_does_not_push(monkeypatch):
     assert sent["set_cell"] == []
 
 
-def test_file_link_opens_the_rows_csv_and_arrows_page_frames(monkeypatch):
+def test_file_link_opens_the_rows_path_and_arrows_page_frames(monkeypatch):
     model, _controller, _sent = _wire(monkeypatch)
     opened = []
     monkeypatch.setattr(mod, "open_file", opened.append)
 
-    first = PmtResultFrame(rows=[PmtSpotResultRow(csv_path="/tmp/a.csv")])
-    second = PmtResultFrame(rows=[PmtSpotResultRow(csv_path="/tmp/b.csv")])
+    first = CaptureResultFrame(rows=[PmtSpotResultRow(path="/tmp/a.csv")])
+    second = CaptureResultFrame(rows=[PmtSpotResultRow(path="/tmp/b.csv")])
     model.result_frames = [first, second]
     model.frame_index = 1
 
@@ -186,7 +188,7 @@ def test_file_link_opens_the_rows_csv_and_arrows_page_frames(monkeypatch):
 
     model.previous_frame_button = True
     assert model.frame_index == 0
-    assert model.results[0].csv_path == "/tmp/a.csv"
+    assert model.results[0].path == "/tmp/a.csv"
 
     model.next_frame_button = True
     assert model.frame_index == 1
