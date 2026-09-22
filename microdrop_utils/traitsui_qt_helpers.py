@@ -531,9 +531,15 @@ class _SteppedSliderEditor(QtEditor):
         if self.control is None:
             return
 
+        # A lower maximum clamps the handle and emits valueChanged, which
+        # would write the clamped value back; the bound only limits where
+        # the handle can go, never the value.
+        self._slider.blockSignals(True)
         self._slider.setMaximum(
             round((self.high - self.factory.low) / self.factory.step)
         )
+        self._slider.blockSignals(False)
+
         self.update_editor()
 
     def update_object(self, notches):
