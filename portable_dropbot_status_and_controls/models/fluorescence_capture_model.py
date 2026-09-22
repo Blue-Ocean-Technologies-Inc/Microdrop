@@ -9,10 +9,11 @@
 # Thanks for using Microdrop open source!
 
 """Qt-free state for the Fluorescence Capture pane: one row per filter-wheel
-position (Capture tick, auto focus, LED %, exposure, focus) on the shared
-capture-pane state (see capture_pane_model.py), keyed by filter_position — plus the
-Manual controls: the wheel, LED and camera set directly (applied live) and a
-single frame grabbed on demand, with the camera's readback on show.
+position (Capture tick, LED %, exposure) on the shared
+capture-pane state (see capture_pane_model.py), keyed by filter_position —
+plus the Manual controls: the wheel and camera exposure set directly
+(applied live; the LED is the status pane's Light control) and a single
+frame grabbed on demand, with the camera's readback on show.
 Trait mutations are safe from any thread — attach_step/detach_step are
 called from the message handler's Dramatiq worker thread; only Qt object
 creation needs the GUI thread (see the controller)."""
@@ -41,7 +42,6 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_DEFAULT_LED_PERCENT,
     FLUORESCENCE_EXPOSURE_MS_BOUNDS,
     FLUORESCENCE_LED_PERCENT_BOUNDS,
-    FLUORESCENCE_LED_RAW_MAX,
     FluorescenceStepCapture,
 )
 
@@ -73,31 +73,20 @@ class FluorescenceRow(CaptureRow):
         desc="Camera exposure for this filter position, milliseconds",
         setting=True,
     )
-    #: True = continuous auto focus; False = the fixed focus_distance below.
-    auto_focus = Bool(True, desc="Continuous auto focus", setting=True)
-    focus_distance = Range(
-        0.0,
-        1.0,
-        0.5,
-        desc="Manual focus distance (QCamera scale, 0.0 near - 1.0 far)",
-        setting=True,
-    )
 
     def capture_entry(self):
         return {
             "filter_position": self.filter_position,
             "led_percent": int(self.led_percent),
             "exposure_ms": float(self.exposure_ms),
-            "focus_distance": None if self.auto_focus else float(self.focus_distance),
+            # The camera (the Pi's DH Camera) has no software focus control;
+            # None leaves it on its own focus.
+            "focus_distance": None,
         }
 
     def load_step_entry(self, entry):
         self.led_percent = entry.led_percent
         self.exposure_ms = entry.exposure_ms
-        self.auto_focus = entry.focus_distance is None
-
-        if entry.focus_distance is not None:
-            self.focus_distance = entry.focus_distance
 
 
 class FluorescenceResultRow(HasTraits):
@@ -133,10 +122,6 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     show_manual = Bool(False)
     #: Moves the wheel as soon as it changes.
     manual_filter_position = Enum(FILTER_POSITIONS)
-    manual_led_on = Bool(False, desc="Fluorescence LED on")
-    manual_led_percent = Range(
-        *FLUORESCENCE_LED_PERCENT_BOUNDS, FLUORESCENCE_DEFAULT_LED_PERCENT
-    )
     #: The camera settings below are applied as soon as any of them changes.
     manual_auto_exposure = Bool(False, desc="Camera auto exposure")
     manual_exposure_ms = Range(
@@ -144,36 +129,25 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     )
     #: The manual exposure slider's upper bound, from the exposure range.
     manual_exposure_max = Property(Float, observe="exposure_range")
-    manual_auto_focus = Bool(True, desc="Continuous auto focus")
-    manual_focus_distance = Range(0.0, 1.0, 0.5)
     manual_capture_button = Button("Capture frame")
     #: request_id of the manual frame in flight; empty when none is.
     manual_capture_request_id = Str("")
-    #: The camera's last readback of any exposure/focus request (manual or
-    #: a capture's) — what the camera actually took, or why it refused.
-    camera_readback = Str("-", desc="The camera's last exposure/focus readback")
+    #: The camera's last readback of any exposure request (manual or a
+    #: capture's) — what the camera actually took, or why it refused.
+    camera_readback = Str("-", desc="The camera's last exposure readback")
 
     def _get_manual_exposure_max(self):
         return self.EXPOSURE_RANGES[self.exposure_range]
 
-    def manual_led_raw(self):
-        """The manual LED setting as the firmware's raw 16-bit level."""
-        if not self.manual_led_on:
-            return 0
-
-        return round(self.manual_led_percent * FLUORESCENCE_LED_RAW_MAX / 100)
-
     def manual_camera_request(self, request_id=""):
-        """The manual camera settings as a CameraControlsRequest payload;
-        None means auto."""
+        """The manual exposure as a CameraControlsRequest payload; None
+        means auto, and focus always stays the camera's own."""
         return {
             "request_id": request_id,
             "exposure_ms": (
                 None if self.manual_auto_exposure else float(self.manual_exposure_ms)
             ),
-            "focus_distance": (
-                None if self.manual_auto_focus else float(self.manual_focus_distance)
-            ),
+            "focus_distance": None,
         }
 
     def show_camera_readback(self, applied):
@@ -186,13 +160,8 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
         exposure = (
             "auto" if applied.exposure_ms is None else f"{applied.exposure_ms:.1f} ms"
         )
-        focus = (
-            "auto"
-            if applied.focus_distance is None
-            else f"{applied.focus_distance:.2f}"
-        )
 
-        self.camera_readback = f"exposure {exposure}, focus {focus}"
+        self.camera_readback = f"exposure {exposure}"
 
     def add_manual_frame(self, path):
         """Add a manual frame grab as its own results run."""

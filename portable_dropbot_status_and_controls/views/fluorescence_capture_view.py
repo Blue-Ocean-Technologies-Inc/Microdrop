@@ -10,12 +10,11 @@
 
 """Fluorescence Capture pane view, built from the capture-pane layout shared
 with the PMT pane (see capture_pane_view.py): the filter table (Filter,
-ticks, Auto focus, LED %, then the exposure and focus sliders), the run
-controls, the collapsible Manual controls (wheel, LED and camera applied
-live, a one-frame grab, the camera's readback), and the saved frames paged
-per capture run. Business logic lives
-in the model; this module is instantiable standalone against just the
-model:
+ticks, LED %, then the exposure slider), the run controls, the collapsible
+Manual controls (wheel and camera exposure applied live, a one-frame grab,
+the camera's readback), and the saved frames paged per capture run.
+Business logic lives in the model; this module is instantiable standalone
+against just the model:
 
     PortableDropbotFluorescenceCaptureModel().edit_traits(
         view=FluorescenceCaptureView
@@ -54,7 +53,6 @@ from .capture_pane_view import (
     number_column,
     results_group,
     slider_column,
-    tick_column,
 )
 
 
@@ -64,7 +62,6 @@ def _filter_column():
 
 def _setting_columns():
     return [
-        tick_column("auto_focus", "Auto focus"),
         number_column("led_percent", "LED %"),
         slider_column(
             "exposure_ms",
@@ -73,14 +70,6 @@ def _setting_columns():
             step=FLUORESCENCE_EXPOSURE_MS_STEP,
             value_format="%.1f",
             high_name="exposure_max",
-        ),
-        slider_column(
-            "focus_distance",
-            "Focus",
-            0.0,
-            1.0,
-            step=0.05,
-            value_format="%.2f",
         ),
     ]
 
@@ -118,12 +107,6 @@ manual_controls = VGroup(
     VGroup(
         VGroup(
             Item("manual_filter_position", label="Filter"),
-            Item("manual_led_on", label="LED on"),
-            Item(
-                "manual_led_percent",
-                label="LED %",
-                enabled_when="manual_led_on",
-            ),
             Item("manual_auto_exposure", label="Auto exposure"),
             Item(
                 "manual_exposure_ms",
@@ -135,13 +118,6 @@ manual_controls = VGroup(
                     format="%.1f",
                 ),
                 enabled_when="not manual_auto_exposure",
-            ),
-            Item("manual_auto_focus", label="Auto focus"),
-            Item(
-                "manual_focus_distance",
-                label="Focus",
-                editor=SteppedSliderEditor(low=0.0, high=1.0, step=0.05, format="%.2f"),
-                enabled_when="not manual_auto_focus",
             ),
             Item("camera_readback", style="readonly", label="Camera"),
         ),

@@ -185,7 +185,7 @@ class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
 
 class PortableDropbotFluorescenceCaptureDockPane(PortableDropbotSecondaryDockPane):
     """Dock pane for fluorescence capture: per ticked filter-wheel position,
-    move the wheel, set the LED, set the camera exposure/focus, and grab a
+    move the wheel, set the LED, set the camera exposure, and grab a
     still frame to captures/."""
 
     id = PKG + ".fluorescence_capture_dock_pane"

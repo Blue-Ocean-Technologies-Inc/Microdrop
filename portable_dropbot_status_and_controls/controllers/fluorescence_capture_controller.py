@@ -11,8 +11,9 @@
 """Buttons -> request topics for the Fluorescence Capture pane — all of it
 shared with every capture pane (see capture_pane_controller.py) but the
 request itself — plus the Manual controls, each applied live: a filter pick
-moves the wheel, an LED edit sets the LED, a camera edit sets exposure and
-focus, and Capture frame grabs one frame into the experiment's captures.
+moves the wheel, an exposure edit sets the camera's exposure, and Capture
+frame grabs one frame into the experiment's captures. The LED is the status
+pane's Light control.
 Progress, readbacks and outcomes come back through the message handler."""
 
 # Standard library imports.
@@ -28,7 +29,6 @@ from microdrop_application.helpers import get_current_experiment_directory
 from portable_dropbot_controller.consts import (
     FLUORESCENCE_CAPTURE_ABORT,
     SET_FILTER,
-    SET_FLUORESCENCE_LED_RAW,
     fluorescence_capture_publisher,
 )
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
@@ -62,14 +62,7 @@ class FluorescenceCaptureController(CapturePaneController):
             topic=SET_FILTER, message=str(self.model.manual_filter_position)
         )
 
-    @observe("model:manual_led_on, model:manual_led_percent")
-    def _set_led(self, event):
-        publish_message(
-            topic=SET_FLUORESCENCE_LED_RAW, message=str(self.model.manual_led_raw())
-        )
-
     @observe("model:manual_auto_exposure, model:manual_exposure_ms")
-    @observe("model:manual_auto_focus, model:manual_focus_distance")
     def _set_camera_controls(self, event):
         camera_controls_publisher.publish(
             self.model.manual_camera_request(request_id="manual")

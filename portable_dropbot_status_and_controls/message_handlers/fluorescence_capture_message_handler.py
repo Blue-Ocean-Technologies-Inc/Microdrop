@@ -10,7 +10,7 @@
 
 """Connection greying and "pane follows step" (both inherited — see
 capture_pane_message_handler.py) plus the Fluorescence Capture pane's
-capture progress and outcome, the camera's exposure/focus readback, and the
+capture progress and outcome, the camera's exposure readback, and the
 manual frame grab's saved file."""
 
 # Enthought library imports.
@@ -61,7 +61,7 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
     # ------------------------------------------------------------------ #
 
     def _on_controls_applied_triggered(self, body):
-        """Any exposure/focus readback — the manual controls' or a
+        """Any exposure readback — the manual controls' or a
         capture's — so the pane shows what the camera actually took."""
         applied = CameraControlsApplied.model_validate_json(str(body))
 

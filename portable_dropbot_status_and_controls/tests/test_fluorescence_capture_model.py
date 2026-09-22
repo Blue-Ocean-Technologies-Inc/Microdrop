@@ -33,21 +33,14 @@ def test_rows_default_to_one_per_filter_position_in_order():
     assert all(r.capture is True for r in m.rows)
     assert all(r.led_percent == FLUORESCENCE_DEFAULT_LED_PERCENT for r in m.rows)
     assert all(r.exposure_ms == FLUORESCENCE_DEFAULT_EXPOSURE_MS for r in m.rows)
-    assert all(r.auto_focus is True for r in m.rows)
 
 
-def test_capture_entries_manual_mode_honours_ticks_and_focus():
+def test_capture_entries_manual_mode_honours_ticks_and_leaves_focus_auto():
     m = PortableDropbotFluorescenceCaptureModel()
     m.rows = [
         FluorescenceRow(filter_position=2, led_percent=80, exposure_ms=25.0),
         FluorescenceRow(filter_position=1, capture=False),
-        FluorescenceRow(
-            filter_position=3,
-            led_percent=10,
-            exposure_ms=5.0,
-            auto_focus=False,
-            focus_distance=0.25,
-        ),
+        FluorescenceRow(filter_position=3, led_percent=10, exposure_ms=5.0),
     ]
     assert m.capture_entries() == [
         {
@@ -60,7 +53,7 @@ def test_capture_entries_manual_mode_honours_ticks_and_focus():
             "filter_position": 3,
             "led_percent": 10,
             "exposure_ms": 5.0,
-            "focus_distance": 0.25,
+            "focus_distance": None,
         },
     ]
 
@@ -125,9 +118,7 @@ def test_attach_step_loads_cell_order_settings_and_ticks():
     assert m.attached_label == "Editing step step-1"
     assert [r.filter_position for r in m.rows] == [3, 1, 2, 4, 5]
     assert (m.rows[0].led_percent, m.rows[0].exposure_ms) == (90, 12.5)
-    assert m.rows[0].auto_focus is False and m.rows[0].focus_distance == 0.75
     assert m.rows[0].at_start is True and m.rows[0].at_end is False
-    assert m.rows[1].auto_focus is True
     assert m.rows[1].at_start is False and m.rows[1].at_end is True
     # Filter positions absent from the cell: unticked, moved after.
     assert all(not r.at_start and not r.at_end for r in m.rows[2:])
