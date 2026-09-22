@@ -139,6 +139,12 @@ class CapturePaneModel(BaseStatusModel):
     attached_step_id = Str("", desc="Step the capture table is attached to")
     #: Read-only header line: "Editing step <id>" / "Manual capture".
     attached_label = Str("Manual capture")
+    #: The attached step already carries the other capture pane's setup (PMT
+    #: and fluorescence are exclusive per step), so this pane's step table
+    #: is locked; see step_capture_taken_note.
+    step_capture_taken = Bool(False)
+    #: Why the step table is locked; each pane names the other capture.
+    step_capture_taken_note = Str()
     #: True while attach_step/detach_step are applying a loaded cell or the
     #: manual snapshot to the rows — the controller must not echo these
     #: mutations back out as a set-cell publish.
@@ -366,6 +372,7 @@ class CapturePaneModel(BaseStatusModel):
 
         self.attached_step_id = ""
         self.attached_label = "Manual capture"
+        self.step_capture_taken = False
         self.last_pushed_step_id = ""
         self.last_pushed_value = None
 

@@ -31,7 +31,10 @@ from portable_dropbot_controller.consts import (
     PmtSpotsUpdated,
     PmtStreamUpdated,
 )
-from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
+from portable_dropbot_protocol_controls.consts import (
+    FLUORESCENCE_CAPTURE_COLUMN_ID,
+    PMT_CAPTURE_COLUMN_ID,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.datetime_helpers import TimestampedMessage
@@ -50,6 +53,7 @@ logger = get_logger(__name__)
 
 class PortableDropbotPmtCaptureMessageHandler(CapturePaneMessageHandler):
     STEP_COLUMN_ID = PMT_CAPTURE_COLUMN_ID
+    EXCLUSIVE_COLUMN_ID = FLUORESCENCE_CAPTURE_COLUMN_ID
 
     model = Instance(PortableDropbotPmtCaptureModel)
 

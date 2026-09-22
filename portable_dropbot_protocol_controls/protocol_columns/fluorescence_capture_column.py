@@ -56,6 +56,7 @@ from portable_dropbot_controller.consts import (
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
+from ..capture_exclusivity import check_single_capture
 from ..consts import FLUORESCENCE_CAPTURE_COLUMN_ID
 from ..fluorescence_step_capture import (
     PHASE_END,
@@ -142,6 +143,8 @@ class FluorescenceCaptureHandler(BaseColumnHandler):
     def _run_phase(self, row, ctx, phase):
         if getattr(ctx.protocol, "preview_mode", False):
             return
+
+        check_single_capture(row)
 
         step = parse_step_capture(getattr(row, FLUORESCENCE_CAPTURE_COLUMN_ID, None))
 

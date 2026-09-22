@@ -142,6 +142,11 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
     STEP_CELL_NAME = "pmt_capture"
     EXPOSURE_RANGES = PMT_EXPOSURE_RANGES
 
+    step_capture_taken_note = Str(
+        "This step captures fluorescence — a step runs one capture; clear its "
+        "fluorescence Start/End ticks to capture PMT here."
+    )
+
     # ---- Chevron-collapsed group toggles ------------------------------
     show_live = Bool(True)
     show_conversion = Bool(False)
