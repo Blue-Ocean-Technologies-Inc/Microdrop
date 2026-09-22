@@ -30,6 +30,8 @@ class CapturePaneMessageHandler(BaseMessageHandler):
 
     #: The protocol-tree column the attached step's cell lives in.
     STEP_COLUMN_ID = ""
+    #: The other capture pane's column: a step sets only one of the two.
+    EXCLUSIVE_COLUMN_ID = ""
 
     # ------------------------------------------------------------------ #
     # Pane follows step (PROTOCOL_TREE_ROW_SELECTED's last topic segment    #
@@ -57,6 +59,12 @@ class CapturePaneMessageHandler(BaseMessageHandler):
             return
 
         cell_value = msg.cells.get(self.STEP_COLUMN_ID)
+
+        # Locked only while this pane's own cell is empty — a step with both
+        # (hand-edited, older) stays editable here so one can be cleared.
+        self.model.step_capture_taken = bool(
+            msg.cells.get(self.EXCLUSIVE_COLUMN_ID) and not cell_value
+        )
 
         if (
             msg.step_id == self.model.last_pushed_step_id

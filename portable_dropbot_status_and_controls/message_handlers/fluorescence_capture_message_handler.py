@@ -22,7 +22,10 @@ from portable_dropbot_controller.consts import (
     FluorescenceCaptureDone,
     FluorescenceCaptureProgress,
 )
-from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
+from portable_dropbot_protocol_controls.consts import (
+    FLUORESCENCE_CAPTURE_COLUMN_ID,
+    PMT_CAPTURE_COLUMN_ID,
+)
 
 # Local imports.
 from ..models.fluorescence_capture_model import PortableDropbotFluorescenceCaptureModel
@@ -31,6 +34,7 @@ from .capture_pane_message_handler import CapturePaneMessageHandler
 
 class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler):
     STEP_COLUMN_ID = FLUORESCENCE_CAPTURE_COLUMN_ID
+    EXCLUSIVE_COLUMN_ID = PMT_CAPTURE_COLUMN_ID
 
     model = Instance(PortableDropbotFluorescenceCaptureModel)
 

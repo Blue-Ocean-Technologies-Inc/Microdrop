@@ -121,6 +121,11 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     STEP_CELL_NAME = "fluorescence_capture"
     EXPOSURE_RANGES = FLUORESCENCE_EXPOSURE_RANGES
 
+    step_capture_taken_note = Str(
+        "This step captures PMT — a step runs one capture; clear its "
+        "PMT Start/End ticks to capture fluorescence here."
+    )
+
     #: Which span the exposure sliders cover: a narrow range makes the
     #: 0.1 ms notches easy to hit, a wide one reaches long exposures.
     exposure_range = Enum(

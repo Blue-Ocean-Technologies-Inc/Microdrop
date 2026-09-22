@@ -111,6 +111,12 @@ def capture_group(manual_table, attached_table, extra_buttons=()):
         VGroup(
             Item("attached_label", style="readonly", label="Mode"),
             Item(
+                "step_capture_taken_note",
+                style="readonly",
+                show_label=False,
+                visible_when="step_capture_taken",
+            ),
+            Item(
                 "exposure_range",
                 label="Exposure range",
                 enabled_when=ROW_TABLE_ENABLED_WHEN,
@@ -125,7 +131,7 @@ def capture_group(manual_table, attached_table, extra_buttons=()):
         UItem(
             "rows",
             editor=attached_table,
-            enabled_when=ROW_TABLE_ENABLED_WHEN,
+            enabled_when=f"{ROW_TABLE_ENABLED_WHEN} and not step_capture_taken",
             visible_when="attached_step_id",
         ),
         HGroup(
