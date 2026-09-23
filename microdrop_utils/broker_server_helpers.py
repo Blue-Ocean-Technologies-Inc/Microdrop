@@ -22,6 +22,7 @@ from typing import Optional
 from dramatiq import Worker, get_broker, set_broker
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import CurrentMessage
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -263,7 +264,16 @@ def dramatiq_workers_context(**kwargs):
 
     # Outside the try: if the workers never start (e.g. Redis is not
     # running), that error propagates as-is — there is no worker to stop.
-    worker = start_workers(**kwargs)
+    try:
+        worker = start_workers(**kwargs)
+    except RedisConnectionError:
+        logger.warning(
+            f"Cannot reach the Redis server at {REDIS_HOST}:{REDIS_PORT} — is it "
+            "running? Start it with `pixi run run_redis` from microdrop-py/ "
+            "(or launch the full app with `pixi run microdrop`, which starts "
+            "Redis itself), then start this again."
+        )
+        raise
 
     try:
         yield worker  # This is where the main logic will execute within the context
