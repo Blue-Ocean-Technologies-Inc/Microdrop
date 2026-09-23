@@ -260,13 +260,14 @@ def dramatiq_workers_context(**kwargs):
     remove_middleware_from_dramatiq_broker(
         middleware_name="dramatiq.middleware.prometheus", broker=get_broker()
     )
+
+    # Outside the try: if the workers never start (e.g. Redis is not
+    # running), that error propagates as-is — there is no worker to stop.
+    worker = start_workers(**kwargs)
+
     try:
-        worker = start_workers(**kwargs)
-
         yield worker  # This is where the main logic will execute within the context
-
     finally:
-        # Shutdown routine
         worker.stop()
 
 
