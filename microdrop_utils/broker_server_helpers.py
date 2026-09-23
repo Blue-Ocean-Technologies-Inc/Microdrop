@@ -269,9 +269,8 @@ def dramatiq_workers_context(**kwargs):
     except RedisConnectionError:
         logger.warning(
             f"Cannot reach the Redis server at {REDIS_HOST}:{REDIS_PORT} — is it "
-            "running? Start it with `pixi run run_redis` from microdrop-py/ "
-            "(or launch the full app with `pixi run microdrop`, which starts "
-            "Redis itself), then start this again."
+            "running? Start a Redis server on that address, then start this "
+            "again."
         )
         raise
 
