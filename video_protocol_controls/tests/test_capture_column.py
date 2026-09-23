@@ -12,12 +12,15 @@
 capture timing (capture Bool + capture_at Step Start/Step End) and the
 preference acting as default-only."""
 
+# Standard library imports.
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 
+# Microdrop package imports.
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
@@ -26,7 +29,9 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import StepTime
 from pluggable_protocol_tree.session import resolve_columns
 from video_protocol_controls.protocol_columns.capture_column import (
-    CaptureAtComboBoxView, CaptureCompoundModel, CaptureHandler,
+    CaptureAtComboBoxView,
+    CaptureCompoundModel,
+    CaptureHandler,
     make_capture_column,
 )
 
@@ -34,8 +39,7 @@ CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column
 
 
 def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
-    return SimpleNamespace(name=name, uuid=uuid, capture=capture,
-                           capture_at=capture_at)
+    return SimpleNamespace(name=name, uuid=uuid, capture=capture, capture_at=capture_at)
 
 
 def _ctx(experiment_dir=""):
@@ -44,30 +48,35 @@ def _ctx(experiment_dir=""):
 
 
 def _capture_manager():
-    return RowManager(columns=[
-        make_type_column(), make_name_column(),
-        *_expand_compound(make_capture_column()),
-    ])
+    return RowManager(
+        columns=[
+            make_type_column(),
+            make_name_column(),
+            *_expand_compound(make_capture_column()),
+        ]
+    )
 
 
 # --- model ----------------------------------------------------------------
 
+
 def test_field_specs_capture_then_capture_at():
     specs = CaptureCompoundModel().field_specs()
     assert [(s.field_id, s.col_name) for s in specs] == [
-        ("capture", "Capture"), ("capture_at", "Capture At"),
+        ("capture", "Capture"),
+        ("capture_at", "Capture At"),
     ]
     assert specs[0].default_value is False
     assert specs[1].default_value == StepTime.START
 
 
 def test_capture_at_default_follows_model_default():
-    specs = CaptureCompoundModel(
-        default_capture_at=StepTime.END).field_specs()
+    specs = CaptureCompoundModel(default_capture_at=StepTime.END).field_specs()
     assert specs[1].default_value == StepTime.END
 
 
 # --- factory ----------------------------------------------------------------
+
 
 def test_factory_returns_compound_with_checkbox_and_combobox():
     col = make_capture_column()
@@ -100,6 +109,7 @@ def test_new_step_gets_pref_default_without_overriding_edits():
 
 
 # --- handler ----------------------------------------------------------------
+
 
 def test_handler_priority_and_fire_and_forget():
     handler = make_capture_column().handler
@@ -155,10 +165,10 @@ def test_mixed_timings_in_one_protocol(monkeypatch):
     handler.on_pre_step(s1, _ctx())
     assert [p["step_description"] for _t, p in fired] == ["S1"]
     handler.on_post_step(s1, _ctx())
-    assert len(fired) == 1                      # S1 only fires at start
+    assert len(fired) == 1  # S1 only fires at start
 
     handler.on_pre_step(s2, _ctx())
-    assert len(fired) == 1                      # S2 silent at start
+    assert len(fired) == 1  # S2 silent at start
     handler.on_post_step(s2, _ctx())
     assert [p["step_description"] for _t, p in fired] == ["S1", "S2"]
 
@@ -172,7 +182,7 @@ def test_payload_uses_legacy_directory_key(monkeypatch):
         "directory": "exp/dir",
         "step_description": "snap",
         "step_id": "u-9",
-        "show_dialog": False,
+        "show_status_message": False,
     }
 
 
@@ -187,6 +197,7 @@ def test_no_cross_step_state_two_calls_two_publishes(monkeypatch):
 
 # --- view (cross-cell editability) ------------------------------------------
 
+
 def test_capture_at_cell_read_only_until_capture_on():
     view = make_capture_column().view.cell_view_for_field("capture_at")
     off = _row(capture=False)
@@ -200,20 +211,21 @@ def test_capture_at_cell_read_only_until_capture_on():
 
 # --- persistence + legacy migration ------------------------------------------
 
+
 def test_round_trip_preserves_per_step_capture_at(qapp):
     manager = _capture_manager()
-    manager.add_step(values={"name": "S1", "capture": True,
-                             "capture_at": StepTime.START})
-    manager.add_step(values={"name": "S2", "capture": True,
-                             "capture_at": StepTime.END})
+    manager.add_step(
+        values={"name": "S1", "capture": True, "capture_at": StepTime.START}
+    )
+    manager.add_step(values={"name": "S2", "capture": True, "capture_at": StepTime.END})
     data = json.loads(json.dumps(manager.to_json()))
     restored = RowManager.from_json(data, columns=resolve_columns(data))
     assert restored.get_row((0,)).capture_at == StepTime.START
     assert restored.get_row((1,)).capture_at == StepTime.END
-    cap_entries = [c for c in data["columns"]
-                   if c.get("compound_id") == "capture"]
+    cap_entries = [c for c in data["columns"] if c.get("compound_id") == "capture"]
     assert [c["compound_field_id"] for c in cap_entries] == [
-        "capture", "capture_at",
+        "capture",
+        "capture_at",
     ]
 
 
@@ -227,19 +239,18 @@ def test_payload_missing_capture_at_fills_from_pref_default(qapp):
     data = json.loads(json.dumps(manager.to_json()))
     at_idx = data["fields"].index("capture_at")
     data["fields"].remove("capture_at")
-    data["rows"] = [
-        row[:at_idx] + row[at_idx + 1:] for row in data["rows"]
-    ]
+    data["rows"] = [row[:at_idx] + row[at_idx + 1 :] for row in data["rows"]]
 
     with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
         P.return_value = SimpleNamespace(capture_time=StepTime.END)
         manager_end_pref = _capture_manager()
     loaded = RowManager.from_json(
-        data, columns=list(manager_end_pref.columns),
+        data,
+        columns=list(manager_end_pref.columns),
     )
     captures, plain = loaded.get_row((0,)), loaded.get_row((1,))
     assert captures.capture is True and plain.capture is False
-    assert captures.capture_at == StepTime.END    # filled from the pref
+    assert captures.capture_at == StepTime.END  # filled from the pref
     assert plain.capture_at == StepTime.END
 
 
@@ -250,4 +261,5 @@ def test_capture_at_view_declares_capture_dependency():
     from video_protocol_controls.protocol_columns.capture_column import (
         CaptureAtComboBoxView,
     )
+
     assert list(CaptureAtComboBoxView().depends_on_row_traits) == ["capture"]

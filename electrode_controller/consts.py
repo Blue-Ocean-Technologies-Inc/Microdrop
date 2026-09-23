@@ -8,17 +8,39 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop package imports.
+from dropbot_controller.consts import DISABLED_CHANNELS_CHANGED
+from electrode_controller.models import (
+    DisabledChannelsChangedPublisher,
+    ElectrodeDisableRequestPublisher,
+    ElectrodeStateChangePublisher,
+)
+
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-from electrode_controller.models import ElectrodeStateChangePublisher, ElectrodeDisableRequestPublisher, DisabledChannelsChangedPublisher
-from dropbot_controller.consts import DISABLED_CHANNELS_CHANGED
+ELECTRODES_STATE_CHANGE = "hardware/requests/electrodes_state_change"
+ELECTRODES_DISABLE_REQUEST = "hardware/requests/electrodes_disable"
+ELECTRODES_STATE_APPLIED = "hardware/electrodes_state_applied"
 
-ELECTRODES_STATE_CHANGE = 'hardware/requests/electrodes_state_change'
-ELECTRODES_DISABLE_REQUEST = 'hardware/requests/electrodes_disable'
-ELECTRODES_STATE_APPLIED = 'hardware/electrodes_state_applied'
+electrode_state_change_publisher = ElectrodeStateChangePublisher(
+    topic=ELECTRODES_STATE_CHANGE
+)
+electrode_disable_request_publisher = ElectrodeDisableRequestPublisher(
+    topic=ELECTRODES_DISABLE_REQUEST
+)
+disabled_channels_changed_publisher = DisabledChannelsChangedPublisher(
+    topic=DISABLED_CHANNELS_CHANGED
+)
 
-electrode_state_change_publisher = ElectrodeStateChangePublisher(topic=ELECTRODES_STATE_CHANGE)
-electrode_disable_request_publisher = ElectrodeDisableRequestPublisher(topic=ELECTRODES_DISABLE_REQUEST)
-disabled_channels_changed_publisher = DisabledChannelsChangedPublisher(topic=DISABLED_CHANNELS_CHANGED)
+# ---------------------------------------------------------------------------
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+# ---------------------------------------------------------------------------
+# Last applied electrodes_state_change request, mirrored so a reconnecting
+# dropbot backend can replay it (see dropbot_controller_base.py).
+LAST_CHANNELS_REQUESTED_KEY = "last_channels_requested"
+
+APP_GLOBALS_KEYS = [
+    LAST_CHANNELS_REQUESTED_KEY,
+]

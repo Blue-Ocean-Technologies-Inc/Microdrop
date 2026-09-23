@@ -31,7 +31,7 @@ import time
 from traits.api import Any, Callable, HasTraits, Instance
 
 # Microdrop package imports.
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY,
     ELECTRODES_STATE_CHANGE,

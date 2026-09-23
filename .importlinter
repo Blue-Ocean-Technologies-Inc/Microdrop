@@ -100,16 +100,6 @@ ignore_imports =
     # specific leaf plugin's internals is a real violation, itemized below.
     ** -> pluggable_protocol_tree.**
 
-    # --- Seeded debt: microdrop_application.menus.is_advanced_mode consumers ---
-    # menus.py is plugin-private (an Action class + a Redis-backed flag
-    # check), unlike helpers/dialogs above — not blanket-exempted. These
-    # call sites should switch to a published topic/consts flag instead.
-    pluggable_protocol_tree.services.device_viewer_sync -> microdrop_application.menus
-    pluggable_protocol_tree.views.dock_pane -> microdrop_application.menus
-    pluggable_protocol_tree.services.protocol_status_controller -> microdrop_application.menus
-    portable_dropbot_status_and_controls.models.advanced_controls_model -> microdrop_application.menus
-    portable_dropbot_status_and_controls.models.model -> microdrop_application.menus
-
     # --- Seeded debt: pluggable_protocol_tree (the framework) reaching back
     # into specific leaf plugins it should not know about ---
     pluggable_protocol_tree.services.device_viewer_sync -> device_viewer.models.messages
