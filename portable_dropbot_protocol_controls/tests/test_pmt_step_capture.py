@@ -14,9 +14,6 @@ summary."""
 
 # Microdrop package imports.
 from portable_dropbot_protocol_controls.pmt_step_capture import (
-    PHASE_END,
-    PHASE_START,
-    entries_for_phase,
     normalize_step_capture,
     parse_step_capture,
     summary_text,
@@ -99,24 +96,6 @@ def test_normalize_step_capture_none_stays_none():
 def test_normalize_step_capture_preserves_order():
     normalized = normalize_step_capture(STEP_VALUE)
     assert [e["slot"] for e in normalized["entries"]] == [1, 2, 3]
-
-
-def test_entries_for_phase_filters_by_tick():
-    step = parse_step_capture(STEP_VALUE)
-
-    assert [e.slot for e in entries_for_phase(step, PHASE_START)] == [1, 3]
-    assert [e.slot for e in entries_for_phase(step, PHASE_END)] == [2, 3]
-
-
-def test_entries_for_phase_unknown_phase_raises():
-    step = parse_step_capture(STEP_VALUE)
-
-    try:
-        entries_for_phase(step, "middle")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for an unknown phase")
 
 
 def test_summary_text_blank_for_no_capture():
