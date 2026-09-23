@@ -28,7 +28,11 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from ..consts import ELECTRODES_STATE_APPLIED, disabled_channels_changed_publisher
+from ..consts import (
+    ELECTRODES_STATE_APPLIED,
+    LAST_CHANNELS_REQUESTED_KEY,
+    disabled_channels_changed_publisher,
+)
 from ..models import ElectrodeChannelsRequest
 
 # Logger import.
@@ -87,7 +91,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     self.proxy, list(model.channels), timeout=5, allow_disabled=True
                 )
 
-                app_globals["last_channels_requested"] = message
+                app_globals[LAST_CHANNELS_REQUESTED_KEY] = message
 
                 active_channels = self.proxy.state_of_channels.sum()
                 logger.info(f"{active_channels} channels actuated: {actuated_channels}")

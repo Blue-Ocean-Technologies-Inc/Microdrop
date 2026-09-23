@@ -29,6 +29,7 @@ from traits.api import Bool, Dict, HasTraits, Instance, Str, observe, provides
 from dropbot_controller.consts import DROPBOT_CONNECTED, DROPBOT_DISCONNECTED
 from electrode_controller.consts import (
     ELECTRODES_STATE_CHANGE,
+    LAST_CHANNELS_REQUESTED_KEY,
     disabled_channels_changed_publisher,
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
@@ -440,7 +441,7 @@ class DropbotControllerBase(HasTraits):
 
         publish_message(
             topic=ELECTRODES_STATE_CHANGE,
-            message=app_globals.get("last_channels_requested", []),
+            message=app_globals.get(LAST_CHANNELS_REQUESTED_KEY, []),
         )
 
     def on_reboot_request(self, message):

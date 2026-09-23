@@ -68,6 +68,24 @@ REALTIME_MODE_KEY = "microdrop.realtime_mode"
 # writes it whenever dropbot_connection_active changes); consumers read it
 # instead of tracking the connected/disconnected signals themselves.
 DROPBOT_CONNECTION_STATE_KEY = f"{PKG}.connection_active"
+
+# app_globals keys DropbotPreferences seeds via preferences_name_map
+# (owner-publishes pattern; trait name doubles as the hash key, matching
+# dropbot_preferences_ui's VOLTAGE_FREQUENCY_RANGE_APP_GLOBALS_KEYS).
+DROPLET_DETECTION_CAPACITANCE_KEY = "droplet_detection_capacitance"
+CAPACITANCE_UPDATE_INTERVAL_KEY = "capacitance_update_interval"
+HARDWARE_MAX_VOLTAGE_KEY = "_hardware_max_voltage"
+HARDWARE_MAX_FREQUENCY_KEY = "_hardware_max_frequency"
+
+APP_GLOBALS_KEYS = [
+    REALTIME_MODE_KEY,
+    DROPBOT_CONNECTION_STATE_KEY,
+    DROPLET_DETECTION_CAPACITANCE_KEY,
+    CAPACITANCE_UPDATE_INTERVAL_KEY,
+    HARDWARE_MAX_VOLTAGE_KEY,
+    HARDWARE_MAX_FREQUENCY_KEY,
+]
+
 RUN_ALL_TESTS = "dropbot/requests/run_all_tests"
 TEST_VOLTAGE = "dropbot/requests/test_voltage"
 TEST_ON_BOARD_FEEDBACK_CALIBRATION = (

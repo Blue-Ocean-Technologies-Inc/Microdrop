@@ -256,6 +256,35 @@ MONITOR_INTERVAL_S = 2
 #: "Active".
 STATUS_FAILURE_DISCONNECT_LIMIT = 3
 
+# ---------------------------------------------------------------------------
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+# ---------------------------------------------------------------------------
+# Owner-publishes pattern: PortableDropbotPreferences seeds these via
+# preferences_name_map (trait name doubles as the hash key), matching
+# dropbot_controller/preferences.py and dropbot_preferences_ui's
+# VOLTAGE_FREQUENCY_RANGE_APP_GLOBALS_KEYS.
+BAUD_RATE_KEY = "baud_rate"
+PORT_HINT_KEY = "port_hint"
+DEFAULT_VOLTAGE_KEY = "default_voltage"
+DEFAULT_FREQUENCY_KEY = "default_frequency"
+DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
+
+PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
+    BAUD_RATE_KEY,
+    PORT_HINT_KEY,
+    DEFAULT_VOLTAGE_KEY,
+    DEFAULT_FREQUENCY_KEY,
+    DEFAULT_LIGHT_INTENSITY_KEY,
+)
+
+# Last applied electrodes_state_change request.
+LAST_CHANNEL_STATES_REQUESTED_KEY = "last_channel_states_requested"
+
+APP_GLOBALS_KEYS = [
+    *PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS,
+    LAST_CHANNEL_STATES_REQUESTED_KEY,
+]
+
 # Shared hardware topics (same strings every device backend uses; the
 # backend with a live proxy is the one that acts).
 PORTABLE_DROPBOT_CONNECTED = "hardware/signals/connected"

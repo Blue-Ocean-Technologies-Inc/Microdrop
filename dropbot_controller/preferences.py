@@ -17,9 +17,13 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
 from .consts import (
+    CAPACITANCE_UPDATE_INTERVAL_KEY,
+    DROPLET_DETECTION_CAPACITANCE_KEY,
     DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
     HARDWARE_DEFAULT_FREQUENCY,
     HARDWARE_DEFAULT_VOLTAGE,
+    HARDWARE_MAX_FREQUENCY_KEY,
+    HARDWARE_MAX_VOLTAGE_KEY,
     HARDWARE_MIN_FREQUENCY,
     HARDWARE_MIN_VOLTAGE,
 )
@@ -30,10 +34,10 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 preferences_names = [
-    "droplet_detection_capacitance",
-    "capacitance_update_interval",
-    "_hardware_max_voltage",
-    "_hardware_max_frequency",
+    DROPLET_DETECTION_CAPACITANCE_KEY,
+    CAPACITANCE_UPDATE_INTERVAL_KEY,
+    HARDWARE_MAX_VOLTAGE_KEY,
+    HARDWARE_MAX_FREQUENCY_KEY,
 ]
 
 app_globals = get_microdrop_redis_globals_manager()
@@ -110,18 +114,18 @@ class DropbotPreferences(PreferencesHelper):
         return 100
 
     def __hardware_max_voltage_view_default(self):
-        return float(app_globals.get(preferences_names[2], float("inf")))
+        return float(app_globals.get(HARDWARE_MAX_VOLTAGE_KEY, float("inf")))
 
     def __hardware_max_frequency_view_default(self):
-        return float(app_globals.get(preferences_names[3], float("inf")))
+        return float(app_globals.get(HARDWARE_MAX_FREQUENCY_KEY, float("inf")))
 
     def _get_droplet_detection_capacitance_view(self):
         return app_globals.get(
-            preferences_names[0], DROPLET_DETECTION_CAPACITANCE_THRESHOLD
+            DROPLET_DETECTION_CAPACITANCE_KEY, DROPLET_DETECTION_CAPACITANCE_THRESHOLD
         )
 
     def _get_capacitance_update_interval_view(self):
-        return app_globals.get(preferences_names[1], 100)
+        return app_globals.get(CAPACITANCE_UPDATE_INTERVAL_KEY, 100)
 
     def _get__hardware_max_voltage_view(self):
         return self.__hardware_max_voltage_view_default()

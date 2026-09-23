@@ -17,19 +17,19 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
 from .consts import (
+    BAUD_RATE_KEY,
     DEFAULT_BAUD_RATE,
     DEFAULT_FREQUENCY,
+    DEFAULT_FREQUENCY_KEY,
     DEFAULT_LIGHT_INTENSITY,
+    DEFAULT_LIGHT_INTENSITY_KEY,
     DEFAULT_VOLTAGE,
+    DEFAULT_VOLTAGE_KEY,
+    PORT_HINT_KEY,
+    PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS,
 )
 
-preferences_names = [
-    "baud_rate",
-    "port_hint",
-    "default_voltage",
-    "default_frequency",
-    "default_light_intensity",
-]
+preferences_names = PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS
 
 app_globals = get_microdrop_redis_globals_manager()
 
@@ -54,19 +54,21 @@ class PortableDropbotPreferences(PreferencesHelper):
     preferences_name_map = Property(Dict)
 
     def _baud_rate_default(self):
-        return int(app_globals.get("baud_rate", DEFAULT_BAUD_RATE))
+        return int(app_globals.get(BAUD_RATE_KEY, DEFAULT_BAUD_RATE))
 
     def _port_hint_default(self):
-        return str(app_globals.get("port_hint", ""))
+        return str(app_globals.get(PORT_HINT_KEY, ""))
 
     def _default_voltage_default(self):
-        return int(app_globals.get("default_voltage", DEFAULT_VOLTAGE))
+        return int(app_globals.get(DEFAULT_VOLTAGE_KEY, DEFAULT_VOLTAGE))
 
     def _default_frequency_default(self):
-        return int(app_globals.get("default_frequency", DEFAULT_FREQUENCY))
+        return int(app_globals.get(DEFAULT_FREQUENCY_KEY, DEFAULT_FREQUENCY))
 
     def _default_light_intensity_default(self):
-        return int(app_globals.get("default_light_intensity", DEFAULT_LIGHT_INTENSITY))
+        return int(
+            app_globals.get(DEFAULT_LIGHT_INTENSITY_KEY, DEFAULT_LIGHT_INTENSITY)
+        )
 
     def _get_preferences_name_map(self):
         return {pref: getattr(self, pref) for pref in preferences_names}

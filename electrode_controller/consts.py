@@ -33,3 +33,14 @@ electrode_disable_request_publisher = ElectrodeDisableRequestPublisher(
 disabled_channels_changed_publisher = DisabledChannelsChangedPublisher(
     topic=DISABLED_CHANNELS_CHANGED
 )
+
+# ---------------------------------------------------------------------------
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+# ---------------------------------------------------------------------------
+# Last applied electrodes_state_change request, mirrored so a reconnecting
+# dropbot backend can replay it (see dropbot_controller_base.py).
+LAST_CHANNELS_REQUESTED_KEY = "last_channels_requested"
+
+APP_GLOBALS_KEYS = [
+    LAST_CHANNELS_REQUESTED_KEY,
+]

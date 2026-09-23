@@ -16,7 +16,7 @@ from electrode_controller.models import ElectrodeChannelsRequest
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from ..consts import DEFAULT_NUM_CHANNELS
+from ..consts import DEFAULT_NUM_CHANNELS, LAST_CHANNEL_STATES_REQUESTED_KEY
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -72,7 +72,7 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             "electrode actuation", lambda: self.proxy.actuate_channels(channels)
         )
         if ok:
-            app_globals["last_channel_states_requested"] = str(message)
+            app_globals[LAST_CHANNEL_STATES_REQUESTED_KEY] = str(message)
             logger.info(
                 f"Portable Dropbot electrode update applied: {len(channels)} active"
             )

@@ -19,7 +19,7 @@ from electrode_controller.models import ElectrodeChannelsRequest
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from ..consts import NUM_ELECTRODES
+from ..consts import LAST_CHANNEL_STATES_REQUESTED_KEY, NUM_ELECTRODES
 from ..interfaces.i_opendrop_control_mixin_service import IOpenDropControlMixinService
 
 # Logger import.
@@ -58,7 +58,7 @@ class OpenDropElectrodesMixinService(HasTraits):
             channel_mask[channels_to_actuate] = True
         self.proxy.state_of_channels = channel_mask
 
-        app_globals["last_channel_states_requested"] = str(message)
+        app_globals[LAST_CHANNEL_STATES_REQUESTED_KEY] = str(message)
         telemetry = self._push_state_to_device(force=False)
         active_channels = int(channel_mask.sum())
         logger.info(
