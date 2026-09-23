@@ -110,8 +110,8 @@ def test_frame_description_tags_label_position_and_dye():
 
 
 def test_filter_label_names_the_dye():
-    assert filter_label(4) == "4 · FAM"
-    assert filter_label(9) == "9 · ?"
+    assert filter_label(4) == "FAM"
+    assert filter_label(9) == "9"
 
 
 class _Listener(HasTraits):

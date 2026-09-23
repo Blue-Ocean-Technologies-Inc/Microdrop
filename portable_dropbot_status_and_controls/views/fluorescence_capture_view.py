@@ -68,7 +68,7 @@ from .capture_pane_view import (
     tick_column,
 )
 
-#: The Filter pick's labels, "4 · FAM"; the "i:" prefix keeps EnumEditor in
+#: The Filter pick's labels, the dye ("FAM"); the "i:" prefix keeps EnumEditor in
 #: position order rather than alphabetical.
 _filter_labels = {
     position: f"{i}:{filter_label(position)}"

@@ -207,8 +207,9 @@ FLUORESCENCE_PARK_FILTER = 3
 
 
 def filter_label(position):
-    """A filter position for display: "3 · White"."""
-    return f"{position} · {FILTER_NAMES.get(position, '?')}"
+    """A filter position for display: its dye ("FAM"), or the bare
+    position number when unnamed."""
+    return FILTER_NAMES.get(position, str(position))
 
 
 def frame_description(label, filter_position):

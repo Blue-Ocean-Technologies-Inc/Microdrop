@@ -67,7 +67,7 @@ class FluorescenceRow(CaptureRow):
 
     #: Filter-wheel position (FILTER_POSITIONS) — the identity of the row.
     filter_position = Int
-    #: Read-only Filter column: "4 · FAM".
+    #: Read-only Filter column: the dye, "FAM".
     filter_label = Property(Str, observe="filter_position")
     led_percent = Range(
         *FLUORESCENCE_LED_PERCENT_BOUNDS,
@@ -110,7 +110,7 @@ class FluorescenceResultRow(HasTraits):
 
     #: Filter-wheel position the frame was captured through.
     filter_position = Int
-    #: Read-only Filter column: "4 · FAM".
+    #: Read-only Filter column: the dye, "FAM".
     filter_label = Property(Str, observe="filter_position")
     path = Str
     #: `path`'s file name, for the table; `path` is what open_file uses.
