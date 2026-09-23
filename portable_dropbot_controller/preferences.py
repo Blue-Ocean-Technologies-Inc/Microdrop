@@ -8,23 +8,28 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from traits.api import Dict, Int, Property, Str
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Local imports.
 from .consts import (
-    DEFAULT_BAUD_RATE, DEFAULT_FREQUENCY, DEFAULT_LIGHT_INTENSITY,
+    BAUD_RATE_KEY,
+    DEFAULT_BAUD_RATE,
+    DEFAULT_FREQUENCY,
+    DEFAULT_FREQUENCY_KEY,
+    DEFAULT_LIGHT_INTENSITY,
+    DEFAULT_LIGHT_INTENSITY_KEY,
     DEFAULT_VOLTAGE,
+    DEFAULT_VOLTAGE_KEY,
+    PORT_HINT_KEY,
+    PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS,
 )
 
-preferences_names = [
-    "baud_rate",
-    "port_hint",
-    "default_voltage",
-    "default_frequency",
-    "default_light_intensity",
-]
+preferences_names = PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS
 
 app_globals = get_microdrop_redis_globals_manager()
 
@@ -32,34 +37,38 @@ app_globals = get_microdrop_redis_globals_manager()
 class PortableDropbotPreferences(PreferencesHelper):
     preferences_path = "microdrop.portable_dropbot_settings"
 
-    baud_rate = Int(desc="Starting serial baud rate; the driver probes "
-                         "its own whitelist beyond it.")
-    port_hint = Str(desc="Optional preferred serial port (e.g. COM3), "
-                         "tried before scanning — the hardware has no "
-                         "VID:PID identity to discover it by.")
+    baud_rate = Int(
+        desc="Starting serial baud rate; the driver probes its own whitelist beyond it."
+    )
+    port_hint = Str(
+        desc="Optional preferred serial port (e.g. COM3), "
+        "tried before scanning — the hardware has no "
+        "VID:PID identity to discover it by."
+    )
     default_voltage = Int(desc="HV amplitude applied on connect (V).")
     default_frequency = Int(desc="HV frequency applied on connect (Hz).")
-    default_light_intensity = Int(desc="Illumination LED brightness "
-                                       "applied on connect (%).")
+    default_light_intensity = Int(
+        desc="Illumination LED brightness applied on connect (%)."
+    )
 
     preferences_name_map = Property(Dict)
 
     def _baud_rate_default(self):
-        return int(app_globals.get("baud_rate", DEFAULT_BAUD_RATE))
+        return int(app_globals.get(BAUD_RATE_KEY, DEFAULT_BAUD_RATE))
 
     def _port_hint_default(self):
-        return str(app_globals.get("port_hint", ""))
+        return str(app_globals.get(PORT_HINT_KEY, ""))
 
     def _default_voltage_default(self):
-        return int(app_globals.get("default_voltage", DEFAULT_VOLTAGE))
+        return int(app_globals.get(DEFAULT_VOLTAGE_KEY, DEFAULT_VOLTAGE))
 
     def _default_frequency_default(self):
-        return int(app_globals.get("default_frequency",
-                                   DEFAULT_FREQUENCY))
+        return int(app_globals.get(DEFAULT_FREQUENCY_KEY, DEFAULT_FREQUENCY))
 
     def _default_light_intensity_default(self):
-        return int(app_globals.get("default_light_intensity",
-                                   DEFAULT_LIGHT_INTENSITY))
+        return int(
+            app_globals.get(DEFAULT_LIGHT_INTENSITY_KEY, DEFAULT_LIGHT_INTENSITY)
+        )
 
     def _get_preferences_name_map(self):
         return {pref: getattr(self, pref) for pref in preferences_names}
