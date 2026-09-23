@@ -16,6 +16,7 @@ from pathlib import Path
 
 # Third-party imports.
 import dramatiq
+from pydantic import ValidationError
 
 # Enthought library imports.
 from pyface.api import GUI
@@ -100,6 +101,7 @@ from ..consts import (
     STEP_PARAMS_COMMIT,
     ZONE_STATUS_MESSAGE_MS,
     PKG_name,
+    camera_controls_applied_publisher,
     camera_edit_status_message_text,
     camera_place_status_message_text,
     device_modified_tag,
@@ -111,6 +113,7 @@ from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
 from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
+from ..models.media import CameraControlsRequest
 from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
 from ..models.route import Route
 from ..models.step_params_commit import StepParamsCommitMessage
@@ -158,6 +161,46 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 _dock_pane_name = f"{PKG_name} Dock Pane"
+
+
+def parse_camera_controls_request(message):
+    """Parse and validate a DEVICE_VIEWER_CAMERA_SET_CONTROLS payload.
+
+    Returns a ``(request, reply)`` pair: on success ``request`` is the
+    validated ``CameraControlsRequest`` as a plain dict and ``reply`` is
+    None; on failure ``request`` is None and ``reply`` is a ready-to-publish
+    ``CameraControlsApplied`` failure payload (``ok=False``), so the caller
+    can answer a waiting requester without reaching the camera widget. The
+    request_id is recovered from the raw payload when possible, so the
+    requester still gets matched even on a failed validation.
+    """
+
+    try:
+        raw = json.loads(message) if message and message.strip() else {}
+    except (json.JSONDecodeError, TypeError) as error:
+        logger.warning(f"Unparseable camera controls request: {message!r}")
+
+        return None, {"request_id": "", "ok": False, "error": str(error)}
+
+    request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
+
+    try:
+        request = CameraControlsRequest.model_validate(raw)
+    except ValidationError as error:
+        logger.warning(f"Invalid camera controls request: {message!r} ({error})")
+
+        # Name the field and the reason ("exposure_ms: Input should be
+        # greater than 0"), not pydantic's "1 validation error for ..." header.
+        first = error.errors()[0]
+        field = ".".join(str(part) for part in first["loc"]) or "request"
+
+        return None, {
+            "request_id": request_id,
+            "ok": False,
+            "error": f"{field}: {first['msg']}",
+        }
+
+    return request.model_dump(), None
 
 
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
@@ -557,15 +600,16 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_set_controls_triggered(self, message):
         """Another plugin's CameraControlsRequest (exposure/focus); applied on
         the GUI thread by the camera widget, which answers the applied
-        signal itself."""
+        signal itself. An invalid request is answered ok=False here instead,
+        so a waiting requester fails fast rather than reaching the camera."""
 
         if not self.camera_control_widget:
             return
 
-        try:
-            request = json.loads(message) if message and message.strip() else {}
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Unparseable camera controls request: {message!r}")
+        request, reply = parse_camera_controls_request(message)
+
+        if reply is not None:
+            camera_controls_applied_publisher.publish(reply)
 
             return
 
