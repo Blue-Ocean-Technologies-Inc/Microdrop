@@ -16,6 +16,9 @@ protocol_tree_set_cell_publisher. The model's loading_step flag suppresses
 this while attach_step/detach_step are themselves applying a loaded cell or
 the manual snapshot."""
 
+# Standard library imports.
+import uuid
+
 # Enthought library imports.
 from traits.api import observe
 from traitsui.api import Controller
@@ -44,8 +47,10 @@ class CapturePaneController(Controller):
     #: What the capture visits, for the status line ("spot", "filter").
     ROW_NOUN = ""
 
-    def _publish_capture_request(self):
-        """Publish the pane's capture request for the ticked rows."""
+    def _publish_capture_request(self, request_id):
+        """Publish the pane's capture request for the ticked rows, tagged
+        with `request_id` so the pane can recognize its own progress/done
+        later."""
         raise NotImplementedError
 
     def init(self, info):
@@ -69,11 +74,13 @@ class CapturePaneController(Controller):
 
             return
 
+        request_id = str(uuid.uuid4())
+        self.model.capture_request_id = request_id
         self.model.capturing = True
         self.model.progress = "starting..."
         logger.info(f"Requested capture of {len(entries)} {self.ROW_NOUN}(s)")
 
-        self._publish_capture_request()
+        self._publish_capture_request(request_id)
 
     @observe("model:abort_button")
     def _abort_capture(self, event):

@@ -88,6 +88,14 @@ class CapturePaneMessageHandler(BaseMessageHandler):
     # Capture                                                              #
     # ------------------------------------------------------------------ #
 
+    def _is_own_capture(self, request_id):
+        """True when `request_id` names the capture this pane started and
+        is still following. A protocol step mints its own request_id for
+        its captures (see the *_capture_column.py handlers), so a
+        progress/done from one of those — or a stale echo — is not this
+        pane's to show."""
+        return bool(request_id) and request_id == self.model.capture_request_id
+
     def capture_progressed(self, key, progress):
         """A capture moved on to the row keyed `key`: highlight it and show
         the stage on the status line."""
@@ -96,12 +104,13 @@ class CapturePaneMessageHandler(BaseMessageHandler):
         self.model.progress = progress
 
     def capture_finished(self, done):
-        """A capture ended: clear the highlight and, unless the request was
-        refused (directory="" — never overwrite the previous run's folder
-        and results with that), record the saved-to folder and the run's
-        results."""
+        """A capture ended: clear the highlight and stop following it, and
+        — unless the request was refused (directory="" — never overwrite
+        the previous run's folder and results with that) — record the
+        saved-to folder and the run's results."""
         self.model.capturing = False
         self.model.mark_active_row(None)
+        self.model.capture_request_id = ""
 
         if done.directory:
             self.model.results_directory = done.directory

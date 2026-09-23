@@ -52,10 +52,8 @@ class FluorescenceCaptureController(CapturePaneController):
     #: wheel is already going there, so that change must not publish a move.
     _homing = Bool(False)
 
-    def _publish_capture_request(self):
-        request = self.model.capture_request(
-            request_id=str(uuid.uuid4()), label="manual"
-        )
+    def _publish_capture_request(self, request_id):
+        request = self.model.capture_request(request_id=request_id, label="manual")
 
         fluorescence_capture_publisher.publish(request)
 

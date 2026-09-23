@@ -24,6 +24,7 @@ from pluggable_protocol_tree.models.cell_sync import ProtocolTreeRowSelectedMess
 from portable_dropbot_controller.consts import (
     PmtAdcUpdated,
     PmtCaptureDone,
+    PmtCaptureProgress,
 )
 from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
 from portable_dropbot_status_and_controls.message_handlers import (
@@ -78,13 +79,72 @@ def test_disconnect_clears_streaming_and_acquiring(handler):
 
 
 def test_capture_done_populates_results(handler):
+    handler.model.capture_request_id = "r1"
     handler._on_pmt_capture_done_triggered(
         PmtCaptureDone(
-            ok=True, aborted=False, directory="/tmp/pmt", results=[]
+            ok=True, aborted=False, directory="/tmp/pmt", results=[], request_id="r1"
         ).model_dump_json()
     )
     assert handler.model.results == []
     assert handler.model.capturing is False
+    assert handler.model.capture_request_id == ""
+
+
+def test_capture_progress_for_own_request_highlights_the_active_row(handler):
+    handler.model.merge_spots([(1, 1000), (2, 2000)])
+    handler.model.capture_request_id = "r1"
+
+    handler._on_pmt_capture_progress_triggered(
+        PmtCaptureProgress(
+            index=0, total=2, slot=2, stage="gain", request_id="r1"
+        ).model_dump_json()
+    )
+
+    assert handler.model.capturing is True
+    assert [r.active for r in handler.model.rows] == [False, True]
+    assert handler.model.progress == "Spot 2 (1/2): gain"
+
+
+def test_capture_progress_for_a_foreign_request_id_is_ignored(handler):
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.capture_request_id = "own"
+
+    handler._on_pmt_capture_progress_triggered(
+        PmtCaptureProgress(
+            index=0,
+            total=1,
+            slot=1,
+            stage="stream",
+            exposure_s=5.0,
+            request_id="step-1:start",
+        ).model_dump_json()
+    )
+
+    assert handler.model.capturing is False
+    assert all(not r.active for r in handler.model.rows)
+    assert handler.model.progress == "-"
+    assert handler.model.exposure_deadline == 0.0
+
+
+def test_capture_done_for_a_foreign_request_id_leaves_the_pane_untouched(handler):
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.mark_active_row(1)
+    handler.model.capturing = True
+    handler.model.capture_request_id = "own"
+
+    handler._on_pmt_capture_done_triggered(
+        PmtCaptureDone(
+            ok=True,
+            aborted=False,
+            directory="/tmp/pmt",
+            results=[],
+            request_id="step-1:start",
+        ).model_dump_json()
+    )
+
+    assert handler.model.capturing is True
+    assert handler.model.rows[0].active is True
+    assert handler.model.capture_request_id == "own"
 
 
 def test_row_selected_with_step_id_attaches(handler):

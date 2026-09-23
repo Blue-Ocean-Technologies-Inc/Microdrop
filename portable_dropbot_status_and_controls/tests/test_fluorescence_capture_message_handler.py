@@ -47,6 +47,7 @@ def test_progress_highlights_the_active_row_and_sets_the_stage(handler):
         FluorescenceRow(filter_position=1),
         FluorescenceRow(filter_position=2),
     ]
+    handler.model.capture_request_id = "r1"
 
     handler._on_fluorescence_capture_progress_triggered(
         FluorescenceCaptureProgress(
@@ -59,9 +60,25 @@ def test_progress_highlights_the_active_row_and_sets_the_stage(handler):
     assert handler.model.progress == "Filter CY5 (1/2): camera"
 
 
+def test_progress_for_a_foreign_request_id_is_ignored(handler):
+    handler.model.rows = [FluorescenceRow(filter_position=1)]
+    handler.model.capture_request_id = "own"
+
+    handler._on_fluorescence_capture_progress_triggered(
+        FluorescenceCaptureProgress(
+            request_id="step-1:start", index=0, total=1, filter_position=1, stage="led"
+        ).model_dump_json()
+    )
+
+    assert handler.model.capturing is False
+    assert all(not r.active for r in handler.model.rows)
+    assert handler.model.progress == "-"
+
+
 def test_done_clears_highlight_and_adds_a_result_frame(handler):
     handler.model.rows = [FluorescenceRow(filter_position=1)]
     handler.model.mark_active_row(1)
+    handler.model.capture_request_id = "r1"
 
     handler._on_fluorescence_capture_done_triggered(
         FluorescenceCaptureDone(
@@ -80,9 +97,12 @@ def test_done_clears_highlight_and_adds_a_result_frame(handler):
     assert handler.model.results_directory == "/tmp/flu"
     assert [r.path for r in handler.model.results] == ["/tmp/flu/a.png"]
     assert handler.model.progress == "1 frame(s) saved"
+    assert handler.model.capture_request_id == ""
 
 
 def test_done_refused_does_not_touch_directory_or_results(handler):
+    handler.model.capture_request_id = "r1"
+
     handler._on_fluorescence_capture_done_triggered(
         FluorescenceCaptureDone(
             request_id="r1", ok=False, directory="", frames=[], error="busy"
@@ -92,3 +112,30 @@ def test_done_refused_does_not_touch_directory_or_results(handler):
     assert handler.model.results_directory == ""
     assert handler.model.result_frames == []
     assert handler.model.progress == "FAILED: busy"
+    assert handler.model.capturing is False
+    assert handler.model.capture_request_id == ""
+
+
+def test_done_for_a_foreign_request_id_leaves_the_pane_untouched(handler):
+    handler.model.rows = [FluorescenceRow(filter_position=1)]
+    handler.model.mark_active_row(1)
+    handler.model.capturing = True
+    handler.model.capture_request_id = "own"
+
+    handler._on_fluorescence_capture_done_triggered(
+        FluorescenceCaptureDone(
+            request_id="step-1:start",
+            ok=True,
+            label="step1.1-start",
+            directory="/tmp/flu",
+            frames=[
+                FluorescenceCapturedFrame(filter_position=1, path="/tmp/flu/a.png")
+            ],
+        ).model_dump_json()
+    )
+
+    assert handler.model.capturing is True
+    assert handler.model.rows[0].active is True
+    assert handler.model.results_directory == ""
+    assert handler.model.result_frames == []
+    assert handler.model.capture_request_id == "own"

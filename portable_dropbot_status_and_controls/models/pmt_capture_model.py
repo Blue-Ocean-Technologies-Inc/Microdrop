@@ -374,7 +374,7 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
     def stop_countdown(self):
         self.exposure_deadline = 0.0
 
-    def capture_request(self):
+    def capture_request(self, request_id=""):
         """Ticked spots plus the stream settings the capture converts with."""
         return {
             "entries": self.capture_entries(),
@@ -382,6 +382,7 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
             "osr": int(self.stream_osr),
             "rf_ohms": float(self.rf_ohms),
             "park_motor": self.park_motor,
+            "request_id": request_id,
         }
 
     def stream_request(self):

@@ -159,6 +159,11 @@ class CapturePaneModel(BaseStatusModel):
     _manual_snapshot = Any(None)
 
     # ---- Run state --------------------------------------------------------
+    #: request_id of the capture this pane started and is following; empty
+    #: when none. A protocol step mints its own request_id for its captures
+    #: (see the *_capture_column.py handlers), so a progress/done whose
+    #: request_id does not match this one is not this pane's to show.
+    capture_request_id = Str("")
     #: True between Start and the backend's done message.
     capturing = Bool(False)
     #: Top-level (not nested) so enabled_when reacts to it — TraitsUI's

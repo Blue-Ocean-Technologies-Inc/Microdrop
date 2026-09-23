@@ -68,15 +68,17 @@ def test_start_publishes_ticked_entries_and_stream_settings(monkeypatch):
     model.rows = [PmtSpotRow(slot=2, position_um=0, gain=90, exposure_s=1.5)]
     model.stream_avg = 32
     model.start_button = True
-    assert sent["capture"] == [
-        {
-            "entries": [{"slot": 2, "gain": 90, "exposure_s": 1.5}],
-            "avg": 32,
-            "osr": model.stream_osr,
-            "rf_ohms": model.rf_ohms,
-            "park_motor": False,
-        }
-    ]
+
+    assert len(sent["capture"]) == 1
+    payload = sent["capture"][0]
+    assert payload["entries"] == [{"slot": 2, "gain": 90, "exposure_s": 1.5}]
+    assert payload["avg"] == 32
+    assert payload["osr"] == model.stream_osr
+    assert payload["rf_ohms"] == model.rf_ohms
+    assert payload["park_motor"] is False
+    assert payload["request_id"]  # a fresh uuid4, non-empty
+    # The model follows the request it just minted.
+    assert model.capture_request_id == payload["request_id"]
     assert model.capturing is True
 
 

@@ -550,6 +550,10 @@ class PmtCaptureProgress(BaseModel):
     #: On the "stream" stage, the exposure about to run, so the pane can
     #: count it down; 0 on every other stage.
     exposure_s: float = 0.0
+    #: Echoed from the request, so a pane can tell its own capture's
+    #: progress from a protocol step's; empty for a pane-initiated capture
+    #: that predates request_id (never published by current code).
+    request_id: str = ""
 
 
 class PmtSpotResult(BaseModel):

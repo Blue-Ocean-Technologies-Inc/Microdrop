@@ -42,6 +42,9 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
     def _on_fluorescence_capture_progress_triggered(self, body):
         p = FluorescenceCaptureProgress.model_validate_json(str(body))
 
+        if not self._is_own_capture(p.request_id):
+            return
+
         self.capture_progressed(
             p.filter_position,
             f"Filter {filter_label(p.filter_position)} ({p.index + 1}/{p.total}): "
@@ -50,6 +53,9 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
 
     def _on_fluorescence_capture_done_triggered(self, body):
         done = FluorescenceCaptureDone.model_validate_json(str(body))
+
+        if not self._is_own_capture(done.request_id):
+            return
 
         self.capture_finished(done)
 

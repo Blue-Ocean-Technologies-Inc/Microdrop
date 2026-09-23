@@ -475,6 +475,16 @@ def test_done_echoes_request_id_and_label_on_success(published):
     assert done["label"] == "step1.2-end"
 
 
+def test_progress_echoes_request_id(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    payload = json.loads(_request([{"slot": 1, "gain": 10, "exposure_s": 1.0}]))
+    payload["request_id"] = "abc-123:end"
+    _run(h, json.dumps(payload))
+    assert published["progress"]
+    assert all(p["request_id"] == "abc-123:end" for p in published["progress"])
+
+
 def test_done_echoes_request_id_and_label_on_refusal(published):
     h = _Harness()
     h.proxy = _Session(h.log)

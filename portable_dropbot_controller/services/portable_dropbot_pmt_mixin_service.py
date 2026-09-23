@@ -535,6 +535,7 @@ class PortableDropbotPmtMixinService(HasTraits):
                             "stage": stage,
                             "detail": detail,
                             "exposure_s": exposure_s,
+                            "request_id": request.request_id,
                         }
                     )
 

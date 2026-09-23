@@ -76,6 +76,8 @@ def test_start_publishes_ticked_entries_with_a_fresh_request_id(monkeypatch):
     ]
     assert payload["label"] == "manual"
     assert payload["request_id"]  # a fresh uuid4, non-empty
+    # The model follows the request it just minted.
+    assert model.capture_request_id == payload["request_id"]
     assert model.capturing is True
 
 

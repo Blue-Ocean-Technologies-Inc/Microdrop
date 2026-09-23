@@ -56,8 +56,8 @@ class PmtCaptureController(CapturePaneController):
     #: going there, so that change must not publish a second move.
     _homing = Bool(False)
 
-    def _publish_capture_request(self):
-        pmt_capture_publisher.publish(self.model.capture_request())
+    def _publish_capture_request(self, request_id):
+        pmt_capture_publisher.publish(self.model.capture_request(request_id=request_id))
 
     # ------------------------------------------------------------------ #
     # Spots and the exposure countdown                                      #

@@ -84,6 +84,10 @@ class PortableDropbotPmtCaptureMessageHandler(CapturePaneMessageHandler):
 
     def _on_pmt_capture_progress_triggered(self, body):
         p = PmtCaptureProgress.model_validate_json(str(body))
+
+        if not self._is_own_capture(p.request_id):
+            return
+
         self.model.stop_countdown()
         self.capture_progressed(
             p.slot,
@@ -96,6 +100,10 @@ class PortableDropbotPmtCaptureMessageHandler(CapturePaneMessageHandler):
 
     def _on_pmt_capture_done_triggered(self, body):
         done = PmtCaptureDone.model_validate_json(str(body))
+
+        if not self._is_own_capture(done.request_id):
+            return
+
         self.model.stop_countdown()
         self.capture_finished(done)
 
