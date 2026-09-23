@@ -8,14 +8,46 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
-from microdrop_application.consts import APP_GLOBALS_REDIS_HASH, EXPERIMENT_DIR
-from microdrop_utils.redis_manager import get_redis_hash_proxy
+# Third-party imports.
 from dramatiq import get_broker
 
+# Microdrop package imports.
+from microdrop_application.consts import (
+    ADVANCED_MODE_KEY,
+    APP_GLOBALS_REDIS_HASH,
+    EXPERIMENT_DIR,
+)
+
+# Microdrop utils imports.
+from microdrop_utils.redis_manager import get_redis_hash_proxy
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+
+
 def get_microdrop_redis_globals_manager():
-    return get_redis_hash_proxy(redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH)
+    return get_redis_hash_proxy(
+        redis_client=get_broker().client, hash_name=APP_GLOBALS_REDIS_HASH
+    )
+
+
+def is_advanced_mode():
+    """Read the Advanced Mode app-global flag.
+
+    Tolerates no-Redis (tests / headless imports): menus.AdvancedModeAction
+    reads this at CLASS DEFINITION time, so a connect error here would make
+    any import of that module require a live Redis server.
+    """
+    try:
+        return get_microdrop_redis_globals_manager().get(ADVANCED_MODE_KEY, False)
+    except Exception as e:
+        logger.debug(f"Advanced-mode flag unavailable (no Redis?): {e}")
+        return False
 
 
 def get_current_experiment_directory() -> Path:

@@ -8,12 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from traits.api import Bool, Button, Enum, Float, Int, List, Str
 
-from microdrop_application.menus import is_advanced_mode
+# Microdrop package imports.
+from microdrop_application.helpers import is_advanced_mode
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
+# Local imports.
 from ..consts import PORTABLE_DROPBOT_IMAGE
 
 
@@ -71,5 +74,4 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
     write_button = Button("Write (RAM)")
     preset_button = Button("Preset to Flash")
     reboot_button = Button("Reboot Motor Board")
-    params_status = Str("-", desc="Last read/write/preset/reboot "
-                                  "outcome")
+    params_status = Str("-", desc="Last read/write/preset/reboot outcome")
