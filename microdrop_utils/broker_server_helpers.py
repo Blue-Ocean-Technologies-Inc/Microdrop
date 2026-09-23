@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 import os
 import socket
@@ -17,12 +18,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+# Third-party imports.
+from dramatiq import Worker, get_broker, set_broker
 from dramatiq.brokers.redis import RedisBroker
-
-from dramatiq import get_broker, set_broker, Worker
 from dramatiq.middleware import CurrentMessage
+from redis.exceptions import ConnectionError as RedisConnectionError
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -33,6 +37,7 @@ logger = get_logger(__name__)
 # Falls back to 127.0.0.1:6379 if the file is missing.
 # ---------------------------------------------------------------------------
 _REDIS_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "redis_settings.json"
+
 
 def load_redis_settings() -> dict:
     """
@@ -59,7 +64,9 @@ REDIS_PORT = settings["port"]
 # redis_settings.json). Copy dramatiq_settings.example.json to
 # dramatiq_settings.json and edit; falls back to the defaults below.
 # ---------------------------------------------------------------------------
-_DRAMATIQ_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "dramatiq_settings.json"
+_DRAMATIQ_SETTINGS_PATH = (
+    Path(__file__).resolve().parent.parent / "dramatiq_settings.json"
+)
 
 DEFAULT_WORKER_THREADS = 4
 DEFAULT_WORKER_TIMEOUT_MS = 100
@@ -77,15 +84,19 @@ def load_dramatiq_worker_settings() -> dict:
         dict with 'worker_threads' and 'worker_timeout' keys, falling back to
         the defaults above when the file is missing or lacks the keys.
     """
-    defaults = {"worker_threads": DEFAULT_WORKER_THREADS,
-                "worker_timeout": DEFAULT_WORKER_TIMEOUT_MS}
+    defaults = {
+        "worker_threads": DEFAULT_WORKER_THREADS,
+        "worker_timeout": DEFAULT_WORKER_TIMEOUT_MS,
+    }
     try:
         with open(_DRAMATIQ_SETTINGS_PATH) as f:
             loaded = {**defaults, **json.load(f)}
     except (FileNotFoundError, json.JSONDecodeError):
         loaded = defaults
-    return {"worker_threads": int(loaded["worker_threads"]),
-            "worker_timeout": int(loaded["worker_timeout"])}
+    return {
+        "worker_threads": int(loaded["worker_threads"]),
+        "worker_timeout": int(loaded["worker_timeout"]),
+    }
 
 
 def configure_dramatiq_broker(host=REDIS_HOST, port=REDIS_PORT):
@@ -113,7 +124,9 @@ def is_redis_running(host=REDIS_HOST, port=REDIS_PORT) -> bool:
             return False
 
 
-def start_redis_server(timeout: float = 3.0, host=REDIS_HOST, port=REDIS_PORT) -> Optional[subprocess.Popen]:
+def start_redis_server(
+    timeout: float = 3.0, host=REDIS_HOST, port=REDIS_PORT
+) -> Optional[subprocess.Popen]:
     """
     Starts the Redis server using the local redis.conf file.
 
@@ -136,11 +149,16 @@ def start_redis_server(timeout: float = 3.0, host=REDIS_HOST, port=REDIS_PORT) -
     # 2. Handle missing executable gracefully
     try:
         print(f"Trying to start redis server process on {host}:{port}")
-        process = subprocess.Popen([
-            "redis-server", conf_path,
-            "--port", str(port),
-            "--bind", host,
-        ])
+        process = subprocess.Popen(
+            [
+                "redis-server",
+                conf_path,
+                "--port",
+                str(port),
+                "--bind",
+                host,
+            ]
+        )
     except FileNotFoundError:
         print("FAILURE: Failed to start: 'redis-server' executable not found in PATH.")
         return None
@@ -153,7 +171,10 @@ def start_redis_server(timeout: float = 3.0, host=REDIS_HOST, port=REDIS_PORT) -
     while not is_redis_running(host=host, port=port):
         # 4. Fail fast if the process crashed immediately (e.g., bad config)
         if process.poll() is not None:
-            print(f"Redis server process terminated unexpectedly with code {process.returncode}.")
+            print(
+                "Redis server process terminated unexpectedly with code "
+                f"{process.returncode}."
+            )
             return process
 
         # Check against actual elapsed time
@@ -171,7 +192,10 @@ def start_redis_server(timeout: float = 3.0, host=REDIS_HOST, port=REDIS_PORT) -
 def stop_redis_server(process):
     """Stop the Redis server."""
     if process is None:
-        print("Redis server is not running, or was not started by this process, cannot stop it.")
+        print(
+            "Redis server is not running, or was not started by this process, "
+            "cannot stop it."
+        )
         return
     else:
         try:
@@ -181,15 +205,16 @@ def stop_redis_server(process):
             print(f"Failed to stop Redis server: {e}")
 
 
-def remove_middleware_from_dramatiq_broker(middleware_name: str, broker: 'dramatiq.broker.Broker'):
+def remove_middleware_from_dramatiq_broker(
+    middleware_name: str, broker: "dramatiq.broker.Broker"
+):
     # Remove Prometheus middleware if it exists
     broker.middleware[:] = [
-        m for m in broker.middleware
-        if m.__module__ != middleware_name
+        m for m in broker.middleware if m.__module__ != middleware_name
     ]
 
 
-def start_workers(**kwargs) -> 'dramatiq.worker.Worker':
+def start_workers(**kwargs) -> "dramatiq.worker.Worker":
     """
     A startup routine for apps that make use of dramatiq.
     """
@@ -233,22 +258,36 @@ def dramatiq_workers_context(**kwargs):
     """
     Context manager for apps that make use of dramatiq. They need the workers to exist.
     """
-    remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=get_broker())
+    remove_middleware_from_dramatiq_broker(
+        middleware_name="dramatiq.middleware.prometheus", broker=get_broker()
+    )
+
+    # Outside the try: if the workers never start (e.g. Redis is not
+    # running), that error propagates as-is — there is no worker to stop.
     try:
         worker = start_workers(**kwargs)
+    except RedisConnectionError:
+        logger.warning(
+            f"Cannot reach the Redis server at {REDIS_HOST}:{REDIS_PORT} — is it "
+            "running? Start a Redis server on that address, then start this "
+            "again."
+        )
+        raise
 
+    try:
         yield worker  # This is where the main logic will execute within the context
-
     finally:
-        # Shutdown routine
         worker.stop()
 
 
 # Example usage
 if __name__ == "__main__":
-    from microdrop_utils.dramatiq_pub_sub_helpers import publish_message, MessageRouterActor
     import dramatiq
 
+    from microdrop_utils.dramatiq_pub_sub_helpers import (
+        MessageRouterActor,
+        publish_message,
+    )
 
     def example_app_routine():
         # Given that I have a database
@@ -260,17 +299,23 @@ if __name__ == "__main__":
 
         test_topic = "test_topic"
         test_message = "test_message"
-        # after declaring the actor, I add it to the message router and ascribe an topic to it that it will listen to.
+        # after declaring the actor, I add it to the message router and ascribe
+        # a topic to it that it will listen to.
         mra = MessageRouterActor()
-        mra.message_router_data.add_subscriber_to_topic(topic=test_topic, subscribing_actor_name="put")
-        # Now I publish a message to the message router actor to the test topic for triggering it.
+        mra.message_router_data.add_subscriber_to_topic(
+            topic=test_topic, subscribing_actor_name="put"
+        )
+        # Now I publish a message to the message router actor to the test topic
+        # for triggering it.
         publish_message(test_message, test_topic, "message_router_actor")
         publish_message(message="test", topic="test")
         while True:
             if test_topic in database:
-                print(f"Message: {database[test_topic]} successfully published on topic {test_topic}")
+                print(
+                    f"Message: {database[test_topic]} successfully published on "
+                    f"topic {test_topic}"
+                )
                 exit(0)
 
-
     with redis_server_context(), dramatiq_workers_context():
-            example_app_routine()
+        example_app_routine()
