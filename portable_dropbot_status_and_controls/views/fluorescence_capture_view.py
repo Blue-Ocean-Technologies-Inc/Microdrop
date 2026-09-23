@@ -24,10 +24,12 @@ against just the model:
 
 # Enthought library imports.
 from traitsui.api import (
+    EnumEditor,
     HGroup,
     Item,
     Label,
     ObjectColumn,
+    RangeEditor,
     TableEditor,
     UItem,
     VGroup,
@@ -35,10 +37,19 @@ from traitsui.api import (
 )
 
 # Microdrop package imports.
-from portable_dropbot_controller.consts import FLUORESCENCE_EXPOSURE_MS_BOUNDS
+from portable_dropbot_controller.consts import (
+    FILTER_POSITIONS,
+    FLUORESCENCE_EXPOSURE_MS_BOUNDS,
+    FLUORESCENCE_LED_PERCENT_BOUNDS,
+    filter_label,
+)
+
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_HOME
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
+    IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
     SteppedSliderEditor,
@@ -57,14 +68,29 @@ from .capture_pane_view import (
     tick_column,
 )
 
+#: The Filter pick's labels, the dye ("FAM"); the "i:" prefix keeps EnumEditor in
+#: position order rather than alphabetical.
+_filter_labels = {
+    position: f"{i}:{filter_label(position)}"
+    for i, position in enumerate(FILTER_POSITIONS)
+}
+
+
+#: LED % cell: an integer spin box over the LED bounds.
+_led_spinner = RangeEditor(
+    low=FLUORESCENCE_LED_PERCENT_BOUNDS[0],
+    high=FLUORESCENCE_LED_PERCENT_BOUNDS[1],
+    mode="spinner",
+)
+
 
 def _filter_column():
-    return key_column("filter_position", "Filter")
+    return key_column("filter_label", "Filter")
 
 
 def _setting_columns():
     return [
-        number_column("led_percent", "LED %"),
+        number_column("led_percent", "LED %", editor=_led_spinner),
         tick_column("auto_exposure", "Auto exposure"),
         slider_column(
             "exposure_ms",
@@ -86,7 +112,7 @@ fluorescence_row_table_manual, fluorescence_row_table_attached = capture_row_tab
 fluorescence_results_table = TableEditor(
     columns=[
         ObjectColumn(
-            name="filter_position",
+            name="filter_label",
             label="Filter",
             editable=False,
             resize_mode="resize_to_contents",
@@ -109,7 +135,17 @@ manual_controls = VGroup(
     ),
     VGroup(
         VGroup(
-            Item("manual_filter_position", label="Filter"),
+            HGroup(
+                Item(
+                    "manual_filter_position",
+                    label="Filter",
+                    editor=EnumEditor(values=_filter_labels),
+                ),
+                UItem(
+                    "home_filter_button",
+                    editor=IconButtonEditor(glyph=ICON_HOME, tooltip="Home filter"),
+                ),
+            ),
             Item("manual_auto_exposure", label="Auto exposure"),
             Item(
                 "manual_exposure_ms",
@@ -137,7 +173,11 @@ manual_controls = VGroup(
 
 FluorescenceCaptureView = View(
     VGroup(
-        capture_group(fluorescence_row_table_manual, fluorescence_row_table_attached),
+        capture_group(
+            fluorescence_row_table_manual,
+            fluorescence_row_table_attached,
+            park_label="Park Filter",
+        ),
         manual_controls,
         results_group(fluorescence_results_table),
     ),

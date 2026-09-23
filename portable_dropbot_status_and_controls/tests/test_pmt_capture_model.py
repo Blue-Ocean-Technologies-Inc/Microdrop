@@ -41,6 +41,16 @@ def test_merge_spots_builds_rows_in_slot_order_with_defaults():
     assert m.rows[1].label == "Spot 3 · 24.50 mm"
 
 
+def test_live_spot_labels_list_park_then_configured_spots_in_slot_order():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(3, 24500), (1, 1000)])
+    assert m.live_spot_labels == {
+        0: "0:Park (spot 0)",
+        1: "1:Spot 1 · 1.00 mm",
+        3: "3:Spot 3 · 24.50 mm",
+    }
+
+
 def test_merge_spots_keeps_settings_order_and_refreshes_positions():
     m = PortableDropbotPmtCaptureModel()
     m.merge_spots([(1, 1000), (2, 2000), (3, 3000)])
@@ -85,6 +95,7 @@ def test_capture_request_carries_stream_settings():
         "avg": 32,
         "osr": 4,
         "rf_ohms": 250_000.0,
+        "park_motor": False,
     }
 
 
@@ -302,6 +313,36 @@ def test_detach_step_restores_the_manual_snapshot():
     assert all(not r.at_start and not r.at_end for r in m.rows)
 
 
+def test_capture_request_and_step_cell_value_carry_park_motor():
+    m = PortableDropbotPmtCaptureModel()
+    m.park_motor = True
+    m.rows = [PmtSpotRow(slot=1, position_um=0, at_start=True)]
+
+    assert m.capture_request()["park_motor"] is True
+    assert m.step_cell_value()["park_motor"] is True
+
+
+def test_attach_step_loads_park_motor_and_detach_restores_the_manual_value():
+    m = PortableDropbotPmtCaptureModel()
+    m.merge_spots([(1, 1000)])
+    m.park_motor = True  # the manual value the snapshot must restore
+
+    m.attach_step(
+        "step-1",
+        {
+            "avg": 16,
+            "osr": 6,
+            "rf_ohms": 499_000.0,
+            "park_motor": False,
+            "entries": [{"slot": 1, "gain": 90, "exposure_s": 2.5, "at_start": True}],
+        },
+    )
+    assert m.park_motor is False
+
+    m.detach_step()
+    assert m.park_motor is True
+
+
 def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
     m = PortableDropbotPmtCaptureModel()
     m.rows = [
@@ -315,6 +356,7 @@ def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
         "avg": 16,
         "osr": 6,
         "rf_ohms": 499_000.0,
+        "park_motor": False,
         "entries": [
             {
                 "slot": 1,

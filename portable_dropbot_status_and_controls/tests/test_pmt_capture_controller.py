@@ -13,7 +13,9 @@ publish_message are patched; no Redis."""
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
+    MOTOR_HOME,
     PMT_CAPTURE_ABORT,
+    PMT_MOVE_TO_SPOT,
     PMT_SPOTS_READ,
     PMT_STREAM_STOP,
 )
@@ -72,6 +74,7 @@ def test_start_publishes_ticked_entries_and_stream_settings(monkeypatch):
             "avg": 32,
             "osr": model.stream_osr,
             "rf_ohms": model.rf_ohms,
+            "park_motor": False,
         }
     ]
     assert model.capturing is True
@@ -90,6 +93,23 @@ def test_abort_and_refresh_topics(monkeypatch):
     model.abort_button = True
     model.refresh_button = True
     assert sent["raw"] == [(PMT_CAPTURE_ABORT, ""), (PMT_SPOTS_READ, "")]
+
+
+def test_live_spot_change_publishes_move_to_spot(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.live_spot = 3
+    assert sent["raw"] == [(PMT_MOVE_TO_SPOT, "3")]
+
+
+def test_home_pmt_publishes_motor_home_only_and_resets_live_spot(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.live_spot = 2
+    sent["raw"].clear()
+
+    model.home_pmt_button = True
+
+    assert sent["raw"] == [(MOTOR_HOME, "pmt")]
+    assert model.live_spot == 0
 
 
 def test_stream_start_clears_live_data_and_publishes_request(monkeypatch):

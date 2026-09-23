@@ -32,7 +32,9 @@ from traits.api import Any, HasTraits, List
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
     PMT_ADC_FULL_SCALE,
+    PMT_PARK_LOCATION,
     PMT_RF_OHMS,
+    PMT_SPOT_SLOTS,
     PMT_STREAM_AVG,
     PMT_STREAM_OSR,
     PmtAcquireDone,
@@ -285,6 +287,34 @@ def test_spots_read_publishes_non_zero_slots(published):
     assert h._pmt_spot_positions == {1: 1000, 3: 24500}
 
 
+def test_move_to_spot_moves_through_the_motor_proxy(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_move_to_spot_request("2")
+
+    assert h.log == [f"move {2 + PMT_PARK_LOCATION}"]
+
+
+def test_move_to_spot_refuses_a_spot_out_of_range(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_move_to_spot_request(str(PMT_SPOT_SLOTS + 1))
+
+    assert h.log == []
+
+
+def test_move_to_spot_refused_while_a_capture_is_running(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h._pmt_capturing = True
+
+    h.on_pmt_move_to_spot_request("1")
+
+    assert h.log == []
+
+
 def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
     h = _Harness()
     h.proxy = _Session(h.log)
@@ -333,6 +363,17 @@ def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
     ]
     assert h.proxy.uart.subscribers == {}
     assert h._pmt_capturing is False
+
+
+def test_capture_parks_the_pmt_when_requested(published):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    payload = json.loads(_request([{"slot": 1, "gain": 50, "exposure_s": 1.0}]))
+    payload["park_motor"] = True
+
+    _run(h, json.dumps(payload))
+
+    assert h.log[-1] == f"move {PMT_PARK_LOCATION}"
 
 
 def test_failed_stream_start_records_error_and_continues(published):

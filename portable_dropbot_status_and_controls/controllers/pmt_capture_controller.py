@@ -17,11 +17,13 @@ message handler."""
 
 # Enthought library imports.
 from pyface.timer.api import CallbackTimer
-from traits.api import Instance, observe
+from traits.api import Bool, Instance, observe
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
+    MOTOR_HOME,
     PMT_CAPTURE_ABORT,
+    PMT_MOVE_TO_SPOT,
     PMT_SPOTS_READ,
     PMT_STREAM_STOP,
     pmt_acquire_publisher,
@@ -50,6 +52,9 @@ class PmtCaptureController(CapturePaneController):
 
     #: Ticks the status line's exposure countdown on the GUI thread.
     _countdown_timer = Instance(CallbackTimer)
+    #: True while homing resets live_spot to park — the PMT is already
+    #: going there, so that change must not publish a second move.
+    _homing = Bool(False)
 
     def _publish_capture_request(self):
         pmt_capture_publisher.publish(self.model.capture_request())
@@ -61,6 +66,23 @@ class PmtCaptureController(CapturePaneController):
     @observe("model:refresh_button")
     def _refresh_spots(self, event):
         publish_message(topic=PMT_SPOTS_READ, message="")
+
+    @observe("model:live_spot")
+    def _move_to_spot(self, event):
+        if not self._homing:
+            publish_message(topic=PMT_MOVE_TO_SPOT, message=str(event.new))
+
+    @observe("model:home_pmt_button")
+    def _home_pmt(self, event):
+        publish_message(topic=MOTOR_HOME, message="pmt")
+
+        # Homing ends at park.
+        self._homing = True
+
+        try:
+            self.model.live_spot = 0
+        finally:
+            self._homing = False
 
     # dispatch="ui": the deadline is set by the message handler on a Dramatiq
     # worker thread, and a Qt timer created or started there never fires —

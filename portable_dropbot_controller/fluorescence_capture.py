@@ -96,9 +96,3 @@ def led_raw(percent):
     clamped = min(max(int(percent), low), high)
 
     return round(clamped * FLUORESCENCE_LED_RAW_MAX / 100)
-
-
-def frame_description(label, filter_position):
-    """The step_description a frame request carries; the device viewer names
-    the file ``<description>_<timestamp>.png`` (dropping the label's dots)."""
-    return f"flu_{label or 'manual'}_f{filter_position}"

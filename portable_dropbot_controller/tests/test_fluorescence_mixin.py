@@ -27,7 +27,10 @@ import pytest
 from traits.api import Any, Bool, HasTraits, List, Str
 
 # Microdrop package imports.
-from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
+from portable_dropbot_controller.consts import (
+    FLUORESCENCE_LED_RAW_MAX,
+    FLUORESCENCE_PARK_FILTER,
+)
 from portable_dropbot_controller.fluorescence_capture import led_raw
 from portable_dropbot_controller.services import (
     portable_dropbot_fluorescence_mixin_service as mod,
@@ -213,11 +216,11 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
         "filter 2",
         f"led {led_raw(40)}",
         "camera 50.0 None",
-        "frame flu_manual_f2",
+        "frame flu_manual_f2_CY5",
         "filter 1",
         f"led {FLUORESCENCE_LED_RAW_MAX}",
         "camera 50.0 0.3",
-        "frame flu_manual_f1",
+        "frame flu_manual_f1_HEX",
         "light restored",
         "camera None None",
     ]
@@ -227,7 +230,7 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     assert done["directory"] == str(tmp_path / "captures")
     assert [
         f["path"].rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for f in done["frames"]
-    ] == ["flu_manual_f2.png", "flu_manual_f1.png"]
+    ] == ["flu_manual_f2_CY5.png", "flu_manual_f1_HEX.png"]
     assert [f["filter_position"] for f in done["frames"]] == [2, 1]
     stages = [(p["filter_position"], p["stage"]) for p in rig["progress"]]
     assert stages == [
@@ -244,6 +247,14 @@ def test_each_entry_runs_filter_led_camera_frame_then_restores(rig, tmp_path):
     assert {p["request_id"] for p in rig["progress"]} == {"r1"}
     assert h._fluorescence_capturing is False
     assert h._fluorescence_abort is None
+
+
+def test_teardown_parks_the_filter_when_requested(rig):
+    h = rig["h"]
+
+    _run(h, _request([_entry(1)], park_motor=True))
+
+    assert h.log[-1] == f"filter {FLUORESCENCE_PARK_FILTER}"
 
 
 def test_led_zero_percent_is_a_valid_dark_frame(rig):
@@ -272,7 +283,7 @@ def test_frame_request_carries_directory_label_and_reply_id(rig, tmp_path):
     assert frontend.frame_requests == [
         {
             "directory": str(tmp_path),
-            "step_description": "flu_step1.2-end_f3",
+            "step_description": "flu_step1.2-end_f3_White",
             "show_dialog": False,
             "request_id": "row-uuid:end:0",
         }

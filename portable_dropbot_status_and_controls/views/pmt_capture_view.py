@@ -41,11 +41,15 @@ from portable_dropbot_controller.consts import (
     PMT_STREAM_OSR_CHOICES,
 )
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_HOME
+
 # Microdrop utils imports.
 from microdrop_utils.pyqtgraph_editors import LivePlotEditor
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HtmlLabelEditor,
+    IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
 )
@@ -139,6 +143,7 @@ pmt_results_table = TableEditor(
 capture = capture_group(
     pmt_spot_table_manual,
     pmt_spot_table_attached,
+    park_label="Park PMT",
     extra_buttons=(UItem("refresh_button", enabled_when="connected and not busy"),),
 )
 
@@ -175,6 +180,19 @@ live = VGroup(
                     "connected and not capturing and not acquiring "
                     "and not protocol_running"
                 ),
+            ),
+        ),
+        HGroup(
+            Item(
+                "live_spot",
+                label="Move to",
+                editor=EnumEditor(name="live_spot_labels"),
+                enabled_when="connected and not capturing and not protocol_running",
+            ),
+            UItem(
+                "home_pmt_button",
+                editor=IconButtonEditor(glyph=ICON_HOME, tooltip="Home PMT"),
+                enabled_when="connected and not capturing and not protocol_running",
             ),
         ),
         HGroup(

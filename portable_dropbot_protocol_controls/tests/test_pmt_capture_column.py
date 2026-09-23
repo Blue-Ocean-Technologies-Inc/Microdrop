@@ -71,6 +71,7 @@ STEP_VALUE = {
     "avg": 16,
     "osr": 6,
     "rf_ohms": 499000.0,
+    "park_motor": False,
     "entries": [ENTRY_START, ENTRY_END, ENTRY_BOTH],
 }
 
