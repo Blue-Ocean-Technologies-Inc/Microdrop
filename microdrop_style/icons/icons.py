@@ -30,6 +30,9 @@ ICON_CALL_TO_ACTION = "call_to_action"  # panel with a button strip
 ICON_REMOVE_SELECTION = "remove_selection"  # undraw: sweep electrodes out
 ICON_CHECKLIST = "checklist"  # multi-select: clicks add to the selection
 ICON_CLOSE = "close"  # dismiss/cancel
+ICON_UNDO = "undo"  # step back one edit
+ICON_REDO = "redo"  # re-apply an undone edit
+ICON_RESTORE = "restore"  # revert to a baseline state
 
 # DEVICE VIEWER ICONS
 ICON_VIEW_3D = "\ue8b4"  # view_in_ar (3D view)
