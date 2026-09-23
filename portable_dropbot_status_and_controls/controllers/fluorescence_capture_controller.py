@@ -107,7 +107,7 @@ class FluorescenceCaptureController(CapturePaneController):
             "step_description": frame_description(
                 "manual", self.model.manual_filter_position
             ),
-            "show_dialog": False,
+            "show_status_message": False,
             "request_id": request_id,
         }
 
