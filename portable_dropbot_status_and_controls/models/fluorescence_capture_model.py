@@ -137,6 +137,7 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     show_manual = Bool(False)
     #: Moves the wheel as soon as it changes.
     manual_filter_position = Enum(FILTER_POSITIONS)
+    home_filter_button = Button("Home filter")
     #: The camera settings below are applied as soon as any of them changes.
     manual_auto_exposure = Bool(False, desc="Camera auto exposure")
     manual_exposure_ms = Range(

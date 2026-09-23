@@ -62,6 +62,7 @@ from ..consts import (
     PMT_CAPTURE_SUBDIR,
     PMT_GAIN_BOUNDS,
     PMT_PARK_LOCATION,
+    PMT_SPOT_SLOTS,
     PMT_STREAM_AVG,
     PMT_STREAM_OSR,
     PMT_STREAM_PREEMPT_TIMEOUT_S,
@@ -291,6 +292,31 @@ class PortableDropbotPmtMixinService(HasTraits):
         self._pmt_spot_positions = {s["slot"]: s["position_um"] for s in spots}
         pmt_spots_updated_publisher.publish({"spots": spots})
         logger.info(f"Portable Dropbot PMT spots --> {[s['slot'] for s in spots]}")
+
+    def on_pmt_move_to_spot_request(self, message):
+        """Move the PMT to a spot (0 = park). Refused while a capture runs —
+        the capture routine owns the motor; a live stream or acquire keeps
+        running, so the operator can watch the signal at the new spot."""
+        spot = int(float(str(message)))
+
+        if not 0 <= spot <= PMT_SPOT_SLOTS:
+            logger.warning(f"PMT spot out of range: {spot}")
+
+            return
+
+        if self._pmt_capturing:
+            logger.warning(f"PMT move to spot {spot} refused: a capture is running")
+
+            return
+
+        ok, location = self._proxy_call(
+            f"PMT move to spot {spot}",
+            lambda: self.proxy.motor.pmt_ctrl(spot + PMT_PARK_LOCATION),
+        )
+        logger.info(
+            f"Portable Dropbot PMT --> spot {spot}: "
+            f"{'ok' if ok and location is not None else 'FAILED'}"
+        )
 
     # ------------------------------------------------------------------ #
     # PMT Capture pane: multi-spot capture routine                         #

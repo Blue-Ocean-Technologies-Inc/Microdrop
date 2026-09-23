@@ -344,6 +344,9 @@ PMT_STREAM_STOP = "portable_dropbot/requests/pmt_stream_stop"
 PMT_ADC_QUERY = "portable_dropbot/requests/pmt_adc_query"
 #: Re-read the motor board's PMT position table and publish PMT_SPOTS_UPDATED.
 PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"
+#: Move the PMT to spot 0..PMT_SPOT_SLOTS (0 = park, where homing ends);
+#: payload is the spot number as text. Refused while a PMT capture runs.
+PMT_MOVE_TO_SPOT = "portable_dropbot/requests/pmt_move_to_spot"
 #: Run the multi-spot capture routine (PmtCaptureRequest); one CSV per spot.
 PMT_CAPTURE = "portable_dropbot/requests/pmt_capture"
 #: Stop the running capture after the current spot's teardown.

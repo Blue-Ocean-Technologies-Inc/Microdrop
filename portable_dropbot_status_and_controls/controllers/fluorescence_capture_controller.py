@@ -21,13 +21,15 @@ import json
 import uuid
 
 # Enthought library imports.
-from traits.api import observe
+from traits.api import Bool, observe
 
 # Microdrop package imports.
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE, camera_controls_publisher
 from microdrop_application.helpers import get_current_experiment_directory
 from portable_dropbot_controller.consts import (
+    FILTER_POSITIONS,
     FLUORESCENCE_CAPTURE_ABORT,
+    MOTOR_HOME,
     SET_FILTER,
     fluorescence_capture_publisher,
 )
@@ -45,6 +47,10 @@ class FluorescenceCaptureController(CapturePaneController):
     ABORT_TOPIC = FLUORESCENCE_CAPTURE_ABORT
     ROW_NOUN = "filter"
 
+    #: True while homing resets the Filter pick to the first position — the
+    #: wheel is already going there, so that change must not publish a move.
+    _homing = Bool(False)
+
     def _publish_capture_request(self):
         request = self.model.capture_request(
             request_id=str(uuid.uuid4()), label="manual"
@@ -58,9 +64,22 @@ class FluorescenceCaptureController(CapturePaneController):
 
     @observe("model:manual_filter_position")
     def _move_filter(self, event):
-        publish_message(
-            topic=SET_FILTER, message=str(self.model.manual_filter_position)
-        )
+        if not self._homing:
+            publish_message(
+                topic=SET_FILTER, message=str(self.model.manual_filter_position)
+            )
+
+    @observe("model:home_filter_button")
+    def _home_filter(self, event):
+        publish_message(topic=MOTOR_HOME, message="filter")
+
+        # Homing ends at the first position (as the Motors pane assumes).
+        self._homing = True
+
+        try:
+            self.model.manual_filter_position = FILTER_POSITIONS[0]
+        finally:
+            self._homing = False
 
     @observe("model:manual_auto_exposure")
     def _toggle_auto_exposure(self, event):

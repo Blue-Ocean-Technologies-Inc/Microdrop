@@ -178,6 +178,18 @@ live = VGroup(
             ),
         ),
         HGroup(
+            Item(
+                "live_spot",
+                label="Move to",
+                editor=EnumEditor(name="live_spot_labels"),
+                enabled_when="connected and not capturing and not protocol_running",
+            ),
+            UItem(
+                "home_pmt_button",
+                enabled_when="connected and not capturing and not protocol_running",
+            ),
+        ),
+        HGroup(
             UItem("stream_start_button", enabled_when="connected and not busy"),
             UItem("stream_stop_button", enabled_when="streaming"),
             UItem("acquire_button", enabled_when="connected and not busy"),

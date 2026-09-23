@@ -109,7 +109,10 @@ manual_controls = VGroup(
     ),
     VGroup(
         VGroup(
-            Item("manual_filter_position", label="Filter"),
+            HGroup(
+                Item("manual_filter_position", label="Filter"),
+                UItem("home_filter_button"),
+            ),
             Item("manual_auto_exposure", label="Auto exposure"),
             Item(
                 "manual_exposure_ms",

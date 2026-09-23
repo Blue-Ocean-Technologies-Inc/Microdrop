@@ -27,6 +27,7 @@ from traits.api import (
     Array,
     Bool,
     Button,
+    Dict,
     Enum,
     Event,
     Float,
@@ -204,6 +205,12 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
     stream_start_button = Button("Start live")
     stream_stop_button = Button("Stop live")
     acquire_button = Button("Buffered acquire")
+    #: The spot the PMT is moved to (0 = park, where homing ends); it moves
+    #: as soon as this changes.
+    live_spot = Int(0)
+    #: live_spot's dropdown: park plus the board's configured spots.
+    live_spot_labels = Property(Dict, observe="rows.items.position_um")
+    home_pmt_button = Button("Home PMT")
     live_units = Enum("Current", "Volts", "Counts")
     #: Rolling window of raw counts, trimmed to PMT_LIVE_WINDOW_SAMPLES.
     live_counts = Array
@@ -223,6 +230,15 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
 
     def _get_busy(self):
         return self.capturing or self.streaming or self.acquiring
+
+    def _get_live_spot_labels(self):
+        # The "n:" prefix keeps EnumEditor in spot order, not alphabetical.
+        labels = {0: "0:Park (spot 0)"}
+
+        for row in sorted(self.rows, key=lambda row: row.slot):
+            labels[row.slot] = f"{row.slot}:{row.label}"
+
+        return labels
 
     def _get_live_axis_label(self):
         return {"Current": "A", "Volts": "V", "Counts": "counts"}[self.live_units]
