@@ -20,7 +20,7 @@ from traits.api import (
 )
 
 # Microdrop package imports.
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from portable_dropbot_controller.consts import (
     DEFAULT_FREQUENCY,
     DEFAULT_LIGHT_INTENSITY,

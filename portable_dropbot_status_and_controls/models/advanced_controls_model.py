@@ -12,7 +12,7 @@
 from traits.api import Bool, Button, Enum, Float, Int, List, Str
 
 # Microdrop package imports.
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 

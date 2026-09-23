@@ -45,6 +45,13 @@ CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
 application_home_directory = Path.home() / "Documents" / "MicroDropNextGen"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"
 
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+ADVANCED_MODE_KEY = "microdrop.advanced_mode"  # advanced-mode toggle flag
+
+APP_GLOBALS_KEYS = [
+    ADVANCED_MODE_KEY,
+]
+
 sidebar_menu_options = [
     ("File", ICON_FOLDER_OPEN),
     ("Tools", ICON_EMOJI_OBJECTS),

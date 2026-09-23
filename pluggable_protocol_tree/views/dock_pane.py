@@ -42,7 +42,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_application.dialogs.pyface_wrapper import (
     error as error_dialog,
 )
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     ACK_WAIT_FOREVER,
     ELECTRODES_STATE_CHANGE,

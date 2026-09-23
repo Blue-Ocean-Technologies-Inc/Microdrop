@@ -8,30 +8,24 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from pyface.action.api import Action
 
-from microdrop_application.consts import ADVANCED_MODE_CHANGE
+# Microdrop package imports.
+from microdrop_application.consts import ADVANCED_MODE_CHANGE, ADVANCED_MODE_KEY
+from microdrop_application.helpers import (
+    get_microdrop_redis_globals_manager,
+    is_advanced_mode,
+)
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
-
-_advanced_mode_enabled = False
-
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 app_globals = get_microdrop_redis_globals_manager()
-
-
-def is_advanced_mode():
-    # Tolerate no-Redis (tests / headless imports): this runs at CLASS
-    # DEFINITION time below, so a connect error here used to make ANY
-    # import of this module (e.g. via device_viewer.preferences) require
-    # a live Redis server.
-    try:
-        return app_globals.get("microdrop.advanced_mode", False)
-    except Exception as e:
-        logger.debug(f"Advanced-mode flag unavailable (no Redis?): {e}")
-        return False
 
 
 class AdvancedModeAction(Action):
@@ -41,9 +35,13 @@ class AdvancedModeAction(Action):
     checked = is_advanced_mode()
 
     def perform(self, event):
+        app_globals[ADVANCED_MODE_KEY] = self.checked
 
-        app_globals["microdrop.advanced_mode"] = self.checked
-        logger.critical("Microdrop Running in Advanced Mode!" if self.checked else "Microdrop Advanced Mode is Off.")
+        logger.critical(
+            "Microdrop Running in Advanced Mode!"
+            if self.checked
+            else "Microdrop Advanced Mode is Off."
+        )
 
         publish_message(
             topic=ADVANCED_MODE_CHANGE,
