@@ -33,34 +33,43 @@ like Record or Video. So no scratch key needed; no on_protocol_end cleanup
 needed.
 """
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 from traits.api import Bool, Enum, List, Str
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
+# Microdrop package imports.
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
-    BaseCompoundColumnHandler, BaseCompoundColumnModel, CompoundColumn,
+    BaseCompoundColumnHandler,
+    BaseCompoundColumnModel,
+    CompoundColumn,
     DictCompoundColumnView,
 )
 from pluggable_protocol_tree.services.preferences import (
-    ProtocolPreferences, StepTime,
+    ProtocolPreferences,
+    StepTime,
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 #: The selectable capture moments, in display order — the single
 #: definition; the default/per-row trait validation and the
 #: combobox options all derive from it.
 CHOICES = (StepTime.START, StepTime.END)
 
+
 class CaptureCompoundModel(BaseCompoundColumnModel):
     """Two coupled fields. base_id 'capture' appears as compound_id on
     each field's column entry in JSON (PPT-11 framework)."""
+
     base_id = "capture"
 
     # Default capture_at for newly added steps (and the fill-in for any
@@ -78,9 +87,11 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
         if field_id == "capture":
             return Bool(False, desc="Capture image during step")
         if field_id == "capture_at":
-            return Enum(self.default_capture_at,
-                        *CHOICES,
-                        desc="When during the step the capture fires")
+            return Enum(
+                self.default_capture_at,
+                *CHOICES,
+                desc="When during the step the capture fires",
+            )
         raise KeyError(field_id)
 
 
@@ -127,6 +138,7 @@ class CaptureHandler(BaseCompoundColumnHandler):
     it doesn't. There is no change-detection suppression, so calling
     on_pre_step twice with row.capture=True fires two publishes.
     """
+
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
@@ -179,9 +191,11 @@ def make_capture_column():
     model = CaptureCompoundModel(default_capture_at=prefs.capture_time)
     return CompoundColumn(
         model=model,
-        view=DictCompoundColumnView(cell_views={
-            "capture": CheckboxColumnView(),
-            "capture_at": CaptureAtComboBoxView(),
-        }),
+        view=DictCompoundColumnView(
+            cell_views={
+                "capture": CheckboxColumnView(),
+                "capture_at": CaptureAtComboBoxView(),
+            }
+        ),
         handler=CaptureHandler(),
     )
