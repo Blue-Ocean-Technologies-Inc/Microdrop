@@ -176,7 +176,7 @@ def test_on_pre_step_publishes_start_json_on_flip_on():
     assert payload["step_id"] == "abc123"
     assert payload["step_description"] == "Step 1"
     assert payload["directory"] == "/tmp/foo"
-    assert payload["show_dialog"] is False
+    assert payload["show_status_message"] is False
     assert ctx.protocol.scratch[RECORDING_ACTIVE_KEY] is True
 
 
@@ -330,6 +330,7 @@ def test_on_protocol_end_noop_when_scratch_key_absent():
 # 13. Pre-protocol recording-active dialog gate (issue #398 acceptance)
 # ---------------------------------------------------------------------------
 
+
 _RECORD_MOD = "video_protocol_controls.protocol_columns.record_column"
 
 
@@ -352,7 +353,7 @@ def test_dialog_gate_idle_proceeds_without_dialog():
         patch(f"{_RECORD_MOD}.confirm") as mock_confirm,
     ):
         ag.get.return_value = False
-        assert handler._check_video_recording_and_show_dialog() is True
+        assert handler._check_video_recording_and_show_status_message() is True
         mock_confirm.assert_not_called()
 
 
@@ -370,7 +371,7 @@ def test_dialog_gate_active_confirm_publishes_stop_and_proceeds():
         ),
     ):
         ag.get.return_value = True
-        assert handler._check_video_recording_and_show_dialog() is True
+        assert handler._check_video_recording_and_show_status_message() is True
     assert len(published) == 1
     assert published[0]["topic"] == DEVICE_VIEWER_SCREEN_RECORDING
     assert json.loads(published[0]["message"]) == {"action": "stop"}
@@ -385,7 +386,7 @@ def test_dialog_gate_active_cancel_does_not_publish_or_proceed():
         patch(f"{_RECORD_MOD}.publish_message") as mock_pub,
     ):
         ag.get.return_value = True
-        assert handler._check_video_recording_and_show_dialog() is False
+        assert handler._check_video_recording_and_show_status_message() is False
         mock_pub.assert_not_called()
 
 

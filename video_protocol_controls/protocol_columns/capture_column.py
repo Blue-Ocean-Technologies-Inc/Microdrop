@@ -17,13 +17,11 @@ independently. The global ProtocolPreferences.capture_time pref is the
 DEFAULT for newly added steps (read once at factory time) — it never
 overrides a per-step value.
 
-Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic; the
-legacy code in protocol_grid/services/utils.py is also fire-and-forget.
+Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic.
 
-Capture payload format (legacy-compatible — see protocol_grid/services/
-utils.py:19-32):
+Capture payload format:
     {"directory": experiment_dir, "step_description": ..., "step_id": ...,
-     "show_dialog": false}
+     "show_status_message": false}
 
 ⚠ Key is "directory" (NOT "experiment_dir") — preserves the legacy wire
 format the device_viewer consumer expects.
@@ -172,7 +170,7 @@ class CaptureHandler(BaseCompoundColumnHandler):
             "directory": ctx.protocol.scratch.get(EXPERIMENT_DIR_SCRATCH_KEY, ""),
             "step_description": row.name,
             "step_id": row.dotted_path(),
-            "show_dialog": False,
+            "show_status_message": False,
         }
         publish_message(
             topic=DEVICE_VIEWER_SCREEN_CAPTURE,

@@ -182,7 +182,7 @@ def test_payload_uses_legacy_directory_key(monkeypatch):
         "directory": "exp/dir",
         "step_description": "snap",
         "step_id": "u-9",
-        "show_dialog": False,
+        "show_status_message": False,
     }
 
 

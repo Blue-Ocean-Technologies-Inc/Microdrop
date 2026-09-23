@@ -16,15 +16,14 @@ change-detection survives across multiple steps of the same protocol run.
 Bracketing semantics in detail:
   - flip-on  (False --> True):  publish {"action": "start", "directory": ...,
                                          "step_description": ..., "step_id": ...,
-                                         "show_dialog": false}
+                                         "show_status_message": false}
   - flip-off (True → False):  publish {"action": "stop"}
   - on_protocol_end:           if recording was left active, publish {"action": "stop"}
                                 and reset scratch — ensures the consumer is never
                                 left in a recording state after the run finishes.
 
-Legacy wire format reference: protocol_grid/services/utils.py:34-52.
 ⚠ The key is "directory" (NOT "experiment_dir") — the device_viewer consumer
-expects the legacy key; do not change it.
+expects this key; do not change it.
 
 Convention for cross-step scratch keys in this plugin: dot-namespaced as
 'video_protocol_controls.<state_var>' so Tasks 3 (Video) and 5 (Capture)
@@ -93,7 +92,7 @@ class RecordHandler(BaseColumnHandler):
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
-    def _check_video_recording_and_show_dialog(self) -> bool:
+    def _check_video_recording_and_show_status_message(self) -> bool:
         """Check if video recording is active and show warning dialog.
 
         Returns True if protocol should proceed, False to cancel.
@@ -125,7 +124,7 @@ class RecordHandler(BaseColumnHandler):
         active and the operator cancels, stop the run here so the
         lower-priority realtime/logging hooks never fire.
         """
-        proceed = ctx.prompt_gui(self._check_video_recording_and_show_dialog)
+        proceed = ctx.prompt_gui(self._check_video_recording_and_show_status_message)
 
         if not proceed:
             ctx.stop_event.set()
@@ -148,7 +147,7 @@ class RecordHandler(BaseColumnHandler):
                 "directory": ctx.protocol.scratch.get(EXPERIMENT_DIR_SCRATCH_KEY, ""),
                 "step_description": row.name,
                 "step_id": row.dotted_path(),
-                "show_dialog": False,
+                "show_status_message": False,
             }
             publish_message(
                 topic=DEVICE_VIEWER_SCREEN_RECORDING,

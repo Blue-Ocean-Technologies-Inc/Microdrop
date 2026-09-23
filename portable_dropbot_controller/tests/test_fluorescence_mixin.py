@@ -284,7 +284,7 @@ def test_frame_request_carries_directory_label_and_reply_id(rig, tmp_path):
         {
             "directory": str(tmp_path),
             "step_description": "flu_step1.2-end_f3_White",
-            "show_dialog": False,
+            "show_status_message": False,
             "request_id": "row-uuid:end:0",
         }
     ]
