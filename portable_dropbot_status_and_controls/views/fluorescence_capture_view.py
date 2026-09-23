@@ -29,6 +29,7 @@ from traitsui.api import (
     Item,
     Label,
     ObjectColumn,
+    RangeEditor,
     TableEditor,
     UItem,
     VGroup,
@@ -39,6 +40,7 @@ from traitsui.api import (
 from portable_dropbot_controller.consts import (
     FILTER_POSITIONS,
     FLUORESCENCE_EXPOSURE_MS_BOUNDS,
+    FLUORESCENCE_LED_PERCENT_BOUNDS,
     filter_label,
 )
 
@@ -74,13 +76,21 @@ _filter_labels = {
 }
 
 
+#: LED % cell: an integer spin box over the LED bounds.
+_led_spinner = RangeEditor(
+    low=FLUORESCENCE_LED_PERCENT_BOUNDS[0],
+    high=FLUORESCENCE_LED_PERCENT_BOUNDS[1],
+    mode="spinner",
+)
+
+
 def _filter_column():
     return key_column("filter_label", "Filter")
 
 
 def _setting_columns():
     return [
-        number_column("led_percent", "LED %"),
+        number_column("led_percent", "LED %", editor=_led_spinner),
         tick_column("auto_exposure", "Auto exposure"),
         slider_column(
             "exposure_ms",
@@ -163,7 +173,11 @@ manual_controls = VGroup(
 
 FluorescenceCaptureView = View(
     VGroup(
-        capture_group(fluorescence_row_table_manual, fluorescence_row_table_attached),
+        capture_group(
+            fluorescence_row_table_manual,
+            fluorescence_row_table_attached,
+            park_label="Park Filter",
+        ),
         manual_controls,
         results_group(fluorescence_results_table),
     ),

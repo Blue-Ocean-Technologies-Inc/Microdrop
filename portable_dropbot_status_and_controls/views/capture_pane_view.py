@@ -57,10 +57,11 @@ def tick_column(name, label):
     )
 
 
-def number_column(name, label):
-    """A plain editable number column sized to its contents."""
+def number_column(name, label, editor=None):
+    """An editable number column sized to its contents; `editor` swaps the
+    default cell editor (e.g. a spin box)."""
     return ActiveRowObjectColumn(
-        name=name, label=label, resize_mode="resize_to_contents"
+        name=name, label=label, resize_mode="resize_to_contents", editor=editor
     )
 
 
@@ -101,9 +102,10 @@ def capture_row_tables(key, settings):
     return manual, attached
 
 
-def capture_group(manual_table, attached_table, extra_buttons=()):
+def capture_group(manual_table, attached_table, park_label, extra_buttons=()):
     """The mode line and exposure range, the row table for the current
-    mode, the run buttons, and the status lines. Labelled rows live in
+    mode, the run buttons with the park checkbox (`park_label`, e.g. "Park
+    PMT"), and the status lines. Labelled rows live in
     their own sub-groups: a group with any labelled item lays out as a
     label/editor grid, which would push the unlabelled table into the
     editor column instead of full width."""
@@ -140,7 +142,7 @@ def capture_group(manual_table, attached_table, extra_buttons=()):
             *extra_buttons,
             Item(
                 "park_motor",
-                label="Park Motor",
+                label=park_label,
                 tooltip="Move the motor to its parking position when the capture ends",
                 enabled_when=ROW_TABLE_ENABLED_WHEN,
             ),

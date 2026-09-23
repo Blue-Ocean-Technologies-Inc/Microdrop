@@ -143,6 +143,7 @@ pmt_results_table = TableEditor(
 capture = capture_group(
     pmt_spot_table_manual,
     pmt_spot_table_attached,
+    park_label="Park PMT",
     extra_buttons=(UItem("refresh_button", enabled_when="connected and not busy"),),
 )
 
