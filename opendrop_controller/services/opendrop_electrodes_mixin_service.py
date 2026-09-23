@@ -8,15 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
 import numpy as np
-from traits.api import HasTraits, Str, provides, Dict
 
+# Enthought library imports.
+from traits.api import Dict, HasTraits, Str, provides
+
+# Microdrop package imports.
 from electrode_controller.models import ElectrodeChannelsRequest
-from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Local imports.
 from ..consts import NUM_ELECTRODES
 from ..interfaces.i_opendrop_control_mixin_service import IOpenDropControlMixinService
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
@@ -31,7 +38,9 @@ class OpenDropElectrodesMixinService(HasTraits):
 
     def on_electrodes_state_change_request(self, message):
         if self.proxy is None:
-            logger.warning("OpenDrop not connected: ignoring electrode state change request.")
+            logger.warning(
+                "OpenDrop not connected: ignoring electrode state change request."
+            )
             return
 
         if not self.message_context:
@@ -53,6 +62,7 @@ class OpenDropElectrodesMixinService(HasTraits):
         telemetry = self._push_state_to_device(force=False)
         active_channels = int(channel_mask.sum())
         logger.info(
-            f"OpenDrop electrode update applied: {active_channels}/{NUM_ELECTRODES} active "
+            f"OpenDrop electrode update applied: "
+            f"{active_channels}/{NUM_ELECTRODES} active "
             f"(telemetry={'ok' if telemetry is not None else 'skipped'})"
         )

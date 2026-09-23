@@ -8,7 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-import json
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
@@ -52,8 +51,8 @@ SET_TEMPERATURE_3 = "opendrop/requests/set_temperature_3"
 CHANGE_SETTINGS = "opendrop/requests/change_settings"
 
 # Topics published by this plugin
-NO_OPENDROP_AVAILABLE = 'dropbot/signals/warnings/no_dropbot_available'
-DROPLETS_DETECTED = 'dropbot/signals/drops_detected'
+NO_OPENDROP_AVAILABLE = "dropbot/signals/warnings/no_dropbot_available"
+DROPLETS_DETECTED = "dropbot/signals/drops_detected"
 
 
 # Topics actor declared by plugin subscribes to

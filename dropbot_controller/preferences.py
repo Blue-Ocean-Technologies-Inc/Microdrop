@@ -8,26 +8,36 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Float, Int, Dict, Property, Range, observe
+from traits.api import Dict, Float, Int, Property, Range, observe
+
+# Microdrop package imports.
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+# Local imports.
+from .consts import (
+    DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
+    HARDWARE_DEFAULT_FREQUENCY,
+    HARDWARE_DEFAULT_VOLTAGE,
+    HARDWARE_MIN_FREQUENCY,
+    HARDWARE_MIN_VOLTAGE,
+)
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-from .consts import (
-    DROPLET_DETECTION_CAPACITANCE_THRESHOLD,
-    HARDWARE_DEFAULT_VOLTAGE,
-    HARDWARE_DEFAULT_FREQUENCY, HARDWARE_MIN_VOLTAGE, HARDWARE_MIN_FREQUENCY,
-)
-
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 preferences_names = [
-            'droplet_detection_capacitance',
-            'capacitance_update_interval',
-            '_hardware_max_voltage', '_hardware_max_frequency',
-        ]
+    "droplet_detection_capacitance",
+    "capacitance_update_interval",
+    "_hardware_max_voltage",
+    "_hardware_max_frequency",
+]
 
 app_globals = get_microdrop_redis_globals_manager()
+
 
 class DropbotPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.
@@ -40,8 +50,13 @@ class DropbotPreferences(PreferencesHelper):
     preferences_path = "microdrop.dropbot_settings"
 
     #### Preferences ##########################################################
-    droplet_detection_capacitance = Float(desc="Threshold for electrode capcitance past which we consider a droplet present.")
-    capacitance_update_interval = Int(desc="how often to poll capacitance from dropbot (in ms)")
+    droplet_detection_capacitance = Float(
+        desc="Threshold for electrode capcitance past which we consider a "
+        "droplet present."
+    )
+    capacitance_update_interval = Int(
+        desc="how often to poll capacitance from dropbot (in ms)"
+    )
 
     # Upper bound is a trait reference (string) — Traits dynamically resolves
     # it against hardware_max_voltage/hardware_max_frequency at validation time.
@@ -59,22 +74,33 @@ class DropbotPreferences(PreferencesHelper):
     )
 
     # Readonly hardware limits — set at runtime when DropBot connects.
-    # Default to inf so the Range traits above are unconstrained until a device reports its limits.
-    _hardware_max_voltage = Float(float("inf"), desc="maximum voltage from connected hardware")
-    _hardware_max_frequency = Float(float("inf"), desc="maximum frequency from connected hardware")
+    # Default to inf so the Range traits above are unconstrained until a
+    # device reports its limits.
+    _hardware_max_voltage = Float(
+        float("inf"), desc="maximum voltage from connected hardware"
+    )
+    _hardware_max_frequency = Float(
+        float("inf"), desc="maximum frequency from connected hardware"
+    )
 
     preferences_name_map = Property(Dict)
 
     ################ View Model ################################################
-    droplet_detection_capacitance_view = Property(Float, observe="droplet_detection_capacitance")
-    capacitance_update_interval_view = Property(Int, observe="capacitance_update_interval")
+    droplet_detection_capacitance_view = Property(
+        Float, observe="droplet_detection_capacitance"
+    )
+    capacitance_update_interval_view = Property(
+        Int, observe="capacitance_update_interval"
+    )
 
     _hardware_max_voltage_view = Property(Float)
     _hardware_max_frequency_view = Property(Float)
 
     def traits_init(self):
         """Seed traits from app_globals so downstream observers fire on startup."""
-        self.droplet_detection_capacitance = self._get_droplet_detection_capacitance_view()
+        self.droplet_detection_capacitance = (
+            self._get_droplet_detection_capacitance_view()
+        )
         self.capacitance_update_interval = self._get_capacitance_update_interval_view()
 
     def _droplet_detection_capacitance_default(self):
@@ -90,7 +116,9 @@ class DropbotPreferences(PreferencesHelper):
         return float(app_globals.get(preferences_names[3], float("inf")))
 
     def _get_droplet_detection_capacitance_view(self):
-        return app_globals.get(preferences_names[0], DROPLET_DETECTION_CAPACITANCE_THRESHOLD)
+        return app_globals.get(
+            preferences_names[0], DROPLET_DETECTION_CAPACITANCE_THRESHOLD
+        )
 
     def _get_capacitance_update_interval_view(self):
         return app_globals.get(preferences_names[1], 100)
@@ -111,7 +139,7 @@ class DropbotPreferences(PreferencesHelper):
         # Use a dict comprehension to build the dictionary
         return {pref: getattr(self, pref) for pref in preferences_names}
 
-    @observe('[_hardware_max_voltage, _hardware_max_frequency]')
+    @observe("[_hardware_max_voltage, _hardware_max_frequency]")
     def _hardware_limit_changed(self, event):
         """Sync hardware limits to app_globals so view properties stay current."""
         logger.debug(f"Hardware limit changed: {event.name} = {event.new}")
