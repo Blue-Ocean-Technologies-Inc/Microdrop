@@ -41,11 +41,15 @@ from portable_dropbot_controller.consts import (
     PMT_STREAM_OSR_CHOICES,
 )
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_HOME
+
 # Microdrop utils imports.
 from microdrop_utils.pyqtgraph_editors import LivePlotEditor
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HtmlLabelEditor,
+    IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
 )
@@ -186,6 +190,7 @@ live = VGroup(
             ),
             UItem(
                 "home_pmt_button",
+                editor=IconButtonEditor(glyph=ICON_HOME, tooltip="Home PMT"),
                 enabled_when="connected and not capturing and not protocol_running",
             ),
         ),

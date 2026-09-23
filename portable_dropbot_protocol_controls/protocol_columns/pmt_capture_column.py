@@ -177,6 +177,7 @@ class PmtCaptureHandler(BaseColumnHandler):
                 "request_id": request_id,
                 "label": label,
                 "stop_live_stream": True,
+                "park_motor": step.park_motor,
             }
         )
 
@@ -186,6 +187,8 @@ class PmtCaptureHandler(BaseColumnHandler):
         timeout = (
             sum(e.exposure_s for e in entries)
             + len(entries) * PMT_STEP_PER_SPOT_OVERHEAD_S
+            # Parking is one more move after the last spot.
+            + (PMT_STEP_PER_SPOT_OVERHEAD_S if step.park_motor else 0)
             + PMT_STEP_TIMEOUT_MARGIN_S
         )
 

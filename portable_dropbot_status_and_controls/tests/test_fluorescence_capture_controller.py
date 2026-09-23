@@ -12,7 +12,11 @@
 publisher and publish_message are patched; no Redis."""
 
 # Microdrop package imports.
-from portable_dropbot_controller.consts import FLUORESCENCE_CAPTURE_ABORT
+from portable_dropbot_controller.consts import (
+    FILTER_POSITIONS,
+    FLUORESCENCE_CAPTURE_ABORT,
+    MOTOR_HOME,
+)
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
 from portable_dropbot_status_and_controls.controllers import (
     fluorescence_capture_controller as mod,
@@ -53,7 +57,11 @@ def _wire(monkeypatch):
 
 def test_start_publishes_ticked_entries_with_a_fresh_request_id(monkeypatch):
     model, _controller, sent = _wire(monkeypatch)
-    model.rows = [FluorescenceRow(filter_position=2, led_percent=80, exposure_ms=25.0)]
+    model.rows = [
+        FluorescenceRow(
+            filter_position=2, led_percent=80, exposure_ms=25.0, auto_exposure=False
+        )
+    ]
     model.start_button = True
 
     assert len(sent["capture"]) == 1
@@ -83,6 +91,17 @@ def test_abort_publishes_the_abort_topic(monkeypatch):
     model, _controller, sent = _wire(monkeypatch)
     model.abort_button = True
     assert sent["raw"] == [(FLUORESCENCE_CAPTURE_ABORT, "")]
+
+
+def test_home_filter_publishes_motor_home_only_and_resets_the_position(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+    model.manual_filter_position = 3
+    sent["raw"].clear()
+
+    model.home_filter_button = True
+
+    assert sent["raw"] == [(MOTOR_HOME, "filter")]
+    assert model.manual_filter_position == FILTER_POSITIONS[0]
 
 
 def test_attached_edit_publishes_set_cell(monkeypatch):

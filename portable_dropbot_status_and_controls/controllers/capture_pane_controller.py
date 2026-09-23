@@ -83,6 +83,7 @@ class CapturePaneController(Controller):
     # Pane follows step                                                     #
     # ------------------------------------------------------------------ #
 
+    @observe("model:park_motor")
     @observe("model:rows:items:+setting")
     @observe("model:rows:items:[at_start,at_end]")
     @observe("model:rows:items")

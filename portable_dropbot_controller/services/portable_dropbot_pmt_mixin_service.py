@@ -660,6 +660,15 @@ class PortableDropbotPmtMixinService(HasTraits):
             self._apply_light_intensity()
             self._publish_pmt(acquiring=False)
 
+            if request.park_motor:
+                ok, location = self._proxy_call(
+                    "PMT capture: park",
+                    lambda: self.proxy.motor.pmt_ctrl(PMT_PARK_LOCATION),
+                )
+
+                if not ok or location is None:
+                    logger.error("Portable Dropbot PMT park after capture FAILED")
+
         complete = (
             not aborted
             and not request_error

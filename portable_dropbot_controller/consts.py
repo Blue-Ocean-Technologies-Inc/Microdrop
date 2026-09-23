@@ -200,6 +200,25 @@ MOTOR_PARAM_FIELDS = (
 #: Fluorescence filter wheel positions the hardware knows — 1-based; the
 #: firmware faults on position 0.
 FILTER_POSITIONS = (1, 2, 3, 4, 5)
+#: What sits at each filter position, confirmed against the vendor UI.
+FILTER_NAMES = {1: "HEX", 2: "CY5", 3: "White", 4: "FAM", 5: "Empty"}
+#: Where a capture with park_motor set leaves the filter wheel.
+FLUORESCENCE_PARK_FILTER = 3
+
+
+def filter_label(position):
+    """A filter position for display: "3 · White"."""
+    return f"{position} · {FILTER_NAMES.get(position, '?')}"
+
+
+def frame_description(label, filter_position):
+    """The step_description a frame request carries, naming the filter's dye;
+    the device viewer names the file ``<description>_<timestamp>.png``
+    (dropping the label's dots)."""
+    name = FILTER_NAMES.get(filter_position, "")
+
+    return f"flu_{label or 'manual'}_f{filter_position}_{name}".rstrip("_")
+
 
 #: Fluorescence capture (#695), per filter position: LED level in % of
 #: FLUORESCENCE_LED_RAW_MAX and camera exposure. The exposure bound caps at
@@ -413,6 +432,14 @@ class PmtCaptureEntry(BaseModel):
     exposure_s: float = Field(ge=PMT_EXPOSURE_S_BOUNDS[0], le=PMT_EXPOSURE_S_BOUNDS[1])
 
 
+class CaptureParkOption(BaseModel):
+    """A capture request's (and step cell's) park option: when set, the
+    capture's teardown moves its motor to its parking position — the PMT to
+    park (spot 0), the filter wheel to FLUORESCENCE_PARK_FILTER."""
+
+    park_motor: bool = False
+
+
 class PmtStreamSettings(BaseModel):
     """Stream averaging, oversampling index and the Rf used for conversion."""
 
@@ -423,7 +450,7 @@ class PmtStreamSettings(BaseModel):
     )
 
 
-class PmtCaptureRequest(PmtStreamSettings):
+class PmtCaptureRequest(PmtStreamSettings, CaptureParkOption):
     """Capture order is list order; only ticked spots are sent."""
 
     entries: list[PmtCaptureEntry]
@@ -449,7 +476,7 @@ class PmtStepCaptureEntry(PmtCaptureEntry):
     at_end: bool = False
 
 
-class PmtStepCapture(PmtStreamSettings):
+class PmtStepCapture(PmtStreamSettings, CaptureParkOption):
     """The value of a step's PMT capture cell; list order is capture order."""
 
     entries: list[PmtStepCaptureEntry] = []
@@ -615,7 +642,7 @@ class FluorescenceCaptureEntry(BaseModel):
         return value
 
 
-class FluorescenceCaptureRequest(BaseModel):
+class FluorescenceCaptureRequest(CaptureParkOption):
     """Capture order is list order; only ticked filter positions are sent."""
 
     entries: list[FluorescenceCaptureEntry]
@@ -642,7 +669,7 @@ class FluorescenceStepCaptureEntry(FluorescenceCaptureEntry):
     at_end: bool = False
 
 
-class FluorescenceStepCapture(BaseModel):
+class FluorescenceStepCapture(CaptureParkOption):
     """The value of a step's fluorescence capture cell; list order is
     capture order."""
 

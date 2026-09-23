@@ -43,6 +43,7 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_EXPOSURE_MS_BOUNDS,
     FLUORESCENCE_LED_PERCENT_BOUNDS,
     FluorescenceStepCapture,
+    filter_label,
 )
 
 # Local imports.
@@ -66,6 +67,8 @@ class FluorescenceRow(CaptureRow):
 
     #: Filter-wheel position (FILTER_POSITIONS) — the identity of the row.
     filter_position = Int
+    #: Read-only Filter column: "4 · FAM".
+    filter_label = Property(Str, observe="filter_position")
     led_percent = Range(
         *FLUORESCENCE_LED_PERCENT_BOUNDS,
         FLUORESCENCE_DEFAULT_LED_PERCENT,
@@ -79,7 +82,10 @@ class FluorescenceRow(CaptureRow):
         setting=True,
     )
     #: True = the camera's auto exposure; exposure_ms is then unused.
-    auto_exposure = Bool(False, desc="Camera auto exposure", setting=True)
+    auto_exposure = Bool(True, desc="Camera auto exposure", setting=True)
+
+    def _get_filter_label(self):
+        return filter_label(self.filter_position)
 
     def capture_entry(self):
         return {
@@ -104,11 +110,16 @@ class FluorescenceResultRow(HasTraits):
 
     #: Filter-wheel position the frame was captured through.
     filter_position = Int
+    #: Read-only Filter column: "4 · FAM".
+    filter_label = Property(Str, observe="filter_position")
     path = Str
     #: `path`'s file name, for the table; `path` is what open_file uses.
     file = Str
     #: Fired by the File column's link; the controller opens `path`.
     open_file = Event
+
+    def _get_filter_label(self):
+        return filter_label(self.filter_position)
 
 
 class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
@@ -139,7 +150,7 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     manual_filter_position = Enum(FILTER_POSITIONS)
     home_filter_button = Button("Home filter")
     #: The camera settings below are applied as soon as any of them changes.
-    manual_auto_exposure = Bool(False, desc="Camera auto exposure")
+    manual_auto_exposure = Bool(True, desc="Camera auto exposure")
     manual_exposure_ms = Range(
         *FLUORESCENCE_EXPOSURE_MS_BOUNDS, FLUORESCENCE_DEFAULT_EXPOSURE_MS
     )
@@ -253,6 +264,7 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
             "request_id": request_id,
             "label": label,
             "directory": "",
+            "park_motor": self.park_motor,
         }
 
     def add_result_frame(self, done):

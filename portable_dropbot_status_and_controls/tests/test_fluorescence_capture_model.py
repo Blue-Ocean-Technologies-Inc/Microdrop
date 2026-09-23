@@ -38,9 +38,13 @@ def test_rows_default_to_one_per_filter_position_in_order():
 def test_capture_entries_manual_mode_honours_ticks_and_leaves_focus_auto():
     m = PortableDropbotFluorescenceCaptureModel()
     m.rows = [
-        FluorescenceRow(filter_position=2, led_percent=80, exposure_ms=25.0),
+        FluorescenceRow(
+            filter_position=2, led_percent=80, exposure_ms=25.0, auto_exposure=False
+        ),
         FluorescenceRow(filter_position=1, capture=False),
-        FluorescenceRow(filter_position=3, led_percent=10, exposure_ms=5.0),
+        FluorescenceRow(
+            filter_position=3, led_percent=10, exposure_ms=5.0, auto_exposure=False
+        ),
     ]
     assert m.capture_entries() == [
         {
@@ -71,7 +75,11 @@ def test_capture_entries_attached_mode_uses_start_or_end_ticks():
 
 def test_capture_request_wraps_entries_with_request_id_and_label():
     m = PortableDropbotFluorescenceCaptureModel()
-    m.rows = [FluorescenceRow(filter_position=1, led_percent=50, exposure_ms=50.0)]
+    m.rows = [
+        FluorescenceRow(
+            filter_position=1, led_percent=50, exposure_ms=50.0, auto_exposure=False
+        )
+    ]
     assert m.capture_request(request_id="r1", label="manual") == {
         "entries": [
             {
@@ -84,6 +92,7 @@ def test_capture_request_wraps_entries_with_request_id_and_label():
         "request_id": "r1",
         "label": "manual",
         "directory": "",
+        "park_motor": False,
     }
 
 
@@ -186,13 +195,49 @@ def test_detach_step_restores_the_manual_snapshot():
     assert all(not r.at_start and not r.at_end for r in m.rows)
 
 
+def test_capture_request_and_step_cell_value_carry_park_motor():
+    m = PortableDropbotFluorescenceCaptureModel()
+    m.park_motor = True
+    m.rows = [FluorescenceRow(filter_position=1, at_start=True)]
+
+    assert m.capture_request()["park_motor"] is True
+    assert m.step_cell_value()["park_motor"] is True
+
+
+def test_attach_step_loads_park_motor_and_detach_restores_the_manual_value():
+    m = PortableDropbotFluorescenceCaptureModel()
+    m.park_motor = True  # the manual value the snapshot must restore
+
+    m.attach_step(
+        "step-1",
+        {
+            "park_motor": False,
+            "entries": [
+                {
+                    "filter_position": 1,
+                    "led_percent": 50,
+                    "exposure_ms": 10.0,
+                    "at_start": True,
+                }
+            ],
+        },
+    )
+    assert m.park_motor is False
+
+    m.detach_step()
+    assert m.park_motor is True
+
+
 def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
     m = PortableDropbotFluorescenceCaptureModel()
     m.rows = [
-        FluorescenceRow(filter_position=1, at_start=True, led_percent=60),
+        FluorescenceRow(
+            filter_position=1, at_start=True, led_percent=60, auto_exposure=False
+        ),
         FluorescenceRow(filter_position=1),  # neither tick: dropped
     ]
     assert m.step_cell_value() == {
+        "park_motor": False,
         "entries": [
             {
                 "filter_position": 1,
@@ -202,7 +247,7 @@ def test_step_cell_value_drops_unticked_and_returns_none_when_empty():
                 "at_start": True,
                 "at_end": False,
             }
-        ]
+        ],
     }
 
     m.rows[0].at_start = False

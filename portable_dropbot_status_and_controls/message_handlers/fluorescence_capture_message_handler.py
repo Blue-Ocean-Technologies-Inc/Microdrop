@@ -21,6 +21,7 @@ from device_viewer.consts import CameraControlsApplied, MediaCaptureMessageModel
 from portable_dropbot_controller.consts import (
     FluorescenceCaptureDone,
     FluorescenceCaptureProgress,
+    filter_label,
 )
 from portable_dropbot_protocol_controls.consts import (
     FLUORESCENCE_CAPTURE_COLUMN_ID,
@@ -43,7 +44,7 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
 
         self.capture_progressed(
             p.filter_position,
-            f"Filter {p.filter_position} ({p.index + 1}/{p.total}): "
+            f"Filter {filter_label(p.filter_position)} ({p.index + 1}/{p.total}): "
             f"{p.stage} {p.detail}".rstrip(),
         )
 

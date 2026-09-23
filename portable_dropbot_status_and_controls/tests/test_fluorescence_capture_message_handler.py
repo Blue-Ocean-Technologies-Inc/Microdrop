@@ -56,7 +56,7 @@ def test_progress_highlights_the_active_row_and_sets_the_stage(handler):
 
     assert handler.model.capturing is True
     assert [r.active for r in handler.model.rows] == [False, True]
-    assert handler.model.progress == "Filter 2 (1/2): camera"
+    assert handler.model.progress == "Filter 2 · CY5 (1/2): camera"
 
 
 def test_done_clears_highlight_and_adds_a_result_frame(handler):

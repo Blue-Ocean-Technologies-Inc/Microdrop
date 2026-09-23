@@ -175,6 +175,7 @@ class FluorescenceCaptureHandler(BaseColumnHandler):
                 "request_id": request_id,
                 "label": label,
                 "directory": "",
+                "park_motor": step.park_motor,
             }
         )
 
@@ -183,6 +184,8 @@ class FluorescenceCaptureHandler(BaseColumnHandler):
 
         timeout = (
             len(entries) * FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S
+            # Parking is one more wheel move after the last frame.
+            + (FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S if step.park_motor else 0)
             + FLUORESCENCE_STEP_TIMEOUT_MARGIN_S
         )
 

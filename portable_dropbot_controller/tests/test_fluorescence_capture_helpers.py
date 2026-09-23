@@ -24,10 +24,14 @@ from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
 )
-from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX, SET_VOLTAGE
+from portable_dropbot_controller.consts import (
+    FLUORESCENCE_LED_RAW_MAX,
+    SET_VOLTAGE,
+    filter_label,
+    frame_description,
+)
 from portable_dropbot_controller.fluorescence_capture import (
     PendingReplies,
-    frame_description,
     led_raw,
     wait_with_abort,
 )
@@ -99,10 +103,15 @@ def test_led_raw_scales_and_clamps():
     assert led_raw(-5) == 0
 
 
-def test_frame_description_tags_label_and_position():
-    assert frame_description("step1.2-end", 3) == "flu_step1.2-end_f3"
-    assert frame_description("manual", 1) == "flu_manual_f1"
-    assert frame_description("", 2) == "flu_manual_f2"
+def test_frame_description_tags_label_position_and_dye():
+    assert frame_description("step1.2-end", 3) == "flu_step1.2-end_f3_White"
+    assert frame_description("manual", 1) == "flu_manual_f1_HEX"
+    assert frame_description("", 2) == "flu_manual_f2_CY5"
+
+
+def test_filter_label_names_the_dye():
+    assert filter_label(4) == "4 · FAM"
+    assert filter_label(9) == "9 · ?"
 
 
 class _Listener(HasTraits):

@@ -138,6 +138,12 @@ def capture_group(manual_table, attached_table, extra_buttons=()):
             UItem("start_button", enabled_when=f"{ROW_TABLE_ENABLED_WHEN} and rows"),
             UItem("abort_button", enabled_when="capturing"),
             *extra_buttons,
+            Item(
+                "park_motor",
+                label="Park Motor",
+                tooltip="Move the motor to its parking position when the capture ends",
+                enabled_when=ROW_TABLE_ENABLED_WHEN,
+            ),
         ),
         VGroup(
             Item("progress", style="readonly", label="Status"),

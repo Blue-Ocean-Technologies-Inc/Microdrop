@@ -74,7 +74,7 @@ ENTRY_NEITHER = {
     "at_end": False,
 }
 
-STEP_VALUE = {"entries": [ENTRY_START, ENTRY_END, ENTRY_BOTH]}
+STEP_VALUE = {"park_motor": False, "entries": [ENTRY_START, ENTRY_END, ENTRY_BOTH]}
 
 
 def _row(value=None, uuid="row-uuid", dotted_path="1.2"):

@@ -340,12 +340,15 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
 
     def _pane_settings(self):
         return {
+            **super()._pane_settings(),
             "avg": int(self.stream_avg),
             "osr": int(self.stream_osr),
             "rf_ohms": float(self.rf_ohms),
         }
 
     def _load_pane_settings(self, settings):
+        super()._load_pane_settings(settings)
+
         if settings:
             self.stream_avg = settings["avg"]
             self.stream_osr = settings["osr"]
@@ -378,6 +381,7 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
             "avg": int(self.stream_avg),
             "osr": int(self.stream_osr),
             "rf_ohms": float(self.rf_ohms),
+            "park_motor": self.park_motor,
         }
 
     def stream_request(self):

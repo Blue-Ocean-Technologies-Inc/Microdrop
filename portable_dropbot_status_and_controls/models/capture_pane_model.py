@@ -170,6 +170,10 @@ class CapturePaneModel(BaseStatusModel):
 
     start_button = Button("Start capture")
     abort_button = Button("Abort")
+    #: Move the capture's motor to its parking position when the capture
+    #: ends (the PMT to park, the filter wheel to FLUORESCENCE_PARK_FILTER).
+    #: A pane-level setting, so an attached step's cell carries it too.
+    park_motor = Bool(False, desc="Park the motor when the capture ends")
 
     # ---- Results ----------------------------------------------------------
     #: Chevron toggle for the Results group.
@@ -267,10 +271,12 @@ class CapturePaneModel(BaseStatusModel):
 
     def _pane_settings(self):
         """Pane-level settings the step cell carries beside its entries."""
-        return {}
+        return {"park_motor": self.park_motor}
 
     def _load_pane_settings(self, settings):
         """Apply pane-level settings from a snapshot or a parsed cell."""
+        if "park_motor" in settings:
+            self.park_motor = settings["park_motor"]
 
     def _parse_step_capture(self, cell_value):
         """Tolerant parse of the step's cell: missing or invalid reads as no

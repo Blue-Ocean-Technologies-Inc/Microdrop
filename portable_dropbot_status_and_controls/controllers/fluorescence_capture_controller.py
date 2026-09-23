@@ -32,6 +32,7 @@ from portable_dropbot_controller.consts import (
     MOTOR_HOME,
     SET_FILTER,
     fluorescence_capture_publisher,
+    frame_description,
 )
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
 
@@ -103,7 +104,9 @@ class FluorescenceCaptureController(CapturePaneController):
         request_id = f"manual-{uuid.uuid4()}"
         frame_request = {
             "directory": str(get_current_experiment_directory()),
-            "step_description": (f"flu_manual_f{self.model.manual_filter_position}"),
+            "step_description": frame_description(
+                "manual", self.model.manual_filter_position
+            ),
             "show_dialog": False,
             "request_id": request_id,
         }

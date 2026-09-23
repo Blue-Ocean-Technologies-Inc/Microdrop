@@ -56,14 +56,15 @@ from ..consts import (
     FLUORESCENCE_AUTO_EXPOSURE_SETTLE_S,
     FLUORESCENCE_CAMERA_CONTROLS_TIMEOUT_S,
     FLUORESCENCE_FRAME_TIMEOUT_S,
+    FLUORESCENCE_PARK_FILTER,
     FLUORESCENCE_SETTLE_S,
     FluorescenceCaptureRequest,
     fluorescence_capture_done_publisher,
     fluorescence_capture_progress_publisher,
+    frame_description,
 )
 from ..fluorescence_capture import (
     PendingReplies,
-    frame_description,
     led_raw,
     wait_with_abort,
 )
@@ -306,7 +307,7 @@ class FluorescenceCaptureMixinService(HasTraits):
             logger.error(f"Portable Dropbot fluorescence capture FAILED: {error}")
         finally:
             progress("teardown")
-            self._teardown_fluorescence_capture()
+            self._teardown_fluorescence_capture(request.park_motor)
 
         return {
             "request_id": request.request_id,
@@ -458,10 +459,11 @@ class FluorescenceCaptureMixinService(HasTraits):
 
         return publish
 
-    def _teardown_fluorescence_capture(self):
-        """Guaranteed teardown, two independent blocks so one failure cannot
-        skip the other. The camera's auto request is not waited on: nothing
-        after teardown depends on its readback."""
+    def _teardown_fluorescence_capture(self, park_motor=False):
+        """Guaranteed teardown, independent blocks so one failure cannot skip
+        the next. The camera's auto request is not waited on: nothing after
+        teardown depends on its readback. `park_motor` also moves the wheel
+        to FLUORESCENCE_PARK_FILTER."""
         try:
             self._apply_light_intensity()
         except Exception as error:
@@ -471,3 +473,12 @@ class FluorescenceCaptureMixinService(HasTraits):
             camera_controls_publisher.publish({})
         except Exception as error:
             logger.error(f"Fluorescence capture: camera auto restore FAILED: {error}")
+
+        if park_motor:
+            ok, moved = self._proxy_call(
+                f"fluorescence capture: park filter {FLUORESCENCE_PARK_FILTER}",
+                lambda: self.proxy.motor.fluorescence_ctrl(FLUORESCENCE_PARK_FILTER),
+            )
+
+            if not ok or moved is None:
+                logger.error("Fluorescence capture: filter park FAILED")
