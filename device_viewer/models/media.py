@@ -13,7 +13,7 @@ import json
 from enum import Enum
 
 # Third-party imports.
-from pydantic import BaseModel, Field, FilePath, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, FilePath, StrictBool
 
 # Enthought library imports.
 from traits.api import Bool, Event, HasTraits, Str, observe
@@ -52,6 +52,10 @@ class MediaCaptureMessageModel(BaseModel):
 
 class CameraControlsRequest(BaseModel):
     """Set the active camera's exposure and focus; None means auto."""
+
+    #: A misspelt field would otherwise be dropped silently and the camera
+    #: left in auto — reject it so the requester is told.
+    model_config = ConfigDict(extra="forbid")
 
     request_id: str = ""
     #: Manual exposure time; None = auto exposure.
