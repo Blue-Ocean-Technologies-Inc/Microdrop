@@ -71,3 +71,13 @@ def test_request_id_is_recovered_into_the_failure_reply():
     assert request is None
     assert reply["ok"] is False
     assert reply["request_id"] == "keep-me"
+
+
+def test_unknown_field_is_answered_ok_false():
+    payload = {"request_id": "r1", "exposure": 20.0}
+    request, reply = parse_camera_controls_request(json.dumps(payload))
+
+    assert request is None
+    assert reply["ok"] is False
+    assert reply["request_id"] == "r1"
+    assert reply["error"].startswith("exposure:")
