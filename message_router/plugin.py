@@ -8,40 +8,54 @@
 #
 # Thanks for using Microdrop open source!
 
-from envisage.api import Plugin, ExtensionPoint
-from traits.api import List, Str, Dict, Instance, observe, on_trait_change
-import dramatiq
+# Standard library imports.
 import uuid
 
-from .consts import ACTOR_TOPIC_ROUTES, PKG, PKG_name
-from logger.logger_service import get_logger
+# Third-party imports.
+import dramatiq
+
+# Enthought library imports.
+from envisage.api import ExtensionPoint, Plugin
+from traits.api import Dict, Instance, List, Str, observe, on_trait_change
+
+# Microdrop utils imports.
+from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
 from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
 
-# Initialize logger
+# Local imports.
+from .consts import ACTOR_TOPIC_ROUTES, PKG, PKG_name
+
+# Logger import.
+from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+
 # remove prometheus metrics for now
-from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
-remove_middleware_from_dramatiq_broker(middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker())
+remove_middleware_from_dramatiq_broker(
+    middleware_name="dramatiq.middleware.prometheus", broker=dramatiq.get_broker()
+)
 
 
 class MessageRouterPlugin(Plugin):
-    id = PKG + '.plugin'
-    name = f'{PKG_name} Plugin'
+    id = PKG + ".plugin"
+    name = f"{PKG_name} Plugin"
     router_actor = Instance(MessageRouterActor)
-    listener_queue = "_" + str(uuid.uuid4())  # queue names cannot start with number, has to be letter on underscore.
+
+    # Queue names must start with a letter or underscore, not a digit.
+    listener_queue = "_" + str(uuid.uuid4())
 
     # This tells us that the plugin offers the 'greetings' extension point,
     # and that plugins that want to contribute to it must each provide a list
     # of strings (Str).
     actor_topic_routing = ExtensionPoint(
-        List(Dict(Str, List)), id=ACTOR_TOPIC_ROUTES,
-
-        desc='actor topic routing information: keys should be different actors. And values for each are a list of '
-             'topics that it acts upon'
+        List(Dict(Str, List)),
+        id=ACTOR_TOPIC_ROUTES,
+        desc="actor topic routing information: keys should be different "
+        "actors. And values for each are a list of topics that it acts upon",
     )
 
     def _router_actor_default(self):
-        """ Trait initializer for pubsub actor"""
+        """Trait initializer for pubsub actor"""
         return MessageRouterActor(listener_queue=self.listener_queue)
 
     def start(self):
@@ -53,8 +67,19 @@ class MessageRouterPlugin(Plugin):
         self.connect_extension_point_traits()
 
         # assign topics to actors when plugin starts
-        self._update_router_subscriptions(added=self.actor_topic_routing,
-                                          removed=[])
+        self._update_router_subscriptions(added=self.actor_topic_routing, removed=[])
+
+    def stop(self):
+        """Withdraw this session's subscriptions and drop its listener queue.
+
+        The subscriber map lives in Redis and outlives the process: any
+        (actor, queue) pair left behind keeps receiving every routed
+        message into a queue nobody consumes, so it grows without bound.
+        """
+        self._update_router_subscriptions(added=[], removed=self.actor_topic_routing)
+
+        dramatiq.get_broker().flush(self.listener_queue)
+        logger.info(f"router listener queue {self.listener_queue} dropped")
 
     def _update_router_subscriptions(self, added, removed):
         """Apply contribution deltas to the router's topic->subscriber map.
@@ -74,8 +99,10 @@ class MessageRouterPlugin(Plugin):
                         # Two contributions can declare the same (actor,
                         # topic) pair; the flat map holds it once, so the
                         # second removal finds nothing. Not an error.
-                        logger.warning(f"router unsubscribe skipped: "
-                                       f"{actor_name} not subscribed to {topic}")
+                        logger.warning(
+                            f"router unsubscribe skipped: "
+                            f"{actor_name} not subscribed to {topic}"
+                        )
 
         for actor_topics_routes in added:
             for actor_name, topics_list in actor_topics_routes.items():
@@ -96,8 +123,10 @@ class MessageRouterPlugin(Plugin):
         string-matched on_trait_change must bind it — observe() rejects
         unknown names. ``event`` is the ExtensionPointChangedEvent.
         """
-        logger.info(f"actor topic routing changed: added={event.added}, "
-                    f"removed={event.removed}, index={event.index}")
+        logger.info(
+            f"actor topic routing changed: added={event.added}, "
+            f"removed={event.removed}, index={event.index}"
+        )
         self._update_router_subscriptions(event.added, event.removed)
 
     @observe("actor_topic_routing")
@@ -107,6 +136,7 @@ class MessageRouterPlugin(Plugin):
         changes; covered for completeness. The connect listener delivers
         removed contributions as ``event.old`` and added as ``event.new``.
         """
-        logger.info(f"actor topic routing replaced: removed={event.old}, "
-                    f"added={event.new}")
+        logger.info(
+            f"actor topic routing replaced: removed={event.old}, added={event.new}"
+        )
         self._update_router_subscriptions(added=event.new, removed=event.old)
