@@ -46,3 +46,15 @@ repos:
         additional_dependencies: [import-linter==2.14]
         types: [python]
         pass_filenames: false
+      - id: check-package-inits
+        name: check-package-inits (no __init__.py-less package dirs)
+        # grimp silently skips a directory with tracked .py files but no
+        # __init__.py, so the import-linter contract above can't see imports
+        # inside it. Whole-repo check, same reasoning as import-linter: a
+        # staged file alone can't tell us whether some other directory in
+        # the tree lost its __init__.py. Stdlib only; `language: python`
+        # runs it on pre-commit's own interpreter, not whatever is on PATH.
+        entry: python tools/check_package_inits.py
+        language: python
+        types: [python]
+        pass_filenames: false

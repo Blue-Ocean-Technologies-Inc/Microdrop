@@ -162,7 +162,7 @@ class CameraControlWidget(QWidget):
         self.last_camera_state = False
         self.available_cameras = None
         self.available_formats = None
-        self.show_media_capture_dialog_for_video = True
+        self.show_status_message_for_video = True
         # In-flight ImageSaver workers, referenced so a pool worker (and its
         # signals QObject) cannot be garbage-collected before its completion
         # signal is delivered back to the GUI thread.
@@ -877,14 +877,15 @@ class CameraControlWidget(QWidget):
             self.camera.start()
 
     def _capture_image_routine(self, capture_data=None):
-        directory, step_description, step_id, show_dialog = None, None, None, True
+        directory, step_description, step_id = None, None, None
+        show_status_message = True
         request_id = ""
 
         if isinstance(capture_data, dict):
             directory = capture_data.get("directory")
             step_description = capture_data.get("step_description")
             step_id = capture_data.get("step_id")
-            show_dialog = capture_data.get("show_dialog", True)
+            show_status_message = capture_data.get("show_status_message", True)
             request_id = str(capture_data.get("request_id", ""))
 
         filename = self._generate_capture_filename(step_description, step_id)
@@ -895,9 +896,9 @@ class CameraControlWidget(QWidget):
         # sensor captures are the owning plugin's concern — the
         # fluorescence capture chain writes its own per-burst folders —
         # so this pipeline no longer special-cases raw-capable feeds.
-        self._capture_display_image(save_path, show_dialog, request_id)
+        self._capture_display_image(save_path, show_status_message, request_id)
 
-    def _capture_display_image(self, save_path, show_dialog, request_id=""):
+    def _capture_display_image(self, save_path, show_status_message, request_id=""):
         # Capture Pixels (Must happen on UI thread)
         image = self.get_screen_shot()
 
@@ -910,7 +911,7 @@ class CameraControlWidget(QWidget):
             _cache_media_capture(MediaType.IMAGE, saved_path, request_id)
             media_capture_event_model.captured = saved_path
 
-            if show_dialog:
+            if show_status_message:
                 _show_media_capture_status_message(
                     MediaType.IMAGE, saved_path, self.status_bar_manager
                 )
@@ -1159,7 +1160,7 @@ class CameraControlWidget(QWidget):
                     recording_data.get("directory"),
                     recording_data.get("step_description"),
                     recording_data.get("step_id"),
-                    recording_data.get("show_dialog", True),
+                    recording_data.get("show_status_message", True),
                 )
                 # Reflect what actually happened — the start is refused for
                 # provider feeds (ASI) and unsupported frame rates.
@@ -1221,7 +1222,11 @@ class CameraControlWidget(QWidget):
 
     @Slot()
     def video_record_start(
-        self, directory=None, step_description=None, step_id=None, show_dialog=True
+        self,
+        directory=None,
+        step_description=None,
+        step_id=None,
+        show_status_message=True,
     ):
         logger.info("Starting video recorder...")
 
@@ -1273,7 +1278,7 @@ class CameraControlWidget(QWidget):
         path.parent.mkdir(parents=True, exist_ok=True)
         _recording_file_path = str(path)
 
-        self.show_media_capture_dialog_for_video = show_dialog
+        self.show_status_message_for_video = show_status_message
 
         _resolution = (
             _current_fmt.resolution().width(),
@@ -1315,7 +1320,7 @@ class CameraControlWidget(QWidget):
                 self.toggle_camera()
 
         # Show Result
-        if recording_output_path and self.show_media_capture_dialog_for_video:
+        if recording_output_path and self.show_status_message_for_video:
             _show_media_capture_status_message(
                 MediaType.VIDEO, recording_output_path, self.status_bar_manager
             )

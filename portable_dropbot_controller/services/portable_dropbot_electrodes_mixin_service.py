@@ -8,16 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from traits.api import Dict, HasTraits, Str, provides
 
+# Microdrop package imports.
 from electrode_controller.models import ElectrodeChannelsRequest
-from logger.logger_service import get_logger
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
-from ..consts import DEFAULT_NUM_CHANNELS
+# Local imports.
+from ..consts import DEFAULT_NUM_CHANNELS, LAST_CHANNEL_STATES_REQUESTED_KEY
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
@@ -40,8 +45,10 @@ class PortableDropbotElectrodesMixinService(HasTraits):
 
     def on_electrodes_state_change_request(self, message):
         if self.proxy is None:
-            logger.warning("Portable Dropbot not connected: ignoring "
-                           "electrode state change request.")
+            logger.warning(
+                "Portable Dropbot not connected: ignoring "
+                "electrode state change request."
+            )
             return
 
         if not self.realtime_mode:
@@ -49,8 +56,7 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             # frontend already withholds clicks outside realtime mode,
             # but the hardware must not actuate on a stray request
             # either.
-            logger.warning("Cannot process actuations since realtime "
-                           "mode is disabled.")
+            logger.warning("Cannot process actuations since realtime mode is disabled.")
             return
 
         model = ElectrodeChannelsRequest.model_validate_json(
@@ -58,15 +64,20 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             context={"max_channels": self._board_channels()},
         )
         channels = [int(channel) for channel in model.channels]
-        logger.debug(f"Electrode state change requested: "
-                     f"{len(channels)} active channel(s) {channels}")
+        logger.debug(
+            f"Electrode state change requested: "
+            f"{len(channels)} active channel(s) {channels}"
+        )
         ok, _ = self._proxy_call(
-            "electrode actuation",
-            lambda: self.proxy.actuate_channels(channels))
+            "electrode actuation", lambda: self.proxy.actuate_channels(channels)
+        )
         if ok:
-            app_globals["last_channel_states_requested"] = str(message)
-            logger.info(f"Portable Dropbot electrode update applied: "
-                        f"{len(channels)} active")
+            app_globals[LAST_CHANNEL_STATES_REQUESTED_KEY] = str(message)
+            logger.info(
+                f"Portable Dropbot electrode update applied: {len(channels)} active"
+            )
         else:
-            logger.warning(f"Portable Dropbot electrode update FAILED "
-                           f"({len(channels)} active requested)")
+            logger.warning(
+                f"Portable Dropbot electrode update FAILED "
+                f"({len(channels)} active requested)"
+            )

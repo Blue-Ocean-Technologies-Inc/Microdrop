@@ -478,6 +478,15 @@ idiom (chunking, comment density, method order) that rules alone can't:
   sites are touched.
 - Every plugin has a `consts.py` with `PKG`, its topics, and
   `ACTOR_TOPIC_DICT`
+- **App-globals keys**: every plugin declares the Redis app_globals keys it
+  owns (writes to) as `*_KEY` string constants plus an `APP_GLOBALS_KEYS`
+  list in its `consts.py` — see `device_viewer/consts.py`
+  (`CHANNEL_AREAS_KEY`, `ZONES_KEY`, …) and `dropbot_preferences_ui/consts.py`
+  (`VOLTAGE_FREQUENCY_RANGE_APP_GLOBALS_KEYS`, for a preferences helper that
+  seeds several keys at once). Readers — including a preferences helper's own
+  `app_globals.get(...)` defaults — import the owner's constant, never a
+  literal string; a cross-plugin reader imports it from the owner's `consts`
+  module (allowed by `.importlinter`).
 - Styling goes through `microdrop_style/` helpers (colors, button styles,
   icon fonts)
 

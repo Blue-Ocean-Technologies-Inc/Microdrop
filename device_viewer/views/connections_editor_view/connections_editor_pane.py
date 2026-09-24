@@ -34,10 +34,16 @@ from traits.api import (
 )
 from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
 # Microdrop style imports.
 from microdrop_style.icons.icons import (
     ICON_DELETE,
     ICON_FIT_SCREEN,
+    ICON_REDO,
+    ICON_RESTORE,
+    ICON_UNDO,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
 )
@@ -62,7 +68,12 @@ CONNECTIONS_EDITOR_INSTRUCTIONS = (
     "Drag from one electrode's dot to another's to connect them — the "
     "line snaps onto the dots. Click a line to select it (Ctrl-click for "
     "several, Shift-drag for a box) and press Delete to remove it. "
-    "Scroll to zoom, drag the image to pan."
+    "Scroll to zoom, drag the image to pan. Ctrl+Z / Ctrl+Shift+Z (or "
+    "Ctrl+Y) undo/redo."
+)
+
+REVERT_ALL_CONFIRM_MESSAGE = (
+    "Revert all connection edits back to how they were when this dialog opened?"
 )
 
 
@@ -93,6 +104,29 @@ connections_editor_view = View(
                 editor=IconButtonEditor(
                     glyph=ICON_FIT_SCREEN, tooltip="Fit the device in the view"
                 ),
+            ),
+            UItem(
+                "undo",
+                editor=IconButtonEditor(
+                    glyph=ICON_UNDO, tooltip="Undo the last connection edit"
+                ),
+                enabled_when="can_undo",
+            ),
+            UItem(
+                "redo",
+                editor=IconButtonEditor(
+                    glyph=ICON_REDO, tooltip="Redo the last undone edit"
+                ),
+                enabled_when="can_redo",
+            ),
+            UItem(
+                "revert_all",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Revert all connections to how they were when "
+                    "this dialog opened",
+                ),
+                enabled_when="can_revert",
             ),
             UItem(
                 "delete_selected",
@@ -138,11 +172,17 @@ class ConnectionsEditorPane(HasTraits):
     show_centroids = Bool(True)
     #: Refit the image in the view.
     fit = Button()
+    undo = Button()
+    redo = Button()
+    revert_all = Button()
     delete_selected = Button()
 
-    #: Top-level mirror of the model's selection for ``enabled_when``,
-    #: which does not follow nested traits.
+    #: Top-level mirrors of the model's selection/history for
+    #: ``enabled_when``, which does not follow nested traits.
     has_selection = Property(Bool, observe="model.selected_connections.items")
+    can_undo = Property(Bool, observe="model.can_undo")
+    can_redo = Property(Bool, observe="model.can_redo")
+    can_revert = Property(Bool, observe="model.can_revert")
 
     _overlay = Instance(ConnectionsOverlay)
 
@@ -156,12 +196,14 @@ class ConnectionsEditorPane(HasTraits):
         canvas = ConnectionsCanvasView(QPixmap.fromImage(self.device_image))
         canvas.setMinimumSize(*CANVAS_MIN_SIZE_PX)
         canvas.delete_requested.connect(self.model.remove_selected)
+        canvas.undo_requested.connect(self.model.undo)
+        canvas.redo_requested.connect(self.model.redo)
         self.canvas = canvas
 
         self._overlay = ConnectionsOverlay(
             canvas.scene(),
             self._centroids_in_image(),
-            on_connection_drawn=self.model.svg_model.add_connection,
+            on_connection_drawn=self.model.add_connection,
             on_selection_changed=self._on_lines_selected,
         )
         canvas.overlay = self._overlay
@@ -172,6 +214,15 @@ class ConnectionsEditorPane(HasTraits):
     # ------------------------------------------------------------------ #
     def _get_has_selection(self):
         return bool(self.model.selected_connections)
+
+    def _get_can_undo(self):
+        return self.model.can_undo
+
+    def _get_can_redo(self):
+        return self.model.can_redo
+
+    def _get_can_revert(self):
+        return self.model.can_revert
 
     def _centroids_in_image(self):
         """Electrode id -> centroid in the canvas's image pixels."""
@@ -204,6 +255,16 @@ class ConnectionsEditorPane(HasTraits):
 
     def _fit_fired(self):
         self.canvas.fit_frame()
+
+    def _undo_fired(self):
+        self.model.undo()
+
+    def _redo_fired(self):
+        self.model.redo()
+
+    def _revert_all_fired(self):
+        if confirm(None, REVERT_ALL_CONFIRM_MESSAGE, title="Edit Connections") == YES:
+            self.model.revert_all()
 
     def _delete_selected_fired(self):
         self.model.remove_selected()

@@ -26,6 +26,10 @@ from .connections_overlay import ConnectionLineItem
 class ConnectionsCanvasView(ZoomPanImageView):
     #: Delete or Backspace was pressed over the canvas.
     delete_requested = Signal()
+    #: Ctrl+Z was pressed over the canvas.
+    undo_requested = Signal()
+    #: Ctrl+Shift+Z or Ctrl+Y was pressed over the canvas.
+    redo_requested = Signal()
 
     def __init__(self, pixmap, parent=None):
         super().__init__(pixmap, parent)
@@ -87,6 +91,16 @@ class ConnectionsCanvasView(ZoomPanImageView):
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
             self.delete_requested.emit()
+            return
+
+        if event.modifiers() & Qt.ControlModifier and event.key() in (
+            Qt.Key_Z,
+            Qt.Key_Y,
+        ):
+            if event.key() == Qt.Key_Y or event.modifiers() & Qt.ShiftModifier:
+                self.redo_requested.emit()
+            else:
+                self.undo_requested.emit()
             return
 
         super().keyPressEvent(event)

@@ -8,31 +8,34 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from traits.api import Bool, Dict, Float, Int, Property, Range, Str
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Local imports.
 from .consts import (
+    BAUD_RATE_KEY,
     DEFAULT_BAUD_RATE,
     DEFAULT_FEEDBACK_ENABLED,
     DEFAULT_READ_TIMEOUT_MS,
     DEFAULT_SERIAL_TIMEOUT,
     DEFAULT_TEMPERATURE_C,
+    FEEDBACK_ENABLED_KEY,
     MAX_TEMPERATURE_C,
     MIN_TEMPERATURE_C,
+    OPENDROP_PREFERENCES_APP_GLOBALS_KEYS,
+    PORT_HINT_KEY,
+    READ_TIMEOUT_MS_KEY,
+    SERIAL_TIMEOUT_S_KEY,
+    TEMPERATURE_1_KEY,
+    TEMPERATURE_2_KEY,
+    TEMPERATURE_3_KEY,
 )
 
-preferences_names = [
-    "baud_rate",
-    "serial_timeout_s",
-    "read_timeout_ms",
-    "port_hint",
-    "feedback_enabled",
-    "temperature_1",
-    "temperature_2",
-    "temperature_3",
-]
+preferences_names = OPENDROP_PREFERENCES_APP_GLOBALS_KEYS
 
 app_globals = get_microdrop_redis_globals_manager()
 
@@ -68,28 +71,28 @@ class OpenDropPreferences(PreferencesHelper):
     preferences_name_map = Property(Dict)
 
     def _baud_rate_default(self):
-        return int(app_globals.get("baud_rate", DEFAULT_BAUD_RATE))
+        return int(app_globals.get(BAUD_RATE_KEY, DEFAULT_BAUD_RATE))
 
     def _serial_timeout_s_default(self):
-        return float(app_globals.get("serial_timeout_s", DEFAULT_SERIAL_TIMEOUT))
+        return float(app_globals.get(SERIAL_TIMEOUT_S_KEY, DEFAULT_SERIAL_TIMEOUT))
 
     def _read_timeout_ms_default(self):
-        return int(app_globals.get("read_timeout_ms", DEFAULT_READ_TIMEOUT_MS))
+        return int(app_globals.get(READ_TIMEOUT_MS_KEY, DEFAULT_READ_TIMEOUT_MS))
 
     def _port_hint_default(self):
-        return str(app_globals.get("port_hint", ""))
+        return str(app_globals.get(PORT_HINT_KEY, ""))
 
     def _feedback_enabled_default(self):
-        return bool(app_globals.get("feedback_enabled", DEFAULT_FEEDBACK_ENABLED))
+        return bool(app_globals.get(FEEDBACK_ENABLED_KEY, DEFAULT_FEEDBACK_ENABLED))
 
     def _temperature_1_default(self):
-        return int(app_globals.get("temperature_1", DEFAULT_TEMPERATURE_C))
+        return int(app_globals.get(TEMPERATURE_1_KEY, DEFAULT_TEMPERATURE_C))
 
     def _temperature_2_default(self):
-        return int(app_globals.get("temperature_2", DEFAULT_TEMPERATURE_C))
+        return int(app_globals.get(TEMPERATURE_2_KEY, DEFAULT_TEMPERATURE_C))
 
     def _temperature_3_default(self):
-        return int(app_globals.get("temperature_3", DEFAULT_TEMPERATURE_C))
+        return int(app_globals.get(TEMPERATURE_3_KEY, DEFAULT_TEMPERATURE_C))
 
     def _get_preferences_name_map(self):
         return {pref: getattr(self, pref) for pref in preferences_names}

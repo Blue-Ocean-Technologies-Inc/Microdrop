@@ -1212,6 +1212,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         # User toggled the sidebar checkbox (or the mode was force-exited):
         # broadcast so the protocol tree's checkbox follows. Inbound messages
         # set _applying_phase_nav_message so they are not re-broadcast.
+        # Assigning the model itself fires this too, with the model as
+        # event.new — that is not a toggle, so it is not broadcast.
+        if event.name != "phase_navigation_mode":
+            return
+
         if not self._applying_phase_nav_message:
             publish_message(topic=PHASE_NAVIGATION_MODE, message=str(event.new))
 

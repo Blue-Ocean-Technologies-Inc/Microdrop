@@ -393,7 +393,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         frame_request = {
             "directory": directory,
             "step_description": frame_description(request.label, position),
-            "show_dialog": False,
+            "show_status_message": False,
             "request_id": reply_id,
         }
         captured = self._await_fluorescence_reply(

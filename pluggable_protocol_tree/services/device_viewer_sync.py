@@ -71,7 +71,7 @@ from dropbot_controller.consts import DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATE
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS,
     ELECTRODE_TO_CHANNEL_KEY,

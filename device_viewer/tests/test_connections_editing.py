@@ -85,6 +85,114 @@ def test_remove_selected_disconnects_either_direction(svg_model):
     assert svg_model.connections_modified
 
 
+def test_model_add_connection_can_be_undone_and_redone(svg_model):
+    from_id, to_id = unconnected_pair(svg_model)
+    model = ConnectionsEditorModel(svg_model=svg_model)
+    before = {key: list(ids) for key, ids in svg_model.neighbours.items()}
+
+    model.add_connection(from_id, to_id)
+
+    assert to_id in svg_model.neighbours[from_id]
+    assert model.can_undo
+    assert not model.can_redo
+
+    assert model.undo() is True
+
+    assert svg_model.neighbours == before
+    assert not model.can_undo
+    assert model.can_redo
+
+    assert model.redo() is True
+
+    assert to_id in svg_model.neighbours[from_id]
+    assert not model.can_redo
+
+
+def test_model_remove_selected_can_be_undone(svg_model):
+    from_id, neighbour_ids = next(iter(svg_model.neighbours.items()))
+    to_id = neighbour_ids[0]
+    before = {key: list(ids) for key, ids in svg_model.neighbours.items()}
+    model = ConnectionsEditorModel(
+        svg_model=svg_model, selected_connections=[(to_id, from_id)]
+    )
+
+    model.remove_selected()
+
+    assert to_id not in svg_model.neighbours[from_id]
+    assert model.can_undo
+
+    assert model.undo() is True
+
+    assert svg_model.neighbours == before
+
+
+def test_model_undo_redo_are_no_ops_with_empty_stacks(svg_model):
+    model = ConnectionsEditorModel(svg_model=svg_model)
+
+    assert model.undo() is False
+    assert model.redo() is False
+    assert not model.can_undo
+    assert not model.can_revert
+
+
+def test_model_add_connection_ignored_edit_takes_no_snapshot(svg_model):
+    from_id, neighbour_ids = next(iter(svg_model.neighbours.items()))
+    model = ConnectionsEditorModel(svg_model=svg_model)
+
+    model.add_connection(from_id, neighbour_ids[0])
+
+    assert not model.can_undo
+    assert not model.can_revert
+
+
+def test_model_revert_all_restores_baseline_and_is_undoable(svg_model):
+    from_id, to_id = unconnected_pair(svg_model)
+    baseline = {key: list(ids) for key, ids in svg_model.neighbours.items()}
+    model = ConnectionsEditorModel(svg_model=svg_model)
+
+    assert not model.can_revert
+
+    model.add_connection(from_id, to_id)
+
+    assert model.can_revert
+
+    model.revert_all()
+
+    assert svg_model.neighbours == baseline
+    assert not model.can_revert
+    assert model.can_undo
+
+    assert model.undo() is True
+
+    assert to_id in svg_model.neighbours[from_id]
+
+
+def test_model_revert_all_is_a_no_op_when_nothing_changed(svg_model):
+    baseline = {key: list(ids) for key, ids in svg_model.neighbours.items()}
+    model = ConnectionsEditorModel(svg_model=svg_model)
+
+    model.revert_all()
+
+    assert svg_model.neighbours == baseline
+    assert not model.can_undo
+
+
+def test_model_new_edit_after_undo_clears_redo_stack(svg_model):
+    from_id, to_id = unconnected_pair(svg_model)
+    model = ConnectionsEditorModel(svg_model=svg_model)
+
+    model.add_connection(from_id, to_id)
+    model.undo()
+
+    assert model.can_redo
+
+    # Undo restored the pair to unconnected; reconnecting is a fresh edit
+    # that should fork history and drop the redo entry.
+    model.add_connection(from_id, to_id)
+
+    assert not model.can_redo
+
+
 def test_nearest_point_index_within():
     points = np.array([[0.0, 0.0], [10.0, 0.0]])
 

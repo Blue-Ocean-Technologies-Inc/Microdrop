@@ -8,23 +8,33 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
+# Microdrop package imports.
 from dropbot_controller.consts import SHORTS_DETECTED
-from microdrop_style.icons.icons import (ICON_FOLDER_OPEN, ICON_EMOJI_OBJECTS,
-                                         ICON_HEADSET_MIC, ICON_INFO,
-                                         ICON_TROUBLESHOOT, ICON_EXTENSION,
-                                         ICON_DESCRIPTION, ICON_CANCEL)
+
+# Microdrop style imports.
+from microdrop_style.icons.icons import (
+    ICON_CANCEL,
+    ICON_DESCRIPTION,
+    ICON_EMOJI_OBJECTS,
+    ICON_EXTENSION,
+    ICON_FOLDER_OPEN,
+    ICON_HEADSET_MIC,
+    ICON_INFO,
+    ICON_TROUBLESHOOT,
+)
+
+# Microdrop utils imports.
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 # Topics actor declared by plugin subscribes to
-ACTOR_TOPIC_DICT = {
-    f"{PKG}_listener": [ SHORTS_DETECTED ]
-}
+ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
 
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
@@ -32,19 +42,26 @@ ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
-application_home_directory = Path.home() / "Documents"/ "MicroDropNextGen"
+application_home_directory = Path.home() / "Documents" / "MicroDropNextGen"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"
 
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+ADVANCED_MODE_KEY = "microdrop.advanced_mode"  # advanced-mode toggle flag
+
+APP_GLOBALS_KEYS = [
+    ADVANCED_MODE_KEY,
+]
+
 sidebar_menu_options = [
-            ("File", ICON_FOLDER_OPEN),
-            ("Tools", ICON_EMOJI_OBJECTS),
-            ("Help", ICON_HEADSET_MIC),
-            ("Info", ICON_INFO),
-            ("Diagnostics", ICON_TROUBLESHOOT),
-            ("Plugins", ICON_EXTENSION),
-            ("Protocol \nRepository", ICON_DESCRIPTION),
-            ("Exit", ICON_CANCEL),
-        ]
+    ("File", ICON_FOLDER_OPEN),
+    ("Tools", ICON_EMOJI_OBJECTS),
+    ("Help", ICON_HEADSET_MIC),
+    ("Info", ICON_INFO),
+    ("Diagnostics", ICON_TROUBLESHOOT),
+    ("Plugins", ICON_EXTENSION),
+    ("Protocol \nRepository", ICON_DESCRIPTION),
+    ("Exit", ICON_CANCEL),
+]
 
 # Custom hamburger button stylesheet without hover effects for sidebar compatibility
 hamburger_btn_stylesheet = """QPushButton {
@@ -71,7 +88,7 @@ QPushButton:disabled {
 sidebar_stylesheet = """QPushButton {
     background: none;
     border: none;
-    font-size: 2em;: Invalid line ('[""]') (matched as neither section nor keyword) at line 1. 
+    font-size: 2em;
     text-align: left;
     padding-left: 8px;
     color: %s;

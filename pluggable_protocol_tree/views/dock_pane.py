@@ -42,7 +42,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_application.dialogs.pyface_wrapper import (
     error as error_dialog,
 )
-from microdrop_application.menus import is_advanced_mode
+from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     ACK_WAIT_FOREVER,
     ELECTRODES_STATE_CHANGE,
@@ -118,6 +118,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     columns = List(Instance(IColumn))
     manager = Instance(RowManager)
+
+    #: The tree view, built by create_contents — None until the pane mounts.
+    _pane = Instance(ProtocolTreePane)
 
     #: Per-row cell values stashed (keyed by row uuid) when a column set is
     #: removed at runtime, so a later re-add of the same columns restores the
@@ -197,10 +200,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
-        # Create the sync controller eagerly (single source of truth — no
-        # _sync_default, so the controller + its dramatiq actor are never
-        # created twice).
-        self.sync = DeviceViewerSyncController(row_manager=self.manager)
+        # In the app the plugin hands in its sync controller (and the row
+        # manager it wraps), declared at plugin start so its dramatiq actor
+        # exists before the device viewer publishes. A standalone pane builds
+        # its own — eagerly, never via _sync_default, so the controller and
+        # its actor are never created twice.
+        if self.sync is None:
+            self.sync = DeviceViewerSyncController(row_manager=self.manager)
         # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)
@@ -1319,9 +1325,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
-        # control is None until create_contents has run (the application
-        # can switch experiments before this pane is mounted).
-        self._pane._on_experiment_changed()
+        # The application can switch experiments before this pane is
+        # mounted; the view reads the current experiment when it is built.
+        if self._pane is not None:
+            self._pane._on_experiment_changed()
 
     @observe("task.window.closing", dispatch="ui")
     def _on_window_closing(self, event):
