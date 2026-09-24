@@ -133,6 +133,12 @@ class PluggableProtocolTreePlugin(Plugin):
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
+    #: Device-viewer sync controller and the row manager it wraps, built at
+    #: plugin start and handed to the dock pane when it mounts.
+    sync = Instance(
+        "pluggable_protocol_tree.services.device_viewer_sync.DeviceViewerSyncController"
+    )
+
     def _preferences_panes_default(self):
         from pluggable_protocol_tree.services.preferences import (
             ProtocolPreferencesPane,
@@ -175,10 +181,47 @@ class PluggableProtocolTreePlugin(Plugin):
     def _make_dock_pane(self, *args, **kwargs):
         from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
 
-        columns = self._assemble_columns()
         quick_actions = self._assemble_quick_actions()
+
+        if self.sync is None:
+            return PluggableProtocolDockPane(
+                columns=self._assemble_columns(),
+                quick_actions=quick_actions,
+                *args,
+                **kwargs,
+            )
+
+        # The pane's columns must be the very objects the manager holds.
+        manager = self.sync.row_manager
+
         return PluggableProtocolDockPane(
-            columns=columns, quick_actions=quick_actions, *args, **kwargs
+            columns=list(manager.columns),
+            manager=manager,
+            sync=self.sync,
+            quick_actions=quick_actions,
+            *args,
+            **kwargs,
+        )
+
+    def _declare_listeners(self):
+        """Declare the tree's dramatiq actors at plugin start.
+
+        The router routes to them from the moment it starts, and the
+        device viewer publishes while the window is still being built — a
+        message that reaches the worker before its actor exists is
+        dead-lettered, not retried. So the sync controller (with the row
+        manager it wraps) is built here and handed to the dock pane later.
+        """
+        from pluggable_protocol_tree.models.row_manager import RowManager
+        from pluggable_protocol_tree.services.device_viewer_sync import (
+            DeviceViewerSyncController,
+        )
+
+        # Importing the module declares its module-level logging actor.
+        from pluggable_protocol_tree.services.logging import listener  # noqa: F401
+
+        self.sync = DeviceViewerSyncController(
+            row_manager=RowManager(columns=self._assemble_columns())
         )
 
     def _assemble_columns(self):
@@ -270,6 +313,8 @@ class PluggableProtocolTreePlugin(Plugin):
                 f"failed to read PROTOCOL_QUICK_ACTIONS extension point: {e}"
             )
 
+        self._declare_listeners()
+
         try:
             # The executor's wait topics depend on the assembled column set,
             # so they can't sit in the static ACTOR_TOPIC_DICT contribution —
@@ -334,19 +379,25 @@ class PluggableProtocolTreePlugin(Plugin):
         self.actor_topic_routing = routing
 
     def _refresh_live_dock_pane(self):
-        """Rebuild this plugin's live dock-pane columns in place. No-op when
-        the app has no GUI window yet (headless/tests) or the pane hasn't been
-        mounted."""
+        """Rebuild this plugin's live dock-pane columns in place. With no GUI
+        window yet (headless/tests) or no pane mounted, only the plugin-owned
+        row manager is brought up to date, so a pane mounted later gets the
+        current column set."""
         application = self.application
         window = getattr(application, "active_window", None)
+
         if window is None:
             windows = getattr(application, "windows", None) or []
             window = windows[0] if windows else None
-        if window is None:
-            logger.debug("no task window; skipping live column refresh")
-            return
-        pane = window.get_dock_pane("pluggable_protocol_tree.dock_pane")
-        if pane is None:
-            logger.debug("protocol dock pane not mounted; skipping live refresh")
-            return
-        pane.rebuild_columns(self._assemble_columns())
+
+        pane = None
+
+        if window is not None:
+            pane = window.get_dock_pane("pluggable_protocol_tree.dock_pane")
+
+        if pane is not None:
+            pane.rebuild_columns(self._assemble_columns())
+
+        elif self.sync is not None:
+            logger.debug("protocol dock pane not mounted; updating its columns")
+            self.sync.row_manager.set_columns(self._assemble_columns())

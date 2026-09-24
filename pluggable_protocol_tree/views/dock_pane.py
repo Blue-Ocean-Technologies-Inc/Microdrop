@@ -197,10 +197,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         return RowManager(columns=list(self.columns))
 
     def traits_init(self):
-        # Create the sync controller eagerly (single source of truth — no
-        # _sync_default, so the controller + its dramatiq actor are never
-        # created twice).
-        self.sync = DeviceViewerSyncController(row_manager=self.manager)
+        # In the app the plugin hands in its sync controller (and the row
+        # manager it wraps), declared at plugin start so its dramatiq actor
+        # exists before the device viewer publishes. A standalone pane builds
+        # its own — eagerly, never via _sync_default, so the controller and
+        # its actor are never created twice.
+        if self.sync is None:
+            self.sync = DeviceViewerSyncController(row_manager=self.manager)
         # One ack-wait grid entry per wait-capable column, user-edited
         # values persisted on the node are kept.
         self.preferences.seed_ack_times_from_columns(self.columns)
