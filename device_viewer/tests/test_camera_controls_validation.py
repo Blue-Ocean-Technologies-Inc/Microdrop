@@ -30,7 +30,7 @@ def test_valid_request_is_returned_as_a_dict():
     request, reply = parse_camera_controls_request(json.dumps(payload))
 
     assert reply is None
-    assert request == payload
+    assert request == {**payload, "hold_auto_exposure": False}
 
 
 @pytest.mark.parametrize("message", [None, "", "   "])
