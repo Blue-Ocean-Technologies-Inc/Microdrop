@@ -21,7 +21,6 @@ from device_viewer.consts import (
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
-    CALIBRATION_UPDATED,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
     MOTOR_PARAMS_UPDATED,
@@ -82,11 +81,14 @@ ACTOR_TOPIC_DICT = {
         #: moves the magnet with a chip on the pad.
         STATUS_UPDATED,
     ],
-    CALIBRATION_LISTENER: [
-        PORTABLE_DROPBOT_CONNECTED,
-        PORTABLE_DROPBOT_DISCONNECTED,
-        CALIBRATION_UPDATED,
-    ],
+    # Routed only while its pane is mounted (see plugin.py): with the pane
+    # disabled the actor is never declared, so every routed message
+    # would be dead-lettered.
+    # CALIBRATION_LISTENER: [
+    #     PORTABLE_DROPBOT_CONNECTED,
+    #     PORTABLE_DROPBOT_DISCONNECTED,
+    #     CALIBRATION_UPDATED,
+    # ],
     MORE_CONTROLS_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
