@@ -31,8 +31,8 @@ from device_viewer.consts import (
     FILLER_CAPACITANCE_KEY,
     LIQUID_CAPACITANCE_KEY,
     MEDIA_CAPTURES_KEY,
+    MediaCaptureMessageModel,
 )
-from device_viewer.models.media import MediaCaptureMessageModel
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.consts import DEFAULT_LOGS_SETTLING_SECONDS
 from pluggable_protocol_tree.services.logging import listener as _listener

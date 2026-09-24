@@ -102,10 +102,6 @@ ignore_imports =
 
     # --- Seeded debt: pluggable_protocol_tree (the framework) reaching back
     # into specific leaf plugins it should not know about ---
-    pluggable_protocol_tree.services.device_viewer_sync -> device_viewer.models.messages
-    pluggable_protocol_tree.services.device_viewer_sync -> device_viewer.models.step_params_commit
-    pluggable_protocol_tree.services.logging.controller -> device_viewer.models.media
-    pluggable_protocol_tree.tests.tests_with_redis_server_need.test_device_viewer_sync_redis -> device_viewer.models.messages
     # Root cause of the reporting.py chain below: a "shared" microdrop_utils
     # helper itself imports a specific plugin's internals, so anything using
     # microdrop_utils.plotly_helpers transitively depends on device_viewer.
