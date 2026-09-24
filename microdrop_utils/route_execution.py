@@ -349,10 +349,9 @@ class PathExecutionService:
         lane_frame = lane_frame or wide_path_geometry.IN_OUT
 
         has_lattice = centroids is not None and neighbours is not None
-        # A locked trail keeps its orientation through corners, which only
-        # the slug geometry does; without a lattice (callers that never
-        # pass one) it stays the plain trail.
-        slug = width > 1 or (rotation_lock and trail_length > 1 and has_lattice)
+        slug = PathExecutionService.slug_applies(
+            width, trail_length, rotation_lock, has_lattice
+        )
 
         if width > 1 and not has_lattice:
             raise ValueError(
@@ -656,6 +655,96 @@ class PathExecutionService:
         return execution_plan
 
     @staticmethod
+    def slug_applies(width, trail_length, rotation_lock, has_lattice) -> bool:
+        """Whether a step's phases come from the slug geometry: a slug wider
+        than one electrode, or a locked trail longer than one — keeping a
+        trail's orientation through corners is something only the slug
+        geometry does, so without a lattice (callers that never pass one)
+        such a trail stays the plain trail."""
+        return width > 1 or (rotation_lock and trail_length > 1 and has_lattice)
+
+    @staticmethod
+    def slug_phase_ids(
+        path: List[str],
+        laps: int,
+        trail_length: int,
+        trail_overlay: int,
+        lane_left: int,
+        lane_right: int,
+        lane_frame: str,
+        rotation_lock: bool,
+        centroids: Dict[str, tuple],
+        neighbours: Dict[str, List[str]],
+        soft_start: bool = False,
+        soft_terminate: bool = False,
+        recentre: bool = True,
+    ) -> List[List[str]]:
+        """The slug's phases along ``path`` as lists of electrode ids: ``laps``
+        of a loop (one traversal of an open path), with the ramps asked for."""
+        return [
+            list(phase.ids)
+            for phase in wide_path_geometry.slug_phases(
+                path,
+                centroids,
+                neighbours,
+                lane_left,
+                lane_right,
+                trail_length,
+                trail_overlay,
+                rotation_lock=rotation_lock,
+                lane_frame=lane_frame,
+                repetitions=laps,
+                soft_start=soft_start,
+                soft_terminate=soft_terminate,
+                recentre=recentre,
+            )
+        ]
+
+    @staticmethod
+    def wide_loop_laps(
+        path: List[str],
+        repetitions: int,
+        duration: float,
+        repeat_duration: float,
+        trail_length: int,
+        trail_overlay: int,
+        lane_left: int,
+        lane_right: int,
+        lane_frame: str,
+        rotation_lock: bool,
+        centroids: Dict[str, tuple],
+        neighbours: Dict[str, List[str]],
+        recentre: bool = True,
+    ) -> tuple:
+        """``(lap_phases, laps)`` for a loop driven by the slug: one lap
+        measured in phases of the slug, and the laps to play — the
+        repeat-duration cap of ``calculate_effective_repetitions_for_path``
+        applied to that lap, or ``repetitions`` when there is no cap."""
+
+        def phases(laps):
+            return PathExecutionService.slug_phase_ids(
+                path,
+                laps,
+                trail_length,
+                trail_overlay,
+                lane_left,
+                lane_right,
+                lane_frame,
+                rotation_lock,
+                centroids,
+                neighbours,
+                recentre=recentre,
+            )
+
+        lap_phases = len(phases(2)) - len(phases(1))
+        laps = repetitions
+
+        if repeat_duration > 0 and lap_phases > 0 and duration > 0:
+            laps = max(int(((repeat_duration / duration) - 1) / lap_phases), 1)
+
+        return lap_phases, laps
+
+    @staticmethod
     def wide_path_phases(
         path: List[str],
         repetitions: int,
@@ -688,38 +777,42 @@ class PathExecutionService:
         """
 
         def phases(laps, ramp_up=False, ramp_down=False):
-            return [
-                list(phase.ids)
-                for phase in wide_path_geometry.slug_phases(
-                    path,
-                    centroids,
-                    neighbours,
-                    lane_left,
-                    lane_right,
-                    trail_length,
-                    trail_overlay,
-                    rotation_lock=rotation_lock,
-                    lane_frame=lane_frame,
-                    repetitions=laps,
-                    soft_start=ramp_up,
-                    soft_terminate=ramp_down,
-                    recentre=recentre,
-                )
-            ]
+            return PathExecutionService.slug_phase_ids(
+                path,
+                laps,
+                trail_length,
+                trail_overlay,
+                lane_left,
+                lane_right,
+                lane_frame,
+                rotation_lock,
+                centroids,
+                neighbours,
+                soft_start=ramp_up,
+                soft_terminate=ramp_down,
+                recentre=recentre,
+            )
 
         if not PathExecutionService.is_loop_path(path):
             once = phases(1, soft_start, soft_terminate)
 
             return once * (repetitions if linear_repeats else 1)
 
-        lap_phases = len(phases(2)) - len(phases(1))
-        effective_repetitions = repetitions
-
-        if repeat_duration > 0 and lap_phases > 0 and duration > 0:
-            effective_repetitions = max(
-                int(((repeat_duration / duration) - 1) / lap_phases), 1
-            )
-
+        _lap_phases, effective_repetitions = PathExecutionService.wide_loop_laps(
+            path,
+            repetitions,
+            duration,
+            repeat_duration,
+            trail_length,
+            trail_overlay,
+            lane_left,
+            lane_right,
+            lane_frame,
+            rotation_lock,
+            centroids,
+            neighbours,
+            recentre=recentre,
+        )
         active = phases(effective_repetitions)
         ramped = phases(effective_repetitions, soft_start, soft_terminate)
         idle_phases = 0
@@ -748,6 +841,13 @@ class PathExecutionService:
         soft_start: bool = False,
         soft_terminate: bool = False,
         linear_repeats: bool = False,
+        lane_left: int = 0,
+        lane_right: int = 0,
+        lane_frame: Optional[str] = None,
+        rotation_lock: bool = True,
+        recentre: bool = True,
+        centroids: Optional[Dict[str, tuple]] = None,
+        neighbours: Optional[Dict[str, List[str]]] = None,
     ) -> tuple:
         """(phases_per_rep, total_reps) for an execution plan's status
         display.
@@ -757,7 +857,37 @@ class PathExecutionService:
         ``linear_repeats`` on, one rep is the longest path's single
         traversal and total reps is the raw ``repetitions`` count.
         Otherwise the whole plan (``plan_length`` phases) is one rep.
+
+        A cycle is measured the way the plan plays it: in phases of the
+        slug when the shape (see ``calculate_execution_plan_from_params``)
+        takes its phases from the slug geometry, of the trail otherwise.
         """
+        width = int(lane_left) + int(lane_right) + 1
+        lane_frame = lane_frame or wide_path_geometry.IN_OUT
+        has_lattice = centroids is not None and neighbours is not None
+        # A wide slug with no lattice never reached a plan (the builder
+        # refuses it), so the breakdown just measures the trail.
+        slug = has_lattice and PathExecutionService.slug_applies(
+            width, trail_length, rotation_lock, has_lattice
+        )
+
+        def slug_traversal(path):
+            return PathExecutionService.slug_phase_ids(
+                path,
+                1,
+                trail_length,
+                trail_overlay,
+                lane_left,
+                lane_right,
+                lane_frame,
+                rotation_lock,
+                centroids,
+                neighbours,
+                soft_start=soft_start,
+                soft_terminate=soft_terminate,
+                recentre=recentre,
+            )
+
         max_cycle_length = 0
         max_effective_reps = 1
         has_loops = False
@@ -765,21 +895,40 @@ class PathExecutionService:
             if not PathExecutionService.is_loop_path(path):
                 continue
             has_loops = True
-            effective_reps = (
-                PathExecutionService.calculate_effective_repetitions_for_path(
+
+            if slug:
+                cycle_length, effective_reps = PathExecutionService.wide_loop_laps(
                     path,
                     repetitions,
                     duration,
                     repeat_duration,
                     trail_length,
                     trail_overlay,
+                    lane_left,
+                    lane_right,
+                    lane_frame,
+                    rotation_lock,
+                    centroids,
+                    neighbours,
+                    recentre=recentre,
                 )
-            )
-            cycle_length = len(
-                PathExecutionService.calculate_loop_cycle_phases(
-                    path, trail_length, trail_overlay
+            else:
+                effective_reps = (
+                    PathExecutionService.calculate_effective_repetitions_for_path(
+                        path,
+                        repetitions,
+                        duration,
+                        repeat_duration,
+                        trail_length,
+                        trail_overlay,
+                    )
                 )
-            )
+                cycle_length = len(
+                    PathExecutionService.calculate_loop_cycle_phases(
+                        path, trail_length, trail_overlay
+                    )
+                )
+
             if cycle_length > max_cycle_length or (
                 cycle_length == max_cycle_length and effective_reps > max_effective_reps
             ):
@@ -794,18 +943,18 @@ class PathExecutionService:
             # traversal = one rep; total reps = the raw Repetitions count.
             max_open_cycle = 0
             for path in paths:
-                max_open_cycle = max(
-                    max_open_cycle,
-                    len(
-                        PathExecutionService.calculate_trail_phases_for_path(
-                            path,
-                            trail_length,
-                            trail_overlay,
-                            soft_start=soft_start,
-                            soft_terminate=soft_terminate,
-                        )
-                    ),
-                )
+                if slug:
+                    traversal = slug_traversal(path)
+                else:
+                    traversal = PathExecutionService.calculate_trail_phases_for_path(
+                        path,
+                        trail_length,
+                        trail_overlay,
+                        soft_start=soft_start,
+                        soft_terminate=soft_terminate,
+                    )
+
+                max_open_cycle = max(max_open_cycle, len(traversal))
             return max(max_open_cycle, 1), max(int(repetitions), 1)
         # Open paths only, no linear repeats — entire plan is one rep
         return max(plan_length, 1), 1

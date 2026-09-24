@@ -121,8 +121,17 @@ class RouteExecutionService(HasTraits):
                     self.model.electrodes.channels_electrode_ids_map[channel]
                 )
 
-        # A slug wider than one electrode lays its lanes out on the device's
-        # lattice: the electrode centroids and the neighbour graph.
+        return PathExecutionService.calculate_execution_plan_from_params(
+            paths=paths,
+            activated_electrodes=activated_electrode_ids,
+            **self._device_lattice(),
+            **self.model.routes.plan_arguments(),
+        )
+
+    def _device_lattice(self):
+        """The device's lattice — the electrode centroids and the neighbour
+        graph — that a slug wider than one electrode lays its lanes out on,
+        as the plan builder's keyword arguments; both None with no device."""
         svg_model = self.model.electrodes.svg_model
         centroids = neighbours = None
 
@@ -136,13 +145,7 @@ class RouteExecutionService(HasTraits):
                 for electrode_id, adjacent in svg_model.neighbours.items()
             }
 
-        return PathExecutionService.calculate_execution_plan_from_params(
-            paths=paths,
-            activated_electrodes=activated_electrode_ids,
-            centroids=centroids,
-            neighbours=neighbours,
-            **self.model.routes.plan_arguments(),
-        )
+        return {"centroids": centroids, "neighbours": neighbours}
 
     # ----------------------------- Observers --------------------------------
 
@@ -172,8 +175,6 @@ class RouteExecutionService(HasTraits):
         # Build paths from route layers (kept for the rep breakdown below)
         paths = [layer.route.route for layer in routes_to_execute]
 
-        linear_repeats = bool(self.model.routes.linear_repeats)
-
         plan = self._build_execution_plan(routes_to_execute)
 
         if not plan:
@@ -197,14 +198,8 @@ class RouteExecutionService(HasTraits):
             PathExecutionService.calculate_phase_rep_breakdown(
                 paths,
                 len(plan),
-                duration=self.model.routes.duration,
-                repetitions=self.model.routes.repetitions,
-                repeat_duration=self.model.routes.repeat_duration,
-                trail_length=self.model.routes.trail_length,
-                trail_overlay=self.model.routes.trail_overlay,
-                soft_start=self.model.routes.soft_start,
-                soft_terminate=self.model.routes.soft_terminate,
-                linear_repeats=linear_repeats,
+                **self._device_lattice(),
+                **self.model.routes.plan_arguments(),
             )
         )
 

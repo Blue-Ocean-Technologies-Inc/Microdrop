@@ -173,3 +173,45 @@ def test_a_wide_slug_needs_the_device_geometry():
             paths=[LINE],
             lane_left=1,
         )
+
+
+def test_rep_breakdown_measures_a_wide_loop_lap_in_slug_phases():
+    # The 3x1 bar's lap round the ring is 12 phases (see the cap test
+    # above), so 30 s at 1 s a phase is two reps of 12 -- not the three
+    # reps of 8 the trail's cycle would give.
+    centroids, neighbours, _pitch = square_lattice()
+    plan = wide_plan([RING], 1, 1, 1, 0, repetitions=5, repeat_duration=30)
+    breakdown = PathExecutionService.calculate_phase_rep_breakdown(
+        [RING],
+        len(plan),
+        duration=1.0,
+        repetitions=5,
+        repeat_duration=30,
+        trail_length=1,
+        trail_overlay=0,
+        lane_left=1,
+        lane_right=1,
+        lane_frame=LEFT_RIGHT,
+        rotation_lock=False,
+        centroids=centroids,
+        neighbours=neighbours,
+    )
+
+    assert breakdown == (12, 2)
+
+
+def test_rep_breakdown_at_width_one_is_the_trail_cycle():
+    centroids, neighbours, _pitch = square_lattice()
+    breakdown = PathExecutionService.calculate_phase_rep_breakdown(
+        [RING],
+        30,
+        duration=1.0,
+        repetitions=5,
+        repeat_duration=30,
+        trail_length=1,
+        trail_overlay=0,
+        centroids=centroids,
+        neighbours=neighbours,
+    )
+
+    assert breakdown == (8, 3)
