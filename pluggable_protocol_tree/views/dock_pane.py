@@ -119,6 +119,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     columns = List(Instance(IColumn))
     manager = Instance(RowManager)
 
+    #: The tree view, built by create_contents — None until the pane mounts.
+    _pane = Instance(ProtocolTreePane)
+
     #: Per-row cell values stashed (keyed by row uuid) when a column set is
     #: removed at runtime, so a later re-add of the same columns restores the
     #: values the rebuilt tree would otherwise reset to defaults. Survives a
@@ -1322,9 +1325,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
-        # control is None until create_contents has run (the application
-        # can switch experiments before this pane is mounted).
-        self._pane._on_experiment_changed()
+        # The application can switch experiments before this pane is
+        # mounted; the view reads the current experiment when it is built.
+        if self._pane is not None:
+            self._pane._on_experiment_changed()
 
     @observe("task.window.closing", dispatch="ui")
     def _on_window_closing(self, event):
