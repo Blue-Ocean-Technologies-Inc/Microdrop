@@ -16,17 +16,7 @@ import pickle
 from pathlib import Path
 
 # Third-party imports.
-from PySide6.QtCore import QEvent, QSize, Qt
-from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QToolBar,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import Qt
 
 # Enthought library imports.
 from envisage.ui.tasks.api import TasksApplication
@@ -40,24 +30,12 @@ from traits.etsconfig.api import ETSConfig
 
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
-from dropbot_tools_menu.menus import dropbot_tools_menu_factory
-from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
-
-# Microdrop style imports.
-from microdrop_style.helpers import is_dark_mode
-from microdrop_style.icons.icons import ICON_MENU
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from .consts import (
-    CHANGELOG_PATH,
-    EXPERIMENT_DIR,
-    hamburger_btn_stylesheet,
-    scibots_icon_path,
-    sidebar_menu_options,
-)
+from .consts import CHANGELOG_PATH, EXPERIMENT_DIR
 from .helpers import get_microdrop_redis_globals_manager
 from .preferences import MicrodropPreferences
 
@@ -399,163 +377,3 @@ class MicrodropApplication(TasksApplication):
             logger.exception("Error while saving application state")
         else:
             logger.debug("Application state successfully saved")
-
-        # if not hasattr(window.control, "_left_toolbar"):
-        #     left_toolbar = MicrodropSidebar(window.control, task=window.active_task)
-        #
-        #     # Add to the left of the main window
-        #     window.control.addToolBar(Qt.LeftToolBarArea, left_toolbar)
-        #
-        #     # Optionally, prevent closing the toolbar
-        #     left_toolbar.setContextMenuPolicy(Qt.PreventContextMenu)
-        #
-        #     # Store a reference so it's not re-added
-        #     window.control._left_toolbar = left_toolbar
-
-
-class MicrodropSidebar(QToolBar):
-    def __init__(self, parent=None, task=None):
-        super().__init__("Permanent Sidebar", parent)
-        self.task = task
-
-        # self.setOrientation(Qt.Vertical)
-        # self.setMovable(False)
-        # self.setFloatable(False)
-        # self.setAllowedAreas(Qt.LeftToolBarArea)
-        # self.setFixedWidth(160)
-        self.setObjectName("PermanentLeftToolbar")
-
-        container = QWidget()
-        self.layout = QVBoxLayout()
-        # self.layout.setContentsMargins(0, 10, 0, 10)
-        # self.layout.setSpacing(15)
-        # self.layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-
-        # Logo
-        self.logo_label = QLabel()
-        pixmap = QPixmap(scibots_icon_path)
-        if not pixmap.isNull():
-            self.logo_label.setPixmap(pixmap.scaledToWidth(48, Qt.SmoothTransformation))
-        # self.logo_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
-
-        # Hamburger button
-        self.hamburger_btn = QPushButton(ICON_MENU)
-        self.hamburger_btn.setFont(QFont("Material Symbols Outlined"))
-        self.hamburger_btn.setFixedSize(QSize(40, 40))
-        self.hamburger_btn.setStyleSheet(hamburger_btn_stylesheet)
-        self.hamburger_btn.setCursor(Qt.PointingHandCursor)
-        self.hamburger_btn.clicked.connect(self.toggle_menu)
-        self.layout.addWidget(self.hamburger_btn, alignment=Qt.AlignHCenter)
-
-        self.menu_widget = QWidget()
-        self.menu_layout = QVBoxLayout()
-        self.menu_layout.setContentsMargins(0, 0, 0, 0)
-        self.menu_layout.setSpacing(15)
-        self.menu_widget.setLayout(self.menu_layout)
-
-        # Menu buttons
-        self.menu_buttons = []
-        icon_font = QFont("Material Symbols Outlined")
-        icon_font.setPointSize(22)
-        color_str = "white" if is_dark_mode() else "black"
-
-        for option, icon_code in sidebar_menu_options:
-            btn = SidebarMenuButton(icon_code, option, icon_font, color_str)
-            self.menu_layout.addWidget(btn)
-            self.menu_buttons.append((btn, option))
-
-        self.menu_widget.setVisible(False)
-        self.layout.addWidget(self.menu_widget, alignment=Qt.AlignHCenter)
-        # connections
-        button_names = [name for name, _ in sidebar_menu_options]
-        self.menu_buttons[button_names.index("Exit")][0].clicked.connect(
-            self._handle_exit
-        )
-        self.menu_buttons[button_names.index("Diagnostics")][0].clicked.connect(
-            self._handle_diagnostics
-        )
-
-        container.setLayout(self.layout)
-        self.addWidget(container)
-        self.update_menu_colors()
-
-    def toggle_menu(self):
-        self.menu_widget.setVisible(not self.menu_widget.isVisible())
-
-    def _handle_diagnostics(self):
-        app = self.task.window.application
-        dropbot_plugin = None
-        for plugin in app.plugin_manager._plugins:
-            if isinstance(plugin, DropbotToolsMenuPlugin):
-                dropbot_plugin = plugin
-                break
-        if dropbot_plugin is None:
-            print("DropbotToolsMenuPlugin not found.")
-            return
-
-        dropbot_menu = dropbot_tools_menu_factory(dropbot_plugin)
-        run_all_tests_action = dropbot_menu.items[0]
-        run_all_tests_action.perform(self)
-
-    def _handle_exit(self):
-        self.task.window.application.exit()
-
-    def event(self, event):
-        if event.type() == QEvent.PaletteChange:
-            self.update_menu_colors()
-            self.toggle_menu
-        return super().event(event)
-
-    def update_menu_colors(self):
-        if is_dark_mode():
-            color_str = "white"
-        else:
-            color_str = "black"
-        for btn, _ in self.menu_buttons:
-            btn.set_color(color_str)
-        # Apply hamburger button stylesheet with three color placeholders
-        # (normal, hover, pressed)
-        self.hamburger_btn.setStyleSheet(
-            hamburger_btn_stylesheet % (color_str, color_str, color_str)
-        )
-
-
-class SidebarMenuButton(QFrame):
-    def __init__(
-        self, icon_code, label, icon_font, color_str, text_font=None, parent=None
-    ):
-        super().__init__(parent)
-        self.setObjectName("SidebarMenuButton")
-        self.setStyleSheet("QFrame#SidebarMenuButton { background: none; }")
-        self.setCursor(Qt.PointingHandCursor)
-        self.icon_label = QLabel(icon_code)
-        self.icon_label.setFont(icon_font)
-        self.icon_label.setStyleSheet(f"color: {color_str};")
-        self.icon_label.setFixedWidth(28)
-        self.text_label = QLabel(label)
-        text_font = QFont()
-        text_font.setPointSize(11)
-        self.text_label.setFont(text_font)
-        self.text_label.setStyleSheet(f"color: {color_str};")
-        self.text_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        hbox = QHBoxLayout(self)
-        hbox.setContentsMargins(8, 0, 0, 0)
-        hbox.setSpacing(12)
-        hbox.addWidget(self.icon_label)
-        hbox.addWidget(self.text_label)
-        self.setLayout(hbox)
-        self.setFixedHeight(37)
-        self.setMinimumWidth(140)
-
-    def set_color(self, color_str):
-        self.icon_label.setStyleSheet(f"color: {color_str};")
-        self.text_label.setStyleSheet(f"color: {color_str};")
-
-    def mousePressEvent(self, event):
-        self.clicked.emit()
-        super().mousePressEvent(event)
-
-    from PySide6.QtCore import Signal
-
-    clicked = Signal()

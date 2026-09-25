@@ -14,18 +14,6 @@ from pathlib import Path
 # Microdrop package imports.
 from dropbot_controller.consts import SHORTS_DETECTED
 
-# Microdrop style imports.
-from microdrop_style.icons.icons import (
-    ICON_CANCEL,
-    ICON_DESCRIPTION,
-    ICON_EMOJI_OBJECTS,
-    ICON_EXTENSION,
-    ICON_FOLDER_OPEN,
-    ICON_HEADSET_MIC,
-    ICON_INFO,
-    ICON_TROUBLESHOOT,
-)
-
 # Microdrop utils imports.
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
@@ -51,47 +39,5 @@ ADVANCED_MODE_KEY = "microdrop.advanced_mode"  # advanced-mode toggle flag
 APP_GLOBALS_KEYS = [
     ADVANCED_MODE_KEY,
 ]
-
-sidebar_menu_options = [
-    ("File", ICON_FOLDER_OPEN),
-    ("Tools", ICON_EMOJI_OBJECTS),
-    ("Help", ICON_HEADSET_MIC),
-    ("Info", ICON_INFO),
-    ("Diagnostics", ICON_TROUBLESHOOT),
-    ("Plugins", ICON_EXTENSION),
-    ("Protocol \nRepository", ICON_DESCRIPTION),
-    ("Exit", ICON_CANCEL),
-]
-
-# Custom hamburger button stylesheet without hover effects for sidebar compatibility
-hamburger_btn_stylesheet = """QPushButton {
-    font-size: 24px;
-    background: none;
-    border: none;
-    color: %s;
-    padding: 8px;
-    border-radius: 4px;
-}
-QPushButton:hover {
-    background: none;
-    color: %s;
-}
-QPushButton:pressed {
-    background: none;
-    color: %s;
-}
-QPushButton:disabled {
-    background: none;
-    color: #666666;
-}"""
-
-sidebar_stylesheet = """QPushButton {
-    background: none;
-    border: none;
-    font-size: 2em;
-    text-align: left;
-    padding-left: 8px;
-    color: %s;
-}"""
 
 EXPERIMENT_DIR = get_current_utc_datetime()
