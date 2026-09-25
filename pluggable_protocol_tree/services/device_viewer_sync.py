@@ -61,12 +61,10 @@ from device_viewer.consts import (
     DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_RUNNING,
     STEP_PARAMS_COMMIT,
-)
-from device_viewer.models.messages import (
     DeviceViewerMessageModel,
     GeometryChangedMessage,
+    StepParamsCommitMessage,
 )
-from device_viewer.models.step_params_commit import StepParamsCommitMessage
 from dropbot_controller.consts import DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.consts import ADVANCED_MODE_CHANGE

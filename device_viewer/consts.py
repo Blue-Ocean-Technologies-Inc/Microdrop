@@ -20,6 +20,17 @@ from device_viewer.models.media import (
     RecordingStateModel,
     RecordingStatePublisher,
 )
+from device_viewer.models.messages import (
+    # Topic payload schemas are re-exported (``X as X``) so sibling plugins
+    # import them from this module, never from device_viewer.models.
+    DeviceViewerMessageModel as DeviceViewerMessageModel,
+)
+from device_viewer.models.messages import (
+    GeometryChangedMessage as GeometryChangedMessage,
+)
+from device_viewer.models.step_params_commit import (
+    StepParamsCommitMessage as StepParamsCommitMessage,
+)
 from dropbot_controller.consts import (
     CAPACITANCE_UPDATED,
     CHIP_INSERTED,

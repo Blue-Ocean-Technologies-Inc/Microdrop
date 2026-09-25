@@ -19,42 +19,50 @@ generate_class_method_dramatiq_listener_actor() silently skips re-registration
 controller + actor for the session and reset its mutable state between tests.
 """
 
+# Standard library imports.
 import time
 
+# Third-party imports.
 import dramatiq
 import pytest
 from dramatiq import Worker
 
+# Microdrop package imports.
 from device_viewer.consts import (
     DEVICE_VIEWER_GEOMETRY_CHANGED,
     DEVICE_VIEWER_STATE_CHANGED,
     PROTOCOL_RUNNING,
+    DeviceViewerMessageModel,
+    GeometryChangedMessage,
 )
-from device_viewer.models.messages import (
-    DeviceViewerMessageModel, GeometryChangedMessage,
-)
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from pluggable_protocol_tree.builtins.electrodes_column import (
     make_electrodes_column,
 )
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.routes_column import make_routes_column
-from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT as SYNC_ACTOR_TOPIC_DICT,
+)
+from pluggable_protocol_tree.consts import (
     SYNC_LISTENER_NAME,
 )
+from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.device_viewer_sync import (
     DeviceViewerSyncController,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
 
 def _make_manager():
-    return RowManager(columns=[
-        make_name_column(),
-        make_electrodes_column(),
-        make_routes_column(),
-    ])
+    return RowManager(
+        columns=[
+            make_name_column(),
+            make_electrodes_column(),
+            make_routes_column(),
+        ]
+    )
 
 
 @pytest.fixture(scope="session")
@@ -87,13 +95,15 @@ def subscribed_router(router_actor):
     """Subscribe the sync controller's actor to the router for this test."""
     for topic in SYNC_ACTOR_TOPIC_DICT[SYNC_LISTENER_NAME]:
         router_actor.message_router_data.add_subscriber_to_topic(
-            topic=topic, subscribing_actor_name=SYNC_LISTENER_NAME,
+            topic=topic,
+            subscribing_actor_name=SYNC_LISTENER_NAME,
         )
     yield router_actor
     for topic in SYNC_ACTOR_TOPIC_DICT[SYNC_LISTENER_NAME]:
         try:
             router_actor.message_router_data.remove_subscriber_from_topic(
-                topic=topic, subscribing_actor_name=SYNC_LISTENER_NAME,
+                topic=topic,
+                subscribing_actor_name=SYNC_LISTENER_NAME,
             )
         except Exception:
             pass
@@ -107,6 +117,7 @@ def worker():
     from microdrop_utils.broker_server_helpers import (
         remove_middleware_from_dramatiq_broker,
     )
+
     broker = dramatiq.get_broker()
     # Strip Prometheus middleware (project convention) — its message-
     # processing hooks fail in the test broker because Prometheus state
@@ -120,14 +131,18 @@ def worker():
 
 
 def test_geometry_round_trip_to_protocol_metadata(
-    qapp, dv_sync_ctrl, subscribed_router, worker,
+    qapp,
+    dv_sync_ctrl,
+    subscribed_router,
+    worker,
 ):
     """Redis: publishing GEOMETRY_CHANGED reaches the controller and
     populates protocol_metadata."""
     manager = dv_sync_ctrl.row_manager
     msg = GeometryChangedMessage(id_to_channel={"e00": 0, "e01": 1})
     publish_message(
-        topic=DEVICE_VIEWER_GEOMETRY_CHANGED, message=msg.serialize(),
+        topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
+        message=msg.serialize(),
     )
 
     deadline = time.monotonic() + 5.0
@@ -138,21 +153,23 @@ def test_geometry_round_trip_to_protocol_metadata(
         time.sleep(0.05)
 
     assert manager.protocol_metadata["electrode_to_channel"] == {
-        "e00": 0, "e01": 1,
+        "e00": 0,
+        "e01": 1,
     }
 
 
 def test_dv_state_to_stash_round_trip(
-    qapp, dv_sync_ctrl, subscribed_router, worker,
+    qapp,
+    dv_sync_ctrl,
+    subscribed_router,
+    worker,
 ):
     """Redis: publishing DEVICE_VIEWER_STATE_CHANGED reaches the
     controller and populates _free_mode_stash."""
     ctrl = dv_sync_ctrl
     publish_message(
         topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
-        message=GeometryChangedMessage(
-            id_to_channel={"e00": 0, "e01": 1}
-        ).serialize(),
+        message=GeometryChangedMessage(id_to_channel={"e00": 0, "e01": 1}).serialize(),
     )
     # Wait for geometry to land first (needed so channel->id cache is built).
     deadline = time.monotonic() + 5.0
@@ -167,8 +184,7 @@ def test_dv_state_to_stash_round_trip(
         message=DeviceViewerMessageModel(
             channels_activated={0, 1},
             routes=[],
-            step_info={"step_id": None, "step_label": None,
-                       "free_mode": True},
+            step_info={"step_id": None, "step_label": None, "free_mode": True},
         ).serialize(),
     )
 
@@ -180,12 +196,16 @@ def test_dv_state_to_stash_round_trip(
         time.sleep(0.05)
 
     assert ctrl._free_mode_stash == {
-        "electrodes": ["e00", "e01"], "routes": [],
+        "electrodes": ["e00", "e01"],
+        "routes": [],
     }
 
 
 def test_protocol_running_round_trip(
-    qapp, dv_sync_ctrl, subscribed_router, worker,
+    qapp,
+    dv_sync_ctrl,
+    subscribed_router,
+    worker,
 ):
     """Redis: PROTOCOL_RUNNING True/False reaches the controller and
     flips _protocol_running."""
