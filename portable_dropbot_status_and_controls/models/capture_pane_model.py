@@ -410,6 +410,10 @@ class CapturePaneModel(BaseStatusModel):
 
             settings = {name: value for name, value in saved.items() if name != "key"}
             row.trait_set(**settings)
+            # Step ticks are meaningless in manual mode; _reorder_rows only
+            # clears rows that fall out of `ordered`, which is every row
+            # here, so clear them explicitly.
+            row.at_start = row.at_end = False
             ordered.append(row)
 
         self._reorder_rows(ordered)
