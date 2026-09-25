@@ -12,7 +12,7 @@
 (a requester's own tag), and free mode. No Qt."""
 
 # Microdrop package imports.
-from device_viewer.utils.camera import media_filename
+from device_viewer.utils.capture import media_filename
 
 STAMP = "2026-09-21T10-00-00"
 

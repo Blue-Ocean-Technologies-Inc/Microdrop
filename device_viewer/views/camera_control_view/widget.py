@@ -55,12 +55,9 @@ from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
-from ...utils.camera import (
-    ImageSaver,
-    NativeVideoRecorder,
-    RawFFMPEGVideoRecorder,
-    get_transformed_frame,
-)
+from ...utils.capture import ImageSaver, get_transformed_frame
+from ...utils.recording.ffmpeg import RawFFMPEGVideoRecorder
+from ...utils.recording.native import NativeVideoRecorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
 from .utils import _show_media_capture_status_message

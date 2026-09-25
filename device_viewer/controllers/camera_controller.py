@@ -53,7 +53,7 @@ from ..consts import (
 from ..interfaces.i_camera_device import ICameraDevice
 from ..models.camera import CameraModel
 from ..models.media import MediaType
-from ..utils.camera import media_filename
+from ..utils.capture import media_filename
 from ..views.camera_control_view.utils import _cache_media_capture
 
 # Logger import.
