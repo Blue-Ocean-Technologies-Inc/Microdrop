@@ -8,16 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-import time
-
-from dotenv import load_dotenv
-import pytest
+# Standard library imports.
+import filecmp
 import os
 import shutil
 import subprocess
-from microdrop_utils.file_sync_helpers import Rsync
+import time
 from pathlib import Path
-import filecmp
+
+# Third-party imports.
+import pytest
+from dotenv import load_dotenv
+
+# Microdrop utils imports.
+from microdrop_utils.file_sync_helpers import Rsync
 
 # Define test directory names
 SOURCE_DIR = Path(__file__).parent / "rsync_test_source"
@@ -94,7 +98,7 @@ def test_local_sync_delete_exclude(setup_test_dirs):
             verbose=True,
             progress=True,
             delete=True,
-            exclude=["*logs"]  # Exclude the 'logs' directory
+            exclude=["*logs"],  # Exclude the 'logs' directory
         )
 
         print("\nSync successful (Example 1).")
@@ -105,11 +109,10 @@ def test_local_sync_delete_exclude(setup_test_dirs):
 
         # --- Verification using Assertions ---
         assert file1.exists()
-        assert logs.exists() == True
-        assert (DEST_DIR / "logs").exists() == False
-        assert old_file.exists() == False
+        assert logs.exists()
+        assert not (DEST_DIR / "logs").exists()
+        assert not old_file.exists()
         assert result.returncode == 0
-
 
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         pytest.fail(f"Sync failed unexpectedly: {e}")
@@ -131,7 +134,7 @@ def test_remote_sync_syntax_failure(setup_test_dirs):
         verbose=True,
         identity=SSH_IDENTITY,
         ssh_port=2222,
-        check=False  # Prevent raising error on (likely) failure
+        check=False,  # Prevent raising error on (likely) failure
     )
 
     print("\nRemote command executed (or failed gracefully).")
@@ -142,6 +145,12 @@ def test_remote_sync_syntax_failure(setup_test_dirs):
         print("STDERR:")
         print(result_remote.stderr)
 
+
+@pytest.mark.skipif(
+    not (SSH_USERNAME and SSH_IP),
+    reason="needs a live SSH host: set REMOTE_HOST_USERNAME and "
+    "REMOTE_HOST_IP_ADDRESS (and SSH_PRIVATE_KEY_FILE) in .env",
+)
 def test_remote_sync_success(setup_test_dirs):
     """
     Tests that remote sync works
@@ -165,7 +174,7 @@ def test_remote_sync_success(setup_test_dirs):
     result_from = source_dir.with_stem("rsync_test_source_from_remote")
     rsync.sync(
         src=f"{SSH_USERNAME}@{SSH_IP}:~/{source_dir.stem}/",
-        dest=f"{source_dir.with_stem("rsync_test_source_from_remote")}",
+        dest=f"{source_dir.with_stem('rsync_test_source_from_remote')}",
         archive=True,
         verbose=True,
         identity=SSH_IDENTITY,
@@ -174,13 +183,10 @@ def test_remote_sync_success(setup_test_dirs):
 
     # run a diff between the two directories
     dcmp = filecmp.dircmp(source_dir, result_from)
-    assert dcmp.common_dirs == ['data', 'logs']
+    assert dcmp.common_dirs == ["data", "logs"]
 
     common_files = []
     for sd in dcmp.subdirs.values():
         common_files.extend(sd.common_files)
 
-    assert common_files == ['file1.txt', 'app_logs.txt']
-
-
-
+    assert common_files == ["file1.txt", "app_logs.txt"]
