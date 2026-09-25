@@ -120,8 +120,12 @@ Phase = namedtuple("Phase", "head heading ids")
 
 #: One block placement: the route index it belongs to, the ``anchor`` point
 #: its leading cell sits on, the ``heading`` it hangs behind that point
-#: along, and its ``(left, right)`` lane counts across that heading.
-Position = namedtuple("Position", "head anchor heading lanes")
+#: along, its ``(left, right)`` lane counts across that heading, and whether
+#: it was ``forced``: fitted to a point rather than hung behind a route
+#: electrode the stride reached — a run's finish (centred on a corner, the
+#: leading edge on the route's end, a loop's return to its start) or a route
+#: end the stride fell short of.
+Position = namedtuple("Position", "head anchor heading lanes forced", defaults=(False,))
 
 
 # ------------------------------------------------------------------ lattice
@@ -427,16 +431,19 @@ def rehung_positions(route, headings, lanes, trail_length, trail_overlay, centro
     from one side to the other in a single phase).
     """
     stride = stride_of(trail_length, trail_overlay)
+    last = len(route) - 1
     heads = list(range(trail_length - 1, len(route), stride))
+    landed = heads[-1] == last
 
-    if heads[-1] != len(route) - 1:
-        heads.append(len(route) - 1)
+    if not landed:
+        heads.append(last)
 
     positions = []
 
     for index in heads:
         anchor = centroids[route[index]]
-        positions.append(Position(index, anchor, headings[index], lanes[index]))
+        forced = index == last and not landed
+        positions.append(Position(index, anchor, headings[index], lanes[index], forced))
 
         if trail_length == 1 and turns_at(index, headings):
             positions.append(
@@ -552,7 +559,8 @@ def translating_positions(
                 heads.append(end)
 
             for j in heads:
-                positions.append(Position(j, hung(j), first, lanes[j]))
+                forced = (j - start) % along_stride != 0
+                positions.append(Position(j, hung(j), first, lanes[j], forced))
 
             arrived_back = 0 if axis(heading) == axis(first) else trail_length - 1
             index = end
@@ -577,8 +585,12 @@ def translating_positions(
 
             return index - round(max(behind, 0) / pitch)
 
-        for _k, point in run_points(start, centred(corner), along_stride, pitch)[0]:
-            positions.append(Position(leading_index(point), point, first, config))
+        points, steps = run_points(start, centred(corner), along_stride, pitch)
+
+        for k, point in points:
+            positions.append(
+                Position(leading_index(point), point, first, config, k == steps)
+            )
 
         # Across: one straight run to the leg's last electrode, shifted to
         # the lanes wanted after it — or, when the route ends here, until
@@ -604,7 +616,7 @@ def translating_positions(
             else:
                 head = min(index + k, end) if forward else end
 
-            positions.append(Position(head, point, first, config))
+            positions.append(Position(head, point, first, config, k == steps))
 
         # Turning onto an along leg: the block centred on the corner covers
         # (T - 1) // 2 cells ahead of it along its heading and T // 2 behind,
@@ -695,7 +707,7 @@ def block_phases(
         )
         for position in positions
     ]
-    phases, wrapped, previous = [], [], None
+    phases, wrapped, forced, previous = [], [], [], None
 
     for index, position in enumerate(positions):
         # Ties between equally near cells go to ones the neighbouring
@@ -728,15 +740,22 @@ def block_phases(
             travel = headings[position.head] if translate else position.heading
             phases.append(Phase(position.head, travel, ids))
             wrapped.append(len(ids) > len(blocks[index]))
+            forced.append(position.forced)
             previous = ids
 
-    # The last placement is forced onto the route's end (a leg-end fit, or
-    # a loop's return to its start). When the slug could step there straight
-    # from the phase before, the short step between is dropped: a 2x3
-    # closing a loop goes from its last stride to the start footprint in
-    # one move instead of via a one-electrode shuffle.
-    if len(phases) >= 3 and touching(
-        phases[-3].ids, phases[-1].ids, trail_overlay, neighbours
+    # When the last placement was forced onto the route's end — fitted there
+    # (an across leg's leading-edge fit, a slide centred on a final corner, a
+    # loop's return to its start) or appended past a stride that fell short —
+    # and the slug could step there straight from the phase before, the
+    # short step between is dropped: a 2x3 closing a loop goes from its last
+    # stride to the start footprint in one move instead of via a
+    # one-electrode shuffle. An end the stride lands on, the block hung
+    # behind it, keeps every step, so the last move never outruns the
+    # stride (ruled 2026-09-25).
+    if (
+        len(phases) >= 3
+        and forced[-1]
+        and touching(phases[-3].ids, phases[-1].ids, trail_overlay, neighbours)
     ):
         del phases[-2]
         del wrapped[-2]

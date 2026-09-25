@@ -85,39 +85,8 @@ def lattices():
     }
 
 
-#: The end-of-route drop (2139af4e) is documented for a placement forced onto
-#: the route's end, but it also fires on a natural stride's end, so the last
-#: move outruns the stride the overlay sets. These cases keep the picked
-#: candidate until the maintainer decides.
-UNFORCED_END_DROP = (
-    "end-of-route drop (2139af4e) fires on a natural, unforced end: the last "
-    "move outruns the stride, which the rule as documented (forced end "
-    "placement) does not cover"
-)
-UNDECIDED = {
-    "3x3 hairpin in/out": (
-        f"{UNFORCED_END_DROP}; head 5 -> 7 in one phase at overlay 2 (stride 1)"
-    ),
-    "3x2 overlay 0 at a corner": (
-        f"{UNFORCED_END_DROP}; head 3 -> 7 at stride 2 skips pick K1's 5 u, "
-        "though it does honour 'overlay 0 means no overlap at corners', stated "
-        "for locked blocks only"
-    ),
-}
-
-
 @pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(
-            case,
-            id=case["id"],
-            marks=[pytest.mark.xfail(reason=UNDECIDED[case["id"]], strict=True)]
-            if case["id"] in UNDECIDED
-            else [],
-        )
-        for case in ANSWERS
-    ],
+    "case", [pytest.param(case, id=case["id"]) for case in ANSWERS]
 )
 def test_slug_phases_reproduce_the_picked_candidate(case, lattices):
     centroids, neighbours, pitch = lattices[case["lattice"]]
@@ -167,20 +136,21 @@ def test_square_slug_hangs_behind_its_head_from_first_to_last_electrode():
 
 
 def test_rectangle_re_hangs_behind_the_head_at_the_corner():
-    # The re-hang behind head 3 is dropped (2139af4e): the phases either side
-    # of it share the overlay, so the slug steps straight to the end.
+    # The stride lands on the last electrode, a natural end, so the re-hang
+    # behind head 3 stays: the end-of-route drop (2139af4e) only follows a
+    # placement forced onto the route's end (2026-09-25).
     centroids, neighbours, pitch = square_lattice()
     route = ["e0305", "e0405", "e0505", "e0504", "e0503"]
     phases = slug_phases(route, centroids, neighbours, 1, 1, 2, 1, pitch=pitch)
     assert frame_text(render_phases(phases, route, centroids, pitch)) == dedent(
         """
-        1 r           2 r           3 u
-        . . . . . .   . . . . . .   . . . . . .
-        . . . . . .   . . . . . .   . . # # # .
-        . # # . . .   . . # # . .   . . # # # .
-        . # # . . .   . . # # . .   . . . . . .
-        . # # . . .   . . # # . .   . . . . . .
-        . . . . . .   . . . . . .   . . . . . .
+        1 r           2 r           3 u           4 u
+        . . . . . .   . . . . . .   . . . . . .   . . . . . .
+        . . . . . .   . . . . . .   . . . . . .   . . # # # .
+        . # # . . .   . . # # . .   . . # # # .   . . # # # .
+        . # # . . .   . . # # . .   . . # # # .   . . . . . .
+        . # # . . .   . . # # . .   . . . . . .   . . . . . .
+        . . . . . .   . . . . . .   . . . . . .   . . . . . .
         """
     ).strip("\n")
 
@@ -192,15 +162,9 @@ def test_overlay_sets_how_many_electrodes_a_block_advances():
     assert [phase.head for phase in hop] == [2, 5, 8]
 
 
-@pytest.mark.xfail(
-    reason=(
-        "end-of-route drop (2139af4e) removes head 7 on a straight route whose "
-        "end is a natural stride, not a forced placement, so the last move is "
-        "two electrodes at overlay 2 (stride 1)"
-    ),
-    strict=True,
-)
 def test_a_high_overlay_creeps_one_electrode_at_a_time_to_the_end():
+    # The stride lands on the last electrode, so the end-of-route drop
+    # (2139af4e) stays out of it: the last move never outruns the stride.
     centroids, neighbours, pitch = square_lattice()
     route = [f"e{x:02d}05" for x in range(1, 10)]
     creep = slug_phases(route, centroids, neighbours, 1, 1, 3, 2, pitch=pitch)

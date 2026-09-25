@@ -267,6 +267,18 @@
         ]
       },
       {
+        "head": 3,
+        "heading": "u",
+        "ids": [
+          "e0404",
+          "e0405",
+          "e0504",
+          "e0505",
+          "e0604",
+          "e0605"
+        ]
+      },
+      {
         "head": 4,
         "heading": "u",
         "ids": [
@@ -279,7 +291,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
+    "note": "Pick C restored 2026-09-25 after the maintainer ruled the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end: the re-hung block's stride lands on the last electrode, a natural end, so it keeps its re-hang at head 3."
   },
   {
     "id": "3x3",
@@ -2181,7 +2193,8 @@
           "e0703"
         ]
       }
-    ]
+    ],
+    "note": "Ruled 2026-09-25: the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end; the re-hung block's stride lands on the last electrode, a natural end, so pick K1's stop at 5 u stays instead of a jump from 3 to 7."
   },
   {
     "id": "3x3 hairpin in/out",
@@ -2279,8 +2292,8 @@
         ]
       },
       {
-        "head": 4,
-        "heading": "d",
+        "head": 5,
+        "heading": "l",
         "ids": [
           "e0406",
           "e0407",
@@ -2324,7 +2337,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Ruled 2026-09-25: the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end; the return leg's stride lands on the last electrode, a natural end, so the slug creeps 5, 6, 7 instead of jumping 5 to 7."
   },
   {
     "id": "3x1 jog in/out, rotation lock",
