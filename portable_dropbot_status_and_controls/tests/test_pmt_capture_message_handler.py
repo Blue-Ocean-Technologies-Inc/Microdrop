@@ -127,6 +127,28 @@ def test_row_selected_echo_of_own_push_is_ignored(handler):
     assert handler.model.rows[0].gain == 200
 
 
+def test_reselecting_a_pushed_step_after_another_reattaches(handler):
+    # Edit step 1 (push), select step 2, select step 1 again: the pane must
+    # follow back to step 1 — the unchanged cell is not an echo once the pane
+    # has attached elsewhere, or later edits land on step 2.
+    handler.model.merge_spots([(1, 1000)])
+    handler.model.attach_step("step-1", None)
+    pushed_value = {"avg": 16, "osr": 6, "rf_ohms": 499_000.0, "entries": []}
+    handler.model.record_pushed_value(pushed_value)
+
+    other = ProtocolTreeRowSelectedMessage(
+        step_id="step-2", cells={PMT_CAPTURE_COLUMN_ID: None}
+    )
+    handler._on_row_selected_triggered(other.serialize())
+    assert handler.model.attached_step_id == "step-2"
+
+    back = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={PMT_CAPTURE_COLUMN_ID: pushed_value}
+    )
+    handler._on_row_selected_triggered(back.serialize())
+    assert handler.model.attached_step_id == "step-1"
+
+
 def test_row_selected_foreign_change_reloads(handler):
     handler.model.merge_spots([(1, 1000)])
     handler.model.attach_step("step-1", None)
