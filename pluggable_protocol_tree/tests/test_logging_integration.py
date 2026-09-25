@@ -12,10 +12,14 @@
 listener would, and assert that per-phase channel attribution and
 artifacts are produced correctly."""
 
+# Standard library imports.
 import json
-from pathlib import Path
+from types import SimpleNamespace
 
-from pluggable_protocol_tree.services.logging.controller import ProtocolLoggingController
+# Microdrop package imports.
+from pluggable_protocol_tree.services.logging.controller import (
+    ProtocolLoggingController,
+)
 from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
 
 
@@ -23,22 +27,48 @@ def test_two_phase_run_produces_artifacts_with_per_phase_channels(tmp_path):
     """Drive the controller as the executor + listener would: step start,
     phase A actuation + capacitance, phase B actuation + capacitance,
     finish. Assert artifacts + per-phase attribution."""
-    c = ProtocolLoggingController(settling_provider=lambda: 0.0,
-                                  flush_scheduler=lambda ctrl: ctrl._flush())
-    ctx = LoggingDeviceContext(experiment_directory=tmp_path, device_svg_path=None,
-                               channel_areas={1: 1.0, 2: 2.0, 3: 3.0},
-                               capacitance_per_unit_area=2.0)
+    c = ProtocolLoggingController(
+        settling_provider=lambda: 0.0, flush_scheduler=lambda ctrl: ctrl._flush()
+    )
+    ctx = LoggingDeviceContext(
+        experiment_directory=tmp_path,
+        device_svg_path=None,
+        channel_areas={1: 1.0, 2: 2.0, 3: 3.0},
+        capacitance_per_unit_area=2.0,
+    )
     c.start_logging(ctx, n_steps=1, preview_mode=False)
 
     class _Row:
-        uuid = "r1"; name = "S"; path = (0,)
-    c._on_step_started(_Row())
+        uuid = "r1"
+        name = "S"
+        path = (0,)
+
+    # _on_step_started observes a traits change event; .new is the
+    # (row, step_index, step_total) tuple step_started fires with
+    # (#8503b7c7, Qt signals -> Traits events).
+    c._on_step_started(SimpleNamespace(new=(_Row(), 0, 1)))
     c.on_actuation(json.dumps({"electrodes": ["a"], "channels": [1]}))
-    c.on_capacitance(json.dumps({"capacitance": "10pF", "voltage": "100V",
-                                 "instrument_time_us": 5, "reception_time": 1}))
+    c.on_capacitance(
+        json.dumps(
+            {
+                "capacitance": "10pF",
+                "voltage": "100V",
+                "instrument_time_us": 5,
+                "reception_time": 1,
+            }
+        )
+    )
     c.on_actuation(json.dumps({"electrodes": ["b", "c"], "channels": [2, 3]}))
-    c.on_capacitance(json.dumps({"capacitance": "20pF", "voltage": "100V",
-                                 "instrument_time_us": 6, "reception_time": 2}))
+    c.on_capacitance(
+        json.dumps(
+            {
+                "capacitance": "20pF",
+                "voltage": "100V",
+                "instrument_time_us": 6,
+                "reception_time": 2,
+            }
+        )
+    )
     c.stop_logging()
 
     data_json = list((tmp_path / "data").glob("data_*.json"))
@@ -46,4 +76,4 @@ def test_two_phase_run_produces_artifacts_with_per_phase_channels(tmp_path):
     assert list((tmp_path / "reports").glob("report_*.html"))
     payload = json.loads(data_json[0].read_text())
     chan_col = payload["data"][payload["columns"].index("actuated_channels")]
-    assert chan_col == [[1], [2, 3]]            # per-phase attribution
+    assert chan_col == [[1], [2, 3]]  # per-phase attribution

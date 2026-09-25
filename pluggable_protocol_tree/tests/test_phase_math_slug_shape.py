@@ -54,6 +54,7 @@ def test_a_row_without_the_shape_reads_as_the_plain_trail():
         "lane_right": 0,
         "lane_frame": IN_OUT,
         "rotation_lock": True,
+        "recentre": True,
     }
 
 
@@ -67,6 +68,7 @@ def test_a_row_with_the_shape_maps_to_the_builder_arguments():
         "lane_right": 2,
         "lane_frame": LEFT_RIGHT,
         "rotation_lock": False,
+        "recentre": True,
     }
 
 

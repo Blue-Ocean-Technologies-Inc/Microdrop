@@ -99,7 +99,11 @@ class PathExecutionService:
         Returns the number of idle phases (each lasting ``duration`` seconds) that
         should be appended after the loop's active phases to fill the balance time.
         """
-        if repeat_duration <= 0 or not PathExecutionService.is_loop_path(path):
+        if (
+            repeat_duration <= 0
+            or duration <= 0
+            or not PathExecutionService.is_loop_path(path)
+        ):
             return 0
 
         cycle_phases = PathExecutionService.calculate_loop_cycle_phases(

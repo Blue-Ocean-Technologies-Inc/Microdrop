@@ -12,15 +12,30 @@
 electrodes/routes are read-only summary cells; the actual edit path is
 the demo's SimpleDeviceViewer (and tests / programmatic mutation)."""
 
+# Standard library imports.
+import json
+from unittest.mock import MagicMock, patch
+
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 
-from pluggable_protocol_tree.models.row import BaseRow, build_row_type
+# Microdrop package imports.
 from pluggable_protocol_tree.builtins.electrodes_column import (
     make_electrodes_column,
 )
-
+from pluggable_protocol_tree.builtins.routes_column import (
+    RoutesHandler,
+    make_routes_column,
+)
+from pluggable_protocol_tree.consts import (
+    ELECTRODES_STATE_APPLIED,
+    ELECTRODES_STATE_CHANGE,
+)
+from pluggable_protocol_tree.execution.cursor import ExecutionCursor
+from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
 # --- electrodes column ---
+
 
 def test_electrodes_column_metadata():
     col = make_electrodes_column()
@@ -36,17 +51,17 @@ def test_electrodes_column_trait_defaults_to_empty_list():
     assert r.electrodes == []
 
 
-def test_electrodes_summary_shows_pluralized_count():
+def test_electrodes_summary_shows_the_count():
     col = make_electrodes_column()
-    assert col.view.format_display([], BaseRow()) == "0 electrodes"
-    assert col.view.format_display(["e0"], BaseRow()) == "1 electrode"
-    assert col.view.format_display(["e0", "e1", "e2"], BaseRow()) == "3 electrodes"
+    assert col.view.format_display([], BaseRow()) == "0"
+    assert col.view.format_display(["e0"], BaseRow()) == "1"
+    assert col.view.format_display(["e0", "e1", "e2"], BaseRow()) == "3"
 
 
 def test_electrodes_summary_handles_none_value():
     """Defensive: if the underlying value is somehow None, render as 0."""
     col = make_electrodes_column()
-    assert col.view.format_display(None, BaseRow()) == "0 electrodes"
+    assert col.view.format_display(None, BaseRow()) == "0"
 
 
 def test_electrodes_cell_is_not_editable():
@@ -61,23 +76,15 @@ def test_electrodes_cell_create_editor_returns_none():
 
 # --- routes column + RoutesHandler ---
 
-import json
-from unittest.mock import MagicMock, patch
-
-from pluggable_protocol_tree.builtins.routes_column import (
-    make_routes_column, RoutesHandler,
-)
-from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
-)
-from pluggable_protocol_tree.execution.cursor import ExecutionCursor
-
 
 def test_routes_column_metadata():
     col = make_routes_column()
     assert col.model.col_id == "routes"
-    assert col.model.col_name == "Electrodes"
+    assert col.model.col_name == "Routes"
     assert col.model.default_value == []
+    # The tree header reads "Routes"; the preferences/ack-wait grid uses
+    # the more explicit compound name (#d258651a).
+    assert col.preference_display_name == "Electrodes / Routes"
 
 
 def test_routes_column_trait_defaults_to_empty_list():
@@ -87,13 +94,13 @@ def test_routes_column_trait_defaults_to_empty_list():
     assert r.routes == []
 
 
-def test_routes_summary_shows_pluralized_count():
+def test_routes_summary_shows_the_count():
     col = make_routes_column()
-    assert col.view.format_display([], BaseRow()) == "0 routes"
-    assert col.view.format_display([["a", "b"]], BaseRow()) == "1 route"
-    assert col.view.format_display(
-        [["a", "b"], ["c", "d"], ["e", "f"]], BaseRow()
-    ) == "3 routes"
+    assert col.view.format_display([], BaseRow()) == "0"
+    assert col.view.format_display([["a", "b"]], BaseRow()) == "1"
+    assert (
+        col.view.format_display([["a", "b"], ["c", "d"], ["e", "f"]], BaseRow()) == "3"
+    )
 
 
 def test_routes_cell_is_not_editable():
@@ -114,7 +121,10 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
     emits TWO messages — PROTOCOL_TREE_DISPLAY_STATE (display path) and
     ELECTRODES_STATE_CHANGE (hardware path) — and waits for the
     hardware ack once per phase. Matches the legacy protocol_grid
-    split between display and hardware.
+    split between display and hardware. The hardware path publishes
+    through ElectrodeStateChangePublisher (a ValidatedTopicPublisher),
+    whose own module-level ``publish_message`` reference must be patched
+    separately from the display path's (#26b44a0f).
     """
     from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
     from pluggable_protocol_tree.models.display_state import (
@@ -132,7 +142,7 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
     row.soft_end = False
     row.repeat_duration = 0.0
     row.linear_repeats = False
-    row.duration_s = 0.0     # no per-phase dwell so the unit test stays fast
+    row.duration_s = 0.0  # no per-phase dwell so the unit test stays fast
     row.repetitions = 1
 
     ctx = MagicMock()
@@ -142,14 +152,31 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
     ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.preview_mode = False
+    # Not Advanced Mode -> the display payload's editable flag is False
+    # (#434); a bare MagicMock attribute would be truthy by default.
+    ctx.protocol.advanced_mode = False
     ctx.scratch = {}
-    ctx.protocol.scratch = {"electrode_to_channel": {
-        "e0": 0, "e1": 1, "e2": 2, "e3": 3, "e4": 4,
-    }}
+    ctx.protocol.scratch = {
+        "electrode_to_channel": {
+            "e0": 0,
+            "e1": 1,
+            "e2": 2,
+            "e3": 3,
+            "e4": 4,
+        }
+    }
 
     published = []
-    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
-               side_effect=lambda **kw: published.append(kw)):
+    with (
+        patch(
+            "pluggable_protocol_tree.builtins.routes_column.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+        patch(
+            "microdrop_utils.dramatiq_pub_sub_helpers.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+    ):
         col.handler.on_step(row, ctx)
 
     # 3 phases * 2 messages (display + hardware) = 6 publishes
@@ -162,18 +189,18 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
     assert len(display_msgs) == 3
     assert len(hardware_msgs) == 3
 
-    # Hardware payloads — sorted electrodes + channels
+    # Hardware payloads carry channels only — ElectrodeChannelsRequest
+    # validates a bare {"channels": [...]} set; electrode ids stay on the
+    # display path below.
     hw_payloads = [json.loads(p["message"]) for p in hardware_msgs]
-    assert hw_payloads[0]["electrodes"] == ["e0", "e1", "e2"]
-    assert hw_payloads[0]["channels"] == [0, 1, 2]
-    assert hw_payloads[1]["electrodes"] == ["e0", "e1", "e3"]
-    assert hw_payloads[2]["electrodes"] == ["e0", "e1", "e4"]
+    assert set(hw_payloads[0]["channels"]) == {0, 1, 2}
+    assert set(hw_payloads[1]["channels"]) == {0, 1, 3}
+    assert set(hw_payloads[2]["channels"]) == {0, 1, 4}
 
     # Display payloads — same electrode list, plus the row's static
     # routes / step_label / editable=False.
     disp_payloads = [
-        ProtocolTreeDisplayMessage.deserialize(p["message"])
-        for p in display_msgs
+        ProtocolTreeDisplayMessage.deserialize(p["message"]) for p in display_msgs
     ]
     assert disp_payloads[0].electrodes == ["e0", "e1", "e2"]
     assert disp_payloads[1].electrodes == ["e0", "e1", "e3"]
@@ -214,13 +241,19 @@ def test_routes_handler_preview_mode_skips_hardware_and_ack():
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.preview_mode = True
     ctx.scratch = {}
-    ctx.protocol.scratch = {"electrode_to_channel": {
-        "e0": 0, "e1": 1, "e2": 2,
-    }}
+    ctx.protocol.scratch = {
+        "electrode_to_channel": {
+            "e0": 0,
+            "e1": 1,
+            "e2": 2,
+        }
+    }
 
     published = []
-    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
-               side_effect=lambda **kw: published.append(kw)):
+    with patch(
+        "pluggable_protocol_tree.builtins.routes_column.publish_message",
+        side_effect=lambda **kw: published.append(kw),
+    ):
         col.handler.on_step(row, ctx)
 
     # All published messages are display-only — none target the
@@ -260,15 +293,22 @@ def test_routes_handler_unmapped_electrode_logs_warning_and_skips_channel():
     ctx.protocol.scratch = {"electrode_to_channel": {}}
 
     published = []
-    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
-               side_effect=lambda **kw: published.append(kw)):
+    with (
+        patch(
+            "pluggable_protocol_tree.builtins.routes_column.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+        patch(
+            "microdrop_utils.dramatiq_pub_sub_helpers.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+    ):
         col.handler.on_step(row, ctx)
 
     # 1 display + 1 hardware
     hardware_msgs = [p for p in published if p["topic"] == ELECTRODES_STATE_CHANGE]
     assert len(hardware_msgs) == 1
     payload = json.loads(hardware_msgs[0]["message"])
-    assert payload["electrodes"] == ["unknown_electrode"]
     assert payload["channels"] == []
 
 
@@ -276,19 +316,20 @@ def test_routes_handler_uses_route_repetitions_for_loop_count():
     """iter_phases must receive n_repeats from route_repetitions, NOT
     repetitions (which now only drives whole-step expansion)."""
     from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
     col = make_routes_column()
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
     row = Row()
     row.routes = [["a", "b", "c", "a"]]
     row.route_repetitions = 3
-    row.repetitions = 7          # must be IGNORED by phase generation
-    row.duration_s = 0.0         # zero dwell so the test is instant
+    row.repetitions = 7  # must be IGNORED by phase generation
+    row.duration_s = 0.0  # zero dwell so the test is instant
 
     ctx = MagicMock()
     # Real cursor so on_step's no-seek static loop sees phase_index=0,
@@ -297,20 +338,23 @@ def test_routes_handler_uses_route_repetitions_for_loop_count():
     ctx.protocol.cursor = ExecutionCursor()
     ctx.protocol.stop_event.is_set.return_value = False
     ctx.protocol.pause_event.is_set.return_value = False
-    ctx.protocol.preview_mode = True     # skip hardware publish + ack wait
+    ctx.protocol.preview_mode = True  # skip hardware publish + ack wait
     ctx.scratch = {}
     ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
 
     captured = {}
     import pluggable_protocol_tree.builtins.routes_column as mod
+
     real_iter = mod.iter_phases
 
     def spy(*args, **kwargs):
         captured["n_repeats"] = kwargs.get("n_repeats")
         return real_iter(*args, **kwargs)
 
-    with patch.object(mod, "iter_phases", side_effect=spy), \
-         patch.object(mod, "publish_message", lambda **kw: None):
+    with (
+        patch.object(mod, "iter_phases", side_effect=spy),
+        patch.object(mod, "publish_message", lambda **kw: None),
+    ):
         col.handler.on_step(row, ctx)
 
     assert captured["n_repeats"] == 3
@@ -321,14 +365,16 @@ def test_routes_handler_hold_pad_uses_total_emitted_phase_count():
     emitted phases (so loop cycles + soft ramps + open routes all count).
     iter_phases is patched to a known 6-phase list; T=10, dwell=1 => pad 4."""
     from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import (
-        make_routes_column, DURATION_CONSUMED_KEY,
-    )
+
+    import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
-    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import (
+        DURATION_CONSUMED_KEY,
+        make_routes_column,
+    )
+    from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
     col = make_routes_column()
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
@@ -352,15 +398,20 @@ def test_routes_handler_hold_pad_uses_total_emitted_phase_count():
     ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
 
     sleeps = []
-    with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+    with (
+        patch.object(mod, "publish_message", lambda **kw: None),
+        patch.object(mod, "iter_phases", return_value=iter(fake_phases)),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda secs, *a, **k: sleeps.append(secs),
+        ),
+    ):
         col.handler.on_step(row, ctx)
 
     # 6 per-phase dwells of 1.0, then the pad of 10 - 6*1 = 4.0.
     assert sleeps[-1] == 4.0
-    assert sum(sleeps) == 10.0          # total lands exactly on the budget
+    assert sum(sleeps) == 10.0  # total lands exactly on the budget
     assert ctx.scratch.get(DURATION_CONSUMED_KEY) is True
 
 
@@ -368,12 +419,13 @@ def test_routes_handler_no_hold_pad_in_count_mode():
     """Count mode (repeat_duration_controls False): no extra pad sleep —
     only the per-phase dwells occur."""
     from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+
+    import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
-    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
     col = make_routes_column()
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
@@ -381,7 +433,7 @@ def test_routes_handler_no_hold_pad_in_count_mode():
     row.routes = [["a", "b", "c", "a"]]
     row.duration_s = 1.0
     row.repeat_duration = 10.0
-    row.repeat_duration_controls = False     # count mode
+    row.repeat_duration_controls = False  # count mode
 
     fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
 
@@ -397,10 +449,15 @@ def test_routes_handler_no_hold_pad_in_count_mode():
     ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
 
     sleeps = []
-    with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+    with (
+        patch.object(mod, "publish_message", lambda **kw: None),
+        patch.object(mod, "iter_phases", return_value=iter(fake_phases)),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda secs, *a, **k: sleeps.append(secs),
+        ),
+    ):
         col.handler.on_step(row, ctx)
 
     # Exactly one sleep per phase, no trailing pad sleep.
@@ -411,19 +468,20 @@ def test_routes_handler_no_pad_sleep_when_phases_fill_budget():
     """Duration mode but len(phases)*dwell == repeat_duration: pad is 0 so
     no extra sleep is added beyond the per-phase dwells."""
     from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+
+    import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
-    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
     col = make_routes_column()
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
     row = Row()
     row.routes = [["a", "b", "c", "a"]]
     row.duration_s = 1.0
-    row.repeat_duration = 6.0                # equals 6 phases * 1.0
+    row.repeat_duration = 6.0  # equals 6 phases * 1.0
     row.repeat_duration_controls = True
 
     fake_phases = [{"a"}, {"a", "b"}, {"a", "b", "c"}, {"a", "b"}, {"a"}, {"a"}]
@@ -440,13 +498,18 @@ def test_routes_handler_no_pad_sleep_when_phases_fill_budget():
     ctx.protocol.scratch = {"electrode_to_channel": {"a": 0, "b": 1, "c": 2}}
 
     sleeps = []
-    with patch.object(mod, "publish_message", lambda **kw: None), \
-         patch.object(mod, "iter_phases", return_value=iter(fake_phases)), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda secs, *a, **k: sleeps.append(secs)):
+    with (
+        patch.object(mod, "publish_message", lambda **kw: None),
+        patch.object(mod, "iter_phases", return_value=iter(fake_phases)),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda secs, *a, **k: sleeps.append(secs),
+        ),
+    ):
         col.handler.on_step(row, ctx)
 
-    assert len(sleeps) == len(fake_phases)   # no extra pad sleep (pad == 0)
+    assert len(sleeps) == len(fake_phases)  # no extra pad sleep (pad == 0)
 
 
 def _captured_repeat_duration_s(controls):
@@ -454,12 +517,13 @@ def _captured_repeat_duration_s(controls):
     was passed into iter_phases, for a row with repeat_duration=7.0 and
     repeat_duration_controls=`controls`."""
     from unittest.mock import MagicMock, patch
-    from pluggable_protocol_tree.models.row import build_row_type, BaseRow
-    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+
+    import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.route_repetitions_column import (
         make_route_repetitions_column,
     )
-    import pluggable_protocol_tree.builtins.routes_column as mod
+    from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
     col = make_routes_column()
     Row = build_row_type([col, make_route_repetitions_column()], base=BaseRow)
@@ -488,8 +552,10 @@ def _captured_repeat_duration_s(controls):
         seen["rd"] = k.get("repeat_duration_s")
         return real(*a, **k)
 
-    with patch.object(mod, "iter_phases", side_effect=spy), \
-         patch.object(mod, "publish_message", lambda **kw: None):
+    with (
+        patch.object(mod, "iter_phases", side_effect=spy),
+        patch.object(mod, "publish_message", lambda **kw: None),
+    ):
         col.handler.on_step(row, ctx)
     return seen["rd"]
 
@@ -502,8 +568,8 @@ def test_routes_handler_duration_mode_gated_on_controls_flag():
     route_repetitions drives the cycle count. Otherwise the loop is
     truncated to the budget WITHOUT the compensating hold-pad (which is
     also gated on the flag), making the step run short."""
-    assert _captured_repeat_duration_s(controls=False) == 0.0   # count mode
-    assert _captured_repeat_duration_s(controls=True) == 7.0     # duration mode
+    assert _captured_repeat_duration_s(controls=False) == 0.0  # count mode
+    assert _captured_repeat_duration_s(controls=True) == 7.0  # duration mode
 
 
 def test_cooperative_sleep_returns_early_on_phase_advance_event():
@@ -512,9 +578,11 @@ def test_cooperative_sleep_returns_early_on_phase_advance_event():
     raise)."""
     import threading
     import time
+
     from pluggable_protocol_tree.builtins.routes_column import (
         _cooperative_sleep,
     )
+
     stop_event = threading.Event()
     pause_event = None
     advance_event = threading.Event()
@@ -526,8 +594,7 @@ def test_cooperative_sleep_returns_early_on_phase_advance_event():
     threading.Thread(target=_set_after, args=(0.05,), daemon=True).start()
     t0 = time.monotonic()
     # 5 second dwell, but the advance_event fires at ~50 ms
-    _cooperative_sleep(5.0, stop_event, pause_event,
-                       phase_advance_event=advance_event)
+    _cooperative_sleep(5.0, stop_event, pause_event, phase_advance_event=advance_event)
     elapsed = time.monotonic() - t0
     assert elapsed < 0.5, f"expected early return, elapsed={elapsed:.2f}s"
 
@@ -537,14 +604,16 @@ def test_cooperative_sleep_phase_advance_event_kwarg_is_optional():
     kwarg and get the original behaviour."""
     import threading
     import time
+
     from pluggable_protocol_tree.builtins.routes_column import (
         _cooperative_sleep,
     )
+
     stop_event = threading.Event()
     t0 = time.monotonic()
     _cooperative_sleep(0.1, stop_event, None)
     elapsed = time.monotonic() - t0
-    assert 0.05 <= elapsed < 0.5      # roughly the requested dwell
+    assert 0.05 <= elapsed < 0.5  # roughly the requested dwell
 
 
 def test_cooperative_sleep_aborts_leftover_dwell_on_seek_after_pause():
@@ -555,6 +624,7 @@ def test_cooperative_sleep_aborts_leftover_dwell_on_seek_after_pause():
     right after the pause clears."""
     import threading
     import time
+
     from pluggable_protocol_tree.builtins.routes_column import (
         _cooperative_sleep,
     )
@@ -564,19 +634,20 @@ def test_cooperative_sleep_aborts_leftover_dwell_on_seek_after_pause():
     pause_event = PauseEvent()
     seek = {"pending": False}
 
-    pause_event.set()                 # paused mid-dwell
+    pause_event.set()  # paused mid-dwell
 
     def _seek_then_resume():
         time.sleep(0.05)
-        seek["pending"] = True        # operator navigated to another step
-        pause_event.clear()           # then resumed
+        seek["pending"] = True  # operator navigated to another step
+        pause_event.clear()  # then resumed
 
     threading.Thread(target=_seek_then_resume, daemon=True).start()
     t0 = time.monotonic()
     # 5 s dwell, paused immediately; resume at ~50 ms with a seek pending must
     # return at once, NOT finish the remaining ~5 s.
-    _cooperative_sleep(5.0, stop_event, pause_event,
-                       seek_pending=lambda: seek["pending"])
+    _cooperative_sleep(
+        5.0, stop_event, pause_event, seek_pending=lambda: seek["pending"]
+    )
     elapsed = time.monotonic() - t0
     assert elapsed < 0.5, f"expected early return on seek, elapsed={elapsed:.2f}s"
 
@@ -586,6 +657,7 @@ def test_cooperative_sleep_resume_without_seek_finishes_dwell():
     still finish the remaining dwell rather than bailing early."""
     import threading
     import time
+
     from pluggable_protocol_tree.builtins.routes_column import (
         _cooperative_sleep,
     )
@@ -600,8 +672,7 @@ def test_cooperative_sleep_resume_without_seek_finishes_dwell():
         daemon=True,
     ).start()
     t0 = time.monotonic()
-    _cooperative_sleep(0.2, stop_event, pause_event,
-                       seek_pending=lambda: False)
+    _cooperative_sleep(0.2, stop_event, pause_event, seek_pending=lambda: False)
     elapsed = time.monotonic() - t0
     # ~50 ms paused + the full 0.2 s dwell after resume.
     assert elapsed >= 0.2, f"dwell should complete, elapsed={elapsed:.2f}s"
@@ -610,18 +681,19 @@ def test_cooperative_sleep_resume_without_seek_finishes_dwell():
 def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     """RoutesHandler must clear the event at the TOP of each phase loop
     iteration so a set from phase N doesn't leak into phase N+1."""
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     from pluggable_protocol_tree.builtins.routes_column import (
         RoutesHandler,
     )
 
     handler = RoutesHandler()
     advance_event = threading.Event()
-    advance_event.set()                # simulate stale set from prior phase
+    advance_event.set()  # simulate stale set from prior phase
 
     row = MagicMock()
-    row.routes = []                    # no routes -> single static phase
+    row.routes = []  # no routes -> single static phase
     row.electrodes = ["e1"]
     row.duration_s = 0.001
     row.route_repetitions = 1
@@ -632,7 +704,7 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     row.repeat_duration = 0.0
     row.repeat_duration_controls = False
     row.linear_repeats = False
-    row.volume_threshold = 0           # no VT -> static path
+    row.volume_threshold = 0  # no VT -> static path
     row.uuid = "u"
     row.path = (0,)
 
@@ -640,7 +712,7 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
-    proto.preview_mode = True          # skip hardware publish + ack wait
+    proto.preview_mode = True  # skip hardware publish + ack wait
     proto.scratch = {"electrode_to_channel": {"e1": 1}}
     proto.signals = MagicMock()
 
@@ -650,8 +722,10 @@ def test_routes_handler_clears_phase_advance_event_each_iteration(qapp):
     ctx.step_phases_done_event = threading.Event()
     ctx.wait_for = MagicMock()
 
-    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
-               lambda **kw: None):
+    with patch(
+        "pluggable_protocol_tree.builtins.routes_column.publish_message",
+        lambda **kw: None,
+    ):
         handler.on_step(row, ctx)
     # Even though the test pre-set the event, RoutesHandler must clear
     # it before entering the dwell (otherwise the single-phase wouldn't
@@ -665,8 +739,9 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     """After Routes finishes its per-phase loop (and any in-duration-mode
     hold), step_phases_done_event must be set so sibling handlers can
     exit their wait loops."""
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     from pluggable_protocol_tree.builtins.routes_column import (
         RoutesHandler,
     )
@@ -684,7 +759,7 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     row.repeat_duration = 0.0
     row.repeat_duration_controls = False
     row.linear_repeats = False
-    row.volume_threshold = 0           # no VT -> static path
+    row.volume_threshold = 0  # no VT -> static path
     row.uuid = "u"
     row.path = (0,)
 
@@ -703,8 +778,10 @@ def test_routes_handler_sets_step_phases_done_event_when_loop_finishes(qapp):
     ctx.wait_for = MagicMock()
 
     assert ctx.step_phases_done_event.is_set() is False
-    with patch("pluggable_protocol_tree.builtins.routes_column.publish_message",
-               lambda **kw: None):
+    with patch(
+        "pluggable_protocol_tree.builtins.routes_column.publish_message",
+        lambda **kw: None,
+    ):
         handler.on_step(row, ctx)
     assert ctx.step_phases_done_event.is_set() is True
 
@@ -718,25 +795,26 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     Deterministic clock: each phase advances the fake clock by 0.5s; the
     full per-phase dwell is 1.0s, so the precalc would do budget/cycle_time
     = 8/2 = 4 cycles, but the dynamic loop fits ~7."""
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
 
     handler = RoutesHandler()
     row = MagicMock()
-    row.routes = [["a", "b", "a"]]      # loop route -> unit cycle [{a},{b}]
+    row.routes = [["a", "b", "a"]]  # loop route -> unit cycle [{a},{b}]
     row.electrodes = []
-    row.duration_s = 1.0                # full per-phase dwell
+    row.duration_s = 1.0  # full per-phase dwell
     row.trail_length = 1
     row.trail_overlay = 0
     row.soft_start = False
-    row.soft_end = True                 # MUST be ignored (ramp-down dropped)
+    row.soft_end = True  # MUST be ignored (ramp-down dropped)
     row.repeat_duration = 8.0
     row.repeat_duration_controls = True
     row.linear_repeats = False
     row.route_repetitions = 1
-    row.volume_threshold = 50           # VT active
+    row.volume_threshold = 50  # VT active
     row.uuid = "u"
     row.path = (0,)
 
@@ -744,7 +822,7 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     proto.cursor = ExecutionCursor()
     proto.stop_event = threading.Event()
     proto.pause_event = MagicMock(is_set=lambda: False)
-    proto.preview_mode = True           # skip hardware publish + ack wait
+    proto.preview_mode = True  # skip hardware publish + ack wait
     proto.scratch = {"electrode_to_channel": {"a": 0, "b": 1}}
     proto.signals = MagicMock()
 
@@ -761,30 +839,35 @@ def test_dynamic_vt_loop_runs_more_cycles_than_precalc(qapp):
     clock = {"t": 0.0}
 
     def fake_sleep(secs, *a, **k):
-        clock["t"] += 0.5               # each phase "really" takes 0.5s
+        clock["t"] += 0.5  # each phase "really" takes 0.5s
 
     displays = []
 
     def fake_publish(**kw):
         from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+
         if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
             displays.append(kw)
 
     # iter_phases must NOT be used on the dynamic path.
     iter_spy = MagicMock(side_effect=AssertionError("iter_phases used on VT path"))
 
-    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
-         patch.object(mod, "_cooperative_sleep", side_effect=fake_sleep), \
-         patch.object(mod, "publish_message", side_effect=fake_publish), \
-         patch.object(mod, "iter_phases", iter_spy):
+    with (
+        patch.object(mod, "_monotonic", lambda: clock["t"]),
+        patch.object(mod, "_cooperative_sleep", side_effect=fake_sleep),
+        patch.object(mod, "publish_message", side_effect=fake_publish),
+        patch.object(mod, "iter_phases", iter_spy),
+    ):
         handler.on_step(row, ctx)
 
-    # Unit cycle = 2 phases; loop runs while t + 2.0 <= 8.0 (t <= 6.0),
-    # advancing 1.0/cycle -> cycles at t=0,1,2,3,4,5,6 = 7 cycles = 14
-    # phases, plus the single return-to-start phase = 15 display publishes.
-    assert len(displays) == 7 * 2 + 1   # 7 cycles x 2 phases + 1 return phase
-    # Precalc equivalent would be 4 cycles + return = 9; dynamic ran more.
-    assert len(displays) > 9
+    # Unit cycle = 2 phases; loop runs while elapsed + worst_loop <= 8.0
+    # (elapsed <= 6.0), advancing 1.0/cycle -> cycles at t=0,1,2,3,4,5,6 =
+    # 7 cycles = 14 phases. No separate return phase (#477): every loop
+    # closes back at the unit-cycle start, so the next loop's phase 0 IS
+    # the return.
+    assert len(displays) == 7 * 2  # 7 cycles x 2 phases
+    # Precalc equivalent would be 4 cycles = 8; dynamic ran more.
+    assert len(displays) > 8
     assert ctx.step_phases_done_event.is_set() is True
     assert ctx.scratch.get(mod.DURATION_CONSUMED_KEY) is True
 
@@ -795,8 +878,9 @@ def test_dynamic_vt_loop_drives_model_via_dyn_phase_started(qapp):
     handler clears dyn_loop_active, which would make the timeline/seek fall back
     to the materialized predicted phase count instead of the single loop (#477).
     """
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
     from pluggable_protocol_tree.execution.signals import ExecutorSignals
@@ -846,10 +930,15 @@ def test_dynamic_vt_loop_drives_model_via_dyn_phase_started(qapp):
     proto.signals = sigs
 
     clock = {"t": 0.0}
-    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
-         patch.object(mod, "publish_message", lambda **kw: None):
+    with (
+        patch.object(mod, "_monotonic", lambda: clock["t"]),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5),
+        ),
+        patch.object(mod, "publish_message", lambda **kw: None),
+    ):
         handler.on_step(row, ctx)
 
     # The generic phase_started must NOT fire from the dynamic loop: its handler
@@ -860,18 +949,19 @@ def test_dynamic_vt_loop_drives_model_via_dyn_phase_started(qapp):
     # (cycle_pos 1-based, cycle_len, dwell) within ONE loop shape.
     assert dyn_calls, "expected dyn_phase_started emissions"
     cycle_lens = {payload[1] for payload in dyn_calls}
-    assert len(cycle_lens) == 1                           # one stable loop shape
+    assert len(cycle_lens) == 1  # one stable loop shape
     (cycle_len,) = cycle_lens
     positions = [payload[0] for payload in dyn_calls]
-    assert positions[0] == 1                              # each loop starts at 1
-    assert all(1 <= p <= cycle_len for p in positions)    # never the full total
+    assert positions[0] == 1  # each loop starts at 1
+    assert all(1 <= p <= cycle_len for p in positions)  # never the full total
 
 
 def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
     """Duration mode WITHOUT volume threshold: the static precalc path runs
     (iter_phases is used), proving the dynamic loop is gated on VT."""
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
 
@@ -888,7 +978,7 @@ def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
     row.repeat_duration_controls = True
     row.linear_repeats = False
     row.route_repetitions = 1
-    row.volume_threshold = 0            # NO VT
+    row.volume_threshold = 0  # NO VT
     row.uuid = "u"
     row.path = (0,)
 
@@ -909,11 +999,13 @@ def test_dynamic_vt_loop_not_taken_when_no_volume_threshold(qapp):
 
     real_iter = mod.iter_phases
     iter_spy = MagicMock(side_effect=real_iter)
-    with patch.object(mod, "iter_phases", iter_spy), \
-         patch.object(mod, "publish_message", lambda **kw: None):
+    with (
+        patch.object(mod, "iter_phases", iter_spy),
+        patch.object(mod, "publish_message", lambda **kw: None),
+    ):
         handler.on_step(row, ctx)
 
-    assert iter_spy.called          # precalc path used
+    assert iter_spy.called  # precalc path used
 
 
 def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
@@ -921,14 +1013,15 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     phase is repeated within the budget; there is no return phase; the
     done event is still set. unit_cycle=[{a}] (cycle_full_time=1.0), budget
     4.0, clock +0.5/phase -> cycles at t=0,0.5,...,3.0 = 7 phases."""
-    from unittest.mock import MagicMock, patch
     import threading
+    from unittest.mock import MagicMock, patch
+
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
 
     handler = RoutesHandler()
     row = MagicMock()
-    row.routes = []                     # static-only
+    row.routes = []  # static-only
     row.electrodes = ["a"]
     row.duration_s = 1.0
     row.trail_length = 1
@@ -966,13 +1059,19 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
 
     def fake_publish(**kw):
         from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+
         if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
             displays.append(kw)
 
-    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
-         patch.object(mod, "publish_message", side_effect=fake_publish):
+    with (
+        patch.object(mod, "_monotonic", lambda: clock["t"]),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5),
+        ),
+        patch.object(mod, "publish_message", side_effect=fake_publish),
+    ):
         handler.on_step(row, ctx)
 
     # 7 repeats of the single static phase; no return phase (return_phase is None).
@@ -980,25 +1079,28 @@ def test_dynamic_vt_loop_static_only_repeats_within_budget(qapp):
     assert ctx.step_phases_done_event.is_set() is True
 
 
-def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
-    """Budget smaller than a single full cycle: the while guard fails on the
-    very first check (no unit cycle runs), but the return-to-start phase still
-    fires once so the step isn't a no-op, then the remainder idles."""
-    from unittest.mock import MagicMock, patch
+def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_first_cycle(qapp):
+    """Budget smaller than a single full cycle: the first loop always runs
+    unconditionally (#477) — there is no separate return phase to fall back
+    on since every loop already closes back at the unit-cycle start — so
+    the guard only breaks the loop AFTER that first cycle, then the
+    remainder idles."""
     import threading
+    from unittest.mock import MagicMock, patch
+
     import pluggable_protocol_tree.builtins.routes_column as mod
     from pluggable_protocol_tree.builtins.routes_column import RoutesHandler
 
     handler = RoutesHandler()
     row = MagicMock()
-    row.routes = [["a", "b", "a"]]      # unit cycle [{a},{b}] -> cycle_full_time 2.0
+    row.routes = [["a", "b", "a"]]  # unit cycle [{a},{b}] -> cycle_full_time 2.0
     row.electrodes = []
     row.duration_s = 1.0
     row.trail_length = 1
     row.trail_overlay = 0
     row.soft_start = False
     row.soft_end = False
-    row.repeat_duration = 1.0           # < cycle_full_time (2.0)
+    row.repeat_duration = 1.0  # < cycle_full_time (2.0)
     row.repeat_duration_controls = True
     row.linear_repeats = False
     row.route_repetitions = 1
@@ -1029,15 +1131,22 @@ def test_dynamic_vt_loop_budget_smaller_than_one_cycle_runs_return_only(qapp):
 
     def fake_publish(**kw):
         from pluggable_protocol_tree.consts import PROTOCOL_TREE_DISPLAY_STATE
+
         if kw.get("topic") == PROTOCOL_TREE_DISPLAY_STATE:
             displays.append(kw)
 
-    with patch.object(mod, "_monotonic", lambda: clock["t"]), \
-         patch.object(mod, "_cooperative_sleep",
-                      side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5)), \
-         patch.object(mod, "publish_message", side_effect=fake_publish):
+    with (
+        patch.object(mod, "_monotonic", lambda: clock["t"]),
+        patch.object(
+            mod,
+            "_cooperative_sleep",
+            side_effect=lambda s, *a, **k: clock.__setitem__("t", clock["t"] + 0.5),
+        ),
+        patch.object(mod, "publish_message", side_effect=fake_publish),
+    ):
         handler.on_step(row, ctx)
 
-    # No full cycle fit; only the single return-to-start phase ran.
-    assert len(displays) == 1
+    # The guaranteed first loop runs unconditionally: both unit-cycle
+    # phases fire before the fits-another-loop gate ever gets checked.
+    assert len(displays) == 2
     assert ctx.step_phases_done_event.is_set() is True
