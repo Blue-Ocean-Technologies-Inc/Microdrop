@@ -47,7 +47,9 @@ from pluggable_protocol_tree.views.columns.spinbox import DoubleSpinBoxColumnVie
 
 def test_executor_signals_constructible_without_qapplication():
     s = ExecutorSignals()
-    # All eight expected events are present as attributes.
+    # All eight expected events are present as traits. A Traits Event is
+    # write-only, so hasattr() always returns False for it (reading raises
+    # AttributeError) — check trait_names() instead of attribute access.
     for name in (
         "protocol_started",
         "step_started",
@@ -58,7 +60,7 @@ def test_executor_signals_constructible_without_qapplication():
         "protocol_aborted",
         "protocol_error",
     ):
-        assert hasattr(s, name), f"missing signal: {name}"
+        assert name in s.trait_names(), f"missing signal: {name}"
 
 
 def test_executor_signals_direct_connect_invokes_slot():
@@ -491,12 +493,18 @@ def test_run_hooks_fans_same_priority_in_parallel():
     a = _make_recording_column("a", priority=20, log=log, barrier=barrier)
     b = _make_recording_column("b", priority=20, log=log, barrier=barrier)
     ex = _executor_with([a, b])
-    # If they don't run in parallel the barrier never trips and the
-    # executor blocks until barrier timeout (2s) — test would take >2s.
-    start = time.monotonic()
+    spy = _SignalSpy(ex.signals)
+    # If they don't run in parallel, the second hook never reaches the
+    # barrier and the first's wait(timeout=2.0) raises BrokenBarrierError,
+    # which surfaces as protocol_error instead of protocol_finished. Assert
+    # on that outcome rather than overall wall-clock elapsed: run() also
+    # pays unrelated per-call overhead (e.g. warming the broker connection)
+    # whose duration varies by platform and would otherwise make this test
+    # flaky.
     ex.run()
-    elapsed = time.monotonic() - start
-    assert elapsed < 1.5, "same-priority hooks did not fan out in parallel"
+    assert spy.events[-1] == ("protocol_finished",), (
+        f"same-priority hooks did not fan out in parallel: {spy.events}"
+    )
     on_step_names = [name for (name, hook) in log if hook == "on_step"]
     assert sorted(on_step_names) == ["a", "b"]
 
@@ -699,12 +707,15 @@ def test_wait_for_timeout_message_names_topic():
 
 def test_executor_signals_includes_wait_and_repetition_signals():
     s = ExecutorSignals()
+    # hasattr() is always False for a write-only Event trait; check
+    # trait_names() instead (see
+    # test_executor_signals_constructible_without_qapplication).
     for name in (
         "protocol_wait_started",
         "protocol_wait_finished",
         "protocol_repetition_finished",
     ):
-        assert hasattr(s, name), f"missing signal: {name}"
+        assert name in s.trait_names(), f"missing signal: {name}"
 
 
 def _lifecycle_handler(name, priority, log, *, on_pre=None):
