@@ -29,6 +29,7 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import StepTime
 from pluggable_protocol_tree.session import resolve_columns
 from video_protocol_controls.protocol_columns.capture_column import (
+    CHOICES,
     CaptureAtComboBoxView,
     CaptureCompoundModel,
     CaptureHandler,
@@ -39,7 +40,16 @@ CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column
 
 
 def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
-    return SimpleNamespace(name=name, uuid=uuid, capture=capture, capture_at=capture_at)
+    # dotted_path() is the step_id source (#396 follow-up: matches the
+    # recording scheme) — a bare attribute won't do since the handler
+    # calls it.
+    return SimpleNamespace(
+        name=name,
+        uuid=uuid,
+        capture=capture,
+        capture_at=capture_at,
+        dotted_path=lambda: uuid,
+    )
 
 
 def _ctx(experiment_dir=""):
@@ -84,8 +94,10 @@ def test_factory_returns_compound_with_checkbox_and_combobox():
     assert col.model.base_id == "capture"
     at_view = col.view.cell_view_for_field("capture_at")
     assert isinstance(at_view, CaptureAtComboBoxView)
-    # The combobox options come from the model's single definition.
-    assert at_view.options == list(CaptureCompoundModel.CAPTURE_AT_CHOICES)
+    # The combobox options come from the module's single definition
+    # (CHOICES — moved off CaptureCompoundModel so the Enum default and
+    # the view can both derive from it without a class reference).
+    assert at_view.options == list(CHOICES)
     assert at_view.options == [StepTime.START, StepTime.END]
 
 

@@ -14,6 +14,25 @@ configuration. Currently a no-op for the existing plugin-shell tests
 (no actors registered yet); kept up-front to mirror PPT-4's conftest
 and avoid a later cross-cutting test-infra change."""
 
+# Third-party imports.
+import pytest
+
+# Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
 
 configure_dramatiq_broker()
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """Session-scoped QApplication — mirrors
+    pluggable_protocol_tree/tests/conftest.py's fixture of the same name.
+    Column resolution (resolve_columns) builds real view instances, which
+    need a live QApplication; this tree's conftest doesn't inherit fixtures
+    from the sibling pluggable_protocol_tree tests package."""
+    from pyface.qt.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    yield app
+    # Don't quit — pytest-qt doesn't either; lets subsequent test
+    # modules reuse the same QApplication.

@@ -20,9 +20,14 @@ The device stacks are installable packages now, so these tests register a
 synthetic manifest whose group specs point at dummy plugin classes defined
 here (resolved through the same importlib path production uses).
 """
+
+# Third-party imports.
 import pytest
+
+# Enthought library imports.
 from envisage.plugin import Plugin
 
+# Microdrop package imports.
 from plugin_management import group_manager
 from plugin_management.group_manager import PluginGroupManager
 from plugin_management.manifest import manifest_from_dict
@@ -38,19 +43,25 @@ class DummyBackendPlugin(Plugin):
 
 _SPEC_PREFIX = "plugin_management.tests.test_group_manager_adoption"
 
-TEST_MANIFEST = manifest_from_dict({
-    "schema_version": 1,
-    "name": "dummy_device",
-    "packages": ["plugin_management"],
-    "groups": [
-        {"name": "dummy_ui_group",
-         "plugins": [f"{_SPEC_PREFIX}:DummyUiPlugin"],
-         "enabled_key": "plugin_group_enabled.dummy_ui_group"},
-        {"name": "dummy_backend_group",
-         "plugins": [f"{_SPEC_PREFIX}:DummyBackendPlugin"],
-         "enabled_key": "plugin_group_enabled.dummy_backend_group"},
-    ],
-})
+TEST_MANIFEST = manifest_from_dict(
+    {
+        "schema_version": 1,
+        "name": "dummy_device",
+        "packages": ["plugin_management"],
+        "groups": [
+            {
+                "name": "dummy_ui_group",
+                "plugins": [f"{_SPEC_PREFIX}:DummyUiPlugin"],
+                "enabled_key": "plugin_group_enabled.dummy_ui_group",
+            },
+            {
+                "name": "dummy_backend_group",
+                "plugins": [f"{_SPEC_PREFIX}:DummyBackendPlugin"],
+                "enabled_key": "plugin_group_enabled.dummy_backend_group",
+            },
+        ],
+    }
+)
 
 
 @pytest.fixture(autouse=True)
@@ -59,10 +70,23 @@ def isolated_preferences(monkeypatch):
     preferences file — a polluted flag makes the real app restore groups
     wrongly."""
     from apptools.preferences.api import Preferences
+
     store = Preferences()
-    monkeypatch.setattr(group_manager, "get_default_preferences",
-                        lambda: store)
+    monkeypatch.setattr(group_manager, "get_default_preferences", lambda: store)
     return store
+
+
+@pytest.fixture(autouse=True)
+def no_real_plugin_discovery(monkeypatch):
+    """Keep PluginGroupManager._groups_default from picking up whatever
+    device-plugin packages (magnet, heater, ...) actually happen to be
+    conda-installed in the dev environment — installed_plugins() must
+    report only the manifests this test itself registers."""
+    monkeypatch.setattr(
+        group_manager.entry_point_discovery,
+        "discover_entry_point_manifests",
+        lambda: [],
+    )
 
 
 def make_manager():
@@ -105,8 +129,13 @@ def test_manifest_groups_register_and_classify_as_installed():
     m = make_manager()
     assert {"dummy_ui_group", "dummy_backend_group"} <= set(m.groups)
     assert m.installed_plugins() == [
-        ("dummy_device", "dummy_device", "dummy-device-plugin",
-         ["dummy_ui_group", "dummy_backend_group"])]
+        (
+            "dummy_device",
+            "dummy_device",
+            "dummy-device-plugin",
+            ["dummy_ui_group", "dummy_backend_group"],
+        )
+    ]
 
 
 def test_adopt_running_matches_registered_instances_by_class():
@@ -115,7 +144,7 @@ def test_adopt_running_matches_registered_instances_by_class():
     m = make_manager()
     m.adopt_running(app)
     assert m.groups["dummy_ui_group"].loaded is True
-    assert m.groups["dummy_ui_group"].instances == [ui]     # the LIVE instance
+    assert m.groups["dummy_ui_group"].instances == [ui]  # the LIVE instance
     assert m.groups["dummy_backend_group"].instances == [backend]
 
 
@@ -138,8 +167,7 @@ def test_disable_after_adoption_removes_the_adopted_instance():
     m.adopt_running(app)
     m.disable(app, "dummy_backend_group")
     assert not m.is_loaded("dummy_backend_group")
-    assert [name for op, name in app.calls if op == "remove"] == [
-        "DummyBackendPlugin"]
+    assert [name for op, name in app.calls if op == "remove"] == ["DummyBackendPlugin"]
 
 
 def test_enable_constructs_when_nothing_registered():
@@ -166,8 +194,8 @@ def test_disabled_group_stays_disabled_across_restart(isolated_preferences):
     m2 = make_manager()
     m2.adopt_running(app2)
     m2.restore_persisted(app2)
-    assert not m2.is_loaded("dummy_backend_group")   # stayed disabled
-    assert m2.is_loaded("dummy_ui_group")            # untouched: default on
+    assert not m2.is_loaded("dummy_backend_group")  # stayed disabled
+    assert m2.is_loaded("dummy_ui_group")  # untouched: default on
 
 
 def test_reenabled_group_restores_enabled(isolated_preferences):
@@ -175,7 +203,7 @@ def test_reenabled_group_restores_enabled(isolated_preferences):
     m = make_manager()
     m.adopt_running(app)
     m.disable(app, "dummy_backend_group")
-    m.enable(app, "dummy_backend_group")             # user toggles back on
+    m.enable(app, "dummy_backend_group")  # user toggles back on
 
     app2 = FakeApp(plugins=[DummyBackendPlugin()])
     m2 = make_manager()
