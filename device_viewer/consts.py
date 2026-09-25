@@ -188,7 +188,7 @@ recording_state_model = RecordingStateModel(
 media_capture_event_model = MediaCaptureEventModel()
 
 # Validated publishers for the camera seam. media_captured_publisher is fed
-# by the capture path itself (see camera_control_view/utils.py) so the run
+# by the capture path itself (see services/media_capture_cache.py) so the run
 # report gets each file live, not only from the app_globals bucket at flush.
 camera_controls_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_CAMERA_SET_CONTROLS, validator_class=CameraControlsRequest

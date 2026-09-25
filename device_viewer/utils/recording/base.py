@@ -19,7 +19,7 @@ from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 # Microdrop package imports.
 from device_viewer.consts import RECORDING_TRANSFORM_SIDECAR_SUFFIX
 from device_viewer.models.media import MediaType
-from device_viewer.views.camera_control_view.utils import _cache_media_capture
+from device_viewer.services.media_capture_cache import _cache_media_capture
 
 # Local imports.
 from ..qt_geometry_serialization import qtransform_serialize

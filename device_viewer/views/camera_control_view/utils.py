@@ -8,55 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
-# Standard library imports.
-from pathlib import Path
-
-# Third-party imports.
-import dramatiq
-
 # Enthought library imports.
 from pyface.qt.QtCore import QUrl
 
-# Microdrop package imports.
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
-
 # Local imports.
-from ...consts import MEDIA_CAPTURES_KEY, media_captured_publisher
-from ...models.media import MediaCaptureMessageModel, MediaType
+from ...models.media import MediaType
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-app_globals = get_microdrop_redis_globals_manager()
-
-
-@dramatiq.actor
-def _cache_media_capture(name: MediaType, save_path: str, request_id: str = ""):
-    media_capture_message = MediaCaptureMessageModel(
-        path=Path(save_path), type=name.lower(), request_id=request_id
-    )
-
-    message = media_capture_message.model_dump_json()
-
-    if not app_globals.get(MEDIA_CAPTURES_KEY):
-        captures = [message]
-
-    else:
-        captures = app_globals[MEDIA_CAPTURES_KEY] + [message]
-
-    app_globals[MEDIA_CAPTURES_KEY] = captures
-
-    # Live notification for the run report and for whoever asked for this
-    # frame (request_id); the bucket above stays for the flush-time drain.
-    media_captured_publisher.publish(media_capture_message.model_dump(mode="json"))
-
-    # Log only the new capture, not the whole accumulated bucket -- logging
-    # the full list here grows the log quadratically over a long run.
-    logger.info(
-        f"Cached {name.lower()} capture {save_path} "
-        f"(request_id={request_id!r}); {len(captures)} capture(s) this run."
-    )
 
 
 def _show_media_capture_status_message(
