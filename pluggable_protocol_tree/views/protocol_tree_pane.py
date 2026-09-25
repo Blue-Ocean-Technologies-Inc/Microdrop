@@ -504,6 +504,13 @@ class ProtocolTreePane(QWidget):
     def resume_loading(self):
         self.loading_overlay.resume()
 
+    def show_protocol_error_dialog(self, message: str) -> None:
+        """Pure view: present the protocol-error dialog (the pane already
+        owns dialog presentation for save/load/import errors above; the
+        composition root decides WHEN a run has errored, this just shows
+        it)."""
+        error_dialog(parent=None, title="Protocol error", message=str(message))
+
     def _navigable_steps(self):
         """Distinct steps in execution order for the step cursor.
 

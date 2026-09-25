@@ -247,27 +247,41 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         # Forward the pane's phase_acked into the window's signal so
         # tests / external code that connect to ``window.phase_acked``
-        # keep working unchanged. The phase-ack actor (module level)
-        # emits ``window.phase_acked``; route that into the pane so
-        # _on_phase_ack runs and resets the per-phase timer.
+        # keep working unchanged. (There is nothing left to route it TO on
+        # the pane: ProtocolTreePane._on_phase_ack was already a no-op
+        # before issue #471 removed it — "phase boundary now comes from the
+        # executor's phase_started signal" — so this is just the outward
+        # forward, no inward connection.)
         self.pane.phase_acked.connect(self.phase_acked.emit)
-        if config.phase_ack_topic is not None:
-            self.phase_acked.connect(self.pane._on_phase_ack)
 
-        # Standalone composition root (no dock pane here): own the status
-        # controller that links the executor's Qt signals to the status model
-        # and bind the status bar to it (issue #467).
+        # Standalone composition root (no dock pane here): own the executor
+        # and the status controller that links its signals to the status
+        # model (issue #467). The pane itself is a pure view and owns
+        # neither (issue #471) — mirrors PluggableProtocolDockPane's
+        # _executor_default, simplified for the demo (no preferences/
+        # lifecycle handlers).
+        import threading
+
+        from pluggable_protocol_tree.execution.events import PauseEvent
+        from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+        from pluggable_protocol_tree.execution.signals import ExecutorSignals
         from pluggable_protocol_tree.services.protocol_status_controller import (
             ProtocolStatusController,
         )
 
+        self._executor = ProtocolExecutor(
+            row_manager=self.pane.manager,
+            signals=ExecutorSignals(),
+            pause_event=PauseEvent(),
+            stop_event=threading.Event(),
+        )
         self.status_controller = ProtocolStatusController(
-            signals=self.pane.executor.signals,
+            signals=self._executor.signals,
             manager=self.pane.manager,
-            executor=self.pane.executor,
+            executor=self._executor,
         )
         self.pane.status_controller = self.status_controller
-        self.pane.status_bar.bind(self.status_controller.model)
+        self._wire_run_control()
 
         self._side_panel = None
         if config.side_panel_factory is not None:
@@ -324,6 +338,60 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._build_toolbar()
         config.post_build_setup(self)
+
+    # --- run control (issue #471 parity, simplified for the demo) ----
+    # The dock pane is the composition root that owns the executor, the
+    # status controller, and all run control in the full app; a standalone
+    # demo has no dock pane, so the window plays that role for its own
+    # executor here, driving the pane's pure-view methods.
+
+    def _wire_run_control(self):
+        signals = self._executor.signals
+        signals.observe(
+            lambda e: self.pane.enter_running_buttons(),
+            "protocol_started",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self.pane.enter_paused_buttons(), "protocol_paused", dispatch="ui"
+        )
+        signals.observe(
+            lambda e: self.pane.enter_resumed_buttons(),
+            "protocol_resumed",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self._on_protocol_terminated(),
+            "protocol_finished",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self._on_protocol_terminated(), "protocol_aborted", dispatch="ui"
+        )
+        signals.observe(self._on_protocol_error, "protocol_error", dispatch="ui")
+        # step_started's payload is (row, step_index, step_total) — see
+        # ExecutorSignals; only the row is the tree widget's business.
+        signals.observe(
+            lambda e: self.pane.widget.highlight_active_row(e.new[0]),
+            "step_started",
+            dispatch="ui",
+        )
+        self.status_controller.model.observe(
+            self._on_names_changed,
+            "recent_step_name,next_step_name,rep_chain_label",
+            dispatch="ui",
+        )
+        self.pane.enter_idle_buttons()
+
+    def _on_protocol_error(self, event):
+        self.pane.enter_idle_buttons()
+        self.pane.show_protocol_error_dialog(event.new)
+
+    def _on_names_changed(self, event=None):
+        model = self.status_controller.model
+        self.pane.status_bar._refresh_names(
+            model.recent_step_name, model.next_step_name, model.rep_chain_label
+        )
 
     # --- demo-window-only chrome -----------------------------------
 
@@ -469,7 +537,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     @property
     def executor(self):
-        return self.pane.executor
+        return self._executor
 
     @property
     def navigation_bar(self):
@@ -501,8 +569,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         return self.status_controller.model
 
     def _on_protocol_terminated(self):
-        """Test hook — calls the pane's terminator + resets demo readouts."""
-        self.pane._on_protocol_terminated()
+        """Runs on every terminal executor signal (finished/aborted) and
+        doubles as a manual test hook: idle button state + demo readout
+        reset. (ProtocolTreePane no longer has a terminator of its own to
+        delegate to — issue #471 moved that to the dock pane, which this
+        standalone window has none of.)"""
+        self.pane.enter_idle_buttons()
         for readout in self.config.status_readouts:
             slug = _slug(readout.label)
             label = self._readout_labels.get(slug)
