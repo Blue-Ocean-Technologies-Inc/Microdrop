@@ -23,12 +23,18 @@ import pytest
 
 def _call_handler(message):
     """Run the handler against a stub pane, returning (pane, logger)."""
-    from device_viewer.views.device_view_dock_pane import DeviceViewerDockPane
+    from device_viewer.controllers.device_viewer_message_controller import (
+        DeviceViewerMessageController,
+    )
 
-    pane = MagicMock()
-    with patch("device_viewer.views.device_view_dock_pane.logger") as mock_logger:
-        DeviceViewerDockPane._on_screen_recording_triggered(pane, message)
-    return pane, mock_logger
+    controller = MagicMock()
+    with patch(
+        "device_viewer.controllers.device_viewer_message_controller.logger"
+    ) as mock_logger:
+        DeviceViewerMessageController._on_screen_recording_triggered(
+            controller, message
+        )
+    return controller.pane, mock_logger
 
 
 def test_valid_message_emits_parsed_payload():
