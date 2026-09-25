@@ -31,11 +31,12 @@ def test_topic_in_actor_topic_dict():
 
 
 def test_handler_emits_adapted_message_via_display_state_signal():
-    from device_viewer.views.device_view_dock_pane import (
-        DeviceViewerDockPane,
+    from device_viewer.controllers.device_viewer_message_controller import (
+        DeviceViewerMessageController,
     )
 
-    pane = MagicMock()
+    controller = MagicMock()
+    pane = controller.pane
     # The handler reads the real electrodes Property `electrode_ids_channels_map`
     # and asks the routes model for a layer color via get_available_color().
     pane.model.electrodes.electrode_ids_channels_map = {
@@ -53,8 +54,8 @@ def test_handler_emits_adapted_message_via_display_state_signal():
         free_mode=False,
         editable=True,
     )
-    DeviceViewerDockPane._on_protocol_tree_display_state_triggered(
-        pane,
+    DeviceViewerMessageController._on_protocol_tree_display_state_triggered(
+        controller,
         msg.serialize(),
     )
 
@@ -72,15 +73,16 @@ def test_handler_emits_adapted_message_via_display_state_signal():
 
 
 def test_free_mode_payload_clears_display():
-    from device_viewer.views.device_view_dock_pane import (
-        DeviceViewerDockPane,
+    from device_viewer.controllers.device_viewer_message_controller import (
+        DeviceViewerMessageController,
     )
 
-    pane = MagicMock()
+    controller = MagicMock()
+    pane = controller.pane
     pane.model.electrodes.electrode_ids_channels_map = {"e00": 0, "e01": 1}
     msg = ProtocolTreeDisplayMessage(free_mode=True)
-    DeviceViewerDockPane._on_protocol_tree_display_state_triggered(
-        pane,
+    DeviceViewerMessageController._on_protocol_tree_display_state_triggered(
+        controller,
         msg.serialize(),
     )
     serial = pane.device_view.display_state_signal.emit.call_args.args[0]
