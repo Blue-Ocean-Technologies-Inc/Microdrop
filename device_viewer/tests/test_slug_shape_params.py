@@ -101,6 +101,7 @@ def test_plan_arguments_spell_out_every_sidebar_setting_once():
         "lane_right",
         "lane_frame",
         "rotation_lock",
+        "recentre",
     }
 
 
