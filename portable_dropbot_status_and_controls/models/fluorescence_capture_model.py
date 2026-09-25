@@ -148,6 +148,10 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     show_manual = Bool(False)
     #: Moves the wheel as soon as it changes.
     manual_filter_position = Enum(FILTER_POSITIONS)
+    #: True while manual_filter_position is being set to mirror the wheel's
+    #: actual position (homing, or a capture's teardown) rather than a user
+    #: pick — the controller must not publish a move for this change.
+    syncing_filter_position = Bool(False)
     home_filter_button = Button("Home filter")
     #: The camera settings below are applied as soon as any of them changes.
     manual_auto_exposure = Bool(True, desc="Camera auto exposure")
@@ -168,6 +172,17 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
 
     def _get_manual_exposure_max(self):
         return self.EXPOSURE_RANGES[self.exposure_range]
+
+    def sync_filter_position(self, position):
+        """Set manual_filter_position to the wheel's actual position (home,
+        or a capture's teardown) without the controller publishing a
+        redundant move request for it."""
+        self.syncing_filter_position = True
+
+        try:
+            self.manual_filter_position = position
+        finally:
+            self.syncing_filter_position = False
 
     def manual_camera_request(self, hold_auto_exposure=False):
         """The manual exposure as a CameraControlsRequest payload; None

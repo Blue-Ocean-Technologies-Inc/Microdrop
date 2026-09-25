@@ -21,7 +21,7 @@ import json
 import uuid
 
 # Enthought library imports.
-from traits.api import Bool, observe
+from traits.api import observe
 
 # Microdrop package imports.
 from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE, camera_controls_publisher
@@ -48,10 +48,6 @@ class FluorescenceCaptureController(CapturePaneController):
     ABORT_TOPIC = FLUORESCENCE_CAPTURE_ABORT
     ROW_NOUN = "filter"
 
-    #: True while homing resets the Filter pick to the first position — the
-    #: wheel is already going there, so that change must not publish a move.
-    _homing = Bool(False)
-
     def _publish_capture_request(self):
         request = self.model.capture_request(
             request_id=str(uuid.uuid4()), label="manual"
@@ -65,7 +61,7 @@ class FluorescenceCaptureController(CapturePaneController):
 
     @observe("model:manual_filter_position")
     def _move_filter(self, event):
-        if not self._homing:
+        if not self.model.syncing_filter_position:
             publish_message(
                 topic=SET_FILTER, message=str(self.model.manual_filter_position)
             )
@@ -75,12 +71,7 @@ class FluorescenceCaptureController(CapturePaneController):
         publish_message(topic=MOTOR_HOME, message="filter")
 
         # Homing ends at the first position (as the Motors pane assumes).
-        self._homing = True
-
-        try:
-            self.model.manual_filter_position = FILTER_POSITIONS[0]
-        finally:
-            self._homing = False
+        self.model.sync_filter_position(FILTER_POSITIONS[0])
 
     @observe("model:manual_auto_exposure")
     def _toggle_auto_exposure(self, event):
