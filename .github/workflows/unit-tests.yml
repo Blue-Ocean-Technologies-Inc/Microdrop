@@ -110,6 +110,15 @@ jobs:
           locked: true
           cache: true
 
+      # Qt loads these system libraries even on the offscreen platform; the
+      # runner image lacks them, and without them every Qt-importing test
+      # module fails to collect (libEGL.so.1), which aborts the whole run.
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
       - name: Run pure-unit pytest partition
         working-directory: launcher/microdrop-py/src
         env:
