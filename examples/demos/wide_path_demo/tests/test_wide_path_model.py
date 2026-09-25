@@ -60,17 +60,21 @@ def test_path_recomputes_phases_when_route_or_shape_changes(device):
     assert path.pitch == 1.0 and path.phases == []
     for electrode_id in ("e13", "e23", "e33", "e32"):
         assert path.pick(electrode_id)
-    # A 3x1 bar: the corner electrode (head 2) shows both orientations.
-    assert [phase.head for phase in path.phases] == [0, 1, 2, 2, 3]
+    # A 3x1 bar one electrode past its corner: arriving at head 2 it already
+    # touches its end placement, so the departing row between is dropped
+    # (the end-of-route drop, 2139af4e).
+    assert [phase.head for phase in path.phases] == [0, 1, 2, 3]
     assert len(path.phases[0].ids) == 3  # 3x1 by default
     path.left = 2
     assert len(path.phases[0].ids) == 4
     path.trail_length = 2  # overlay 0: the block hops two electrodes at a time
     assert [phase.head for phase in path.phases] == [1, 3]
+    # Overlay 1 re-hangs at head 2 too, but that phase is dropped: head 1
+    # already touches the end placement (2139af4e).
     path.trail_overlay = 1
-    assert [phase.head for phase in path.phases] == [1, 2, 3]
+    assert [phase.head for phase in path.phases] == [1, 3]
     path.soft_start = True  # one ramp phase before the first full block
-    assert [phase.head for phase in path.phases] == [1, 1, 2, 3]
+    assert [phase.head for phase in path.phases] == [1, 1, 3]
     assert "4x2" in path.summary and len(path.footprint_ids) > 0
 
 
