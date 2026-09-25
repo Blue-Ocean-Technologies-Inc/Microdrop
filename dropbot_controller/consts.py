@@ -10,7 +10,16 @@
 
 # Microdrop package imports.
 from dropbot_controller.models.self_tests import SelfTestResultsPublisher
+from dropbot_controller.models.self_tests import (
+    # Topic payload schemas are re-exported (``X as X``) so sibling plugins
+    # import them from this module, never from dropbot_controller.models.
+    SelfTestResultsSignal as SelfTestResultsSignal,
+)
+from dropbot_controller.models.self_tests import TestEvent as TestEvent
 from dropbot_controller.models.shorts import ShortsDetectedPublisher
+from dropbot_controller.models.shorts import (
+    ShortsDetectedSignal as ShortsDetectedSignal,
+)
 
 # This module's package.
 

@@ -107,14 +107,6 @@ ignore_imports =
     # microdrop_utils.plotly_helpers transitively depends on device_viewer.
     microdrop_utils.plotly_helpers -> device_viewer.utils.dmf_utils_helpers
 
-    # --- Seeded debt: microdrop_application (the core plugin) reaching into
-    # hardware/UI plugin internals in its wiring code ---
-    microdrop_application.task -> dropbot_controller.models.self_tests
-    microdrop_application.task -> dropbot_controller.models.shorts
-    microdrop_application.task -> dropbot_tools_menu.self_test_dialogs
-    microdrop_application.application -> dropbot_tools_menu.menus
-    microdrop_application.application -> dropbot_tools_menu.plugin
-
     # Issue #611 (PR #658) — dropbot_tools_menu's self-test dialogs render
     # from the backend's self_tests model directly instead of a message.
     dropbot_tools_menu.self_test_dialogs -> dropbot_controller.models.self_tests
