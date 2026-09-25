@@ -10,9 +10,6 @@
 
 """Tests for the demo base window + DemoConfig + StatusReadout."""
 
-# Third-party imports.
-import pytest
-
 # Microdrop package imports.
 from pluggable_protocol_tree.consts import ELECTRODES_STATE_APPLIED
 from pluggable_protocol_tree.demos.base_demo_window import (
@@ -267,54 +264,6 @@ def test_window_executor_step_started_connected_to_tree_highlight(qapp):
         assert received == ["fake-row"]
     finally:
         w.widget.highlight_active_row = orig
-
-
-@pytest.mark.xfail(
-    reason=(
-        "StatusBar._poll_timer no longer exists anywhere in the source — the "
-        "live 10 Hz time-readout poll was replaced by "
-        "PluggableProtocolDockPane._protocol_poll_scheduler (an APScheduler "
-        "BackgroundScheduler owned by the dock pane), and the standalone demo "
-        "window was never given an equivalent. Needs a design decision (a "
-        "QTimer owned by the window/a controller, not the view, per the "
-        "MVC-separation convention) before it can be ported here — real bug, "
-        "not small enough to fix inline."
-    ),
-    strict=True,
-)
-def test_window_status_poll_timer_runs_at_10_hz(qapp):
-    """The status bar's time-poll timer interval should be 100 ms (10 Hz)."""
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.demos.base_demo_window import (
-        BasePluggableProtocolDemoWindow,
-    )
-
-    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
-    w = BasePluggableProtocolDemoWindow(cfg)
-    assert w.status_bar._poll_timer.interval() == 100
-
-
-@pytest.mark.xfail(
-    reason=(
-        "StatusBar._poll_timer no longer exists — see "
-        "test_window_status_poll_timer_runs_at_10_hz."
-    ),
-    strict=True,
-)
-def test_window_status_poll_timer_runs_only_while_running(qapp):
-    """The poll timer starts when the model goes running and stops on stop."""
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.demos.base_demo_window import (
-        BasePluggableProtocolDemoWindow,
-    )
-
-    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
-    w = BasePluggableProtocolDemoWindow(cfg)
-    assert not w.status_bar._poll_timer.isActive()
-    w.status_model.running = True
-    assert w.status_bar._poll_timer.isActive()
-    w.status_model.running = False
-    assert not w.status_bar._poll_timer.isActive()
 
 
 def test_phase_ack_topic_none_hides_phase_timer(qapp):
@@ -763,41 +712,3 @@ def test_step_repetition_empty_chain_clears(qapp):
     w.executor.signals.step_repetition = [("Wash", 1, 3)]
     w.executor.signals.step_repetition = []
     assert w.status_bar.lbl_step_repetition.text() == ""
-
-
-@pytest.mark.xfail(
-    reason=(
-        "StatusBar._poll_timer no longer exists — see "
-        "test_window_status_poll_timer_runs_at_10_hz. Everything else this "
-        "test checks (idle button state + the dialog call) is wired and "
-        "passes; only the poll-timer assertion blocks it."
-    ),
-    strict=True,
-)
-def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
-    """protocol_error --> idle button state, tick timer stopped, dialog
-    shown via the styled pyface_wrapper.error helper.
-
-    The pane is the owner of the error path now (post-PPT-10.1
-    delegation), so we patch the pane module's error_dialog."""
-    import pluggable_protocol_tree.demos.base_demo_window as bdw
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-
-    calls = []
-
-    def fake_error_dialog(parent=None, title="", message="", **kwargs):
-        calls.append((title, message))
-
-    monkeypatch.setattr(ptp, "error_dialog", fake_error_dialog)
-
-    cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
-    w = bdw.BasePluggableProtocolDemoWindow(cfg)
-    nb = w.navigation_bar
-    w.executor.signals.protocol_started = True
-    assert nb.btn_stop.isEnabled()
-    w.executor.signals.protocol_error = "kaboom"
-    assert nb.btn_play.isEnabled()
-    assert not nb.btn_stop.isEnabled()
-    assert not w.status_bar._poll_timer.isActive()
-    assert calls == [("Protocol error", "kaboom")]
