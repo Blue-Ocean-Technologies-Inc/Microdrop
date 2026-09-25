@@ -8,22 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import re
+from collections import defaultdict
+from typing import Dict, List, Set, Union
 from xml.etree import ElementTree as ET
 
+# Third-party imports.
 import numpy as np
-import pandas as pd
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import LineString, Polygon
 from shapely.strtree import STRtree
-from collections import defaultdict
-from typing import List, Dict, Set, Union
-from traits.api import HasTraits, Instance, Array
+from svg.path import Arc, CubicBezier, QuadraticBezier, parse_path
 
-from svg.path import parse_path, Arc, CubicBezier, QuadraticBezier
+# Enthought library imports.
+from traits.api import Array, HasTraits, Instance
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error
-from microdrop_utils.shapely_helpers import sort_polygon_indices_along_line, draw_polygons_and_line
+
+# Microdrop utils imports.
+from microdrop_utils.shapely_helpers import (
+    draw_polygons_and_line,
+    sort_polygon_indices_along_line,
+)
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -64,25 +74,19 @@ def mm_to_picas(mm):
     return points / 12
 
 
-inkscape_units = [
-    "mm",
-    "cm",
-    "pt",
-    "pc",
-    "px"
-]
+inkscape_units = ["mm", "cm", "pt", "pc", "px"]
 
 _mm_converter_func = {
-    'mm': lambda v: v,
-    'cm': lambda v: 10 * v,
+    "mm": lambda v: v,
+    "cm": lambda v: 10 * v,
     "pt": points_to_mm,
     "pc": picas_to_mm,
     "px": pixels_to_mm,
 }
 
 _mm_converter_func_inverse = {
-    'mm': lambda v: v,
-    'cm': lambda v: v / 10,
+    "mm": lambda v: v,
+    "cm": lambda v: v / 10,
     "pt": mm_to_points,
     "pc": mm_to_picas,
     "px": mm_to_pixels,
@@ -107,13 +111,15 @@ def as_valid_polygon(polygon: Polygon) -> Polygon:
         if dropped > 0:
             logger.info(
                 f"Self-intersection repair dropped {dropped:.4f} area units "
-                f"({dropped / repaired.area:.1%}) of sliver lobes")
+                f"({dropped / repaired.area:.1%}) of sliver lobes"
+            )
         repaired = largest
     return repaired
 
 
 class AlgorithmError(Exception):
     """Raised when the algorithm fails to find a valid solution."""
+
     pass
 
 
@@ -126,13 +132,16 @@ class PolygonNeighborFinder:
     both of them.
     """
 
-    def __init__(self, polygons: List[Polygon], lines: np.ndarray, polygon_names: List[str]):
+    def __init__(
+        self, polygons: List[Polygon], lines: np.ndarray, polygon_names: List[str]
+    ):
         """
         Initializes the finder with geometric and naming data.
 
         Args:
             polygons: A list of shapely.geometry.Polygon objects.
-            lines: A NumPy array, with shape (N, 4) representing N lines with endpoints [x1, y1, x2, y2].
+            lines: A NumPy array, with shape (N, 4) representing N lines with
+                endpoints [x1, y1, x2, y2].
             polygon_names: A list of names corresponding to the polygons by index.
         """
         if not (len(polygons) == len(polygon_names)):
@@ -142,7 +151,9 @@ class PolygonNeighborFinder:
         self.polygon_names = polygon_names
         self.lines = [LineString(line.reshape((2, 2))) for line in lines]
 
-    def get_polygon_neighbours(self, max_attempts: int = 10, buffer_factor: float = 128.0) -> Dict[str, List[str]]:
+    def get_polygon_neighbours(
+        self, max_attempts: int = 10, buffer_factor: float = 128.0
+    ) -> Dict[str, List[str]]:
         """
         Attempts to find exactly two intersecting polygons for each line.
 
@@ -165,7 +176,8 @@ class PolygonNeighborFinder:
         current_polygons = self.polygons
 
         for attempt in range(max_attempts):
-            # The STRtree must be rebuilt in each iteration because the polygon geometries change.
+            # The STRtree must be rebuilt in each iteration because the polygon
+            # geometries change.
             tree = STRtree(current_polygons)
 
             # Query the tree to find which lines intersect which polygons.
@@ -179,63 +191,80 @@ class PolygonNeighborFinder:
             all_lines_have_two_neighbors = np.all(counts == 2)
 
             if all_lines_found and all_lines_have_two_neighbors:
-                logger.debug(f"SUCCESS: Found solution on attempt {attempt + 1}/{max_attempts}.")
+                logger.debug(
+                    f"SUCCESS: Found solution on attempt {attempt + 1}/{max_attempts}."
+                )
                 return self._build_neighbor_map(query_result)
 
             # --- If not successful, prepare for the next attempt ---
             logger.debug(
-                f"Attempt {attempt + 1}/{max_attempts} failed. Buffering polygons and retrying buffer factor ~ {buffer_factor / (attempt + 1)}."
+                f"Attempt {attempt + 1}/{max_attempts} failed. Buffering polygons "
+                f"and retrying buffer factor ~ {buffer_factor / (attempt + 1)}."
             )
             # Buffer each polygon by a small amount relative to its area
-            current_polygons = [poly.buffer(poly.area / buffer_factor) for poly in current_polygons]
+            current_polygons = [
+                poly.buffer(poly.area / buffer_factor) for poly in current_polygons
+            ]
 
         ###### Check if we can proceed with looser conditions #######
-        logger.warning(f"Could not find a solution where each line intersects exactly 2 polygons "
-                       f"after {max_attempts} attempts.")
+        logger.warning(
+            f"Could not find a solution where each line intersects exactly 2 polygons "
+            f"after {max_attempts} attempts."
+        )
 
         if np.all(counts >= 2):
-            logger.warning("Proceeding with solution taking first and last polygin intersected by line")
+            logger.warning(
+                "Proceeding with solution taking first and last polygon intersected "
+                "by line"
+            )
             return self._build_neighbor_map(query_result)
 
-        ##### Looser conditions failed, raise error: should have a fallback method in place to handle this
+        ##### Looser conditions failed, raise error: should have a fallback
+        ##### method in place to handle this
         raise AlgorithmError(
-            f"Could not find a solution where each line intersects at least 2 polygons "
+            "Could not find a solution where each line intersects at least 2 polygons "
         )
 
     def _build_neighbor_map(self, query_result: np.ndarray) -> Dict[str, List[str]]:
-        """Helper method to construct the final neighbor dictionary from query results."""
+        """Build the final neighbor dictionary from the query results."""
         # Use a defaultdict or a set for easier adding
-        neighbours_map: Dict[str, Set[str]] = {name: set() for name in self.polygon_names}
+        neighbours_map: Dict[str, Set[str]] = {
+            name: set() for name in self.polygon_names
+        }
 
         # Group polygon indices by their corresponding line index
         for line_idx in range(len(self.lines)):
             # Get the indices of polygons that intersected with this line
             intersecting_poly_indices = query_result[1, query_result[0] == line_idx]
 
-            # if more than 2 polygons found intersecting, only take polygons at line start and end points
-            # do this by sorting polygon indices by distance of corresponding polygon to line start
+            # if more than 2 polygons found intersecting, only take polygons at
+            # line start and end points: sort the polygon indices by the distance
+            # of their polygon to the line start
             # then we take the first and last elements of the sorted list
             if len(intersecting_poly_indices) > 2:
                 try:
                     intersecting_poly_indices = sort_polygon_indices_along_line(
                         line=self.lines[line_idx],
-                        polygons=np.array(self.polygons)[intersecting_poly_indices],
-                        indices=intersecting_poly_indices)
+                        polygons=self.polygons,
+                        indices=intersecting_poly_indices,
+                    )
 
                 except Exception as e:
-
+                    import tempfile
                     import uuid
                     from pathlib import Path
-                    import tempfile
 
                     # Create a unique temp filename
                     # utilizing UUID to ensure no file conflicts
-                    temp_path = tempfile.gettempdir() / Path(f"poly_debug_{uuid.uuid4().hex[:8]}.png")
+                    temp_path = tempfile.gettempdir() / Path(
+                        f"poly_debug_{uuid.uuid4().hex[:8]}.png"
+                    )
 
                     fig, ax = draw_polygons_and_line(
                         np.array(self.polygons)[intersecting_poly_indices],
                         self.lines[line_idx],
-                        index_labels=list(intersecting_poly_indices))
+                        index_labels=list(intersecting_poly_indices),
+                    )
 
                     # 1. Save the figure
                     fig.tight_layout()
@@ -243,13 +272,20 @@ class PolygonNeighborFinder:
                     fig.savefig(temp_path)
 
                     # 2. Log the error to your backend/console
-                    logger.error(f"Error: {e}. Saving debug plot to {temp_path}. Proceeding with random endpoints...",
-                                 exc_info=True)
+                    logger.error(
+                        f"Error: {e}. Saving debug plot to {temp_path}. Proceeding "
+                        "with random endpoints...",
+                        exc_info=True,
+                    )
 
                     # 3. Format the polygon list for the report
                     # Added a header and newlines for cleaner HTML formatting
                     polygons_str = "<br><br>".join(
-                        [f"<b>{idx}</b>: {self.polygons[idx]}" for idx in intersecting_poly_indices])
+                        [
+                            f"<b>{idx}</b>: {self.polygons[idx]}"
+                            for idx in intersecting_poly_indices
+                        ]
+                    )
 
                     # 4. Construct the URI
                     uri = temp_path.as_uri()
@@ -257,7 +293,8 @@ class PolygonNeighborFinder:
                     debug_plot = (
                         f"<b>Debug Plot</b>:<br>"
                         f"<a href='{uri}' target='_blank'>"
-                        f"  <img src='{uri}' alt='Debug Plot' style='max-width:50%; max-height: 50%; border:1px solid #ccc; cursor:zoom-in;'>"
+                        f"  <img src='{uri}' alt='Debug Plot' style='max-width:50%; "
+                        "max-height: 50%; border:1px solid #ccc; cursor:zoom-in;'>"
                         f"</a><br>"
                         f"<small>(Click image to maximize)</small>"
                     )
@@ -265,21 +302,22 @@ class PolygonNeighborFinder:
                     # 5. Send the error report
                     error(
                         None,
-
                         title="Device Loading Error",
-
                         message=(
-                            f"<b>Error</b>: {e}. Proceeding with random polygon endpoints...<br><br>"
+                            f"<b>Error</b>: {e}. Proceeding with random polygon "
+                            "endpoints...<br><br>"
                             f"{debug_plot}"
                         ),
-
-                        detail=f"<b>Affected Line</b>: {line_idx}: {self.lines[line_idx]}<br><br>"
-                            f"<b>Affected Polygons</b>:<br>{polygons_str} <br><br>"
-
+                        detail=f"<b>Affected Line</b>: {line_idx}: "
+                        f"{self.lines[line_idx]}<br><br>"
+                        f"<b>Affected Polygons</b>:<br>{polygons_str} <br><br>",
                     )
 
             # Just take first and last ones -- endpoint polygons.
-            poly1_idx, poly2_idx = intersecting_poly_indices[0], intersecting_poly_indices[-1]
+            poly1_idx, poly2_idx = (
+                intersecting_poly_indices[0],
+                intersecting_poly_indices[-1],
+            )
 
             name1 = self.polygon_names[poly1_idx]
             name2 = self.polygon_names[poly2_idx]
@@ -292,7 +330,9 @@ class PolygonNeighborFinder:
         return {key: list(val) for key, val in neighbours_map.items()}
 
 
-def channels_to_svg(old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float):
+def channels_to_svg(
+    old_filename, new_filename, electrode_ids_channels_map: dict[str, int], scale: float
+):
     tree = ET.parse(old_filename)
     root = tree.getroot()
 
@@ -361,7 +401,9 @@ def create_adjacency_dict(neighbours) -> dict:
 
 
 class ElectrodeData(HasTraits):
-    channel = Instance(int, allow_none=True)  # Int() doesn't seem to follow allow_none for some reason
+    channel = Instance(
+        int, allow_none=True
+    )  # Int() doesn't seem to follow allow_none for some reason
     path = Array
 
 
@@ -379,7 +421,8 @@ class SVGProcessor:
         self.min_x = self.min_y = self.max_x = self.max_y = None
 
         ### Set unit normalization func to get all values in mm everytime.
-        _svg_file_units = 'px'  # default value is pixels if nothing given or invalid values given in svg file
+        # Pixels when the svg file gives no units, or invalid ones.
+        _svg_file_units = "px"
         svg_width, svg_height = self.root.get("width"), self.root.get("height")
 
         for unit in inkscape_units:
@@ -387,7 +430,9 @@ class SVGProcessor:
                 _svg_file_units = unit
 
         self.unit_normalization_func = _mm_converter_func[_svg_file_units]
-        self.unit_normalization_func_inverse = _mm_converter_func_inverse[_svg_file_units]
+        self.unit_normalization_func_inverse = _mm_converter_func_inverse[
+            _svg_file_units
+        ]
 
     @staticmethod
     def _parse_path_string(d_string: str) -> np.ndarray:
@@ -424,7 +469,7 @@ class SVGProcessor:
         return np.array(points)
 
     def _update_bounding_box(self, points_list: List[np.ndarray]):
-        """Efficiently calculates and updates the bounding box from a list of point arrays."""
+        """Calculate and update the bounding box from a list of point arrays."""
         if not points_list:
             return
         # Combine all points into a single large array for one-pass calculation
@@ -438,11 +483,16 @@ class SVGProcessor:
     @staticmethod
     def get_transform(element: ET.Element) -> np.ndarray:
         # Parse the 'transform' attribute of the parent group
-        transform_str = element.attrib.get('transform', '').replace(' ', '')
-        match = re.search(r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)",
-                          transform_str.lower())
+        transform_str = element.attrib.get("transform", "").replace(" ", "")
+        match = re.search(
+            r"translate\((?P<x>[-\d.]+),(?P<y>[-\d.]+)\)", transform_str.lower()
+        )
         # Apply the Y transform directly, without negation
-        transform = np.array([float(match.group('x')), float(match.group('y'))]) if match else np.array([0, 0])
+        transform = (
+            np.array([float(match.group("x")), float(match.group("y"))])
+            if match
+            else np.array([0, 0])
+        )
         return transform
 
     def svg_to_electrodes(self, group_element: ET.Element) -> Dict[str, ElectrodeData]:
@@ -475,18 +525,20 @@ class SVGProcessor:
                         ring = Polygon(path_points)
                         if not ring.is_valid:
                             path_points = np.array(
-                                as_valid_polygon(ring).exterior.coords)
+                                as_valid_polygon(ring).exterior.coords
+                            )
                     except Exception as e:
                         logger.warning(
-                            f"Could not validity-check path '{element_id}': {e}")
+                            f"Could not validity-check path '{element_id}': {e}"
+                        )
 
                 # Apply all transformations: translation and then scaling
                 transformed_path = self.unit_normalization_func(path_points + transform)
 
-                channel_str = element.attrib.get('data-channels')
+                channel_str = element.attrib.get("data-channels")
                 electrodes[element_id] = ElectrodeData(
                     channel=int(channel_str) if channel_str is not None else None,
-                    path=transformed_path
+                    path=transformed_path,
                 )
                 all_electrode_paths.append(transformed_path)
             else:
@@ -501,11 +553,13 @@ class SVGProcessor:
         within a specific Inkscape layer of an SVG file.
 
         Args:
-            group_element: The elements within an SVG group containing the connection lines / paths.
+            group_element: The elements within an SVG group containing the
+                connection lines / paths.
 
         Returns:
-            A np.array of connection line records, where each record is: [<id>, <x1>, <y1>, <x2>, <y2>].
-            This will be in mm with its group's translation applied as found from the svg.
+            A np.array of connection line records, where each record is:
+            [<id>, <x1>, <y1>, <x2>, <y2>]. This will be in mm with its group's
+            translation applied as found from the svg.
         """
 
         if not len(group_element):
@@ -521,24 +575,25 @@ class SVGProcessor:
         # 2. Iterate through all elements in the layer
         for element in group_element:
             # Extract the tag name without the namespace prefix
-            tag = element.tag.split('}')[-1]
+            tag = element.tag.split("}")[-1]
 
             # --- Process <line> elements ---
-            if tag == 'line':
+            if tag == "line":
                 try:
-                    x1 = float(element.attrib['x1'])
-                    y1 = float(element.attrib['y1'])
-                    x2 = float(element.attrib['x2'])
-                    y2 = float(element.attrib['y2'])
+                    x1 = float(element.attrib["x1"])
+                    y1 = float(element.attrib["y1"])
+                    x2 = float(element.attrib["x2"])
+                    y2 = float(element.attrib["y2"])
                     lines.append([x1, y1, x2, y2])
                 except KeyError:
-                    logger.warning(f"Warning: Skipping malformed <line> element '{element}'.")
+                    logger.warning(
+                        f"Warning: Skipping malformed <line> element '{element}'."
+                    )
 
             # --- Process <path> elements using svg.path ---
-            elif tag == 'path':
-                d_string = element.attrib.get('d')
+            elif tag == "path":
+                d_string = element.attrib.get("d")
                 if d_string:
-
                     try:
                         path_obj = parse_path(d_string)
                         if path_obj:
@@ -547,29 +602,33 @@ class SVGProcessor:
                             # The end point is the end of the last segment
                             end_point = path_obj[-1].end
 
-                            lines.append([
-                                start_point.real,  # x1
-                                start_point.imag,  # y1
-                                end_point.real,  # x2
-                                end_point.imag  # y2
-                            ])
+                            lines.append(
+                                [
+                                    start_point.real,  # x1
+                                    start_point.imag,  # y1
+                                    end_point.real,  # x2
+                                    end_point.imag,  # y2
+                                ]
+                            )
 
                     except (IndexError, ValueError) as e:
-                        logger.warning(f"Warning: Could not parse <path> '{element}': {e}")
+                        logger.warning(
+                            f"Warning: Could not parse <path> '{element}': {e}"
+                        )
 
         if len(lines) == 0:
             return None
 
         # convert list to np array to easily apply tranformations
         lines = np.array(lines)
-        lines = (lines.reshape(-1, 2) + transform).reshape(-1, 4)  # apply translation to start and end points
+        lines = (lines.reshape(-1, 2) + transform).reshape(
+            -1, 4
+        )  # apply translation to start and end points
         return self.unit_normalization_func(lines)
 
 
 if __name__ == "__main__":
-
     from matplotlib import pyplot as plt
-
 
     # func to plot shapely polygons and lines.
     def plot_shapes_lines(polygons, lines):
@@ -579,16 +638,16 @@ if __name__ == "__main__":
         # Plot the polygons with a semi-transparent blue color
         for poly in polygons:
             x, y = poly.exterior.xy
-            ax.fill(x, y, alpha=0.5, fc='b', ec='none')
+            ax.fill(x, y, alpha=0.5, fc="b", ec="none")
 
         # Plot the line with a contrasting solid red color and a thicker line width
         for line in lines:
             x, y = line.xy
-            ax.plot(x, y, color='red', linewidth=3, solid_capstyle='round')
+            ax.plot(x, y, color="red", linewidth=3, solid_capstyle="round")
 
         # Set plot aspect ratio and labels for better visualization
-        ax.set_aspect('equal', 'box')
-        ax.set_title('Shapely Polygons and Lines')
+        ax.set_aspect("equal", "box")
+        ax.set_title("Shapely Polygons and Lines")
         plt.xlabel("X-axis")
         plt.ylabel("Y-axis")
         plt.grid(True)
@@ -596,23 +655,15 @@ if __name__ == "__main__":
         # Show the plot
         plt.show()
 
-
     # vertices for a square polygon
-    v1 = [1., 1.]
-    v2 = [2., 1.]
-    v3 = [2., 0.]
-    v4 = [1., 0.]
+    v1 = [1.0, 1.0]
+    v2 = [2.0, 1.0]
+    v3 = [2.0, 0.0]
+    v4 = [1.0, 0.0]
 
     _centers = np.array([v1, v2, v3, v4])  # square. points sep by 1 unit.
 
-    _lines_names = [
-        "v1-v2",
-        "v2-v3",
-        "v3-v4",
-        "v1-v4",
-        "v1-v3",
-        "v2-v4"
-    ]
+    _lines_names = ["v1-v2", "v2-v3", "v3-v4", "v1-v4", "v1-v3", "v2-v4"]
 
     # --- 2. Define Polygon Properties ---
     side_length = 0.8  # The side length for each square
@@ -630,12 +681,14 @@ if __name__ == "__main__":
             (cx - h, cy - h),  # Bottom-left
             (cx + h, cy - h),  # Bottom-right
             (cx + h, cy + h),  # Top-right
-            (cx - h, cy + h)  # Top-left
+            (cx - h, cy + h),  # Top-left
         ]
 
         # Perturb each corner by adding random noise
         irregular_corners = []
-        irregularity = side_length / 4  # How much the corners can be moved. 0=perfect square.
+        irregularity = (
+            side_length / 4
+        )  # How much the corners can be moved. 0=perfect square.
         for x, y in base_corners:
             noise_x = np.random.uniform(-irregularity, irregularity)
             noise_y = np.random.uniform(-irregularity, irregularity)
@@ -658,16 +711,7 @@ if __name__ == "__main__":
 
     # add noise and find new threshold
     # 6 lines for a square. Includes diagonal connections.
-    _lines = np.array(
-        [
-            v1 + v2,
-            v2 + v3,
-            v3 + v4,
-            v4 + v1,
-            v1 + v3,
-            v2 + v4
-        ]
-    )
+    _lines = np.array([v1 + v2, v2 + v3, v3 + v4, v4 + v1, v1 + v3, v2 + v4])
 
     scale = side_length / 7
 
@@ -680,14 +724,13 @@ if __name__ == "__main__":
     # check validity
 
     expected = {
-        'v1': ['v3', 'v2', 'v4'],
-        'v2': ['v3', 'v1', 'v4'],
-        'v3': ['v1', 'v2', 'v4'],
-        'v4': ['v2', 'v3', 'v1']
+        "v1": ["v3", "v2", "v4"],
+        "v2": ["v3", "v1", "v4"],
+        "v3": ["v1", "v2", "v4"],
+        "v4": ["v2", "v3", "v1"],
     }
 
-    plot_shapes_lines(polygons=_polygons,
-                      lines=_lines_strs)
+    plot_shapes_lines(polygons=_polygons, lines=_lines_strs)
 
     util = PolygonNeighborFinder(
         polygons=_polygons,
@@ -695,10 +738,14 @@ if __name__ == "__main__":
         polygon_names=_polygon_names,
     )
 
-    expected = {'v1': ['v3', 'v2', 'v4'], 'v2': ['v3', 'v1', 'v4'], 'v3': ['v2', 'v4', 'v1'],
-                'v4': ['v2', 'v3', 'v1']}
+    expected = {
+        "v1": ["v3", "v2", "v4"],
+        "v2": ["v3", "v1", "v4"],
+        "v3": ["v2", "v4", "v1"],
+        "v4": ["v2", "v3", "v1"],
+    }
 
-    map = util.get_polygon_neighbours(max_attempts=1000, buffer_factor=-2 ** 5)
+    map = util.get_polygon_neighbours(max_attempts=1000, buffer_factor=-(2**5))
 
     for el in map:
         if sorted(map[el]) != sorted(expected[el]):
