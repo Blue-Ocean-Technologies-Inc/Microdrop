@@ -53,11 +53,11 @@ def test_defaults():
 
 def test_display_name_clean_dirty_and_untitled():
     t = PluggableProtocolStateTracker()
-    assert t.display_name() == f"{PKG_name} - untitled"
+    assert t.display_name() == f"{PKG_name}\t\t-\t\tuntitled"
     t.protocol_name = "my_assay"
-    assert t.display_name() == f"{PKG_name} - my_assay"
+    assert t.display_name() == f"{PKG_name}\t\t-\t\tmy_assay"
     t.is_modified = True
-    assert t.display_name() == f"{PKG_name} - my_assay [modified]"
+    assert t.display_name() == f"{PKG_name}\t\t-\t\tmy_assay [modified]"
 
 
 def test_no_dock_pane_is_safe():
@@ -65,15 +65,15 @@ def test_no_dock_pane_is_safe():
     t = PluggableProtocolStateTracker()
     t.protocol_name = "demo"  # no crash
     t.is_modified = True  # no crash
-    assert t.display_name() == f"{PKG_name} - demo [modified]"
+    assert t.display_name() == f"{PKG_name}\t\t-\t\tdemo [modified]"
 
 
 def test_dock_pane_name_rewritten_on_name_change():
     stub = _NameStub()
     t = PluggableProtocolStateTracker(dock_pane=stub)
-    assert stub.name == f"{PKG_name} - untitled"
+    assert stub.name == f"{PKG_name}\t\t-\t\tuntitled"
     t.protocol_name = "demo"
-    assert stub.name == f"{PKG_name} - demo"
+    assert stub.name == f"{PKG_name}\t\t-\t\tdemo"
 
 
 def test_dock_pane_name_rewritten_on_dirty_change():
@@ -81,9 +81,9 @@ def test_dock_pane_name_rewritten_on_dirty_change():
     t = PluggableProtocolStateTracker(dock_pane=stub)
     t.protocol_name = "demo"
     t.is_modified = True
-    assert stub.name == f"{PKG_name} - demo [modified]"
+    assert stub.name == f"{PKG_name}\t\t-\t\tdemo [modified]"
     t.is_modified = False
-    assert stub.name == f"{PKG_name} - demo"
+    assert stub.name == f"{PKG_name}\t\t-\t\tdemo"
 
 
 # --- file lifecycle (filename only; dirty is separate) --------------
