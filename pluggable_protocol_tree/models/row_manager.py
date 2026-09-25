@@ -17,20 +17,33 @@ dynamic step/group subclasses are built once at construction from the
 active column set.
 """
 
+# Standard library imports.
 from typing import Iterator, List, Optional, Tuple
 
+# Enthought library imports.
 from traits.api import (
-    HasTraits, Instance, List as ListTrait, Any as AnyTrait, Dict, Int,
-    Event, Str, observe,
+    Any as AnyTrait,
+)
+from traits.api import (
+    Dict,
+    Event,
+    HasTraits,
+    Instance,
+    Str,
+    observe,
+)
+from traits.api import (
+    List as ListTrait,
 )
 
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import PROTOCOL_ROWS_MIME
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow, build_row_type
 from pluggable_protocol_tree.services.protocol_validator import (
-    validate_protocol, log_report,
+    log_report,
+    validate_protocol,
 )
-
 
 Path = Tuple[int, ...]
 
@@ -46,27 +59,33 @@ class RowManager(HasTraits):
 
     # Path tuples are variable-length; Tuple(Int) would be a fixed 1-element
     # tuple validator, which rejects nested-row paths like (0, 2).
-    selection = ListTrait(AnyTrait,
-        desc="List of 0-indexed path tuples currently selected")
+    selection = ListTrait(
+        AnyTrait, desc="List of 0-indexed path tuples currently selected"
+    )
 
     clipboard_mime = Str(PROTOCOL_ROWS_MIME)
 
-    protocol_metadata = Dict(Str, AnyTrait,
+    protocol_metadata = Dict(
+        Str,
+        AnyTrait,
         desc="Per-protocol scratch persisted in the JSON header. Keys "
-             "are namespaced by feature ('electrode_to_channel', etc.). "
-             "Hydrated into ProtocolContext.scratch by the executor at "
-             "run start.")
+        "are namespaced by feature ('electrode_to_channel', etc.). "
+        "Hydrated into ProtocolContext.scratch by the executor at "
+        "run start.",
+    )
 
     rows_changed = Event(
         desc="Fires on structural mutations (add/remove/move/paste/"
-             "set_state_from_json/apply). For cell value edits use "
-             "``cell_changed`` instead.")
+        "set_state_from_json/apply). For cell value edits use "
+        "``cell_changed`` instead."
+    )
 
     cell_changed = Event(
         desc="Fires on a single cell value edit. Payload is "
-             "``{'path': (i, j, ...), 'col_id': '<col_id>'}``. Enables "
-             "O(1) incremental dirty tracking; the protocol state "
-             "tracker observes this for per-cell diff bookkeeping.")
+        "``{'path': (i, j, ...), 'col_id': '<col_id>'}``. Enables "
+        "O(1) incremental dirty tracking; the protocol state "
+        "tracker observes this for per-cell diff bookkeeping."
+    )
 
     # --- construction ---
 
@@ -81,10 +100,14 @@ class RowManager(HasTraits):
 
     def _rebuild_types(self):
         self.step_type = build_row_type(
-            self.columns, base=BaseRow, name="ProtocolStepRow",
+            self.columns,
+            base=BaseRow,
+            name="ProtocolStepRow",
         )
         self.group_type = build_row_type(
-            self.columns, base=GroupRow, name="ProtocolGroupRow",
+            self.columns,
+            base=GroupRow,
+            name="ProtocolGroupRow",
         )
 
     # --- tree lookup ---
@@ -104,8 +127,12 @@ class RowManager(HasTraits):
 
     # --- structure mutation ---
 
-    def add_step(self, parent_path: Path = (), index: Optional[int] = None,
-                 values: Optional[dict] = None) -> Path:
+    def add_step(
+        self,
+        parent_path: Path = (),
+        index: Optional[int] = None,
+        values: Optional[dict] = None,
+    ) -> Path:
         parent = self._parent_for_path(parent_path)
         row = self.step_type()
         if values:
@@ -117,8 +144,9 @@ class RowManager(HasTraits):
         self.rows_changed = True
         return parent_path + (index,)
 
-    def add_group(self, parent_path: Path = (), index: Optional[int] = None,
-                  name: str = "Group") -> Path:
+    def add_group(
+        self, parent_path: Path = (), index: Optional[int] = None, name: str = "Group"
+    ) -> Path:
         parent = self._parent_for_path(parent_path)
         row = self.group_type(name=name)
         if index is None:
@@ -158,11 +186,13 @@ class RowManager(HasTraits):
 
     @staticmethod
     def _is_ancestor(ancestor: Path, descendant: Path) -> bool:
-        return (len(ancestor) < len(descendant)
-                and descendant[: len(ancestor)] == ancestor)
+        return (
+            len(ancestor) < len(descendant) and descendant[: len(ancestor)] == ancestor
+        )
 
-    def move(self, paths: List[Path], target_parent_path: Path,
-             target_index: int) -> None:
+    def move(
+        self, paths: List[Path], target_parent_path: Path, target_index: int
+    ) -> None:
         """Move rows to a new parent. Collects rows first (while paths are
         still valid), then inserts at the target, removing from the old
         location afterwards."""
@@ -183,8 +213,11 @@ class RowManager(HasTraits):
         whole). Returns the cleaned list, or None when it is empty or spans
         more than one parent (the v1 single-parent restriction)."""
         paths = [tuple(p) for p in paths]
-        paths = [p for p in paths
-                 if not any(self._is_ancestor(a, p) for a in paths if a != p)]
+        paths = [
+            p
+            for p in paths
+            if not any(self._is_ancestor(a, p) for a in paths if a != p)
+        ]
         if not paths:
             return None
         parent_path = paths[0][:-1]
@@ -197,8 +230,7 @@ class RowManager(HasTraits):
         sharing one parent). Drives the context-menu entry's enabled state."""
         return self._normalize_fold_paths(paths) is not None
 
-    def fold_into_group(self, paths: List[Path],
-                        name: str = "Group") -> Optional[Path]:
+    def fold_into_group(self, paths: List[Path], name: str = "Group") -> Optional[Path]:
         """Wrap the rows at ``paths`` in a new group at the position of the
         first selected row, preserving their order, identity (uuids, names,
         column values), and any group children.
@@ -351,14 +383,17 @@ class RowManager(HasTraits):
     def _field_index(self, col_id: str) -> int:
         """Position of col_id in the serialized row tuple (depth/uuid/type/name
         come first, then columns in their self.columns order)."""
-        fields = ["depth", "uuid", "type", "name"] + [c.model.col_id for c in self.columns]
+        fields = ["depth", "uuid", "type", "name"] + [
+            c.model.col_id for c in self.columns
+        ]
         return fields.index(col_id)
 
     def _serialize_selection(self) -> dict:
         """Return a clipboard-style payload covering the current selection.
 
         Format mirrors persistence (no schema_version on the clipboard):
-        {"columns": [...], "fields": [...], "rows": [[depth, uuid, type, name, *values], ...]}
+        {"columns": [...], "fields": [...],
+         "rows": [[depth, uuid, type, name, *values], ...]}
         Children of a selected group are included automatically.
         """
         rows_out: list = []
@@ -380,8 +415,11 @@ class RowManager(HasTraits):
         for p in self.selection:
             row = self.get_row(p)
             # Skip rows whose ancestor is also selected (covered already).
-            if any(self._is_ancestor(tuple(other), tuple(p))
-                   for other in self.selection if other != p):
+            if any(
+                self._is_ancestor(tuple(other), tuple(p))
+                for other in self.selection
+                if other != p
+            ):
                 continue
             emit(row, depth=0)
 
@@ -403,7 +441,7 @@ class RowManager(HasTraits):
         import uuid as _uuid
 
         fields: list = payload["fields"]
-        col_ids_in_payload: list = fields[4:]   # skip depth, uuid, type, name
+        col_ids_in_payload: list = fields[4:]  # skip depth, uuid, type, name
         live_by_col_id = {c.model.col_id: c for c in self.columns}
 
         # Determine insertion target.
@@ -420,7 +458,7 @@ class RowManager(HasTraits):
                 insert_idx = target_parent.children.index(target_row) + 1
 
         # Reconstruct, honoring depth stacking.
-        stack: list = [target_parent]   # stack[-1] is the current parent
+        stack: list = [target_parent]  # stack[-1] is the current parent
         base_depth = 0
         first = True
         for row_tuple in payload["rows"]:
@@ -444,7 +482,7 @@ class RowManager(HasTraits):
             for col_id, raw in zip(col_ids_in_payload, values):
                 col = live_by_col_id.get(col_id)
                 if col is None:
-                    continue   # orphan column (PPT-1 scope: skip silently)
+                    continue  # orphan column (PPT-1 scope: skip silently)
                 setattr(row, col_id, col.model.deserialize(raw))
 
             # Insert either at the computed position (top-level) or
@@ -464,12 +502,14 @@ class RowManager(HasTraits):
 
     def copy(self) -> None:
         """Serialize the current selection onto the system QClipboard."""
-        from pyface.qt.QtWidgets import QApplication
         import json
+
+        from pyface.qt.QtWidgets import QApplication
+
         payload = self._serialize_selection()
         mime_text = json.dumps(payload)
         cb = QApplication.clipboard()
-        cb.setText(mime_text)   # TODO(PPT-1): use MIME-typed QMimeData for xplat
+        cb.setText(mime_text)  # TODO(PPT-1): use MIME-typed QMimeData for xplat
         # NOTE: PPT-1 uses plain-text clipboard for simplicity; upgrading to
         # a proper application/x-microdrop-rows+json MIME type via QMimeData
         # lands when we also need cross-app paste. For within-app round-trip
@@ -481,7 +521,9 @@ class RowManager(HasTraits):
 
     def paste(self, target_path: Optional[Path] = None) -> None:
         import json
+
         from pyface.qt.QtWidgets import QApplication
+
         cb = QApplication.clipboard()
         text = cb.text()
         if not text:
@@ -513,12 +555,14 @@ class RowManager(HasTraits):
                 continue
             candidates.append(path)
         return sorted(
-            p for p in candidates
+            p
+            for p in candidates
             if not any(self._is_ancestor(a, p) for a in candidates if a != p)
         )
 
-    def iter_execution_steps(self, scope_paths: Optional[List[Path]] = None
-                             ) -> Iterator[BaseRow]:
+    def iter_execution_steps(
+        self, scope_paths: Optional[List[Path]] = None
+    ) -> Iterator[BaseRow]:
         """Yield rows in execution order, flattening groups and expanding
         repetitions. Backward-compat shim — delegates to the richer
         ``iter_execution_frames``.
@@ -526,8 +570,9 @@ class RowManager(HasTraits):
         for row, _rep_chain in self.iter_execution_frames(scope_paths):
             yield row
 
-    def iter_execution_frames(self, scope_paths: Optional[List[Path]] = None
-                              ) -> Iterator[tuple]:
+    def iter_execution_frames(
+        self, scope_paths: Optional[List[Path]] = None
+    ) -> Iterator[tuple]:
         """Yield ``(row, rep_chain)`` tuples in execution order.
 
         ``scope_paths`` narrows the run to a selection (issue #558). ``None``
@@ -585,6 +630,7 @@ class RowManager(HasTraits):
         """Snapshot DataFrame. Index = path tuples. Columns = col_ids.
         Rebuilt on each access (O(N rows)); not cached."""
         import pandas as pd
+
         rows_data = []
         index = []
         for path, row in self._walk():
@@ -594,8 +640,9 @@ class RowManager(HasTraits):
                 row_vals[col.model.col_id] = col.model.get_value(row)
             rows_data.append(row_vals)
         col_ids = [c.model.col_id for c in self.columns]
-        return pd.DataFrame(rows_data, index=pd.Index(index, tupleize_cols=False),
-                            columns=col_ids)
+        return pd.DataFrame(
+            rows_data, index=pd.Index(index, tupleize_cols=False), columns=col_ids
+        )
 
     def _walk(self, node=None, prefix=()):
         """Depth-first traversal yielding (path, row). Skips the root."""
@@ -633,7 +680,7 @@ class RowManager(HasTraits):
 
     # --- imperative bulk write ---
 
-    def _set_value(self, path: Path, col: 'IColumn', value):
+    def _set_value(self, path: Path, col: "IColumn", value):
         row = self.get_row(path)
         col.model.set_value(row, value)
         # cell_changed carries the per-cell model col_id (NOT col.id, which is
@@ -711,15 +758,21 @@ class RowManager(HasTraits):
     def to_json(self) -> dict:
         """Serialize the tree + per-protocol metadata to a JSON-ready dict."""
         from pluggable_protocol_tree.services.persistence import serialize_tree
+
         return serialize_tree(
-            self.root, list(self.columns),
+            self.root,
+            list(self.columns),
             protocol_metadata=dict(self.protocol_metadata),
         )
 
     @classmethod
-    def from_json(cls, data: dict, columns: list,
-                  device_electrode_to_channel=None,
-                  report_findings: bool = True) -> "RowManager":
+    def from_json(
+        cls,
+        data: dict,
+        columns: list,
+        device_electrode_to_channel=None,
+        report_findings: bool = True,
+    ) -> "RowManager":
         """Reconstruct a RowManager from a serialized payload.
 
         When ``report_findings`` is True (headless default) the payload is
@@ -727,22 +780,29 @@ class RowManager(HasTraits):
         findings are printed via the module logger before loading. The load
         proceeds regardless - headless cannot prompt."""
         from pluggable_protocol_tree.services.persistence import deserialize_tree
+
         if report_findings:
             report = validate_protocol(data, columns, device_electrode_to_channel)
             if not report.is_empty:
                 log_report(report)
         manager = cls(columns=list(columns))
         root, metadata = deserialize_tree(
-            data, columns,
-            step_type=manager.step_type, group_type=manager.group_type,
+            data,
+            columns,
+            step_type=manager.step_type,
+            group_type=manager.group_type,
         )
         manager.root = root
         manager.protocol_metadata = metadata
         return manager
 
-    def set_state_from_json(self, data: dict, columns: list,
-                            device_electrode_to_channel=None,
-                            report_findings: bool = True) -> None:
+    def set_state_from_json(
+        self,
+        data: dict,
+        columns: list,
+        device_electrode_to_channel=None,
+        report_findings: bool = True,
+    ) -> None:
         """Reconstruct tree state in-place from a serialized payload dynamically.
 
         When ``report_findings`` is True (headless default) findings are
@@ -762,7 +822,8 @@ class RowManager(HasTraits):
 
         # 2. Deserialize the payload into a new root and metadata dict
         root, metadata = deserialize_tree(
-            data, self.columns,
+            data,
+            self.columns,
             step_type=self.step_type,
             group_type=self.group_type,
         )
@@ -796,9 +857,11 @@ class RowManager(HasTraits):
         excluding the root. Unlike ``iter_execution_frames`` this does not
         expand repetitions — it is a structural walk, e.g. to snapshot or
         restore per-row column values across a live column swap."""
+
         def walk(group):
             for child in group.children:
                 yield child
                 if isinstance(child, GroupRow):
                     yield from walk(child)
+
         yield from walk(self.root)
