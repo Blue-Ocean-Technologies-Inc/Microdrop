@@ -59,6 +59,7 @@ from ..consts import (
     FLUORESCENCE_PARK_FILTER,
     FLUORESCENCE_SETTLE_S,
     FluorescenceCaptureRequest,
+    filter_label,
     fluorescence_capture_done_publisher,
     fluorescence_capture_progress_publisher,
     frame_description,
@@ -338,6 +339,10 @@ class FluorescenceCaptureMixinService(HasTraits):
             f"fluorescence capture: filter {position}",
             lambda: self.proxy.motor.fluorescence_ctrl(position),
         )
+        logger.info(
+            f"Portable Dropbot filter --> {position} ({filter_label(position)}): "
+            f"{'ok' if ok and moved is not None else 'FAILED'}"
+        )
 
         if not ok and abort.is_set():
             # _proxy_call's own OSError handling already declared us
@@ -490,7 +495,11 @@ class FluorescenceCaptureMixinService(HasTraits):
                 lambda: self.proxy.motor.fluorescence_ctrl(FLUORESCENCE_PARK_FILTER),
             )
 
-            if not ok or moved is None:
-                logger.error("Fluorescence capture: filter park FAILED")
-            else:
+            if ok and moved is not None:
                 self._fluorescence_last_filter_position = FLUORESCENCE_PARK_FILTER
+                logger.info(
+                    f"Portable Dropbot filter --> {FLUORESCENCE_PARK_FILTER} "
+                    f"({filter_label(FLUORESCENCE_PARK_FILTER)}): ok (park)"
+                )
+            else:
+                logger.error("Fluorescence capture: filter park FAILED")
