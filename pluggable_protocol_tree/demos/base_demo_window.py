@@ -24,23 +24,40 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
+# Standard library imports.
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+# Third-party imports.
 import dramatiq
 
-from microdrop_utils.broker_server_helpers import (
-    remove_middleware_from_dramatiq_broker,
+# Enthought library imports.
+from pyface.qt.QtCore import Qt, Signal
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMainWindow,
+    QSplitter,
+    QStatusBar,
+    QToolBar,
 )
+
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    ELECTRODES_STATE_APPLIED,
+    ELECTRODES_STATE_CHANGE,
 )
 from pluggable_protocol_tree.demos.electrode_responder import (
     DEMO_RESPONDER_ACTOR_NAME,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.broker_server_helpers import (
+    remove_middleware_from_dramatiq_broker,
+)
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -64,6 +81,7 @@ class StatusReadout:
     ``f"{label}: {fmt(message)}"``. Until the first ack, the label
     shows ``f"{label}: {initial}"``.
     """
+
     label: str
     topic: str
     fmt: Callable[[str], str]
@@ -83,16 +101,14 @@ class DemoConfig:
     window_size: tuple[int, int] = (1100, 650)
 
     # Optional sample steps populated after RowManager construction.
-    pre_populate: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda rm: None)
-    )
+    pre_populate: Callable[[Any], None] = field(default_factory=lambda: lambda rm: None)
 
     # Subscribe demo responders / additional listeners on the router.
     # Called AFTER the base wires the standard PPT-3 electrode chain
     # + the phase-ack listener (if phase_ack_topic is set) +
     # the StatusReadout listeners.
     routing_setup: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda router: None)
+        default_factory=lambda: lambda router: None
     )
 
     # Single ack topic that drives the per-phase timer.
@@ -112,7 +128,7 @@ class DemoConfig:
     # Called as the FINAL step of __init__ — all base scaffolding (executor,
     # status bar, toolbar, routing) is already in place.
     post_build_setup: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda window: None)
+        default_factory=lambda: lambda window: None
     )
 
 
@@ -134,8 +150,14 @@ def _slug(label: str) -> str:
 # must add their prefix here. ``ppt11_demo_`` is forward-declared for the
 # planned PPT-11 demo refactor; no actors with that prefix exist yet.
 _DEMO_PREFIXES = (
-    "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt6_demo_", "ppt11_demo_",
-    "ppt12_demo_", "ppt_vf_demo_", "integration_demo_",
+    "ppt_demo_",
+    "ppt4_demo_",
+    "ppt5_demo_",
+    "ppt6_demo_",
+    "ppt11_demo_",
+    "ppt12_demo_",
+    "ppt_vf_demo_",
+    "integration_demo_",
 )
 
 
@@ -148,6 +170,7 @@ def _is_purgable_demo_actor_name(name: str) -> bool:
 class _PerSlugEmitter:
     """Tiny shim that exposes .emit(message) and forwards to the
     window's per-instance readout_acked signal with a fixed slug."""
+
     __slots__ = ("_signal", "_slug")
 
     def __init__(self, signal, slug):
@@ -185,7 +208,7 @@ def _make_readout_actor(slug: str):
     broker = dramatiq.get_broker()
     try:
         broker.get_actor(actor_name)
-        return actor_name   # already registered
+        return actor_name  # already registered
     except dramatiq.errors.ActorNotFound:
         pass
 
@@ -199,17 +222,11 @@ def _make_readout_actor(slug: str):
     return actor_name
 
 
-from pyface.qt.QtCore import Qt, Signal
-from pyface.qt.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar, QToolBar,
-)
-
-
 class BasePluggableProtocolDemoWindow(QMainWindow):
     """Hosts a ProtocolTreePane + the demo-only toolbar / readouts /
     Dramatiq routing scaffolding. See PPT-10.1 for the pane refactor."""
 
-    phase_acked = Signal()                    # forwarded from pane.phase_acked
+    phase_acked = Signal()  # forwarded from pane.phase_acked
     readout_acked = Signal(str, str)
 
     def __init__(self, config: DemoConfig):
@@ -243,6 +260,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         from pluggable_protocol_tree.services.protocol_status_controller import (
             ProtocolStatusController,
         )
+
         self.status_controller = ProtocolStatusController(
             signals=self.pane.executor.signals,
             manager=self.pane.manager,
@@ -259,10 +277,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 splitter = QSplitter(Qt.Horizontal)
                 splitter.addWidget(self.pane)
                 splitter.addWidget(side)
-                splitter.setSizes([
-                    int(config.window_size[0] * 0.65),
-                    int(config.window_size[0] * 0.35),
-                ])
+                splitter.setSizes(
+                    [
+                        int(config.window_size[0] * 0.65),
+                        int(config.window_size[0] * 0.35),
+                    ]
+                )
                 self._central_content = splitter
             else:
                 self._central_content = self.pane
@@ -362,7 +382,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             router = MessageRouterActor()
 
             broker_topics_to_check = (
-                ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED,
+                ELECTRODES_STATE_CHANGE,
+                ELECTRODES_STATE_APPLIED,
             )
             extra_topics = []
             if self.config.phase_ack_topic is not None:

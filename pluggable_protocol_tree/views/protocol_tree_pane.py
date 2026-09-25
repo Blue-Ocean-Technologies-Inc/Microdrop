@@ -24,40 +24,67 @@ PPT-10.1 for the full wiring rules.
 
 from __future__ import annotations
 
+# Standard library imports.
 import filecmp
 import json
 from pathlib import Path
 
+# Enthought library imports.
 from pyface.qt.QtCore import (
-    Qt, QEventLoop, QModelIndex, QThread, QTimer, Signal, QUrl,
+    QEventLoop,
+    QModelIndex,
+    Qt,
+    QThread,
+    QTimer,
+    QUrl,
+    Signal,
 )
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout,
-    QLabel, QProgressDialog, QToolButton, QVBoxLayout, QWidget,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QProgressDialog,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from microdrop_application.dialogs.pyface_wrapper import (
-    NO, YES, choose, confirm, error as error_dialog,
-    information as information_dialog, success,
-)
-from microdrop_style.button_styles import ICON_FONT_FAMILY
-
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
-from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
-from microdrop_utils.file_handler import next_free_numbered_path, safe_copy_file
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.pyside_helpers import LoadingOverlay
-
+# Microdrop package imports.
 from device_viewer.consts import (
-    DEVICE_REPO_DIR_KEY, DEVICE_SVG_PATH_KEY, DEVICE_VIEWER_LOAD_SVG_REQUEST,
+    DEVICE_REPO_DIR_KEY,
+    DEVICE_SVG_PATH_KEY,
+    DEVICE_VIEWER_LOAD_SVG_REQUEST,
 )
+from microdrop_application.dialogs.pyface_wrapper import (
+    NO,
+    YES,
+    choose,
+    confirm,
+    success,
+)
+from microdrop_application.dialogs.pyface_wrapper import (
+    error as error_dialog,
+)
+from microdrop_application.dialogs.pyface_wrapper import (
+    information as information_dialog,
+)
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, PROTOCOL_FILE_DIALOG_FILTER)
+    ELECTRODES_STATE_APPLIED,
+    PROTOCOL_FILE_DIALOG_FILTER,
+)
 from pluggable_protocol_tree.models.row import GroupRow
+from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.legacy_protocol_import import (
-    build_protocol_payload, convert_legacy_protocol,
-    legacy_device_display_name, read_device_svg_channel_map,
+    build_protocol_payload,
+    convert_legacy_protocol,
+    legacy_device_display_name,
+    read_device_svg_channel_map,
     read_legacy_protocol,
 )
 from pluggable_protocol_tree.services.persistence import (
@@ -68,20 +95,32 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
-from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
+from pluggable_protocol_tree.views.navigation_bar import (
+    NavigationBar,
+    StatusBar,
+    make_separator,
+)
 from pluggable_protocol_tree.views.protocol_validator_presenter import (
     confirm_report,
 )
-from pluggable_protocol_tree.views.navigation_bar import (
-    NavigationBar, StatusBar, make_separator,
-)
-from pluggable_protocol_tree.views.timeline_bar import TimelineBar
 from pluggable_protocol_tree.views.quick_action_bar import QuickActionBar
+from pluggable_protocol_tree.views.timeline_bar import TimelineBar
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
+# Microdrop style imports.
+from microdrop_style.button_styles import ICON_FONT_FAMILY
+
+# Microdrop utils imports.
+from microdrop_utils.decorators import attempt_func_execution_with_error_dialog
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.file_handler import next_free_numbered_path, safe_copy_file
+from microdrop_utils.pyside_helpers import LoadingOverlay
+
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 # Shared Redis-backed state (device SVG path published by the device viewer,
@@ -165,10 +204,13 @@ class ProtocolTreePane(QWidget):
         # preferences node, so every consumer can rely on it being present.
         self.preferences = preferences or ProtocolPreferences()
 
-        self.protocol_state_tracker = protocol_state_tracker or PluggableProtocolStateTracker()
+        self.protocol_state_tracker = (
+            protocol_state_tracker or PluggableProtocolStateTracker()
+        )
 
         self.widget = ProtocolTreeWidget(
-            self.manager, preferences=self.preferences, parent=self)
+            self.manager, preferences=self.preferences, parent=self
+        )
 
         # Loading screen shown over the tree during the executor's pre-protocol
         # wait (realtime settle, etc.). Same widget the old protocol_grid used.
@@ -204,7 +246,8 @@ class ProtocolTreePane(QWidget):
         # when no contributions exist (demo / headless test environments).
         if quick_actions:
             self.quick_action_bar = QuickActionBar(
-                actions=list(quick_actions), parent=self)
+                actions=list(quick_actions), parent=self
+            )
         else:
             self.quick_action_bar = None
         self.quick_actions_controller = None
@@ -223,10 +266,8 @@ class ProtocolTreePane(QWidget):
         # _logging_complete / _report_failed / _schedule_flush_with_progress /
         # _logs_settling_time_s members below — those stay here because they
         # are the GUI-thread bridge + dialog presentation (pure view).
-        self._logging_complete.connect(
-            self._on_logging_complete, Qt.QueuedConnection)
-        self._report_failed.connect(
-            self._on_report_failed, Qt.QueuedConnection)
+        self._logging_complete.connect(self._on_logging_complete, Qt.QueuedConnection)
+        self._report_failed.connect(self._on_report_failed, Qt.QueuedConnection)
 
         # The nav cursor (_current_row), preview-mode flag, and run guards
         # now live on the composition root (the dock pane), which owns the
@@ -274,7 +315,7 @@ class ProtocolTreePane(QWidget):
             ("Ctrl+Right", nb.btn_next_phase),
             ("Ctrl+.", nb.btn_stop),
         ]
-        self._nav_shortcuts = []   # keep refs (PySide6 GCs stray QShortcuts)
+        self._nav_shortcuts = []  # keep refs (PySide6 GCs stray QShortcuts)
         for seq, btn in bindings:
             self._add_shortcut(seq, lambda b=btn: self._click_if_active(b))
             self._append_shortcut_to_tooltip(btn, seq)
@@ -336,7 +377,8 @@ class ProtocolTreePane(QWidget):
         self.timeline_show_full_check = QCheckBox("Show full timeline")
         self.timeline_show_full_check.setToolTip(
             "Show every phase/step across all repetitions instead of a "
-            "collapsed base loop")
+            "collapsed base loop"
+        )
         layout.addWidget(self.timeline_step_rep_label)
         layout.addWidget(self.timeline_step_rep_combo)
         layout.addWidget(self.timeline_phase_rep_label)
@@ -345,7 +387,8 @@ class ProtocolTreePane(QWidget):
         self.phase_nav_check = QCheckBox("Phase navigation")
         self.phase_nav_check.setToolTip(
             "Step through the selected step's route phases without running "
-            "the protocol (synced with the device viewer sidebar)")
+            "the protocol (synced with the device viewer sidebar)"
+        )
         layout.addWidget(self.phase_nav_check)
         layout.addStretch()
         row.setVisible(False)
@@ -483,13 +526,16 @@ class ProtocolTreePane(QWidget):
         """Context manager wrapping a programmatic selection move so the
         sync controller's currentChanged slot does not trigger a publish."""
         pane = self
+
         class _Guard:
             def __enter__(self_):
                 if pane.device_viewer_sync is not None:
                     pane.device_viewer_sync._suppress_publish = True
+
             def __exit__(self_, *exc):
                 if pane.device_viewer_sync is not None:
                     pane.device_viewer_sync._suppress_publish = False
+
         return _Guard()
 
     @attempt_func_execution_with_error_dialog
@@ -534,8 +580,7 @@ class ProtocolTreePane(QWidget):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.manager.to_json(), f, indent=2)
         except Exception as e:
-            error_dialog(parent=parent or self,
-                         title="Save error", message=str(e))
+            error_dialog(parent=parent or self, title="Save error", message=str(e))
             return False
         return True
 
@@ -547,7 +592,9 @@ class ProtocolTreePane(QWidget):
         or the write fails.
         """
         path, _ = QFileDialog.getSaveFileName(
-            parent or self, "Save Protocol", self._default_protocol_dir(),
+            parent or self,
+            "Save Protocol",
+            self._default_protocol_dir(),
             PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
@@ -566,7 +613,9 @@ class ProtocolTreePane(QWidget):
         on success, ``None`` otherwise.
         """
         path, _ = QFileDialog.getOpenFileName(
-            parent or self, "Load Protocol", self._default_protocol_dir(),
+            parent or self,
+            "Load Protocol",
+            self._default_protocol_dir(),
             PROTOCOL_FILE_DIALOG_FILTER,
         )
         if not path:
@@ -575,8 +624,9 @@ class ProtocolTreePane(QWidget):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             columns = columns_factory()
-            # Device's current electrode->channel map (from DEVICE_VIEWER_GEOMETRY_CHANGED);
-            # None when no device/sync is wired -> validator skips device-dependent checks.
+            # Device's current electrode->channel map (from
+            # DEVICE_VIEWER_GEOMETRY_CHANGED); None when no device/sync is
+            # wired -> validator skips device-dependent checks.
             device_map = None
             if self.device_viewer_sync is not None:
                 device_map = dict(self.device_viewer_sync.electrode_ids_channels_map)
@@ -586,11 +636,12 @@ class ProtocolTreePane(QWidget):
                     return None
             # report already shown in the dialog -> don't re-log it
             self.manager.set_state_from_json(
-                data, columns=columns, report_findings=False,
+                data,
+                columns=columns,
+                report_findings=False,
             )
         except Exception as e:
-            error_dialog(parent=parent or self,
-                         title="Load error", message=str(e))
+            error_dialog(parent=parent or self, title="Load error", message=str(e))
             return None
         return path
 
@@ -607,21 +658,21 @@ class ProtocolTreePane(QWidget):
             logger.warning("Attempting to overwrite unsaved protocol.")
             user_choice = confirm(
                 self,
-                "Current protocol has unsaved changes.\n"
-                "Proceed without saving?",
+                "Current protocol has unsaved changes.\nProceed without saving?",
                 title="Unsaved Protocol Changes",
                 cancel=False,
             )
             if user_choice == NO:
                 logger.info("Action cancelled due to unsaved changes.")
                 return False
-        elif (tracker.loaded_protocol_path
-              and not Path(tracker.loaded_protocol_path).exists()):
+        elif (
+            tracker.loaded_protocol_path
+            and not Path(tracker.loaded_protocol_path).exists()
+        ):
             logger.warning("Loaded protocol file no longer exists on disk.")
             user_choice = confirm(
                 self,
-                "Current protocol file has been deleted.\n"
-                "Proceed without saving?",
+                "Current protocol file has been deleted.\nProceed without saving?",
                 title="Protocol File Not Found",
                 cancel=False,
             )
@@ -674,9 +725,11 @@ class ProtocolTreePane(QWidget):
     def load_protocol_dialog(self, columns_factory=None):
         if not self._confirm_proceed_or_abort():
             return
-        factory = (columns_factory
-                   if columns_factory is not None
-                   else (lambda: list(self.manager.columns)))
+        factory = (
+            columns_factory
+            if columns_factory is not None
+            else (lambda: list(self.manager.columns))
+        )
         path = self.load_from_dialog(factory, parent=self)
         if path:
             self.protocol_state_tracker.set_loaded(path)
@@ -695,8 +748,7 @@ class ProtocolTreePane(QWidget):
         dialog = LegacyImportDialog(
             parent=self,
             initial_root_path=self.preferences.legacy_import_root_path,
-            initial_device_svg_path=(
-                self.preferences.legacy_import_device_svg_path),
+            initial_device_svg_path=(self.preferences.legacy_import_device_svg_path),
             initial_protocol_path=self.preferences.legacy_import_protocol_path,
         )
         if dialog.exec() != QDialog.Accepted:
@@ -711,22 +763,29 @@ class ProtocolTreePane(QWidget):
         self.preferences.legacy_import_protocol_path = protocol_path
         dialog.deleteLater()
         if not device_svg_path or not protocol_path:
-            error_dialog(parent=self, title="Import error",
-                         message="Select both a device SVG and a protocol "
-                                 "file.")
+            error_dialog(
+                parent=self,
+                title="Import error",
+                message="Select both a device SVG and a protocol file.",
+            )
             return
 
         try:
-            electrode_to_channel = read_device_svg_channel_map(
-                device_svg_path)
+            electrode_to_channel = read_device_svg_channel_map(device_svg_path)
         except Exception as e:
-            error_dialog(parent=self, title="Import error",
-                         message=f"Could not read {device_svg_path}:\n{e}")
+            error_dialog(
+                parent=self,
+                title="Import error",
+                message=f"Could not read {device_svg_path}:\n{e}",
+            )
             return
         if not electrode_to_channel:
-            error_dialog(parent=self, title="Import error",
-                         message=f"{device_svg_path} contains no electrodes "
-                                 f"with channel assignments.")
+            error_dialog(
+                parent=self,
+                title="Import error",
+                message=f"{device_svg_path} contains no electrodes "
+                f"with channel assignments.",
+            )
             return
 
         device_name = legacy_device_display_name(device_svg_path)
@@ -735,8 +794,7 @@ class ProtocolTreePane(QWidget):
         # name from the result -- a collision rename (e.g. "Name (2).svg")
         # must also rename the protocol folder, which the save/load dialogs
         # later locate by the active SVG's stem.
-        device_svg_path = self._import_device_into_repo(
-            device_svg_path, device_name)
+        device_svg_path = self._import_device_into_repo(device_svg_path, device_name)
         device_name = legacy_device_display_name(device_svg_path)
 
         self._offer_switch_to_matching_device(device_svg_path, device_name)
@@ -744,12 +802,14 @@ class ProtocolTreePane(QWidget):
         try:
             legacy_protocol = read_legacy_protocol(protocol_path)
         except Exception as e:
-            error_dialog(parent=self, title="Import error",
-                         message=f"Could not read {protocol_path}:\n{e}")
+            error_dialog(
+                parent=self,
+                title="Import error",
+                message=f"Could not read {protocol_path}:\n{e}",
+            )
             return
 
-        converted = convert_legacy_protocol(
-            legacy_protocol, electrode_to_channel)
+        converted = convert_legacy_protocol(legacy_protocol, electrode_to_channel)
         columns = list(self.manager.columns)
         payload = build_protocol_payload(converted, columns)
 
@@ -760,7 +820,8 @@ class ProtocolTreePane(QWidget):
             if confirm_report(report, parent=self) != YES:
                 return
         self.manager.set_state_from_json(
-            payload, columns=columns, report_findings=False)
+            payload, columns=columns, report_findings=False
+        )
 
         saved_path = self._save_imported_protocol(protocol_path, device_name)
         if saved_path:
@@ -772,16 +833,20 @@ class ProtocolTreePane(QWidget):
             # plain Save cannot overwrite whatever file was open before
             # the import.
             self.protocol_state_tracker.reset()
-            saved_note = ("Could not save into the protocol repo -- "
-                          "use Save As to keep this protocol.")
+            saved_note = (
+                "Could not save into the protocol repo -- "
+                "use Save As to keep this protocol."
+            )
 
         information_dialog(
-            parent=self, title="Legacy protocol imported", cancel=False,
+            parent=self,
+            title="Legacy protocol imported",
+            cancel=False,
             message=f"Imported {len(converted.step_values)} steps.",
-            detail=f"{saved_note}\n\n{converted.report.render()}")
+            detail=f"{saved_note}\n\n{converted.report.render()}",
+        )
 
-    def _import_device_into_repo(self, device_svg_path: str,
-                                 device_name: str) -> str:
+    def _import_device_into_repo(self, device_svg_path: str, device_name: str) -> str:
         """Copy the legacy device SVG into the device repo as
         ``<device_name>.svg`` so Device > Load can find it later.
 
@@ -807,8 +872,7 @@ class ProtocolTreePane(QWidget):
             if destination.exists():
                 if filecmp.cmp(destination, source, shallow=False):
                     return str(destination)
-                destination = self._choose_device_collision_rename(
-                    source, destination)
+                destination = self._choose_device_collision_rename(source, destination)
                 if destination is None:
                     return device_svg_path
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -816,13 +880,11 @@ class ProtocolTreePane(QWidget):
             logger.info(f"imported legacy device into repo: {destination}")
             return str(destination)
         except Exception as e:
-            logger.warning(f"could not import device into repo: {e}",
-                           exc_info=True)
+            logger.warning(f"could not import device into repo: {e}", exc_info=True)
             return device_svg_path
 
     @staticmethod
-    def _choose_device_collision_rename(source: Path,
-                                        destination: Path):
+    def _choose_device_collision_rename(source: Path, destination: Path):
         """Ask how to handle a repo entry of the same name but different
         content. Returns the numbered rename to save under, or None to
         skip saving this device (Cancel and closing the dialog also
@@ -836,17 +898,20 @@ class ProtocolTreePane(QWidget):
             parent=None,
             title="Device Name Conflict",
             message=(
-                f"A different device named <b>{destination.name}</b> already exists in the device repository.<br><br>"
-                f"Overwriting it could break existing protocols. To safely save your "
-                f"<a href='{source.as_uri()}' style='color: #0078d7;'>{source}</a>, we can save a renamed copy <b>{renamed.name}</b>."
+                f"A different device named <b>{destination.name}</b> already "
+                f"exists in the device repository.<br><br>"
+                f"Overwriting it could break existing protocols. To safely "
+                f"save your "
+                f"<a href='{source.as_uri()}' style='color: #0078d7;'>"
+                f"{source}</a>, we can save a renamed copy "
+                f"<b>{renamed.name}</b>."
             ),
             choices=(save_choice, skip_choice),
         )
 
         return renamed if choice == save_choice else None
 
-    def _save_imported_protocol(self, legacy_protocol_path: str,
-                                device_name: str):
+    def _save_imported_protocol(self, legacy_protocol_path: str, device_name: str):
         """Write the just-imported tree to
         ``PROTOCOL_REPO_DIR/<device_name>/<legacy name>.json``.
 
@@ -867,8 +932,9 @@ class ProtocolTreePane(QWidget):
             return None
         return str(path)
 
-    def _offer_switch_to_matching_device(self, device_svg_path: str,
-                                         device_name: str) -> None:
+    def _offer_switch_to_matching_device(
+        self, device_svg_path: str, device_name: str
+    ) -> None:
         """Offer to load the imported protocol's device when the Device
         viewer currently shows a different one (or none).
 
@@ -882,13 +948,17 @@ class ProtocolTreePane(QWidget):
         entirely). YES loads the matched device over pub/sub; NO keeps
         the current one."""
         try:
-            active_svg = str(app_globals.get(DEVICE_SVG_PATH_KEY,
-                                             NO_DEVICE_SVG_SENTINEL))
+            active_svg = str(
+                app_globals.get(DEVICE_SVG_PATH_KEY, NO_DEVICE_SVG_SENTINEL)
+            )
         except Exception as e:
             logger.debug(f"active device svg unavailable: {e}")
             return
         device_loaded = active_svg not in ("", "None", NO_DEVICE_SVG_SENTINEL)
-        new_device_html = f"<a href='{Path(device_svg_path).as_uri()}' style='color: #0078d7;'>{device_name}</a>"
+        new_device_html = (
+            f"<a href='{Path(device_svg_path).as_uri()}' "
+            f"style='color: #0078d7;'>{device_name}</a>"
+        )
         if device_loaded:
             try:
                 if filecmp.cmp(active_svg, device_svg_path, shallow=False):
@@ -901,19 +971,27 @@ class ProtocolTreePane(QWidget):
             question = (
                 f"This protocol was authored for device {new_device_html}, "
                 f"but the loaded device is "
-                f"<a href='{active_svg.as_uri()}' style='color: #0078d7;'>{active_svg.stem}</a> <br><br>"
+                f"<a href='{active_svg.as_uri()}' style='color: #0078d7;'>"
+                f"{active_svg.stem}</a> <br><br>"
                 f"Switch to {new_device_html}? Choosing No keeps the loaded "
                 f"device, whose channel wiring may not match this "
-                f"protocol's electrodes.")
+                f"protocol's electrodes."
+            )
         else:
             question = (
                 f"This protocol was authored for device {new_device_html}, "
                 f"and no device is currently loaded.<br><br>"
-                f"Load {new_device_html} into the Device viewer?")
-        if confirm(parent=None, message=question, title="Device mismatch",
-                   cancel=False) == YES:
-            publish_message(topic=DEVICE_VIEWER_LOAD_SVG_REQUEST,
-                            message=device_svg_path)
+                f"Load {new_device_html} into the Device viewer?"
+            )
+        if (
+            confirm(
+                parent=None, message=question, title="Device mismatch", cancel=False
+            )
+            == YES
+        ):
+            publish_message(
+                topic=DEVICE_VIEWER_LOAD_SVG_REQUEST, message=device_svg_path
+            )
 
     # --- experiment-bar handlers ------------------------------------
     @attempt_func_execution_with_error_dialog
@@ -941,8 +1019,7 @@ class ProtocolTreePane(QWidget):
             QTimer.singleShot(settling_ms, controller._flush)
             return
 
-        progress = QProgressDialog(
-            "Generating Run Report...", None, 0, 0, self)
+        progress = QProgressDialog("Generating Run Report...", None, 0, 0, self)
         progress.setWindowTitle("Please Wait")
         progress.setWindowModality(Qt.WindowModal)
         progress.setCancelButton(None)
@@ -960,7 +1037,7 @@ class ProtocolTreePane(QWidget):
                         logger.warning(f"deferred flush failed: {e}")
 
             worker = _FlushWorker(self)
-            worker_holder["w"] = worker          # keep reference alive
+            worker_holder["w"] = worker  # keep reference alive
             loop = QEventLoop()
             worker.finished.connect(loop.quit)
             worker.finished.connect(progress.close)
@@ -981,8 +1058,10 @@ class ProtocolTreePane(QWidget):
             file_url = QUrl.fromLocalFile(str(report_path)).toString(QUrl.FullyEncoded)
             success(
                 parent=None,
-                message=(f"Report file saved to:<br>"
-                         f"<a href='{file_url}'>{Path(report_path).name}</a>"),
+                message=(
+                    f"Report file saved to:<br>"
+                    f"<a href='{file_url}'>{Path(report_path).name}</a>"
+                ),
                 title="Run Summary Generated",
             )
         except Exception as e:
@@ -996,8 +1075,8 @@ class ProtocolTreePane(QWidget):
         error_dialog(
             parent=None,
             message="The run summary could not be generated.<br><br>"
-                    "The run's data files were still saved to the experiment "
-                    "directory.",
+            "The run's data files were still saved to the experiment "
+            "directory.",
             title="Run Summary Failed",
             detail=message,
         )
@@ -1135,8 +1214,11 @@ class ProtocolTreePane(QWidget):
         if not isinstance(target, GroupRow):
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Protocol", self._default_protocol_dir(),
-            PROTOCOL_FILE_DIALOG_FILTER)
+            self,
+            "Import Protocol",
+            self._default_protocol_dir(),
+            PROTOCOL_FILE_DIALOG_FILTER,
+        )
         if not path:
             return
         try:
@@ -1153,27 +1235,25 @@ class ProtocolTreePane(QWidget):
             type_idx = fields.index("type")
             name_idx = fields.index("name")
         except ValueError:
-            return            # malformed file — no fixed metadata
+            return  # malformed file — no fixed metadata
         # (index, col_id) pairs for the column-value positions:
         # everything except the reserved row-metadata fields.
         col_field_positions = [
-            (i, fid) for i, fid in enumerate(fields)
+            (i, fid)
+            for i, fid in enumerate(fields)
             if fid not in _RESERVED_ROW_METADATA_FIELDS
         ]
         # Build once — same across all rows; keyed by col_id for O(1)
         # lookup inside the loop.
-        live_by_col_id = {
-            c.model.col_id: c for c in self.manager.columns
-        }
+        live_by_col_id = {c.model.col_id: c for c in self.manager.columns}
 
-        for row in (data.get("rows") or []):
+        for row in data.get("rows") or []:
             # Top-level only — nested rows are not recursively
             # imported (deep-import out of scope; legacy parity).
             if int(row[depth_idx]) != 0:
                 continue
             if row[type_idx] == "group":
-                self.manager.add_group(
-                    parent_path=target_path, name=row[name_idx])
+                self.manager.add_group(parent_path=target_path, name=row[name_idx])
             else:
                 # Resolve each saved column id against the LIVE column
                 # set. Skip:
@@ -1199,5 +1279,6 @@ class ProtocolTreePane(QWidget):
                 # fixed metadata position.
                 values["name"] = row[name_idx]
                 self.manager.add_step(
-                    parent_path=target_path, values=values,
+                    parent_path=target_path,
+                    values=values,
                 )
