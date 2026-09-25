@@ -16,16 +16,47 @@ run synchronously on the thread that set the event, so these tests need no
 QApplication / event loop even for the worker-thread runs.
 """
 
+# Standard library imports.
+import threading
+import time
+
+# Microdrop package imports.
+from pluggable_protocol_tree.builtins.duration_column import (
+    DurationColumnHandler,
+    DurationColumnModel,
+    make_duration_column,
+)
+from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.exceptions import AbortError
+from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
+from pluggable_protocol_tree.models.column import (
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
+)
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.columns.readonly_label import (
+    ReadOnlyLabelColumnView,
+)
+from pluggable_protocol_tree.views.columns.spinbox import DoubleSpinBoxColumnView
 
 
 def test_executor_signals_constructible_without_qapplication():
     s = ExecutorSignals()
     # All eight expected events are present as attributes.
     for name in (
-        "protocol_started", "step_started", "step_finished",
-        "protocol_paused", "protocol_resumed",
-        "protocol_finished", "protocol_aborted", "protocol_error",
+        "protocol_started",
+        "step_started",
+        "step_finished",
+        "protocol_paused",
+        "protocol_resumed",
+        "protocol_finished",
+        "protocol_aborted",
+        "protocol_error",
     ):
         assert hasattr(s, name), f"missing signal: {name}"
 
@@ -57,22 +88,6 @@ def test_executor_signals_protocol_error_carries_message():
 
 # --- ProtocolExecutor public API ---
 
-import threading
-
-import pytest
-
-from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.execution.executor import ProtocolExecutor
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.builtins.id_column import make_id_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.duration_column import (
-    DurationColumnHandler, DurationColumnModel, make_duration_column,
-)
-from pluggable_protocol_tree.models.column import Column
-from pluggable_protocol_tree.views.columns.spinbox import DoubleSpinBoxColumnView
-
 
 def _fast_duration_column():
     """Like make_duration_column() but defaults to 0s so unit tests
@@ -80,10 +95,15 @@ def _fast_duration_column():
     demo and integration tests."""
     return Column(
         model=DurationColumnModel(
-            col_id="duration_s", col_name="Duration (s)", default_value=0.0,
+            col_id="duration_s",
+            col_name="Duration (s)",
+            default_value=0.0,
         ),
         view=DoubleSpinBoxColumnView(
-            low=0.0, high=3600.0, decimals=2, single_step=0.1,
+            low=0.0,
+            high=3600.0,
+            decimals=2,
+            single_step=0.1,
         ),
         handler=DurationColumnHandler(),
     )
@@ -91,8 +111,12 @@ def _fast_duration_column():
 
 def _make_executor():
     """Bare-bones executor with the four PPT-1 built-in columns."""
-    cols = [make_type_column(), make_id_column(),
-            make_name_column(), _fast_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     return ProtocolExecutor(
         row_manager=rm,
@@ -132,8 +156,12 @@ def test_executor_resume_emits_protocol_resumed():
 def test_executor_constructible_with_only_row_manager():
     """Headless / scripting use: pass just the row_manager and let
     signals / pause_event / stop_event default."""
-    cols = [make_type_column(), make_id_column(),
-            make_name_column(), _fast_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     ex = ProtocolExecutor(row_manager=rm)
     assert ex.signals is not None
@@ -142,8 +170,12 @@ def test_executor_constructible_with_only_row_manager():
 
 
 def test_executor_wait_returns_true_when_never_started():
-    cols = [make_type_column(), make_id_column(),
-            make_name_column(), _fast_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     ex = ProtocolExecutor(row_manager=rm)
     # Never called start(); wait should return True immediately.
@@ -151,8 +183,12 @@ def test_executor_wait_returns_true_when_never_started():
 
 
 def test_executor_wait_blocks_until_run_finishes():
-    cols = [make_type_column(), make_id_command if False else make_id_column(),
-            make_name_column(), _fast_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "A"})
     ex = ProtocolExecutor(row_manager=rm)
@@ -164,19 +200,28 @@ def test_executor_wait_blocks_until_run_finishes():
 
 
 def test_executor_execute_classmethod_blocks_by_default():
-    cols = [make_type_column(), make_id_column(),
-            make_name_column(), _fast_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "A"})
-    ex = ProtocolExecutor.execute(rm)   # blocking=True by default
+    ex = ProtocolExecutor.execute(rm)  # blocking=True by default
     # By the time execute returns, the worker thread is done.
     assert not ex._thread.is_alive()
 
 
 def test_executor_execute_classmethod_non_blocking_returns_immediately():
     import time as _time
-    cols = [make_type_column(), make_id_column(),
-            make_name_column(), make_duration_column()]   # full 1s default
+
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_duration_column(),
+    ]  # full 1s default
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "A"})
     t0 = _time.monotonic()
@@ -215,6 +260,7 @@ def test_executor_start_is_idempotent_while_running():
     """A second start() while already running should be a no-op (not
     a TypeError or a duplicate thread)."""
     import time
+
     ex = _make_executor()
     started_count = []
     # Make the protocol take a moment so the second start() races with it.
@@ -231,14 +277,13 @@ def test_executor_start_is_idempotent_while_running():
     )
     ex.row_manager.columns = list(ex.row_manager.columns) + [slow_col]
     ex.row_manager.add_step(values={"name": "A"})
-    ex.signals.observe(
-        lambda event: started_count.append(1), "protocol_started")
+    ex.signals.observe(lambda event: started_count.append(1), "protocol_started")
 
     ex.start()
     # Give the first start a head start before issuing the second one.
     time.sleep(0.05)
     first_thread = ex._thread
-    ex.start()              # should be a no-op
+    ex.start()  # should be a no-op
     assert ex._thread is first_thread, "start() must not replace the live thread"
 
     # Let the protocol finish.
@@ -263,43 +308,56 @@ def test_executor_stop_sets_stop_event_and_clears_pause():
 
 # --- ProtocolExecutor.run() — main loop ---
 
-import time
-
-from pluggable_protocol_tree.execution.signals import ExecutorSignals
-
 
 class _SignalSpy:
     """Collects event emissions into a list for assertion."""
+
     def __init__(self, sigs: ExecutorSignals):
         self.events = []
-        sigs.observe(lambda e: self.events.append(("protocol_started",)), "protocol_started")
-        sigs.observe(lambda e: self.events.append(("step_started", e.new[0].name)), "step_started")
-        sigs.observe(lambda e: self.events.append(("step_finished", e.new.name)), "step_finished")
-        sigs.observe(lambda e: self.events.append(("protocol_finished",)), "protocol_finished")
-        sigs.observe(lambda e: self.events.append(("protocol_aborted",)), "protocol_aborted")
-        sigs.observe(lambda e: self.events.append(("protocol_error", e.new)), "protocol_error")
+        sigs.observe(
+            lambda e: self.events.append(("protocol_started",)), "protocol_started"
+        )
+        sigs.observe(
+            lambda e: self.events.append(("step_started", e.new[0].name)),
+            "step_started",
+        )
+        sigs.observe(
+            lambda e: self.events.append(("step_finished", e.new.name)), "step_finished"
+        )
+        sigs.observe(
+            lambda e: self.events.append(("protocol_finished",)), "protocol_finished"
+        )
+        sigs.observe(
+            lambda e: self.events.append(("protocol_aborted",)), "protocol_aborted"
+        )
+        sigs.observe(
+            lambda e: self.events.append(("protocol_error", e.new)), "protocol_error"
+        )
 
 
 def test_run_empty_protocol_emits_started_then_finished():
     ex = _make_executor()
     spy = _SignalSpy(ex.signals)
-    ex.run()       # synchronous; bypasses start()/QThread
+    ex.run()  # synchronous; bypasses start()/QThread
     assert spy.events[0] == ("protocol_started",)
     assert spy.events[-1] == ("protocol_finished",)
 
 
 def test_run_three_steps_emits_step_signals_in_order():
     ex = _make_executor()
-    a = ex.row_manager.add_step(values={"name": "A"})
-    b = ex.row_manager.add_step(values={"name": "B"})
-    c = ex.row_manager.add_step(values={"name": "C"})
+    ex.row_manager.add_step(values={"name": "A"})
+    ex.row_manager.add_step(values={"name": "B"})
+    ex.row_manager.add_step(values={"name": "C"})
     spy = _SignalSpy(ex.signals)
     ex.run()
     step_events = [e for e in spy.events if e[0] in ("step_started", "step_finished")]
     assert step_events == [
-        ("step_started", "A"), ("step_finished", "A"),
-        ("step_started", "B"), ("step_finished", "B"),
-        ("step_started", "C"), ("step_finished", "C"),
+        ("step_started", "A"),
+        ("step_finished", "A"),
+        ("step_started", "B"),
+        ("step_finished", "B"),
+        ("step_started", "C"),
+        ("step_finished", "C"),
     ]
 
 
@@ -355,30 +413,30 @@ def test_run_stop_while_paused_breaks_out():
 
 # --- priority bucket fan-out ---
 
-from traits.api import HasTraits, Int, List, provides, Str
-
-from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
-from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
-)
-from pluggable_protocol_tree.views.columns.readonly_label import (
-    ReadOnlyLabelColumnView,
-)
-
 
 def _recording_handler(name, priority, log: list, barrier=None):
     """Build a handler that appends (name, hook_name) to `log` on each
     fire. Optional `barrier` makes the handler block on a threading
     barrier inside on_step (used to prove parallel execution)."""
+
     class _H(BaseColumnHandler):
-        def on_protocol_start(self, ctx):  log.append((name, "on_protocol_start"))
-        def on_pre_step(self, row, ctx):   log.append((name, "on_pre_step"))
+        def on_protocol_start(self, ctx):
+            log.append((name, "on_protocol_start"))
+
+        def on_pre_step(self, row, ctx):
+            log.append((name, "on_pre_step"))
+
         def on_step(self, row, ctx):
             log.append((name, "on_step"))
             if barrier is not None:
                 barrier.wait(timeout=2.0)
-        def on_post_step(self, row, ctx):  log.append((name, "on_post_step"))
-        def on_protocol_end(self, ctx):    log.append((name, "on_protocol_end"))
+
+        def on_post_step(self, row, ctx):
+            log.append((name, "on_post_step"))
+
+        def on_protocol_end(self, ctx):
+            log.append((name, "on_protocol_end"))
+
     h = _H()
     h.priority = priority
     return h
@@ -396,12 +454,16 @@ def _executor_with(cols):
     """Build an executor on a fresh RowManager containing one step,
     with the given extra columns layered on top of the four PPT-1
     builtins (so iter_execution_steps yields one row)."""
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.builtins.id_column import make_id_column
     from pluggable_protocol_tree.builtins.name_column import make_name_column
-    from pluggable_protocol_tree.builtins.duration_column import make_duration_column
-    builtins = [make_type_column(), make_id_column(),
-                make_name_column(), _fast_duration_column()]
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    builtins = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        _fast_duration_column(),
+    ]
     rm = RowManager(columns=builtins + list(cols))
     rm.add_step(values={"name": "A"})
     return ProtocolExecutor(
@@ -416,7 +478,7 @@ def test_run_hooks_orders_buckets_by_priority():
     log = []
     low = _make_recording_column("low", priority=10, log=log)
     high = _make_recording_column("high", priority=30, log=log)
-    ex = _executor_with([high, low])   # deliberately shuffled
+    ex = _executor_with([high, low])  # deliberately shuffled
     ex.run()
     on_step_calls = [name for (name, hook) in log if hook == "on_step"]
     # All low (priority 10) before any high (priority 30)
@@ -461,18 +523,23 @@ def test_run_hooks_all_five_phases_fire_in_order_for_one_step():
     c_calls = [hook for (name, hook) in log if name == "c"]
     assert c_calls == [
         "on_protocol_start",
-        "on_pre_step", "on_step", "on_post_step",
+        "on_pre_step",
+        "on_step",
+        "on_post_step",
         "on_protocol_end",
     ]
 
 
 # --- same-topic conflict + error propagation ---
 
+
 def _handler_with_topic(name, priority, topic, log):
     class _H(BaseColumnHandler):
         wait_for_topics = [topic]
+
         def on_step(self, row, ctx):
             log.append((name, "on_step"))
+
     h = _H()
     h.priority = priority
     return h
@@ -512,8 +579,6 @@ def test_same_topic_different_priority_buckets_is_fine():
 
 
 def test_hook_exception_emits_protocol_error_not_finished():
-    log = []
-
     class _Boom(BaseColumnHandler):
         def on_step(self, row, ctx):
             raise RuntimeError("kaboom")
@@ -542,6 +607,7 @@ def test_on_protocol_end_runs_even_on_error():
     class _Boom(BaseColumnHandler):
         def on_step(self, row, ctx):
             raise RuntimeError("kaboom")
+
         def on_protocol_end(self, ctx):
             log.append("end_ran")
 
@@ -559,11 +625,11 @@ def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
     """If both on_step AND on_protocol_end raise, the original error
     wins (it's what surfaces as protocol_error) and the on_protocol_end
     exception is logged but not re-raised."""
-    log = []
 
     class _DoubleBoom(BaseColumnHandler):
         def on_step(self, row, ctx):
             raise RuntimeError("first")
+
         def on_protocol_end(self, ctx):
             raise RuntimeError("second")
 
@@ -584,12 +650,13 @@ def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
 def test_hook_error_message_names_step_column_and_hook():
     """A failing hook surfaces a protocol_error whose message names the
     step, the column and the hook (not just the bare exception)."""
+
     class _Boom(BaseColumnHandler):
         def on_step(self, row, ctx):
             raise RuntimeError("kaboom")
+
     col = Column(
-        model=BaseColumnModel(col_id="magnet", col_name="Magnet",
-                              default_value=None),
+        model=BaseColumnModel(col_id="magnet", col_name="Magnet", default_value=None),
         view=ReadOnlyLabelColumnView(),
         handler=_Boom(),
     )
@@ -597,22 +664,24 @@ def test_hook_error_message_names_step_column_and_hook():
     spy = _SignalSpy(ex.signals)
     ex.run()
     err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
-    assert "Step 1" in err          # which step
-    assert "Magnet" in err          # which column
-    assert "on_step" in err         # which hook
-    assert "kaboom" in err          # original cause preserved
+    assert "Step 1" in err  # which step
+    assert "Magnet" in err  # which column
+    assert "on_step" in err  # which hook
+    assert "kaboom" in err  # original cause preserved
 
 
 def test_wait_for_timeout_message_names_topic():
     """A wait_for timeout names the topic it was waiting for and the
     likely cause, surfaced through the step/column annotation."""
+
     class _Waiter(BaseColumnHandler):
         wait_for_topics = ["dropbot/applied"]
+
         def on_step(self, row, ctx):
             ctx.wait_for("dropbot/applied", timeout=0.05)
+
     col = Column(
-        model=BaseColumnModel(col_id="w", col_name="Waiter",
-                              default_value=None),
+        model=BaseColumnModel(col_id="w", col_name="Waiter", default_value=None),
         view=ReadOnlyLabelColumnView(),
         handler=_Waiter(),
     )
@@ -620,34 +689,43 @@ def test_wait_for_timeout_message_names_topic():
     spy = _SignalSpy(ex.signals)
     ex.run()
     err = [e for e in spy.events if e[0] == "protocol_error"][0][1]
-    assert "dropbot/applied" in err          # WHAT timed out (topic)
-    assert "Timed out after 0.05s" in err     # the timeout cause
-    assert "Waiter" in err                    # which column
+    assert "dropbot/applied" in err  # WHAT timed out (topic)
+    assert "Timed out after 0.05s" in err  # the timeout cause
+    assert "Waiter" in err  # which column
 
 
 # --- lifecycle hooks, executor-owned repeats, pre-protocol wait (PR #468) ---
 
-from pluggable_protocol_tree.execution.exceptions import AbortError
-
 
 def test_executor_signals_includes_wait_and_repetition_signals():
     s = ExecutorSignals()
-    for name in ("protocol_wait_started", "protocol_wait_finished",
-                 "protocol_repetition_finished"):
+    for name in (
+        "protocol_wait_started",
+        "protocol_wait_finished",
+        "protocol_repetition_finished",
+    ):
         assert hasattr(s, name), f"missing signal: {name}"
 
 
 def _lifecycle_handler(name, priority, log, *, on_pre=None):
     """Execution-only handler that logs the lifecycle hooks. `on_pre` (if
     given) runs inside on_pre_protocol_start, receiving the ProtocolContext."""
+
     class _H(BaseColumnHandler):
         def on_pre_protocol_start(self, ctx):
             log.append((name, "pre"))
             if on_pre is not None:
                 on_pre(ctx)
-        def on_protocol_start(self, ctx):     log.append((name, "start"))
-        def on_protocol_end(self, ctx):       log.append((name, "end"))
-        def on_post_protocol_end(self, ctx):  log.append((name, "post"))
+
+        def on_protocol_start(self, ctx):
+            log.append((name, "start"))
+
+        def on_protocol_end(self, ctx):
+            log.append((name, "end"))
+
+        def on_post_protocol_end(self, ctx):
+            log.append((name, "post"))
+
     h = _H()
     h.priority = priority
     return h
@@ -659,12 +737,13 @@ def test_lifecycle_hooks_once_per_run_while_per_rep_hooks_repeat():
     protocol_repetition_finished reports progress."""
     log = []
     h = _lifecycle_handler("L", priority=900, log=log)
-    ex = _executor_with([])           # one step
+    ex = _executor_with([])  # one step
     ex.lifecycle_handlers = [h]
     ex._repeats = 3
     reps = []
     ex.signals.observe(
-        lambda event: reps.append(event.new), "protocol_repetition_finished")
+        lambda event: reps.append(event.new), "protocol_repetition_finished"
+    )
     ex.run()
     hooks = [hook for (n, hook) in log if n == "L"]
     assert hooks.count("pre") == 1
@@ -679,17 +758,18 @@ def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
     lower-priority pre hooks fire; teardown hooks still run; the run aborts
     without ever announcing protocol_started."""
     log = []
-    early = _lifecycle_handler("early", priority=10, log=log,
-                               on_pre=lambda ctx: ctx.stop_event.set())
+    early = _lifecycle_handler(
+        "early", priority=10, log=log, on_pre=lambda ctx: ctx.stop_event.set()
+    )
     late = _lifecycle_handler("late", priority=900, log=log)
     ex = _executor_with([])
     ex.lifecycle_handlers = [early, late]
     spy = _SignalSpy(ex.signals)
     ex.run()
     late_hooks = [h for (n, h) in log if n == "late"]
-    assert ("early", "pre") in log          # early ran
-    assert "pre" not in late_hooks          # short-circuited
-    assert "post" in late_hooks             # teardown still runs
+    assert ("early", "pre") in log  # early ran
+    assert "pre" not in late_hooks  # short-circuited
+    assert "post" in late_hooks  # teardown still runs
     assert ("protocol_started",) not in spy.events
     assert spy.events[-1] == ("protocol_aborted",)
 
@@ -697,9 +777,11 @@ def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
 def test_hook_abort_error_routes_to_aborted_not_error():
     """AbortError from a hook (e.g. Stop during a pre-protocol dialog) is a
     clean cancellation, not a protocol_error."""
+
     class _Aborter(BaseColumnHandler):
         def on_step(self, row, ctx):
             raise AbortError("stop during hook")
+
     col = Column(
         model=BaseColumnModel(col_id="a", col_name="A", default_value=None),
         view=ReadOnlyLabelColumnView(),
@@ -716,19 +798,22 @@ def test_pre_protocol_wait_emits_signals_and_blocks():
     """A hook contributing wait seconds triggers the wait phase: the executor
     emits protocol_wait_started(ms) / protocol_wait_finished and blocks."""
     log = []
-    h = _lifecycle_handler("w", priority=900, log=log,
-                           on_pre=lambda ctx: ctx.add_pre_protocol_wait(0.05))
+    h = _lifecycle_handler(
+        "w", priority=900, log=log, on_pre=lambda ctx: ctx.add_pre_protocol_wait(0.05)
+    )
     ex = _executor_with([])
     ex.lifecycle_handlers = [h]
     events = []
     ex.signals.observe(
-        lambda event: events.append(("start", event.new)), "protocol_wait_started")
+        lambda event: events.append(("start", event.new)), "protocol_wait_started"
+    )
     ex.signals.observe(
-        lambda event: events.append(("finished",)), "protocol_wait_finished")
+        lambda event: events.append(("finished",)), "protocol_wait_finished"
+    )
     t0 = time.monotonic()
     ex.run()
     elapsed = time.monotonic() - t0
-    assert events[0] == ("start", 50)        # 0.05 s -> 50 ms
+    assert events[0] == ("start", 50)  # 0.05 s -> 50 ms
     assert ("finished",) in events
     assert elapsed >= 0.05
 
@@ -750,13 +835,13 @@ def test_wait_pre_protocol_returns_early_on_stop():
 
     threading.Thread(target=stopper, daemon=True).start()
     t0 = time.monotonic()
-    ex._wait_pre_protocol(5.0)          # 5 s, but stop fires at ~50 ms
+    ex._wait_pre_protocol(5.0)  # 5 s, but stop fires at ~50 ms
     assert time.monotonic() - t0 < 1.0
 
 
 def test_wait_pre_protocol_freezes_while_paused():
     ex = _make_executor()
-    ex.pause_event.set()                 # paused before the wait starts
+    ex.pause_event.set()  # paused before the wait starts
 
     def resumer():
         time.sleep(0.1)
@@ -764,10 +849,8 @@ def test_wait_pre_protocol_freezes_while_paused():
 
     threading.Thread(target=resumer, daemon=True).start()
     t0 = time.monotonic()
-    ex._wait_pre_protocol(0.05)          # frozen until resume, then 0.05 s
+    ex._wait_pre_protocol(0.05)  # frozen until resume, then 0.05 s
     assert time.monotonic() - t0 >= 0.1  # paused time did not count down
-
-
 
 
 # --- scoped runs ("Run Selected Steps", issue #558) ---
@@ -788,8 +871,7 @@ def _scoped_executor():
 
 def _names_of_run(ex, **start_kwargs):
     started = []
-    ex.signals.observe(lambda event: started.append(event.new[0].name),
-                       "step_started")
+    ex.signals.observe(lambda event: started.append(event.new[0].name), "step_started")
     ex.start(**start_kwargs)
     assert ex.wait(timeout=10) is True
     return started
