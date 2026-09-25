@@ -109,9 +109,6 @@ ignore_imports =
 
     # --- Seeded debt: microdrop_application (the core plugin) reaching into
     # hardware/UI plugin internals in its wiring code ---
-    microdrop_application.task -> dropbot_controller.models.self_tests
-    microdrop_application.task -> dropbot_controller.models.shorts
-    microdrop_application.task -> dropbot_tools_menu.self_test_dialogs
     microdrop_application.application -> dropbot_tools_menu.menus
     microdrop_application.application -> dropbot_tools_menu.plugin
 

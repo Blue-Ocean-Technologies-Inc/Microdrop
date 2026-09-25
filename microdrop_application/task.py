@@ -8,28 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
-# system imports.
-import json
-
+# Third-party imports.
 import dramatiq
-from PySide6.QtCore import QTimer
-
-from pyface.api import GUI
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
 from pyface.tasks.api import PaneItem, Task, TaskLayout, VSplitter
 from traits.api import Instance, provides
 
-from dropbot_controller.models.self_tests import SelfTestResultsSignal, TestEvent
-from dropbot_controller.models.shorts import ShortsDetectedSignal
-from dropbot_tools_menu.self_test_dialogs import (
-    ResultsDialogAction,
-    WaitForTestDialogAction,
-)
+# Microdrop package imports.
+from dropbot_controller.consts import ShortsDetectedSignal
 from electrode_controller.consts import disabled_channels_changed_publisher
 from microdrop_application.views.microdrop_pane import MicrodropCentralCanvas
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
@@ -43,6 +36,7 @@ from .menus import AdvancedModeAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -54,9 +48,6 @@ class MicrodropTask(Task):
     # 'IDramatiqControllerBase' interface.
     ##########################################################
 
-    # Child window should be an instance of Dialog Action
-    wait_for_test_dialog = Instance(WaitForTestDialogAction)
-    results_dialog = Instance(ResultsDialogAction)
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     microdrop_preferences = Instance(MicrodropPreferences)
 
@@ -144,108 +135,6 @@ class MicrodropTask(Task):
     def show_help(self):
         """Show the help dialog."""
         logger.info("Showing help dialog.")
-
-    ##########################################################
-    # Including below function permanently this class, so no need to
-    # dynamically attach it in dropbot_tools_menu/plugin.py
-    # This callback is registered in ACTOR_TOPIC_DICT of dropbot_tools_menu and
-    # does nothing if that plugin is not loaded
-    # The relevant code has to be here since the dialogs need to be manipulated
-    # from the main task
-    ###########################################################
-
-    def _on_self_tests_progress_triggered(self, raw_message):
-        try:
-            data = json.loads(raw_message)
-            event_type = data.get("type")
-            payload = data.get("payload", {})
-        except ValueError:
-            return
-
-        # 1. Dispatch based on Explicit Event Type
-        if event_type == TestEvent.SESSION_START:
-            self._handle_session_start(payload)
-
-        elif event_type == TestEvent.PROGRESS:
-            self._handle_progress(payload)
-
-        elif event_type == TestEvent.SESSION_END:
-            self._handle_session_end(payload)
-
-    # --- Separated Logic Handlers ---
-
-    def _handle_session_start(self, payload):
-        self._total_tests = total = payload.get("total_tests", 0)
-
-        def _show():
-            self.wait_for_test_dialog = WaitForTestDialogAction()
-            mode = "progress_bar" if total > 1 else "spinner"
-
-            if total == 1:
-                test = payload.get("tests")[0].replace("_", " ").title()
-                test_name = f"Running Dropbot Self Test: {test}"
-            else:
-                test_name = "Running All Dropbot Self Tests..."
-
-            self.wait_for_test_dialog.perform(self, test_name=test_name, mode=mode)
-
-        GUI.invoke_later(_show)
-
-    def _handle_progress(self, payload):
-        # message sent right before test is run
-        # So the last test was completed.
-        name = payload.get("test_name", "")
-        idx = int(payload.get("test_index", 0))
-
-        def _update():
-            if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
-                # You might need to pass 'total' in payload or store it in self
-                # For now assuming percentage is calculated here or passed
-                self.wait_for_test_dialog.set_progress(
-                    int(idx * 100 / self._total_tests), name
-                )
-
-        GUI.invoke_later(_update)
-
-    def _handle_session_end(self, payload):
-
-        def _cleanup_reference():
-            if hasattr(self, "wait_for_test_dialog") and self.wait_for_test_dialog:
-                self.wait_for_test_dialog.close()
-                self.wait_for_test_dialog = None  # Cleanup reference
-
-        def _close():
-            self.wait_for_test_dialog.set_progress_end(
-                "Dropbot Self Test(s) are Complete! \n\n"
-                "Report will be opened shortly..."
-            )
-            QTimer.singleShot(1200, _cleanup_reference)
-
-        GUI.invoke_later(_close)
-
-    def _on_self_tests_results_triggered(self, message):
-        """Present a single self-test's results dialog (#611).
-
-        The backend (`dropbot_self_tests_mixin_service`) writes the raw test
-        results to a JSON file and publishes its path, never a live
-        `matplotlib.Figure`, so it never has to import Qt or
-        `dropbot_tools_menu`; this task owns showing the dialog, same as the
-        progress dialog above, and the dialog itself loads and plots the
-        file interactively.
-        """
-        signal = SelfTestResultsSignal.model_validate_json(message)
-
-        def _show():
-            self.results_dialog = ResultsDialogAction()
-            self.results_dialog.perform(
-                self,
-                title=signal.title,
-                test_name=signal.test_name,
-                results_path=signal.results_path,
-                failed_channels=signal.failed_channels,
-            )
-
-        GUI.invoke_later(_show)
 
     def _on_shorts_detected_triggered(self, message):
         """
