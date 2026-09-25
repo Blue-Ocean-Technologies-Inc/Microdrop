@@ -32,14 +32,11 @@ name: Unit tests and import contract
 # prefix-dev/setup-pixi. The lock covers linux-64, so jobs run on the
 # default x86_64 runner.
 #
-# Known-failing baseline (pytest job): this selection currently has 139 failing tests
-# and 3 collection errors out of 1363 (verified locally on main @ a3f32b9a,
-# win-64, before this workflow existed -- not introduced by this change).
-# Most cluster in pluggable_protocol_tree/tests (103) and
-# video_protocol_controls/tests (13). The pytest step runs with
-# continue-on-error so the job stays green on merge while those pre-existing
-# failures stay visible as an annotated warning in the run -- fixing them is
-# tracked as a follow-up, not silently swallowed here.
+# The pytest step must pass: a failing test fails the job. It once ran with
+# continue-on-error over a known-failing baseline, which hid that the
+# runner could not even collect the Qt-importing modules (so no test ran at
+# all); keep it strict. Mark a genuinely pending case xfail(strict=True)
+# with a reason instead of relaxing the step.
 
 on:
   pull_request:
@@ -124,9 +121,6 @@ jobs:
         working-directory: launcher/microdrop-py/src
         env:
           QT_QPA_PLATFORM: offscreen
-        # continue-on-error: see "Known-failing baseline" above -- remove
-        # once the pre-existing failures are fixed or explicitly deselected.
-        continue-on-error: true
         run: |
           pixi run --manifest-path ../pyproject.toml python -m pytest . -q \
             --ignore-glob="**/tests_with_redis_server_need" \
