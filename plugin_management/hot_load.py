@@ -33,13 +33,17 @@ prompt — always correct, just slower. A refusal returns its REASON (a short
 human-readable string, also logged) so the relaunch dialog can say why the
 change could not be applied live instead of looking like arbitrary nagging.
 """
+
+# Standard library imports.
 import importlib
 import importlib.metadata as importlib_metadata
 import sys
 
-from plugin_management.entry_point_discovery import (
-    discover_entry_point_manifests)
+# Microdrop package imports.
+from plugin_management.entry_point_discovery import discover_entry_point_manifests
 from plugin_management.group_manager import PluginGroupManager
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -76,7 +80,12 @@ def _dist_top_modules(dist_name):
     RECORD. The group specs name only the plugin-class modules; a dist may
     ship additional top-level helper packages those modules import — purging
     by specs alone leaves them cached, and the fresh re-import silently binds
-    old helper code under the new version. Empty set if not installed."""
+    old helper code under the new version. Empty set if not installed, or if
+    no dist_name was given at all (Distribution.from_name("") raises
+    ValueError rather than PackageNotFoundError)."""
+    if not dist_name:
+        return set()
+
     try:
         dist = importlib_metadata.distribution(dist_name)
     except importlib_metadata.PackageNotFoundError:
@@ -112,13 +121,13 @@ def purge_plugin_modules(plugin_specs, dist_name=""):
     install → uninstall → reinstall cycle, and an in-place version change,
     hot-load instead of demanding a relaunch."""
     tops = _top_modules(plugin_specs) | _dist_top_modules(dist_name)
-    purged = [name for name in list(sys.modules)
-              if name.split(".")[0] in tops]
+    purged = [name for name in list(sys.modules) if name.split(".")[0] in tops]
     for name in purged:
         del sys.modules[name]
     if purged:
-        logger.info(f"purged {len(purged)} module(s) under {sorted(tops)} "
-                    f"for reinstall")
+        logger.info(
+            f"purged {len(purged)} module(s) under {sorted(tops)} for reinstall"
+        )
     return purged
 
 
@@ -136,8 +145,9 @@ def unload_for_change(manager, application, manifest_name, dist_name=""):
     fully isolated (no cross-plugin imports; they can run as separate
     processes), so after disable() nothing else references their modules."""
     specs = []
-    for name in [n for n, g in manager.groups.items()
-                 if g.manifest_name == manifest_name]:
+    for name in [
+        n for n, g in manager.groups.items() if g.manifest_name == manifest_name
+    ]:
         specs += manager.groups[name].plugin_specs
         if manager.is_loaded(name):
             manager.disable(application, name)
@@ -159,8 +169,7 @@ def hot_load_installed(application, manager, dist_name, diff) -> str | None:
     try:
         return _hot_load_installed(application, manager, dist_name, diff)
     except Exception:
-        logger.exception(
-            f"hot-load of '{dist_name}' failed; falling back to relaunch")
+        logger.exception(f"hot-load of '{dist_name}' failed; falling back to relaunch")
         return "an unexpected error occurred (see the log)"
 
 
@@ -173,8 +182,7 @@ def _refuse(dist_name, reason):
 def _hot_load_installed(application, manager, dist_name, diff):
     norm = PluginGroupManager._norm_dist
     if diff is None:
-        return _refuse(dist_name,
-                       "the environment change could not be determined")
+        return _refuse(dist_name, "the environment change could not be determined")
     # The target dist changing ITSELF (in-place version change) is allowed:
     # the caller unloads + purges its modules first, and the sys.modules
     # guard below still refuses if that didn't happen. Any OTHER package
@@ -182,8 +190,10 @@ def _hot_load_installed(application, manager, dist_name, diff):
     moved = sorted(diff.changed) + sorted(diff.removed)
     blocking = [m for m in moved if norm(m) != norm(dist_name)]
     if blocking:
-        return _refuse(dist_name, f"existing packages were changed or "
-                                  f"removed: {', '.join(blocking)}")
+        return _refuse(
+            dist_name,
+            f"existing packages were changed or removed: {', '.join(blocking)}",
+        )
 
     # Snapshot sys.modules BEFORE discovery. discover_entry_point_manifests()
     # reads each entry point's package-data manifest via
@@ -198,16 +208,21 @@ def _hot_load_installed(application, manager, dist_name, diff):
     # import_module goes through is not.
     importlib.invalidate_caches()
 
-    mine = [(m, d) for m, d in discover_entry_point_manifests()
-            if norm(d) == norm(dist_name)]
+    mine = [
+        (m, d)
+        for m, d in discover_entry_point_manifests()
+        if norm(d) == norm(dist_name)
+    ]
     if not mine:
         return _refuse(dist_name, "no plugin manifest was found for it")
 
     for manifest, _ in mine:
         live = sorted(set(_live_modules(manifest, already_imported)))
         if live:
-            return _refuse(dist_name, f"{', '.join(live)} is already loaded "
-                                      f"from an earlier install")
+            return _refuse(
+                dist_name,
+                f"{', '.join(live)} is already loaded from an earlier install",
+            )
 
     names = []
     try:
@@ -224,8 +239,9 @@ def _hot_load_installed(application, manager, dist_name, diff):
 
     not_loaded = [n for n in names if not manager.is_loaded(n)]
     if not_loaded:
-        return _refuse(dist_name, f"plugin groups failed to load: "
-                                  f"{', '.join(not_loaded)}")
+        return _refuse(
+            dist_name, f"plugin groups failed to load: {', '.join(not_loaded)}"
+        )
 
     logger.info(f"hot-loaded '{dist_name}': enabled groups {names}")
     return None
