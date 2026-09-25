@@ -29,7 +29,10 @@ from portable_dropbot_controller.consts import (
     FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S,
     FLUORESCENCE_STEP_TIMEOUT_MARGIN_S,
 )
-from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
+from portable_dropbot_protocol_controls.consts import (
+    FLUORESCENCE_CAPTURE_COLUMN_ID,
+    PMT_CAPTURE_COLUMN_ID,
+)
 from portable_dropbot_protocol_controls.protocol_columns.fluorescence_capture_column import (  # noqa: E501
     FluorescenceCaptureHandler,
     FluorescenceStepCaptureColumnModel,
@@ -80,6 +83,9 @@ STEP_VALUE = {"park_motor": False, "entries": [ENTRY_START, ENTRY_END, ENTRY_BOT
 def _row(value=None, uuid="row-uuid", dotted_path="1.2"):
     row = MagicMock()
     setattr(row, FLUORESCENCE_CAPTURE_COLUMN_ID, value)
+    # The sibling capture column is empty on a real row; a bare MagicMock
+    # auto-creates a truthy attribute for it, tripping check_single_capture.
+    setattr(row, PMT_CAPTURE_COLUMN_ID, None)
     row.uuid = uuid
     row.dotted_path.return_value = dotted_path
 
