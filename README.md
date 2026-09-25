@@ -5,7 +5,8 @@
 <h1 align="center">MicroDrop</h1>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/status-in_development-yellow" alt="In Development"></a>
+  <a href="#disclaimer--license"><img src="https://img.shields.io/badge/status-beta-orange" alt="Beta"></a>
+  <a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/actions/workflows/unit-tests.yml?query=branch%3Amain"><img src="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/actions/workflows/unit-tests.yml/badge.svg?branch=main" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPLv3-blue" alt="AGPLv3"></a>
   <a href="https://prefix.dev/channels/microdrop-plugins"><img src="https://img.shields.io/badge/plugins-prefix.dev%2Fmicrodrop--plugins-green" alt="Plugin channel"></a>
 </p>
