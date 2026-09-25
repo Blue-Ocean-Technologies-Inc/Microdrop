@@ -24,9 +24,7 @@ from pyface.qt.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
-    QVBoxLayout,
     QWidget,
 )
 from pyface.tasks.api import TraitsDockPane
@@ -55,7 +53,7 @@ from microdrop_status_bar.consts import (
 )
 
 # Microdrop style imports.
-from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
+from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.colors import BLACK, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.helpers import (
@@ -71,7 +69,6 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
-    CollapsibleVStackBox,
     PulsingLabel,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
@@ -96,7 +93,6 @@ from ..consts import (
 from ..controllers.device_viewer_message_controller import (
     DeviceViewerMessageController,
 )
-from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
@@ -119,8 +115,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
 from ..utils.message_utils import gui_models_to_message_model
-from .alpha_view.alpha_table import alpha_table_view
-from .calibration_view.widget import CalibrationController, CalibrationWidget
 from .camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -131,17 +125,15 @@ from .camera_alignment_view.alignment_settings import (
     SETTING_TRAITS,
     AlignmentSettingsModel,
 )
-from .camera_control_view.widget import CameraControlWidget
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
-from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import (
-    ExecutionSettingsView,
-    RouteLayerView,
-)
-from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
-from .zone_view.zones_sidebar import zones_view
+from .sidebar.calibration import build_calibration
+from .sidebar.camera_controls import build_camera_controls
+from .sidebar.host import build_sidebar
+from .sidebar.paths import build_paths
+from .sidebar.viewport_controls import build_viewport_controls
+from .sidebar.zones import build_zones
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -1265,146 +1257,54 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # --- Right Side: Collapsible Scroll Area ---
 
-        # Create the Scroll Area and its container
-        self.scroll_area = scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-
-        # Initially hide the scroll area
-        scroll_area.setVisible(True)
-
-        self.scroll_content = scroll_content = QWidget()
-
-        scroll_layout = QVBoxLayout(scroll_content)
-
         # device_view code
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
-        #### Side Bar widgets init #####
+        #### Side Bar sections, top to bottom #####
+        viewport_section = build_viewport_controls(self.model)
+        self.viewport_controls_widget = viewport_section.widget
 
-        # alpha_view code
-        self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
-
-        # layer_view code
-        layer_view = RouteLayerView
-        self.layer_ui = self.model.edit_traits(view=layer_view)
-        self.execution_settings_ui = self.model.edit_traits(view=ExecutionSettingsView)
-
-        # mode_picker_view code
-        _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
-        self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
-
-        # camera_control_widget code
         # status_bar_manager is typically None at create_contents time (the
         # MicrodropTask creates it in activated(), which runs after dock pane
         # creation). _setup_app_statusbar below re-pushes the manager once
         # the trait fires.
-        self.camera_control_widget = CameraControlWidget(
+        camera_section = build_camera_controls(
             self.model,
             self.video_item,
             self.scene,
             self.app_preferences,
             status_bar_manager=self.task.window.status_bar_manager,
             source_providers=self._camera_source_providers,
+            on_align_camera=self._on_open_camera_alignment,
+            on_go_to_endpoint=self._on_go_to_endpoint,
         )
+        self.camera_control_widget = camera_section.camera_control_widget
+        self.alpha_view_ui = camera_section.alpha_view_ui
 
-        # keep the camera toggled button in sync with the alpha map.
-        # self.camera_control_widget.camera_toggle_button.toggled.connect(
-        #     lambda checked: self.model.set_visible(video_key, checked)
-        # )
+        paths_section = build_paths(self.model, pane=self)
+        self.layer_ui = paths_section.layer_ui
+        self.execution_settings_ui = paths_section.execution_settings_ui
+        self.execution_settings_box = paths_section.execution_settings_box
+        self.mode_picker_view = paths_section.mode_picker_view
 
-        # calibration_view code
-        self.calibration_view = CalibrationWidget()
-        self.calibration_controller = CalibrationController(
-            model=self.model.calibration, view=self.calibration_view
+        zones_section = build_zones(self.model)
+        self.zones_ui = zones_section.zones_ui
+        self.zones_controller = zones_section.zones_controller
+
+        calibration_section = build_calibration(self.model.calibration)
+        self.calibration_view = calibration_section.widget
+        self.calibration_controller = calibration_section.calibration_controller
+
+        self.scroll_area = scroll_area = build_sidebar(
+            [
+                viewport_section,
+                camera_section,
+                paths_section,
+                zones_section,
+                calibration_section,
+            ]
         )
-
-        self.zones_controller = ZonesController(model=self.model)
-        self.zones_ui = self.model.zones.edit_traits(view=zones_view)
-
-        vm = ZoomViewModel(model=self.model)
-        self.viewport_controls_widget = ZoomControlWidget(vm)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Viewport Controls", control_widgets=self.viewport_controls_widget
-            )
-        )
-
-        # Camera Alignment: the manual per-device endpoint workflow.
-        # Lives right under the camera-control button grid.
-        alignment_widget = QWidget()
-        alignment_layout = QHBoxLayout(alignment_widget)
-        for label, handler, tip in (
-            (
-                "Align Camera",
-                self._on_open_camera_alignment,
-                "Place this device's endpoint on the SVG and drag the "
-                "corner dots onto its outline in a captured camera frame",
-            ),
-            (
-                "Go To Endpoint",
-                self._on_go_to_endpoint,
-                "Glide the marked points onto this device's saved endpoint",
-            ),
-        ):
-            action_button = QPushButton(label)
-            # The sidebar's theme stylesheet renders QPushButton text
-            # in the Material Symbols icon font — these buttons carry
-            # real words, so they get the text-button font override.
-            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
-            action_button.setToolTip(tip)
-            action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button, 1)
-
-        camera_controls_box = CollapsibleVStackBox(
-            "Camera Controls",
-            control_widgets=[
-                self.camera_control_widget,
-                alignment_widget,
-                self.alpha_view_ui.control,
-            ],
-        )
-        # Same side margins and gap as the camera-control button rows so
-        # the two buttons line up with the four above (each spans a pair);
-        # the bottom margin separates them from the alpha table below.
-        # Read only now: Qt's default layout margin is wider for a widget
-        # that is still a window than for a child, so it settles once the
-        # camera widget sits inside the box.
-        _camera_layout = self.camera_control_widget.layout()
-        _camera_margins = _camera_layout.contentsMargins()
-        alignment_layout.setContentsMargins(
-            _camera_margins.left(), 0, _camera_margins.right(), 12
-        )
-        alignment_layout.setSpacing(_camera_layout.spacing())
-
-        scroll_layout.addWidget(camera_controls_box)
-
-        self.execution_settings_box = CollapsibleVStackBox(
-            "Execution Settings", control_widgets=self.execution_settings_ui.control
-        )
-        self.execution_settings_box.set_expanded(False)
-        self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Paths",
-                control_widgets=[
-                    self.execution_settings_box,
-                    self.layer_ui.control,
-                    self.mode_picker_view,
-                ],
-            )
-        )
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
-        )
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
-        )
-        scroll_layout.addStretch()
-
-        scroll_area.setWidget(scroll_content)
+        self.scroll_content = scroll_area.widget()
 
         self._set_device_view_layout_width()
 
