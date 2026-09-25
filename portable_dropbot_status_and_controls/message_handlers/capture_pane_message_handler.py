@@ -41,10 +41,11 @@ class CapturePaneMessageHandler(BaseMessageHandler):
     def _on_row_selected_triggered(self, body):
         """A step selection loads its cell into the table; a group or empty
         selection returns to manual mode. A rebroadcast that carries
-        exactly the value we last pushed for this step is our own set-cell
-        echoing back (skip it, not a reload) — a rebroadcast carrying a
-        DIFFERENT value for the same step is a genuine external change
-        (reload)."""
+        exactly the value we last pushed for this step, while the pane is
+        still attached to it, is our own set-cell echoing back (skip it, not
+        a reload) — a rebroadcast carrying a DIFFERENT value for the same
+        step is a genuine external change (reload). Re-selecting that step
+        after attaching to another is never an echo: the pane must follow."""
 
         try:
             msg = ProtocolTreeRowSelectedMessage.deserialize(str(body))
@@ -67,7 +68,8 @@ class CapturePaneMessageHandler(BaseMessageHandler):
         )
 
         if (
-            msg.step_id == self.model.last_pushed_step_id
+            msg.step_id == self.model.attached_step_id
+            and msg.step_id == self.model.last_pushed_step_id
             and cell_value == self.model.last_pushed_value
         ):
             return  # echo of our own push
