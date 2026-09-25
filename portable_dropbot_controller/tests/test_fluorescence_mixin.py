@@ -257,6 +257,34 @@ def test_teardown_parks_the_filter_when_requested(rig):
     assert h.log[-1] == f"filter {FLUORESCENCE_PARK_FILTER}"
 
 
+def test_filter_moves_and_park_are_logged_at_info(rig, caplog):
+    """Capture-routine filter moves and a successful park were silent before
+    this fix — only manual moves logged. Each move and the park now get a
+    concise INFO line naming the position, dye, and outcome."""
+    h = rig["h"]
+
+    with caplog.at_level("INFO"):
+        _run(h, _request([_entry(2), _entry(1)], park_motor=True))
+
+    messages = [r.message for r in caplog.records]
+    assert "Portable Dropbot filter --> 2 (CY5): ok" in messages
+    assert "Portable Dropbot filter --> 1 (HEX): ok" in messages
+    assert (
+        f"Portable Dropbot filter --> {FLUORESCENCE_PARK_FILTER} (White): ok (park)"
+    ) in messages
+
+
+def test_filter_move_failure_is_logged_at_info(rig, caplog):
+    h = rig["h"]
+    h.proxy.motor.failing = {1}
+
+    with caplog.at_level("INFO"):
+        _run(h, _request([_entry(1)]))
+
+    messages = [r.message for r in caplog.records]
+    assert "Portable Dropbot filter --> 1 (HEX): FAILED" in messages
+
+
 def test_led_zero_percent_is_a_valid_dark_frame(rig):
     """led_raw(0) == 0, and an echoing driver returns that same 0 - falsy,
     but not the None that signals no reply."""
