@@ -16,7 +16,9 @@ candidate the maintainer picked in the game (2026-09-09, revised
 the bundled 2x3 device, rotation-locked shapes, in / out lanes on hairpins
 (locked and not), loops and their seams, and trails that don't fit — the
 nine open questions of 2026-09-11 were all answered "as current".
-The algorithm must reproduce every one. Cases answered "none" are left out.
+Cases the board-audit rules of 2026-09-15/16 changed were re-derived on
+2026-09-25, each with a note naming its rule. The algorithm must reproduce
+every one. Cases answered "none" are left out.
 """
 
 # Standard library imports.
@@ -83,7 +85,40 @@ def lattices():
     }
 
 
-@pytest.mark.parametrize("case", ANSWERS, ids=[case["id"] for case in ANSWERS])
+#: The end-of-route drop (2139af4e) is documented for a placement forced onto
+#: the route's end, but it also fires on a natural stride's end, so the last
+#: move outruns the stride the overlay sets. These cases keep the picked
+#: candidate until the maintainer decides.
+UNFORCED_END_DROP = (
+    "end-of-route drop (2139af4e) fires on a natural, unforced end: the last "
+    "move outruns the stride, which the rule as documented (forced end "
+    "placement) does not cover"
+)
+UNDECIDED = {
+    "3x3 hairpin in/out": (
+        f"{UNFORCED_END_DROP}; head 5 -> 7 in one phase at overlay 2 (stride 1)"
+    ),
+    "3x2 overlay 0 at a corner": (
+        f"{UNFORCED_END_DROP}; head 3 -> 7 at stride 2 skips pick K1's 5 u, "
+        "though it does honour 'overlay 0 means no overlap at corners', stated "
+        "for locked blocks only"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            case,
+            id=case["id"],
+            marks=[pytest.mark.xfail(reason=UNDECIDED[case["id"]], strict=True)]
+            if case["id"] in UNDECIDED
+            else [],
+        )
+        for case in ANSWERS
+    ],
+)
 def test_slug_phases_reproduce_the_picked_candidate(case, lattices):
     centroids, neighbours, pitch = lattices[case["lattice"]]
     phases = slug_phases(
@@ -109,39 +144,43 @@ def test_slug_phases_reproduce_the_picked_candidate(case, lattices):
     ]
 
 
-def test_square_slug_hangs_behind_its_head_and_centres_on_the_corner():
-    """A square starts on the first electrode, slides on to centre on the
-    corner (phase 3), goes up, and ends with its leading edge on the last
-    electrode (2026-09-11: it used to start one in and end one past)."""
+def test_square_slug_hangs_behind_its_head_from_first_to_last_electrode():
+    """A square starts on the first electrode and ends with its leading edge
+    on the last electrode (2026-09-11: it used to start one in and end one
+    past). Since the board audit (2139af4e) it steps from its last stride
+    straight to that end placement: the corner slide, which shared the
+    overlay with both, is dropped."""
     centroids, neighbours, pitch = square_lattice()
     route = ["e0205", "e0305", "e0405", "e0505", "e0504", "e0503"]
     phases = slug_phases(route, centroids, neighbours, 1, 1, 3, 2, pitch=pitch)
     assert frame_text(render_phases(phases, route, centroids, pitch)) == dedent(
         """
-        1 r             2 r             3 r             4 u
-        . . . . . . .   . . . . . . .   . . . . . . .   . . . . . . .
-        . . . . . . .   . . . . . . .   . . . . . . .   . . . # # # .
-        . # # # . . .   . . # # # . .   . . . # # # .   . . . # # # .
-        . # # # . . .   . . # # # . .   . . . # # # .   . . . # # # .
-        . # # # . . .   . . # # # . .   . . . # # # .   . . . . . . .
-        . . . . . . .   . . . . . . .   . . . . . . .   . . . . . . .
+        1 r             2 r             3 u
+        . . . . . . .   . . . . . . .   . . . . . . .
+        . . . . . . .   . . . . . . .   . . . # # # .
+        . # # # . . .   . . # # # . .   . . . # # # .
+        . # # # . . .   . . # # # . .   . . . # # # .
+        . # # # . . .   . . # # # . .   . . . . . . .
+        . . . . . . .   . . . . . . .   . . . . . . .
         """
     ).strip("\n")
 
 
 def test_rectangle_re_hangs_behind_the_head_at_the_corner():
+    # The re-hang behind head 3 is dropped (2139af4e): the phases either side
+    # of it share the overlay, so the slug steps straight to the end.
     centroids, neighbours, pitch = square_lattice()
     route = ["e0305", "e0405", "e0505", "e0504", "e0503"]
     phases = slug_phases(route, centroids, neighbours, 1, 1, 2, 1, pitch=pitch)
     assert frame_text(render_phases(phases, route, centroids, pitch)) == dedent(
         """
-        1 r           2 r           3 u           4 u
-        . . . . . .   . . . . . .   . . . . . .   . . . . . .
-        . . . . . .   . . . . . .   . . . . . .   . . # # # .
-        . # # . . .   . . # # . .   . . # # # .   . . # # # .
-        . # # . . .   . . # # . .   . . # # # .   . . . . . .
-        . # # . . .   . . # # . .   . . . . . .   . . . . . .
-        . . . . . .   . . . . . .   . . . . . .   . . . . . .
+        1 r           2 r           3 u
+        . . . . . .   . . . . . .   . . . . . .
+        . . . . . .   . . . . . .   . . # # # .
+        . # # . . .   . . # # . .   . . # # # .
+        . # # . . .   . . # # . .   . . . . . .
+        . # # . . .   . . # # . .   . . . . . .
+        . . . . . .   . . . . . .   . . . . . .
         """
     ).strip("\n")
 
@@ -150,8 +189,21 @@ def test_overlay_sets_how_many_electrodes_a_block_advances():
     centroids, neighbours, pitch = square_lattice()
     route = [f"e{x:02d}05" for x in range(1, 10)]
     hop = slug_phases(route, centroids, neighbours, 1, 1, 3, 0, pitch=pitch)
-    creep = slug_phases(route, centroids, neighbours, 1, 1, 3, 2, pitch=pitch)
     assert [phase.head for phase in hop] == [2, 5, 8]
+
+
+@pytest.mark.xfail(
+    reason=(
+        "end-of-route drop (2139af4e) removes head 7 on a straight route whose "
+        "end is a natural stride, not a forced placement, so the last move is "
+        "two electrodes at overlay 2 (stride 1)"
+    ),
+    strict=True,
+)
+def test_a_high_overlay_creeps_one_electrode_at_a_time_to_the_end():
+    centroids, neighbours, pitch = square_lattice()
+    route = [f"e{x:02d}05" for x in range(1, 10)]
+    creep = slug_phases(route, centroids, neighbours, 1, 1, 3, 2, pitch=pitch)
     assert [phase.head for phase in creep] == [2, 3, 4, 5, 6, 7, 8]
 
 
@@ -203,17 +255,18 @@ def test_rotation_lock_translates_a_rectangle_without_rotating_it():
         route, centroids, neighbours, 1, 1, 2, 1, pitch=pitch, rotation_lock=True
     )
     # A 3x2 heading right stays three tall and two wide as it goes up: 2x3 u.
-    # With overlay 1 that 3-tall block strides two up the leg, and it ends
-    # with its leading edge on the last electrode.
+    # It ends with its leading edge on the last electrode, stepping there
+    # straight from its start: the two share the overlay, so the corner stop
+    # between them is dropped (2139af4e).
     assert frame_text(render_phases(locked, route, centroids, pitch)) == dedent(
         """
-        1 r         2 r         3 u
-        . . . . .   . . . . .   . . . . .
-        . . . . .   . . . . .   . . # # .
-        . # # . .   . . # # .   . . # # .
-        . # # . .   . . # # .   . . # # .
-        . # # . .   . . # # .   . . . . .
-        . . . . .   . . . . .   . . . . .
+        1 r         2 u
+        . . . . .   . . . . .
+        . . . . .   . . # # .
+        . # # . .   . . # # .
+        . # # . .   . . # # .
+        . # # . .   . . . . .
+        . . . . .   . . . . .
         """
     ).strip("\n")
     assert shorthand(1, 1, 2, (0.0, -1.0), block_heading=(1.0, 0.0)) == "2x3 u"
@@ -257,7 +310,9 @@ def test_a_2x2_keeps_four_actuations_into_a_neck_and_drains_with_soft_end(lattic
     the soft end, which drops rows rather than cells since 2026-09-11: four
     electrodes stay on as the slug enters the 1-wide reservoir feed, the
     cell farthest from the head dropping first, then it drains to the last
-    electrode."""
+    electrode. Since the board audit (2139af4e) the drawing's "4 u" frame is
+    dropped: the phases either side of it share the overlay, so the slug
+    steps straight to its end placement, the drawing's "5 u"."""
     centroids, neighbours, pitch = lattices["device"]
     by_cell = {cell: eid for eid, cell in lattice_cells(centroids, pitch).items()}
     route = [
@@ -268,16 +323,15 @@ def test_a_2x2_keeps_four_actuations_into_a_neck_and_drains_with_soft_end(lattic
     )
     # Soft end goes row by row (2026-09-11), so the two-cell tail row drops
     # first: 4, 2, 1 where the drawing went 4, 3, 2, 1.
-    assert [len(phase.ids) for phase in phases] == [4, 4, 4, 4, 4, 2, 1]
+    assert [len(phase.ids) for phase in phases] == [4, 4, 4, 4, 2, 1]
     cells = lambda ids: sorted(lattice_cells(centroids, pitch)[i] for i in ids)  # noqa: E731
-    # The drawing's "4 u" and "5 u" frames are the fourth and fifth phases.
-    assert cells(phases[3].ids) == [(7, 6), (8, 5), (8, 6), (8, 7)]
-    assert cells(phases[4].ids) == [(7, 6), (8, 4), (8, 5), (8, 6)]
-    assert cells(phases[5].ids) == [(8, 4), (8, 5)]
-    assert cells(phases[6].ids) == [(8, 4)]
+    # The drawing's "5 u" frame is the fourth phase.
+    assert cells(phases[3].ids) == [(7, 6), (8, 4), (8, 5), (8, 6)]
+    assert cells(phases[4].ids) == [(8, 4), (8, 5)]
+    assert cells(phases[5].ids) == [(8, 4)]
     # Without soft end the slug simply stops, four electrodes on.
     kept = slug_phases(route, centroids, neighbours, 1, 0, 2, 1, pitch=pitch)
-    assert [len(phase.ids) for phase in kept] == [4, 4, 4, 4, 4]
+    assert [len(phase.ids) for phase in kept] == [4, 4, 4, 4]
 
 
 def test_a_bar_against_the_right_edge_keeps_three_actuations():
@@ -286,10 +340,13 @@ def test_a_bar_against_the_right_edge_keeps_three_actuations():
     route = ["e0805", "e0905", "e1005", "e1004", "e1003"]
     phases = slug_phases(route, centroids, neighbours, 1, 1, 1, 0, pitch=pitch)
     assert all(len(phase.ids) == 3 for phase in phases)
-    # After the turn (head 3, the fifth phase) the missing lane is replaced
-    # by the nearest cell left over from the phase before: the corner itself.
-    assert phases[4].head == 3
-    assert sorted(phases[4].ids) == ["e0904", "e1004", "e1005"]
+    # The missing lane is made up with the electrode nearest the bar's
+    # unclipped centre, a step along the heading costing 1.5 times a step
+    # across (6484f26e): at the end that is the cell behind the head. The
+    # topped-up phases between the corner and the end are trimmed, their
+    # neighbours already touching within the stride.
+    assert [phase.head for phase in phases] == [0, 1, 2, 4]
+    assert sorted(phases[-1].ids) == ["e0903", "e1003", "e1004"]
 
 
 def test_in_out_lanes_hug_the_outer_rung_of_a_track():
@@ -374,6 +431,8 @@ def test_locked_bar_on_a_loop_clamps_its_stride_at_every_corner():
         rotation_lock=True,
     )
     # Along legs stride 1; across legs (two long) a stride of 3 is clamped.
+    # The loop closes in one move (2139af4e): from head 13 the bar already
+    # touches its start footprint, so the stop at head 14 is dropped.
     assert [phase.head for phase in phases] == [
         0,
         1,
@@ -386,7 +445,6 @@ def test_locked_bar_on_a_loop_clamps_its_stride_at_every_corner():
         10,
         12,
         13,
-        14,
         16,
     ]
 
