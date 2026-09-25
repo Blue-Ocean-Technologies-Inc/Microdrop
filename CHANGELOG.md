@@ -1,3 +1,76 @@
+## [v1.24.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.1) (2026-09-25)
+
+### Fix
+
+- **protocol-tree**: restore demo window's run-control wiring ([`246f4ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/246f4ac5197763f60da65fddd7060292cf1f49a2))
+- **microdrop_utils**: drop the end step only after a forced end placement ([`c6bf5cd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c6bf5cd1ac12613b473c8a889f71c260d444200d))
+- **device-viewer**: pass the full polygon list to the neighbour sort ([`6eedcb8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6eedcb8e5e033105d9ba9e4142aed96fc79fc4bc))
+- **microdrop_utils**: sort_polygon_indices_along_line never sorted ([`c7dd77d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c7dd77df0ab8705d97582a9462ef00a0016c3236))
+- **microdrop_utils**: guard zero per-phase duration in idle-phase calc ([`933dfc2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/933dfc2a54951d21b5a980cb0c3c6f777f56a338))
+- **plugin_management**: guard purge_plugin_modules against empty dist_name ([`a3e628a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a3e628ac89500fd918035f33464a038a796cd908))
+- **portable-status-and-controls**: clear step ticks on detach to manual ([`3bb94ef`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3bb94efbd78bde6cc3ef6b04a99b930881108951))
+- **protocol_tree**: status callers pass the slug shape ([`6fa6ea0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6fa6ea05b3b861324e5e2a1084a055c01170b825))
+- **microdrop_utils**: measure a wide loop's rep in slug phases ([`811bc95`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/811bc9567cd7adce21c569e93d32509e79a2e494))
+- **device-viewer**: reject unknown fields in camera-control requests ([`497b55f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/497b55fad8f9e552c8cbfb213c8454bde556aee3))
+- **device-viewer**: validate camera-control requests before applying ([`e32a1d6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e32a1d64492d4440b7d050cf7f6886b47df0db4f))
+
+### Refactor
+
+- **app**: drop the dead sidebar that imported the tools menu ([`02c9067`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/02c9067c10024c54b6586c86df74e02f07f1124f))
+- **dropbot-tools-menu**: own the self-test dialogs ([`54881bc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54881bc9e391696dd7b0ba51af3983b60131ef4c))
+- **dropbot-controller**: re-export topic schemas from consts ([`de3929f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/de3929f289135bd106a83f99b24883db0e9b7f83))
+- **protocol-tree**: import device-viewer schemas from its consts ([`693bf2b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/693bf2b2d2b52787874d0c400dbb2495ae1c87fc))
+
+### Docs
+
+- **readme**: mark MicroDrop beta and show the tests badge ([`83533f8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/83533f8c73126c463545d37d54c10199b545dd6a))
+
+### CI
+
+- **tests**: make the pytest step fail on a failing test ([`55b05e6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/55b05e6cabfd36a3750546e6086d2823da9bf365))
+- **tests**: add libpulse for QtMultimedia test modules ([`6a13270`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6a132703440ee686abec9464cb2921480b493515))
+- **tests**: install the Qt runtime libraries before pytest ([`cef3920`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cef39200e13b42e1c41c8a00f7484ed19437e9f6))
+
+### Test
+
+- **protocol-tree**: drop the demo window's status-poll tests ([`1bde19b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1bde19b604c725269940908337bcc25aa4a0a058))
+- **protocol-tree**: expect the tab separator in the tracker's name ([`92fc693`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/92fc693b6465b59dfd7b5c0892965cc49515bbfd))
+- **protocol-tree**: stop test_logging_reporting from hitting real Redis ([`1a0d1de`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1a0d1de44ef797e7741d654c600aa6edc7be665c))
+- **protocol-tree**: retarget pane tests to the dock pane (#663) ([`e161f67`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e161f67a1783ad4044082293fecad36785fc4cc8))
+- **protocol-tree**: retarget trail-overlay clamp test to dock pane ([`a5638c1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a5638c17764fe3972dc1780e5a1af2eee5b7b208))
+- **protocol-tree**: retarget base-demo-window tests to fixed API ([`6efc0c5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6efc0c5f3d6a6db65adb0af7ab88b140d07dc1c4))
+- **protocol-tree**: fix executor signal/parallel-fanout tests ([`d26849c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d26849c0409604470dd403702e8e4fad3f1b81ff))
+- **wide_path_demo**: phase heads follow the end-of-route drop ([`d7e622c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d7e622c388460bf6942709861a21a4846b548986))
+- **microdrop_utils**: re-derive slug answers from the board audit ([`5424f81`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5424f819e885cc93788d576c63b471656e691069))
+- **device_viewer**: add dirty_device.svg fixture, force past .gitignore ([`014e623`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/014e6234470fcb1a67a2c398ef331d3b18a814d2))
+- **device_viewer**: fix svg_electrode_layer fixture and assertion ([`62afbfb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/62afbfbb63a6a66f3794ce0c20ca1306ad9173c4))
+- **device_viewer**: fix stale Electrode path shape, drop dead state test ([`abeaced`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/abeaced38a426aac29bf6d26ceeb98a4f0547efe))
+- **device_viewer**: update route params for post-#682 shape fields ([`97af22f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97af22f87056fc690990ede928a715ec8fc433dd))
+- **device_viewer**: fix stale publish_message.send mock convention ([`3051de9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3051de97a30027ed0f9cb1d40016bbf8520404a7))
+- **protocol-tree**: update electrodes/routes column tests for #477/#682 ([`c5cdec7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c5cdec723be97afb9e481f5f5855e1101c7e4d3e))
+- **protocol-tree**: instantiate publishers to read validator_class ([`5734a8f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5734a8f0544dd3d5378c70ee4754719baa730d49))
+- **protocol-tree**: drive _on_step_started with a traits change event ([`70918b4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/70918b4784bc5e54ac53f674399e015531332014))
+- **protocol-tree**: expect recentre in slug_shape_for_row output ([`65404a1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/65404a16dc204df9f5adacc154ccd8266e46a745))
+- **examples**: skip the remote rsync test without a live SSH host ([`38c517d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/38c517d8f26d0678cc5833849fe505fa0dc1c13b))
+- **examples**: read validator_class off an instance, not the class ([`60ec4ea`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/60ec4ea9823c6fdf31b1bed199f4c32e152ec924))
+- **plugin_management**: isolate installed_plugins() test from real env ([`51ee5cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/51ee5cf6344a0d6d7afd5857ba9b2f2d0c8082d0))
+- **volume_threshold_protocol_controls**: isolate guard tests from Redis ([`d7b3652`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d7b36520e7e54b06b5c49c3a23a3e3c54a93ac4d))
+- **video_protocol_controls**: use dotted_path() for record step_id ([`f53fc4a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f53fc4ab17be51cf4079c8e349caf50564027bc3))
+- **video_protocol_controls**: update tests for the capture compound ([`e496ad5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e496ad50264810e9b44b7d15138ba107d3e26c9b))
+- **dropbot_protocol_controls**: patch the renamed calibration lookup ([`817bfec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/817bfec800a8b98e1ae51b1236b4a5ad5de782a1))
+- **dropbot_protocol_controls**: update droplet-check tests for default-off ([`f71af96`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f71af96613daf21281ccab80d7e1eec299447ff3))
+- **portable-status-and-controls**: match frame_label's stamped format ([`ed451c7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ed451c78b19cb291c3a094e42b425f7c37cff068))
+- **portable-status-and-controls**: patch the shared base in capture-pane tests ([`395ec88`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/395ec88265b8d0095b91657c386913d85b2d5990))
+- **portable-protocol-controls**: give capture-column test rows the sibling column ([`e0449a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e0449a59e4e71843d550f96c995d997940e47571))
+- **device-viewer**: expect the defaulted hold_auto_exposure field ([`ec33267`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ec332671fc0f4db6965a616fdd61cec31168712c))
+
+### Chore
+
+- **protocol-tree**: ruff-clean test_protocol_tree_pane.py ([`e8f8ded`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e8f8deddc81457778395fee6e7c644812c4172ea))
+- **protocol-tree**: ruff-clean test_hidden_columns.py ([`2065cb9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2065cb910f22715746c2f98d284da5310ba876d1))
+- **protocol-tree**: ruff-clean pane/demo-window files ([`6aec07d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6aec07d2f330d9b8ca72802b248e1dbeaede288b))
+- **protocol-tree**: ruff-clean test_executor.py ([`6557de0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6557de0e80174ae76ccac13254a33b436f3b9730))
+
 ## [v1.24.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.0) (2026-09-24)
 
 ### Feat
