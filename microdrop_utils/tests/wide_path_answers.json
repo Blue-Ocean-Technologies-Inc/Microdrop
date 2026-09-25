@@ -214,16 +214,6 @@
         ]
       },
       {
-        "head": 2,
-        "heading": "r",
-        "ids": [
-          "e0404",
-          "e0405",
-          "e0504",
-          "e0505"
-        ]
-      },
-      {
         "head": 4,
         "heading": "u",
         "ids": [
@@ -234,7 +224,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
   },
   {
     "id": "3x2",
@@ -300,7 +290,8 @@
           "e0604"
         ]
       }
-    ]
+    ],
+    "note": "Pick C restored 2026-09-25 after the maintainer ruled the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end: the re-hung block's stride lands on the last electrode, a natural end, so it keeps its re-hang at head 3."
   },
   {
     "id": "3x3",
@@ -350,21 +341,6 @@
         ]
       },
       {
-        "head": 3,
-        "heading": "r",
-        "ids": [
-          "e0404",
-          "e0405",
-          "e0406",
-          "e0504",
-          "e0505",
-          "e0506",
-          "e0604",
-          "e0605",
-          "e0606"
-        ]
-      },
-      {
         "head": 5,
         "heading": "u",
         "ids": [
@@ -380,7 +356,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e); the corner slide goes."
   },
   {
     "id": "4x4",
@@ -426,28 +402,6 @@
         "head": 4,
         "heading": "r",
         "ids": [
-          "e0203",
-          "e0204",
-          "e0205",
-          "e0206",
-          "e0303",
-          "e0304",
-          "e0305",
-          "e0306",
-          "e0403",
-          "e0404",
-          "e0405",
-          "e0406",
-          "e0503",
-          "e0504",
-          "e0505",
-          "e0506"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "r",
-        "ids": [
           "e0303",
           "e0304",
           "e0305",
@@ -467,7 +421,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e); the corner slide goes."
   },
   {
     "id": "3x1 bottom edge",
@@ -490,25 +444,8 @@
         "heading": "r",
         "ids": [
           "e0309",
-          "e0310"
-        ]
-      },
-      {
-        "head": 1,
-        "heading": "r",
-        "ids": [
           "e0310",
-          "e0409",
           "e0410"
-        ]
-      },
-      {
-        "head": 2,
-        "heading": "r",
-        "ids": [
-          "e0410",
-          "e0509",
-          "e0510"
         ]
       },
       {
@@ -538,7 +475,8 @@
           "e0608"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e); topped-up phases whose neighbours already touch, the head moving no further than the stride, are trimmed (6484f26e)."
   },
   {
     "id": "3x1 right edge",
@@ -584,24 +522,6 @@
         ]
       },
       {
-        "head": 2,
-        "heading": "u",
-        "ids": [
-          "e0905",
-          "e1005",
-          "e1006"
-        ]
-      },
-      {
-        "head": 3,
-        "heading": "u",
-        "ids": [
-          "e0904",
-          "e1004",
-          "e1005"
-        ]
-      },
-      {
         "head": 4,
         "heading": "u",
         "ids": [
@@ -610,7 +530,8 @@
           "e1004"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e); topped-up phases whose neighbours already touch, the head moving no further than the stride, are trimmed (6484f26e)."
   },
   {
     "id": "3x3 bottom edge",
@@ -633,10 +554,13 @@
         "head": 2,
         "heading": "r",
         "ids": [
+          "e0208",
           "e0209",
           "e0210",
+          "e0308",
           "e0309",
           "e0310",
+          "e0408",
           "e0409",
           "e0410"
         ]
@@ -644,35 +568,6 @@
       {
         "head": 3,
         "heading": "r",
-        "ids": [
-          "e0209",
-          "e0210",
-          "e0309",
-          "e0310",
-          "e0409",
-          "e0410",
-          "e0509",
-          "e0510"
-        ]
-      },
-      {
-        "head": 3,
-        "heading": "r",
-        "ids": [
-          "e0210",
-          "e0309",
-          "e0310",
-          "e0409",
-          "e0410",
-          "e0509",
-          "e0510",
-          "e0609",
-          "e0610"
-        ]
-      },
-      {
-        "head": 5,
-        "heading": "u",
         "ids": [
           "e0408",
           "e0409",
@@ -686,7 +581,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e), shifted off the wall; the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
   },
   {
     "id": "3x2 right edge",
@@ -732,15 +627,16 @@
         "head": 4,
         "heading": "u",
         "ids": [
+          "e0803",
+          "e0804",
           "e0903",
           "e0904",
-          "e0905",
           "e1003",
-          "e1004",
-          "e1005"
+          "e1004"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e), shifted off the wall."
   },
   {
     "id": "4x4 bottom edge",
@@ -764,15 +660,19 @@
         "head": 3,
         "heading": "r",
         "ids": [
+          "e0107",
           "e0108",
           "e0109",
           "e0110",
+          "e0207",
           "e0208",
           "e0209",
           "e0210",
+          "e0307",
           "e0308",
           "e0309",
           "e0310",
+          "e0407",
           "e0408",
           "e0409",
           "e0410"
@@ -782,47 +682,26 @@
         "head": 4,
         "heading": "r",
         "ids": [
-          "e0108",
-          "e0109",
-          "e0110",
-          "e0208",
-          "e0209",
-          "e0210",
+          "e0307",
           "e0308",
           "e0309",
           "e0310",
+          "e0407",
           "e0408",
           "e0409",
           "e0410",
-          "e0508",
-          "e0509",
-          "e0510"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "r",
-        "ids": [
-          "e0110",
-          "e0208",
-          "e0209",
-          "e0210",
-          "e0308",
-          "e0309",
-          "e0310",
-          "e0408",
-          "e0409",
-          "e0410",
+          "e0507",
           "e0508",
           "e0509",
           "e0510",
+          "e0607",
           "e0608",
           "e0609",
           "e0610"
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e); the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
   },
   {
     "id": "3x1 device band",
@@ -945,16 +824,6 @@
         ]
       },
       {
-        "head": 5,
-        "heading": "u",
-        "ids": [
-          "electrode048",
-          "electrode051",
-          "electrode084",
-          "electrode091"
-        ]
-      },
-      {
         "head": 6,
         "heading": "u",
         "ids": [
@@ -981,7 +850,7 @@
       }
     ],
     "soft_terminate": true,
-    "note": "Soft end re-derived 2026-09-11: rows drop instead of cells. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Soft end re-derived 2026-09-11: rows drop instead of cells. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
   },
   {
     "id": "4x4 into the neck",
@@ -1047,34 +916,12 @@
         ]
       },
       {
-        "head": 4,
-        "heading": "r",
-        "ids": [
-          "electrode004",
-          "electrode009",
-          "electrode040",
-          "electrode047",
-          "electrode048",
-          "electrode049",
-          "electrode050",
-          "electrode051",
-          "electrode065",
-          "electrode066",
-          "electrode067",
-          "electrode068",
-          "electrode072",
-          "electrode079",
-          "electrode083",
-          "electrode084"
-        ]
-      },
-      {
         "head": 7,
         "heading": "u",
         "ids": [
           "electrode004",
           "electrode009",
-          "electrode040",
+          "electrode029",
           "electrode047",
           "electrode048",
           "electrode049",
@@ -1091,7 +938,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e); a clipped block is topped up with the electrodes nearest its unclipped centre, full from its first phase (6484f26e), stretched only into the neck."
   },
   {
     "id": "3x1 rotation lock",
@@ -1244,18 +1091,6 @@
         ]
       },
       {
-        "head": 2,
-        "heading": "r",
-        "ids": [
-          "e0404",
-          "e0405",
-          "e0406",
-          "e0504",
-          "e0505",
-          "e0506"
-        ]
-      },
-      {
         "head": 4,
         "heading": "u",
         "ids": [
@@ -1269,7 +1104,7 @@
       }
     ],
     "rotation_lock": true,
-    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Re-derived 2026-09-25 from the #682 board-audit rules: the step before the placement forced onto the route's end is dropped when the slug could step there straight away (2139af4e)."
   },
   {
     "id": "3x1 hairpin in/out",
@@ -1407,50 +1242,32 @@
         "head": 0,
         "heading": "r",
         "ids": [
-          "e0203",
-          "e0204",
-          "e0205"
+          "e0205",
+          "e0206",
+          "e0207"
         ]
       },
       {
         "head": 1,
         "heading": "r",
         "ids": [
-          "e0303",
-          "e0304",
-          "e0305"
+          "e0305",
+          "e0306",
+          "e0307"
         ]
       },
       {
         "head": 2,
         "heading": "r",
         "ids": [
-          "e0403",
-          "e0404",
-          "e0405"
+          "e0405",
+          "e0406",
+          "e0407"
         ]
       },
       {
         "head": 3,
         "heading": "r",
-        "ids": [
-          "e0503",
-          "e0504",
-          "e0505"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0504",
-          "e0505",
-          "e0506"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
         "ids": [
           "e0505",
           "e0506",
@@ -1495,7 +1312,7 @@
       }
     ],
     "rotation_lock": true,
-    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2."
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
   },
   {
     "id": "3x1 wide hairpin in/out",
@@ -1644,50 +1461,32 @@
         "head": 0,
         "heading": "r",
         "ids": [
-          "e0203",
-          "e0204",
-          "e0205"
+          "e0205",
+          "e0206",
+          "e0207"
         ]
       },
       {
         "head": 1,
         "heading": "r",
         "ids": [
-          "e0303",
-          "e0304",
-          "e0305"
+          "e0305",
+          "e0306",
+          "e0307"
         ]
       },
       {
         "head": 2,
         "heading": "r",
         "ids": [
-          "e0403",
-          "e0404",
-          "e0405"
+          "e0405",
+          "e0406",
+          "e0407"
         ]
       },
       {
         "head": 3,
         "heading": "r",
-        "ids": [
-          "e0503",
-          "e0504",
-          "e0505"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0504",
-          "e0505",
-          "e0506"
-        ]
-      },
-      {
-        "head": 5,
-        "heading": "d",
         "ids": [
           "e0505",
           "e0506",
@@ -1695,7 +1494,7 @@
         ]
       },
       {
-        "head": 5,
+        "head": 4,
         "heading": "d",
         "ids": [
           "e0506",
@@ -1741,7 +1540,7 @@
       }
     ],
     "rotation_lock": true,
-    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-10 after the cross-leg rule (picks Q and the edited tight hairpin): the block now slides past the second corner instead of jumping across the route."
+    "note": "Picked from stride-1 candidates before the overlay governed the cross leg (2026-09-10); with a width of 3 that is overlay 2. Re-derived 2026-09-10 after the cross-leg rule (picks Q and the edited tight hairpin): the block now slides past the second corner instead of jumping across the route. Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
   },
   {
     "id": "2x1 hairpin, rotation lock, overlay 0",
@@ -1768,124 +1567,29 @@
         "head": 0,
         "heading": "r",
         "ids": [
-          "e0204",
-          "e0205"
+          "e0205",
+          "e0206"
         ]
       },
       {
         "head": 1,
         "heading": "r",
         "ids": [
-          "e0304",
-          "e0305"
+          "e0305",
+          "e0306"
         ]
       },
       {
         "head": 2,
         "heading": "r",
         "ids": [
-          "e0404",
-          "e0405"
+          "e0405",
+          "e0406"
         ]
       },
       {
         "head": 3,
         "heading": "r",
-        "ids": [
-          "e0504",
-          "e0505"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0506",
-          "e0507"
-        ]
-      },
-      {
-        "head": 5,
-        "heading": "l",
-        "ids": [
-          "e0406",
-          "e0407"
-        ]
-      },
-      {
-        "head": 6,
-        "heading": "l",
-        "ids": [
-          "e0306",
-          "e0307"
-        ]
-      },
-      {
-        "head": 7,
-        "heading": "l",
-        "ids": [
-          "e0206",
-          "e0207"
-        ]
-      }
-    ]
-  },
-  {
-    "id": "2x1 hairpin, rotation lock, overlay 1",
-    "pick": "Q",
-    "lattice": "square",
-    "route": [
-      "e0205",
-      "e0305",
-      "e0405",
-      "e0505",
-      "e0506",
-      "e0406",
-      "e0306",
-      "e0206"
-    ],
-    "left": 0,
-    "right": 1,
-    "trail": 1,
-    "overlay": 1,
-    "lane_frame": "in/out",
-    "rotation_lock": true,
-    "phases": [
-      {
-        "head": 0,
-        "heading": "r",
-        "ids": [
-          "e0204",
-          "e0205"
-        ]
-      },
-      {
-        "head": 1,
-        "heading": "r",
-        "ids": [
-          "e0304",
-          "e0305"
-        ]
-      },
-      {
-        "head": 2,
-        "heading": "r",
-        "ids": [
-          "e0404",
-          "e0405"
-        ]
-      },
-      {
-        "head": 3,
-        "heading": "r",
-        "ids": [
-          "e0504",
-          "e0505"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
         "ids": [
           "e0505",
           "e0506"
@@ -1923,7 +1627,96 @@
           "e0207"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
+  },
+  {
+    "id": "2x1 hairpin, rotation lock, overlay 1",
+    "pick": "Q",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 0,
+    "right": 1,
+    "trail": 1,
+    "overlay": 1,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0205",
+          "e0206"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0305",
+          "e0306"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0405",
+          "e0406"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0505",
+          "e0506"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "l",
+        "ids": [
+          "e0406",
+          "e0407"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "l",
+        "ids": [
+          "e0306",
+          "e0307"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "l",
+        "ids": [
+          "e0206",
+          "e0207"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
   },
   {
     "id": "1x3 leg shorter than trail",
@@ -2400,7 +2193,8 @@
           "e0703"
         ]
       }
-    ]
+    ],
+    "note": "Ruled 2026-09-25: the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end; the re-hung block's stride lands on the last electrode, a natural end, so pick K1's stop at 5 u stays instead of a jump from 3 to 7."
   },
   {
     "id": "3x3 hairpin in/out",
@@ -2498,8 +2292,8 @@
         ]
       },
       {
-        "head": 4,
-        "heading": "d",
+        "head": 5,
+        "heading": "l",
         "ids": [
           "e0406",
           "e0407",
@@ -2543,7 +2337,7 @@
         ]
       }
     ],
-    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning)."
+    "note": "Re-derived 2026-09-11: translating blocks hang behind the head along the way they travel (start on the first electrode, end on the last, slide to centre on a corner before turning). Ruled 2026-09-25: the end-of-route drop (2139af4e) applies only to a placement forced onto the route's end; the return leg's stride lands on the last electrode, a natural end, so the slug creeps 5, 6, 7 instead of jumping 5 to 7."
   },
   {
     "id": "3x1 jog in/out, rotation lock",
@@ -2561,6 +2355,102 @@
     ],
     "left": 0,
     "right": 2,
+    "trail": 1,
+    "overlay": 2,
+    "lane_frame": "in/out",
+    "rotation_lock": true,
+    "phases": [
+      {
+        "head": 0,
+        "heading": "r",
+        "ids": [
+          "e0205",
+          "e0206",
+          "e0207"
+        ]
+      },
+      {
+        "head": 1,
+        "heading": "r",
+        "ids": [
+          "e0305",
+          "e0306",
+          "e0307"
+        ]
+      },
+      {
+        "head": 2,
+        "heading": "r",
+        "ids": [
+          "e0405",
+          "e0406",
+          "e0407"
+        ]
+      },
+      {
+        "head": 3,
+        "heading": "r",
+        "ids": [
+          "e0505",
+          "e0506",
+          "e0507"
+        ]
+      },
+      {
+        "head": 4,
+        "heading": "d",
+        "ids": [
+          "e0506",
+          "e0507",
+          "e0508"
+        ]
+      },
+      {
+        "head": 5,
+        "heading": "r",
+        "ids": [
+          "e0606",
+          "e0607",
+          "e0608"
+        ]
+      },
+      {
+        "head": 6,
+        "heading": "r",
+        "ids": [
+          "e0706",
+          "e0707",
+          "e0708"
+        ]
+      },
+      {
+        "head": 7,
+        "heading": "r",
+        "ids": [
+          "e0806",
+          "e0807",
+          "e0808"
+        ]
+      }
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
+  },
+  {
+    "id": "3x1 hairpin in/out, more inside than outside",
+    "pick": "V1",
+    "lattice": "square",
+    "route": [
+      "e0205",
+      "e0305",
+      "e0405",
+      "e0505",
+      "e0506",
+      "e0406",
+      "e0306",
+      "e0206"
+    ],
+    "left": 2,
+    "right": 0,
     "trail": 1,
     "overlay": 2,
     "lane_frame": "in/out",
@@ -2612,119 +2502,6 @@
         ]
       },
       {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0505",
-          "e0506",
-          "e0507"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0506",
-          "e0507",
-          "e0508"
-        ]
-      },
-      {
-        "head": 5,
-        "heading": "r",
-        "ids": [
-          "e0606",
-          "e0607",
-          "e0608"
-        ]
-      },
-      {
-        "head": 6,
-        "heading": "r",
-        "ids": [
-          "e0706",
-          "e0707",
-          "e0708"
-        ]
-      },
-      {
-        "head": 7,
-        "heading": "r",
-        "ids": [
-          "e0806",
-          "e0807",
-          "e0808"
-        ]
-      }
-    ]
-  },
-  {
-    "id": "3x1 hairpin in/out, more inside than outside",
-    "pick": "V1",
-    "lattice": "square",
-    "route": [
-      "e0205",
-      "e0305",
-      "e0405",
-      "e0505",
-      "e0506",
-      "e0406",
-      "e0306",
-      "e0206"
-    ],
-    "left": 2,
-    "right": 0,
-    "trail": 1,
-    "overlay": 2,
-    "lane_frame": "in/out",
-    "rotation_lock": true,
-    "phases": [
-      {
-        "head": 0,
-        "heading": "r",
-        "ids": [
-          "e0205",
-          "e0206",
-          "e0207"
-        ]
-      },
-      {
-        "head": 1,
-        "heading": "r",
-        "ids": [
-          "e0305",
-          "e0306",
-          "e0307"
-        ]
-      },
-      {
-        "head": 2,
-        "heading": "r",
-        "ids": [
-          "e0405",
-          "e0406",
-          "e0407"
-        ]
-      },
-      {
-        "head": 3,
-        "heading": "r",
-        "ids": [
-          "e0505",
-          "e0506",
-          "e0507"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0504",
-          "e0505",
-          "e0506"
-        ]
-      },
-      {
         "head": 5,
         "heading": "l",
         "ids": [
@@ -2751,7 +2528,8 @@
           "e0206"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
   },
   {
     "id": "3x1 top edge in/out, rotation lock",
@@ -2778,49 +2556,32 @@
         "head": 0,
         "heading": "r",
         "ids": [
-          "e0200",
-          "e0201"
+          "e0201",
+          "e0202",
+          "e0203"
         ]
       },
       {
         "head": 1,
         "heading": "r",
         "ids": [
-          "e0201",
-          "e0300",
-          "e0301"
+          "e0301",
+          "e0302",
+          "e0303"
         ]
       },
       {
         "head": 2,
         "heading": "r",
         "ids": [
-          "e0301",
-          "e0400",
-          "e0401"
+          "e0401",
+          "e0402",
+          "e0403"
         ]
       },
       {
         "head": 3,
         "heading": "r",
-        "ids": [
-          "e0401",
-          "e0500",
-          "e0501"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
-        "ids": [
-          "e0500",
-          "e0501",
-          "e0502"
-        ]
-      },
-      {
-        "head": 4,
-        "heading": "d",
         "ids": [
           "e0501",
           "e0502",
@@ -2863,7 +2624,8 @@
           "e0204"
         ]
       }
-    ]
+    ],
+    "note": "Re-derived 2026-09-25 from the #682 board-audit rules: a rotation-locked block reads its lanes as left / right, never in / out (2139af4e)."
   },
   {
     "id": "3x2 wide hairpin in/out",

@@ -10,10 +10,13 @@
 
 """Tests for DV-side DEVICE_VIEWER_GEOMETRY_CHANGED publishing."""
 
+# Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from device_viewer.consts import DEVICE_VIEWER_GEOMETRY_CHANGED
 from device_viewer.models.messages import GeometryChangedMessage
 
@@ -41,13 +44,12 @@ def test_publishes_on_first_call(fake_dock_pane):
     from device_viewer.views.device_view_dock_pane import (
         DeviceViewerDockPane,
     )
-    with patch(
-        "device_viewer.views.device_view_dock_pane.publish_message"
-    ) as send:
+
+    with patch("device_viewer.views.device_view_dock_pane.publish_message") as send:
         DeviceViewerDockPane._publish_geometry_if_changed(fake_dock_pane)
 
-    send.send.assert_called_once()
-    args, kwargs = send.send.call_args
+    send.assert_called_once()
+    args, kwargs = send.call_args
     assert kwargs["topic"] == DEVICE_VIEWER_GEOMETRY_CHANGED
     msg = GeometryChangedMessage.deserialize(kwargs["message"])
     assert msg.id_to_channel == {"e00": 0, "e01": 1, "e02": None}
@@ -57,23 +59,21 @@ def test_no_republish_when_unchanged(fake_dock_pane):
     from device_viewer.views.device_view_dock_pane import (
         DeviceViewerDockPane,
     )
-    with patch(
-        "device_viewer.views.device_view_dock_pane.publish_message"
-    ) as send:
+
+    with patch("device_viewer.views.device_view_dock_pane.publish_message") as send:
         DeviceViewerDockPane._publish_geometry_if_changed(fake_dock_pane)
         DeviceViewerDockPane._publish_geometry_if_changed(fake_dock_pane)
-    assert send.send.call_count == 1
+    assert send.call_count == 1
 
 
 def test_republishes_when_mapping_changes(fake_dock_pane):
     from device_viewer.views.device_view_dock_pane import (
         DeviceViewerDockPane,
     )
-    with patch(
-        "device_viewer.views.device_view_dock_pane.publish_message"
-    ) as send:
+
+    with patch("device_viewer.views.device_view_dock_pane.publish_message") as send:
         DeviceViewerDockPane._publish_geometry_if_changed(fake_dock_pane)
         # Simulate chip insert: mapping changes
         fake_dock_pane.model.electrodes.electrodes["e00"].channel = 5
         DeviceViewerDockPane._publish_geometry_if_changed(fake_dock_pane)
-    assert send.send.call_count == 2
+    assert send.call_count == 2

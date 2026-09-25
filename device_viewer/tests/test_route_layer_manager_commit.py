@@ -8,8 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop package imports.
 from device_viewer.models.route import RouteLayerManager
-
 
 EXEC_PARAMS = {
     "duration": 1.5,
@@ -19,6 +19,7 @@ EXEC_PARAMS = {
     "trail_overlay": 1,
     "soft_start": True,
     "soft_terminate": False,
+    "linear_repeats": False,
 }
 
 
