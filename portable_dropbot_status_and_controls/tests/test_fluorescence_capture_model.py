@@ -35,6 +35,17 @@ def test_rows_default_to_one_per_filter_position_in_order():
     assert all(r.exposure_ms == FLUORESCENCE_DEFAULT_EXPOSURE_MS for r in m.rows)
 
 
+def test_sync_filter_position_sets_it_and_clears_the_guard_flag():
+    m = PortableDropbotFluorescenceCaptureModel()
+
+    m.sync_filter_position(4)
+
+    assert m.manual_filter_position == 4
+    # Cleared again once the assignment (and the controller's observer of
+    # it) has run, so a later user pick still publishes a move normally.
+    assert m.syncing_filter_position is False
+
+
 def test_capture_entries_manual_mode_honours_ticks_and_leaves_focus_auto():
     m = PortableDropbotFluorescenceCaptureModel()
     m.rows = [

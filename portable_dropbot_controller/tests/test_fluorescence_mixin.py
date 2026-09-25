@@ -255,6 +255,24 @@ def test_teardown_parks_the_filter_when_requested(rig):
     _run(h, _request([_entry(1)], park_motor=True))
 
     assert h.log[-1] == f"filter {FLUORESCENCE_PARK_FILTER}"
+    assert rig["done"][-1]["final_filter_position"] == FLUORESCENCE_PARK_FILTER
+
+
+def test_done_reports_the_last_entrys_filter_as_the_final_position(rig):
+    h = rig["h"]
+
+    _run(h, _request([_entry(2), _entry(4)]))
+
+    assert rig["done"][-1]["final_filter_position"] == 4
+
+
+def test_a_failed_first_move_reports_no_final_position(rig):
+    h = rig["h"]
+    h.proxy.motor.failing = {1}
+
+    _run(h, _request([_entry(1), _entry(2)]))
+
+    assert rig["done"][-1]["final_filter_position"] is None
 
 
 def test_led_zero_percent_is_a_valid_dark_frame(rig):
@@ -334,6 +352,9 @@ def test_camera_refusal_fails_the_entry_without_a_frame(rig):
     assert frontend.frame_requests == []
     assert rig["done"][-1]["error"] == "camera: no QCamera is selected"
     assert h.log[-2:] == ["light restored", "camera None None"]
+    # The filter move itself succeeded before the camera stage failed, so
+    # the wheel really is at 2 — the pane's manual pick must follow it.
+    assert rig["done"][-1]["final_filter_position"] == 2
 
 
 def test_camera_timeout_names_the_stage_and_reply_id(rig):
@@ -435,6 +456,7 @@ def test_request_while_capturing_is_refused_as_busy(rig):
             "label": "step2-start",
             "directory": "",
             "frames": [],
+            "final_filter_position": None,
             "error": "busy",
         }
     ]
