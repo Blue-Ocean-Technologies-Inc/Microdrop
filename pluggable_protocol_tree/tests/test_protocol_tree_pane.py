@@ -12,13 +12,16 @@
 pluggable protocol tree's full UX (navigation, status, experiment
 bar, executor, button state machine)."""
 
+# Standard library imports.
 from pathlib import Path
 
+# Enthought library imports.
 from traits.api import Directory, Event, HasTraits, Property
 
 
 class FakePausableRow:
     """Row stub rich enough for the pause-time phase computation."""
+
     path = [0]
     name = "S"
     duration_s = 1.0
@@ -36,6 +39,7 @@ class FakePausableRow:
 class FakeExperimentApp(HasTraits):
     """Application stub: current_experiment_directory Property whose
     setter fires the experiment_changed Event, like the real app."""
+
     current_experiment_directory = Property(Directory)
     experiment_changed = Event()
     _value = Path("/tmp/initial")
@@ -49,14 +53,18 @@ class FakeExperimentApp(HasTraits):
 
 
 def test_pane_constructs_with_columns_list(qapp):
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.builtins.id_column import make_id_column
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    pane = ProtocolTreePane([
-        make_type_column(), make_id_column(), make_name_column(),
-    ])
+    pane = ProtocolTreePane(
+        [
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+        ]
+    )
     assert pane.manager is not None
     ids = [c.model.col_id for c in pane.manager.columns]
     assert ids == ["type", "id", "name"]
@@ -213,8 +221,8 @@ def test_pane_phase_acked_is_noop_for_timer(qapp):
 
 
 def test_pane_protocol_error_resets_to_idle_and_calls_dialog(qapp, monkeypatch):
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
 
     calls = []
 
@@ -261,10 +269,10 @@ def test_pane_resume_merges_phase_nav_back_to_play_button(qapp):
 def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
     """next_phase click delegates to the status controller, which publishes
     ELECTRODES_STATE_CHANGE for the targeted phase (#471)."""
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     import pluggable_protocol_tree.services.protocol_status_controller as psc
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.routes_column import make_routes_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.services.protocol_status_controller import (
         ProtocolStatusController,
     )
@@ -284,7 +292,8 @@ def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
     pane.manager.protocol_metadata["electrode_to_channel"] = {"e1": 1, "e2": 2}
 
     sc = ProtocolStatusController(
-        signals=None, manager=pane.manager, executor=pane.executor)
+        signals=None, manager=pane.manager, executor=pane.executor
+    )
     pane.status_controller = sc
     sc.model.on_protocol_start(0.0, 1)
     sc.model.on_step_start(0.0, row.name, "-")
@@ -298,18 +307,22 @@ def test_pane_phase_nav_publishes_electrodes_state_change(qapp, monkeypatch):
 
 
 def test_pane_navigate_to_first_step_selects_first_row(qapp):
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.builtins.id_column import make_id_column
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.duration_column import (
         make_duration_column,
     )
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    pane = ProtocolTreePane([
-        make_type_column(), make_id_column(), make_name_column(),
-        make_duration_column(),
-    ])
+    pane = ProtocolTreePane(
+        [
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_duration_column(),
+        ]
+    )
     pane.manager.add_step(values={"name": "A", "duration_s": 0.1})
     pane.manager.add_step(values={"name": "B", "duration_s": 0.1})
     pane.navigate_to_first_step()
@@ -318,18 +331,22 @@ def test_pane_navigate_to_first_step_selects_first_row(qapp):
 
 
 def test_pane_navigate_to_next_at_end_duplicates_step(qapp):
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.builtins.id_column import make_id_column
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.duration_column import (
         make_duration_column,
     )
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
-    pane = ProtocolTreePane([
-        make_type_column(), make_id_column(), make_name_column(),
-        make_duration_column(),
-    ])
+    pane = ProtocolTreePane(
+        [
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_duration_column(),
+        ]
+    )
     pane.manager.add_step(values={"name": "A", "duration_s": 0.1})
     pane.navigate_to_last_step()
     pane.navigate_to_next_step()
@@ -337,26 +354,32 @@ def test_pane_navigate_to_next_at_end_duplicates_step(qapp):
 
 
 def test_pane_save_writes_manager_to_json(qapp, tmp_path, monkeypatch):
+    import json
+
     from pyface.qt.QtWidgets import QFileDialog
 
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.builtins.id_column import make_id_column
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.duration_column import (
         make_duration_column,
     )
+    from pluggable_protocol_tree.builtins.id_column import make_id_column
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
-    import json
 
-    pane = ProtocolTreePane([
-        make_type_column(), make_id_column(), make_name_column(),
-        make_duration_column(),
-    ])
+    pane = ProtocolTreePane(
+        [
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_duration_column(),
+        ]
+    )
     pane.manager.add_step(values={"name": "S1", "duration_s": 0.1})
 
     save_path = tmp_path / "out.json"
-    monkeypatch.setattr(QFileDialog, "getSaveFileName",
-                        lambda *a, **kw: (str(save_path), ""))
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *a, **kw: (str(save_path), "")
+    )
     pane.save_to_dialog()
     payload = json.loads(save_path.read_text())
     # After the dedup fix, type/name are NOT in col_specs — they are encoded
@@ -521,15 +544,18 @@ def test_pane_real_mode_label_click_opens_experiment_directory(qapp):
 
 def test_pane_accepts_device_viewer_sync_kwarg(qapp):
     from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     sync = MagicMock()
     pane = ProtocolTreePane(
-        [make_name_column()], device_viewer_sync=sync,
+        [make_name_column()],
+        device_viewer_sync=sync,
     )
     sync.attach.assert_called_once_with(pane.widget)
 
@@ -552,12 +578,13 @@ def test_pane_accepts_device_viewer_sync_kwarg(qapp):
 
 def test_pane_without_sync_works(qapp):
     """Demo windows pass None - the pane stays usable."""
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     assert pane.device_viewer_sync is None
 
@@ -568,13 +595,14 @@ def test_pane_publishes_protocol_running_true_on_start(qapp, monkeypatch):
         "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
         lambda topic, message: publishes.append((topic, message)),
     )
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+    from device_viewer.consts import PROTOCOL_RUNNING
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
-    from device_viewer.consts import PROTOCOL_RUNNING
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     pane._on_protocol_started()
     assert (PROTOCOL_RUNNING, "True") in publishes
@@ -586,13 +614,14 @@ def test_pane_publishes_protocol_running_false_on_finish(qapp, monkeypatch):
         "pluggable_protocol_tree.views.protocol_tree_pane.publish_message",
         lambda topic, message: publishes.append((topic, message)),
     )
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+    from device_viewer.consts import PROTOCOL_RUNNING
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
-    from device_viewer.consts import PROTOCOL_RUNNING
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     pane._on_protocol_finished()
     assert (PROTOCOL_RUNNING, "False") in publishes
@@ -605,13 +634,14 @@ def test_pane_publishes_protocol_running_false_on_abort(qapp, monkeypatch):
         lambda topic, message: publishes.append((topic, message)),
     )
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+    from device_viewer.consts import PROTOCOL_RUNNING
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
-    from device_viewer.consts import PROTOCOL_RUNNING
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     # _run_completion_flow("aborted") calls confirm(); patch it to avoid
     # a blocking modal dialog in headless tests.
     monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)
@@ -625,12 +655,14 @@ def test_select_step_does_not_suppress_sync_publish(qapp):
     expects the DV to update on those clicks just as on a direct row
     click, so select_row must NOT suppress the sync controller."""
     from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     sync = MagicMock()
     sync._suppress_publish = False
     pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
@@ -639,9 +671,11 @@ def test_select_step_does_not_suppress_sync_publish(qapp):
 
     seen_states = []
     original = pane.widget.tree.setCurrentIndex
+
     def capturing(idx):
         seen_states.append(sync._suppress_publish)
         return original(idx)
+
     pane.widget.tree.setCurrentIndex = capturing
     pane.select_row(row)
 
@@ -654,12 +688,14 @@ def test_protocol_terminated_publishes_free_mode_to_dv(qapp):
     clear the selection AND push a free-mode payload to the DV so
     the user is back in free mode."""
     from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     sync = MagicMock()
     sync._suppress_publish = False
     pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
@@ -672,13 +708,13 @@ def test_delete_selection_picks_alternative_step(qapp):
     """When the currently-selected step is deleted, an alternative step
     must be selected (whatever step is left). DV gets updated via the
     new selection's currentChanged."""
-    from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     pane.manager.add_step(values={"name": "S1"})
     pane.manager.add_step(values={"name": "S2"})
@@ -693,17 +729,18 @@ def test_delete_selection_picks_alternative_step(qapp):
     cur_idx = pane.widget.tree.currentIndex()
     assert cur_idx.isValid()
     cur_path = pane.widget.index_to_path(cur_idx)
-    assert cur_path == (0,) or cur_path == (1,)   # one of the surviving steps
+    assert cur_path == (0,) or cur_path == (1,)  # one of the surviving steps
 
 
 def test_delete_all_steps_goes_to_free_mode(qapp):
     """Deleting the last step leaves no selection — free mode."""
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     pane.manager.add_step(values={"name": "S1"})
     pane.select_row(pane.manager.get_row((0,)))
@@ -717,13 +754,14 @@ def test_delete_all_steps_goes_to_free_mode(qapp):
 def test_fold_into_group_wraps_selection_and_selects_group(qapp):
     """The tree widget's Fold into Group action folds the manager's
     selection into a new group and makes that group the current row (#518)."""
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
     from pluggable_protocol_tree.models.row import GroupRow
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     for n in ["A", "B", "C"]:
         pane.manager.add_step(values={"name": n})
@@ -742,15 +780,16 @@ def test_fold_into_group_wraps_selection_and_selects_group(qapp):
 def test_escape_clears_selection_to_free_mode(qapp):
     """Escape on the tree deselects the current step (clears selection AND
     current index) so the device viewer returns to free mode."""
-    from pyface.qt.QtCore import Qt
+    from pyface.qt.QtCore import QEvent, Qt
     from pyface.qt.QtGui import QKeyEvent
-    from pyface.qt.QtCore import QEvent
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     pane = ProtocolTreePane([make_name_column()])
     pane.manager.add_step(values={"name": "S1"})
     pane.select_row(pane.manager.get_row((0,)))
@@ -768,40 +807,46 @@ def test_clear_highlights_suppresses_sync_publish(qapp):
     """clear_highlights also moves selection programmatically; same
     guard requirement."""
     from unittest.mock import MagicMock
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
+
     from pluggable_protocol_tree.builtins.name_column import (
         make_name_column,
     )
+    from pluggable_protocol_tree.views.protocol_tree_pane import (
+        ProtocolTreePane,
+    )
+
     sync = MagicMock()
     sync._suppress_publish = False
     pane = ProtocolTreePane([make_name_column()], device_viewer_sync=sync)
 
     seen_states = []
     original = pane.widget.tree.clearSelection
+
     def capturing():
         seen_states.append(sync._suppress_publish)
         return original()
+
     pane.widget.tree.clearSelection = capturing
     pane.clear_highlights()
 
     assert seen_states == [True]
-    assert sync._suppress_publish is False    # restored
+    assert sync._suppress_publish is False  # restored
 
 
 def test_format_error_html_from_step_execution_error():
     """The protocol-error dialog body is built as HTML from the structured
     StepExecutionError fields (step, column, hook, cause)."""
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
     from pluggable_protocol_tree.execution.exceptions import StepExecutionError
+    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
 
     class _Model:
         col_name = "Magnet"
+
     class _Col:
         model = _Model()
+
     class _Row:
-        path = (0, 1)          # -> "Step 1.2"
+        path = (0, 1)  # -> "Step 1.2"
         name = "Engage magnet"
 
         def dotted_path(self):
@@ -809,7 +854,9 @@ def test_format_error_html_from_step_execution_error():
             return ".".join(str(i + 1) for i in self.path)
 
     exc = StepExecutionError(
-        _Col(), "on_step", _Row(),
+        _Col(),
+        "on_step",
+        _Row(),
         TimeoutError("Timed out after 10.0s waiting for a reply on 'topic/x'."),
     )
     html = ProtocolTreePane._format_error_html(exc, "fallback")
@@ -818,16 +865,17 @@ def test_format_error_html_from_step_execution_error():
     assert "Magnet" in html
     assert "on_step" in html
     assert "Timed out after 10.0s" in html
-    assert "<p" in html and "</p>" in html       # it's HTML
+    assert "<p" in html and "</p>" in html  # it's HTML
 
 
 def test_format_error_html_escapes_fallback():
     """Non-annotated errors fall back to the plain message, HTML-escaped."""
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
     html = ProtocolTreePane._format_error_html(None, "<oops> & <crash>")
     assert "&lt;oops&gt;" in html
     assert "&amp;" in html
-    assert "<oops>" not in html                  # raw angle brackets escaped
+    assert "<oops>" not in html  # raw angle brackets escaped
 
 
 def test_pane_terminated_stops_logging(qapp):
@@ -835,33 +883,47 @@ def test_pane_terminated_stops_logging(qapp):
     whole-protocol repetitions). With no experiment_manager, finished outcome
     skips the new-experiment prompt and calls stop_logging with generate_report=True."""
     from unittest.mock import MagicMock
+
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+
     pane = ProtocolTreePane([make_type_column()])
     pane.logging_controller = MagicMock()
-    pane.logging_controller.has_data.return_value = True   # a step ran
+    pane.logging_controller.has_data.return_value = True  # a step ran
     pane._on_protocol_terminated()
-    pane.logging_controller.stop_logging.assert_called_once_with(
-        generate_report=True
-    )
+    pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
 def test_flush_with_report_shows_progress_dialog_and_runs_in_worker(qapp, monkeypatch):
     """Legacy parity: when a report will be generated, the flush scheduler
     shows a 'Generating Run Report...' modal dialog and runs the flush
     in a QThread so the GUI stays responsive while plotly builds charts."""
-    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pyface.qt.QtCore import QThread
 
+    import pluggable_protocol_tree.views.protocol_tree_pane as ptp
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     shown = []
+
     class _FakeProgress:
-        def __init__(self_, *a, **k): shown.append(("constructed",))
-        def setWindowTitle(self_, t): shown.append(("title", t))
-        def setWindowModality(self_, m): shown.append(("modality", m))
-        def setCancelButton(self_, b): shown.append(("cancel", b))
-        def show(self_): shown.append(("show",))
-        def close(self_): shown.append(("close",))
+        def __init__(self_, *a, **k):
+            shown.append(("constructed",))
+
+        def setWindowTitle(self_, t):
+            shown.append(("title", t))
+
+        def setWindowModality(self_, m):
+            shown.append(("modality", m))
+
+        def setCancelButton(self_, b):
+            shown.append(("cancel", b))
+
+        def show(self_):
+            shown.append(("show",))
+
+        def close(self_):
+            shown.append(("close",))
+
     monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
 
     pane = ptp.ProtocolTreePane([make_name_column()])
@@ -899,13 +961,26 @@ def test_flush_progress_dialog_appears_before_settling_delay(qapp, monkeypatch):
     from pluggable_protocol_tree.builtins.name_column import make_name_column
 
     events = []
+
     class _FakeProgress:
-        def __init__(self_, *a, **k): events.append("constructed")
-        def setWindowTitle(self_, t): pass
-        def setWindowModality(self_, m): pass
-        def setCancelButton(self_, b): pass
-        def show(self_): events.append("show")
-        def close(self_): events.append("close")
+        def __init__(self_, *a, **k):
+            events.append("constructed")
+
+        def setWindowTitle(self_, t):
+            pass
+
+        def setWindowModality(self_, m):
+            pass
+
+        def setCancelButton(self_, b):
+            pass
+
+        def show(self_):
+            events.append("show")
+
+        def close(self_):
+            events.append("close")
+
     monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
 
     pane = ptp.ProtocolTreePane([make_name_column()])
@@ -930,8 +1005,11 @@ def test_flush_without_report_skips_progress_dialog(qapp, monkeypatch):
     from pluggable_protocol_tree.builtins.name_column import make_name_column
 
     shown = []
+
     class _FakeProgress:
-        def __init__(self_, *a, **k): shown.append("constructed")
+        def __init__(self_, *a, **k):
+            shown.append("constructed")
+
     monkeypatch.setattr(ptp, "QProgressDialog", _FakeProgress)
 
     pane = ptp.ProtocolTreePane([make_name_column()])
@@ -946,7 +1024,7 @@ def test_flush_without_report_skips_progress_dialog(qapp, monkeypatch):
         qapp.processEvents()
 
     assert flushed == [True]
-    assert shown == []                # dialog must NOT appear on fast path
+    assert shown == []  # dialog must NOT appear on fast path
 
 
 def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path):
@@ -956,14 +1034,14 @@ def test_on_logging_complete_shows_success_with_link(qapp, monkeypatch, tmp_path
     pane = ptp.ProtocolTreePane([make_name_column()])
     seen = {}
     monkeypatch.setattr(ptp, "success", lambda **k: seen.update(k))
-    report = tmp_path / "exp dir" / "reports" / "report_x.html"   # space in path
+    report = tmp_path / "exp dir" / "reports" / "report_x.html"  # space in path
     report.parent.mkdir(parents=True)
     report.write_text("<html></html>", encoding="utf-8")
 
     pane._on_logging_complete(report)
     assert "report_x.html" in seen.get("message", "")
     assert "file://" in seen.get("message", "")
-    assert "%20" in seen.get("message", "")          # space percent-encoded, link not broken
+    assert "%20" in seen.get("message", "")  # space percent-encoded, link not broken
     assert seen["title"] == "Run Summary Generated"
 
 
@@ -979,9 +1057,10 @@ def test_on_logging_complete_none_shows_no_dialog(qapp, monkeypatch):
 
 
 def _pane_for_flow(monkeypatch, *, with_exp):
+    from unittest.mock import MagicMock
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
-    from unittest.mock import MagicMock
 
     kwargs = {}
     if with_exp:
@@ -1000,6 +1079,7 @@ def _pane_for_flow(monkeypatch, *, with_exp):
 def test_completion_flow_finished_prompts_new_experiment(qapp, monkeypatch):
     ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
     from unittest.mock import MagicMock
+
     pane._on_new_experiment = MagicMock()
     monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.YES)
 
@@ -1031,10 +1111,14 @@ def test_completion_flow_preview_shows_info_no_confirm(qapp, monkeypatch):
     ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
     pane._current_run_preview_mode = True
     counts = {"info": 0, "confirm": 0}
-    monkeypatch.setattr(ptp, "information",
-                        lambda **k: counts.__setitem__("info", counts["info"] + 1))
-    monkeypatch.setattr(ptp, "confirm",
-                        lambda **k: counts.__setitem__("confirm", counts["confirm"] + 1) or ptp.YES)
+    monkeypatch.setattr(
+        ptp, "information", lambda **k: counts.__setitem__("info", counts["info"] + 1)
+    )
+    monkeypatch.setattr(
+        ptp,
+        "confirm",
+        lambda **k: counts.__setitem__("confirm", counts["confirm"] + 1) or ptp.YES,
+    )
 
     pane._run_completion_flow("finished")
 
@@ -1042,24 +1126,30 @@ def test_completion_flow_preview_shows_info_no_confirm(qapp, monkeypatch):
     pane.logging_controller.stop_logging.assert_called_once_with()
 
 
-def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(qapp, monkeypatch):
+def test_completion_flow_no_experiment_manager_skips_autosave_and_prompt(
+    qapp, monkeypatch
+):
     ptp, pane = _pane_for_flow(monkeypatch, with_exp=False)
     confirms = []
     monkeypatch.setattr(ptp, "confirm", lambda **k: confirms.append(k) or ptp.YES)
 
     pane._run_completion_flow("finished")
 
-    assert confirms == []          # no "Create New Experiment?" without a manager
+    assert confirms == []  # no "Create New Experiment?" without a manager
     pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
-def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch, tmp_path):
+def test_completion_flow_finished_autosave_logs_protocol_path(
+    qapp, monkeypatch, tmp_path
+):
     ptp, pane = _pane_for_flow(monkeypatch, with_exp=True)
     saved = tmp_path / "protocols" / "protocol_x.json"
     saved.parent.mkdir(parents=True)
     saved.write_text("{}", encoding="utf-8")
     pane.experiment_manager.auto_save_protocol.return_value = saved
-    monkeypatch.setattr(ptp, "confirm", lambda **k: ptp.NO)   # don't start a new experiment
+    monkeypatch.setattr(
+        ptp, "confirm", lambda **k: ptp.NO
+    )  # don't start a new experiment
 
     pane._run_completion_flow("finished")
 
@@ -1069,14 +1159,16 @@ def test_completion_flow_finished_autosave_logs_protocol_path(qapp, monkeypatch,
     assert "protocol_x.json" in arg["Protocol Path"]
 
 
-def test_completion_flow_aborted_no_experiment_manager_skips_summary_prompt(qapp, monkeypatch):
+def test_completion_flow_aborted_no_experiment_manager_skips_summary_prompt(
+    qapp, monkeypatch
+):
     ptp, pane = _pane_for_flow(monkeypatch, with_exp=False)
     confirms = []
     monkeypatch.setattr(ptp, "confirm", lambda **k: confirms.append(k) or ptp.NO)
 
     pane._run_completion_flow("aborted")
 
-    assert confirms == []          # no summary prompt without an experiment manager
+    assert confirms == []  # no summary prompt without an experiment manager
     pane.logging_controller.stop_logging.assert_called_once_with(generate_report=True)
 
 
@@ -1088,7 +1180,7 @@ def test_terminated_error_outcome_defers_completion_flow(qapp):
     ran = []
     pane._run_completion_flow = lambda outcome: ran.append(outcome)
     pane._on_protocol_terminated("error")
-    assert ran == []                      # error: flow deferred to _on_error
+    assert ran == []  # error: flow deferred to _on_error
 
 
 def test_terminated_finished_outcome_runs_completion_flow(qapp):
@@ -1109,7 +1201,9 @@ def test_on_error_shows_dialog_before_completion_flow(qapp, monkeypatch):
     pane = ptp.ProtocolTreePane([make_name_column()])
     order = []
     pane._publish_protocol_running = lambda *a, **k: None
-    pane._on_protocol_terminated = lambda outcome="finished": order.append(("term", outcome))
+    pane._on_protocol_terminated = lambda outcome="finished": order.append(
+        ("term", outcome)
+    )
     pane._run_completion_flow = lambda outcome: order.append(("flow", outcome))
     monkeypatch.setattr(ptp, "error_dialog", lambda **k: order.append("error_dialog"))
 
@@ -1121,6 +1215,7 @@ def test_on_error_shows_dialog_before_completion_flow(qapp, monkeypatch):
 def test_pane_emits_protocol_running_changed_true_on_start(qapp):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     seen = []
     pane.protocol_running_changed.connect(lambda v: seen.append(v))
@@ -1131,6 +1226,7 @@ def test_pane_emits_protocol_running_changed_true_on_start(qapp):
 def test_pane_emits_protocol_running_changed_false_on_terminated(qapp):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     seen = []
     pane.protocol_running_changed.connect(lambda v: seen.append(v))
@@ -1139,9 +1235,11 @@ def test_pane_emits_protocol_running_changed_false_on_terminated(qapp):
 
 
 def test_pane_emits_selection_changed_on_tree_selection(qapp):
+    from pyface.qt.QtCore import QItemSelection
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
-    from pyface.qt.QtCore import QItemSelection
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     fired = []
     pane.selection_changed.connect(lambda: fired.append(True))
@@ -1157,10 +1255,12 @@ def test_pane_mounts_quick_action_bar_when_actions_passed(qapp):
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.models.quick_action import BaseQuickAction
 
-    a = BaseQuickAction(action_id="add_step", icon_text="add",
-                        tooltip="Add step", priority=10)
-    b = BaseQuickAction(action_id="save_protocol", icon_text="save",
-                        tooltip="Save", priority=60)
+    a = BaseQuickAction(
+        action_id="add_step", icon_text="add", tooltip="Add step", priority=10
+    )
+    b = BaseQuickAction(
+        action_id="save_protocol", icon_text="save", tooltip="Save", priority=60
+    )
     pane = ptp.ProtocolTreePane([make_name_column()], quick_actions=[a, b])
     assert pane.quick_action_bar is not None
     assert set(pane.quick_action_bar.buttons.keys()) == {"add_step", "save_protocol"}
@@ -1183,6 +1283,7 @@ def _pane_with_two_steps(qapp):
     """Pane with a tree containing exactly two top-level step rows."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     # seed_default_step_if_empty already gave us 1 step; add one more.
     pane.manager.add_step()
@@ -1212,6 +1313,7 @@ def test_add_group_after_selection_appends_a_group(qapp):
     pane.add_group_after_selection()
     assert len(pane.manager.root.children) == before + 1
     from pluggable_protocol_tree.models.row import GroupRow
+
     assert isinstance(pane.manager.root.children[-1], GroupRow)
 
 
@@ -1231,26 +1333,25 @@ def test_delete_selected_rows_no_selection_is_noop(qapp):
     assert len(pane.manager.root.children) == before
 
 
-def test_import_into_selected_group_noop_when_no_group_selected(qapp,
-                                                                 monkeypatch):
+def test_import_into_selected_group_noop_when_no_group_selected(qapp, monkeypatch):
     """Selection points to a step (not a group) -> import is a no-op."""
     pane = _pane_with_two_steps(qapp)
-    pane.manager.selection = [(0,)]            # a step row
+    pane.manager.selection = [(0,)]  # a step row
     called = []
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: called.append(True) or ("", ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: called.append(True) or ("", ""),
+    )
     pane.import_into_selected_group()
-    assert called == []                        # never even opened the dialog
+    assert called == []  # never even opened the dialog
 
 
-def test_import_into_selected_group_adds_top_level_rows(qapp, tmp_path,
-                                                         monkeypatch):
+def test_import_into_selected_group_adds_top_level_rows(qapp, tmp_path, monkeypatch):
     """Selecting a group + importing -> the imported protocol's
     top-level rows are merged under the selected group. Nested rows
     are NOT recursively imported."""
     import json as _json
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -1275,9 +1376,9 @@ def test_import_into_selected_group_adds_top_level_rows(qapp, tmp_path,
 
     # Stub the file-dialog to return our file.
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: (str(f), ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(f), ""),
+    )
 
     pane.import_into_selected_group()
 
@@ -1294,8 +1395,7 @@ def test_import_into_selected_group_adds_top_level_rows(qapp, tmp_path,
     assert len(dest.children[1].children) == 0
 
 
-def test_import_into_selected_group_noop_on_unreadable_file(qapp,
-                                                              monkeypatch):
+def test_import_into_selected_group_noop_on_unreadable_file(qapp, monkeypatch):
     """A broken file selection -> the method returns without raising
     and without mutating the tree."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
@@ -1306,19 +1406,19 @@ def test_import_into_selected_group_noop_on_unreadable_file(qapp,
     pane.manager.selection = [tuple(target_path)]
 
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: ("/non/existent.json", ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: ("/non/existent.json", ""),
+    )
 
     before = len(pane.manager.get_row(target_path).children)
-    pane.import_into_selected_group()                # must not raise
+    pane.import_into_selected_group()  # must not raise
     after = len(pane.manager.get_row(target_path).children)
     assert before == after
 
 
 def test_delete_last_step_removes_last_top_level_step(qapp):
     """Two top-level steps -> delete_last_step removes the second one."""
-    pane = _pane_with_two_steps(qapp)        # helper from Task 8 already exists
+    pane = _pane_with_two_steps(qapp)  # helper from Task 8 already exists
     before = len(pane.manager.root.children)
     # No selection — the action's new behaviour is independent of selection.
     pane.manager.selection = []
@@ -1331,15 +1431,16 @@ def test_delete_last_step_descends_into_groups(qapp):
     inside the group, leaving the (now-empty) group in place."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     # The pane starts with an empty tree. Add a top-level step, then a
     # group containing one step so the last execution step is nested.
-    pane.manager.add_step()                            # step at (0,)
-    group_path = pane.manager.add_group(name="G")      # group at (1,)
-    pane.manager.add_step(parent_path=group_path)      # step at (1, 0)
+    pane.manager.add_step()  # step at (0,)
+    group_path = pane.manager.add_group(name="G")  # group at (1,)
+    pane.manager.add_step(parent_path=group_path)  # step at (1, 0)
     # Tree now: step(0,) / Group(step(1,0))
     group = pane.manager.get_row(group_path)
-    assert len(group.children) == 1            # sanity
+    assert len(group.children) == 1  # sanity
 
     pane.delete_last_step()
 
@@ -1353,25 +1454,28 @@ def test_delete_last_step_descends_into_groups(qapp):
 def test_delete_last_step_empty_tree_is_noop(qapp):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     # The pane starts with an empty tree (no auto-seeding in __init__).
     assert len(pane.manager.root.children) == 0
-    pane.delete_last_step()                    # must not raise
+    pane.delete_last_step()  # must not raise
 
 
 def test_delete_last_step_empty_trailing_group_deletes_the_group(qapp):
     """`S1, EmptyGroup` -> delete removes the empty group, leaves S1."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
-    pane.manager.add_step()                       # S1
-    group_path = pane.manager.add_group(name="G")
+    pane.manager.add_step()  # S1
+    pane.manager.add_group(name="G")
     assert len(pane.manager.root.children) == 2
 
     pane.delete_last_step()
 
     assert len(pane.manager.root.children) == 1
     from pluggable_protocol_tree.models.row import GroupRow
+
     # The remaining row is the step (S1), NOT the group.
     assert not isinstance(pane.manager.root.children[0], GroupRow)
 
@@ -1380,19 +1484,20 @@ def test_delete_last_step_non_empty_group_descends_to_step(qapp):
     """`S1, Group[S2, S3]` -> delete removes S3, leaving Group[S2]."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
-    pane.manager.add_step()                       # S1 at (0,)
+    pane.manager.add_step()  # S1 at (0,)
     group_path = pane.manager.add_group(name="G")
-    pane.manager.add_step(parent_path=group_path) # S2
-    pane.manager.add_step(parent_path=group_path) # S3
+    pane.manager.add_step(parent_path=group_path)  # S2
+    pane.manager.add_step(parent_path=group_path)  # S3
     group = pane.manager.get_row(group_path)
     assert len(group.children) == 2
 
     pane.delete_last_step()
 
     group = pane.manager.get_row(group_path)
-    assert len(group.children) == 1               # S3 gone, S2 remains
-    assert len(pane.manager.root.children) == 2   # S1 + G(S2)
+    assert len(group.children) == 1  # S3 gone, S2 remains
+    assert len(pane.manager.root.children) == 2  # S1 + G(S2)
 
 
 def test_delete_last_step_nested_empty_group_deletes_inner_empty_group(qapp):
@@ -1401,6 +1506,7 @@ def test_delete_last_step_nested_empty_group_deletes_inner_empty_group(qapp):
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.models.row import GroupRow
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     pane.manager.add_step()
     group_path = pane.manager.add_group(name="G")
@@ -1424,15 +1530,16 @@ def test_add_step_after_selection_with_group_selected_appends_inside_group(qapp)
     at the root level after it."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
-    pane.manager.add_step()                       # step at (0,)
-    group_path = pane.manager.add_group(name="G") # group at (1,)
+    pane.manager.add_step()  # step at (0,)
+    group_path = pane.manager.add_group(name="G")  # group at (1,)
     pane.manager.selection = [tuple(group_path)]
 
     pane.add_step_after_selection()
 
     group = pane.manager.get_row(group_path)
-    assert len(group.children) == 1               # new step is inside G
+    assert len(group.children) == 1  # new step is inside G
     # Top-level layout unchanged: still just step + group.
     assert len(pane.manager.root.children) == 2
 
@@ -1443,6 +1550,7 @@ def test_add_group_after_selection_with_group_selected_appends_inside_group(qapp
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.models.row import GroupRow
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     pane.manager.add_step()
     group_path = pane.manager.add_group(name="G")
@@ -1461,9 +1569,10 @@ def test_add_step_after_selection_with_multi_selection_uses_last(qapp):
     the "append inside" rule — only single-group selection does."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
-    pane.manager.add_step()                       # step at (0,)
-    group_path = pane.manager.add_group(name="G") # group at (1,)
+    pane.manager.add_step()  # step at (0,)
+    group_path = pane.manager.add_group(name="G")  # group at (1,)
     # Select both — multi-selection.
     pane.manager.selection = [(0,), tuple(group_path)]
 
@@ -1480,6 +1589,7 @@ def test_add_step_after_selection_with_nested_group_selected_appends_inside(qapp
     same as a top-level group."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+
     pane = ptp.ProtocolTreePane([make_name_column()])
     outer = pane.manager.add_group(name="Outer")
     inner = pane.manager.add_group(parent_path=outer, name="Inner")
@@ -1489,23 +1599,23 @@ def test_add_step_after_selection_with_nested_group_selected_appends_inside(qapp
 
     inner_row = pane.manager.get_row(inner)
     outer_row = pane.manager.get_row(outer)
-    assert len(inner_row.children) == 1            # step inside Inner
-    assert len(outer_row.children) == 1            # Outer still has only Inner
+    assert len(inner_row.children) == 1  # step inside Inner
+    assert len(outer_row.children) == 1  # Outer still has only Inner
 
 
-def test_import_into_selected_group_robust_to_schema_field_order(qapp,
-                                                                  tmp_path,
-                                                                  monkeypatch):
+def test_import_into_selected_group_robust_to_schema_field_order(
+    qapp, tmp_path, monkeypatch
+):
     """If a saved file ever reorders the leading-metadata fields,
     the importer must still merge correctly because positions are
     looked up by name, not hardcoded."""
     import json as _json
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.type_column import make_type_column
 
-    pane = ptp.ProtocolTreePane(
-        [make_type_column(), make_name_column()])
+    pane = ptp.ProtocolTreePane([make_type_column(), make_name_column()])
     target_path = pane.manager.add_group(name="Dest")
     pane.manager.selection = [tuple(target_path)]
 
@@ -1521,15 +1631,15 @@ def test_import_into_selected_group_robust_to_schema_field_order(qapp,
         "rows": [
             ["step", 0, "imported_step", "u-1"],
             ["group", 0, "imported_group", "u-2"],
-            ["step", 1, "nested_skip", "u-3"],   # nested -> skipped
+            ["step", 1, "nested_skip", "u-3"],  # nested -> skipped
         ],
     }
     f = tmp_path / "p.json"
     f.write_text(_json.dumps(file_data), encoding="utf-8")
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: (str(f), ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(f), ""),
+    )
 
     pane.import_into_selected_group()
 
@@ -1542,18 +1652,18 @@ def test_import_into_selected_group_robust_to_schema_field_order(qapp,
     assert len(dest.children[1].children) == 0
 
 
-def test_import_into_selected_group_skips_none_values(qapp, tmp_path,
-                                                       monkeypatch):
+def test_import_into_selected_group_skips_none_values(qapp, tmp_path, monkeypatch):
     """A saved row with None for a strict-typed column (e.g. Float)
     must NOT raise TraitError on import — the None is skipped so the
     trait keeps its default. Regression for the bug reported on
     feat/433."""
     import json as _json
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
-    from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.duration_column import (
         make_duration_column,
     )
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
 
     cols = [make_name_column(), make_duration_column()]
     pane = ptp.ProtocolTreePane(cols)
@@ -1564,7 +1674,8 @@ def test_import_into_selected_group_skips_none_values(qapp, tmp_path,
     # with a naive setattr. Importer must skip and let the default apply.
     file_data = {
         "schema_version": 1,
-        "protocol_metadata": {}, "row_flags": {},
+        "protocol_metadata": {},
+        "row_flags": {},
         "columns": [
             {"id": "name", "cls": "x.NameColumnModel"},
             {"id": "duration_s", "cls": "x.DurationColumnModel"},
@@ -1577,11 +1688,11 @@ def test_import_into_selected_group_skips_none_values(qapp, tmp_path,
     f = tmp_path / "p.json"
     f.write_text(_json.dumps(file_data), encoding="utf-8")
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: (str(f), ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(f), ""),
+    )
 
-    pane.import_into_selected_group()                # must not raise
+    pane.import_into_selected_group()  # must not raise
 
     dest = pane.manager.get_row(target_path)
     assert len(dest.children) == 1
@@ -1592,12 +1703,13 @@ def test_import_into_selected_group_skips_none_values(qapp, tmp_path,
     assert isinstance(new_step.duration_s, float)
 
 
-def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
-                                                                    tmp_path,
-                                                                    monkeypatch):
+def test_import_into_selected_group_skips_columns_not_in_live_set(
+    qapp, tmp_path, monkeypatch
+):
     """A saved column id absent from the LIVE column set must be
     skipped rather than becoming an orphan attribute on the row."""
     import json as _json
+
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
 
@@ -1608,7 +1720,8 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
 
     file_data = {
         "schema_version": 1,
-        "protocol_metadata": {}, "row_flags": {},
+        "protocol_metadata": {},
+        "row_flags": {},
         "columns": [
             {"id": "name", "cls": "x.NameColumnModel"},
             {"id": "unknown_plugin_col", "cls": "x.WhateverModel"},
@@ -1621,9 +1734,9 @@ def test_import_into_selected_group_skips_columns_not_in_live_set(qapp,
     f = tmp_path / "p.json"
     f.write_text(_json.dumps(file_data), encoding="utf-8")
     monkeypatch.setattr(
-        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog."
-        "getOpenFileName",
-        lambda *a, **k: (str(f), ""))
+        "pluggable_protocol_tree.views.protocol_tree_pane.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(f), ""),
+    )
 
     pane.import_into_selected_group()
 
