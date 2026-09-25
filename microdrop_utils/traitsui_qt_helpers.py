@@ -38,6 +38,7 @@ from pyface.qt.QtGui import (
     QColor,
     QCursor,
     QFont,
+    QFontMetrics,
     QKeySequence,
     QPainter,
     QPaintEvent,
@@ -524,6 +525,13 @@ def _slider_style(filled_side):
     """
 
 
+#: The narrowest a slider track can go and still show a distinct handle
+#: (the 14px handle from _slider_style plus a little travel either side) —
+#: below this the fill and the handle are indistinguishable, which looks
+#: like a solid bar rather than a slider.
+_SLIDER_TRACK_MIN_WIDTH = 28
+
+
 class _SteppedSliderEditor(QtEditor):
     """A horizontal slider whose handle snaps to fixed increments (the
     slider works in integer notches of ``step``), with a value readout.
@@ -539,7 +547,16 @@ class _SteppedSliderEditor(QtEditor):
     ``span_name`` takes the slider's top end from a trait, and ``high_name``
     a lower bound the handle may not pass: past it the handle snaps back.
     Two sliders sharing a budget (the lanes of a width cap) keep one scale
-    this way, rather than each shrinking as the other grows."""
+    this way, rather than each shrinking as the other grows.
+
+    In a table cell the editor is forced to the cell's exact rect
+    (TableDelegate.updateEditorGeometry), which can be narrower than the
+    slider and its readout need — Qt then clamps that geometry to the
+    control's minimum size instead of shrinking below it, so the readout
+    keeps a floor wide enough for the largest value it will ever show and
+    the slider keeps a floor wide enough for a visible handle; the editor
+    overlaps the next cell rather than collapsing into an unreadable
+    sliver or a value-less filled bar."""
 
     #: The slider's top end, synced from ``factory.span_name``.
     span = Any()
@@ -559,11 +576,29 @@ class _SteppedSliderEditor(QtEditor):
         self._slider.setStyleSheet(
             _slider_style(filled_side="add" if self.factory.inverted else "sub")
         )
+        self._slider.setMinimumWidth(_SLIDER_TRACK_MIN_WIDTH)
+
         self._readout = QLabel()
+        # Widest string the readout will ever show (the trait's own upper
+        # bound, never clamped past it) plus a little padding, so the label
+        # never gets squeezed to nothing when the slider does.
+        widest_text = self.factory.format % self.factory.high
+        self._readout.setMinimumWidth(
+            QFontMetrics(self._readout.font()).horizontalAdvance(widest_text) + 4
+        )
+
         widgets = [self._slider, self._readout]
 
         for widget in reversed(widgets) if self.factory.inverted else widgets:
             layout.addWidget(widget)
+
+        # The slider gives way first when the cell is narrow; the readout
+        # keeps its floor so the value stays legible.
+        layout.setStretch(layout.indexOf(self._slider), 1)
+        layout.setStretch(layout.indexOf(self._readout), 0)
+        self.control.setMinimumWidth(
+            _SLIDER_TRACK_MIN_WIDTH + layout.spacing() + self._readout.minimumWidth()
+        )
 
         self._slider.valueChanged.connect(self.update_object)
 
@@ -951,6 +986,21 @@ def fit_table_editor_height_to_rows(editor):
     editor.control.setSizePolicy(policy)
 
     fit()
+
+
+#: Floor for a `resize_mode="stretch"` slider column (see slider_column in
+#: capture_pane_view.py): wide enough for the compact in-cell editor
+#: (_SLIDER_TRACK_MIN_WIDTH plus a "999.9"-sized readout) so a narrow pane
+#: never squeezes it into an unreadable sliver — in edit mode or out of it.
+STRETCH_SLIDER_COLUMN_MIN_WIDTH = 90
+
+
+def ensure_min_column_width(editor, width):
+    """Floor every column of a TableEditor at ``width`` px. QHeaderView has
+    no per-column minimum, so this raises the header's shared floor instead
+    — harmless for the table's other, already content-sized columns, which
+    keep their own computed width whenever it is already above the floor."""
+    editor.table_view.horizontalHeader().setMinimumSectionSize(width)
 
 
 class SafeCancelTableHandler(Handler):
