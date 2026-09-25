@@ -294,10 +294,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     # ------- Phase-navigation mode and gamepad lifecycle -------------
     ################################################################################################
 
-    def _apply_phase_navigation_mode(self, enabled):
+    def apply_phase_navigation_mode(self, enabled):
+        """Apply an inbound phase-navigation mode without re-broadcasting it."""
         if self.model is None:
             return
+
         self._applying_phase_nav_message = True
+
         try:
             self.model.phase_navigation_mode = enabled
         finally:
