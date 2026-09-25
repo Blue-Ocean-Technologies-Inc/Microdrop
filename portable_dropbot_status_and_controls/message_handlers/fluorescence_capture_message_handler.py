@@ -53,6 +53,9 @@ class PortableDropbotFluorescenceCaptureMessageHandler(CapturePaneMessageHandler
 
         self.capture_finished(done)
 
+        if done.final_filter_position is not None:
+            self.model.sync_filter_position(done.final_filter_position)
+
         if done.error:
             self.model.progress = f"FAILED: {done.error}"
         elif done.ok:

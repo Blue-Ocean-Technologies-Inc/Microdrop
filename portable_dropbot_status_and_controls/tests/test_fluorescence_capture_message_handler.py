@@ -92,3 +92,31 @@ def test_done_refused_does_not_touch_directory_or_results(handler):
     assert handler.model.results_directory == ""
     assert handler.model.result_frames == []
     assert handler.model.progress == "FAILED: busy"
+
+
+def test_done_with_a_final_filter_position_syncs_the_manual_pick(handler):
+    """A table/protocol capture (or its park teardown) may leave the wheel
+    somewhere other than the manual pick's stale value; the pane must follow
+    it (#bug: manual pick not updated) without going through a move
+    request — sync_filter_position guards that, not this handler."""
+    handler.model.manual_filter_position = 1
+
+    handler._on_fluorescence_capture_done_triggered(
+        FluorescenceCaptureDone(
+            request_id="r1", ok=True, directory="/tmp/flu", final_filter_position=4
+        ).model_dump_json()
+    )
+
+    assert handler.model.manual_filter_position == 4
+
+
+def test_done_without_a_final_filter_position_leaves_the_manual_pick_alone(handler):
+    handler.model.manual_filter_position = 2
+
+    handler._on_fluorescence_capture_done_triggered(
+        FluorescenceCaptureDone(
+            request_id="r1", ok=False, directory="", frames=[], error="busy"
+        ).model_dump_json()
+    )
+
+    assert handler.model.manual_filter_position == 2
