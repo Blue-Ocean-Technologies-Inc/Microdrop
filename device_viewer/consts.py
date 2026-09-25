@@ -329,6 +329,8 @@ RECORDING_BITRATE_CLASSES = {
 # Class-matching thresholds for the ACTUAL camera format at record time.
 RECORDING_4K_MIN_HEIGHT = 1600  # frames at least this tall use the 4K classes
 RECORDING_60FPS_MIN_FPS = 45  # at least this fps uses the 60 fps classes
+#: Recording is refused for camera formats slower than this.
+MIN_RECORDING_FPS = 20
 
 # ---------------------------------------------------------------------------
 # Camera preview

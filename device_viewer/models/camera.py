@@ -48,6 +48,9 @@ class CameraModel(HasTraits):
     #: A provider feed is open and streaming into the panel.
     provider_feed_active = Bool(False)
 
+    #: The panel's camera toggle is on (a QCamera or provider feed is live).
+    camera_active = Bool(False)
+
     #: ``/dev/videoN`` node of the selected camera (Linux only), which the
     #: v4l2 exposure/focus fallbacks drive; None elsewhere.
     v4l2_device_path = Union(None, Str)
