@@ -16,6 +16,7 @@ from portable_dropbot_controller.consts import (
     FILTER_POSITIONS,
     FLUORESCENCE_CAPTURE_ABORT,
     MOTOR_HOME,
+    SET_FILTER,
 )
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
 from portable_dropbot_status_and_controls.controllers import capture_pane_controller
@@ -109,6 +110,28 @@ def test_home_filter_publishes_motor_home_only_and_resets_the_position(monkeypat
 
     assert sent["raw"] == [(MOTOR_HOME, "filter")]
     assert model.manual_filter_position == FILTER_POSITIONS[0]
+
+
+def test_picking_a_filter_moves_the_wheel(monkeypatch):
+    model, _controller, sent = _wire(monkeypatch)
+
+    model.manual_filter_position = 4
+
+    assert sent["raw"] == [(SET_FILTER, "4")]
+
+
+def test_syncing_the_filter_position_does_not_move_the_wheel(monkeypatch):
+    """A capture's teardown (or a protocol step) may leave the wheel
+    somewhere else; the pane's manual pick must follow it without echoing
+    a move request back at the hardware (see sync_filter_position)."""
+    model, _controller, sent = _wire(monkeypatch)
+    model.manual_filter_position = FILTER_POSITIONS[0]
+    sent["raw"].clear()
+
+    model.sync_filter_position(4)
+
+    assert model.manual_filter_position == 4
+    assert sent["raw"] == []
 
 
 def test_attached_edit_publishes_set_cell(monkeypatch):

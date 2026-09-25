@@ -109,6 +109,11 @@ class FluorescenceCaptureMixinService(HasTraits):
     #: for, keyed by the per-entry reply id "<request id>:<index>".
     _fluorescence_camera_replies = Instance(PendingReplies, args=())
     _fluorescence_frame_replies = Instance(PendingReplies, args=())
+    #: The wheel's actual position once the last successful filter move of
+    #: the running capture lands (park included); None until then. Reported
+    #: on FluorescenceCaptureDone as final_filter_position so the pane's
+    #: manual Filter pick can follow the wheel instead of going stale.
+    _fluorescence_last_filter_position = Any(None)
 
     # ------------------------------------------------------------------ #
     # Requests                                                            #
@@ -284,6 +289,8 @@ class FluorescenceCaptureMixinService(HasTraits):
             request, 0, total, request.entries[0].filter_position
         )
 
+        self._fluorescence_last_filter_position = None
+
         try:
             for index, entry in enumerate(request.entries):
                 progress = self._fluorescence_progress(
@@ -316,6 +323,7 @@ class FluorescenceCaptureMixinService(HasTraits):
             "label": request.label,
             "directory": str(Path(directory) / CAPTURES_DIR_NAME),
             "frames": frames,
+            "final_filter_position": self._fluorescence_last_filter_position,
             "error": error,
         }
 
@@ -349,6 +357,8 @@ class FluorescenceCaptureMixinService(HasTraits):
                 f"filter {position}: no reply (see the alarm; home the wheel "
                 f"if its position is unknown)"
             )
+
+        self._fluorescence_last_filter_position = position
 
         self._enter_fluorescence_stage(abort, progress, "led")
         raw = led_raw(entry.led_percent)
@@ -486,6 +496,7 @@ class FluorescenceCaptureMixinService(HasTraits):
             )
 
             if ok and moved is not None:
+                self._fluorescence_last_filter_position = FLUORESCENCE_PARK_FILTER
                 logger.info(
                     f"Portable Dropbot filter --> {FLUORESCENCE_PARK_FILTER} "
                     f"({filter_label(FLUORESCENCE_PARK_FILTER)}): ok (park)"
