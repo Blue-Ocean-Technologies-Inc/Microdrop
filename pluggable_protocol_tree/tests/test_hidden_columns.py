@@ -120,16 +120,42 @@ def test_trail_overlay_editor_max_follows_row_trail_length(qapp):
     assert editor_no_ctx.maximum() == view.high  # static fallback
 
 
+def _build_dock_pane(columns):
+    """Minimal headless PluggableProtocolDockPane: a real (but plugin-free)
+    Envisage Task/TaskWindow/Application chain so the strictly-typed `task`
+    trait validates, plus the two application traits
+    (`current_experiment_directory`, `experiment_changed`) the dock pane's
+    class-level `@observe("task.window.application...")` decorators need to
+    exist at construction time. The real `MicrodropApplication` declares
+    these too, but as filesystem-backed Properties — overkill (and file
+    I/O) for a pure unit test."""
+    from envisage.ui.tasks.api import TasksApplication, TaskWindow
+    from pyface.tasks.api import Task
+    from traits.api import Any, Event
+
+    from pluggable_protocol_tree.views.dock_pane import PluggableProtocolDockPane
+
+    class _StubApplication(TasksApplication):
+        experiment_changed = Event()
+        current_experiment_directory = Any(None)
+
+    task = Task()
+    task.window = TaskWindow(application=_StubApplication())
+
+    dock_pane = PluggableProtocolDockPane(columns=columns, task=task)
+    dock_pane.create_contents(parent=None)
+
+    return dock_pane
+
+
 def test_shrinking_trail_length_drags_overlay_down(qapp):
-    """Pane-level clamp: lowering Trail Len below overlay + 1 clamps the
-    overlay cell too, with a cell_changed event for dirty tracking."""
+    """Dock-pane-level clamp (issue #471 moved run control off the pane):
+    lowering Trail Len below overlay + 1 clamps the overlay cell too, with
+    a cell_changed event for dirty tracking."""
     from pluggable_protocol_tree.builtins.name_column import make_name_column
     from pluggable_protocol_tree.builtins.type_column import make_type_column
-    from pluggable_protocol_tree.views.protocol_tree_pane import (
-        ProtocolTreePane,
-    )
 
-    pane = ProtocolTreePane(
+    dock_pane = _build_dock_pane(
         [
             make_type_column(),
             make_name_column(),
@@ -137,17 +163,21 @@ def test_shrinking_trail_length_drags_overlay_down(qapp):
             make_trail_overlay_column(),
         ]
     )
-    pane.manager.add_step(
-        values={
-            "name": "S1",
-            "trail_length": 10,
-            "trail_overlay": 7,
-        }
-    )
-    row = pane.manager.get_row((0,))
+    manager = dock_pane.manager
+    manager.add_step(values={"name": "S1"})
+    row = manager.get_row((0,))
+    # Set trail_length and trail_overlay as separate cell edits (as the UI
+    # would), not a single add_step(values=...) bulk write — the clamp only
+    # reacts to a "trail_length" cell_changed event, so setting both at once
+    # would clamp overlay against trail_length's still-default value.
+    manager.set_value((0,), "trail_length", 10)
+    manager.set_value((0,), "trail_overlay", 7)
+    qapp.processEvents()
 
-    pane.manager.set_value((0,), "trail_length", 3)
+    manager.set_value((0,), "trail_length", 3)
+    qapp.processEvents()
     assert row.trail_overlay == 2  # dragged down to length - 1
 
-    pane.manager.set_value((0,), "trail_length", 8)
+    manager.set_value((0,), "trail_length", 8)
+    qapp.processEvents()
     assert row.trail_overlay == 2  # growing length leaves it
