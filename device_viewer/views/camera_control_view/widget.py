@@ -81,6 +81,7 @@ from ...consts import (
     recording_state_model,
 )
 from ...default_settings import video_key
+from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.camera import (
     ImageSaver,
@@ -137,13 +138,9 @@ class CameraControlWidget(QWidget):
 
         self.session = QMediaCaptureSession()
         self.camera = None
-        # /dev/videoN path the v4l2 manual-focus fallback last drove, and its
-        # cached focus_absolute (min, max) — see _apply_focus.
-        self._v4l2_focus_path = None
-        self._v4l2_focus_range = None
-        #: v4l2 node the auto-exposure fallback last switched to auto; None
-        #: while Qt (or manual exposure) drives the camera's exposure.
-        self._v4l2_auto_exposure_path = None
+        #: Qt-free camera state (selection, format, recording, v4l2
+        #: exposure/focus fallbacks).
+        self.camera_model = CameraModel()
         # Lookup dict mapping camera description -> LinuxCameraDeviceContainer.
         # Kept separate from combo box userData because shiboken cannot serialize
         # plain Python objects as QVariant — only Qt types (QCameraDevice) are safe
@@ -159,10 +156,6 @@ class CameraControlWidget(QWidget):
         self._provider_sources = {}
         self._active_feed = None
         self._feed_controls = None
-        self.last_camera_state = False
-        self.available_cameras = None
-        self.available_formats = None
-        self.show_status_message_for_video = True
         # In-flight ImageSaver workers, referenced so a pool worker (and its
         # signals QObject) cannot be garbage-collected before its completion
         # signal is delivered back to the GUI thread.
@@ -183,8 +176,6 @@ class CameraControlWidget(QWidget):
         # preferences; the recorder is rebuilt from them at every recording
         # start (see _build_recorder), so preference changes apply live.
         self.recorder = self._build_recorder()
-        self.recording_file_path = None
-        self._camera_state_pre_recording = None
 
         # Signal connectors
         self.camera_active_signal.connect(self.on_camera_active)
@@ -1012,7 +1003,7 @@ class CameraControlWidget(QWidget):
                 if set_v4l2_controls(
                     path, **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_ON}
                 ):
-                    self._v4l2_auto_exposure_path = path
+                    self.camera_model.v4l2_auto_exposure_path = path
                 else:
                     logger.warning(f"v4l2 auto exposure failed for {path}")
 
@@ -1023,17 +1014,17 @@ class CameraControlWidget(QWidget):
 
         # Back to manual on the v4l2 side first, if the fallback above left
         # the camera on auto — its exposure time is ignored otherwise.
-        if self._v4l2_auto_exposure_path is not None:
+        if self.camera_model.v4l2_auto_exposure_path is not None:
             if not set_v4l2_controls(
-                self._v4l2_auto_exposure_path,
+                self.camera_model.v4l2_auto_exposure_path,
                 **{V4L2_EXPOSURE_AUTO: V4L2_EXPOSURE_AUTO_MANUAL},
             ):
                 logger.warning(
                     f"v4l2 manual exposure restore failed for "
-                    f"{self._v4l2_auto_exposure_path}"
+                    f"{self.camera_model.v4l2_auto_exposure_path}"
                 )
 
-            self._v4l2_auto_exposure_path = None
+            self.camera_model.v4l2_auto_exposure_path = None
 
         camera.setExposureMode(QCamera.ExposureMode.ExposureManual)
         camera.setManualExposureTime(float(exposure_ms) / 1000.0)
@@ -1046,20 +1037,23 @@ class CameraControlWidget(QWidget):
 
             # Restore continuous auto focus on the v4l2 side too, if the
             # fallback below was last driving this camera's focus.
-            if self._v4l2_focus_path is not None:
-                if not set_v4l2_controls(self._v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}):
+            if self.camera_model.v4l2_focus_path is not None:
+                if not set_v4l2_controls(
+                    self.camera_model.v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}
+                ):
                     logger.warning(
-                        f"v4l2 auto focus restore failed for {self._v4l2_focus_path}"
+                        f"v4l2 auto focus restore failed for "
+                        f"{self.camera_model.v4l2_focus_path}"
                     )
 
-                self._v4l2_focus_path = None
+                self.camera_model.v4l2_focus_path = None
 
             return
 
         if camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
             camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
             camera.setFocusDistance(float(focus_distance))
-            self._v4l2_focus_path = None
+            self.camera_model.v4l2_focus_path = None
 
             return
 
@@ -1070,15 +1064,20 @@ class CameraControlWidget(QWidget):
         if path is None:
             raise RuntimeError("this camera has no manual focus")
 
-        if path != self._v4l2_focus_path or self._v4l2_focus_range is None:
-            self._v4l2_focus_range = get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE)
+        if (
+            path != self.camera_model.v4l2_focus_path
+            or self.camera_model.v4l2_focus_range is None
+        ):
+            self.camera_model.v4l2_focus_range = get_v4l2_control_range(
+                path, V4L2_FOCUS_ABSOLUTE
+            )
 
-        if self._v4l2_focus_range is None:
+        if self.camera_model.v4l2_focus_range is None:
             raise RuntimeError(
                 "this camera has no manual focus (no v4l2 focus_absolute control)"
             )
 
-        lo, hi = self._v4l2_focus_range
+        lo, hi = self.camera_model.v4l2_focus_range
         raw = round(lo + float(focus_distance) * (hi - lo))
 
         # Auto off first — focus_absolute is inactive while auto is on.
@@ -1087,7 +1086,7 @@ class CameraControlWidget(QWidget):
         ):
             raise RuntimeError("v4l2 focus set failed")
 
-        self._v4l2_focus_path = path
+        self.camera_model.v4l2_focus_path = path
         logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
 
     def _hold_auto_exposure(self):
@@ -1101,7 +1100,7 @@ class CameraControlWidget(QWidget):
 
     def _exposure_is_auto(self):
         return (
-            self._v4l2_auto_exposure_path is not None
+            self.camera_model.v4l2_auto_exposure_path is not None
             or self.camera.exposureMode() != QCamera.ExposureMode.ExposureManual
         )
 
@@ -1112,7 +1111,7 @@ class CameraControlWidget(QWidget):
         # Under the v4l2 fallback's auto, UVC exposure_time_absolute keeps
         # the last manual value, not auto's pick (checked on the Pi's DH
         # Camera) — nothing reports what auto chose.
-        if self._v4l2_auto_exposure_path is not None:
+        if self.camera_model.v4l2_auto_exposure_path is not None:
             return None
 
         exposure_s = self.camera.exposureTime()
@@ -1126,9 +1125,11 @@ class CameraControlWidget(QWidget):
         return self.camera.manualExposureTime() * 1000.0
 
     def _focus_distance_readback(self):
-        if self._v4l2_focus_path is not None:
-            lo, hi = self._v4l2_focus_range
-            raw = get_v4l2_control(self._v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
+        if self.camera_model.v4l2_focus_path is not None:
+            lo, hi = self.camera_model.v4l2_focus_range
+            raw = get_v4l2_control(
+                self.camera_model.v4l2_focus_path, V4L2_FOCUS_ABSOLUTE
+            )
 
             return (raw - lo) / (hi - lo) if raw is not None else None
 
@@ -1263,14 +1264,10 @@ class CameraControlWidget(QWidget):
             self.record_toggle_button.setChecked(False)
             return
 
+        self.camera_model.recording.camera_was_on = self.camera.isActive()
+
         if not self.camera.isActive():
             self.toggle_camera()
-            self._camera_state_pre_recording = (
-                False  ## Flag only used for video recording management
-            )
-
-        else:
-            self._camera_state_pre_recording = True
 
         filename = self._generate_recording_filename(step_description, step_id)
         base_dir = Path(directory) if directory else get_current_experiment_directory()
@@ -1278,7 +1275,7 @@ class CameraControlWidget(QWidget):
         path.parent.mkdir(parents=True, exist_ok=True)
         _recording_file_path = str(path)
 
-        self.show_status_message_for_video = show_status_message
+        self.camera_model.recording.show_status_message = show_status_message
 
         _resolution = (
             _current_fmt.resolution().width(),
@@ -1314,13 +1311,13 @@ class CameraControlWidget(QWidget):
     def handle_recording_stopped(self, recording_output_path):
         device_viewer_recording_state_publisher.publish(state=False)
         recording_state_model.recording = False
-        if not self._camera_state_pre_recording:
+        if not self.camera_model.recording.camera_was_on:
             # turn off camera if we need to
             if self.camera.isActive():
                 self.toggle_camera()
 
         # Show Result
-        if recording_output_path and self.show_status_message_for_video:
+        if recording_output_path and self.camera_model.recording.show_status_message:
             _show_media_capture_status_message(
                 MediaType.VIDEO, recording_output_path, self.status_bar_manager
             )
