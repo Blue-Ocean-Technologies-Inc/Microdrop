@@ -30,9 +30,9 @@ from traits.api import HasTraits, Instance, Str, provides
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error
+from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 
 # Microdrop utils imports.
-from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
     generate_class_method_dramatiq_listener_actor,
@@ -128,7 +128,7 @@ class DeviceViewerMessageController(HasTraits):
 
     def _on_phase_navigation_mode_triggered(self, message):
         GUI.invoke_later(
-            self.pane._apply_phase_navigation_mode, message.lower() == "true"
+            self.pane.apply_phase_navigation_mode, message.lower() == "true"
         )
 
     def _on_phase_navigation_request_triggered(self, message):
@@ -138,17 +138,22 @@ class DeviceViewerMessageController(HasTraits):
 
     def _apply_phase_navigation_request(self, message):
         service = self.pane.model.route_execution_service if self.pane.model else None
+
         if service is None:
             return
+
         try:
             request = json.loads(message)
         except (ValueError, TypeError) as e:
             logger.warning(f"Bad phase-navigation request {message!r}: {e}")
             return
+
         if not isinstance(request, dict):
             logger.warning(f"Bad phase-navigation request {message!r}: not an object")
             return
+
         action = request.get("action")
+
         if action == "prev":
             service.goto_prev_phase()
         elif action == "next":
@@ -240,20 +245,16 @@ class DeviceViewerMessageController(HasTraits):
             )
             self.pane.device_view.setInteractive(False)
 
-    def _on_display_state_triggered(self, message_model_serial: str):
+    def _on_display_state_triggered(self, message_model_serial):
         # We send the message through a signal since Dramatiq runs the callbacks
         # in a separate thread
         # Which has weird side effects on QtGraphicsObject calls
         self.pane.device_view.display_state_signal.emit(message_model_serial)
 
-    def _on_protocol_tree_display_state_triggered(self, message_serial: str):
+    def _on_protocol_tree_display_state_triggered(self, message_serial):
         """Adapter for ProtocolTreeDisplayMessage -> DeviceViewerMessageModel.
         The downstream display_state_signal pipeline reuses what already
         works for the legacy widget."""
-        from pluggable_protocol_tree.models.display_state import (
-            ProtocolTreeDisplayMessage,
-        )
-
         msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
         id_to_channel = self.pane.model.electrodes.electrode_ids_channels_map
         channels_activated = {
@@ -277,15 +278,14 @@ class DeviceViewerMessageController(HasTraits):
         )
         self.pane.device_view.display_state_signal.emit(rich.serialize())
 
-    def _on_protocol_running_triggered(self, message: TimestampedMessage):
-
+    def _on_protocol_running_triggered(self, message):
         logger.debug(f"Protocol running is {message}")
         if self.pane.model:
             self.pane.model.protocol_running = (
                 True if message.lower() == "true" else False
             )
 
-    def _on_advanced_mode_change_triggered(self, message: TimestampedMessage):
+    def _on_advanced_mode_change_triggered(self, message):
         """Operator toggled Advanced Mode. While a protocol is running, this
         is what keeps the viewer editable: Advanced on -> editable (the user
         can actuate electrodes, reflected to hardware); off -> locked back to
