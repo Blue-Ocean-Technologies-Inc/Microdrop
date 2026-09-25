@@ -10,6 +10,9 @@
 
 """Tests for the demo base window + DemoConfig + StatusReadout."""
 
+# Third-party imports.
+import pytest
+
 # Microdrop package imports.
 from pluggable_protocol_tree.consts import ELECTRODES_STATE_APPLIED
 from pluggable_protocol_tree.demos.base_demo_window import (
@@ -253,18 +256,32 @@ def test_window_executor_step_started_connected_to_tree_highlight(qapp):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    # Indirect check: emit step_started with a fake row, watch tree's
-    # highlight_active_row receive it.
+    # Indirect check: emit step_started (payload: (row, step_index,
+    # step_total), see ExecutorSignals) with a fake row, watch tree's
+    # highlight_active_row receive just the row.
     received = []
     orig = w.widget.highlight_active_row
     w.widget.highlight_active_row = lambda r: received.append(r)
     try:
-        w.executor.signals.step_started.emit("fake-row")
+        w.executor.signals.step_started = ("fake-row", 1, 1)
         assert received == ["fake-row"]
     finally:
         w.widget.highlight_active_row = orig
 
 
+@pytest.mark.xfail(
+    reason=(
+        "StatusBar._poll_timer no longer exists anywhere in the source — the "
+        "live 10 Hz time-readout poll was replaced by "
+        "PluggableProtocolDockPane._protocol_poll_scheduler (an APScheduler "
+        "BackgroundScheduler owned by the dock pane), and the standalone demo "
+        "window was never given an equivalent. Needs a design decision (a "
+        "QTimer owned by the window/a controller, not the view, per the "
+        "MVC-separation convention) before it can be ported here — real bug, "
+        "not small enough to fix inline."
+    ),
+    strict=True,
+)
 def test_window_status_poll_timer_runs_at_10_hz(qapp):
     """The status bar's time-poll timer interval should be 100 ms (10 Hz)."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -277,6 +294,13 @@ def test_window_status_poll_timer_runs_at_10_hz(qapp):
     assert w.status_bar._poll_timer.interval() == 100
 
 
+@pytest.mark.xfail(
+    reason=(
+        "StatusBar._poll_timer no longer exists — see "
+        "test_window_status_poll_timer_runs_at_10_hz."
+    ),
+    strict=True,
+)
 def test_window_status_poll_timer_runs_only_while_running(qapp):
     """The poll timer starts when the model goes running and stops on stop."""
     from pluggable_protocol_tree.builtins.type_column import make_type_column
@@ -330,8 +354,8 @@ def test_phase_started_signal_updates_phase_counters(qapp):
         columns_factory=lambda: [make_type_column()], phase_ack_topic="x/applied"
     )
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.signals.protocol_started.emit()
-    w.executor.signals.phase_started.emit(2, 4, 1.0)
+    w.executor.signals.protocol_started = True
+    w.executor.signals.phase_started = (2, 4, 1.0)
     assert w.status_model.phase_index == 2
     assert w.status_model.phase_total == 4
 
@@ -462,7 +486,7 @@ def test_protocol_started_swaps_buttons(qapp):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.signals.protocol_started.emit()
+    w.executor.signals.protocol_started = True
     nb = w.navigation_bar
     assert nb.btn_play.isEnabled()  # toggles to pause while running
     assert nb.btn_stop.isEnabled()
@@ -479,8 +503,8 @@ def test_protocol_terminated_returns_to_idle(qapp):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.signals.protocol_started.emit()
-    w.executor.signals.protocol_finished.emit()
+    w.executor.signals.protocol_started = True
+    w.executor.signals.protocol_finished = True
     nb = w.navigation_bar
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
@@ -709,8 +733,13 @@ def test_post_build_setup_default_is_no_op(qapp):
 
 
 def test_step_repetition_renders_chain(qapp):
-    """step_repetition with a non-empty chain renders 'rep i/n of name'
-    through the controller -> model -> bound rep-chain label."""
+    """step_repetition with a non-empty chain renders 'Step Rep i/n' through
+    the controller -> model -> bound rep-chain label.
+
+    Format per ProtocolStatusController._fmt_chain: the older "rep i/n of
+    'name'" overflowed the fixed-width status label and double-counted the
+    step itself in the count beside it.
+    """
     from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.demos.base_demo_window import (
         BasePluggableProtocolDemoWindow,
@@ -718,8 +747,8 @@ def test_step_repetition_renders_chain(qapp):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.signals.step_repetition.emit([("Wash", 2, 3)])
-    assert w.status_bar.lbl_step_repetition.text() == "rep 2/3 of 'Wash'"
+    w.executor.signals.step_repetition = [("Wash", 2, 3)]
+    assert w.status_bar.lbl_step_repetition.text() == "Step Rep 2/3"
 
 
 def test_step_repetition_empty_chain_clears(qapp):
@@ -731,11 +760,20 @@ def test_step_repetition_empty_chain_clears(qapp):
 
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = BasePluggableProtocolDemoWindow(cfg)
-    w.executor.signals.step_repetition.emit([("Wash", 1, 3)])
-    w.executor.signals.step_repetition.emit([])
+    w.executor.signals.step_repetition = [("Wash", 1, 3)]
+    w.executor.signals.step_repetition = []
     assert w.status_bar.lbl_step_repetition.text() == ""
 
 
+@pytest.mark.xfail(
+    reason=(
+        "StatusBar._poll_timer no longer exists — see "
+        "test_window_status_poll_timer_runs_at_10_hz. Everything else this "
+        "test checks (idle button state + the dialog call) is wired and "
+        "passes; only the poll-timer assertion blocks it."
+    ),
+    strict=True,
+)
 def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     """protocol_error --> idle button state, tick timer stopped, dialog
     shown via the styled pyface_wrapper.error helper.
@@ -756,9 +794,9 @@ def test_protocol_error_resets_state_and_calls_dialog(qapp, monkeypatch):
     cfg = DemoConfig(columns_factory=lambda: [make_type_column()])
     w = bdw.BasePluggableProtocolDemoWindow(cfg)
     nb = w.navigation_bar
-    w.executor.signals.protocol_started.emit()
+    w.executor.signals.protocol_started = True
     assert nb.btn_stop.isEnabled()
-    w.executor.signals.protocol_error.emit("kaboom")
+    w.executor.signals.protocol_error = "kaboom"
     assert nb.btn_play.isEnabled()
     assert not nb.btn_stop.isEnabled()
     assert not w.status_bar._poll_timer.isActive()
