@@ -28,7 +28,10 @@ from portable_dropbot_controller.consts import (
     PMT_STEP_PER_SPOT_OVERHEAD_S,
     PMT_STEP_TIMEOUT_MARGIN_S,
 )
-from portable_dropbot_protocol_controls.consts import PMT_CAPTURE_COLUMN_ID
+from portable_dropbot_protocol_controls.consts import (
+    FLUORESCENCE_CAPTURE_COLUMN_ID,
+    PMT_CAPTURE_COLUMN_ID,
+)
 from portable_dropbot_protocol_controls.protocol_columns.pmt_capture_column import (
     PmtCaptureHandler,
     PmtStepCaptureColumnModel,
@@ -79,6 +82,9 @@ STEP_VALUE = {
 def _row(value=None, uuid="row-uuid", dotted_path="1.2"):
     row = MagicMock()
     setattr(row, PMT_CAPTURE_COLUMN_ID, value)
+    # The sibling capture column is empty on a real row; a bare MagicMock
+    # auto-creates a truthy attribute for it, tripping check_single_capture.
+    setattr(row, FLUORESCENCE_CAPTURE_COLUMN_ID, None)
     row.uuid = uuid
     row.dotted_path.return_value = dotted_path
 

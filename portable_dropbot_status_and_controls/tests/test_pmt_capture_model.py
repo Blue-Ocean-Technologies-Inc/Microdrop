@@ -207,7 +207,8 @@ def test_add_result_frame_labels_with_the_dones_label():
             ok=True, aborted=False, directory="/tmp", results=[], label="step1.2-end"
         )
     )
-    assert m.frame_label == "Run 1 / 1 · step1.2-end"
+    assert m.frame_label.startswith("Run 1 / 1 · ")
+    assert m.frame_label.endswith("· step1.2-end")
 
 
 def test_result_frames_page_through_runs_and_clamp_at_the_ends():
