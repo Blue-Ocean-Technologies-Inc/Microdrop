@@ -11,11 +11,14 @@
 """Tests for the force column — model, factory, view dependency
 declarations, and the calibration-driven repaint handler."""
 
+# Third-party imports.
 import pytest
 
+# Enthought library imports.
 from pyface.qt.QtCore import QObject, Signal
 from traits.api import HasTraits, Int
 
+# Microdrop package imports.
 from dropbot_protocol_controls.protocol_columns import force_column
 from dropbot_protocol_controls.protocol_columns.force_column import (
     ForceColumnHandler,
@@ -25,6 +28,7 @@ from dropbot_protocol_controls.protocol_columns.force_column import (
 )
 from pluggable_protocol_tree.models.column import Column
 
+# Microdrop utils imports.
 from microdrop_utils.force_math_helpers import force_for_step
 
 
@@ -46,7 +50,7 @@ def patch_c_per_a(monkeypatch):
     def _set(value):
         monkeypatch.setattr(
             force_column,
-            "current_capacitance_per_unit_area",
+            "current_full_electrode_capacitance_per_unit_area",
             lambda: value,
         )
 

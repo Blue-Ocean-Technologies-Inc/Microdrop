@@ -152,7 +152,7 @@ def test_on_pre_step_publishes_start_json_on_flip_on():
     """record=True, last=False → publish start JSON; scratch updated to True."""
     handler = RecordHandler()
     row = MagicMock()
-    row.uuid = "abc123"
+    row.dotted_path.return_value = "abc123"
     row.name = "Step 1"
     row.record = True
 
@@ -231,7 +231,7 @@ def test_on_pre_step_rearming_across_three_calls():
 
     # Step 1: flip on
     row1 = MagicMock()
-    row1.uuid = "s1"
+    row1.dotted_path.return_value = "s1"
     row1.name = "Step 1"
     row1.record = True
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
@@ -239,7 +239,7 @@ def test_on_pre_step_rearming_across_three_calls():
 
     # Step 2: flip off
     row2 = MagicMock()
-    row2.uuid = "s2"
+    row2.dotted_path.return_value = "s2"
     row2.name = "Step 2"
     row2.record = False
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
@@ -247,7 +247,7 @@ def test_on_pre_step_rearming_across_three_calls():
 
     # Step 3: flip on again
     row3 = MagicMock()
-    row3.uuid = "s3"
+    row3.dotted_path.return_value = "s3"
     row3.name = "Step 3"
     row3.record = True
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):

@@ -10,13 +10,15 @@
 
 """Unit tests for ssh_controls.models — ExperimentsSyncRequest validation."""
 
+# Standard library imports.
 import json
 
+# Third-party imports.
 import pytest
 from pydantic import ValidationError
 
+# Microdrop package imports.
 from ssh_controls.models import ExperimentsSyncRequest, ExperimentsSyncRequestPublisher
-
 
 VALID_PAYLOAD = {
     "host": "192.168.1.10",
@@ -29,7 +31,6 @@ VALID_PAYLOAD = {
 
 
 class TestExperimentsSyncRequest:
-
     def test_valid_payload_parses(self):
         model = ExperimentsSyncRequest.model_validate(VALID_PAYLOAD)
         assert model.host == "192.168.1.10"
@@ -80,12 +81,18 @@ class TestExperimentsSyncRequest:
 
 
 class TestExperimentsSyncRequestPublisher:
-
     def test_publisher_subclass_has_validator(self):
-        assert ExperimentsSyncRequestPublisher.validator_class is ExperimentsSyncRequest
+        # validator_class is a Traits Type trait — its default is only
+        # visible on an instance, not the class (Traits swallows
+        # class-level trait defaults; same trap as Envisage's Plugin.id).
+        publisher = ExperimentsSyncRequestPublisher(
+            topic="ssh_service/request/sync_experiments"
+        )
+        assert publisher.validator_class is ExperimentsSyncRequest
 
     def test_publish_sends_validated_json(self, monkeypatch):
-        """Publisher.publish should validate the payload and route it through publish_message."""
+        """Publisher.publish should validate the payload and route it
+        through publish_message."""
         captured = {}
 
         def fake_publish_message(message, topic, **kwargs):
@@ -94,9 +101,12 @@ class TestExperimentsSyncRequestPublisher:
 
         # Patch the symbol inside the module that publish() actually calls
         import microdrop_utils.dramatiq_pub_sub_helpers as pub_sub
+
         monkeypatch.setattr(pub_sub, "publish_message", fake_publish_message)
 
-        publisher = ExperimentsSyncRequestPublisher(topic="ssh_service/request/sync_experiments")
+        publisher = ExperimentsSyncRequestPublisher(
+            topic="ssh_service/request/sync_experiments"
+        )
         publisher.publish(**VALID_PAYLOAD)
 
         assert captured["topic"] == "ssh_service/request/sync_experiments"
@@ -106,7 +116,9 @@ class TestExperimentsSyncRequestPublisher:
         assert parsed["identity_path"] == VALID_PAYLOAD["identity_path"]
 
     def test_publish_raises_on_invalid_payload(self):
-        publisher = ExperimentsSyncRequestPublisher(topic="ssh_service/request/sync_experiments")
+        publisher = ExperimentsSyncRequestPublisher(
+            topic="ssh_service/request/sync_experiments"
+        )
         with pytest.raises(ValidationError):
             publisher.publish(
                 host="192.168.1.10",

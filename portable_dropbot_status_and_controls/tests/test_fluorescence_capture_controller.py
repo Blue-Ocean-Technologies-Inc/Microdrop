@@ -18,6 +18,7 @@ from portable_dropbot_controller.consts import (
     MOTOR_HOME,
 )
 from portable_dropbot_protocol_controls.consts import FLUORESCENCE_CAPTURE_COLUMN_ID
+from portable_dropbot_status_and_controls.controllers import capture_pane_controller
 from portable_dropbot_status_and_controls.controllers import (
     fluorescence_capture_controller as mod,
 )
@@ -46,8 +47,14 @@ def _wire(monkeypatch):
         "publish_message",
         lambda topic, message: sent["raw"].append((topic, message)),
     )
+    # _abort_capture lives on the shared base and holds its own reference.
     monkeypatch.setattr(
-        mod.protocol_tree_set_cell_publisher,
+        capture_pane_controller,
+        "publish_message",
+        lambda topic, message: sent["raw"].append((topic, message)),
+    )
+    monkeypatch.setattr(
+        capture_pane_controller.protocol_tree_set_cell_publisher,
         "publish",
         lambda **kw: sent["set_cell"].append(kw),
     )
@@ -158,7 +165,7 @@ def test_loading_a_step_does_not_push(monkeypatch):
 def test_file_link_opens_the_rows_path_and_arrows_page_frames(monkeypatch):
     model, _controller, _sent = _wire(monkeypatch)
     opened = []
-    monkeypatch.setattr(mod, "open_file", opened.append)
+    monkeypatch.setattr(capture_pane_controller, "open_file", opened.append)
 
     first = CaptureResultFrame(
         rows=[FluorescenceResultRow(filter_position=1, path="/tmp/flu/a.png")]

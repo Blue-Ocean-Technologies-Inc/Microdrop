@@ -11,11 +11,14 @@
 """JSON persistence round-trip for Int voltage/frequency columns and the
 derived Force column (computed, never persisted)."""
 
+# Standard library imports.
 import json
 from unittest.mock import patch
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from dropbot_protocol_controls.protocol_columns.force_column import (
     make_force_column,
 )
@@ -35,6 +38,7 @@ from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.models.row_manager import RowManager
 
+# Microdrop utils imports.
 from microdrop_utils.force_math_helpers import force_for_step
 
 
@@ -268,14 +272,14 @@ def test_check_droplets_per_row_round_trip_through_json():
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "S1", "check_droplets": True})
     rm.add_step(values={"name": "S2", "check_droplets": False})
-    rm.add_step(values={"name": "S3"})  # default → True
+    rm.add_step(values={"name": "S3"})  # default → False
 
     payload = rm.to_json()
     parsed = json.loads(json.dumps(payload))
 
     rm2 = RowManager.from_json(parsed, columns=_build_eight_columns())
     steps = rm2.root.children
-    assert [s.check_droplets for s in steps] == [True, False, True]
+    assert [s.check_droplets for s in steps] == [True, False, False]
     assert all(isinstance(s.check_droplets, bool) for s in steps)
 
 
@@ -291,10 +295,10 @@ def test_check_droplets_column_metadata_in_json_payload():
     )
 
 
-def test_legacy_load_without_check_droplets_field_defaults_to_true():
+def test_legacy_load_without_check_droplets_field_defaults_to_false():
     # Build a JSON payload as if check_droplets had never existed (i.e.
     # a protocol saved before PPT-8). After load, all rows should have
-    # check_droplets=True (the column default).
+    # check_droplets=False (the column default).
     cols_no_check = [
         c for c in _build_eight_columns() if c.model.col_id != "check_droplets"
     ]
@@ -307,4 +311,4 @@ def test_legacy_load_without_check_droplets_field_defaults_to_true():
         json.loads(json.dumps(payload)), columns=_build_eight_columns()
     )
     for step in rm2.root.children:
-        assert step.check_droplets is True
+        assert step.check_droplets is False
