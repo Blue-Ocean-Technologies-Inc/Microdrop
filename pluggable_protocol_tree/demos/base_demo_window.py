@@ -24,23 +24,40 @@ See PPT-12 spec for design rationale (composition vs inheritance).
 
 from __future__ import annotations
 
+# Standard library imports.
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+# Third-party imports.
 import dramatiq
 
-from microdrop_utils.broker_server_helpers import (
-    remove_middleware_from_dramatiq_broker,
+# Enthought library imports.
+from pyface.qt.QtCore import Qt, Signal
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMainWindow,
+    QSplitter,
+    QStatusBar,
+    QToolBar,
 )
+
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import (
-    ELECTRODES_STATE_APPLIED, ELECTRODES_STATE_CHANGE,
+    ELECTRODES_STATE_APPLIED,
+    ELECTRODES_STATE_CHANGE,
 )
 from pluggable_protocol_tree.demos.electrode_responder import (
     DEMO_RESPONDER_ACTOR_NAME,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.broker_server_helpers import (
+    remove_middleware_from_dramatiq_broker,
+)
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -64,6 +81,7 @@ class StatusReadout:
     ``f"{label}: {fmt(message)}"``. Until the first ack, the label
     shows ``f"{label}: {initial}"``.
     """
+
     label: str
     topic: str
     fmt: Callable[[str], str]
@@ -83,16 +101,14 @@ class DemoConfig:
     window_size: tuple[int, int] = (1100, 650)
 
     # Optional sample steps populated after RowManager construction.
-    pre_populate: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda rm: None)
-    )
+    pre_populate: Callable[[Any], None] = field(default_factory=lambda: lambda rm: None)
 
     # Subscribe demo responders / additional listeners on the router.
     # Called AFTER the base wires the standard PPT-3 electrode chain
     # + the phase-ack listener (if phase_ack_topic is set) +
     # the StatusReadout listeners.
     routing_setup: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda router: None)
+        default_factory=lambda: lambda router: None
     )
 
     # Single ack topic that drives the per-phase timer.
@@ -112,7 +128,7 @@ class DemoConfig:
     # Called as the FINAL step of __init__ — all base scaffolding (executor,
     # status bar, toolbar, routing) is already in place.
     post_build_setup: Callable[[Any], None] = field(
-        default_factory=lambda: (lambda window: None)
+        default_factory=lambda: lambda window: None
     )
 
 
@@ -134,8 +150,14 @@ def _slug(label: str) -> str:
 # must add their prefix here. ``ppt11_demo_`` is forward-declared for the
 # planned PPT-11 demo refactor; no actors with that prefix exist yet.
 _DEMO_PREFIXES = (
-    "ppt_demo_", "ppt4_demo_", "ppt5_demo_", "ppt6_demo_", "ppt11_demo_",
-    "ppt12_demo_", "ppt_vf_demo_", "integration_demo_",
+    "ppt_demo_",
+    "ppt4_demo_",
+    "ppt5_demo_",
+    "ppt6_demo_",
+    "ppt11_demo_",
+    "ppt12_demo_",
+    "ppt_vf_demo_",
+    "integration_demo_",
 )
 
 
@@ -148,6 +170,7 @@ def _is_purgable_demo_actor_name(name: str) -> bool:
 class _PerSlugEmitter:
     """Tiny shim that exposes .emit(message) and forwards to the
     window's per-instance readout_acked signal with a fixed slug."""
+
     __slots__ = ("_signal", "_slug")
 
     def __init__(self, signal, slug):
@@ -185,7 +208,7 @@ def _make_readout_actor(slug: str):
     broker = dramatiq.get_broker()
     try:
         broker.get_actor(actor_name)
-        return actor_name   # already registered
+        return actor_name  # already registered
     except dramatiq.errors.ActorNotFound:
         pass
 
@@ -199,17 +222,11 @@ def _make_readout_actor(slug: str):
     return actor_name
 
 
-from pyface.qt.QtCore import Qt, Signal
-from pyface.qt.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QSplitter, QStatusBar, QToolBar,
-)
-
-
 class BasePluggableProtocolDemoWindow(QMainWindow):
     """Hosts a ProtocolTreePane + the demo-only toolbar / readouts /
     Dramatiq routing scaffolding. See PPT-10.1 for the pane refactor."""
 
-    phase_acked = Signal()                    # forwarded from pane.phase_acked
+    phase_acked = Signal()  # forwarded from pane.phase_acked
     readout_acked = Signal(str, str)
 
     def __init__(self, config: DemoConfig):
@@ -230,26 +247,41 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         # Forward the pane's phase_acked into the window's signal so
         # tests / external code that connect to ``window.phase_acked``
-        # keep working unchanged. The phase-ack actor (module level)
-        # emits ``window.phase_acked``; route that into the pane so
-        # _on_phase_ack runs and resets the per-phase timer.
+        # keep working unchanged. (There is nothing left to route it TO on
+        # the pane: ProtocolTreePane._on_phase_ack was already a no-op
+        # before issue #471 removed it — "phase boundary now comes from the
+        # executor's phase_started signal" — so this is just the outward
+        # forward, no inward connection.)
         self.pane.phase_acked.connect(self.phase_acked.emit)
-        if config.phase_ack_topic is not None:
-            self.phase_acked.connect(self.pane._on_phase_ack)
 
-        # Standalone composition root (no dock pane here): own the status
-        # controller that links the executor's Qt signals to the status model
-        # and bind the status bar to it (issue #467).
+        # Standalone composition root (no dock pane here): own the executor
+        # and the status controller that links its signals to the status
+        # model (issue #467). The pane itself is a pure view and owns
+        # neither (issue #471) — mirrors PluggableProtocolDockPane's
+        # _executor_default, simplified for the demo (no preferences/
+        # lifecycle handlers).
+        import threading
+
+        from pluggable_protocol_tree.execution.events import PauseEvent
+        from pluggable_protocol_tree.execution.executor import ProtocolExecutor
+        from pluggable_protocol_tree.execution.signals import ExecutorSignals
         from pluggable_protocol_tree.services.protocol_status_controller import (
             ProtocolStatusController,
         )
+
+        self._executor = ProtocolExecutor(
+            row_manager=self.pane.manager,
+            signals=ExecutorSignals(),
+            pause_event=PauseEvent(),
+            stop_event=threading.Event(),
+        )
         self.status_controller = ProtocolStatusController(
-            signals=self.pane.executor.signals,
+            signals=self._executor.signals,
             manager=self.pane.manager,
-            executor=self.pane.executor,
+            executor=self._executor,
         )
         self.pane.status_controller = self.status_controller
-        self.pane.status_bar.bind(self.status_controller.model)
+        self._wire_run_control()
 
         self._side_panel = None
         if config.side_panel_factory is not None:
@@ -259,10 +291,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
                 splitter = QSplitter(Qt.Horizontal)
                 splitter.addWidget(self.pane)
                 splitter.addWidget(side)
-                splitter.setSizes([
-                    int(config.window_size[0] * 0.65),
-                    int(config.window_size[0] * 0.35),
-                ])
+                splitter.setSizes(
+                    [
+                        int(config.window_size[0] * 0.65),
+                        int(config.window_size[0] * 0.35),
+                    ]
+                )
                 self._central_content = splitter
             else:
                 self._central_content = self.pane
@@ -304,6 +338,60 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
         self._build_toolbar()
         config.post_build_setup(self)
+
+    # --- run control (issue #471 parity, simplified for the demo) ----
+    # The dock pane is the composition root that owns the executor, the
+    # status controller, and all run control in the full app; a standalone
+    # demo has no dock pane, so the window plays that role for its own
+    # executor here, driving the pane's pure-view methods.
+
+    def _wire_run_control(self):
+        signals = self._executor.signals
+        signals.observe(
+            lambda e: self.pane.enter_running_buttons(),
+            "protocol_started",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self.pane.enter_paused_buttons(), "protocol_paused", dispatch="ui"
+        )
+        signals.observe(
+            lambda e: self.pane.enter_resumed_buttons(),
+            "protocol_resumed",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self._on_protocol_terminated(),
+            "protocol_finished",
+            dispatch="ui",
+        )
+        signals.observe(
+            lambda e: self._on_protocol_terminated(), "protocol_aborted", dispatch="ui"
+        )
+        signals.observe(self._on_protocol_error, "protocol_error", dispatch="ui")
+        # step_started's payload is (row, step_index, step_total) — see
+        # ExecutorSignals; only the row is the tree widget's business.
+        signals.observe(
+            lambda e: self.pane.widget.highlight_active_row(e.new[0]),
+            "step_started",
+            dispatch="ui",
+        )
+        self.status_controller.model.observe(
+            self._on_names_changed,
+            "recent_step_name,next_step_name,rep_chain_label",
+            dispatch="ui",
+        )
+        self.pane.enter_idle_buttons()
+
+    def _on_protocol_error(self, event):
+        self.pane.enter_idle_buttons()
+        self.pane.show_protocol_error_dialog(event.new)
+
+    def _on_names_changed(self, event=None):
+        model = self.status_controller.model
+        self.pane.status_bar._refresh_names(
+            model.recent_step_name, model.next_step_name, model.rep_chain_label
+        )
 
     # --- demo-window-only chrome -----------------------------------
 
@@ -362,7 +450,8 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
             router = MessageRouterActor()
 
             broker_topics_to_check = (
-                ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED,
+                ELECTRODES_STATE_CHANGE,
+                ELECTRODES_STATE_APPLIED,
             )
             extra_topics = []
             if self.config.phase_ack_topic is not None:
@@ -448,7 +537,7 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
 
     @property
     def executor(self):
-        return self.pane.executor
+        return self._executor
 
     @property
     def navigation_bar(self):
@@ -480,8 +569,12 @@ class BasePluggableProtocolDemoWindow(QMainWindow):
         return self.status_controller.model
 
     def _on_protocol_terminated(self):
-        """Test hook — calls the pane's terminator + resets demo readouts."""
-        self.pane._on_protocol_terminated()
+        """Runs on every terminal executor signal (finished/aborted) and
+        doubles as a manual test hook: idle button state + demo readout
+        reset. (ProtocolTreePane no longer has a terminator of its own to
+        delegate to — issue #471 moved that to the dock pane, which this
+        standalone window has none of.)"""
+        self.pane.enter_idle_buttons()
         for readout in self.config.status_readouts:
             slug = _slug(readout.label)
             label = self._readout_labels.get(slug)

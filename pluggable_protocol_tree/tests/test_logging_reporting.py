@@ -51,7 +51,9 @@ def test_build_html_has_expected_sections():
         columns=cols,
         metadata={"Experiment": "exp-1"},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "<html" in html.lower()
@@ -66,7 +68,9 @@ def test_build_html_empty_data_does_not_crash():
         columns=[],
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "<html" in html.lower()
@@ -78,7 +82,9 @@ def test_build_html_escapes_metadata():
         columns=[],
         metadata={"k": "<x> & y"},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "&lt;x&gt;" in html and "&amp;" in html
@@ -110,7 +116,9 @@ def test_build_html_uses_version_correct_plotly_cdn_not_stale_latest():
         columns=cols,
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "plotly-latest.min.js" not in html  # stale v1.x bundle
@@ -150,7 +158,9 @@ def test_build_html_renders_path_metadata_as_clickable_anchors(tmp_path):
             "Steps": "0 / 1",
         },
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
 
@@ -178,7 +188,9 @@ def test_build_html_renders_contributed_folder_metadata_as_anchor(tmp_path):
         columns=[],
         metadata={"PMT Captures Folder": str(folder), "PMT Gain": "128"},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
 
@@ -194,7 +206,9 @@ def test_build_html_path_metadata_non_absolute_falls_back_to_escaped_text():
         columns=[],
         metadata={"Protocol Path": "<not-a-path>"},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "&lt;not-a-path&gt;" in html
@@ -214,7 +228,9 @@ def test_build_html_data_files_section_lists_clickable_links(tmp_path):
         columns=[],
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
         data_files=[json_f, csv_f],
     )
@@ -230,7 +246,9 @@ def test_build_html_no_data_files_omits_section():
         columns=[],
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "<h2>Data Files</h2>" not in html
@@ -253,7 +271,9 @@ def test_trends_section_renders_horizontal_bars_keyed_by_step_index():
         columns=cols,
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert '"orientation":"h"' in html
@@ -349,7 +369,9 @@ def test_media_section_renders_thumbnails_and_play_placeholders(tmp_path):
         columns=[],
         metadata={},
         media={"video": [str(vid)], "image": [str(img)], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     # Section / sub-section headings
@@ -374,7 +396,9 @@ def test_media_section_omitted_when_no_captures():
         columns=[],
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "<h2>Media Captures</h2>" not in html
@@ -388,7 +412,9 @@ def test_build_html_without_step_idx_does_not_crash():
         columns=["Capacitance (pF)"],
         metadata={},
         media={"video": [], "image": [], "other": []},
-        device_context=LoggingDeviceContext(experiment_directory=Path(".")),
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
         notes=None,
     )
     assert "<html" in html.lower()
