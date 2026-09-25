@@ -8,26 +8,33 @@
 #
 # Thanks for using Microdrop open source!
 
-from shapely.geometry import LineString, Polygon
-import matplotlib.pyplot as plt
+# Third-party imports.
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+from shapely.geometry import LineString, Polygon
+
+# Logger import.
+from logger.logger_service import get_logger
 
 CSS_COLORS = list(mcolors.CSS4_COLORS.keys())
-
-from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
-def get_polygon_distance_from_line_start(target_polygon: 'Polygon', target_line: 'LineString'):
+def get_polygon_distance_from_line_start(
+    target_polygon: "Polygon", target_line: "LineString"
+):
     # Calculate the geometric intersection between the polygon and the line.
     # Returns LineString = segment of line inside polygon.
     intersection_geometry = target_polygon.intersection(target_line)
 
     if intersection_geometry.is_empty:
         # Handle edge case where polygon doesn't actually intersect
-        logger.error("No intersection found: Provide intersecting polygons for a result. Returning infinity")
-        return float('inf')
+        logger.error(
+            "No intersection found: Provide intersecting polygons for a "
+            "result. Returning infinity"
+        )
+        return float("inf")
 
     # Find intersection geometry center point
     # This reduces the intersection segment to a single Point that we can measure.
@@ -40,7 +47,10 @@ def get_polygon_distance_from_line_start(target_polygon: 'Polygon', target_line:
 
     return distance_from_start
 
-def sort_polygon_indices_along_line(line: LineString, polygons: list[Polygon], indices: list[int]) -> list[int]:
+
+def sort_polygon_indices_along_line(
+    line: LineString, polygons: list[Polygon], indices: list[int]
+) -> list[int]:
     """
     Sorts a list of polygon indices based on the spatial order of their intersection
     along a specific line.
@@ -64,12 +74,15 @@ def sort_polygon_indices_along_line(line: LineString, polygons: list[Polygon], i
 
     # Compute distances first to avoid calling the geometric function twice
     #    and to easily filter out None values.
-    # sorted_indices = sorted(indices, key=_get_distance_along_line)
+    poly_dist_along_line = [
+        (index, _get_distance_along_line(polygons[index])) for index in indices
+    ]
 
-    poly_dist_along_line = [(indices[idx], _get_distance_along_line(polygon)) for idx, polygon in
-                            enumerate(polygons)]
-
-    sorted_indices = [el[0] for el in poly_dist_along_line if el[1] != float('inf')]
+    sorted_indices = [
+        index
+        for index, distance in sorted(poly_dist_along_line, key=lambda pair: pair[1])
+        if distance != float("inf")
+    ]
 
     return sorted_indices
 
@@ -80,19 +93,34 @@ def draw_polygons_and_line(polygons, line, sorted_result=None, index_labels=None
 
     # Plot the Line
     lx, ly = line.xy
-    ax.plot(lx, ly, color='blue', linewidth=2, label='Reference Line', linestyle='--')
-    ax.plot(lx[0], ly[0], 'o', color='blue', label='Start of Line')
+    ax.plot(lx, ly, color="blue", linewidth=2, label="Reference Line", linestyle="--")
+    ax.plot(lx[0], ly[0], "o", color="blue", label="Start of Line")
 
     # Plot the Polygons
     for i, poly in enumerate(polygons):
         x, y = poly.exterior.xy
         poly_id = index_labels[i] if index_labels else str(i)
-        ax.fill(x, y, alpha=0.5, fc=CSS_COLORS[i], ec='black', label=f'Poly Index: {poly_id}')
+        ax.fill(
+            x,
+            y,
+            alpha=0.5,
+            fc=CSS_COLORS[i],
+            ec="black",
+            label=f"Poly Index: {poly_id}",
+        )
 
         # Label the Polygon Index inside the shape
         c = poly.centroid
-        ax.text(c.x, c.y, f"ID: {poly_id}", fontsize=12, ha='center', va='center',
-                fontweight='bold', color='black')
+        ax.text(
+            c.x,
+            c.y,
+            f"ID: {poly_id}",
+            fontsize=12,
+            ha="center",
+            va="center",
+            fontweight="bold",
+            color="black",
+        )
 
     # Annotate the Resulting Rank
     if sorted_result:
@@ -102,15 +130,22 @@ def draw_polygons_and_line(polygons, line, sorted_result=None, index_labels=None
             x, y = poly.exterior.xy
             top_y = max(y)
             mid_x = (min(x) + max(x)) / 2
-            ax.text(mid_x, top_y + 0.8, f"Rank: {rank}", ha='center', color='black',
-                    fontsize=10, fontweight='bold')
+            ax.text(
+                mid_x,
+                top_y + 0.8,
+                f"Rank: {rank}",
+                ha="center",
+                color="black",
+                fontsize=10,
+                fontweight="bold",
+            )
 
-    ax.set_title(f"Polygon Line Intersection")
+    ax.set_title("Polygon Line Intersection")
     ax.set_xlabel("X Coordinate")
     ax.set_ylabel("Y Coordinate")
     ax.legend().remove()
-    ax.grid(True, linestyle=':', alpha=0.6)
-    ax.set_aspect('equal')
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.set_aspect("equal")
 
     return fig, ax
 
