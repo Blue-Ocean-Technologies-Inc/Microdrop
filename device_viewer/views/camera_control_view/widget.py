@@ -50,14 +50,13 @@ from microdrop_utils.v4l2_fps_getter import (
 )
 
 # Local imports.
-from ...consts import MIN_RECORDING_FPS, RECORDER_BACKEND_FFMPEG
+from ...consts import MIN_RECORDING_FPS
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
-from ...utils.recording.ffmpeg import RawFFMPEGVideoRecorder
-from ...utils.recording.native import NativeVideoRecorder
+from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
 from .utils import _show_media_capture_status_message
@@ -160,53 +159,16 @@ class CameraControlWidget(QWidget):
         self.check_initial_camera_state()
 
     def _build_recorder(self, resolution=None, fps=None):
-        """Recorder configured from the camera preferences. Both recorders
-        share VideoRecorderBase, so the rest of the widget is agnostic.
-        ``resolution``/``fps`` (known at recording start) select which
-        per-resolution-class bitrate preference applies to the Qt/MKV
-        recorder; at construction time they are unknown and the bitrate
-        stays encoder-chosen."""
-
-        if self.preferences.recorder_backend == RECORDER_BACKEND_FFMPEG:
-            # Raw camera planes piped to an ffmpeg subprocess at full
-            # camera rate (untouched by the preview frame cap thanks to
-            # frame_sink=the session's own sink).
-            logger.info(
-                f"Recorder from preferences: FFmpeg process — "
-                f"container={self.preferences.ffmpeg_container}, "
-                f"codec={self.preferences.ffmpeg_video_codec}, "
-                f"preset={self.preferences.ffmpeg_preset}, "
-                f"crf={self.preferences.ffmpeg_crf}, "
-                f"extra args={self.preferences.ffmpeg_extra_output_args!r}"
-            )
-            recorder = RawFFMPEGVideoRecorder(
-                self.video_item,
-                frame_sink=self.camera_device.sink,
-                video_codec=self.preferences.ffmpeg_video_codec,
-                preset=self.preferences.ffmpeg_preset,
-                crf=self.preferences.ffmpeg_crf,
-                extra_output_args=self.preferences.ffmpeg_extra_output_args,
-            )
-        else:
-            # Qt's own QMediaRecorder: hardware-encoded, zero per-frame
-            # Python work.
-            video_bitrate = self.preferences.recording_bitrate_bps(resolution, fps)
-            bitrate_description = (
-                f"{video_bitrate:,} bps" if video_bitrate else "encoder default"
-            )
-            logger.info(
-                f"Recorder from preferences: Qt MediaRecorder — "
-                f"format={self.preferences.qt_video_format}, "
-                f"codec={self.preferences.qt_video_codec}, "
-                f"bitrate={bitrate_description}"
-            )
-            recorder = NativeVideoRecorder(
-                session=self.camera_device.session,
-                video_item=self.video_item,
-                file_format=self.preferences.qt_video_format,
-                video_codec=self.preferences.qt_video_codec,
-                video_bitrate=video_bitrate,
-            )
+        """The preferences' recorder (see build_recorder), wired to this
+        panel's recording handlers."""
+        recorder = build_recorder(
+            self.preferences,
+            self.camera_device.session,
+            self.camera_device.sink,
+            self.video_item,
+            resolution,
+            fps,
+        )
 
         recorder.error_occurred.connect(self.handle_recording_error)
         recorder.recording_stopped.connect(self.handle_recording_stopped)
