@@ -736,8 +736,23 @@ class FluorescenceCaptureDone(BaseModel):
     directory: str = ""
     #: Saved PNGs, in capture order.
     frames: list[FluorescenceCapturedFrame] = []
+    #: The wheel's actual resting position once teardown finishes — the last
+    #: filter successfully moved to, FLUORESCENCE_PARK_FILTER when park_motor
+    #: parked it there; None when nothing moved (e.g. a refusal). The pane's
+    #: manual Filter pick follows this so it never shows a stale value.
+    final_filter_position: int | None = None
     #: The failing stage and why, "aborted", or "busy" for a refusal.
     error: str = ""
+
+    @field_validator("final_filter_position")
+    @classmethod
+    def _final_filter_position_known(cls, value):
+        if value is not None and value not in FILTER_POSITIONS:
+            raise ValueError(
+                f"filter position {value} is not one of {FILTER_POSITIONS}"
+            )
+
+        return value
 
 
 fluorescence_capture_publisher = ValidatedTopicPublisher(
