@@ -20,6 +20,7 @@ from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
+from image_viewer.plugin import ImageViewerPlugin
 from logger_ui.plugin import LoggerUIPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_application.application import MicrodropApplication
@@ -93,6 +94,7 @@ FRONTEND_PLUGINS = [
     LoggerUIPlugin,
     PluginManagementPlugin,
     DeviceViewerPlugin,
+    ImageViewerPlugin,
     UserHelpPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,

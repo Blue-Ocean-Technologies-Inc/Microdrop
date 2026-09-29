@@ -7,6 +7,7 @@ root_packages =
     dropbot_status_and_controls
     dropbot_tools_menu
     electrode_controller
+    image_viewer
     integrated_ssh_portal
     logger
     logger_ui
@@ -46,6 +47,7 @@ modules =
     dropbot_status_and_controls
     dropbot_tools_menu
     electrode_controller
+    image_viewer
     integrated_ssh_portal
     logger_ui
     manual_controls
