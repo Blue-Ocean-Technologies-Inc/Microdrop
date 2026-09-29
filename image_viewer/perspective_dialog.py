@@ -260,7 +260,7 @@ class PerspectiveTools(HasTraits):
 
 
 # Glyphs match the device viewer: its Reset Camera Perspective and Rotate
-# Camera buttons, and the viewport controls' reset-zoom button.
+# Device buttons, and the viewport controls' reset-zoom button.
 perspective_tools_view = View(
     HGroup(
         UItem(
@@ -272,7 +272,7 @@ perspective_tools_view = View(
         ),
         UItem(
             "rotate_button",
-            editor=IconButtonEditor(glyph="cameraswitch", tooltip="Rotate 90°"),
+            editor=IconButtonEditor(glyph="rotate_90_degrees_cw", tooltip="Rotate 90°"),
             enabled_when="defined",
         ),
         UItem(
