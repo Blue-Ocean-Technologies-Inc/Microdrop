@@ -12,7 +12,13 @@
 """Assemble the device viewer sidebar from its sections."""
 
 # Enthought library imports.
-from pyface.qt.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from pyface.qt.QtWidgets import (
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
@@ -26,8 +32,6 @@ def build_sidebar(sections):
     """
     scroll_area = QScrollArea()
     scroll_area.setWidgetResizable(True)
-
-    # Initially hide the scroll area
     scroll_area.setVisible(True)
 
     scroll_content = QWidget()
@@ -45,3 +49,21 @@ def build_sidebar(sections):
     scroll_area.setWidget(scroll_content)
 
     return scroll_area
+
+
+def build_reveal_button(scroll_area):
+    """Build the narrow button that shows and hides the sidebar."""
+    reveal_button = QPushButton("chevron_right")
+    reveal_button.setToolTip("Reveal Hidden Controls")
+    reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
+
+    def toggle_sidebar():
+        is_now_visible = not scroll_area.isVisible()
+        scroll_area.setVisible(is_now_visible)
+
+        # The chevron points the way the next click moves the sidebar.
+        reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
+
+    reveal_button.clicked.connect(toggle_sidebar)
+
+    return reveal_button

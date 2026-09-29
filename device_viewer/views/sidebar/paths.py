@@ -43,12 +43,14 @@ class PathsSection(SidebarSection):
     mode_picker_view = Instance(ModePicker)
 
 
-def build_paths(model, pane):
-    """Build the Paths section; the pane backs the mode picker's undo/redo."""
+def build_paths(model, undo, redo):
+    """Build the Paths section; `undo` and `redo` back the mode picker's buttons."""
     layer_ui = model.edit_traits(view=RouteLayerView)
     execution_settings_ui = model.edit_traits(view=ExecutionSettingsView)
 
-    _mode_picker_viewmodel = ModePickerViewModel(model=model, pane=pane)
+    _mode_picker_viewmodel = ModePickerViewModel(
+        model=model, undo_handler=undo, redo_handler=redo
+    )
     mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
 
     execution_settings_box = CollapsibleVStackBox(
