@@ -19,9 +19,15 @@ what PerspectiveCorrection stores and warp_frame applies.
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
+from traits.api import Any, Bool, Button, HasTraits, observe
+from traitsui.api import HGroup, UItem, View
 
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, WARNING_COLOR
+from microdrop_style.icons.icons import ICON_REFRESH, ICON_RESET_WRENCH
+
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 
 # Local imports.
 from .analysis.perspective import rotated_quad
@@ -226,6 +232,66 @@ class _QuadView(QtWidgets.QGraphicsView):
         self.changed.emit()
 
 
+class PerspectiveTools(HasTraits):
+    """The definition window's toolbar: the viewer toolbar's icon buttons,
+    acting on the quad view."""
+
+    reset_button = Button()
+    rotate_left_button = Button()
+    rotate_right_button = Button()
+    fit_button = Button()
+
+    #: Whether a transform is defined — rotating needs one.
+    defined = Bool(False)
+
+    #: The _QuadView the buttons drive.
+    quad_view = Any()
+
+    @observe("reset_button")
+    def _reset(self, event):
+        self.quad_view.reset()
+
+    @observe("rotate_left_button")
+    def _rotate_left(self, event):
+        self.quad_view.rotate(-90)
+
+    @observe("rotate_right_button")
+    def _rotate_right(self, event):
+        self.quad_view.rotate(90)
+
+    @observe("fit_button")
+    def _fit(self, event):
+        self.quad_view.fit()
+
+
+perspective_tools_view = View(
+    HGroup(
+        UItem(
+            "reset_button",
+            editor=IconButtonEditor(
+                glyph=ICON_RESET_WRENCH, tooltip="Start over: pick four new points"
+            ),
+        ),
+        UItem(
+            "rotate_left_button",
+            editor=IconButtonEditor(glyph="rotate_left", tooltip="Rotate -90°"),
+            enabled_when="defined",
+        ),
+        UItem(
+            "rotate_right_button",
+            editor=IconButtonEditor(glyph="rotate_right", tooltip="Rotate +90°"),
+            enabled_when="defined",
+        ),
+        UItem(
+            "fit_button",
+            editor=IconButtonEditor(
+                glyph=ICON_REFRESH, tooltip="Fit image to the window"
+            ),
+        ),
+    ),
+)
+
+
 class PerspectiveDialog(QtWidgets.QDialog):
     """Define a perspective correction over ``array``, starting from the
     stored quads (placement when there are none)."""
@@ -241,14 +307,10 @@ class PerspectiveDialog(QtWidgets.QDialog):
         self.view = _QuadView(array, self.correction, self)
         self.hint = QtWidgets.QLabel()
 
-        reset = QtWidgets.QPushButton("Reset")
-        reset.clicked.connect(self.view.reset)
-        self.rotate_left = QtWidgets.QPushButton("Rotate -90°")
-        self.rotate_left.clicked.connect(lambda: self.view.rotate(-90))
-        self.rotate_right = QtWidgets.QPushButton("Rotate +90°")
-        self.rotate_right.clicked.connect(lambda: self.view.rotate(90))
-        fit = QtWidgets.QPushButton("Fit")
-        fit.clicked.connect(self.view.fit)
+        self.tools = PerspectiveTools(quad_view=self.view)
+        self._tools_ui = self.tools.edit_traits(
+            view=perspective_tools_view, kind="subpanel", parent=self
+        )
 
         self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
@@ -257,10 +319,7 @@ class PerspectiveDialog(QtWidgets.QDialog):
         self.buttons.rejected.connect(self.reject)
 
         tools = QtWidgets.QHBoxLayout()
-
-        for button in (reset, self.rotate_left, self.rotate_right, fit):
-            tools.addWidget(button)
-
+        tools.addWidget(self._tools_ui.control)
         tools.addStretch()
         tools.addWidget(self.buttons)
 
@@ -275,9 +334,12 @@ class PerspectiveDialog(QtWidgets.QDialog):
     def _sync(self):
         defined = self.correction.is_defined()
         self.hint.setText(EDIT_HINT if defined else PLACE_HINT)
-        self.rotate_left.setEnabled(defined)
-        self.rotate_right.setEnabled(defined)
+        self.tools.defined = defined
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(defined)
+
+    def done(self, result):
+        self._tools_ui.dispose()
+        super().done(result)
 
 
 def define_perspective(array, source_quad, target_quad, parent=None):
