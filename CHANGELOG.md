@@ -1,3 +1,18 @@
+## [v1.24.2](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.2) (2026-09-25)
+
+### Fix
+
+- **portable-dropbot-controller**: log fluorescence filter moves ([`370fb31`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/370fb3117ce13459be4b4f754a2182f5cb0da29c))
+- **device-viewer**: stop logging the whole media-captures list ([`af4c3ca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af4c3ca6c89fc1ff07ded66634446242e9e5da8f))
+- **portable-status-and-controls**: fit exposure slider to its cell ([`f57fd67`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f57fd6731d935d0d11b690203801fd682345d7e2))
+- **portable-status-and-controls**: follow the wheel, not a stale pick ([`76f5920`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/76f5920aa88d648f38a71bdc64e9886d35640df3))
+- **portable-dropbot-controller**: report the wheel's actual filter position ([`cb6846a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cb6846a31248ee4f215a7742aaa623d60484e1f1))
+- **portable-status-and-controls**: follow a re-selected step in capture panes ([`653392f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/653392f1314de6c218d25f30558e7e22188a1fc3))
+
+### Test
+
+- **portable-dropbot**: cover the manual filter pick following the wheel ([`3fbb59a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3fbb59a493acf48c1d98e5766b225f10e55e8460))
+
 ## [v1.24.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.1) (2026-09-25)
 
 ### Fix
