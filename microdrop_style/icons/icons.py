@@ -76,6 +76,7 @@ ICON_LINK_OFF = "link_off"  # disconnect
 # Recording viewer (ligature names \u2014 the Material Symbols font resolves
 # them like "home"/"play_arrow" above)
 ICON_FIT_SCREEN = "fit_screen"  # refit content to the view
+ICON_OPEN_IN_NEW = "open_in_new"  # show a folder in the system file browser
 ICON_TRANSFORM = "transform"  # device-aligned (warped) view
 ICON_CROP = "crop"  # region-of-interest edit mode
 ICON_DELETE = "delete"  # clear regions
