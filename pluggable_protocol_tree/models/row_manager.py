@@ -87,6 +87,13 @@ class RowManager(HasTraits):
         "tracker observes this for per-cell diff bookkeeping."
     )
 
+    #: Per-row cell values stashed (keyed by row uuid) when a column set is
+    #: removed at runtime (see ``rebuild_columns``), so a later re-add of the
+    #: same columns restores the values a rebuilt tree would otherwise reset
+    #: to defaults. Survives a live remove -> re-add toggle because this
+    #: manager outlives the unloaded plugin. Maps uuid -> {col_id: value}.
+    column_value_stash = Dict()
+
     # --- construction ---
 
     def traits_init(self):
@@ -851,6 +858,60 @@ class RowManager(HasTraits):
         if data is None:
             data = self.to_json()
         self.set_state_from_json(data, list(new_columns), report_findings=False)
+
+    # --- runtime column hot load/unload ---
+
+    def stash_column_values(self, col_ids) -> None:
+        """Snapshot the given columns' per-row values, keyed by row uuid, so a
+        later re-add restores them across a live remove -> re-add toggle."""
+        for row in self.iter_all_rows():
+            bucket = self.column_value_stash.setdefault(row.uuid, {})
+            for col_id in col_ids:
+                if hasattr(row, col_id):
+                    bucket[col_id] = getattr(row, col_id)
+
+    def restore_stashed_column_values(self, col_ids) -> None:
+        """Write stashed values back onto the rebuilt tree's rows (matched by
+        uuid) for the re-added columns. Rows with no stash entry (added while
+        the column was absent) keep their trait defaults. Silent — direct
+        setattr doesn't fire cell_changed, so it doesn't dirty the protocol;
+        the surrounding model reset repaints everything."""
+        for row in self.iter_all_rows():
+            bucket = self.column_value_stash.get(row.uuid)
+            if not bucket:
+                continue
+            for col_id in col_ids:
+                if col_id in bucket and hasattr(row, col_id):
+                    setattr(row, col_id, bucket[col_id])
+
+    def rebuild_columns(self, new_columns: list) -> Tuple[set, set]:
+        """Swap the active column set in place at runtime, preserving cell
+        values across the change.
+
+        Driven by the dock pane when a column-contributing plugin is hot
+        loaded/unloaded (the magnet column). Columns common to the old and
+        new sets round-trip their values through ``set_columns``'s JSON
+        swap; for a remove -> re-add toggle, values for the dropped columns
+        are stashed (by row uuid, see ``column_value_stash``) and restored
+        when they return.
+
+        Returns the ``(added, removed)`` col_id sets so the caller can log
+        or react to them (e.g. reseeding ack-wait handlers for new columns).
+        """
+        old_ids = {c.model.col_id for c in self.columns}
+        new_ids = {c.model.col_id for c in new_columns}
+        removed = old_ids - new_ids
+        added = new_ids - old_ids
+
+        if removed:
+            self.stash_column_values(removed)
+
+        self.set_columns(list(new_columns))
+
+        if added:
+            self.restore_stashed_column_values(added)
+
+        return added, removed
 
     def iter_all_rows(self) -> Iterator[BaseRow]:
         """Yield every row in the tree once (steps and groups, depth-first),
