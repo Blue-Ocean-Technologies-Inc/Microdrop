@@ -11,7 +11,7 @@
 """The perspective-definition window: the device viewer's camera-alignment
 interaction over a captured frame. Click four points on the image (e.g. the
 chip's corners), then drag each corner to where it belongs — the frame
-re-warps live. Reset starts over; the rotate buttons turn the result.
+re-warps live. Reset starts over; the rotate button turns the result 90°.
 
 Scene coordinates are image pixels, so the quads it returns are exactly
 what PerspectiveCorrection stores and warp_frame applies.
@@ -24,7 +24,7 @@ from traitsui.api import HGroup, UItem, View
 
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, WARNING_COLOR
-from microdrop_style.icons.icons import ICON_REFRESH, ICON_RESET_WRENCH
+from microdrop_style.icons.icons import ICON_FIT_SCREEN
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
@@ -237,8 +237,7 @@ class PerspectiveTools(HasTraits):
     acting on the quad view."""
 
     reset_button = Button()
-    rotate_left_button = Button()
-    rotate_right_button = Button()
+    rotate_button = Button()
     fit_button = Button()
 
     #: Whether a transform is defined — rotating needs one.
@@ -251,12 +250,8 @@ class PerspectiveTools(HasTraits):
     def _reset(self, event):
         self.quad_view.reset()
 
-    @observe("rotate_left_button")
-    def _rotate_left(self, event):
-        self.quad_view.rotate(-90)
-
-    @observe("rotate_right_button")
-    def _rotate_right(self, event):
+    @observe("rotate_button")
+    def _rotate(self, event):
         self.quad_view.rotate(90)
 
     @observe("fit_button")
@@ -264,28 +259,26 @@ class PerspectiveTools(HasTraits):
         self.quad_view.fit()
 
 
+# Glyphs match the device viewer: its Reset Camera Perspective and Rotate
+# Camera buttons, and the viewport controls' reset-zoom button.
 perspective_tools_view = View(
     HGroup(
         UItem(
             "reset_button",
             editor=IconButtonEditor(
-                glyph=ICON_RESET_WRENCH, tooltip="Start over: pick four new points"
+                glyph="reset_focus",
+                tooltip="Reset the perspective: pick four new points",
             ),
         ),
         UItem(
-            "rotate_left_button",
-            editor=IconButtonEditor(glyph="rotate_left", tooltip="Rotate -90°"),
-            enabled_when="defined",
-        ),
-        UItem(
-            "rotate_right_button",
-            editor=IconButtonEditor(glyph="rotate_right", tooltip="Rotate +90°"),
+            "rotate_button",
+            editor=IconButtonEditor(glyph="cameraswitch", tooltip="Rotate 90°"),
             enabled_when="defined",
         ),
         UItem(
             "fit_button",
             editor=IconButtonEditor(
-                glyph=ICON_REFRESH, tooltip="Fit image to the window"
+                glyph=ICON_FIT_SCREEN, tooltip="Fit the image in the window"
             ),
         ),
     ),
