@@ -66,7 +66,7 @@ def test_cache_key_includes_the_ring(tmp_path):
     session.ring.gap_px = 5
     after = session.cache_key(str(image), roi)
     assert before != after
-    assert after[5] == (5, session.ring.thickness_px, 0)
+    assert after[5] == (5, session.ring.thickness_px, 0, ())
 
 
 def test_cache_key_includes_the_rolling_ball(tmp_path):

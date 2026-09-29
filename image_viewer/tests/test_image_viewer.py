@@ -88,7 +88,7 @@ def test_manual_window_ignored_while_auto_contrast_on():
     assert auto.max() == 255  # percentile window, not the manual one
 
 
-def test_viewer_model_navigation_wraps_and_positions():
+def test_viewer_model_positions():
     from pathlib import Path
 
     from image_viewer.model import (
@@ -96,12 +96,12 @@ def test_viewer_model_navigation_wraps_and_positions():
     )
 
     model = ImageViewerModel()
-    assert model.relative_path(1) is None  # nothing discovered
-    assert model.position_text == ""
+    assert model.position_text == ""  # nothing discovered
 
-    model.paths = [Path("a.png"), Path("b.png"), Path("c.png")]
-    assert model.relative_path(1) == Path("a.png")  # no current: enter at start
-    assert model.relative_path(-1) == Path("c.png")
+    paths = [Path("a.png"), Path("b.png"), Path("c.png")]
+    model.bursts = [("session", paths)]
+    model.selected_burst = "session"
+    model.paths = paths
     assert model.position_text == "–/3"  # showing an outside image
     assert model.image_names == ["a.png", "b.png", "c.png"]
     assert model.max_image_index == 2
@@ -109,14 +109,12 @@ def test_viewer_model_navigation_wraps_and_positions():
     model.current_path = str(Path("c.png"))
     assert model.position_text == "3/3"
     assert model.path_index() == 2
-    assert model.relative_path(1) == Path("a.png")  # wraps forward
-    assert model.relative_path(-1) == Path("b.png")
 
 
 def test_discover_captures_oldest_first_by_save_time(tmp_path):
     assert discovery.discover_captures(None) == []
     assert discovery.discover_captures(tmp_path / "absent") == []
-    # Discovery is raws-only now: files live under a 16bit_raw parent.
+    # Any image under the folder counts, whatever subfolder it is in.
     raw_dir = tmp_path / "16bit_raw"
     raw_dir.mkdir()
     older, newer = raw_dir / "b_older.png", raw_dir / "a_newer.png"
@@ -381,14 +379,17 @@ def test_dock_pane_title_names_the_browsed_folder():
 
     from image_viewer.dock_pane import _title_for
 
-    assert _title_for("") == "Image Viewer"
+    assert _title_for("", "") == "Image Viewer"
     # Default (experiment) captures dir: the experiment folder names it.
     assert (
-        _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures")))
-        == "Image Viewer\t\t-\t\t2026_07_20-17_41_31"
+        _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures")), "")
+        == "Image Viewer\t-\t2026_07_20-17_41_31"
     )
-    # A user-picked folder shows its own name.
-    assert _title_for(str(Path("D:/some/album"))) == "Image Viewer\t\t-\t\talbum"
+    # A user-picked folder shows its own name, then the loaded image.
+    assert (
+        _title_for(str(Path("D:/some/album")), "a.png - 4x4 16-bit gray")
+        == "Image Viewer\t-\talbum\t-\ta.png - 4x4 16-bit gray"
+    )
 
 
 def test_the_pane_puts_the_analysis_model_in_its_ui_context():
