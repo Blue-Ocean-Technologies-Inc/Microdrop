@@ -148,12 +148,12 @@ class AiRoiController(HasTraits):
             information(
                 message="GPU encoding is not available: the installed "
                 "onnxruntime has no DirectML provider (the "
-                "CPU-only build is present).\n\n"
-                "To enable it, install the GPU build with\n"
-                "    pixi add --pypi onnxruntime-directml\n"
-                "(or re-run Help > Install AI ROI Support) and "
-                "restart MicroDrop. Until then the encoder "
-                "keeps running on the CPU."
+                "CPU-only build is present), so the encoder "
+                "keeps running on the CPU.\n\n"
+                "Do not add onnxruntime-directml alongside it: "
+                "both builds install into the same folder, and "
+                "the next install or removal of either one breaks "
+                "AI ROI detection."
             )
 
     # ------------------------------------------------------------------ #
