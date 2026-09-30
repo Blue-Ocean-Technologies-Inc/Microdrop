@@ -1,3 +1,24 @@
+## [v1.25.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.25.0) (2026-09-29)
+
+### Feat
+
+- **image-viewer**: add a perspective-correction demo ([`0a76053`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0a76053b6f5bea66e2ec4449f58e035654d7874c))
+- **image-viewer**: move the image viewer into core ([`22cf5d6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/22cf5d689aebf2a286ebf23cb5e0463695996171))
+- **style**: add an open-in-new icon ligature ([`87de578`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/87de5780e469bfa90d41f6ee6ae95ba6697a58a6))
+
+### Fix
+
+- **image-viewer**: use the Rotate Device glyph for rotation ([`d6d40b7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d6d40b739477a77da83b67b790f57349c27d19e5))
+
+### Refactor
+
+- **image-viewer**: device-viewer icons in perspective window ([`8a6fcd8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8a6fcd80398e7694f2e994967a48c05e7dbd2270))
+- **image-viewer**: icon toolbar in the perspective window ([`ded89d7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ded89d72d4e280a212d27120912d20aa89487702))
+
+### Test
+
+- **image-viewer**: update tests for the moved viewer's API ([`67968e2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/67968e2373660df6ec7e6c7859e45591f4050088))
+
 ## [v1.24.2](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.2) (2026-09-25)
 
 ### Fix
