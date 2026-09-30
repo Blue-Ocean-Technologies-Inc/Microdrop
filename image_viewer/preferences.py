@@ -52,8 +52,8 @@ class ImageViewerPreferences(PreferencesHelper):
 
     # SAM model for AI ROI detection. Weights are downloaded on demand
     # (cancellable dialog); cancel reverts this. The DirectML (GPU)
-    # onnxruntime build encodes ~3x faster; when the provider is missing
-    # the encoder silently stays on CPU.
+    # onnxruntime build encodes ~3x faster but is not installed (it clashes
+    # with osam's CPU build); without it the encoder stays on CPU.
     ai_use_gpu = Bool(
         True, desc="Run the SAM encoder on the GPU (DirectML) when available"
     )

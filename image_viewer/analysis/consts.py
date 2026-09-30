@@ -210,3 +210,8 @@ AI_CANDIDATE_DISCARDED_OPACITY = 0.3
 #: Hard ceiling of the candidate size filters (mean ellipse diameter,
 #: px).
 AI_SIZE_FILTER_CEILING_PX = 50000
+
+#: onnxruntime distributions that install into the same ``onnxruntime/``
+#: folder: with both present, removing or reinstalling either one deletes
+#: files the other still needs, leaving an import-broken package.
+ONNXRUNTIME_DISTRIBUTIONS = ("onnxruntime", "onnxruntime-directml")

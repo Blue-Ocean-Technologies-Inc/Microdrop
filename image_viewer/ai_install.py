@@ -10,9 +10,11 @@
 
 """Help-menu installer for the optional SAM (osam) ROI-detection stack.
 
-Runs ``pixi add --pypi osam`` (plus ``onnxruntime-directml`` on Windows, a
-tolerated-failure optional GPU accelerator) from the pixi project root in a
-worker thread, streaming output into a cancellable ``QProgressDialog``.
+Runs ``pixi add --pypi osam`` from the pixi project root in a worker thread,
+streaming output into a cancellable ``QProgressDialog``. It deliberately does
+not add ``onnxruntime-directml``: that package installs into the same
+``onnxruntime/`` folder as osam's CPU ``onnxruntime`` dependency, so adding
+it beside osam breaks the other on the next install or removal.
 Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
 pattern for consistency.
 """
@@ -28,6 +30,9 @@ from pathlib import Path
 # Third-party imports.
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
+
+# Local imports.
+from .analysis.sam_detect import sam_available
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -65,16 +70,14 @@ def _pixi_project_root():
 
 
 class _InstallThread(QThread):
-    """Runs ``pixi add --pypi osam`` (plus ``onnxruntime-directml`` on
-    Windows, tolerated failure) in the pixi project root, streaming output
-    lines and reporting success/failure.
+    """Runs ``pixi add --pypi osam`` in the pixi project root, streaming
+    output lines and reporting success/failure.
 
     ``succeeded``/``failed`` only drive the dialog's live label and
     auto-close -- they race a user cancel (Qt hides the dialog and
     ``exec()`` returns as soon as Cancel is clicked, independent of these
     signals). The authoritative result is ``osam_installed``, set the
-    instant the required first step exits 0 and never revisited by the
-    second, tolerated-failure step -- callers must read it only after
+    instant the install exits 0 -- callers must read it only after
     ``wait()``ing for the thread to actually finish."""
 
     output = Signal(str)
@@ -149,34 +152,6 @@ class _InstallThread(QThread):
             return
 
         self.osam_installed = True
-
-        if sys.platform == "win32":
-            try:
-                gpu_code = self._run_step(
-                    # --platform: the DirectML wheel exists only for
-                    # win_amd64, and a multi-platform pixi manifest
-                    # fails to resolve it without the restriction.
-                    [
-                        "pixi",
-                        "add",
-                        "--pypi",
-                        "--platform",
-                        "win-64",
-                        "onnxruntime-directml",
-                    ]
-                )
-            except Exception as e:
-                gpu_code = None
-                logger.warning(
-                    f"onnxruntime-directml install could not run: {e} "
-                    f"(optional GPU accelerator, continuing)"
-                )
-            if gpu_code:
-                logger.warning(
-                    f"pixi add --pypi onnxruntime-directml exited "
-                    f"{gpu_code} (optional GPU accelerator, continuing)"
-                )
-
         self.succeeded.emit()
 
 
@@ -218,10 +193,9 @@ def install_ai_support(parent=None):
 
     # dialog.exec() can return the instant Cancel is clicked (Qt hides the
     # dialog natively), before the worker's succeeded/failed signal lands
-    # -- e.g. a cancel during the optional, tolerated-failure DirectML step
-    # would otherwise race a real osam success. Wait for the thread to
-    # actually finish and read its recorded outcome instead of relying on
-    # which signal happened to fire.
+    # -- e.g. a cancel just as pixi exits would otherwise race a real osam
+    # success. Wait for the thread to actually finish and read its recorded
+    # outcome instead of relying on which signal happened to fire.
     if not thread.wait(5000):
         thread.terminate()
         thread.wait()
@@ -235,12 +209,7 @@ def install_ai_support(parent=None):
         return False
 
     importlib.invalidate_caches()
-    try:
-        # optional dependency: same exception granted to sam_detect.py's
-        # osam import — this just-installed package may still fail to
-        # import (e.g. a partial/incompatible install).
-        import osam  # noqa: F401
-    except ImportError as e:
-        logger.warning(f"osam import still failing after install: {e}")
-        return False
-    return True
+
+    # sam_available() retries the guarded import, so a partial or broken
+    # install is logged with its repair command instead of raising here.
+    return sam_available()
