@@ -193,7 +193,8 @@ Opt-in mode letting the user step through a route's phases without running the p
 - `PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"` — defined in `device_viewer/consts.py`. JSON `{"phase_index": <0-based int>, "phase_total": <int>}` (`phase_total` 0 = no plan).
 
 **Publisher/subscriber side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py` — `_publish_phase_navigation_mode` sends `PHASE_NAVIGATION_MODE` when the sidebar checkbox is toggled; `_on_phase_navigation_mode_triggered` applies the tree's toggle (and any external `"False"`, e.g. force-exit on protocol run start); `_on_phase_navigation_request_triggered` applies an incoming `PHASE_NAVIGATION_REQUEST` via `RouteExecutionService`. Both handlers are registered on the DV's `ACTOR_TOPIC_DICT` listener.
+- `device_viewer/views/device_view_dock_pane.py` — `_publish_phase_navigation_mode` sends `PHASE_NAVIGATION_MODE` when the sidebar checkbox is toggled.
+- `device_viewer/controllers/device_viewer_message_controller.py` — `_on_phase_navigation_mode_triggered` applies the tree's toggle (and any external `"False"`, e.g. force-exit on protocol run start) via the pane's `apply_phase_navigation_mode`; `_on_phase_navigation_request_triggered` applies an incoming `PHASE_NAVIGATION_REQUEST` via `RouteExecutionService`. Both handlers are registered on the DV's `ACTOR_TOPIC_DICT` listener.
 - `device_viewer/services/route_execution_service.py` — `_publish_phase_nav_state` sends `PHASE_NAVIGATION_STATE` whenever the idle-nav position or plan size changes (including the no-plan `phase_total=0` case).
 
 **Publisher/subscriber side (pluggable_protocol_tree)**

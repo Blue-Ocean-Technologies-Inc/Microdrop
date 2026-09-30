@@ -22,7 +22,9 @@ import json
 import pytest
 
 # Microdrop package imports.
-from device_viewer.views.device_view_dock_pane import parse_camera_controls_request
+from device_viewer.controllers.device_viewer_message_controller import (
+    parse_camera_controls_request,
+)
 
 
 def test_valid_request_is_returned_as_a_dict():
