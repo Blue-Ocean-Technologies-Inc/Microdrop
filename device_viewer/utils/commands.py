@@ -12,9 +12,9 @@
 import time
 
 # Enthought library imports.
-from pyface.undo.abstract_command import AbstractCommand
+from pyface.undo.api import AbstractCommand
 from traits.api import Float, Instance, List, Str
-from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
+from traits.observation.api import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 
 # Microdrop utils imports.
 from microdrop_utils.trait_change_commands import live_container
@@ -135,6 +135,7 @@ class DictChangeCommand(AbstractCommand):
 
     def undo(self):
         container = live_container(self.event.object)
+
         logger.debug(
             f"Undoing dict mod {container}, added {self.event.added}, "
             f"removed {self.event.removed}"
@@ -148,6 +149,7 @@ class DictChangeCommand(AbstractCommand):
 
     def redo(self):
         container = live_container(self.event.object)
+
         logger.debug(
             f"Redoing dict mod {container}, added {self.event.added}, "
             f"removed {self.event.removed}"

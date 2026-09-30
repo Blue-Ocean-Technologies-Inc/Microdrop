@@ -35,7 +35,8 @@ def live_container(captured):
     (the TraitList/Set/DictObject a change event carries) was the value of.
 
     Falls back to ``captured`` itself once the owner has been garbage
-    collected.
+    collected. Top-level container traits only: a container nested inside
+    another (``List(List(...))``) reports the outer trait's owner and name.
     """
     owner = captured.object()
 

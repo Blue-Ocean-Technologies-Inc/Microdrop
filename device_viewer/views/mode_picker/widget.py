@@ -64,8 +64,8 @@ class ModePickerViewModel(HasTraits):
 
     #: Whether Undo/Redo would change anything: pyface's stack reports an
     #: empty undo_name/redo_name when there is no command on that side.
-    can_undo = Property(observe="pane:undo_manager:stack_updated, model.editable")
-    can_redo = Property(observe="pane:undo_manager:stack_updated, model.editable")
+    can_undo = Property()
+    can_redo = Property()
 
     def traits_init(self):
         self.signals = ModePickerSignals()
