@@ -987,15 +987,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We need to prevent the changes made in undo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.undo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.undo()
+        finally:
+            self._undoing = False
 
     def redo(self):
         # We need to prevent the changes made in redo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.redo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.redo()
+        finally:
+            self._undoing = False
 
     def apply_message_model(self, message_model_serial: str):
         logger.debug(f"Display state triggered with model: {message_model_serial}")
