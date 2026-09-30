@@ -8,14 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import time
 
-from pyface.undo.abstract_command import AbstractCommand
+# Enthought library imports.
+from pyface.undo.api import AbstractCommand
 from traits.api import Float, Instance, List, Str
-from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
+from traits.observation.api import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 
+# Microdrop utils imports.
+from microdrop_utils.trait_change_commands import live_container
+
+# Local imports.
 from ..models.zones import ZoneLayerManager
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -88,26 +95,34 @@ class ListChangeCommand(AbstractCommand):
         return False
 
     def undo(self):
+        container = live_container(self.event.object)
+
         for event in reversed(self.event_stack):
             logger.debug(
-                f"Undoing list mod {self.event.object}, added {event['added']}, "
+                f"Undoing list mod {container}, added {event['added']}, "
                 f"removed {event['removed']} at {event['index']}"
             )
+
             for _ in event["added"]:
-                self.event.object.pop(event["index"])
+                container.pop(event["index"])
+
             for item in reversed(event["removed"]):
-                self.event.object.insert(event["index"], item)
+                container.insert(event["index"], item)
 
     def redo(self):
+        container = live_container(self.event.object)
+
         for event in self.event_stack:
             logger.debug(
-                f"Redoing list mod {self.event.object}, added {event['added']}, "
+                f"Redoing list mod {container}, added {event['added']}, "
                 f"removed {event['removed']} at {event['index']}"
             )
+
             for _ in event["removed"]:
-                self.event.object.pop(event["index"])
+                container.pop(event["index"])
+
             for item in reversed(event["added"]):
-                self.event.object.insert(event["index"], item)
+                container.insert(event["index"], item)
 
 
 class DictChangeCommand(AbstractCommand):
@@ -119,24 +134,32 @@ class DictChangeCommand(AbstractCommand):
         pass
 
     def undo(self):
+        container = live_container(self.event.object)
+
         logger.debug(
-            f"Undoing dict mod {self.event.object}, added {self.event.added}, "
+            f"Undoing dict mod {container}, added {self.event.added}, "
             f"removed {self.event.removed}"
         )
+
         for key in self.event.added.keys():
-            self.event.object.pop(key)
+            container.pop(key)
+
         for key, value in self.event.removed.items():
-            self.event.object[key] = value
+            container[key] = value
 
     def redo(self):
+        container = live_container(self.event.object)
+
         logger.debug(
-            f"Redoing dict mod {self.event.object}, added {self.event.added}, "
+            f"Redoing dict mod {container}, added {self.event.added}, "
             f"removed {self.event.removed}"
         )
+
         for key in self.event.removed.keys():
-            self.event.object.pop(key)
+            container.pop(key)
+
         for key, value in self.event.added.items():
-            self.event.object[key] = value
+            container[key] = value
 
 
 class ZoneStateCommand(AbstractCommand):

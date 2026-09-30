@@ -987,15 +987,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We need to prevent the changes made in undo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.undo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.undo()
+        finally:
+            self._undoing = False
 
     def redo(self):
         # We need to prevent the changes made in redo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.redo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.redo()
+        finally:
+            self._undoing = False
 
     def apply_message_model(self, message_model_serial: str):
         logger.debug(f"Display state triggered with model: {message_model_serial}")
@@ -1064,68 +1070,76 @@ class DeviceViewerDockPane(TraitsDockPane):
         # the single rebuild against the fully-applied new step.
         self.model.route_execution_service.suspend_nav_rebuild = True
 
-        # Apply step ID
-        self.model.step_id = message_model.step_id
+        try:
+            # Apply step ID
+            self.model.step_id = message_model.step_id
 
-        # Apply step label
-        self.model.step_label = message_model.step_label
+            # Apply step label
+            self.model.step_label = message_model.step_label
 
-        # Apply free mode
-        self.model.free_mode = message_model.free_mode
+            # Apply free mode
+            self.model.free_mode = message_model.free_mode
 
-        # Apply editable state
-        self.model.editable = message_model.editable
+            # Apply editable state
+            self.model.editable = message_model.editable
 
-        if not self.model.protocol_running and self.model.mode == "display":
-            self.model.mode = "draw"
+            if not self.model.protocol_running and self.model.mode == "display":
+                self.model.mode = "draw"
 
-        # Electrode->channel mapping is NOT carried on state messages (#415):
-        # electrodes keep their geometry-derived channels, so there is
-        # nothing to apply here.
+            # Electrode->channel mapping is NOT carried on state messages (#415):
+            # electrodes keep their geometry-derived channels, so there is
+            # nothing to apply here.
 
-        # Apply electrode on/off states in ONE assignment: the recolor
-        # observer receives a single old/new event and repaints only the
-        # channels whose membership flipped.
-        self.model.electrodes.electrode_editing = None
-        self.model.electrodes.actuated_channels = set(message_model.channels_activated)
-
-        # Apply routes only when they actually changed (phase toggles change
-        # actuation only) — and then as one list swap, so the connection map
-        # repaints exactly once with the final layer stack. This also means
-        # the layers are never transiently empty, so repeats_frozen can't
-        # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
-        # step's execution params are pulled below.
-        #
-        # Protocol-side colors are deliberately IGNORED: the tree echoes
-        # back whatever it stored, which drifts from (and reorders against)
-        # the viewer's palette — the visible symptom was routes flipping
-        # between shades on alternate phases. Route colors are the device
-        # viewer's own: selected paints yellow and loops CW/CCW at render
-        # time; everything else gets the standard pool color.
-        incoming_routes = [route for route, _color in message_model.routes]
-        current_routes = [list(layer.route.route) for layer in self.model.routes.layers]
-        if incoming_routes != current_routes:
-            self.model.routes.replace_all_layers(
-                [Route(route=route.copy()) for route in incoming_routes]
+            # Apply electrode on/off states in ONE assignment: the recolor
+            # observer receives a single old/new event and repaints only the
+            # channels whose membership flipped.
+            self.model.electrodes.electrode_editing = None
+            self.model.electrodes.actuated_channels = set(
+                message_model.channels_activated
             )
-        self.model.routes.selected_layer = None
-        self.model.routes.layer_to_merge = None
-        self.model.routes.mode = "draw"
-        self.model.routes.message = ""
 
-        # Pull the step's execution params into the sidebar AFTER the routes
-        # are in place, then baseline the sidebar so the commit button
-        # starts disabled.
-        if step_changed:
-            if message_model.execution_params:
-                self.model.routes.apply_execution_params(message_model.execution_params)
-            else:
-                self.model.routes.clear_committed_baseline()
-            self._last_applied_step_id = message_model.step_id
+            # Apply routes only when they actually changed (phase toggles change
+            # actuation only) — and then as one list swap, so the connection map
+            # repaints exactly once with the final layer stack. This also means
+            # the layers are never transiently empty, so repeats_frozen can't
+            # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
+            # step's execution params are pulled below.
+            #
+            # Protocol-side colors are deliberately IGNORED: the tree echoes
+            # back whatever it stored, which drifts from (and reorders against)
+            # the viewer's palette — the visible symptom was routes flipping
+            # between shades on alternate phases. Route colors are the device
+            # viewer's own: selected paints yellow and loops CW/CCW at render
+            # time; everything else gets the standard pool color.
+            incoming_routes = [route for route, _color in message_model.routes]
+            current_routes = [
+                list(layer.route.route) for layer in self.model.routes.layers
+            ]
+            if incoming_routes != current_routes:
+                self.model.routes.replace_all_layers(
+                    [Route(route=route.copy()) for route in incoming_routes]
+                )
+            self.model.routes.selected_layer = None
+            self.model.routes.layer_to_merge = None
+            self.model.routes.mode = "draw"
+            self.model.routes.message = ""
 
-        self._disable_state_messages = False  # Re-enable state messages after reset
-        self._undoing = False
-        self.model.route_execution_service.suspend_nav_rebuild = False
+            # Pull the step's execution params into the sidebar AFTER the routes
+            # are in place, then baseline the sidebar so the commit button
+            # starts disabled.
+            if step_changed:
+                if message_model.execution_params:
+                    self.model.routes.apply_execution_params(
+                        message_model.execution_params
+                    )
+                else:
+                    self.model.routes.clear_committed_baseline()
+                self._last_applied_step_id = message_model.step_id
+
+        finally:
+            self._disable_state_messages = False  # Re-enable state messages after reset
+            self._undoing = False
+            self.model.route_execution_service.suspend_nav_rebuild = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         # Publish geometry if the electrode-to-channel mapping changed.
