@@ -11,8 +11,10 @@
 """Dramatiq listener for the Device Viewer: routes each subscribed topic to an
 ``_on_<topic>_triggered`` handler acting on the dock pane.
 
-Handlers run on the Dramatiq worker thread; anything touching Qt is marshalled
-to the GUI thread (``GUI.invoke_later`` or a Qt signal), exactly as before.
+Handlers run on the Dramatiq worker thread. Direct widget calls are marshalled
+to the GUI thread (``GUI.invoke_later`` or a Qt signal); model trait writes are
+not, so the pane's observers on those traits still fire on the worker thread
+(#754).
 """
 
 # Standard library imports.
@@ -101,11 +103,15 @@ class DeviceViewerMessageController(HasTraits):
     #: Label used by the dispatch routine's log lines.
     name = Str(f"{PKG_name} Message Controller")
 
+    #: Dramatiq actor name the message router routes this pane's topics to.
     listener_name = listener_name
+
+    #: Actor registered under ``listener_name``; dispatches to the handlers.
     dramatiq_listener_actor = Instance(dramatiq.Actor)
 
     def traits_init(self):
         logger.info("Starting DeviceViewer listener")
+
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.listener_name, class_method=self.listener_actor_routine
         )
@@ -120,7 +126,6 @@ class DeviceViewerMessageController(HasTraits):
             self.pane.message_buffer = gui_models_to_message_model(
                 self.pane.model
             ).serialize()
-            # self.pane.publish_model_message()
 
     def _on_realtime_mode_updated_triggered(self, message):
         if self.pane.model:
@@ -164,6 +169,7 @@ class DeviceViewerMessageController(HasTraits):
             except (ValueError, TypeError) as e:
                 logger.warning(f"Bad phase-navigation index in {message!r}: {e}")
                 return
+
             service.goto_phase(index)
         else:
             logger.warning(f"Unknown phase-navigation action: {action!r}")
@@ -182,39 +188,38 @@ class DeviceViewerMessageController(HasTraits):
         """Load the SVG at ``message`` (a file path) into the device view.
 
         Lets another plugin switch devices over pub/sub instead of reaching
-        into this pane. This handler runs on the Dramatiq listener's worker
-        thread, but rebuilding the electrode scene touches Qt, so the actual
-        work is marshalled to the GUI thread via ``GUI.invoke_later``.
-        ``_set_device_view_from_svg`` already handles and reports its own
-        exceptions, so there is nothing left to catch here."""
+        into this pane. Rebuilding the electrode scene touches Qt, so the work
+        is marshalled to the GUI thread. ``_set_device_view_from_svg`` handles
+        and reports its own exceptions, so there is nothing left to catch here.
+        """
         svg_path = str(message or "").strip()
+
         if not svg_path or not os.path.isfile(svg_path):
             logger.warning(f"load-svg request for missing file: {svg_path!r}")
             return
+
         GUI.invoke_later(self.pane._set_device_view_from_svg, svg_path)
 
     def _on_disconnected_triggered(self, message):
         logger.debug("Disconnected from dropbot")
+
         self.pane.model.realtime_mode = False
         self.pane.model.connected = False
 
-        # make interactive in case device view was disabled from a halt
-        if not self.pane.device_view.isInteractive():
-            self.pane.device_view.setInteractive(True)
+        # Re-enable the view in case a halt disabled it.
+        GUI.invoke_later(self.pane.device_view.setInteractive, True)
 
     def _on_connected_triggered(self, message):
         logger.debug("Connected from dropbot")
         self.pane.model.connected = True
 
     def _on_disabled_channels_changed_triggered(self, message):
-        """
-        Handle hardware-reported disabled channels changes (e.g., after halted events
-        or actuation discrepancies). Update the electrodes model so the UI reflects
-        which channels the hardware has disabled.
-        """
+        """Mirror the channels the hardware reports as disabled (after a halt
+        or an actuation discrepancy) onto the electrodes model."""
         if self.pane.device_viewer_advanced_preferences.allow_hardware_disables:
             data = json.loads(message)
             disabled_set = set(data.get("channels", []))
+
             logger.info(
                 f"DEVICE VIEWER: Received disabled channels change: "
                 f"{len(disabled_set)} channels disabled"
@@ -243,25 +248,25 @@ class DeviceViewerMessageController(HasTraits):
                     "blocked till reconnection.",
                 )
             )
-            self.pane.device_view.setInteractive(False)
+            GUI.invoke_later(self.pane.device_view.setInteractive, False)
 
     def _on_display_state_triggered(self, message_model_serial):
-        # We send the message through a signal since Dramatiq runs the callbacks
-        # in a separate thread
-        # Which has weird side effects on QtGraphicsObject calls
+        # Emitted as a Qt signal: the slot touches QGraphicsObjects, which
+        # must not run on the Dramatiq worker thread.
         self.pane.device_view.display_state_signal.emit(message_model_serial)
 
     def _on_protocol_tree_display_state_triggered(self, message_serial):
-        """Adapter for ProtocolTreeDisplayMessage -> DeviceViewerMessageModel.
-        The downstream display_state_signal pipeline reuses what already
-        works for the legacy widget."""
+        """Adapt a ProtocolTreeDisplayMessage into a DeviceViewerMessageModel,
+        so the tree reuses the legacy grid's display_state_signal pipeline."""
         msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
         id_to_channel = self.pane.model.electrodes.electrode_ids_channels_map
+
         channels_activated = {
             id_to_channel[eid]
             for eid in msg.electrodes
             if id_to_channel.get(eid) is not None
         }
+
         rich = DeviceViewerMessageModel(
             channels_activated=channels_activated,
             routes=[
@@ -276,14 +281,14 @@ class DeviceViewerMessageController(HasTraits):
             editable=msg.editable,
             execution_params=msg.execution_params,
         )
+
         self.pane.device_view.display_state_signal.emit(rich.serialize())
 
     def _on_protocol_running_triggered(self, message):
         logger.debug(f"Protocol running is {message}")
+
         if self.pane.model:
-            self.pane.model.protocol_running = (
-                True if message.lower() == "true" else False
-            )
+            self.pane.model.protocol_running = message.lower() == "true"
 
     def _on_advanced_mode_change_triggered(self, message):
         """Operator toggled Advanced Mode. While a protocol is running, this
@@ -292,25 +297,26 @@ class DeviceViewerMessageController(HasTraits):
         display. Idle editability is selection/mode-driven, so only act during
         a run (#434)."""
         advanced = message.lower() == "true"
+
         if self.pane.model and self.pane.model.protocol_running:
             self.pane.model.editable = advanced
 
     def _on_capacitance_updated_triggered(self, message):
-        """
-        Handle capacitance updates from the device viewer.
-        """
+        """Store the DropBot's latest capacitance reading on the model."""
         capacitance_str = json.loads(message).get("capacitance", None)
+
         if capacitance_str is not None:
             capacitance = float(capacitance_str.split("pF")[0])
             self.pane.model.last_capacitance = capacitance
 
     def _on_screen_capture_triggered(self, message):
-        """
-        Handle screen capture events from the device viewer.
-        """
+        """Forward a screen-capture request (optional JSON options) to the
+        camera widget."""
         logger.debug(f"Screen capture triggered: {message}")
+
         if self.pane.model and self.pane.camera_control_widget:
             capture_data = None
+
             if message and message.strip():
                 try:
                     capture_data = json.loads(message)
@@ -324,26 +330,28 @@ class DeviceViewerMessageController(HasTraits):
     def _on_set_controls_triggered(self, message):
         """Another plugin's CameraControlsRequest (exposure/focus); applied on
         the GUI thread by the camera widget, which answers the applied
-        signal itself. An invalid request is answered ok=False here instead,
-        so a waiting requester fails fast rather than reaching the camera."""
-
-        if not self.pane.camera_control_widget:
-            return
-
+        signal itself. An invalid request, or one arriving with no camera
+        widget, is answered ok=False here instead, so a waiting requester
+        fails fast rather than timing out."""
         request, reply = parse_camera_controls_request(message)
+
+        if reply is None and not self.pane.camera_control_widget:
+            reply = {
+                "request_id": request["request_id"],
+                "ok": False,
+                "error": "Device viewer camera is not available",
+            }
 
         if reply is not None:
             camera_controls_applied_publisher.publish(reply)
-
             return
 
         self.pane.camera_control_widget.camera_controls_signal.emit(request)
 
     def _on_screen_recording_triggered(self, message):
-        """
-        Handle screen recording events from the device viewer.
-        """
+        """Forward a JSON screen-recording command to the camera widget."""
         logger.info(f"Screen recording triggered: {message}")
+
         if self.pane.model and self.pane.camera_control_widget:
             if not (message and message.strip()):
                 return
@@ -359,19 +367,15 @@ class DeviceViewerMessageController(HasTraits):
             self.pane.camera_control_widget.screen_recording_signal.emit(recording_data)
 
     def _on_camera_active_triggered(self, message):
-        """
-        Handle camera activation events from the device viewer.
-        """
+        """Forward a camera on/off request to the camera widget."""
         logger.debug(f"Camera activation triggered: {message}")
+
         if self.pane.model and self.pane.camera_control_widget:
             self.pane.camera_control_widget.camera_active_signal.emit(
                 message.lower() == "true"
             )
 
     def _on_drops_detected_triggered(self, message):
-        message_obj = json.loads(message)
+        detected_channels = json.loads(message).get("detected_channels") or []
 
-        detected_channels = message_obj.get("detected_channels", None)
-
-        # Apply electrode on/off states
         self.pane.model.electrodes.actuated_channels.update(detected_channels)

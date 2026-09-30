@@ -183,6 +183,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     zones_controller = None
     mode_picker_view = None
 
+    #: Camera controls widget; None until ``create_contents`` builds it.
+    camera_control_widget = None
+
     # The open Camera Alignment dialog's model; None while closed. The
     # @observe handlers below re-hook automatically on every assignment.
     _alignment_model = Instance(CameraAlignmentModel)
@@ -226,8 +229,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     # --------- Device View trait initializers -------------
     def traits_init(self):
-        self.message_controller = DeviceViewerMessageController(pane=self)
-
         ###############################################################################################################
         # --------------Setup device view model ---------------------------------- #
         ##############################################################################################################
@@ -289,6 +290,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             auto_fit_margin_scale=self.device_viewer_preferences._auto_fit_margin_scale,
         )
         self.device_view.setObjectName("device_view")
+
+        # Last: its handlers dereference the model, view, and preferences.
+        self.message_controller = DeviceViewerMessageController(pane=self)
 
     ################################################################################################
     # ------- Phase-navigation mode and gamepad lifecycle -------------
