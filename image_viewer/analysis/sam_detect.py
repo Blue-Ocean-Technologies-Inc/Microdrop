@@ -18,6 +18,7 @@ docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 
 # Standard library imports.
 import collections
+import importlib.metadata
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -46,6 +47,7 @@ from .consts import (
     AI_ENCODE_WORK_WIDTH_PX,
     AI_NORMALIZE_HIGH_PERCENTILE,
     AI_NORMALIZE_LOW_PERCENTILE,
+    ONNXRUNTIME_DISTRIBUTIONS,
 )
 from .roi_geometry import normalize
 
@@ -54,10 +56,59 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    import osam
-except ImportError:  # optional dependency: Help menu installs it
-    osam = None
+#: How to repair a broken or doubled onnxruntime from the pixi project root.
+_REPAIR_HINT = (
+    "Run `pixi remove --pypi onnxruntime-directml` if it was added, then "
+    "`pixi reinstall onnxruntime`, from the pixi project root."
+)
+
+
+def _installed_onnxruntime_distributions():
+    """Return the ONNXRUNTIME_DISTRIBUTIONS present in the environment."""
+    installed = []
+
+    for name in ONNXRUNTIME_DISTRIBUTIONS:
+        try:
+            importlib.metadata.distribution(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+
+        installed.append(name)
+
+    return installed
+
+
+def _import_osam():
+    """Import the optional osam stack; None when it is absent or broken.
+
+    A broken install (e.g. an onnxruntime folder half-deleted by a package
+    swap) must disable AI ROI detection, not abort the app at startup.
+    """
+
+    try:
+        # optional dependency: Help menu installs it
+        import osam as _osam
+    except ImportError:
+        return None
+    except Exception as e:
+        logger.error(
+            f"osam is installed but failed to import ({e!r}); AI ROI detection "
+            f"is disabled. {_REPAIR_HINT}"
+        )
+
+        return None
+
+    if len(_installed_onnxruntime_distributions()) > 1:
+        logger.warning(
+            f"onnxruntime and onnxruntime-directml are both installed and share "
+            f"one package folder; the next install or removal of either will "
+            f"break the other. {_REPAIR_HINT}"
+        )
+
+    return _osam
+
+
+osam = _import_osam()
 
 #: Set once _patch_osam_providers() has actually run, so a later
 #: sam_available() retry (after an in-process Help-menu install) and the
@@ -106,18 +157,19 @@ def gpu_encoder_available():
 def sam_available():
     """Whether the optional osam stack imported -- retrying the import if
     it was not present at module load time (e.g. the Help-menu installer
-    has since run `pixi add --pypi osam` in-process), so a successful
+    has since installed osam in-process), so a successful
     install becomes usable without an app restart."""
     global osam
+
     if osam is None:
-        try:
-            # optional dependency: Help menu installs it
-            import osam as _osam
-        except ImportError:
+        osam = _import_osam()
+
+        if osam is None:
             return False
-        osam = _osam
+
     _patch_osam_providers_once()
-    return osam is not None
+
+    return True
 
 
 def normalize_to_uint8(
