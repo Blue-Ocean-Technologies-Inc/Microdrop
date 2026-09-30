@@ -150,10 +150,8 @@ class AiRoiController(HasTraits):
                 "onnxruntime has no DirectML provider (the "
                 "CPU-only build is present), so the encoder "
                 "keeps running on the CPU.\n\n"
-                "Do not add onnxruntime-directml alongside it: "
-                "both builds install into the same folder, and "
-                "the next install or removal of either one breaks "
-                "AI ROI detection."
+                "On Windows, Help > Install AI ROI Support installs "
+                "the DirectML build: re-run it and restart MicroDrop."
             )
 
     # ------------------------------------------------------------------ #

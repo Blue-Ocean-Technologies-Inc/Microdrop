@@ -18,7 +18,6 @@ docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 
 # Standard library imports.
 import collections
-import importlib.metadata
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -47,7 +46,6 @@ from .consts import (
     AI_ENCODE_WORK_WIDTH_PX,
     AI_NORMALIZE_HIGH_PERCENTILE,
     AI_NORMALIZE_LOW_PERCENTILE,
-    ONNXRUNTIME_DISTRIBUTIONS,
 )
 from .roi_geometry import normalize
 
@@ -56,26 +54,9 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: How to repair a broken or doubled onnxruntime from the pixi project root.
-_REPAIR_HINT = (
-    "Run `pixi remove --pypi onnxruntime-directml` if it was added, then "
-    "`pixi reinstall onnxruntime`, from the pixi project root."
-)
-
-
-def _installed_onnxruntime_distributions():
-    """Return the ONNXRUNTIME_DISTRIBUTIONS present in the environment."""
-    installed = []
-
-    for name in ONNXRUNTIME_DISTRIBUTIONS:
-        try:
-            importlib.metadata.distribution(name)
-        except importlib.metadata.PackageNotFoundError:
-            continue
-
-        installed.append(name)
-
-    return installed
+#: A half-deleted onnxruntime folder is repaired by re-extracting the
+#: package, which the installer's last step does.
+_REPAIR_HINT = "Re-run Help > Install AI ROI Support to reinstall it."
 
 
 def _import_osam():
@@ -97,13 +78,6 @@ def _import_osam():
         )
 
         return None
-
-    if len(_installed_onnxruntime_distributions()) > 1:
-        logger.warning(
-            f"onnxruntime and onnxruntime-directml are both installed and share "
-            f"one package folder; the next install or removal of either will "
-            f"break the other. {_REPAIR_HINT}"
-        )
 
     return _osam
 

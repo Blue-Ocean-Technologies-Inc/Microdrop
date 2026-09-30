@@ -10,13 +10,14 @@
 
 """Help-menu installer for the optional SAM (osam) ROI-detection stack.
 
-Runs ``pixi add --pypi osam`` from the pixi project root in a worker thread,
-streaming output into a cancellable ``QProgressDialog``. It deliberately does
-not add ``onnxruntime-directml``: that package installs into the same
-``onnxruntime/`` folder as osam's CPU ``onnxruntime`` dependency, so adding
-it beside osam breaks the other on the next install or removal.
-Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
-pattern for consistency.
+Runs ``pixi add --pypi osam`` then ``pixi install`` from the pixi project root
+(the same add-then-install flow plugin_management uses for external plugins)
+in a worker thread, streaming output into a cancellable ``QProgressDialog``,
+then checks osam imports before reporting it available. On Windows it also
+adds ``onnxruntime-directml``, the GPU build, and re-extracts it last: it
+shares the ``onnxruntime/`` folder with osam's CPU ``onnxruntime``, so the
+build extracted last is the one that runs. Mirrors
+``image_viewer/sam_download.py``'s QThread + QProgressDialog pattern.
 """
 
 # Standard library imports.
@@ -32,7 +33,7 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
 
 # Local imports.
-from .analysis.sam_detect import sam_available
+from .analysis.sam_detect import gpu_encoder_available, sam_available
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -42,6 +43,31 @@ logger = get_logger(__name__)
 #: Base label text the dialog stays pinned to; the latest output line (or
 #: failure reason) is appended beneath it as the install progresses.
 _INSTALL_LABEL = "Installing AI ROI support (osam)..."
+
+_ADD_OSAM = ["pixi", "add", "--pypi", "osam"]
+_INSTALL = ["pixi", "install"]
+# --platform: the DirectML wheel exists only for win_amd64, and a
+# multi-platform pixi manifest fails to resolve it without the restriction.
+_ADD_DIRECTML = [
+    "pixi",
+    "add",
+    "--pypi",
+    "--platform",
+    "win-64",
+    "onnxruntime-directml",
+]
+# onnxruntime-directml and osam's CPU onnxruntime install into the same
+# ``onnxruntime/`` folder, so whichever is extracted last is the one that
+# runs; re-extracting DirectML after the sync makes it the GPU build for sure.
+_REINSTALL_DIRECTML = ["pixi", "reinstall", "onnxruntime-directml"]
+
+#: Add osam to the manifest, then sync the environment so the running
+#: interpreter's site-packages actually carries it. Windows also adds the
+#: DirectML GPU build of onnxruntime (~3x faster SAM encodes).
+if sys.platform == "win32":
+    _INSTALL_STEPS = (_ADD_OSAM, _ADD_DIRECTML, _INSTALL, _REINSTALL_DIRECTML)
+else:
+    _INSTALL_STEPS = (_ADD_OSAM, _INSTALL)
 
 
 def _pixi_project_root():
@@ -70,14 +96,14 @@ def _pixi_project_root():
 
 
 class _InstallThread(QThread):
-    """Runs ``pixi add --pypi osam`` in the pixi project root, streaming
+    """Runs the ``_INSTALL_STEPS`` in the pixi project root, streaming
     output lines and reporting success/failure.
 
     ``succeeded``/``failed`` only drive the dialog's live label and
     auto-close -- they race a user cancel (Qt hides the dialog and
     ``exec()`` returns as soon as Cancel is clicked, independent of these
     signals). The authoritative result is ``osam_installed``, set the
-    instant the install exits 0 -- callers must read it only after
+    instant the last step exits 0 -- callers must read it only after
     ``wait()``ing for the thread to actually finish."""
 
     output = Signal(str)
@@ -88,7 +114,7 @@ class _InstallThread(QThread):
         super().__init__(parent)
         self._root = root
         self._process = None
-        #: Set the moment `pixi add --pypi osam` exits 0. The definitive
+        #: Set the moment every install step has exited 0. The definitive
         #: outcome: read only after the thread has finished.
         self.osam_installed = False
 
@@ -138,18 +164,22 @@ class _InstallThread(QThread):
         return self._process.wait()
 
     def run(self):
-        try:
-            code = self._run_step(["pixi", "add", "--pypi", "osam"])
-        except FileNotFoundError:
-            self.failed.emit("pixi not found on PATH")
-            return
-        except Exception as e:
-            self.failed.emit(f"Install failed: {e}")
-            return
+        for args in _INSTALL_STEPS:
+            command = " ".join(args)
+            logger.info(f"AI support install: running `{command}` in {self._root}")
 
-        if code != 0:
-            self.failed.emit("Install failed")
-            return
+            try:
+                code = self._run_step(args)
+            except FileNotFoundError:
+                self.failed.emit("pixi not found on PATH")
+                return
+            except Exception as e:
+                self.failed.emit(f"`{command}` failed: {e}")
+                return
+
+            if code != 0:
+                self.failed.emit(f"`{command}` exited {code}")
+                return
 
         self.osam_installed = True
         self.succeeded.emit()
@@ -212,4 +242,10 @@ def install_ai_support(parent=None):
 
     # sam_available() retries the guarded import, so a partial or broken
     # install is logged with its repair command instead of raising here.
-    return sam_available()
+    available = sam_available()
+    logger.info(
+        f"AI support install finished; osam available: {available}, "
+        f"GPU (DirectML) encoder available: {gpu_encoder_available()}"
+    )
+
+    return available
