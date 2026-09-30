@@ -11,31 +11,38 @@
 """Undo commands must act on the container the trait holds now.
 
 A Set/ListChangeEvent carries the container object itself. When the trait is
-later reassigned (``model.channels = {...}``, as route playback and phase
-navigation do), that container is detached; a command that still edits it
-changes nothing visible, which read as "undo does nothing" in the viewer.
+later reassigned (``model.channels = {...}``), that container is detached; a
+command that still edits it changes nothing visible, which read as "undo does
+nothing" in the viewer. Route playback makes exactly such reassignments while
+the pane is not recording, so the earlier click and draw commands must still
+find the live container afterwards.
 """
+
+# Standard library imports.
+from contextlib import contextmanager
 
 # Enthought library imports.
 from pyface.undo.api import CommandStack, UndoManager
 from traits.api import Bool, HasTraits, Instance, Int, List, Set, Str, observe
-from traits.observation.api import ListChangeEvent, SetChangeEvent
+from traits.observation.api import ListChangeEvent, SetChangeEvent, TraitChangeEvent
 
 # Microdrop package imports.
-from device_viewer.utils.commands import ListChangeCommand
+from device_viewer.utils.commands import ListChangeCommand, TraitChangeCommand
 
 # Microdrop utils imports.
 from microdrop_utils.trait_change_commands import SetChangeCommand
 
 
 class Recorded(HasTraits):
-    """A model whose set and list edits are pushed onto an undo stack the way
-    the device viewer pane records electrode and route changes, including
-    the guard that keeps an undo's own edits off the stack."""
+    """A model whose set and list changes are pushed onto an undo stack the
+    way the device viewer pane records them: mutations and reassignments
+    alike, except while undoing or while recording is suspended (as the pane
+    suspends it during route playback)."""
 
     channels = Set(Int)
     route = List(Str)
     stack = Instance(CommandStack)
+    recording = Bool(True)
     _undoing = Bool(False)
 
     def _stack_default(self):
@@ -60,48 +67,74 @@ class Recorded(HasTraits):
         finally:
             self._undoing = False
 
+    @contextmanager
+    def playback(self):
+        """Changes made inside are not recorded, like route playback's."""
+        self.recording = False
+
+        try:
+            yield
+        finally:
+            self.recording = True
+
     @observe("channels.items, route.items")
     def _record(self, event):
-        if self._undoing:
+        if self._undoing or not self.recording:
             return
 
         if isinstance(event, SetChangeEvent):
             self.stack.push(SetChangeCommand(event=event))
         elif isinstance(event, ListChangeEvent):
             self.stack.push(ListChangeCommand(event=event))
+        elif isinstance(event, TraitChangeEvent):
+            self.stack.push(TraitChangeCommand(event=event))
 
 
-def test_set_undo_edits_the_live_container_after_reassignment():
+def test_set_undo_survives_an_unrecorded_reassignment():
     model = Recorded()
     model.channels.add(1)
 
-    # Playback / phase navigation swap the container object wholesale.
-    model.channels = {1, 6}
+    with model.playback():
+        model.channels = {1, 6}
 
     model.undo()
 
     assert model.channels == {6}
 
 
-def test_set_redo_edits_the_live_container_after_reassignment():
+def test_set_redo_survives_an_unrecorded_reassignment():
     model = Recorded()
     model.channels.add(1)
     model.undo()
 
-    model.channels = {6}
+    with model.playback():
+        model.channels = {6}
 
     model.redo()
 
     assert model.channels == {1, 6}
 
 
-def test_list_undo_edits_the_live_container_after_reassignment():
+def test_list_undo_survives_an_unrecorded_reassignment():
     model = Recorded()
     model.route.append("a")
     model.route.append("b")
 
-    model.route = ["a", "b"]  # equal content, new container object
+    with model.playback():
+        model.route = ["a", "b"]  # equal content, new container object
 
     model.undo()
 
     assert model.route == []
+
+
+def test_recorded_reassignment_is_its_own_undo_step():
+    model = Recorded()
+    model.channels.add(1)
+    model.channels = {1, 6}
+
+    model.undo()
+    assert model.channels == {1}
+
+    model.undo()
+    assert model.channels == set()
