@@ -8,37 +8,67 @@
 #
 # Thanks for using Microdrop open source!
 
+"""Undoable commands built from Traits container-change events.
+
+A command replays the diff its event carried on the container as it exists on
+its owner at undo/redo time, never on the container the event captured: a later
+reassignment of the trait (``model.channels = {...}``) swaps in a new container
+object, and an edit to the detached old one changes nothing visible.
+"""
+
+# Standard library imports.
 import time
 
-from pyface.undo.abstract_command import AbstractCommand
-from traits.api import Str, Instance, Float, List
-from traits.observation._set_change_event import SetChangeEvent
+# Enthought library imports.
+from pyface.undo.api import AbstractCommand
+from traits.api import Float, Instance, List, Str
+from traits.observation.api import SetChangeEvent
 
-import logging
-logger = logging.getLogger(__name__)
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+
+
+def live_container(captured):
+    """Return the container its owner holds now for the trait that ``captured``
+    (the TraitList/Set/DictObject a change event carries) was the value of.
+
+    Falls back to ``captured`` itself once the owner has been garbage
+    collected.
+    """
+    owner = captured.object()
+
+    if owner is None:
+        return captured
+
+    return getattr(owner, captured.name)
 
 
 class SetChangeCommand(AbstractCommand):
+    """Undo and redo the membership changes one or more set events carried."""
 
     name = Str("Restore Set state")
 
-    event = Instance(SetChangeEvent)  # Assuming you have a SetChangeEvent
+    #: The first event; later edits to the same set merge into ``event_stack``.
+    event = Instance(SetChangeEvent)
 
+    #: When the last merged edit happened, for the merge window.
     timestamp = Float()
 
-    event_stack = List([])  # Mini stack for merging
+    #: ``{"added", "removed"}`` per merged event, oldest first.
+    event_stack = List()
 
     def do(self):
         self.timestamp = time.time()
-        # Sets have no indices, so we only track added/removed elements
         self.event_stack.append(
             {"added": self.event.added.copy(), "removed": self.event.removed.copy()}
         )
 
     def merge(self, other):
+        """Absorb ``other`` when it edits the same set within 0.5 s."""
         merge_timestamp = time.time()
 
-        # Merge edits to the same set within 0.5 seconds of each other.
         if (
             isinstance(other, SetChangeCommand)
             and other.event.object is self.event.object
@@ -51,36 +81,38 @@ class SetChangeCommand(AbstractCommand):
                     "removed": other.event.removed.copy(),
                 }
             )
-            self.timestamp = merge_timestamp  # Reset timestamp to now
+            self.timestamp = merge_timestamp
+
             return True
 
         return False
 
     def undo(self):
-        # Reverse the stack so we undo the most recent changes first
+        container = live_container(self.event.object)
+
         for event in reversed(self.event_stack):
             logger.debug(
-                f"Undoing set mod {self.event.object}, added {event['added']}, removed {event['removed']}"
+                f"Undoing set mod {container}, added {event['added']}, "
+                f"removed {event['removed']}"
             )
 
-            # To undo, we discard what was added...
             for item in event["added"]:
-                self.event.object.discard(item)
+                container.discard(item)
 
-                # ...and add back what was removed.
             for item in event["removed"]:
-                self.event.object.add(item)
+                container.add(item)
 
     def redo(self):
+        container = live_container(self.event.object)
+
         for event in self.event_stack:
             logger.debug(
-                f"Redoing set mod {self.event.object}, added {event['added']}, removed {event['removed']}"
+                f"Redoing set mod {container}, added {event['added']}, "
+                f"removed {event['removed']}"
             )
 
-            # To redo, we discard what was originally removed...
             for item in event["removed"]:
-                self.event.object.discard(item)
+                container.discard(item)
 
-            # ...and add what was originally added.
             for item in event["added"]:
-                self.event.object.add(item)
+                container.add(item)
