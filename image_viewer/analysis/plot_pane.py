@@ -63,6 +63,7 @@ from microdrop_style.icons.icons import (
 
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
+    HoverScrollEnumEditor,
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
@@ -239,7 +240,7 @@ def _top_row():
             "figure.view_mode",
             label="View",
             width=DROPDOWN_W,
-            editor=EnumEditor(
+            editor=HoverScrollEnumEditor(
                 values=list(VIEW_MODES), format_func=VIEW_MODE_LABELS.get
             ),
         ),
@@ -247,7 +248,7 @@ def _top_row():
             "session.plot_stat",
             label="Plot",
             width=DROPDOWN_W,
-            editor=EnumEditor(
+            editor=HoverScrollEnumEditor(
                 values=list(PLOT_STATS), format_func=PLOT_STAT_LABELS.get
             ),
         ),
@@ -301,7 +302,7 @@ def _axes_tab():
                 "figure.x_axis",
                 label="X axis",
                 width=DROPDOWN_W,
-                editor=EnumEditor(
+                editor=HoverScrollEnumEditor(
                     values=list(X_AXIS_MODES), format_func=X_AXIS_LABELS.get
                 ),
                 tooltip="What the curves are plotted against: "

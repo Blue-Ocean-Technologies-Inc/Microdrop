@@ -1805,7 +1805,10 @@ class _HoverScrollEnumEditor(QtEditor):
 
     The combo box uses ``AdjustToMinimumContentsLengthWithIcon`` so it doesn't
     expand to fit the widest item; overflow text marquee-scrolls on hover (see
-    :class:`MarqueeComboBox`). The dropdown list still renders full names.
+    :class:`MarqueeComboBox`) and the tooltip carries the full label. The
+    dropdown list widens to its longest label, so every choice reads in full
+    while picking. Each item keeps its raw value as Qt user data, so a
+    ``format_func`` label never leaks back into the trait.
     """
 
     def init(self, parent):
@@ -1815,9 +1818,11 @@ class _HoverScrollEnumEditor(QtEditor):
             QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
 
-        self.control.currentTextChanged.connect(self.update_object)
+        self.control.currentIndexChanged.connect(self.update_object)
+
         if self.factory.values_name:
             self.object.observe(self._on_values_changed, self.factory.values_name)
+
         self._repopulate()
 
     def dispose(self):
@@ -1825,7 +1830,31 @@ class _HoverScrollEnumEditor(QtEditor):
             self.object.observe(
                 self._on_values_changed, self.factory.values_name, remove=True
             )
+
         super().dispose()
+
+    def _label(self, value):
+        """The display text for a raw choice value."""
+        format_func = self.factory.format_func
+
+        return str(value) if format_func is None else format_func(value)
+
+    def _select_value(self):
+        """Show the trait's value, leaving the current item in place when
+        the value is not (yet) among the choices."""
+        index = self.control.findData(self.value)
+
+        if index >= 0:
+            self.control.setCurrentIndex(index)
+
+    def _fit_popup_to_labels(self):
+        """Let the dropdown list grow past the closed combo's width so
+        its longest label is never elided."""
+        view = self.control.view()
+        label_width = view.sizeHintForColumn(0)
+        chrome_width = view.verticalScrollBar().sizeHint().width()
+
+        view.setMinimumWidth(label_width + chrome_width + 2 * view.frameWidth())
 
     def _repopulate(self):
         values = (
@@ -1833,24 +1862,42 @@ class _HoverScrollEnumEditor(QtEditor):
             if self.factory.values_name
             else self.factory.values
         )
+
         self.control.blockSignals(True)
         self.control.clear()
-        self.control.addItems(list(values))
-        self.control.setCurrentText(str(self.value))
+
+        for value in values:
+            self.control.addItem(self._label(value), value)
+
+        self._select_value()
         self.control.blockSignals(False)
+
+        self._fit_popup_to_labels()
+        self.set_tooltip()
 
     def _on_values_changed(self, event):
         self._repopulate()
 
-    def update_object(self, value):
-        self.value = value
+    def tooltip_text(self):
+        """The full label of the current choice, above the item's own
+        tooltip when it has one."""
+        label = self._label(self.value)
+        description = super().tooltip_text()
+
+        return f"{label}\n\n{description}" if description else label
+
+    def update_object(self, index):
+        if index >= 0:
+            self.value = self.control.itemData(index)
 
     def update_editor(self):
         if self.control is not None:
             # Block signals so programmatic updates don't re-fire update_object.
             self.control.blockSignals(True)
-            self.control.setCurrentText(str(self.value))
+            self._select_value()
             self.control.blockSignals(False)
+
+            self.set_tooltip()
 
 
 class HoverScrollEnumEditor(BasicEditorFactory):
@@ -1865,6 +1912,9 @@ class HoverScrollEnumEditor(BasicEditorFactory):
     #: Name of a List(Str) trait on the edited object supplying the choices
     #: dynamically (takes precedence over ``values``).
     values_name = Str()
+    #: Maps a raw value to its display text, as in TraitsUI's ``EnumEditor``;
+    #: None shows ``str(value)``.
+    format_func = Callable()
 
     def _get_klass(self):
         return _HoverScrollEnumEditor
