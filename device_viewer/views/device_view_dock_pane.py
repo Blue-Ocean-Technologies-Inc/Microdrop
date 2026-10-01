@@ -104,6 +104,7 @@ from ..services.electrode_interaction_service import (
 )
 from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.gamepad_interaction_service import GamepadInteractionService
+from ..services.svg_persistence_service import SvgPersistenceService
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from .camera_alignment_view.alignment_dialog import (
@@ -204,6 +205,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     #: ``create_contents`` builds the sidebar they join.
     layer_host = Instance(LayerHost)
 
+    #: Reads and writes the device SVG; the pane title follows its
+    #: ``loaded_path`` and ``modified``.
+    svg_persistence = Instance(SvgPersistenceService)
+
     # --------- Device View trait initializers -------------
     def traits_init(self):
         ###############################################################################################################
@@ -238,8 +243,9 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         ############## Load preferred / default svg ####################################
 
-        if not Path(self.device_viewer_preferences.DEFAULT_SVG_FILE).exists():
-            self.device_viewer_preferences.reset_traits(["DEFAULT_SVG_FILE"])
+        self.svg_persistence = SvgPersistenceService(
+            model=self.model, preferences=self.device_viewer_preferences
+        )
 
         ############## load preferred / default camera options #########################
         self.model.load_camera_perspective_from_preferences()
@@ -957,7 +963,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         # new device: reset undo manager.
         self.undo_manager.active_stack.clear()
 
-    def _initialize_svg_view(self, svg_file):
+    def _initialize_svg_view(self):
         # A different device has a different saved endpoint — close the
         # old device's alignment dialog before rebuilding the view.
         self._close_alignment_dialog()
@@ -973,47 +979,28 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.layer_host is not None:
             self.layer_host.device_loaded(self.scene.interaction_service.stepping)
 
-        name = _dock_pane_name + "\t\t-\t\t" + Path(svg_file).stem
-
-        if self.model.electrodes.svg_model.connections_modified:
-            name += " (modified)"
-
-        self.name = name
-
         # Publish geometry after SVG is fully loaded and channel mapping is established.
         self.publish_controller._publish_geometry_if_changed()
-
-    def _set_svg_model(self, svg_file):
-
-        self.model.reset()
-
-        # create model using svg data
-        self.model.electrodes.set_electrodes_from_svg_file(
-            svg_file
-        )  # FIXME: Slow! Calculating centers via np.mean
-        logger.debug(
-            f"Created electrodes from SVG file: "
-            f"{self.model.electrodes.svg_model.filename}"
-        )
-        unloaded = self.model.load_zones_from_device()
-        if unloaded > 0:
-            warning(
-                None,
-                f"{unloaded} zone region(s) in this device file reference electrodes "
-                "that do not exist in it and were dropped or trimmed. Saving the "
-                "file will write it without those electrodes.",
-                title="Zones Not Loaded",
-            )
 
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
             svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
 
-        logger.info(f"Selected SVG file: {svg_file}")
-        # create model using svg data
         try:
-            self._set_svg_model(svg_file=svg_file)
-            self._initialize_svg_view(svg_file=svg_file)
+            unloaded = self.svg_persistence.load(svg_file)
+
+            if unloaded > 0:
+                warning(
+                    None,
+                    f"{unloaded} zone region(s) in this device file reference "
+                    "electrodes that do not exist in it and were dropped or "
+                    "trimmed. Saving the file will write it without those "
+                    "electrodes.",
+                    title="Zones Not Loaded",
+                )
+
+            self._initialize_svg_view()
+
             # if model and view can be set, change default svg file
             self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
 
@@ -1246,7 +1233,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # -- 0. Make sure user saves existing changes if file modified:
 
-        if "modified" in self.name:
+        if self.svg_persistence.modified:
             ### Open a confirmation dialog ####
             user_choice = confirm(
                 None,
@@ -1362,18 +1349,11 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
 
         if dialog.open() == OK:
-            new_filename = (
-                dialog.path
-                if dialog.path.endswith(".svg")
-                else str(dialog.path) + ".svg"
-            )
-            self.model.electrodes.svg_save_as(new_filename)
-            self.name = self.name.replace(device_modified_tag, "")
+            self.svg_persistence.save_as(str(dialog.path))
 
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_svg(self):
-        self.model.electrodes.svg_save()
-        self.name = self.name.replace(device_modified_tag, "")
+        self.svg_persistence.save()
 
     @app_statusbar_message_from_dock_pane("...Generating Connections")
     def generate_svg_connections(self):
@@ -1419,14 +1399,18 @@ class DeviceViewerDockPane(TraitsDockPane):
     ###### Trait Observers -- Model and Model Traits ########
     #################################################################################################################
 
-    @observe("model:electrodes:svg_model:area_scale", post_init=True)
-    @observe("model:electrodes:svg_model:connections_modified")
-    @observe("model.electrodes.electrodes.items.channel", post_init=True)
-    def _svg_data_changed(self, event):
-        logger.debug(f"Svg data changed event: {event}")
-        if "modified" not in self.name:
-            logger.info("Svg data changed")
-            self.name += device_modified_tag
+    @observe("svg_persistence:[loaded_path, modified]")
+    def _update_name_from_svg_persistence(self, event):
+        """Title the pane with the loaded device, tagged while unsaved."""
+        name = _dock_pane_name
+
+        if self.svg_persistence.loaded_path:
+            name += "\t\t-\t\t" + Path(self.svg_persistence.loaded_path).stem
+
+        if self.svg_persistence.modified:
+            name += device_modified_tag
+
+        self.name = name
 
     @observe("model:electrodes:svg_model:connections")
     def _on_connections_changed(self, event):
