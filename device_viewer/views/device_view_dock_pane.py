@@ -23,15 +23,11 @@ from pyface.qt.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
-    QPushButton,
-    QScrollArea,
-    QSizePolicy,
-    QVBoxLayout,
     QWidget,
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
-from traits.api import Bool, Instance, Str, observe
+from traits.api import Bool, Instance, List, Str, observe
 from traits.observation._set_change_event import SetChangeEvent
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.api import UI
@@ -55,7 +51,7 @@ from microdrop_status_bar.consts import (
 )
 
 # Microdrop style imports.
-from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
+from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.colors import BLACK, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.helpers import (
@@ -71,7 +67,6 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
-    CollapsibleVStackBox,
     PulsingLabel,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
@@ -96,7 +91,6 @@ from ..consts import (
 from ..controllers.device_viewer_message_controller import (
     DeviceViewerMessageController,
 )
-from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
@@ -119,8 +113,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
 from ..utils.message_utils import gui_models_to_message_model
-from .alpha_view.alpha_table import alpha_table_view
-from .calibration_view.widget import CalibrationController, CalibrationWidget
 from .camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -131,17 +123,16 @@ from .camera_alignment_view.alignment_settings import (
     SETTING_TRAITS,
     AlignmentSettingsModel,
 )
-from .camera_control_view.widget import CameraControlWidget
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
-from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import (
-    ExecutionSettingsView,
-    RouteLayerView,
-)
-from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
-from .zone_view.zones_sidebar import zones_view
+from .sidebar.calibration import build_calibration
+from .sidebar.camera_controls import build_camera_controls
+from .sidebar.host import build_reveal_button, build_sidebar
+from .sidebar.paths import build_paths
+from .sidebar.section import SidebarSection
+from .sidebar.viewport_controls import build_viewport_controls
+from .sidebar.zones import build_zones
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -180,8 +171,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     gamepad_service = Instance(GamepadInteractionService, allow_none=True)
     layer_ui = None
     zones_ui = None
-    zones_controller = None
-    mode_picker_view = None
 
     #: Camera controls widget; None until ``create_contents`` builds it.
     camera_control_widget = None
@@ -192,6 +181,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     #: The open Edit Connections dialog; None while closed.
     _connections_editor_ui = Instance(UI)
+
+    #: The sidebar's sections, top to bottom; holding them keeps each
+    #: section's controllers and TraitsUI UIs alive with the pane.
+    sidebar_sections = List(Instance(SidebarSection))
+
+    #: The open sidebar layout preferences editor; None until opened.
+    edit_sidebar_layout_ui = Instance(UI)
 
     # Variables
     _undoing = Bool(
@@ -1257,267 +1253,116 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.publish_model_message(event=None)
 
-        # Layout init for device view and its property editor right-side bar
-        # left side will house device viewer; right side a collapsible
-        # scrollable stack of collapsible widgets
-        main_layout = QHBoxLayout()
-        main_container = QWidget()
-
-        # --- Right Side: Collapsible Scroll Area ---
-
-        # Create the Scroll Area and its container
-        self.scroll_area = scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-
-        # Initially hide the scroll area
-        scroll_area.setVisible(True)
-
-        self.scroll_content = scroll_content = QWidget()
-
-        scroll_layout = QVBoxLayout(scroll_content)
-
-        # device_view code
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
-        #### Side Bar widgets init #####
+        self.sidebar_sections = self._build_sidebar_sections()
+        self.scroll_area = build_sidebar(self.sidebar_sections)
+        self.scroll_content = self.scroll_area.widget()
+        self._set_device_view_layout_width()
 
-        # alpha_view code
-        self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
+        self.reveal_button = build_reveal_button(self.scroll_area)
 
-        # layer_view code
-        layer_view = RouteLayerView
-        self.layer_ui = self.model.edit_traits(view=layer_view)
-        self.execution_settings_ui = self.model.edit_traits(view=ExecutionSettingsView)
+        # Device view on the left, the sidebar and its reveal toggle on the right.
+        main_layout = QHBoxLayout()
+        main_layout.addWidget(self.device_view, 1)
+        main_layout.addWidget(self.reveal_button)
+        main_layout.addWidget(self.scroll_area)
 
-        # mode_picker_view code
-        _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
-        self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
+        main_container = QWidget()
+        main_container.setLayout(main_layout)
 
-        # camera_control_widget code
+        for widget in (self.scroll_content, self.reveal_button):
+            widget.setContextMenuPolicy(Qt.CustomContextMenu)
+            widget.customContextMenuRequested.connect(self._show_sidebar_context_menu)
+
+        self._apply_theme_style(
+            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
+        )
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_theme_style)
+
+        # style device view: remove frame in device view
+        self.device_view.setFrameStyle(QFrame.NoFrame)
+
+        return main_container
+
+    def _build_sidebar_sections(self):
+        """Build the sidebar sections, top to bottom."""
+        viewport_section = build_viewport_controls(self.model)
+
         # status_bar_manager is typically None at create_contents time (the
         # MicrodropTask creates it in activated(), which runs after dock pane
         # creation). _setup_app_statusbar below re-pushes the manager once
         # the trait fires.
-        self.camera_control_widget = CameraControlWidget(
+        camera_section = build_camera_controls(
             self.model,
             self.video_item,
             self.scene,
             self.app_preferences,
             status_bar_manager=self.task.window.status_bar_manager,
             source_providers=self._camera_source_providers,
+            on_align_camera=self._on_open_camera_alignment,
+            on_go_to_endpoint=self._on_go_to_endpoint,
+        )
+        paths_section = build_paths(self.model, undo=self.undo, redo=self.redo)
+        zones_section = build_zones(self.model)
+        calibration_section = build_calibration(self.model.calibration)
+
+        self.camera_control_widget = camera_section.camera_control_widget
+        self.alpha_view_ui = camera_section.alpha_view_ui
+        self.layer_ui = paths_section.layer_ui
+        self.zones_ui = zones_section.zones_ui
+
+        return [
+            viewport_section,
+            camera_section,
+            paths_section,
+            zones_section,
+            calibration_section,
+        ]
+
+    def _show_sidebar_context_menu(self, point):
+        """Offer the sidebar layout preferences at the right-clicked point."""
+        menu = QMenu(self.scroll_content)
+        settings_action = menu.addAction("Modify Layout...")
+        settings_action.triggered.connect(self._open_sidebar_layout_settings)
+
+        menu.exec(self.scroll_content.mapToGlobal(point))
+
+    def _open_sidebar_layout_settings(self):
+        """Open the sidebar layout preferences, or raise the open editor."""
+        if self.edit_sidebar_layout_ui:
+            control = self.edit_sidebar_layout_ui.control
+
+            if control:
+                if control.isVisible():
+                    control.raise_()
+                    control.activateWindow()
+
+                return
+
+            # The editor's widget was destroyed while its UI lingered.
+            self.edit_sidebar_layout_ui = None
+
+        self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
+            view=View(sidebar_settings_grid, resizable=True)
         )
 
-        # keep the camera toggled button in sync with the alpha map.
-        # self.camera_control_widget.camera_toggle_button.toggled.connect(
-        #     lambda checked: self.model.set_visible(video_key, checked)
-        # )
+    def _apply_theme_style(self, theme):
+        """Restyle the sidebar and device view for the application theme."""
+        theme_name = QT_THEME_NAMES[theme]
 
-        # calibration_view code
-        self.calibration_view = CalibrationWidget()
-        self.calibration_controller = CalibrationController(
-            model=self.model.calibration, view=self.calibration_view
+        logger.debug(f"Applying {theme_name} mode")
+
+        self.scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
+
+        # The device view renders through OpenGL, so it cannot take the full
+        # widget stylesheet; only its tooltips need the theme.
+        self.device_view.setStyleSheet(get_tooltip_style(theme_name))
+        self.device_view.setBackgroundBrush(QBrush(QColor(BLACK)))
+
+        self.reveal_button.setStyleSheet(
+            get_complete_stylesheet(theme_name, button_type="narrow")
         )
-
-        self.zones_controller = ZonesController(model=self.model)
-        self.zones_ui = self.model.zones.edit_traits(view=zones_view)
-
-        vm = ZoomViewModel(model=self.model)
-        self.viewport_controls_widget = ZoomControlWidget(vm)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Viewport Controls", control_widgets=self.viewport_controls_widget
-            )
-        )
-
-        # Camera Alignment: the manual per-device endpoint workflow.
-        # Lives right under the camera-control button grid.
-        alignment_widget = QWidget()
-        alignment_layout = QHBoxLayout(alignment_widget)
-        for label, handler, tip in (
-            (
-                "Align Camera",
-                self._on_open_camera_alignment,
-                "Place this device's endpoint on the SVG and drag the "
-                "corner dots onto its outline in a captured camera frame",
-            ),
-            (
-                "Go To Endpoint",
-                self._on_go_to_endpoint,
-                "Glide the marked points onto this device's saved endpoint",
-            ),
-        ):
-            action_button = QPushButton(label)
-            # The sidebar's theme stylesheet renders QPushButton text
-            # in the Material Symbols icon font — these buttons carry
-            # real words, so they get the text-button font override.
-            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
-            action_button.setToolTip(tip)
-            action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button, 1)
-
-        camera_controls_box = CollapsibleVStackBox(
-            "Camera Controls",
-            control_widgets=[
-                self.camera_control_widget,
-                alignment_widget,
-                self.alpha_view_ui.control,
-            ],
-        )
-        # Same side margins and gap as the camera-control button rows so
-        # the two buttons line up with the four above (each spans a pair);
-        # the bottom margin separates them from the alpha table below.
-        # Read only now: Qt's default layout margin is wider for a widget
-        # that is still a window than for a child, so it settles once the
-        # camera widget sits inside the box.
-        _camera_layout = self.camera_control_widget.layout()
-        _camera_margins = _camera_layout.contentsMargins()
-        alignment_layout.setContentsMargins(
-            _camera_margins.left(), 0, _camera_margins.right(), 12
-        )
-        alignment_layout.setSpacing(_camera_layout.spacing())
-
-        scroll_layout.addWidget(camera_controls_box)
-
-        self.execution_settings_box = CollapsibleVStackBox(
-            "Execution Settings", control_widgets=self.execution_settings_ui.control
-        )
-        self.execution_settings_box.set_expanded(False)
-        self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Paths",
-                control_widgets=[
-                    self.execution_settings_box,
-                    self.layer_ui.control,
-                    self.mode_picker_view,
-                ],
-            )
-        )
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
-        )
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
-        )
-        scroll_layout.addStretch()
-
-        scroll_area.setWidget(scroll_content)
-
-        self._set_device_view_layout_width()
-
-        reveal_button = QPushButton("chevron_right")
-
-        # Create a button to show/hide the scroll area
-
-        def reveal_button_handler():
-            # 1. Check the current visibility of the scroll_area
-            is_now_visible = not scroll_area.isVisible()
-
-            # 2. Toggle the visibility of the entire scroll_area
-            scroll_area.setVisible(is_now_visible)
-
-            # 3. Update the button icon based on the new state
-            #    (chevron_right to hide, chevron_left to reveal)
-            reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
-
-        reveal_button.setToolTip("Reveal Hidden Controls")
-        reveal_button.clicked.connect(reveal_button_handler)
-        reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
-
-        ####### Assemble main layout ################
-        main_layout.addWidget(self.device_view, 1)  # left side
-        main_layout.addWidget(reveal_button)  # middle
-        main_layout.addWidget(scroll_area)  # right side
-
-        main_container.setLayout(main_layout)
-
-        # -------------------------------------------------------------------------
-        # Context Menu to Open Preferences
-        # -------------------------------------------------------------------------
-        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
-        reveal_button.setContextMenuPolicy(Qt.CustomContextMenu)
-
-        self.edit_sidebar_layout_ui = None
-
-        def _on_sidebar_context_menu(point):
-
-            # 1. Create the menu
-            menu = QMenu(self.scroll_content)
-
-            # 2. Create the action
-            settings_action = menu.addAction("Modify Layout...")
-
-            # 3. Define the trigger
-            def open_settings():
-                if self.edit_sidebar_layout_ui:
-                    control = self.edit_sidebar_layout_ui.control
-
-                    # Check if it's actually visible and valid
-                    if control:
-                        if control.isVisible():
-                            control.raise_()  # Bring to top of stack
-                            control.activateWindow()  # Give it keyboard focus
-
-                        return  # STOP here
-
-                    else:
-                        # Handle case where the C++ widget was destroyed but
-                        # Python ref exists
-                        self.edit_sidebar_layout_ui = None
-
-                self.edit_sidebar_layout_ui = (
-                    self.device_viewer_preferences.edit_traits(
-                        view=View(sidebar_settings_grid, resizable=True)
-                    )
-                )
-
-            settings_action.triggered.connect(open_settings)
-
-            # 4. Show the menu at the global position
-            menu.exec(self.scroll_content.mapToGlobal(point))
-
-        self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
-        reveal_button.customContextMenuRequested.connect(_on_sidebar_context_menu)
-
-        # ---------------------------------- Theme aware styling -----------#
-        def _apply_theme_style(theme: "Qt.ColorScheme"):
-            """Handle application level theme updates"""
-
-            theme_name = QT_THEME_NAMES[theme]
-
-            logger.debug(f"Applying {theme_name} mode")
-
-            scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
-
-            # device view uses opengl so a complete stylesheet with widget
-            # style specs cannot be added:
-            # but other elements like tooltips do need updating
-            self.device_view.setStyleSheet(get_tooltip_style(theme_name))
-
-            # if is_dark_mode() else "#263238" #TODO: figure out light mode color
-            bg_color = BLACK
-            self.device_view.setBackgroundBrush(QBrush(QColor(bg_color)))
-
-            # reveal requires the narrow button type specified
-            reveal_button.setStyleSheet(
-                get_complete_stylesheet(theme_name, button_type="narrow")
-            )
-
-        # Apply initial theme styling
-        _apply_theme_style(
-            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
-        )
-
-        # Call theme application method whenever global theme changes occur as well
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
-
-        # style device view: remove frame in device view
-        self.device_view.setFrameStyle(QFrame.NoFrame)
-
-        return main_container
 
     ###################################################################################################################
     ###### SVG file loading / saving / other handling ########

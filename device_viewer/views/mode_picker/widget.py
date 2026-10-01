@@ -13,8 +13,7 @@ from functools import partial
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets
-from pyface.tasks.dock_pane import DockPane
-from traits.api import HasTraits, Instance, Property, observe
+from traits.api import Callable, HasTraits, Instance, Property, observe
 
 # Microdrop package imports.
 from device_viewer.models.main_model import DeviceViewMainModel
@@ -55,7 +54,13 @@ class ModePickerViewModel(HasTraits):
 
     # Dependencies (The "Model" layers this VM wraps)
     model = Instance(DeviceViewMainModel)
-    pane = Instance(DockPane)
+
+    #: Undoes the last edit; the owner of the undo stack supplies it.
+    undo_handler = Callable()
+
+    #: Redoes the last undone edit.
+    redo_handler = Callable()
+
     signals = Instance(ModePickerSignals)
 
     current_mode = Property(observe="model.mode")
@@ -81,10 +86,10 @@ class ModePickerViewModel(HasTraits):
         return self.model.editable
 
     def _get_can_undo(self):
-        return self.model.editable and self.pane.undo_manager.undo_name != ""
+        return self.model.editable and self.model.undo_manager.undo_name != ""
 
     def _get_can_redo(self):
-        return self.model.editable and self.pane.undo_manager.redo_name != ""
+        return self.model.editable and self.model.undo_manager.redo_name != ""
 
     # -- Actions --
     def set_mode(self, mode):
@@ -92,11 +97,11 @@ class ModePickerViewModel(HasTraits):
 
     @if_editable
     def undo(self):
-        self.pane.undo()
+        self.undo_handler()
 
     @if_editable
     def redo(self):
-        self.pane.redo()
+        self.redo_handler()
 
     @if_editable
     def reset_electrodes(self):
@@ -111,7 +116,7 @@ class ModePickerViewModel(HasTraits):
         """Forward underlying model changes to the Qt View."""
         self.signals.state_changed.emit()
 
-    @observe("pane:undo_manager:stack_updated, model:editable")
+    @observe("model:undo_manager:stack_updated, model:editable")
     def _on_undo_availability_changed(self, event):
         """Refresh the Undo/Redo buttons after every push, undo, redo or clear."""
         self.signals.state_changed.emit()
