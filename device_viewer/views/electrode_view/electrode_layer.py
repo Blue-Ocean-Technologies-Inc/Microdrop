@@ -555,6 +555,10 @@ class ElectrodeLayer:
             path.addEllipse(rect[0], 4, 4)
             self.reference_rect_path_item.setPath(path)
             self.reference_rect_path_item.setVisible(True)
+            self.reference_rect_item.setVisible(False)
+
+        else:
+            self.clear_reference_rect()
 
     def clear_reference_rect(self):
         """Reset the reference rectangle to its initial state."""

@@ -332,6 +332,10 @@ class ElectrodeInteractionControllerService(HasTraits):
             logger.debug("Reference rect tied to perspective transform changed")
             rect_to_edit = self.model.camera_perspective.transformed_reference_rect
 
+        # No corner grabbed (-1), or an undo shrank the rect since the grab.
+        if not 0 <= self.rect_editing_index < len(rect_to_edit):
+            return
+
         rect_to_edit[self.rect_editing_index] = point
 
     def handle_perspective_edit_end(self):
@@ -1214,6 +1218,13 @@ class ElectrodeInteractionControllerService(HasTraits):
     @observe("model:camera_perspective:transformed_reference_rect")
     def _reference_rect_change(self, event):
         logger.debug(f"Reference rectangle change: {event}")
+
+        # Undoing past the rect's placement leaves no rect to edit; go back
+        # to placing one, which also clears the drawn outline.
+        if self.model.mode == "camera-edit" and len(event.new) < 4:
+            self.model.mode = "camera-place"
+            return
+
         if self.electrode_view_layer and self.model.mode.split("-")[0] == "camera":
             self.electrode_view_layer.redraw_reference_rect(rect=event.new)
 
