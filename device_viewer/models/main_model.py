@@ -37,11 +37,10 @@ from microdrop_utils.decorators import debounce
 
 # Local imports.
 from ..consts import (
+    BASE_INTERACTION_MODES,
     DEFAULT_ZONE_TYPES,
     DEVICE_REPO_DIR_KEY,
     DEVICE_SVG_PATH_KEY,
-    ZONE_DRAW_MODE,
-    ZONE_SELECT_MODE,
     ZONES_KEY,
 )
 from ..default_settings import (
@@ -122,34 +121,13 @@ class DeviceViewMainModel(HasTraits):
     # Zone / Zone-Select: User draws electrode zones / picks a drawn zone region.
     # To change the mode, set the mode property and clean up any
     # references/inconsistencies
-    mode = Enum(
-        "draw",
-        "edit",
-        "edit-draw",
-        "auto",
-        "merge",
-        "channel-edit",
-        "display",
-        "camera-place",
-        "camera-edit",
-        "pan",
-        ZONE_DRAW_MODE,
-        ZONE_SELECT_MODE,
-    )
-    last_mode = Enum(
-        "draw",
-        "edit",
-        "edit-draw",
-        "auto",
-        "merge",
-        "channel-edit",
-        "display",
-        "camera-place",
-        "camera-edit",
-        "pan",
-        ZONE_DRAW_MODE,
-        ZONE_SELECT_MODE,
-    )
+
+    #: Every value ``mode`` may take: the base modes, then those the
+    #: attached device viewer layers (#650) add and remove at runtime.
+    available_modes = List(Str, list(BASE_INTERACTION_MODES))
+
+    mode = Enum(values="available_modes")
+    last_mode = Enum(values="available_modes")
 
     # Editor related properties
     mode_name = Property(Str, observe="mode")
@@ -277,6 +255,11 @@ class DeviceViewMainModel(HasTraits):
     def traits_init(self):
         """Initialize the model with default traits."""
 
+        # A dynamic Enum computes its default on first read, so the first
+        # mode change would report old=<undefined>; store the defaults
+        # quietly so mode observers always see a real previous mode.
+        self.trait_setq(mode=self.mode, last_mode=self.last_mode)
+
         self.electrodes = Electrodes()
         self.routes = RouteLayerManager(message=self.message, mode=self.mode)
 
@@ -289,24 +272,12 @@ class DeviceViewMainModel(HasTraits):
 
         # Initialize the alpha map with default values
         if self.preferences:
-            # construct alpha map from preferences
-            _alpha_map = []
-            for key in default_alphas.keys():
-                # sync default alphas with pre-existing preferences alphas dict
-                if key not in self.preferences.default_alphas:
-                    self.preferences.default_alphas[key] = default_alphas[key]
-                if key not in self.preferences.default_visibility:
-                    self.preferences.default_visibility[key] = default_visibility[key]
-
-                _alpha_value = AlphaValue(
-                    key=key,
-                    alpha=self.preferences.default_alphas[key],
-                    visible=self.preferences.default_visibility[key],
+            self.alpha_map = [
+                self._saved_alpha_value(
+                    key, default_alphas[key], default_visibility[key]
                 )
-
-                _alpha_map.append(_alpha_value)
-
-            self.alpha_map = _alpha_map
+                for key in default_alphas
+            ]
 
         self._seed_zone_types_from_preferences()
 
@@ -400,6 +371,55 @@ class DeviceViewMainModel(HasTraits):
             svg_model.neighbours,
         )
         return self.zones.load_records(svg_model.zone_records)
+
+    def _saved_alpha_value(self, key, alpha, visible):
+        """Return the opacity row for ``key`` as last saved in preferences.
+
+        ``alpha`` and ``visible`` are the first-run defaults, recorded in
+        preferences for a key seen for the first time.
+        """
+        if key not in self.preferences.default_alphas:
+            self.preferences.default_alphas[key] = alpha
+
+        if key not in self.preferences.default_visibility:
+            self.preferences.default_visibility[key] = visible
+
+        return AlphaValue(
+            key=key,
+            alpha=self.preferences.default_alphas[key],
+            visible=self.preferences.default_visibility[key],
+        )
+
+    def add_alpha_row(self, key, alpha, visible):
+        """Append an opacity-table row; saved preferences beat the defaults."""
+        if self.preferences:
+            alpha_value = self._saved_alpha_value(key, alpha, visible)
+        else:
+            alpha_value = AlphaValue(key=key, alpha=alpha, visible=visible)
+
+        self.alpha_map.append(alpha_value)
+
+    def remove_alpha_row(self, key):
+        """Drop the opacity-table row for ``key``; its saved values stay."""
+        alpha_value = self._alpha_index.get(key)
+
+        if alpha_value is not None:
+            self.alpha_map.remove(alpha_value)
+
+    def add_mode(self, mode):
+        """Accept ``mode`` as a value of the ``mode`` trait."""
+        self.available_modes.append(mode)
+
+    def remove_mode(self, mode):
+        """Withdraw ``mode``, first leaving it for display if it is active."""
+        if self.mode == mode:
+            self.mode = "display"
+
+        # Set after leaving: the mode observer records the mode just left.
+        if self.last_mode == mode:
+            self.last_mode = "display"
+
+        self.available_modes.remove(mode)
 
     def get_alpha(self, key: str) -> float:
         """Get the alpha value for a given key."""
@@ -543,6 +563,10 @@ class DeviceViewMainModel(HasTraits):
     ### update default alpha values with current values for persistence
     @observe("alpha_map.items.[alpha, visible]")
     def _alpha_values_changed(self, event):
+        # Rows added or removed (by a device viewer layer) change no value.
+        if not isinstance(event.object, AlphaValue):
+            return
+
         change_type = event.name
 
         if change_type == "alpha":

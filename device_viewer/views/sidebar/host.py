@@ -41,14 +41,46 @@ def build_sidebar(sections):
         if section is None:
             continue
 
-        box = CollapsibleVStackBox(section.title, control_widgets=section.widget)
-        box.set_expanded(not section.collapsed)
-        scroll_layout.addWidget(box)
+        scroll_layout.addWidget(build_section_box(section))
 
     scroll_layout.addStretch()
     scroll_area.setWidget(scroll_content)
 
     return scroll_area
+
+
+def build_section_box(section):
+    """Wrap a section in its collapsible box, collapsed if it asks to be."""
+    box = CollapsibleVStackBox(section.title, control_widgets=section.widget)
+    box.set_expanded(not section.collapsed)
+
+    return box
+
+
+def insert_section_box(scroll_area, section, before=None):
+    """Add a section to a built sidebar and return its box.
+
+    The box goes above ``before``, a box already in the sidebar, or else
+    below every box, still above the trailing stretch.
+    """
+    scroll_layout = scroll_area.widget().layout()
+    box = build_section_box(section)
+
+    if before is None:
+        index = scroll_layout.count() - 1
+    else:
+        index = scroll_layout.indexOf(before)
+
+    scroll_layout.insertWidget(index, box)
+
+    return box
+
+
+def remove_section_box(scroll_area, box):
+    """Take a section's box out of the sidebar and delete it."""
+    scroll_area.widget().layout().removeWidget(box)
+    box.hide()
+    box.deleteLater()
 
 
 def build_reveal_button(scroll_area):

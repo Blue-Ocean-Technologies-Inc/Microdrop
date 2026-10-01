@@ -18,7 +18,7 @@ from envisage.api import (
 )
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import List, Str
+from traits.api import Callable, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
@@ -26,7 +26,13 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, CAMERA_SOURCES, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    CAMERA_SOURCES,
+    DEVICE_VIEWER_LAYERS,
+    PKG,
+    PKG_name,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -70,6 +76,59 @@ class DeviceViewerPlugin(Plugin):
         desc="Zero-arg factories returning camera-source providers for the "
         "device viewer's video layer",
     )
+
+    #: Device viewer layers (#650): zero-arg factories returning an
+    #: IDeviceViewerLayer, contributed by sibling plugins with
+    #: ``List(contributes_to=DEVICE_VIEWER_LAYERS)``. The live pane builds
+    #: one layer per factory and follows plugins loaded or unloaded later.
+    layers = ExtensionPoint(
+        List(Callable),
+        id=DEVICE_VIEWER_LAYERS,
+        desc="Zero-arg factories returning the IDeviceViewerLayer instances "
+        "mounted on the device viewer pane",
+    )
+
+    def start(self):
+        """Follow layer contributions that change while the app runs."""
+        super().start()
+
+        # Opt-in, and only possible once attached to the application: the
+        # ``_items`` handler below fires only after this connects it.
+        self.connect_extension_point_traits()
+
+        # The registry reports changes only to extension points it has
+        # already resolved, so resolve this one now.
+        logger.debug(f"Device viewer layers contributed at start: {len(self.layers)}")
+
+    @on_trait_change("layers_items")
+    def _on_layers_changed(self, event):
+        """A plugin contributing layers was loaded or unloaded at runtime.
+
+        The synthetic ``_items`` event needs ``on_trait_change``: observe()
+        rejects the name, as no such trait exists. A pane not built yet
+        reads the current contributions when it is.
+        """
+        logger.info(
+            f"Device viewer layers changed: +{len(event.added)} -{len(event.removed)}"
+        )
+
+        pane = self._live_dock_pane()
+
+        if pane is not None and pane.layer_host is not None:
+            pane.layer_host.apply_change(added=event.added, removed=event.removed)
+
+    def _live_dock_pane(self):
+        """Return the mounted device viewer pane, or None."""
+        window = getattr(self.application, "active_window", None)
+
+        if window is None:
+            windows = getattr(self.application, "windows", None) or []
+            window = windows[0] if windows else None
+
+        if window is None:
+            return None
+
+        return window.get_dock_pane(PKG + ".dock_pane")
 
     ###########################################################################
     # Protected interface.
