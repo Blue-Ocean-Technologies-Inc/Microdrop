@@ -14,7 +14,7 @@ calibration, saved fit equations, and the AI ROI detection options."""
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Bool, Float, Str
+from traits.api import Bool, Float, Int, Str
 from traitsui.api import EnumEditor, Item, VGroup, View
 
 # Microdrop style imports.
@@ -25,7 +25,12 @@ from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
 # Local imports.
 from .analysis.sam_detect import AI_MODEL_OPTIONS, DEFAULT_AI_MODEL
-from .consts import LEGACY_PREFERENCE_KEYS, PREFERENCES_PATH
+from .consts import (
+    DEVICE_OUTLINE_ALPHA_PCT,
+    DEVICE_OUTLINE_COLOR,
+    LEGACY_PREFERENCE_KEYS,
+    PREFERENCES_PATH,
+)
 from .scale_bar import DEFAULT_UNIT
 
 # Logger import.
@@ -68,6 +73,16 @@ class ImageViewerPreferences(PreferencesHelper):
     window_max = Float(
         10000, desc="Manual display-window maximum (used when auto-contrast is off)"
     )
+
+    # The perspective window's device-outline alignment reference. Edited
+    # from that window's own controls, not the preferences tab.
+    device_outline_svg = Str(
+        "", desc="Device SVG drawn over the perspective window ('' for none)"
+    )
+    device_outline_alpha = Int(
+        DEVICE_OUTLINE_ALPHA_PCT, desc="Device outline opacity (percent)"
+    )
+    device_outline_color = Str(DEVICE_OUTLINE_COLOR, desc="Device outline colour")
 
 
 def migrate_legacy_preferences(preferences):
