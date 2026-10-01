@@ -22,7 +22,8 @@ only Go To Endpoint moves the red frame — the two are fully
 decoupled.
 
 The pane composes this controller and hands it the few collaborators it
-cannot reach through the model: the camera feed's video item, the current
+cannot reach through the model (which also carries the preferences): the
+camera feed's video item, the current
 electrode layer, the offscreen device render, the dialog parent, and the
 status bar.
 """
@@ -40,7 +41,6 @@ from microdrop_application.dialogs.pyface_wrapper import error, warning
 
 # Local imports.
 from ..models.main_model import DeviceViewMainModel
-from ..preferences import DeviceViewerPreferences
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..views.camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
@@ -61,9 +61,6 @@ class CameraAlignmentWorkflowController(HasTraits):
     #: Device view model whose camera perspective and mode are driven here.
     model = Instance(DeviceViewMainModel)
 
-    #: Source of the persisted 'alignment_' overlay settings.
-    preferences = Instance(DeviceViewerPreferences)
-
     #: Per-device saved endpoints.
     endpoint_store = Instance(CameraEndpointStore, ())
 
@@ -83,8 +80,8 @@ class CameraAlignmentWorkflowController(HasTraits):
     #: Shows a message in the application status bar.
     statusbar_message = Callable()
 
-    # The open Camera Alignment dialog's model; None while closed. The
-    # @observe handlers below re-hook automatically on every assignment.
+    #: The open Camera Alignment dialog's model; None while closed. The
+    #: @observe handlers below re-hook automatically on every assignment.
     _alignment_model = Instance(CameraAlignmentModel)
 
     #: The open Camera Alignment dialog; None while closed.
@@ -103,8 +100,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         """The per-device cache key: the loaded device SVG's stem."""
         svg_model = self.model.electrodes.svg_model
         filename = getattr(svg_model, "filename", None)
+
         if not filename:
             return None
+
         return Path(str(filename)).stem
 
     def _camera_to_item_mapping(self):
@@ -114,9 +113,12 @@ class CameraAlignmentWorkflowController(HasTraits):
         KeepAspectRatio."""
         video_item = self.get_video_item()
         native = video_item.nativeSize()
+
         if native.isEmpty():
             raise RuntimeError("no camera frames yet — cannot map camera pixels")
+
         item_size = video_item.size()
+
         if video_item.aspectRatioMode() == Qt.AspectRatioMode.IgnoreAspectRatio:
             scale_x = item_size.width() / native.width()
             scale_y = item_size.height() / native.height()
@@ -127,22 +129,27 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             offset_x = (item_size.width() - native.width() * scale_x) / 2
             offset_y = (item_size.height() - native.height() * scale_y) / 2
+
         return scale_x, scale_y, offset_x, offset_y
 
-    def _camera_pixels_to_video_item(self, point: QPointF) -> QPointF:
+    def _camera_pixels_to_video_item(self, point):
         scale_x, scale_y, offset_x, offset_y = self._camera_to_item_mapping()
+
         return QPointF(offset_x + point.x() * scale_x, offset_y + point.y() * scale_y)
 
     def _current_camera_quad(self):
         """The active reference rect back in RAW camera pixels (the
         picker's starting quad), or None."""
         perspective = self.model.camera_perspective
+
         if len(perspective.reference_rect) != 4:
             return None
+
         try:
             scale_x, scale_y, offset_x, offset_y = self._camera_to_item_mapping()
         except RuntimeError:
             return None
+
         return [
             [(point.x() - offset_x) / scale_x, (point.y() - offset_y) / scale_y]
             for point in perspective.reference_rect
@@ -155,6 +162,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         open and again on every recapture click."""
         frame = self.get_video_item().videoSink().videoFrame()
         image = frame.toImage()
+
         return None if image.isNull() else image.copy()
 
     @observe("_alignment_model:outline_pane:quad_accepted")
@@ -172,12 +180,14 @@ class CameraAlignmentWorkflowController(HasTraits):
         except RuntimeError as exc:
             error(None, str(exc), title="Select Device Outline")
             return
+
         perspective = self.model.camera_perspective
         current = perspective.transformation
         perspective.reference_rect = item_points
         perspective.transformed_reference_rect = [
             current.map(point) for point in item_points
         ]
+
         self.model.mode = "camera-edit"
 
     def go_to_endpoint(self):
@@ -185,6 +195,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         device's saved endpoint."""
         device_key = self.current_device_key()
         endpoint = self.endpoint_store.load(device_key) if device_key else None
+
         if endpoint is None:
             warning(
                 None,
@@ -193,7 +204,9 @@ class CameraAlignmentWorkflowController(HasTraits):
                 title="Go To Endpoint",
             )
             return
+
         perspective = self.model.camera_perspective
+
         if len(perspective.transformed_reference_rect) != 4:
             warning(
                 None,
@@ -201,8 +214,10 @@ class CameraAlignmentWorkflowController(HasTraits):
                 title="Go To Endpoint",
             )
             return
+
         if self.model.mode != "camera-edit":
             self.model.mode = "camera-edit"
+
         self._start_align_animation([QPointF(float(x), float(y)) for x, y in endpoint])
 
     def _start_align_animation(self, targets, steps=40, interval_ms=40):
@@ -216,9 +231,11 @@ class CameraAlignmentWorkflowController(HasTraits):
             steps,
         )
         self._align_animation_step = 0
+
         if self._align_timer is None:
             self._align_timer = QTimer()
             self._align_timer.timeout.connect(self._on_align_animation_tick)
+
         self._align_timer.start(interval_ms)
 
     def _on_align_animation_tick(self):
@@ -226,6 +243,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         self._align_animation_step += 1
         progress = min(self._align_animation_step / steps, 1.0)
         eased = progress * progress * (3 - 2 * progress)
+
         self.model.camera_perspective.transformed_reference_rect = [
             QPointF(
                 start.x() + (target.x() - start.x()) * eased,
@@ -233,6 +251,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             for start, target in zip(start_points, targets)
         ]
+
         if progress >= 1.0:
             self._align_timer.stop()
             self.model.goto_last_mode()
@@ -245,6 +264,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         recapture glyph), plus the collapsible tuning sidebar."""
         device_key = self.current_device_key()
         electrode_layer = self.get_electrode_layer()
+
         if device_key is None or electrode_layer is None:
             warning(
                 None,
@@ -254,6 +274,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             return
 
         image, scene_rect = self.render_device_image()
+
         if image is None:
             error(
                 None,
@@ -276,7 +297,7 @@ class CameraAlignmentWorkflowController(HasTraits):
 
         # The QuadOverlay kwargs mirror the persisted 'alignment_'
         # preferences one-for-one (see SETTING_TRAITS).
-        preferences = self.preferences
+        preferences = self.model.preferences
         overlay_options = {
             name: getattr(preferences, f"alignment_{name}") for name in SETTING_TRAITS
         }
@@ -326,8 +347,11 @@ class CameraAlignmentWorkflowController(HasTraits):
         self.go_to_endpoint()
 
     def close_alignment_dialog(self):
+        """Dispose the open Camera Alignment dialog, if any."""
         if self._alignment_ui is not None:
             if self._alignment_ui.control is not None:
                 self._alignment_ui.dispose()
+
             self._alignment_ui = None
+
         self._alignment_model = None

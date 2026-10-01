@@ -261,7 +261,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alignment dialog.
         self.camera_alignment_controller = CameraAlignmentWorkflowController(
             model=self.model,
-            preferences=self.device_viewer_preferences,
             get_video_item=lambda: self.camera_control_widget.video_item,
             get_electrode_layer=lambda: self.current_electrode_layer,
             render_device_image=self._render_device_image,
