@@ -9,29 +9,18 @@
 # Thanks for using Microdrop open source!
 
 
-"""The unit the device viewer sidebar is assembled from."""
+"""The unit the device viewer sidebar is assembled from.
+
+``SidebarSection`` is part of the layer contract (#650) and lives with it
+in ``device_viewer.interfaces``; it is imported here for the built-in
+section builders.
+"""
 
 # Enthought library imports.
 from pyface.qt.QtWidgets import QVBoxLayout, QWidget
-from traits.api import Bool, HasTraits, Instance, Str
 
-
-class SidebarSection(HasTraits):
-    """One collapsible section of the device viewer sidebar.
-
-    The value a pluggable device viewer layer (#650) returns from
-    ``build_sidebar_section(parent)``; the sidebar host stacks the sections
-    in order, each in its own collapsible box.
-    """
-
-    #: Header text of the section's collapsible box.
-    title = Str()
-
-    #: The section's content.
-    widget = Instance(QWidget)
-
-    #: Whether the section starts collapsed.
-    collapsed = Bool(False)
+# Local imports.
+from ...interfaces.descriptors import SidebarSection as SidebarSection
 
 
 def stack_widgets(widgets):
