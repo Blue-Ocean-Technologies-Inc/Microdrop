@@ -131,6 +131,7 @@ class CameraControlWidget(QWidget):
         self.camera_device = QtCameraDevice(
             video_item=self.video_item, sink=QVideoSink(self)
         )
+        self.camera_device.sink.videoFrameChanged.connect(self._forward_preview_frame)
         self.camera_model = CameraModel()
         self.controller = CameraController(
             model=self.camera_model,
@@ -429,7 +430,7 @@ class CameraControlWidget(QWidget):
         frame_signal = getattr(feed, "frame", None)
 
         if frame_signal is not None:
-            frame_signal.connect(self.camera_device.forward_preview_image)
+            frame_signal.connect(self._forward_preview_image)
 
         streaming_signal = getattr(feed, "streaming", None)
 
@@ -475,6 +476,16 @@ class CameraControlWidget(QWidget):
         # re-shows it in on_camera_changed).
         self.video_item.setVisible(False)
         logger.info("Provider camera feed stopped")
+
+    # Frames are emitted on capture / feed worker threads. Receiving them on
+    # this QObject queues them onto the GUI thread; a plain-Python receiver
+    # would run on the worker thread and touch the video item from there,
+    # which stalls or kills the preview within seconds.
+    def _forward_preview_frame(self, frame):
+        self.camera_device.forward_preview_frame(frame)
+
+    def _forward_preview_image(self, image):
+        self.camera_device.forward_preview_image(image)
 
     def _on_feed_streaming(self, active):
         """Provider feeds own their preview state (e.g. the fluorescence
