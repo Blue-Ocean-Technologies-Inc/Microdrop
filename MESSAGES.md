@@ -124,8 +124,8 @@ The device viewer pushes its full UI state (routes, free-mode electrode state, c
 - `DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"` — defined in `protocol_grid/consts.py:25`.
 
 **Publisher side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py:408` — `publish_message.send(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)`.
-- Triggered reactively by the Traits observer at `device_view_dock_pane.py:1024-1048` (`@observe("model.routes.layers.items.route.route.items")`), which serializes the UI model and calls `publish_model_message()` at line 1047.
+- `device_viewer/controllers/device_viewer_publish_controller.py` — `publish_model_message`, `@observe("message_buffer")`, sends `publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)`.
+- Triggered reactively by `model_change_handler_with_message` (`@observe("model.routes.layers.items.route.route.items")` among others, same file), which serializes the UI model into `message_buffer`.
 - Payload is assembled in `device_viewer/utils/message_utils.py:4-20` via `gui_models_to_message_model()` — routes are extracted as `[(layer.route.route, layer.color) for layer in model.routes.layers]`.
 
 **Payload schema**
@@ -178,7 +178,7 @@ that only the device viewer has.
 - Fields: `id_to_channel` (as before) plus optional `centroids` (`id -> (x, y)`) and `neighbours` (`id -> [ids]`), None from publishers that predate the shape.
 
 **Publisher side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py` — `_publish_geometry_if_changed` fills the two lattice fields from `Electrodes.svg_model` when a device is loaded.
+- `device_viewer/controllers/device_viewer_publish_controller.py` — `_publish_geometry_if_changed` fills the two lattice fields from `Electrodes.svg_model` when a device is loaded.
 
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_geometry_changed` keeps them on `electrode_centroids` / `electrode_neighbours` and hands them to `services.phase_math.set_device_lattice`, the module-level lattice every phase-math caller reads. A step asking for a wide slug before any lattice is known runs one electrode wide and logs an error.
@@ -193,7 +193,7 @@ Opt-in mode letting the user step through a route's phases without running the p
 - `PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"` — defined in `device_viewer/consts.py`. JSON `{"phase_index": <0-based int>, "phase_total": <int>}` (`phase_total` 0 = no plan).
 
 **Publisher/subscriber side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py` — `_publish_phase_navigation_mode` sends `PHASE_NAVIGATION_MODE` when the sidebar checkbox is toggled.
+- `device_viewer/controllers/device_viewer_publish_controller.py` — `_publish_phase_navigation_mode` sends `PHASE_NAVIGATION_MODE` when the sidebar checkbox is toggled.
 - `device_viewer/controllers/device_viewer_message_controller.py` — `_on_phase_navigation_mode_triggered` applies the tree's toggle (and any external `"False"`, e.g. force-exit on protocol run start) via the pane's `apply_phase_navigation_mode`; `_on_phase_navigation_request_triggered` applies an incoming `PHASE_NAVIGATION_REQUEST` via `RouteExecutionService`. Both handlers are registered on the DV's `ACTOR_TOPIC_DICT` listener.
 - `device_viewer/services/route_execution_service.py` — `_publish_phase_nav_state` sends `PHASE_NAVIGATION_STATE` whenever the idle-nav position or plan size changes (including the no-plan `phase_total=0` case).
 

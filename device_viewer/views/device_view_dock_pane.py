@@ -9,7 +9,6 @@
 # Thanks for using Microdrop open source!
 
 # Standard library imports.
-import json
 import traceback
 from pathlib import Path
 
@@ -27,14 +26,11 @@ from pyface.qt.QtWidgets import (
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
-from traits.api import Bool, Instance, List, Str, observe
-from traits.observation._set_change_event import SetChangeEvent
-from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
+from traits.api import Instance, List, observe
 from traitsui.api import UI
 from traitsui.view import View
 
 # Microdrop package imports.
-from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.dialogs.pyface_wrapper import (
     CANCEL,
     NO,
@@ -69,18 +65,11 @@ from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     PulsingLabel,
 )
-from microdrop_utils.trait_change_commands import SetChangeCommand
 
 # Local imports.
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
-    CALIBRATION_DATA,
-    DEVICE_VIEWER_GEOMETRY_CHANGED,
     DEVICE_VIEWER_LAYERS,
-    DEVICE_VIEWER_STATE_CHANGED,
-    FILLER_CAPACITANCE_KEY,
-    LIQUID_CAPACITANCE_KEY,
-    PHASE_NAVIGATION_MODE,
     PKG,
     STEP_PARAMS_COMMIT,
     ZONE_STATUS_MESSAGE_MS,
@@ -92,6 +81,9 @@ from ..consts import (
 from ..controllers.device_viewer_message_controller import (
     DeviceViewerMessageController,
 )
+from ..controllers.device_viewer_publish_controller import (
+    DeviceViewerPublishController,
+)
 from ..controllers.layer_host import LayerHost
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..interfaces.layer_context import LayerContext
@@ -99,7 +91,7 @@ from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
 from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
-from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
+from ..models.messages import DeviceViewerMessageModel
 from ..models.route import Route
 from ..models.step_params_commit import StepParamsCommitMessage
 from ..preferences import (
@@ -114,8 +106,6 @@ from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.gamepad_interaction_service import GamepadInteractionService
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
-from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
-from ..utils.message_utils import gui_models_to_message_model
 from .camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -193,29 +183,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     edit_sidebar_layout_ui = Instance(UI)
 
     # Variables
-    _undoing = Bool(
-        False,
-        desc="Used to prevent changes made in undo() and redo() from being added "
-        "to the undo stack",
-    )
-    _disable_state_messages = Bool(
-        False,
-        desc="Used to disable state messages when the model is being updated, "
-        "to prevent infinite loops",
-    )
-    _applying_phase_nav_message = Bool(
-        False,
-        desc="True while applying an inbound PHASE_NAVIGATION_MODE message, so "
-        "the publish observer doesn't rebroadcast it",
-    )
     _last_applied_step_id = Instance(
         str, desc="None means no step applied yet", allow_none=True
-    )
-    _last_published_id_to_channel = Instance(
-        dict, allow_none=True, desc="None means geometry never published yet"
-    )
-    message_buffer = Str(
-        desc="Buffer to hold the message to be sent when the debounce timer expires"
     )
     video_item = Instance(
         QGraphicsVideoItem, allow_none=True, desc="The video item for the camera feed"
@@ -225,6 +194,11 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     #: Dramatiq listener for this pane's topics; dispatches them to the pane.
     message_controller = Instance(DeviceViewerMessageController)
+
+    #: Owns the outbound publishing: model observers, the undo/redo entry
+    #: points they guard against, and the echo-prevention flags this pane
+    #: flips while applying an inbound message (#768).
+    publish_controller = Instance(DeviceViewerPublishController)
 
     #: Mounts the layers sibling plugins contribute (#650); None until
     #: ``create_contents`` builds the sidebar they join.
@@ -294,6 +268,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         self.device_view.setObjectName("device_view")
 
+        # Owns the outbound publishing; created before the message
+        # controller so its inbound handlers can already reach it.
+        self.publish_controller = DeviceViewerPublishController(model=self.model)
+
         # Last: its handlers dereference the model, view, and preferences.
         self.message_controller = DeviceViewerMessageController(pane=self)
 
@@ -306,12 +284,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.model is None:
             return
 
-        self._applying_phase_nav_message = True
+        self.publish_controller._applying_phase_nav_message = True
 
         try:
             self.model.phase_navigation_mode = enabled
         finally:
-            self._applying_phase_nav_message = False
+            self.publish_controller._applying_phase_nav_message = False
 
     @observe("device_viewer_preferences:gamepad_enabled")
     def _on_gamepad_enabled_changed(self, event):
@@ -664,37 +642,13 @@ class DeviceViewerDockPane(TraitsDockPane):
     ################################################################################################
     # ------- Device View class methods -------------------------
     ################################################################################################
-    def add_traits_event_to_undo_stack(self, event):
-        command = None
-        if isinstance(event, TraitChangeEvent):
-            command = TraitChangeCommand(event=event)
-        elif isinstance(event, ListChangeEvent):
-            command = ListChangeCommand(event=event)
-        elif isinstance(event, DictChangeEvent):
-            command = DictChangeCommand(event=event)
-        elif isinstance(event, SetChangeEvent):
-            command = SetChangeCommand(event=event)
-        self.undo_manager.active_stack.push(command)
-
     def undo(self):
-        # We need to prevent the changes made in undo() from being added to
-        # the undo stack
-        self._undoing = True
-
-        try:
-            self.model.undo_manager.undo()
-        finally:
-            self._undoing = False
+        # Delegates to the publish controller, which owns _undoing — the
+        # guard that keeps this from being re-recorded onto its own stack.
+        self.publish_controller.undo()
 
     def redo(self):
-        # We need to prevent the changes made in redo() from being added to
-        # the undo stack
-        self._undoing = True
-
-        try:
-            self.model.undo_manager.redo()
-        finally:
-            self._undoing = False
+        self.publish_controller.redo()
 
     def apply_message_model(self, message_model_serial: str):
         logger.debug(f"Display state triggered with model: {message_model_serial}")
@@ -749,12 +703,12 @@ class DeviceViewerDockPane(TraitsDockPane):
         # old path cleared every route layer and re-added them one by one,
         # repainting the connection map once per layer with the routes
         # visibly blinking off in between (the per-phase flicker).
-        self._disable_state_messages = (
+        self.publish_controller._disable_state_messages = (
             True  # Prevent state messages from being sent while we apply the new state
         )
         # Prevent changes from being added to the undo stack (otherwise model
         # changes are undone during playback)
-        self._undoing = True
+        self.publish_controller._undoing = True
         # Suspend the play-checkbox/param-edit rebuild observer while the new
         # step's params/routes are being written below — otherwise it fires
         # mid-apply against the OLD step's execution plan / baseline and
@@ -830,13 +784,14 @@ class DeviceViewerDockPane(TraitsDockPane):
                 self._last_applied_step_id = message_model.step_id
 
         finally:
-            self._disable_state_messages = False  # Re-enable state messages after reset
-            self._undoing = False
+            # Re-enable state messages after reset
+            self.publish_controller._disable_state_messages = False
+            self.publish_controller._undoing = False
             self.model.route_execution_service.suspend_nav_rebuild = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         # Publish geometry if the electrode-to-channel mapping changed.
-        self._publish_geometry_if_changed()
+        self.publish_controller._publish_geometry_if_changed()
 
         # Idle phase navigation follows the newly applied step (#493). Runs
         # after _disable_state_messages is cleared so phase 0's actuation
@@ -882,16 +837,6 @@ class DeviceViewerDockPane(TraitsDockPane):
                         topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
                     )
 
-    @observe("_disable_state_messages")
-    def __disable_state_messages_change_log(self, event):
-        if event.new:
-            logger.warning(
-                "Device viewer will not be processing device view model state "
-                "change since state messages are disabled."
-            )
-        else:
-            logger.info("Device viewer will process device view model state changes")
-
     @observe("model:routes:commit_to_step_btn")
     def _on_commit_to_step_btn_fired(self, event):
         step_id = self._last_applied_step_id
@@ -906,134 +851,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Re-baseline so the button goes back to disabled.
         self.model.routes.mark_params_committed()
-
-    @observe("message_buffer")
-    def publish_model_message(self, event):
-        logger.debug(
-            f"Buffering message for device viewer state change: {self.message_buffer}"
-        )
-        publish_message(topic=DEVICE_VIEWER_STATE_CHANGED, message=self.message_buffer)
-
-    @observe("model.phase_navigation_mode")
-    def _publish_phase_navigation_mode(self, event):
-        # User toggled the sidebar checkbox (or the mode was force-exited):
-        # broadcast so the protocol tree's checkbox follows. Inbound messages
-        # set _applying_phase_nav_message so they are not re-broadcast.
-        # Assigning the model itself fires this too, with the model as
-        # event.new — that is not a toggle, so it is not broadcast.
-        if event.name != "phase_navigation_mode":
-            return
-
-        if not self._applying_phase_nav_message:
-            publish_message(topic=PHASE_NAVIGATION_MODE, message=str(event.new))
-
-    @observe("model.protocol_running")
-    def _exit_phase_navigation_on_run(self, event):
-        # A protocol run owns the hardware: force the idle mode off (this
-        # publishes "False" via the observer above, unchecking both UIs).
-        if event.new and self.model.phase_navigation_mode:
-            self.model.phase_navigation_mode = False
-
-    def _publish_geometry_if_changed(self):
-        """Publish DEVICE_VIEWER_GEOMETRY_CHANGED if id_to_channel differs
-        from the last-published mapping. No-op otherwise. Called from chip-
-        insert and SVG-load handlers."""
-        current = {
-            eid: e.channel for eid, e in self.model.electrodes.electrodes.items()
-        }
-        if current == self._last_published_id_to_channel:
-            return
-        self._last_published_id_to_channel = dict(current)
-        svg_model = self.model.electrodes.svg_model
-        centroids = neighbours = None
-
-        if svg_model is not None:
-            centroids = {
-                electrode_id: (polygon.centroid.x, polygon.centroid.y)
-                for electrode_id, polygon in svg_model.polygons.items()
-            }
-            neighbours = {
-                electrode_id: list(adjacent)
-                for electrode_id, adjacent in svg_model.neighbours.items()
-            }
-
-        msg = GeometryChangedMessage(
-            id_to_channel=current, centroids=centroids, neighbours=neighbours
-        )
-        publish_message(
-            topic=DEVICE_VIEWER_GEOMETRY_CHANGED,
-            message=msg.serialize(),
-        )
-        logger.info(
-            f"Device Viewer: Published geometry changed event. Current id to "
-            f"channel = {current}"
-        )
-
-    @observe("model.electrodes.actuated_channels.items")
-    @observe("model.realtime_mode")
-    @observe("model.connected")
-    def publish_electrode_update(self, event=None):
-        # Don't re-publish actuation we're applying FROM an inbound display/
-        # state message (the executor's own per-phase actuation during a run)
-        # back to hardware — only a genuine user actuation should. With the
-        # viewer editable mid-run in Advanced Mode the apply path mutates
-        # actuated_channels too, so without this guard every phase would echo
-        # a redundant hardware publish (#434).
-        if self._disable_state_messages:
-            return
-        if self.model.realtime_mode and self.model.connected:
-            if (
-                not self.model.protocol_running
-                and (self.model.free_mode or self.model.phase_navigation_mode)
-            ) or (self.model.protocol_running and self.model.editable):
-                logger.info(
-                    f"DEVICE VIEWER: "
-                    f"publishing electrodes state change to activate "
-                    f"{len(self.model.electrodes.actuated_channels)} "
-                    f"channels: {self.model.electrodes.actuated_channels}"
-                )
-                electrode_state_change_publisher.publish(
-                    self.model.electrodes.actuated_channels
-                )
-
-                return
-
-    @observe("model.protocol_running")
-    @observe("model.free_mode")
-    @observe("model.phase_navigation_mode")
-    @observe("model.realtime_mode")
-    @observe("model.connected")
-    def _actuation_publish_disabled_log_message(self, event):
-        reason = ""
-        if self.model.protocol_running:
-            reason += "Protocol running; "
-
-        if not self.model.free_mode and not self.model.phase_navigation_mode:
-            reason += "Not in free mode or phase navigation; "
-
-        if not self.model.realtime_mode:
-            reason += "Realtime mode; "
-
-        if not self.model.connected:
-            reason += "Device Not connected; "
-
-        logger.critical(
-            f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
-        )
-
-    def publish_calibration_message(self):
-        """
-        Publish a message with the current calibration values.
-        """
-        message = {
-            # In pF/mm^2
-            LIQUID_CAPACITANCE_KEY: self.model.liquid_capacitance_over_area,
-            # In pF/mm^2
-            FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,
-        }
-        logger.warning(f"Publishing calibration message: {message}")
-        publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
-        logger.info(f"Published calibration message: {message}")
 
     # --------------UI view content creation / configuration helpers ---------
     def set_interaction_service(self, new_model):
@@ -1164,7 +981,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.name = name
 
         # Publish geometry after SVG is fully loaded and channel mapping is established.
-        self._publish_geometry_if_changed()
+        self.publish_controller._publish_geometry_if_changed()
 
     def _set_svg_model(self, svg_file):
 
@@ -1261,7 +1078,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         ################### Determine Size for video #####################
         self.configure_camera_to_scene_size()
 
-        self.publish_model_message(event=None)
+        self.publish_controller.publish_model_message(event=None)
 
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
@@ -1641,9 +1458,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     def _on_electrode_channel_changed(self, event=None):
         """Re-publish geometry whenever any electrode's channel assignment changes
         (e.g., via channel-edit mode). Gated by _publish_geometry_if_changed."""
-        if self._disable_state_messages:
+        if self.publish_controller._disable_state_messages:
             return
-        self._publish_geometry_if_changed()
+        self.publish_controller._publish_geometry_if_changed()
 
     @observe("model:electrodes:svg_model.svg_error_paths")
     def _svg_errors_found(self, event):
@@ -1657,106 +1474,6 @@ class DeviceViewerDockPane(TraitsDockPane):
                 f"{self.model.electrodes.svg_model.svg_error_paths}<br><br>"
                 f"Errors: {self.model.electrodes.svg_model.svg_exceptions_caught}",
             )
-
-    @observe(
-        "model.camera_perspective.transformed_reference_rect.items, "
-        "model.camera_perspective.reference_rect.items"
-    )
-    @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
-    def model_change_handler_with_timeout(self, event=None):
-        # Opacity rows a device viewer layer adds or removes are not edits.
-        if isinstance(event, ListChangeEvent) and event.object is self.model.alpha_map:
-            return
-
-        if not self._undoing:
-            self.add_traits_event_to_undo_stack(event)
-            # The not-editable revert protects STEP state (electrodes,
-            # routes, camera alignment) while a protocol runs. Alphas are
-            # global display preferences, not step state — they stay
-            # adjustable mid-run (like the visibility toggles, which this
-            # handler never observed).
-            if not self.model.editable and not isinstance(event.object, AlphaValue):
-                self.undo()  # Revert changes if not editable
-                return
-
-    @observe("model.routes.layers.items.route.route.items")  # When a route is modified
-    @observe(
-        "model.electrodes.actuated_channels.items"
-    )  # When an electrode changes state
-    @observe(
-        "model.electrodes.disabled_channels.items"
-    )  # When an electrode is disabled/enabled
-    def model_change_handler_with_message(self, event=None):
-        """
-        Handle changes to the model and send a message to the device viewer
-        state change topic.
-        """
-        logger.debug(f"Model change event received: {event}")
-
-        if self._disable_state_messages:
-            return
-
-        if self.model.route_execution_service_executing:
-            # Route playback replaces actuated_channels every phase;
-            # serializing + publishing the whole model per phase is
-            # GUI-thread work with no consumer at that rate. The final
-            # state still publishes: _cleanup flips this flag off BEFORE
-            # restoring the user-toggled channels.
-            return
-
-        if not self.model.electrodes.svg_model:
-            logger.warning(
-                "Unable to publish device view model yet. Need svg_model to "
-                "fully initialize."
-            )
-            return
-
-        try:
-            logger.debug("Processing device view model state change...")
-            self.model_change_handler_with_timeout(event)
-            self.message_buffer = gui_models_to_message_model(self.model).serialize()
-
-            # self.publish_model_message()
-
-        except Exception as e:
-            logger.error(e, exc_info=True)
-
-    @observe(
-        "model:routes:[duration, repetitions, repeat_duration, "
-        "trail_length, trail_overlay, soft_start, soft_terminate, "
-        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock, "
-        "recentre]"
-    )
-    def execution_params_change_handler(self, event=None):
-        """Free-mode state messages carry the sidebar execution params so
-        the protocol widget can seed them into an inserted step — republish
-        when the user tweaks a param spinner in free mode (the
-        electrode/route observer above doesn't cover the param traits).
-        With a step selected the params travel via STEP_PARAMS_COMMIT
-        instead. Bulk programmatic writes (apply_execution_params on step
-        transition, repeats_frozen resets) run under
-        _suspend_repeat_exclusion and must not publish — they would race
-        the transition with stale free-mode payloads.
-        """
-        if self.model.step_id:
-            return
-        if self._disable_state_messages or self.model.routes._suspend_repeat_exclusion:
-            return
-        if not self.model.electrodes.svg_model:
-            return
-        self.message_buffer = gui_models_to_message_model(self.model).serialize()
-        # self.publish_model_message()
-
-    @observe(
-        "model.liquid_capacitance_over_area, "
-        "model.filler_capacitance_over_area, model.electrode_scale"
-    )
-    def calibration_change_handler(self, event=None):
-        """
-        Handle changes to the calibration values and publish a message.
-        """
-        self.publish_calibration_message()
-        logger.info("Calibration message published")
 
     @observe("model.camera_perspective.transformation")
     @observe("model.camera_perspective.camera_resolution")

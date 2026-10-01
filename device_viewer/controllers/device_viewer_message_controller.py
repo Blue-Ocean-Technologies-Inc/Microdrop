@@ -123,7 +123,7 @@ class DeviceViewerMessageController(HasTraits):
 
     def _on_chip_inserted_triggered(self, message):
         if message.lower() == "true" and self.pane.model:
-            self.pane.message_buffer = gui_models_to_message_model(
+            self.pane.publish_controller.message_buffer = gui_models_to_message_model(
                 self.pane.model
             ).serialize()
 
