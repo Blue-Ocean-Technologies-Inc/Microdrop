@@ -76,6 +76,7 @@ from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     CALIBRATION_DATA,
     DEVICE_VIEWER_GEOMETRY_CHANGED,
+    DEVICE_VIEWER_LAYERS,
     DEVICE_VIEWER_STATE_CHANGED,
     FILLER_CAPACITANCE_KEY,
     LIQUID_CAPACITANCE_KEY,
@@ -91,7 +92,9 @@ from ..consts import (
 from ..controllers.device_viewer_message_controller import (
     DeviceViewerMessageController,
 )
+from ..controllers.layer_host import LayerHost
 from ..default_settings import ELECTRODE_OFF, video_key
+from ..interfaces.layer_context import LayerContext
 from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
 from ..models.electrodes import Electrodes
@@ -222,6 +225,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     #: Dramatiq listener for this pane's topics; dispatches them to the pane.
     message_controller = Instance(DeviceViewerMessageController)
+
+    #: Mounts the layers sibling plugins contribute (#650); None until
+    #: ``create_contents`` builds the sidebar they join.
+    layer_host = Instance(LayerHost)
 
     # --------- Device View trait initializers -------------
     def traits_init(self):
@@ -1146,6 +1153,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.set_interaction_service(self.model)
         logger.info(f"Electrodes model set to {self.model}")
 
+        if self.layer_host is not None:
+            self.layer_host.device_loaded(self.scene.interaction_service.stepping)
+
         name = _dock_pane_name + "\t\t-\t\t" + Path(svg_file).stem
 
         if self.model.electrodes.svg_model.connections_modified:
@@ -1260,6 +1270,8 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.scroll_content = self.scroll_area.widget()
         self._set_device_view_layout_width()
 
+        self.layer_host = self._build_layer_host()
+
         self.reveal_button = build_reveal_button(self.scroll_area)
 
         # Device view on the left, the sidebar and its reveal toggle on the right.
@@ -1319,6 +1331,50 @@ class DeviceViewerDockPane(TraitsDockPane):
             zones_section,
             calibration_section,
         ]
+
+    def _build_layer_host(self):
+        """Mount the contributed layers on this pane, below the sidebar."""
+        # A default device that failed to load leaves no interaction service
+        # (the load error was already reported); layers then get stepping on
+        # the first successful load, via LayerHost.device_loaded.
+        interaction_service = getattr(self.scene, "interaction_service", None)
+        stepping = getattr(interaction_service, "stepping", None)
+
+        context = LayerContext(
+            model=self.model,
+            scene=self.scene,
+            device_view=self.device_view,
+            undo_stack=self.undo_manager.active_stack,
+            preferences=self.app_preferences,
+            status_bar_manager=self.task.window.status_bar_manager,
+            stepping=stepping,
+        )
+        layer_host = LayerHost(context=context, sidebar=self.scroll_area)
+
+        try:
+            factories = self.task.window.application.get_extensions(
+                DEVICE_VIEWER_LAYERS
+            )
+        except Exception:
+            logger.warning("Device viewer layer extension point unavailable")
+            factories = []
+
+        layer_host.add_layers(factories)
+
+        return layer_host
+
+    @observe("task:window:status_bar_manager")
+    def _share_status_bar_with_layers(self, event):
+        """The task creates the status bar after this pane; pass it on."""
+        if self.layer_host is not None:
+            self.layer_host.context.status_bar_manager = event.new
+
+    def destroy(self):
+        """Detach the contributed layers before the pane's widgets go."""
+        if self.layer_host is not None:
+            self.layer_host.remove_all()
+
+        super().destroy()
 
     def _show_sidebar_context_menu(self, point):
         """Offer the sidebar layout preferences at the right-clicked point."""
@@ -1605,6 +1661,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     )
     @observe("model.alpha_map.items.alpha")  # Observe changes to alpha values
     def model_change_handler_with_timeout(self, event=None):
+        # Opacity rows a device viewer layer adds or removes are not edits.
+        if isinstance(event, ListChangeEvent) and event.object is self.model.alpha_map:
+            return
+
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
             # The not-editable revert protects STEP state (electrodes,

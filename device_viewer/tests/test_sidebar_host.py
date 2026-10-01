@@ -17,7 +17,14 @@ import pytest
 from pyface.qt.QtWidgets import QApplication, QLabel
 
 # Microdrop package imports.
-from device_viewer.views.sidebar.host import build_reveal_button, build_sidebar
+from device_viewer.controllers.layer_host import LayerHost
+from device_viewer.interfaces.layer_context import LayerContext
+from device_viewer.views.sidebar.host import (
+    build_reveal_button,
+    build_sidebar,
+    insert_section_box,
+    remove_section_box,
+)
 from device_viewer.views.sidebar.section import SidebarSection, stack_widgets
 
 # Microdrop utils imports.
@@ -43,6 +50,20 @@ def _boxes(scroll_area):
         for index in range(layout.count())
         if isinstance(layout.itemAt(index).widget(), CollapsibleVStackBox)
     ]
+
+
+#: The built-in sections of the pane on main, top to bottom.
+BUILT_IN_TITLES = [
+    "Viewport Controls",
+    "Camera Controls",
+    "Paths",
+    "Zones",
+    "Calibration",
+]
+
+
+def _titles(scroll_area):
+    return [box.toggle_button.text() for box in _boxes(scroll_area)]
 
 
 def test_sections_are_stacked_in_order_with_their_titles():
@@ -110,3 +131,37 @@ def test_reveal_button_toggles_the_sidebar():
 
     assert not scroll_area.isHidden()
     assert reveal_button.text() == "chevron_right"
+
+
+def test_inserted_boxes_go_above_a_given_box_or_last():
+    scroll_area = build_sidebar([_stub_section("A"), _stub_section("C")])
+    box_c = _boxes(scroll_area)[1]
+
+    insert_section_box(scroll_area, _stub_section("D"))
+    insert_section_box(scroll_area, _stub_section("B"), before=box_c)
+
+    layout = scroll_area.widget().layout()
+
+    assert _titles(scroll_area) == ["A", "B", "C", "D"]
+    assert layout.itemAt(layout.count() - 1).spacerItem() is not None
+
+
+def test_a_removed_box_leaves_the_sidebar():
+    scroll_area = build_sidebar([_stub_section("A")])
+    box = insert_section_box(scroll_area, _stub_section("Layer"))
+
+    remove_section_box(scroll_area, box)
+
+    assert _titles(scroll_area) == ["A"]
+
+
+def test_a_layer_host_without_layers_leaves_the_sidebar_as_on_main():
+    scroll_area = build_sidebar([_stub_section(title) for title in BUILT_IN_TITLES])
+    item_count = scroll_area.widget().layout().count()
+
+    layer_host = LayerHost(context=LayerContext(), sidebar=scroll_area)
+    layer_host.add_layers([])
+
+    assert _titles(scroll_area) == BUILT_IN_TITLES
+    assert scroll_area.widget().layout().count() == item_count
+    assert layer_host.layers == []
