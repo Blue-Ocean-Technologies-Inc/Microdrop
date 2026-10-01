@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 # Enthought library imports.
+from apptools.preferences import package_globals
 from envisage.api import Application, Plugin
 from pyface.qt.QtWidgets import QApplication, QLabel
 from traits.api import HasTraits, List, Str, provides
@@ -277,6 +278,10 @@ class LayerContributingPlugin(Plugin):
 
 
 def test_hot_load_and_unload_follow_the_extension_point(host, monkeypatch):
+    # An envisage Application installs its preferences as the process-wide
+    # default node; restore it so later PreferencesHelper tests don't share it.
+    monkeypatch.setattr(package_globals, "_default_preferences", None)
+
     device_viewer_plugin = DeviceViewerPlugin()
     application = Application(plugins=[device_viewer_plugin])
     application.start()
