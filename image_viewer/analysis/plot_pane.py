@@ -117,6 +117,7 @@ PLOT_STAT_LABELS = {
     "bg_integrated": "Integrated (bg-corrected)",
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
+    "area": "Area",
 }
 
 #: Y-axis wording for the stats whose numbers mean nothing without
@@ -124,6 +125,7 @@ PLOT_STAT_LABELS = {
 _Y_LABEL_TEMPLATES = {
     "per_area": "Intensity per {unit}",
     "bg_per_area": "Bg-corrected intensity per {unit}",
+    "area": "Area ({unit})",
 }
 
 

@@ -134,8 +134,7 @@ def test_size_aware_stats_are_nan_when_a_piece_is_missing():
 def test_derive_series_uses_the_sessions_calibration(tmp_path):
     image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
     roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
-    # "area" is table/CSV only, so per_area is what carries the
-    # calibration into a plotted series: 10 / 1e-4 mm^2 = 1e5.
+    # per_area divides by the calibrated pixel area: 10 / 1e-4 mm^2 = 1e5.
     session = AnalysisSession(rois=[roi], plot_stat="per_area")
     session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
     session.stats[session.cache_key(image, roi)] = {
@@ -146,6 +145,19 @@ def test_derive_series_uses_the_sessions_calibration(tmp_path):
 
     _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
     assert abs(values[0] - 1e5) < 1e-6
+
+
+def test_derive_series_plots_area_in_the_calibrated_unit(tmp_path):
+    image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi], plot_stat="area")
+    session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
+    session.stats[session.cache_key(image, roi)] = {"mean": 10.0, "count": 25.0}
+
+    _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
+
+    # 25 px at 1e-4 mm^2 each.
+    assert abs(values[0] - 2.5e-3) < 1e-12
 
 
 def test_normalized_series_stretches_each_roi_to_its_own_range():
