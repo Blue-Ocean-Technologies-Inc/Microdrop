@@ -8,26 +8,34 @@
 #
 # Thanks for using Microdrop open source!
 
-# Standard library imports.
-from traits.api import List, Str
-from message_router.consts import ACTOR_TOPIC_ROUTES
-from microdrop_status_bar.consts import STATUS_BAR_ICONS
-
 # Enthought library imports.
-from envisage.api import ExtensionPoint, Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
+from envisage.api import (
+    PREFERENCES_CATEGORIES,
+    PREFERENCES_PANES,
+    TASK_EXTENSIONS,
+    ExtensionPoint,
+    Plugin,
+)
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
+from traits.api import List, Str
 
-# local imports
+# Microdrop package imports.
+from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, CAMERA_SOURCES
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
+
+# Local imports.
+from .consts import ACTOR_TOPIC_DICT, CAMERA_SOURCES, PKG, PKG_name
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 class DeviceViewerPlugin(Plugin):
-    """Device Viewer plugin based on enthought envisage's The chaotic attractors plugin."""
+    """The device viewer: its dock panes, preferences, and extension points."""
 
     #### 'IPlugin' interface ##################################################
 
@@ -57,9 +65,10 @@ class DeviceViewerPlugin(Plugin):
     #: zero-arg provider factories, rendered through the same video layer
     #: as QtMultimedia cameras. See consts.CAMERA_SOURCES for the contract.
     camera_sources = ExtensionPoint(
-        List, id=CAMERA_SOURCES,
+        List,
+        id=CAMERA_SOURCES,
         desc="Zero-arg factories returning camera-source providers for the "
-             "device viewer's video layer",
+        "device viewer's video layer",
     )
 
     ###########################################################################
@@ -67,20 +76,28 @@ class DeviceViewerPlugin(Plugin):
     ###########################################################################
 
     def _preferences_panes_default(self):
-        from .preferences import DeviceViewerPreferencesPane,DeviceViewerAdvancedPreferencesPane
+        from .preferences import (
+            DeviceViewerAdvancedPreferencesPane,
+            DeviceViewerPreferencesPane,
+        )
         from .views.camera_control_view.preferences import CameraPreferencesPane
 
-        return [DeviceViewerPreferencesPane, CameraPreferencesPane, DeviceViewerAdvancedPreferencesPane]
+        return [
+            DeviceViewerPreferencesPane,
+            CameraPreferencesPane,
+            DeviceViewerAdvancedPreferencesPane,
+        ]
 
     def _preferences_categories_default(self):
         from .preferences import device_viewer_tab
         from .views.camera_control_view.preferences import video_settings_tab
+
         return [device_viewer_tab, video_settings_tab]
 
     def _contributed_task_extensions_default(self):
+        from .menus import tools_menu_factory
         from .views.device_view_dock_pane import DeviceViewerDockPane
         from .views.video_viewer.dock_pane import VideoViewerDockPane
-        from .menus import tools_menu_factory
 
         return [
             TaskExtension(
@@ -89,9 +106,9 @@ class DeviceViewerPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
-                        path='MenuBar/File',
-                        before='Exit',
+                        path="MenuBar/File",
+                        before="Exit",
                     ),
-                ]
+                ],
             )
         ]
