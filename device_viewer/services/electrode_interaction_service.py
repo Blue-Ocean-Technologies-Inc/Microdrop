@@ -53,6 +53,7 @@ from device_viewer.default_settings import (
     routes_key,
     zones_key,
 )
+from device_viewer.models.alpha import AlphaValue
 from device_viewer.models.electrodes import Electrode
 from device_viewer.models.main_model import DeviceViewMainModel
 from device_viewer.models.route import Route, RouteLayer
@@ -1288,6 +1289,9 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     @observe("model.alpha_map.items.[alpha, visible]", post_init=True)
     def _alpha_change(self, event):
+        # Rows added or removed (by a device viewer layer) change no value.
+        if not isinstance(event.object, AlphaValue):
+            return
 
         changed_key = event.object.key
 

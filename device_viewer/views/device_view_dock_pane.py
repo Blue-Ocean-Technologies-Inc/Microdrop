@@ -1334,6 +1334,12 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def _build_layer_host(self):
         """Mount the contributed layers on this pane, below the sidebar."""
+        # A default device that failed to load leaves no interaction service
+        # (the load error was already reported); layers then get stepping on
+        # the first successful load, via LayerHost.device_loaded.
+        interaction_service = getattr(self.scene, "interaction_service", None)
+        stepping = getattr(interaction_service, "stepping", None)
+
         context = LayerContext(
             model=self.model,
             scene=self.scene,
@@ -1341,7 +1347,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             undo_stack=self.undo_manager.active_stack,
             preferences=self.app_preferences,
             status_bar_manager=self.task.window.status_bar_manager,
-            stepping=self.scene.interaction_service.stepping,
+            stepping=stepping,
         )
         layer_host = LayerHost(context=context, sidebar=self.scroll_area)
 
