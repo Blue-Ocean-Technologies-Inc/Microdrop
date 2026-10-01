@@ -51,6 +51,26 @@ def test_lists_repo_devices_after_none(repo_dir):
     assert reference.devices[str(repo_dir / "a_device.svg")] == "001:a_device"
 
 
+def test_lists_every_svg_in_the_repo_not_only_seeded_ones(repo_dir):
+    for name in ("90_pin_array.svg", "pin_map.svg", "Zika-4d Mirror (2).svg"):
+        shutil.copy(DEVICE_2X3_SVG, repo_dir / name)
+
+    reference = DeviceOutlineReference(
+        preferences=ImageViewerPreferences(), repo_dir=str(repo_dir)
+    )
+
+    assert len(reference.devices) == 6
+    assert reference.devices[str(repo_dir / "Zika-4d Mirror (2).svg")].endswith(
+        ":Zika-4d Mirror (2)"
+    )
+
+
+def test_unset_repo_falls_back_to_bundled_devices():
+    reference = DeviceOutlineReference(preferences=ImageViewerPreferences())
+
+    assert reference.device_directory() == MASTER_SVG_FILE.parent
+
+
 def test_missing_repo_falls_back_to_bundled_devices(tmp_path):
     reference = DeviceOutlineReference(
         preferences=ImageViewerPreferences(), repo_dir=str(tmp_path / "missing")

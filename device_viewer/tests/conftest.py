@@ -8,10 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import sys
-
-import pytest
 from unittest.mock import MagicMock, patch
+
+# Third-party imports.
+import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -28,9 +30,27 @@ def _mock_redis_for_dock_pane_import():
     for mod in list(sys.modules.keys()):
         if "microdrop_application.menus" in mod or "app_globals" in mod:
             del sys.modules[mod]
-    with patch.dict("sys.modules", {
-        "microdrop_utils.redis_manager": MagicMock(
-            RedisManager=MagicMock(return_value=fake_redis_manager)
-        ),
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "microdrop_utils.redis_manager": MagicMock(
+                RedisManager=MagicMock(return_value=fake_redis_manager)
+            ),
+        },
+    ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_app_globals_writes(monkeypatch):
+    """Route the main model's app-globals writes to a plain dict.
+
+    Test modules import the model at collection time — before the session
+    mock above exists — so its ``app_globals`` is the live Redis hash. A
+    model loading a device SVG then published the test preferences'
+    repo dir (``Documents/Enthought/Devices``) over a running app's,
+    which is what the image viewer's device dropdown read back.
+    """
+    from device_viewer.models import main_model
+
+    monkeypatch.setattr(main_model, "app_globals", {})

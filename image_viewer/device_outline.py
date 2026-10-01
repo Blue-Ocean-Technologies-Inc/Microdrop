@@ -125,10 +125,25 @@ class DeviceOutlineReference(HasTraits):
         """The directory devices are listed from: the user's repo, or the
         bundled devices when it is unset or missing."""
 
-        if self.repo_dir and Path(self.repo_dir).is_dir():
-            return Path(self.repo_dir)
+        if not self.repo_dir:
+            logger.info(
+                f"No device repo directory published; listing the bundled "
+                f"devices in {MASTER_SVG_FILE.parent}"
+            )
 
-        return MASTER_SVG_FILE.parent
+            return MASTER_SVG_FILE.parent
+
+        if not Path(self.repo_dir).is_dir():
+            logger.info(
+                f"Device repo directory {self.repo_dir} is missing; listing the "
+                f"bundled devices in {MASTER_SVG_FILE.parent}"
+            )
+
+            return MASTER_SVG_FILE.parent
+
+        logger.info(f"Listing device outlines from the device repo {self.repo_dir}")
+
+        return Path(self.repo_dir)
 
     @cached_property
     def _get_devices(self):
