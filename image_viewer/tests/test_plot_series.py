@@ -15,9 +15,12 @@ import math
 
 # Microdrop package imports.
 from image_viewer.analysis.plot_series import (
+    analysed_paths,
     background_ref_baseline,
     background_ref_corrected_series,
     derive_series,
+    finite_values,
+    image_values,
     interpolated_series,
     normalized_series,
     outlier_mask,
@@ -158,6 +161,43 @@ def test_derive_series_plots_area_in_the_calibrated_unit(tmp_path):
 
     # 25 px at 1e-4 mm^2 each.
     assert abs(values[0] - 2.5e-3) < 1e-12
+
+
+def test_analysed_paths_leave_out_excluded_images(tmp_path):
+    first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
+    session = AnalysisSession(excluded_images=["a_2026_07_20-10_00_00_raw.png"])
+
+    assert analysed_paths(session, [first, second]) == [second]
+
+
+def test_image_values_are_the_series_cross_section_at_an_image():
+    series = {
+        "a": ("ROI 1", [0.0, 1.0], [10.0, 20.0]),
+        "b": ("ROI 2", [0.0, 1.0], [30.0, math.nan]),
+    }
+
+    result = image_values(series, ["one.png", "two.png"], "two.png")
+
+    assert result["a"] == ("ROI 1", 20.0)
+    assert result["b"][0] == "ROI 2"
+    assert math.isnan(result["b"][1])  # uncomputed stays a gap
+
+
+def test_image_values_are_none_for_an_image_outside_the_series():
+    series = {"a": ("ROI 1", [0.0], [10.0])}
+
+    assert image_values(series, ["one.png"], "excluded.png") is None
+    assert image_values(series, ["one.png"], "") is None
+
+
+def test_finite_values_drop_gaps_and_empty_curves():
+    series = {
+        "a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, math.nan, 30.0]),
+        "b": ("ROI 2", [0.0, 1.0, 2.0], [math.nan, math.nan, math.nan]),
+    }
+
+    assert finite_values(series) == {"a": ("ROI 1", [10.0, 30.0])}
 
 
 def test_normalized_series_stretches_each_roi_to_its_own_range():
