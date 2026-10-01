@@ -793,6 +793,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if figure_settings.x_axis == "temperature"
             else "Elapsed time (s)"
         )
+        # After the locator reset above (which would fight the log
+        # locators), before relim, so autoscale sees the final scale,
+        # and before drawing: setting a scale resets the axis locators,
+        # which would wipe the ROI-name ticks the bar view sets. The
+        # bar view keeps a linear x.
+        time_axis = figure_settings.view_mode != "fastest_change"
+        log_x = time_axis and figure_settings.log_x
+        log_y = time_axis and figure_settings.log_y
+        self._axes.set_xscale("log" if log_x else "linear")
+        self._axes.set_yscale("log" if log_y else "linear")
+
         if figure_settings.view_mode == "intensity":
             trim_edges = self._refresh_intensity(series, figure_settings)
         else:
@@ -802,14 +813,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_second_derivative(series, figure_settings)
             else:
                 trim_edges = self._draw_fastest_change(series, figure_settings)
-        # After the locator reset above (which would fight the log
-        # locators) and before relim, so autoscale sees the final
-        # scale. The bar view keeps linear: its x is ROI names.
-        time_axis = figure_settings.view_mode != "fastest_change"
-        log_x = time_axis and figure_settings.log_x
-        log_y = time_axis and figure_settings.log_y
-        self._axes.set_xscale("log" if log_x else "linear")
-        self._axes.set_yscale("log" if log_y else "linear")
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
         # axes back while they were still reading them.
