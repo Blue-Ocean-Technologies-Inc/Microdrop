@@ -1,3 +1,71 @@
+## [v1.25.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.25.1) (2026-09-30)
+
+### Fix
+
+- **device-viewer**: harden the moved message handlers ([`ea043a2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ea043a2c7932da25d9b9b0d56f34d8bbb029ea21))
+- **device-viewer**: reset the apply-state guards in a finally ([`586fc64`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/586fc64db18c3188295e8a8ac16696b19c0ccb35))
+- **device-viewer**: never leave the undo guard latched ([`5ed4d8a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5ed4d8a0debfdb5ad5ed0644449a55b38a70f77d))
+- **device-viewer**: disable Undo/Redo when nothing would change ([`422c257`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/422c2572965744162ce637d9d4bd0ed0e532aaa7))
+- **device-viewer**: undo against the live container, not a stale one ([`7d3e390`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7d3e390370f73b5dfac776291790db9340bc6d2d))
+- **image-viewer**: sync the env when installing AI support ([`772a499`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/772a4993e81fef6d777566712a0fbfce7fda87ec))
+- **image-viewer**: stop co-installing onnxruntime-directml ([`a7d9088`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a7d90888e24f9bd08cb48a21b27221d66f09b9ef))
+- **image-viewer**: survive a broken osam install ([`da53085`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/da53085fb8ab5482d2dc999eb800efd640bfbc06))
+
+### Refactor
+
+- **device-viewer**: tidy the message controller ([`4887e90`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4887e901000144be4972ebd0fb6dcdff2c08d926))
+- **device-viewer**: move message handlers into a controller ([`d324a50`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d324a501d2b242dc501dc17260bf15d489d12164))
+- **device-viewer**: review follow-ups on the undo commands ([`e66cd3d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e66cd3db0d04a05184b40999d437bb0620749614))
+
+### Docs
+
+- **messages**: point phase-navigation handlers at the controller ([`d83d93b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d83d93b07a7bb8970eae2eabcf5adedf14545686))
+
+### Test
+
+- **device-viewer**: cover the message controller ([`3893ce3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3893ce33eeadb985698f9125523db1f501b1e79a))
+- **device-viewer**: mirror the pane's recorder in the undo test ([`2161b16`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2161b169e5e18d3a29ce9e2449cc5af86ee5e2af))
+
+### Chore
+
+- **device-viewer**: ruff-clean test_protocol_tree_display_state_handler.py ([`5e1ad1e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5e1ad1e34068581998e239ce4fbff9b367a476f0))
+
+## [v1.25.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.25.0) (2026-09-29)
+
+### Feat
+
+- **image-viewer**: add a perspective-correction demo ([`0a76053`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0a76053b6f5bea66e2ec4449f58e035654d7874c))
+- **image-viewer**: move the image viewer into core ([`22cf5d6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/22cf5d689aebf2a286ebf23cb5e0463695996171))
+- **style**: add an open-in-new icon ligature ([`87de578`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/87de5780e469bfa90d41f6ee6ae95ba6697a58a6))
+
+### Fix
+
+- **image-viewer**: use the Rotate Device glyph for rotation ([`d6d40b7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d6d40b739477a77da83b67b790f57349c27d19e5))
+
+### Refactor
+
+- **image-viewer**: device-viewer icons in perspective window ([`8a6fcd8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8a6fcd80398e7694f2e994967a48c05e7dbd2270))
+- **image-viewer**: icon toolbar in the perspective window ([`ded89d7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ded89d72d4e280a212d27120912d20aa89487702))
+
+### Test
+
+- **image-viewer**: update tests for the moved viewer's API ([`67968e2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/67968e2373660df6ec7e6c7859e45591f4050088))
+
+## [v1.24.2](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.2) (2026-09-25)
+
+### Fix
+
+- **portable-dropbot-controller**: log fluorescence filter moves ([`370fb31`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/370fb3117ce13459be4b4f754a2182f5cb0da29c))
+- **device-viewer**: stop logging the whole media-captures list ([`af4c3ca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af4c3ca6c89fc1ff07ded66634446242e9e5da8f))
+- **portable-status-and-controls**: fit exposure slider to its cell ([`f57fd67`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f57fd6731d935d0d11b690203801fd682345d7e2))
+- **portable-status-and-controls**: follow the wheel, not a stale pick ([`76f5920`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/76f5920aa88d648f38a71bdc64e9886d35640df3))
+- **portable-dropbot-controller**: report the wheel's actual filter position ([`cb6846a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cb6846a31248ee4f215a7742aaa623d60484e1f1))
+- **portable-status-and-controls**: follow a re-selected step in capture panes ([`653392f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/653392f1314de6c218d25f30558e7e22188a1fc3))
+
+### Test
+
+- **portable-dropbot**: cover the manual filter pick following the wheel ([`3fbb59a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3fbb59a493acf48c1d98e5766b225f10e55e8460))
+
 ## [v1.24.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.24.1) (2026-09-25)
 
 ### Fix

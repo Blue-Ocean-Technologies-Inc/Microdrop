@@ -10,16 +10,10 @@
 
 # Standard library imports.
 import json
-import os
 import traceback
 from pathlib import Path
 
-# Third-party imports.
-import dramatiq
-from pydantic import ValidationError
-
 # Enthought library imports.
-from pyface.api import GUI
 from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QBrush, QColor, QFont, QGraphicsScene, QImage, QPainter
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -29,15 +23,11 @@ from pyface.qt.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
-    QPushButton,
-    QScrollArea,
-    QSizePolicy,
-    QVBoxLayout,
     QWidget,
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
-from traits.api import Bool, Instance, Str, observe, provides
+from traits.api import Bool, Instance, List, Str, observe
 from traits.observation._set_change_event import SetChangeEvent
 from traits.observation.events import DictChangeEvent, ListChangeEvent, TraitChangeEvent
 from traitsui.api import UI
@@ -61,7 +51,7 @@ from microdrop_status_bar.consts import (
 )
 
 # Microdrop style imports.
-from microdrop_style.button_styles import TEXT_BUTTON_STYLE, get_tooltip_style
+from microdrop_style.button_styles import get_tooltip_style
 from microdrop_style.colors import BLACK, GREY
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.helpers import (
@@ -73,17 +63,10 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 from microdrop_style.icons.icons import ICON_JOYSTICK
 
 # Microdrop utils imports.
-from microdrop_utils.datetime_helpers import TimestampedMessage
-from microdrop_utils.dramatiq_controller_base import (
-    basic_listener_actor_routine,
-    generate_class_method_dramatiq_listener_actor,
-)
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
-from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
-    CollapsibleVStackBox,
     PulsingLabel,
 )
 from microdrop_utils.trait_change_commands import SetChangeCommand
@@ -101,19 +84,18 @@ from ..consts import (
     STEP_PARAMS_COMMIT,
     ZONE_STATUS_MESSAGE_MS,
     PKG_name,
-    camera_controls_applied_publisher,
     camera_edit_status_message_text,
     camera_place_status_message_text,
     device_modified_tag,
-    listener_name,
 )
-from ..controllers.zones_controller import ZonesController
+from ..controllers.device_viewer_message_controller import (
+    DeviceViewerMessageController,
+)
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
 from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
-from ..models.media import CameraControlsRequest
 from ..models.messages import DeviceViewerMessageModel, GeometryChangedMessage
 from ..models.route import Route
 from ..models.step_params_commit import StepParamsCommitMessage
@@ -131,8 +113,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..utils.commands import DictChangeCommand, ListChangeCommand, TraitChangeCommand
 from ..utils.message_utils import gui_models_to_message_model
-from .alpha_view.alpha_table import alpha_table_view
-from .calibration_view.widget import CalibrationController, CalibrationWidget
 from .camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -143,17 +123,16 @@ from .camera_alignment_view.alignment_settings import (
     SETTING_TRAITS,
     AlignmentSettingsModel,
 )
-from .camera_control_view.widget import CameraControlWidget
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
-from .mode_picker.widget import ModePicker, ModePickerViewModel
-from .route_selection_view.route_selection_view import (
-    ExecutionSettingsView,
-    RouteLayerView,
-)
-from .viewport_settings_view.widget import ZoomControlWidget, ZoomViewModel
-from .zone_view.zones_sidebar import zones_view
+from .sidebar.calibration import build_calibration
+from .sidebar.camera_controls import build_camera_controls
+from .sidebar.host import build_reveal_button, build_sidebar
+from .sidebar.paths import build_paths
+from .sidebar.section import SidebarSection
+from .sidebar.viewport_controls import build_viewport_controls
+from .sidebar.zones import build_zones
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -163,51 +142,10 @@ logger = get_logger(__name__)
 _dock_pane_name = f"{PKG_name} Dock Pane"
 
 
-def parse_camera_controls_request(message):
-    """Parse and validate a DEVICE_VIEWER_CAMERA_SET_CONTROLS payload.
-
-    Returns a ``(request, reply)`` pair: on success ``request`` is the
-    validated ``CameraControlsRequest`` as a plain dict and ``reply`` is
-    None; on failure ``request`` is None and ``reply`` is a ready-to-publish
-    ``CameraControlsApplied`` failure payload (``ok=False``), so the caller
-    can answer a waiting requester without reaching the camera widget. The
-    request_id is recovered from the raw payload when possible, so the
-    requester still gets matched even on a failed validation.
-    """
-
-    try:
-        raw = json.loads(message) if message and message.strip() else {}
-    except (json.JSONDecodeError, TypeError) as error:
-        logger.warning(f"Unparseable camera controls request: {message!r}")
-
-        return None, {"request_id": "", "ok": False, "error": str(error)}
-
-    request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
-
-    try:
-        request = CameraControlsRequest.model_validate(raw)
-    except ValidationError as error:
-        logger.warning(f"Invalid camera controls request: {message!r} ({error})")
-
-        # Name the field and the reason ("exposure_ms: Input should be
-        # greater than 0"), not pydantic's "1 validation error for ..." header.
-        first = error.errors()[0]
-        field = ".".join(str(part) for part in first["loc"]) or "request"
-
-        return None, {
-            "request_id": request_id,
-            "ok": False,
-            "error": f"{field}: {first['msg']}",
-        }
-
-    return request.model_dump(), None
-
-
 # Debounce delay (ms) so arrow-key navigation publishes once after movement stops
 # ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
 
 
-@provides(IDramatiqControllerBase)
 class DeviceViewerDockPane(TraitsDockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
@@ -233,8 +171,9 @@ class DeviceViewerDockPane(TraitsDockPane):
     gamepad_service = Instance(GamepadInteractionService, allow_none=True)
     layer_ui = None
     zones_ui = None
-    zones_controller = None
-    mode_picker_view = None
+
+    #: Camera controls widget; None until ``create_contents`` builds it.
+    camera_control_widget = None
 
     # The open Camera Alignment dialog's model; None while closed. The
     # @observe handlers below re-hook automatically on every assignment.
@@ -242,6 +181,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     #: The open Edit Connections dialog; None while closed.
     _connections_editor_ui = Instance(UI)
+
+    #: The sidebar's sections, top to bottom; holding them keeps each
+    #: section's controllers and TraitsUI UIs alive with the pane.
+    sidebar_sections = List(Instance(SidebarSection))
+
+    #: The open sidebar layout preferences editor; None until opened.
+    edit_sidebar_layout_ui = Instance(UI)
 
     # Variables
     _undoing = Bool(
@@ -274,23 +220,11 @@ class DeviceViewerDockPane(TraitsDockPane):
     # _electrode_publish_timer = None  # Debounce timer for electrode state
     # publish (e.g. arrow-key navigation)
 
-    ###################################################################################
-    # ------------- IDramatiqControllerBase Interface -------------------- #
-    ###################################################################################
-    listener_name = listener_name
-    dramatiq_listener_actor = Instance(dramatiq.Actor)
-
-    # --------- Dramatiq Init ------------------------------
-    def listener_actor_routine(self, message, topic):
-        return basic_listener_actor_routine(self, message, topic)
+    #: Dramatiq listener for this pane's topics; dispatches them to the pane.
+    message_controller = Instance(DeviceViewerMessageController)
 
     # --------- Device View trait initializers -------------
     def traits_init(self):
-        logger.info("Starting DeviceViewer listener")
-        self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name, class_method=self.listener_actor_routine
-        )
-
         ###############################################################################################################
         # --------------Setup device view model ---------------------------------- #
         ##############################################################################################################
@@ -353,72 +287,24 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         self.device_view.setObjectName("device_view")
 
+        # Last: its handlers dereference the model, view, and preferences.
+        self.message_controller = DeviceViewerMessageController(pane=self)
+
     ################################################################################################
-    # ------- Dramatiq handlers ---------------------------
+    # ------- Phase-navigation mode and gamepad lifecycle -------------
     ################################################################################################
 
-    def _on_chip_inserted_triggered(self, message):
-        if message.lower() == "true" and self.model:
-            self.message_buffer = gui_models_to_message_model(self.model).serialize()
-            # self.publish_model_message()
-
-    def _on_realtime_mode_updated_triggered(self, message):
-        if self.model:
-            self.model.realtime_mode = message.lower() == "true"
-
-    def _on_phase_navigation_mode_triggered(self, message):
-        GUI.invoke_later(self._apply_phase_navigation_mode, message.lower() == "true")
-
-    def _apply_phase_navigation_mode(self, enabled):
+    def apply_phase_navigation_mode(self, enabled):
+        """Apply an inbound phase-navigation mode without re-broadcasting it."""
         if self.model is None:
             return
+
         self._applying_phase_nav_message = True
+
         try:
             self.model.phase_navigation_mode = enabled
         finally:
             self._applying_phase_nav_message = False
-
-    def _on_phase_navigation_request_triggered(self, message):
-        # Nav requests drive the route-execution service (actuated_channels +
-        # its QTimer), so marshal onto the GUI thread.
-        GUI.invoke_later(self._apply_phase_navigation_request, message)
-
-    def _apply_phase_navigation_request(self, message):
-        service = self.model.route_execution_service if self.model else None
-        if service is None:
-            return
-        try:
-            request = json.loads(message)
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Bad phase-navigation request {message!r}: {e}")
-            return
-        if not isinstance(request, dict):
-            logger.warning(f"Bad phase-navigation request {message!r}: not an object")
-            return
-        action = request.get("action")
-        if action == "prev":
-            service.goto_prev_phase()
-        elif action == "next":
-            service.goto_next_phase()
-        elif action == "goto":
-            try:
-                index = int(request.get("index", 0))
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Bad phase-navigation index in {message!r}: {e}")
-                return
-            service.goto_phase(index)
-        else:
-            logger.warning(f"Unknown phase-navigation action: {action!r}")
-
-    def _on_gamepad_capture_request_triggered(self, message):
-        """Relay a Gamepad-prefs remap request to the live gamepad service."""
-        if self.gamepad_service is not None:
-            self.gamepad_service.begin_button_capture(message)
-
-    def _on_gamepad_reconnect_request_triggered(self, message):
-        """Relay a manual gamepad-reconnect request to the gamepad service."""
-        if self.gamepad_service is not None:
-            self.gamepad_service.reconnect_gamepad()
 
     @observe("device_viewer_preferences:gamepad_enabled")
     def _on_gamepad_enabled_changed(self, event):
@@ -451,206 +337,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.gamepad_service is not None:
             self.gamepad_service.cleanup()
             self.gamepad_service = None
-
-    def _on_load_svg_request_triggered(self, message):
-        """Load the SVG at ``message`` (a file path) into the device view.
-
-        Lets another plugin switch devices over pub/sub instead of reaching
-        into this pane. This handler runs on the Dramatiq listener's worker
-        thread, but rebuilding the electrode scene touches Qt, so the actual
-        work is marshalled to the GUI thread via ``GUI.invoke_later``.
-        ``_set_device_view_from_svg`` already handles and reports its own
-        exceptions, so there is nothing left to catch here."""
-        svg_path = str(message or "").strip()
-        if not svg_path or not os.path.isfile(svg_path):
-            logger.warning(f"load-svg request for missing file: {svg_path!r}")
-            return
-        GUI.invoke_later(self._set_device_view_from_svg, svg_path)
-
-    def _on_disconnected_triggered(self, message):
-        logger.debug("Disconnected from dropbot")
-        self.model.realtime_mode = False
-        self.model.connected = False
-
-        # make interactive in case device view was disabled from a halt
-        if not self.device_view.isInteractive():
-            self.device_view.setInteractive(True)
-
-    def _on_connected_triggered(self, message):
-        logger.debug("Connected from dropbot")
-        self.model.connected = True
-
-    def _on_disabled_channels_changed_triggered(self, message):
-        """
-        Handle hardware-reported disabled channels changes (e.g., after halted events
-        or actuation discrepancies). Update the electrodes model so the UI reflects
-        which channels the hardware has disabled.
-        """
-        if self.device_viewer_advanced_preferences.allow_hardware_disables:
-            data = json.loads(message)
-            disabled_set = set(data.get("channels", []))
-            logger.info(
-                f"DEVICE VIEWER: Received disabled channels change: "
-                f"{len(disabled_set)} channels disabled"
-            )
-            self.model.electrodes.disabled_channels = disabled_set
-        else:
-            logger.warning(
-                f"Hardware disabled channels ({message}) not applied to view. "
-                f"Change behaviour in preferences/advanced settings."
-            )
-
-    def _on_halted_triggered(self, message_str):
-        data = json.loads(message_str)
-        name = data.get("name", "")
-
-        if name == "output-current-exceeded":
-            logger.error(
-                "Output current exceeded Device viewer blocked till reconnection."
-            )
-            GUI.invoke_later(
-                lambda: error(
-                    None,
-                    title="DropBot Halted",
-                    message="<b>Device viewer</b>: Dropbot halt due to output current "
-                    "exceeded event. Channels disabled, and re-enabling them is "
-                    "blocked till reconnection.",
-                )
-            )
-            self.device_view.setInteractive(False)
-
-    def _on_display_state_triggered(self, message_model_serial: str):
-        # We send the message through a signal since Dramatiq runs the callbacks
-        # in a separate thread
-        # Which has weird side effects on QtGraphicsObject calls
-        self.device_view.display_state_signal.emit(message_model_serial)
-
-    def _on_protocol_tree_display_state_triggered(self, message_serial: str):
-        """Adapter for ProtocolTreeDisplayMessage -> DeviceViewerMessageModel.
-        The downstream display_state_signal pipeline reuses what already
-        works for the legacy widget."""
-        from pluggable_protocol_tree.models.display_state import (
-            ProtocolTreeDisplayMessage,
-        )
-
-        msg = ProtocolTreeDisplayMessage.deserialize(message_serial)
-        id_to_channel = self.model.electrodes.electrode_ids_channels_map
-        channels_activated = {
-            id_to_channel[eid]
-            for eid in msg.electrodes
-            if id_to_channel.get(eid) is not None
-        }
-        rich = DeviceViewerMessageModel(
-            channels_activated=channels_activated,
-            routes=[
-                (route, self.model.routes.get_available_color()) for route in msg.routes
-            ],
-            step_info={
-                "step_id": msg.step_id,
-                "step_label": msg.step_label,
-                "free_mode": msg.free_mode,
-            },
-            editable=msg.editable,
-            execution_params=msg.execution_params,
-        )
-        self.device_view.display_state_signal.emit(rich.serialize())
-
-    def _on_protocol_running_triggered(self, message: TimestampedMessage):
-
-        logger.debug(f"Protocol running is {message}")
-        if self.model:
-            self.model.protocol_running = True if message.lower() == "true" else False
-
-    def _on_advanced_mode_change_triggered(self, message: TimestampedMessage):
-        """Operator toggled Advanced Mode. While a protocol is running, this
-        is what keeps the viewer editable: Advanced on -> editable (the user
-        can actuate electrodes, reflected to hardware); off -> locked back to
-        display. Idle editability is selection/mode-driven, so only act during
-        a run (#434)."""
-        advanced = message.lower() == "true"
-        if self.model and self.model.protocol_running:
-            self.model.editable = advanced
-
-    def _on_capacitance_updated_triggered(self, message):
-        """
-        Handle capacitance updates from the device viewer.
-        """
-        capacitance_str = json.loads(message).get("capacitance", None)
-        if capacitance_str is not None:
-            capacitance = float(capacitance_str.split("pF")[0])
-            self.model.last_capacitance = capacitance
-
-    def _on_screen_capture_triggered(self, message):
-        """
-        Handle screen capture events from the device viewer.
-        """
-        logger.debug(f"Screen capture triggered: {message}")
-        if self.model and self.camera_control_widget:
-            capture_data = None
-            if message and message.strip():
-                try:
-                    capture_data = json.loads(message)
-                except (json.JSONDecodeError, TypeError):
-                    logger.debug(
-                        "Screen capture message is not JSON, using default capture"
-                    )
-
-            self.camera_control_widget.screen_capture_signal.emit(capture_data)
-
-    def _on_set_controls_triggered(self, message):
-        """Another plugin's CameraControlsRequest (exposure/focus); applied on
-        the GUI thread by the camera widget, which answers the applied
-        signal itself. An invalid request is answered ok=False here instead,
-        so a waiting requester fails fast rather than reaching the camera."""
-
-        if not self.camera_control_widget:
-            return
-
-        request, reply = parse_camera_controls_request(message)
-
-        if reply is not None:
-            camera_controls_applied_publisher.publish(reply)
-
-            return
-
-        self.camera_control_widget.camera_controls_signal.emit(request)
-
-    def _on_screen_recording_triggered(self, message):
-        """
-        Handle screen recording events from the device viewer.
-        """
-        logger.info(f"Screen recording triggered: {message}")
-        if self.model and self.camera_control_widget:
-            if not (message and message.strip()):
-                return
-
-            try:
-                recording_data = json.loads(message)
-            except (json.JSONDecodeError, TypeError):
-                logger.warning(
-                    f"Screen recording message is not valid JSON, ignoring: {message!r}"
-                )
-                return
-
-            self.camera_control_widget.screen_recording_signal.emit(recording_data)
-
-    def _on_camera_active_triggered(self, message):
-        """
-        Handle camera activation events from the device viewer.
-        """
-        logger.debug(f"Camera activation triggered: {message}")
-        if self.model and self.camera_control_widget:
-            self.camera_control_widget.camera_active_signal.emit(
-                message.lower() == "true"
-            )
-
-    def _on_drops_detected_triggered(self, message):
-        message_obj = json.loads(message)
-
-        detected_channels = message_obj.get("detected_channels", None)
-
-        # Apply electrode on/off states
-        self.model.electrodes.actuated_channels.update(detected_channels)
 
     ################################################################################################
     # ------- Camera-alignment endpoint workflow -------------------------
@@ -987,15 +673,21 @@ class DeviceViewerDockPane(TraitsDockPane):
         # We need to prevent the changes made in undo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.undo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.undo()
+        finally:
+            self._undoing = False
 
     def redo(self):
         # We need to prevent the changes made in redo() from being added to
         # the undo stack
         self._undoing = True
-        self.model.undo_manager.redo()
-        self._undoing = False
+
+        try:
+            self.model.undo_manager.redo()
+        finally:
+            self._undoing = False
 
     def apply_message_model(self, message_model_serial: str):
         logger.debug(f"Display state triggered with model: {message_model_serial}")
@@ -1064,68 +756,76 @@ class DeviceViewerDockPane(TraitsDockPane):
         # the single rebuild against the fully-applied new step.
         self.model.route_execution_service.suspend_nav_rebuild = True
 
-        # Apply step ID
-        self.model.step_id = message_model.step_id
+        try:
+            # Apply step ID
+            self.model.step_id = message_model.step_id
 
-        # Apply step label
-        self.model.step_label = message_model.step_label
+            # Apply step label
+            self.model.step_label = message_model.step_label
 
-        # Apply free mode
-        self.model.free_mode = message_model.free_mode
+            # Apply free mode
+            self.model.free_mode = message_model.free_mode
 
-        # Apply editable state
-        self.model.editable = message_model.editable
+            # Apply editable state
+            self.model.editable = message_model.editable
 
-        if not self.model.protocol_running and self.model.mode == "display":
-            self.model.mode = "draw"
+            if not self.model.protocol_running and self.model.mode == "display":
+                self.model.mode = "draw"
 
-        # Electrode->channel mapping is NOT carried on state messages (#415):
-        # electrodes keep their geometry-derived channels, so there is
-        # nothing to apply here.
+            # Electrode->channel mapping is NOT carried on state messages (#415):
+            # electrodes keep their geometry-derived channels, so there is
+            # nothing to apply here.
 
-        # Apply electrode on/off states in ONE assignment: the recolor
-        # observer receives a single old/new event and repaints only the
-        # channels whose membership flipped.
-        self.model.electrodes.electrode_editing = None
-        self.model.electrodes.actuated_channels = set(message_model.channels_activated)
-
-        # Apply routes only when they actually changed (phase toggles change
-        # actuation only) — and then as one list swap, so the connection map
-        # repaints exactly once with the final layer stack. This also means
-        # the layers are never transiently empty, so repeats_frozen can't
-        # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
-        # step's execution params are pulled below.
-        #
-        # Protocol-side colors are deliberately IGNORED: the tree echoes
-        # back whatever it stored, which drifts from (and reorders against)
-        # the viewer's palette — the visible symptom was routes flipping
-        # between shades on alternate phases. Route colors are the device
-        # viewer's own: selected paints yellow and loops CW/CCW at render
-        # time; everything else gets the standard pool color.
-        incoming_routes = [route for route, _color in message_model.routes]
-        current_routes = [list(layer.route.route) for layer in self.model.routes.layers]
-        if incoming_routes != current_routes:
-            self.model.routes.replace_all_layers(
-                [Route(route=route.copy()) for route in incoming_routes]
+            # Apply electrode on/off states in ONE assignment: the recolor
+            # observer receives a single old/new event and repaints only the
+            # channels whose membership flipped.
+            self.model.electrodes.electrode_editing = None
+            self.model.electrodes.actuated_channels = set(
+                message_model.channels_activated
             )
-        self.model.routes.selected_layer = None
-        self.model.routes.layer_to_merge = None
-        self.model.routes.mode = "draw"
-        self.model.routes.message = ""
 
-        # Pull the step's execution params into the sidebar AFTER the routes
-        # are in place, then baseline the sidebar so the commit button
-        # starts disabled.
-        if step_changed:
-            if message_model.execution_params:
-                self.model.routes.apply_execution_params(message_model.execution_params)
-            else:
-                self.model.routes.clear_committed_baseline()
-            self._last_applied_step_id = message_model.step_id
+            # Apply routes only when they actually changed (phase toggles change
+            # actuation only) — and then as one list swap, so the connection map
+            # repaints exactly once with the final layer stack. This also means
+            # the layers are never transiently empty, so repeats_frozen can't
+            # flip on mid-apply and pin Repetitions/Repeat Dur to 1/0 before the
+            # step's execution params are pulled below.
+            #
+            # Protocol-side colors are deliberately IGNORED: the tree echoes
+            # back whatever it stored, which drifts from (and reorders against)
+            # the viewer's palette — the visible symptom was routes flipping
+            # between shades on alternate phases. Route colors are the device
+            # viewer's own: selected paints yellow and loops CW/CCW at render
+            # time; everything else gets the standard pool color.
+            incoming_routes = [route for route, _color in message_model.routes]
+            current_routes = [
+                list(layer.route.route) for layer in self.model.routes.layers
+            ]
+            if incoming_routes != current_routes:
+                self.model.routes.replace_all_layers(
+                    [Route(route=route.copy()) for route in incoming_routes]
+                )
+            self.model.routes.selected_layer = None
+            self.model.routes.layer_to_merge = None
+            self.model.routes.mode = "draw"
+            self.model.routes.message = ""
 
-        self._disable_state_messages = False  # Re-enable state messages after reset
-        self._undoing = False
-        self.model.route_execution_service.suspend_nav_rebuild = False
+            # Pull the step's execution params into the sidebar AFTER the routes
+            # are in place, then baseline the sidebar so the commit button
+            # starts disabled.
+            if step_changed:
+                if message_model.execution_params:
+                    self.model.routes.apply_execution_params(
+                        message_model.execution_params
+                    )
+                else:
+                    self.model.routes.clear_committed_baseline()
+                self._last_applied_step_id = message_model.step_id
+
+        finally:
+            self._disable_state_messages = False  # Re-enable state messages after reset
+            self._undoing = False
+            self.model.route_execution_service.suspend_nav_rebuild = False
         self.undo_manager.active_stack.clear()  # Clear the undo stack
 
         # Publish geometry if the electrode-to-channel mapping changed.
@@ -1553,267 +1253,116 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.publish_model_message(event=None)
 
-        # Layout init for device view and its property editor right-side bar
-        # left side will house device viewer; right side a collapsible
-        # scrollable stack of collapsible widgets
-        main_layout = QHBoxLayout()
-        main_container = QWidget()
-
-        # --- Right Side: Collapsible Scroll Area ---
-
-        # Create the Scroll Area and its container
-        self.scroll_area = scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-
-        # Initially hide the scroll area
-        scroll_area.setVisible(True)
-
-        self.scroll_content = scroll_content = QWidget()
-
-        scroll_layout = QVBoxLayout(scroll_content)
-
-        # device_view code
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
-        #### Side Bar widgets init #####
+        self.sidebar_sections = self._build_sidebar_sections()
+        self.scroll_area = build_sidebar(self.sidebar_sections)
+        self.scroll_content = self.scroll_area.widget()
+        self._set_device_view_layout_width()
 
-        # alpha_view code
-        self.alpha_view_ui = self.model.edit_traits(view=alpha_table_view)
+        self.reveal_button = build_reveal_button(self.scroll_area)
 
-        # layer_view code
-        layer_view = RouteLayerView
-        self.layer_ui = self.model.edit_traits(view=layer_view)
-        self.execution_settings_ui = self.model.edit_traits(view=ExecutionSettingsView)
+        # Device view on the left, the sidebar and its reveal toggle on the right.
+        main_layout = QHBoxLayout()
+        main_layout.addWidget(self.device_view, 1)
+        main_layout.addWidget(self.reveal_button)
+        main_layout.addWidget(self.scroll_area)
 
-        # mode_picker_view code
-        _mode_picker_viewmodel = ModePickerViewModel(model=self.model, pane=self)
-        self.mode_picker_view = ModePicker(view_model=_mode_picker_viewmodel)
+        main_container = QWidget()
+        main_container.setLayout(main_layout)
 
-        # camera_control_widget code
+        for widget in (self.scroll_content, self.reveal_button):
+            widget.setContextMenuPolicy(Qt.CustomContextMenu)
+            widget.customContextMenuRequested.connect(self._show_sidebar_context_menu)
+
+        self._apply_theme_style(
+            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
+        )
+        QApplication.styleHints().colorSchemeChanged.connect(self._apply_theme_style)
+
+        # style device view: remove frame in device view
+        self.device_view.setFrameStyle(QFrame.NoFrame)
+
+        return main_container
+
+    def _build_sidebar_sections(self):
+        """Build the sidebar sections, top to bottom."""
+        viewport_section = build_viewport_controls(self.model)
+
         # status_bar_manager is typically None at create_contents time (the
         # MicrodropTask creates it in activated(), which runs after dock pane
         # creation). _setup_app_statusbar below re-pushes the manager once
         # the trait fires.
-        self.camera_control_widget = CameraControlWidget(
+        camera_section = build_camera_controls(
             self.model,
             self.video_item,
             self.scene,
             self.app_preferences,
             status_bar_manager=self.task.window.status_bar_manager,
             source_providers=self._camera_source_providers,
+            on_align_camera=self._on_open_camera_alignment,
+            on_go_to_endpoint=self._on_go_to_endpoint,
+        )
+        paths_section = build_paths(self.model, undo=self.undo, redo=self.redo)
+        zones_section = build_zones(self.model)
+        calibration_section = build_calibration(self.model.calibration)
+
+        self.camera_control_widget = camera_section.camera_control_widget
+        self.alpha_view_ui = camera_section.alpha_view_ui
+        self.layer_ui = paths_section.layer_ui
+        self.zones_ui = zones_section.zones_ui
+
+        return [
+            viewport_section,
+            camera_section,
+            paths_section,
+            zones_section,
+            calibration_section,
+        ]
+
+    def _show_sidebar_context_menu(self, point):
+        """Offer the sidebar layout preferences at the right-clicked point."""
+        menu = QMenu(self.scroll_content)
+        settings_action = menu.addAction("Modify Layout...")
+        settings_action.triggered.connect(self._open_sidebar_layout_settings)
+
+        menu.exec(self.scroll_content.mapToGlobal(point))
+
+    def _open_sidebar_layout_settings(self):
+        """Open the sidebar layout preferences, or raise the open editor."""
+        if self.edit_sidebar_layout_ui:
+            control = self.edit_sidebar_layout_ui.control
+
+            if control:
+                if control.isVisible():
+                    control.raise_()
+                    control.activateWindow()
+
+                return
+
+            # The editor's widget was destroyed while its UI lingered.
+            self.edit_sidebar_layout_ui = None
+
+        self.edit_sidebar_layout_ui = self.device_viewer_preferences.edit_traits(
+            view=View(sidebar_settings_grid, resizable=True)
         )
 
-        # keep the camera toggled button in sync with the alpha map.
-        # self.camera_control_widget.camera_toggle_button.toggled.connect(
-        #     lambda checked: self.model.set_visible(video_key, checked)
-        # )
+    def _apply_theme_style(self, theme):
+        """Restyle the sidebar and device view for the application theme."""
+        theme_name = QT_THEME_NAMES[theme]
 
-        # calibration_view code
-        self.calibration_view = CalibrationWidget()
-        self.calibration_controller = CalibrationController(
-            model=self.model.calibration, view=self.calibration_view
+        logger.debug(f"Applying {theme_name} mode")
+
+        self.scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
+
+        # The device view renders through OpenGL, so it cannot take the full
+        # widget stylesheet; only its tooltips need the theme.
+        self.device_view.setStyleSheet(get_tooltip_style(theme_name))
+        self.device_view.setBackgroundBrush(QBrush(QColor(BLACK)))
+
+        self.reveal_button.setStyleSheet(
+            get_complete_stylesheet(theme_name, button_type="narrow")
         )
-
-        self.zones_controller = ZonesController(model=self.model)
-        self.zones_ui = self.model.zones.edit_traits(view=zones_view)
-
-        vm = ZoomViewModel(model=self.model)
-        self.viewport_controls_widget = ZoomControlWidget(vm)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Viewport Controls", control_widgets=self.viewport_controls_widget
-            )
-        )
-
-        # Camera Alignment: the manual per-device endpoint workflow.
-        # Lives right under the camera-control button grid.
-        alignment_widget = QWidget()
-        alignment_layout = QHBoxLayout(alignment_widget)
-        for label, handler, tip in (
-            (
-                "Align Camera",
-                self._on_open_camera_alignment,
-                "Place this device's endpoint on the SVG and drag the "
-                "corner dots onto its outline in a captured camera frame",
-            ),
-            (
-                "Go To Endpoint",
-                self._on_go_to_endpoint,
-                "Glide the marked points onto this device's saved endpoint",
-            ),
-        ):
-            action_button = QPushButton(label)
-            # The sidebar's theme stylesheet renders QPushButton text
-            # in the Material Symbols icon font — these buttons carry
-            # real words, so they get the text-button font override.
-            action_button.setStyleSheet(TEXT_BUTTON_STYLE)
-            action_button.setToolTip(tip)
-            action_button.clicked.connect(handler)
-            alignment_layout.addWidget(action_button, 1)
-
-        camera_controls_box = CollapsibleVStackBox(
-            "Camera Controls",
-            control_widgets=[
-                self.camera_control_widget,
-                alignment_widget,
-                self.alpha_view_ui.control,
-            ],
-        )
-        # Same side margins and gap as the camera-control button rows so
-        # the two buttons line up with the four above (each spans a pair);
-        # the bottom margin separates them from the alpha table below.
-        # Read only now: Qt's default layout margin is wider for a widget
-        # that is still a window than for a child, so it settles once the
-        # camera widget sits inside the box.
-        _camera_layout = self.camera_control_widget.layout()
-        _camera_margins = _camera_layout.contentsMargins()
-        alignment_layout.setContentsMargins(
-            _camera_margins.left(), 0, _camera_margins.right(), 12
-        )
-        alignment_layout.setSpacing(_camera_layout.spacing())
-
-        scroll_layout.addWidget(camera_controls_box)
-
-        self.execution_settings_box = CollapsibleVStackBox(
-            "Execution Settings", control_widgets=self.execution_settings_ui.control
-        )
-        self.execution_settings_box.set_expanded(False)
-        self.execution_settings_box.main_layout.setContentsMargins(12, 0, 0, 0)
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox(
-                "Paths",
-                control_widgets=[
-                    self.execution_settings_box,
-                    self.layer_ui.control,
-                    self.mode_picker_view,
-                ],
-            )
-        )
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Zones", control_widgets=self.zones_ui.control)
-        )
-
-        scroll_layout.addWidget(
-            CollapsibleVStackBox("Calibration", control_widgets=self.calibration_view)
-        )
-        scroll_layout.addStretch()
-
-        scroll_area.setWidget(scroll_content)
-
-        self._set_device_view_layout_width()
-
-        reveal_button = QPushButton("chevron_right")
-
-        # Create a button to show/hide the scroll area
-
-        def reveal_button_handler():
-            # 1. Check the current visibility of the scroll_area
-            is_now_visible = not scroll_area.isVisible()
-
-            # 2. Toggle the visibility of the entire scroll_area
-            scroll_area.setVisible(is_now_visible)
-
-            # 3. Update the button icon based on the new state
-            #    (chevron_right to hide, chevron_left to reveal)
-            reveal_button.setText("chevron_right" if is_now_visible else "chevron_left")
-
-        reveal_button.setToolTip("Reveal Hidden Controls")
-        reveal_button.clicked.connect(reveal_button_handler)
-        reveal_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding)
-
-        ####### Assemble main layout ################
-        main_layout.addWidget(self.device_view, 1)  # left side
-        main_layout.addWidget(reveal_button)  # middle
-        main_layout.addWidget(scroll_area)  # right side
-
-        main_container.setLayout(main_layout)
-
-        # -------------------------------------------------------------------------
-        # Context Menu to Open Preferences
-        # -------------------------------------------------------------------------
-        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
-        reveal_button.setContextMenuPolicy(Qt.CustomContextMenu)
-
-        self.edit_sidebar_layout_ui = None
-
-        def _on_sidebar_context_menu(point):
-
-            # 1. Create the menu
-            menu = QMenu(self.scroll_content)
-
-            # 2. Create the action
-            settings_action = menu.addAction("Modify Layout...")
-
-            # 3. Define the trigger
-            def open_settings():
-                if self.edit_sidebar_layout_ui:
-                    control = self.edit_sidebar_layout_ui.control
-
-                    # Check if it's actually visible and valid
-                    if control:
-                        if control.isVisible():
-                            control.raise_()  # Bring to top of stack
-                            control.activateWindow()  # Give it keyboard focus
-
-                        return  # STOP here
-
-                    else:
-                        # Handle case where the C++ widget was destroyed but
-                        # Python ref exists
-                        self.edit_sidebar_layout_ui = None
-
-                self.edit_sidebar_layout_ui = (
-                    self.device_viewer_preferences.edit_traits(
-                        view=View(sidebar_settings_grid, resizable=True)
-                    )
-                )
-
-            settings_action.triggered.connect(open_settings)
-
-            # 4. Show the menu at the global position
-            menu.exec(self.scroll_content.mapToGlobal(point))
-
-        self.scroll_content.customContextMenuRequested.connect(_on_sidebar_context_menu)
-        reveal_button.customContextMenuRequested.connect(_on_sidebar_context_menu)
-
-        # ---------------------------------- Theme aware styling -----------#
-        def _apply_theme_style(theme: "Qt.ColorScheme"):
-            """Handle application level theme updates"""
-
-            theme_name = QT_THEME_NAMES[theme]
-
-            logger.debug(f"Applying {theme_name} mode")
-
-            scroll_area.setStyleSheet(get_complete_stylesheet(theme_name))
-
-            # device view uses opengl so a complete stylesheet with widget
-            # style specs cannot be added:
-            # but other elements like tooltips do need updating
-            self.device_view.setStyleSheet(get_tooltip_style(theme_name))
-
-            # if is_dark_mode() else "#263238" #TODO: figure out light mode color
-            bg_color = BLACK
-            self.device_view.setBackgroundBrush(QBrush(QColor(bg_color)))
-
-            # reveal requires the narrow button type specified
-            reveal_button.setStyleSheet(
-                get_complete_stylesheet(theme_name, button_type="narrow")
-            )
-
-        # Apply initial theme styling
-        _apply_theme_style(
-            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
-        )
-
-        # Call theme application method whenever global theme changes occur as well
-        QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
-
-        # style device view: remove frame in device view
-        self.device_view.setFrameStyle(QFrame.NoFrame)
-
-        return main_container
 
     ###################################################################################################################
     ###### SVG file loading / saving / other handling ########

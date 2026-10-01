@@ -8,43 +8,41 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from functools import partial
 
-from traits.api import HasTraits, Instance, observe, Property
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QLabel,
-                               QGridLayout)
+# Enthought library imports.
+from pyface.qt import QtCore, QtWidgets
+from traits.api import Callable, HasTraits, Instance, Property, observe
 
-from pyface.tasks.dock_pane import DockPane
-
+# Microdrop package imports.
 from device_viewer.models.main_model import DeviceViewMainModel
-# Imports from your context
-from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT
 
-try:
-    from microdrop_style.helpers import is_dark_mode
-except ImportError:
-    # Fallback if helper is missing in this context
-    is_dark_mode = lambda: False
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT
 
 
 def if_editable(func):
     """Decorator to check if the model is editable before executing the function."""
+
     def wrapper(self, *args, **kwargs):
         if self.model.editable:
             return func(self, *args, **kwargs)
+
     return wrapper
 
 
 # ==========================================
 # 1. THE SIGNAL BRIDGE
 # ==========================================
-class ModePickerSignals(QObject):
+class ModePickerSignals(QtCore.QObject):
     """
     Qt Signals for the ModePicker ViewModel.
     """
+
     # Emitted when the mode or editability changes, requiring a UI refresh
-    state_changed = Signal()
+    state_changed = QtCore.Signal()
+
 
 # ==========================================
 # 2. THE VIEW MODEL
@@ -53,14 +51,26 @@ class ModePickerViewModel(HasTraits):
     """
     Handles logic for mode switching, undo/redo, and validation.
     """
+
     # Dependencies (The "Model" layers this VM wraps)
     model = Instance(DeviceViewMainModel)
-    pane = Instance(DockPane)
+
+    #: Undoes the last edit; the owner of the undo stack supplies it.
+    undo_handler = Callable()
+
+    #: Redoes the last undone edit.
+    redo_handler = Callable()
+
     signals = Instance(ModePickerSignals)
 
     current_mode = Property(observe="model.mode")
     mode_name = Property(observe="model.mode_name")
     is_editable = Property(observe="model.editable")
+
+    #: Whether Undo/Redo would change anything: pyface's stack reports an
+    #: empty undo_name/redo_name when there is no command on that side.
+    can_undo = Property()
+    can_redo = Property()
 
     def traits_init(self):
         self.signals = ModePickerSignals()
@@ -75,17 +85,23 @@ class ModePickerViewModel(HasTraits):
     def _get_is_editable(self):
         return self.model.editable
 
+    def _get_can_undo(self):
+        return self.model.editable and self.model.undo_manager.undo_name != ""
+
+    def _get_can_redo(self):
+        return self.model.editable and self.model.undo_manager.redo_name != ""
+
     # -- Actions --
     def set_mode(self, mode):
         self.model.flip_mode_activation(mode)
 
     @if_editable
     def undo(self):
-        self.pane.undo()
+        self.undo_handler()
 
     @if_editable
     def redo(self):
-        self.pane.redo()
+        self.redo_handler()
 
     @if_editable
     def reset_electrodes(self):
@@ -95,17 +111,22 @@ class ModePickerViewModel(HasTraits):
     def reset_routes(self):
         self.model.routes.clear_routes()
 
-    @observe('model:mode')
+    @observe("model:mode")
     def _on_underlying_mode_changed(self, event):
         """Forward underlying model changes to the Qt View."""
+        self.signals.state_changed.emit()
+
+    @observe("model:undo_manager:stack_updated, model:editable")
+    def _on_undo_availability_changed(self, event):
+        """Refresh the Undo/Redo buttons after every push, undo, redo or clear."""
         self.signals.state_changed.emit()
 
 
 # ==========================================
 # 3. THE VIEW
 # ==========================================
-class ModePicker(QWidget):
-    def __init__(self, view_model: 'ModePickerViewModel'):
+class ModePicker(QtWidgets.QWidget):
+    def __init__(self, view_model: "ModePickerViewModel"):
         super().__init__()
         self.vm = view_model
 
@@ -121,39 +142,39 @@ class ModePicker(QWidget):
 
     def _init_ui_elements(self):
         # Mode Buttons
-        self.button_draw = QPushButton(ICON_DRAW)
+        self.button_draw = QtWidgets.QPushButton(ICON_DRAW)
         self.button_draw.setToolTip("Draw")
         self.button_draw.setCheckable(True)
 
-        self.button_edit = QPushButton(ICON_EDIT)
+        self.button_edit = QtWidgets.QPushButton(ICON_EDIT)
         self.button_edit.setToolTip("Edit")
         self.button_edit.setCheckable(True)
 
-        self.button_autoroute = QPushButton(ICON_AUTOMATION)
+        self.button_autoroute = QtWidgets.QPushButton(ICON_AUTOMATION)
         self.button_autoroute.setToolTip("Autoroute")
         self.button_autoroute.setCheckable(True)
 
-        self.button_channel_edit = QPushButton("Numbers")
+        self.button_channel_edit = QtWidgets.QPushButton("Numbers")
         self.button_channel_edit.setToolTip("Edit Electrode Channels")
         self.button_channel_edit.setCheckable(True)
 
         # Action Buttons
-        self.button_reset_routes = QPushButton("remove_road")
+        self.button_reset_routes = QtWidgets.QPushButton("remove_road")
         self.button_reset_routes.setToolTip("Clear Routes")
 
-        self.button_reset_electrodes = QPushButton("layers_clear")
+        self.button_reset_electrodes = QtWidgets.QPushButton("layers_clear")
         self.button_reset_electrodes.setToolTip("Clear Electrode States")
 
-        self.button_undo = QPushButton("Undo")
+        self.button_undo = QtWidgets.QPushButton("Undo")
         self.button_undo.setToolTip("Undo")
 
-        self.button_redo = QPushButton("Redo")
+        self.button_redo = QtWidgets.QPushButton("Redo")
         self.button_redo.setToolTip("Redo")
 
-        self.mode_label = QLabel()
+        self.mode_label = QtWidgets.QLabel()
 
     def _layout_ui(self):
-        btn_layout = QGridLayout()
+        btn_layout = QtWidgets.QGridLayout()
 
         # Row 1: Mode selection
         btn_layout.addWidget(self.button_draw, 0, 0)
@@ -171,7 +192,7 @@ class ModePicker(QWidget):
         btn_layout.setColumnStretch(4, 1)
 
         # Main layout
-        layout = QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.mode_label)
         layout.addLayout(btn_layout)
         self.setLayout(layout)
@@ -181,7 +202,9 @@ class ModePicker(QWidget):
         self.button_draw.clicked.connect(partial(self.vm.set_mode, "draw"))
         self.button_edit.clicked.connect(partial(self.vm.set_mode, "edit"))
         self.button_autoroute.clicked.connect(partial(self.vm.set_mode, "auto"))
-        self.button_channel_edit.clicked.connect(partial(self.vm.set_mode, "channel-edit"))
+        self.button_channel_edit.clicked.connect(
+            partial(self.vm.set_mode, "channel-edit")
+        )
 
         self.button_reset_routes.clicked.connect(self.vm.reset_routes)
         self.button_reset_electrodes.clicked.connect(self.vm.reset_electrodes)
@@ -199,5 +222,8 @@ class ModePicker(QWidget):
         self.button_edit.setChecked(current_mode == "edit")
         self.button_autoroute.setChecked(current_mode == "auto")
         self.button_channel_edit.setChecked(current_mode == "channel-edit")
+
+        self.button_undo.setEnabled(self.vm.can_undo)
+        self.button_redo.setEnabled(self.vm.can_redo)
 
         self.mode_label.setText(f"Mode: {self.vm.mode_name}")
