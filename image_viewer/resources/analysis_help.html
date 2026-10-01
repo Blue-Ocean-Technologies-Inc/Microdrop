@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<!--
+  (C) Copyright 2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+
+  Self-contained on purpose: no network, no external fonts or images, so it
+  opens offline in the Help dialog (QtWebEngine) and in a plain browser.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analysis Terms Guide</title>
+<style>
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --surface-2: #f0f2f1;
+  --ink: #1d2328;
+  --muted: #5a656e;
+  --line: #d9dfe3;
+  --accent: #2f8a46;
+  --accent-soft: #e3f2e6;
+  --blue: #1f77b4;
+  --orange: #e8710a;
+  --warn: #b4410c;
+  --warn-soft: #fdecdf;
+  --ok: #2f8a46;
+  --roi: #0b9bb0;
+  --ring: #d99a00;
+  --ball: #7a4fe0;
+  --glow: #3ccf6a;
+  --plot-bg: #fbfcfc;
+  --grid: #e7ebee;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+  --radius: 10px;
+  --toc-w: 250px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b;
+    --surface: #182027;
+    --surface-2: #1e2830;
+    --ink: #e6ebef;
+    --muted: #9aa8b3;
+    --line: #2c3842;
+    --accent: #5cc77a;
+    --accent-soft: #1d3325;
+    --blue: #5aa9e6;
+    --orange: #ff9a3d;
+    --warn: #ff9a6b;
+    --warn-soft: #3a2418;
+    --ok: #5cc77a;
+    --roi: #3fd0e3;
+    --ring: #f2c14e;
+    --ball: #a98bff;
+    --glow: #4fe07f;
+    --plot-bg: #141b21;
+    --grid: #26313a;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b;
+  --surface: #182027;
+  --surface-2: #1e2830;
+  --ink: #e6ebef;
+  --muted: #9aa8b3;
+  --line: #2c3842;
+  --accent: #5cc77a;
+  --accent-soft: #1d3325;
+  --blue: #5aa9e6;
+  --orange: #ff9a3d;
+  --warn: #ff9a6b;
+  --warn-soft: #3a2418;
+  --ok: #5cc77a;
+  --roi: #3fd0e3;
+  --ring: #f2c14e;
+  --ball: #a98bff;
+  --glow: #4fe07f;
+  --plot-bg: #141b21;
+  --grid: #26313a;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--accent); }
+code, kbd {
+  font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  font-size: .88em;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 .3em;
+}
+.ui {
+  font-weight: 600;
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 .3em;
+  white-space: nowrap;
+}
+
+/* ---------- layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: var(--toc-w) minmax(0, 1fr);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+nav.toc {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 20px 14px 40px 16px;
+  border-right: 1px solid var(--line);
+  font-size: 14px;
+}
+nav.toc .toc-title {
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc > ol > li { margin: 10px 0 2px; }
+nav.toc > ol > li > a { font-weight: 700; color: var(--ink); }
+nav.toc ol ol { margin: 2px 0 0 0; }
+nav.toc ol ol a {
+  display: block;
+  color: var(--muted);
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid transparent;
+}
+nav.toc a { text-decoration: none; }
+nav.toc a:hover { color: var(--accent); }
+nav.toc a.active { color: var(--accent); border-left-color: var(--accent); }
+details.toc-mobile { display: none; }
+
+main {
+  padding: 24px clamp(16px, 4vw, 48px) 80px;
+  min-width: 0;
+}
+header.hero {
+  padding: 8px 0 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+header.hero h1 { margin: 0 0 6px; font-size: clamp(1.5rem, 3vw, 2.1rem); line-height: 1.2; }
+header.hero p { margin: 4px 0; color: var(--muted); max-width: 68ch; }
+
+section.part { padding-top: 26px; }
+section.part > h2 {
+  font-size: 1.45rem;
+  margin: 10px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--accent);
+}
+section.part > p.intro { color: var(--muted); max-width: 72ch; margin-top: 4px; }
+
+article.term {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px 14px;
+  margin: 16px 0;
+}
+article.term h3 { margin: 0 0 4px; font-size: 1.18rem; }
+article.term h3 .where {
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+article.term > p { margin: 6px 0; max-width: 75ch; }
+
+dl.facts {
+  display: grid;
+  grid-template-columns: 11.5em minmax(0, 1fr);
+  gap: 0;
+  margin: 10px 0 4px;
+  border-top: 1px solid var(--line);
+}
+dl.facts dt, dl.facts dd {
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+dl.facts dt { font-weight: 700; font-size: .9rem; color: var(--muted); padding-right: 12px; }
+dl.facts dd p { margin: 0 0 4px; }
+dl.facts dd p:last-child { margin-bottom: 0; }
+
+.callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+  margin: 10px 0;
+}
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+/* ---------- demos ---------- */
+figure.demo {
+  margin: 14px 0 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+}
+figure.demo figcaption { font-size: .88rem; color: var(--muted); margin-top: 6px; }
+figure.demo svg { display: block; width: 100%; height: auto; }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: center;
+  font-size: .9rem;
+  margin: 6px 0;
+}
+.controls label { display: inline-flex; align-items: center; gap: 6px; }
+.controls input[type="range"] { width: 150px; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.controls output { font-variant-numeric: tabular-nums; min-width: 3.2em; font-weight: 600; }
+.controls button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.status {
+  font-size: .9rem;
+  min-height: 1.6em;
+  margin-top: 4px;
+}
+.status .bad { color: var(--warn); font-weight: 600; }
+.status .good { color: var(--ok); font-weight: 600; }
+
+svg text { font-family: inherit; fill: var(--muted); font-size: 12px; }
+svg .axis { stroke: var(--line); stroke-width: 1; }
+svg .gridline { stroke: var(--grid); stroke-width: 1; }
+svg .plotbg { fill: var(--plot-bg); }
+
+table.small {
+  border-collapse: collapse;
+  font-size: .9rem;
+  margin: 8px 0;
+  width: 100%;
+}
+table.small th, table.small td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.small th { color: var(--muted); font-weight: 700; }
+table.small td.num { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* pipeline animation */
+.pipeline .flow-dot { fill: var(--accent); animation: flow 6s linear infinite; }
+.pipeline .flow-dot.d2 { animation-delay: -2s; }
+.pipeline .flow-dot.d3 { animation-delay: -4s; }
+@keyframes flow {
+  0% { transform: translateX(0); opacity: 0; }
+  4% { opacity: 1; }
+  96% { opacity: 1; }
+  100% { transform: translateX(560px); opacity: 0; }
+}
+.pulse { animation: pulse 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+dl.glossary { display: grid; grid-template-columns: 12em minmax(0, 1fr); gap: 0; }
+dl.glossary dt, dl.glossary dd { margin: 0; padding: 6px 0; border-bottom: 1px solid var(--line); }
+dl.glossary dt { font-weight: 700; padding-right: 12px; }
+
+/* ---------- narrow: dock-sized dialog, phones ---------- */
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  nav.toc { display: none; }
+  details.toc-mobile {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+  details.toc-mobile summary { cursor: pointer; font-weight: 700; }
+  details.toc-mobile[open] { max-height: 70vh; overflow-y: auto; }
+  details.toc-mobile ol { list-style: none; padding-left: 0; margin: 6px 0; }
+  details.toc-mobile ol ol { padding-left: 14px; }
+  details.toc-mobile a { text-decoration: none; display: block; padding: 2px 0; }
+  html { scroll-padding-top: 52px; }
+  main { padding: 12px 16px 60px; }
+}
+@media (max-width: 560px) {
+  dl.facts, dl.glossary { grid-template-columns: minmax(0, 1fr); }
+  dl.facts dt { border-bottom: none; padding-bottom: 0; }
+  dl.glossary dt { border-bottom: none; padding-bottom: 0; }
+  .controls input[type="range"] { width: 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .pipeline .flow-dot, .pulse { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<details class="toc-mobile" id="toc-mobile">
+  <summary>Contents</summary>
+  <div data-toc-clone></div>
+</details>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <p class="toc-title">Contents</p>
+  <ol id="toc">
+    <li><a href="#start">Start here</a>
+      <ol>
+        <li><a href="#pipeline">How a number is made</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-regions">Regions and images</a>
+      <ol>
+        <li><a href="#roi">ROI and its shapes</a></li>
+        <li><a href="#drift">Moving an ROI later (drift)</a></li>
+        <li><a href="#ai">AI detection options</a></li>
+        <li><a href="#exclude">Excluding images</a></li>
+        <li><a href="#scale">Image scale</a></li>
+        <li><a href="#contrast">Contrast</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-measure">Measurement settings</a>
+      <ol>
+        <li><a href="#ring">Background ring</a></li>
+        <li><a href="#ball">Rolling-ball correction</a></li>
+        <li><a href="#perspective">Perspective correction</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-stats">What you can plot</a>
+      <ol>
+        <li><a href="#stat-mean">Mean intensity</a></li>
+        <li><a href="#stat-bg">Background-corrected mean</a></li>
+        <li><a href="#stat-median">Median intensity</a></li>
+        <li><a href="#stat-minmax">Min and Max intensity</a></li>
+        <li><a href="#stat-ring">Outline ring mean</a></li>
+        <li><a href="#stat-integrated">Integrated</a></li>
+        <li><a href="#stat-perarea">Per area</a></li>
+        <li><a href="#stat-table">Table and CSV-only columns</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-cleanup">Cleanup tab</a>
+      <ol>
+        <li><a href="#order">The order things happen</a></li>
+        <li><a href="#outliers">Outliers (MADs, win)</a></li>
+        <li><a href="#bridge">Bridge gaps</a></li>
+        <li><a href="#smooth">Smoothing</a></li>
+        <li><a href="#normalize">Normalize</a></li>
+        <li><a href="#subfirst">Subtract first</a></li>
+        <li><a href="#bkgref">Bkg Ref</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-fit">Fit tab and views</a>
+      <ol>
+        <li><a href="#fit-method">Fit method</a></li>
+        <li><a href="#r2">R² (goodness of fit)</a></li>
+        <li><a href="#custom">Custom equations and presets</a></li>
+        <li><a href="#trim">Trim tail</a></li>
+        <li><a href="#equations">Equations</a></li>
+        <li><a href="#d2">d² max / d² min markers</a></li>
+        <li><a href="#views">View: Intensity, 2nd derivative, Fastest change</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-axes">Axes, styling and export</a>
+      <ol>
+        <li><a href="#axes">Auto / Min / Max / Log</a></li>
+        <li><a href="#xaxis">X axis: time or temperature</a></li>
+        <li><a href="#heater">Heater logs, Sensor, Window</a></li>
+        <li><a href="#style">Per-ROI styling and visibility</a></li>
+        <li><a href="#export">Export, Calculate, Reset</a></li>
+      </ol>
+    </li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero" id="start">
+  <h1>ROI analysis: what every term means</h1>
+  <p>This guide explains, in plain language, every setting and every number in MicroDrop's
+  image analysis: the Image Viewer pane and the ROI Intensities pane.</p>
+  <p>You do not need any image-processing background. Each item says <strong>what it is</strong>,
+  <strong>when you would use it</strong>, <strong>what changing it does</strong>, and the
+  <strong>value MicroDrop starts with</strong>. The small pictures are live: drag the sliders.</p>
+</header>
+
+<!-- ============================================================ -->
+<section class="part" aria-labelledby="pipeline-h">
+<article class="term" id="pipeline">
+  <h3 id="pipeline-h">How a number is made</h3>
+  <p>Every point on the plot is one number, for one region, in one image. It is made in a fixed order.
+  The first three steps change the picture itself, so they change what is measured.
+  Everything after the measurement only changes how the numbers are shown or compared.</p>
+  <figure class="demo pipeline" aria-label="Analysis pipeline diagram">
+    <svg viewBox="0 0 640 170" role="img">
+      <title>The analysis pipeline, step by step</title>
+      <g font-size="12">
+        <g transform="translate(10,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Image</text>
+          <text x="48" y="46" text-anchor="middle">from camera</text>
+        </g>
+        <g transform="translate(118,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Perspective</text>
+          <text x="48" y="46" text-anchor="middle">straighten (opt.)</text>
+        </g>
+        <g transform="translate(226,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--ball)"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Rolling ball</text>
+          <text x="48" y="46" text-anchor="middle">flatten (opt.)</text>
+        </g>
+        <g transform="translate(334,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--roi)"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Measure</text>
+          <text x="48" y="46" text-anchor="middle">ROI + ring</text>
+        </g>
+        <g transform="translate(442,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Cleanup</text>
+          <text x="48" y="46" text-anchor="middle">outliers, shifts</text>
+        </g>
+        <g transform="translate(550,30)">
+          <rect width="80" height="64" rx="8" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="40" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Plot + fit</text>
+          <text x="40" y="46" text-anchor="middle">curves</text>
+        </g>
+        <line x1="10" y1="118" x2="430" y2="118" stroke="var(--ball)" stroke-width="2"/>
+        <text x="220" y="136" text-anchor="middle">changes the measured pixels (stored with the results)</text>
+        <line x1="442" y1="118" x2="630" y2="118" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="536" y="136" text-anchor="middle">changes the display only</text>
+        <circle class="flow-dot" cx="20" cy="18" r="5"/>
+        <circle class="flow-dot d2" cx="20" cy="18" r="5"/>
+        <circle class="flow-dot d3" cx="20" cy="18" r="5"/>
+      </g>
+    </svg>
+    <figcaption>Left of the measurement, settings change the actual numbers, so MicroDrop recalculates when you change
+    them. Right of it, your stored measurements are never touched: you can switch cleanup options on and off freely.</figcaption>
+  </figure>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-regions">
+<h2>Regions and images</h2>
+<p class="intro">Before anything can be measured you mark where to look, and decide which images count.</p>
+
+<article class="term" id="roi">
+  <h3>ROI (region of interest) and its shapes <span class="where">Image Viewer, right-hand toolbar</span></h3>
+  <p>An ROI is an outline you draw on the image around something you want to measure, usually a droplet.
+  MicroDrop reads the brightness of every pixel inside the outline, in every image of the series.</p>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>A shape: <strong>ellipse</strong> (circle or oval), <strong>box</strong> (rectangle, corners can be rounded),
+    <strong>capsule</strong> (a pill shape, good for stretched droplets), or <strong>contour</strong>
+    (any outline you click point by point).</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>Pick the shape that hugs your droplet best. A tight fit matters: pixels of dark background inside the
+    outline pull the average down.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>Moving, resizing or reshaping an ROI changes which pixels are measured, so its numbers are recalculated.
+    Each draw tool stays armed so you can draw several in a row; press <kbd>Esc</kbd> to put it away.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>Slightly smaller than the droplet, so the edge (where the droplet fades into the background) is not included.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="drift">
+  <h3>Moving an ROI on a later image (drift override) <span class="where">Edit mode</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>Droplets can creep across the chip during an experiment. If you edit an ROI while looking at a later image,
+    MicroDrop does not move it everywhere. It records a change that applies <em>from that image onward</em>.
+    Earlier images keep the old position.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>When a droplet has moved partly out of its outline. Step to the first image where it has moved and drag the ROI back onto it.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>Only the images from that point on are re-measured. <span class="ui">Reset</span> can also clear these overrides.
+    The AI <span class="ui">Track</span> button creates them automatically.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>None until you need one.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="ai">
+  <h3>AI detection options <span class="where">AI Detection box (when AI support is installed)</span></h3>
+  <p>The AI tools find droplets for you. <span class="ui">Pick</span> outlines the droplet you click,
+  <span class="ui">Detect all</span> searches the whole image, and <span class="ui">Track</span> follows your ROIs through later images.
+  What it finds appears as dashed <em>candidates</em>: click one to discard it, then press Accept.</p>
+  <dl class="facts">
+    <dt>Significance</dt>
+    <dd><p>Detect all asks the AI at many points in a grid. Significance is how many of those points must independently
+    find the same droplet. Clear droplets usually score 2 to 4; a one-off speck scores 1.
+    Raise it to hide noise, lower it to see faint droplets. Nothing is deleted: sliding it back brings candidates back.
+    <strong>Starts at 2.</strong> Candidates you clicked yourself are never hidden by it.</p></dd>
+    <dt>Min Size / Max Size</dt>
+    <dd><p>Hide candidates smaller or larger than this average diameter, in pixels.
+    Use them to throw away dust (too small) or whole electrodes (too big). <strong>Start at 0 and 500 px.</strong></p></dd>
+    <dt>Output Shape</dt>
+    <dd><p>What an accepted candidate becomes: the traced <em>polygon</em> outline (follows the droplet exactly) or a fitted
+    <em>ellipse</em> (smoother, easier to edit). <strong>Starts as polygon.</strong></p></dd>
+    <dt>Drift Interval</dt>
+    <dd><p>While tracking, re-find the droplets every Nth image (the last image is always checked); images in between
+    keep the last position. A larger number tracks faster but follows quick movement less closely.
+    <strong>Starts at 3.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="exclude">
+  <h3>Excluding images <span class="where">Analysis Exclusion box</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>A mark that tells the analysis to skip an image: it is left out of the calculation, the plot, the CSV and drift tracking.
+    You can still view it and draw on it. <span class="ui">Before</span>/<span class="ui">After</span> buttons mark or unmark every image on one side of the one shown.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>A frame that is blurred, over-exposed, or was taken while something was being adjusted.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>An excluded image simply disappears from the series. It does not leave a gap in the line. The mark is saved with the experiment.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>Nothing excluded.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="scale">
+  <h3>Image scale (calibration) <span class="where">Ruler button</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>Tells MicroDrop how big a pixel is in real life. Drag a line over something whose length you know
+    (for example an electrode of known width), then type that length and unit.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>When you want areas in mm² or µm² instead of pixels, or a scale bar on the image.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>It does not change which pixels are measured. It changes the <a href="#stat-table">Area</a> column and the
+    <a href="#stat-perarea">Per area</a> values, which are expressed in your unit instead of px².</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>Not calibrated: sizes are reported in pixels (px²).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="contrast">
+  <h3>Contrast (Auto contrast, Min, Max) <span class="where">Contrast box</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>How the image is <em>displayed</em>: which brightness shows as black and which as white.
+    Camera images often hold far more brightness levels than a screen can show, and look almost black without this.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>To see faint droplets more clearly, or to compare images with the same display settings.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p><strong>Display only.</strong> It never changes a measured number.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>Auto contrast on: the darkest 0.1% of pixels show as black and the brightest 0.1% as white.</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-measure">
+<h2>Measurement settings</h2>
+<p class="intro">These live in the <span class="ui">Measurement</span> box under the image. They change what is measured,
+so changing one makes MicroDrop recalculate. The settings used are written into every row of the CSV export.</p>
+
+<article class="term" id="ring">
+  <h3>Background ring (Ring Gap, Ring Width) <span class="where">Measurement box; crop button shows it</span></h3>
+  <p>A droplet's brightness is partly the droplet and partly the chip, light leaking around, and camera offset.
+  To tell them apart, MicroDrop measures a thin ring of chip <em>just outside</em> each ROI. The ring tells you how
+  bright "nothing" is right next to that droplet.</p>
+  <figure class="demo" aria-label="Interactive background ring diagram">
+    <div class="controls">
+      <label>Ring Gap <input type="range" id="ring-gap" min="0" max="15" value="2"><output id="ring-gap-o">2 px</output></label>
+      <label>Ring Width <input type="range" id="ring-width" min="1" max="20" value="4"><output id="ring-width-o">4 px</output></label>
+    </div>
+    <svg id="ring-svg" viewBox="0 0 600 260" role="img">
+      <title>A droplet, its glow, and the background ring around it</title>
+      <defs>
+        <radialGradient id="drop-grad">
+          <stop offset="0%" stop-color="var(--glow)" stop-opacity="0.95"/>
+          <stop offset="88%" stop-color="var(--glow)" stop-opacity="0.85"/>
+          <stop offset="100%" stop-color="var(--glow)" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="chip-grad" x1="0" x2="1">
+          <stop offset="0" stop-color="#20262c"/>
+          <stop offset="1" stop-color="#363e46"/>
+        </linearGradient>
+        <mask id="ring-mask">
+          <rect width="600" height="260" fill="white"/>
+          <circle id="neighbour-cut" cx="470" cy="130" r="54" fill="black"/>
+        </mask>
+      </defs>
+      <rect width="600" height="260" fill="url(#chip-grad)" rx="6"/>
+      <circle cx="260" cy="130" r="61" fill="url(#drop-grad)"/>
+      <circle cx="470" cy="130" r="61" fill="url(#drop-grad)" opacity=".8"/>
+      <path id="ring-path" fill="var(--ring)" fill-opacity=".45" stroke="var(--ring)" stroke-width="1.5" fill-rule="evenodd" mask="url(#ring-mask)"/>
+      <circle cx="260" cy="130" r="54" fill="none" stroke="var(--roi)" stroke-width="2.5"/>
+      <circle cx="470" cy="130" r="54" fill="none" stroke="var(--roi)" stroke-width="2.5" stroke-dasharray="6 4"/>
+      <text x="260" y="134" text-anchor="middle" style="fill:#0b2a14;font-weight:700">ROI 1</text>
+      <text x="470" y="134" text-anchor="middle" style="fill:#0b2a14;font-weight:700">ROI 2</text>
+      <text x="14" y="22" style="fill:#cfd8de">chip (dark)</text>
+      <text x="14" y="248" style="fill:#cfd8de">1 px = 3 drawing units</text>
+    </svg>
+    <div class="status" id="ring-status" aria-live="polite"></div>
+    <figcaption>Blue line: the ROI. Amber: its background ring. The green fades out a pixel or two past the edge:
+    that glow is the droplet, not background. Where the ring would run into another ROI (right), those pixels are left out.</figcaption>
+  </figure>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>A band (in maths, an <em>annulus</em>) that follows the ROI's outline at a small distance.
+    <strong>Ring Gap</strong> is the empty space between the ROI edge and the ring. <strong>Ring Width</strong> is how thick the ring is.
+    Both are in pixels. It works for any shape, not just circles.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>Whenever you plot a <a href="#stat-bg">background-corrected</a> value. It is especially useful when the light is uneven
+    across the chip, because each droplet gets its <em>own</em> local background instead of one value for the whole picture.</p></dd>
+    <dt>What changing it does</dt>
+    <dd>
+      <p><strong>Gap too small:</strong> the ring catches the droplet's glow, so "background" reads too bright and the corrected value too low.</p>
+      <p><strong>Gap too large:</strong> the ring drifts away from the droplet and may reach a different-looking part of the chip.</p>
+      <p><strong>Width too thin:</strong> few pixels, so the background value is noisy. <strong>Too wide:</strong> it reaches further away and into neighbours (other ROIs are always cut out of it).</p>
+      <p>Changing either value recalculates every number.</p>
+    </dd>
+    <dt>Typical value</dt>
+    <dd><p><strong>Gap 2 px, Width 4 px</strong> (Gap can be 0 to 50, Width 1 to 50).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="ball">
+  <h3>Rolling-ball background correction (Ball Radius) <span class="where">Measurement box; tonality button turns it on</span></h3>
+  <p>Microscope and camera light is rarely even: often the middle of the picture is brighter than the corners.
+  A droplet in the bright middle would then look brighter than an identical one in a corner.
+  The rolling ball removes that slow, gentle unevenness from the <em>whole image</em> before anything is measured.</p>
+  <figure class="demo" aria-label="Interactive rolling ball demonstration">
+    <div class="controls">
+      <label>Ball Radius <input type="range" id="ball-r" min="5" max="200" value="50"><output id="ball-r-o">50 px</output></label>
+      <label>Position <input type="range" id="ball-x" min="0" max="599" value="300"></label>
+      <button type="button" id="ball-play">Play</button>
+    </div>
+    <svg id="ball-svg" viewBox="0 0 600 330" role="img">
+      <title>A brightness profile across the image, the ball pushed up underneath it, and the result after subtraction</title>
+    </svg>
+    <div class="status" id="ball-status" aria-live="polite"></div>
+    <figcaption>Top: brightness along one line across the image. Five droplets sit on a hump of uneven light.
+    The violet bar is the "ball", pushed up from underneath as far as it fits. Dashed violet: the background it traces.
+    Bottom: what is left after subtracting it.</figcaption>
+  </figure>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd>
+      <p>Picture the brightness of the image as a landscape: bright places are hills. Droplets are narrow, steep hills;
+      uneven lighting is a broad, gentle rise underneath them.</p>
+      <p>Now push a ball up into that landscape from below, everywhere. Where the ball is too wide to fit into a narrow droplet-hill,
+      it stops at the hill's foot. The surface the top of the ball reaches is the <strong>background</strong>.
+      MicroDrop subtracts it, which leaves the droplets standing on a flat floor.</p>
+      <p>(The name comes from the classic ImageJ tool. In MicroDrop the "ball" is really a flat disk, like a coin pushed up from
+      underneath, which is why the demo draws a flat bar. The idea is identical.)</p>
+    </dd>
+    <dt>When to use it</dt>
+    <dd><p>When droplets in different parts of the picture should be comparable, but the illumination is brighter in some places.
+    While it is on, the image you see is the corrected one, so what you see is what is measured.
+    The <span class="ui">adjust</span> button next to it draws the ball on the image at its real size; drag its grip to choose the radius by eye.</p></dd>
+    <dt>What changing it does</dt>
+    <dd>
+      <p><strong>Radius too small</strong> (smaller than your droplets): the ball climbs <em>into</em> the droplets and counts part of
+      them as background. Your signal shrinks or disappears. Try 20 px in the demo.</p>
+      <p><strong>Radius too large:</strong> the ball cannot follow the gentle unevenness either, so some of it stays. Try 180 px.</p>
+      <p><strong>Rule of thumb:</strong> comfortably larger than your biggest droplet's radius, but smaller than the size of the lighting pattern.
+      Every number is recalculated when you change it, and the ring is measured on the corrected image too.</p>
+    </dd>
+    <dt>Typical value</dt>
+    <dd><p><strong>Off</strong> by default. When on, it starts at <strong>50 px</strong> (allowed range 5 to 500 px).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="perspective">
+  <h3>Perspective correction <span class="where">3D-view button defines it; transform button applies it</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>If the camera looks at the chip slightly from an angle, rectangles look like trapezoids.
+    You click four points on the image (for example the chip's corners), then drag them to where they should be.
+    MicroDrop then straightens every image the same way.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>When the chip appears tilted or skewed, so that ROIs drawn on one part of it are distorted.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>When applied, every image is straightened <em>first</em>, before the rolling ball and before measuring.
+    Your ROIs are drawn on, and measured on, the straightened image. Turning it on or off recalculates everything.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p>Not defined. Once defined, you can switch it on and off.</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-stats">
+<h2>What you can plot (the Y axis)</h2>
+<p class="intro">The <span class="ui">Plot</span> list above the chart chooses which number is drawn for each ROI.
+"Intensity" is how bright a pixel is, as a count from the camera. A brighter fluorescent droplet gives bigger counts.</p>
+
+<figure class="demo" aria-label="Interactive comparison of size-aware statistics">
+  <div class="controls">
+    <label>Droplet radius <input type="range" id="size-r" min="5" max="40" value="15"><output id="size-r-o">15 px</output></label>
+    <label><input type="checkbox" id="size-cal" checked> Calibrated (1 px = 2 µm)</label>
+  </div>
+  <svg id="size-svg" viewBox="0 0 600 120" role="img"><title>A droplet whose size you can change</title></svg>
+  <table class="small" aria-live="polite">
+    <thead><tr><th>Stat</th><th style="text-align:right">Value</th><th>Changes with size?</th></tr></thead>
+    <tbody id="size-table"></tbody>
+  </table>
+  <figcaption>Same droplet brightness (1200 counts per pixel inside, 200 in the ring), different size.
+  Watch which numbers follow the size and which do not.</figcaption>
+</figure>
+
+<article class="term" id="stat-mean">
+  <h3>Mean intensity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The average brightness of all pixels inside the ROI.</p></dd>
+    <dt>When to use it</dt><dd><p>The everyday choice: "how bright is this droplet?" It does not depend on how big you drew the ROI, as long as it sits inside the droplet.</p></dd>
+    <dt>How to read it</dt><dd><p>Includes the background glow of the chip underneath, so two droplets on differently lit parts of the chip are not directly comparable. For that, use the background-corrected mean.</p></dd>
+    <dt>Typical value</dt><dd><p>This is the default plot.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-bg">
+  <h3>Background-corrected mean</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The mean inside the ROI <strong>minus</strong> the mean of its <a href="#ring">background ring</a>.
+    In words: how much brighter the droplet is than the chip right next to it.</p></dd>
+    <dt>When to use it</dt><dd><p>The standard fluorescence measurement. Use it when the background varies across the chip or changes over time.</p></dd>
+    <dt>How to read it</dt><dd><p>Zero means "no brighter than its surroundings". It can go slightly negative for an empty spot. It depends on the ring's Gap and Width.</p></dd>
+    <dt>Typical value</dt><dd><p>Ring Gap 2 px, Width 4 px.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-median">
+  <h3>Median intensity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Line all the ROI's pixels up from darkest to brightest and take the one in the middle.</p></dd>
+    <dt>When to use it</dt><dd><p>When a few pixels are wildly off (a dust speck, a hot pixel, a reflection). The median ignores them; the mean does not.</p></dd>
+    <dt>How to read it</dt><dd><p>Close to the mean for an evenly lit droplet. If the two differ a lot, something in the ROI is uneven.</p></dd>
+    <dt>Typical value</dt><dd><p>Not background-corrected.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-minmax">
+  <h3>Min intensity and Max intensity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The darkest and the brightest single pixel inside the ROI.</p></dd>
+    <dt>When to use it</dt><dd><p>Checking problems rather than measuring. <strong>Max</strong> tells you whether the camera is saturated: if it sits at the camera's top value (for example 65535 on a 16-bit camera), the droplet is too bright to measure correctly. <strong>Min</strong> shows whether your ROI reaches into dark background.</p></dd>
+    <dt>How to read it</dt><dd><p>Single pixels are noisy, so these lines jump around more than the mean.</p></dd>
+    <dt>Typical value</dt><dd><p>Not background-corrected.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-ring">
+  <h3>Outline ring mean</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The average brightness of the <a href="#ring">background ring</a> alone: the "nothing" level next to the droplet.</p></dd>
+    <dt>When to use it</dt><dd><p>To check the background itself. If it rises over time (for example, the chip starts to glow when it heats), you know the background correction is doing real work.</p></dd>
+    <dt>How to read it</dt><dd><p>It should be flat and low. If it follows the droplet's curve, the ring is probably catching the droplet's glow: increase Ring Gap.</p></dd>
+    <dt>Typical value</dt><dd><p>Measured with Gap 2 px, Width 4 px.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-integrated">
+  <h3>Integrated and Integrated (bg-corrected)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The <strong>total</strong> light in the ROI: the mean multiplied by the number of pixels.
+    The bg-corrected version uses the background-corrected mean, so it is the total light <em>above</em> background.</p></dd>
+    <dt>When to use it</dt><dd><p>When the droplet's <em>amount</em> of fluorescent material matters, not its brightness. A droplet that spreads out gets dimmer, but its total stays the same.</p></dd>
+    <dt>How to read it</dt><dd><p>It grows with the ROI's size. Two ROIs of different sizes on the same droplet give different totals, so draw ROIs that cover the whole droplet when you use it. Units are counts × pixels, so the numbers are large.</p></dd>
+    <dt>Typical value</dt><dd><p>Pick it from the Plot list.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-perarea">
+  <h3>Per area and Per area (bg-corrected)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Brightness per unit of real area: the mean divided by the area of one pixel. With a calibrated <a href="#scale">image scale</a> it reads "counts per mm²" (or µm²); without one, "per px²", which is the same as the mean.</p></dd>
+    <dt>When to use it</dt><dd><p>To compare experiments taken at different magnifications or with different cameras, where one pixel covers a different area of chip.</p></dd>
+    <dt>How to read it</dt><dd><p>Within one experiment its curve has exactly the same shape as the mean (it is the mean times a fixed number). It does not depend on how big the ROI is.</p></dd>
+    <dt>Typical value</dt><dd><p>Only meaningful once the image scale is set.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-table">
+  <h3>Table and CSV-only columns (Count, Area, std, outline_*)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd>
+      <p><strong>Count</strong>: how many pixels are inside the ROI. <strong>Area</strong>: count × the area of one pixel, in your calibrated unit (px² if not calibrated).</p>
+      <p>The CSV export also has <strong>std</strong> (standard deviation: how much the pixels vary around their mean) and the same stats for the ring, prefixed <code>outline_</code>.</p>
+    </dd>
+    <dt>When to use it</dt><dd><p>Count and Area confirm the ROI size; std tells you how even the droplet is. The table under the plot shows these for the image currently displayed.</p></dd>
+    <dt>How to read it</dt><dd><p>The CSV is one row per image per ROI. It also records the outlier flag and the ring, ball and perspective settings used, so a file always says how it was made.</p></dd>
+    <dt>Typical value</dt><dd><p>Not plotted.</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-cleanup">
+<h2>Cleanup tab</h2>
+<p class="intro">These options tidy the curves. None of them changes your stored measurements; switch them on and off freely.</p>
+
+<article class="term" id="order">
+  <h3>The order things happen</h3>
+  <p>When several options are on, they are applied in this order, so each one sees what it should:</p>
+  <ol>
+    <li><strong>Outliers</strong> are removed first, so one bad point cannot spoil the steps after it.</li>
+    <li><strong>Bkg Ref</strong> subtraction.</li>
+    <li>Hidden ROIs (eye off) are dropped from the figure.</li>
+    <li><strong>Subtract first</strong>.</li>
+    <li><strong>Normalize</strong>.</li>
+  </ol>
+  <p>Fits use the result of these steps. <strong>Smoothing</strong> and <strong>Bridge gaps</strong> are applied only to the drawn line, after fitting.</p>
+</article>
+
+<article class="term" id="outliers">
+  <h3>Outliers (MADs, win)</h3>
+  <figure class="demo" aria-label="Interactive outlier test">
+    <div class="controls">
+      <label>MADs <input type="range" id="out-t" min="1" max="10" step="0.5" value="3"><output id="out-t-o">3</output></label>
+      <label>win <input type="range" id="out-w" min="3" max="15" step="2" value="5"><output id="out-w-o">5</output></label>
+    </div>
+    <svg id="out-svg" viewBox="0 0 600 220" role="img"><title>A measured series with a few spikes; dropped points are marked</title></svg>
+    <div class="status" id="out-status" aria-live="polite"></div>
+    <figcaption>Red circles are points the test would drop. Try win 3: the pair of spikes side by side on the right
+    then "vouch for each other" and survive, because each one's neighbourhood is mostly the other. Try MADs 1: real scatter starts being dropped too.</figcaption>
+  </figure>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>An automatic check for single bad points, such as a frame where a bubble passed or the light flickered.
+    For each point it looks at its neighbours, finds their <strong>median</strong> (the middle value), and how spread out they normally are
+    (the <strong>MAD</strong>, median absolute deviation). A point much further from the median than usual is dropped.</p>
+    <p>Because it uses medians rather than averages, the spike cannot raise the very bar it is measured against.
+    (Its formal name is the Hampel test.)</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>When a few isolated points jump away from an otherwise smooth curve and spoil a fit.</p></dd>
+    <dt>What changing it does</dt>
+    <dd>
+      <p><strong>MADs</strong>: how far is "too far". 3 means roughly "three times the normal scatter", like "3 sigma".
+      Lower drops more points (risking real data); higher drops only extreme ones.</p>
+      <p><strong>win</strong>: how many points, in total, each point is judged against (5 = the point and two on each side).
+      Wider catches clusters of bad points, but if it spans a real, fast change it may start calling real data outliers.</p>
+      <p>Dropped points become gaps. The plot counts them ("N points dropped as outliers"), the CSV marks them in its
+      <code>outlier</code> column, and fits ignore them.</p>
+    </dd>
+    <dt>Typical value</dt>
+    <dd><p><strong>Off.</strong> When on: <strong>MADs 3</strong> (1 to 20) and <strong>win 5</strong> (3 to 51).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="bridge">
+  <h3>Bridge gaps</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Where a point is missing (an image not calculated yet, or a dropped outlier), the line normally breaks. With Bridge gaps on, it is drawn straight across instead.</p></dd>
+    <dt>When to use it</dt><dd><p>For a cleaner-looking figure. Turn it off when you want to see exactly where data is missing.</p></dd>
+    <dt>What changing it does</dt><dd><p><strong>Display only.</strong> The fits and the CSV keep the gaps; no invented values are stored.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>On.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="smooth">
+  <h3>Smoothing (Savitzky-Golay, Butterworth)</h3>
+  <figure class="demo" aria-label="Interactive smoothing demonstration">
+    <div class="controls">
+      <label>win <input type="range" id="sg-w" min="3" max="31" step="2" value="7"><output id="sg-w-o">7</output></label>
+      <label>order <input type="range" id="sg-o" min="1" max="4" value="2"><output id="sg-o-o">2</output></label>
+    </div>
+    <svg id="sg-svg" viewBox="0 0 600 220" role="img"><title>A noisy series and its Savitzky-Golay smoothed line</title></svg>
+    <figcaption>Grey dots: measured points. Line: Savitzky-Golay smoothing. A big window with a low order flattens the corners of the rise; a high order follows the noise again.</figcaption>
+  </figure>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd>
+      <p>Draws a calmer line through noisy points. Two methods:</p>
+      <p><strong>Savitzky-Golay</strong>: for each point, fit a small curve through it and its neighbours and use that curve's value.
+      <em>win</em> is how many points each little curve uses (always odd); <em>order</em> is how bendy the little curve may be (1 = straight line, 2 = simple arc).</p>
+      <p><strong>Butterworth</strong>: a classic "low-pass" filter that keeps slow changes and removes fast jitter.
+      <em>order</em> is how sharply it separates the two; <em>cutoff</em> sets where "slow" ends, as a fraction of the fastest change the points can show
+      (0.2 keeps only changes slower than about a fifth of that). It runs forwards and backwards, so peaks do not shift in time.</p>
+    </dd>
+    <dt>When to use it</dt>
+    <dd><p>For a readable figure when points are noisy. Savitzky-Golay keeps peaks and steps sharper; Butterworth gives a very smooth line.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p><strong>Display only.</strong> Fits always use the unsmoothed points: smoothing makes neighbouring points depend on each other,
+    which would make a fit look better (higher R²) than it really is. Gaps stay gaps. Smoothing works on point spacing, not seconds.</p></dd>
+    <dt>Typical value</dt>
+    <dd><p><strong>No smoothing.</strong> Savitzky-Golay starts at <strong>win 7, order 2</strong> (win 3 to 101, order 1 to 6).
+    Butterworth starts at <strong>order 2, cutoff 0.2</strong> (order 1 to 8, cutoff 0.01 to 0.99).</p></dd>
+  </dl>
+</article>
+
+<figure class="demo" id="transform-demo" aria-label="Interactive Normalize, Subtract first and Bkg Ref demonstration">
+  <div class="controls">
+    <label><input type="checkbox" id="tf-ref"> Bkg Ref</label>
+    <label><input type="checkbox" id="tf-first"> Subtract first</label>
+    <label><input type="checkbox" id="tf-norm"> Normalize</label>
+  </div>
+  <svg id="tf-svg" viewBox="0 0 600 240" role="img"><title>Two droplets and a background reference, with the selected corrections applied</title></svg>
+  <div class="status" id="tf-label"></div>
+  <figcaption>Blue: a bright droplet. Orange: a dim one that reacts later. Grey dashed: an empty patch of chip ticked as a background reference;
+  its slow rise (the chip warming up) is in every curve. Tick the boxes in any combination; they are applied in the order shown.</figcaption>
+</figure>
+
+<article class="term" id="normalize">
+  <h3>Normalize</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Stretches each ROI's curve so its own lowest point is 0% and its highest is 100%.</p></dd>
+    <dt>When to use it</dt><dd><p>To compare the <em>shape and timing</em> of curves whose brightness differs a lot: "which droplet reacted first?"</p></dd>
+    <dt>What changing it does</dt><dd><p>The actual brightness is lost from the figure, and the Y axis reads "% of range". A flat curve sits at 0%. Fits run on the normalised values.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Off.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="subfirst">
+  <h3>Subtract first</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Takes each curve's first value away from all its values, so every curve starts at zero.</p></dd>
+    <dt>When to use it</dt><dd><p>When you care about the <em>change</em> from the start, not the starting level. Droplets that started at different brightness can then be compared directly.</p></dd>
+    <dt>What changing it does</dt><dd><p>Shifts each curve up or down; its shape is unchanged. The Y axis says "(change from first)". If the first point is missing, the first available one is used.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Off.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="bkgref">
+  <h3>Bkg Ref (background reference)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>You draw an ROI over a patch of chip with no sample in it and tick <span class="ui">Bkg Ref</span> for it in the table.
+    With the Bkg Ref option on, that patch's value is subtracted from every ROI, image by image. If you tick several, their average is used.</p></dd>
+    <dt>When to use it</dt><dd><p>When the background changes over time for the whole chip at once: lamp drift, the chip glowing as it heats, camera warming up.
+    The <a href="#ring">ring</a> corrects each droplet locally; Bkg Ref corrects for what the whole image does over time. They can be used together.</p></dd>
+    <dt>What changing it does</dt><dd><p>The Y axis says "(bkg-ref corrected)". It still works if you hide the reference ROI with its eye. If no ROI is ticked, nothing is subtracted.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Off</strong>, and no ROI ticked.</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-fit">
+<h2>Fit tab and views</h2>
+<p class="intro">A fit draws the best-matching smooth equation through each ROI's points, so you can read off numbers such as the
+midpoint of a melt curve or the speed of a decay.</p>
+
+<figure class="demo" aria-label="Interactive fit, second derivative and fastest change demonstration">
+  <div class="controls">
+    <label><input type="checkbox" id="fit-max" checked> d² max</label>
+    <label><input type="checkbox" id="fit-min" checked> d² min</label>
+    <label><input type="checkbox" id="fit-v" checked> V-line</label>
+    <label><input type="checkbox" id="fit-h"> H-line</label>
+    <label><input type="checkbox" id="fit-c" checked> Coords</label>
+    <label><input type="checkbox" id="fit-fast"> Fastest change</label>
+    <label><input type="checkbox" id="fit-trim"> Trim tail</label>
+  </div>
+  <svg id="fit-svg" viewBox="0 0 600 340" role="img"><title>A sigmoid fit with its curvature markers, and its second derivative below</title></svg>
+  <figcaption>Top: points and a sigmoid fit (dashed). The markers show where the curve bends most. Bottom: the second derivative,
+  which is what the "2nd derivative" view draws. Tick Trim tail to add a fading tail to the data and see the trim at work (illustration).</figcaption>
+</figure>
+
+<article class="term" id="fit-method">
+  <h3>Fit method <span class="where">Fit tab, Method</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd>
+      <p>The shape of equation to fit:</p>
+      <table class="small">
+        <tr><th>Method</th><th>Shape</th><th>Good for</th></tr>
+        <tr><td>Linear</td><td>straight line</td><td>steady rise or fall</td></tr>
+        <tr><td>Quadratic, Cubic</td><td>gentle curves (one or two bends)</td><td>general trends; no physical meaning</td></tr>
+        <tr><td>Exponential</td><td>amplitude·e<sup>rate·x</sup> + offset</td><td>bleaching, decay, early growth</td></tr>
+        <tr><td>Sigmoid</td><td>S-shape from an <em>initial</em> level to a <em>final</em> level, centred on a <em>midpoint</em>, as steep as its <em>rate</em></td><td>melt curves, switching, amplification</td></tr>
+        <tr><td>Custom / your presets</td><td>any equation you type</td><td>see <a href="#custom">Custom equations</a></td></tr>
+      </table>
+    </dd>
+    <dt>When to use it</dt><dd><p>Pick the shape your process should have. For a DNA melt, the sigmoid's <em>midpoint</em> is the melting temperature (with the X axis set to temperature).</p></dd>
+    <dt>What changing it does</dt><dd><p>Each ROI gets its own fit, drawn dashed in its colour. The fit uses the cleaned-up points (after outliers, Bkg Ref, Subtract first and Normalize) but never the smoothed line.
+    Each method needs a minimum number of points (2 for linear up to 5 for sigmoid); with fewer, no curve is drawn.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>No fit.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="r2">
+  <h3>R² (goodness of fit)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>A score of how well the fitted curve passes through the points. 1 means perfectly; 0 means no better than a flat line at the average.</p></dd>
+    <dt>When to use it</dt><dd><p>Shown in the fitted-equations table. Use it to judge whether you can trust the fitted numbers.</p></dd>
+    <dt>How to read it</dt><dd><p>Above about 0.99 is very good for a clean fluorescence curve. A low R² means the shape is wrong for the data, or something (like a fading tail) is disturbing it.</p></dd>
+    <dt>Typical value</dt><dd><p>Trim tail aims for 0.99.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="custom">
+  <h3>Custom equations, presets and start values <span class="where">function button opens the equations window</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>In the equations window you can type your own equation in <code>x</code>, for example <code>a + b*exp(-c*x)</code>.
+    Every other name (<code>a</code>, <code>b</code>, <code>c</code>) is a number MicroDrop finds for you. The table lists every ROI's fitted numbers and R².
+    You can save an equation as a <strong>preset</strong> so it appears in the Fit list for all experiments.</p></dd>
+    <dt>When to use it</dt><dd><p>When none of the built-in shapes describes your process.</p></dd>
+    <dt>What changing it does</dt><dd><p><strong>Start values</strong> give the solver a starting guess for each number. Leave them empty and it tries several guesses itself.
+    If your guesses lead nowhere, it falls back to its own and says so. "Seed from fit" copies the last answer in as the new guesses.</p></dd>
+    <dt>Typical value</dt><dd><p>Empty start values (automatic).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="trim">
+  <h3>Trim tail</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>If the fit is poor (R² below 0.99), MicroDrop tries again on a shorter series, dropping points from the end
+    (about 10% at a time, keeping at least 10 points), until a fit reaches 0.99. The dropped end is shaded grey.</p></dd>
+    <dt>When to use it</dt><dd><p>When the end of the experiment no longer follows the model, for example the dye bleaches after the curve has levelled off. That fading tail can drag a sigmoid's midpoint to the wrong place.</p></dd>
+    <dt>What changing it does</dt><dd><p>The fitted equation then describes only the unshaded part; the equation text says "fit to t ≤ …". If no shorter slice reaches 0.99, the full fit is kept.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Off.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="equations">
+  <h3>Equations</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Writes each ROI's fitted equation, with its numbers filled in, into the corner of the figure.</p></dd>
+    <dt>When to use it</dt><dd><p>For a saved figure that should carry its fit results.</p></dd>
+    <dt>What changing it does</dt><dd><p>Display only. The equations table (function button) shows the same numbers in a grid.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Off.</strong> Available once a fit method is chosen.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="d2">
+  <h3>d² max, d² min, and V-line / H-line / Coords <span class="where">Fit tab, Advanced metrics</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd>
+      <p>The <strong>first derivative</strong> is how fast the curve is changing. The <strong>second derivative (d²)</strong> is how fast <em>that</em> speed is changing: it shows where the curve <em>bends</em>.</p>
+      <p><strong>d² max</strong> marks where the curve bends upward most: on a rising S-curve, where it <em>takes off</em>.
+      <strong>d² min</strong> marks where it bends downward most: where it <em>starts to level off</em>. Both are taken from the fitted curve, not the raw points.</p>
+    </dd>
+    <dt>When to use it</dt><dd><p>To define "onset" and "end" of a reaction objectively, for example the start of melting, or a threshold time in amplification.</p></dd>
+    <dt>What changing it does</dt><dd><p><strong>V-line</strong> drops a vertical line through each marker (read the time or temperature off the X axis), <strong>H-line</strong> runs a horizontal one (read the value), and <strong>Coords</strong> writes the (x, y) numbers next to it.
+    Straight lines and quadratics have no single bend point, so nothing is marked for them.</p></dd>
+    <dt>Typical value</dt><dd><p>Markers <strong>off</strong>. When on: V-line <strong>on</strong>, H-line <strong>off</strong>, Coords <strong>on</strong>.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="views">
+  <h3>View: Intensity, 2nd derivative, Fastest change <span class="where">View list above the chart</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd>
+      <p><strong>Intensity</strong>: the normal chart of your chosen stat.</p>
+      <p><strong>2nd derivative</strong>: draws each fit's d² curve (the lower panel in the demo above). Peaks and troughs are the d² max and min.</p>
+      <p><strong>Fastest change</strong>: one bar per ROI showing <em>when</em> its fitted curve changed fastest. For a sigmoid that is its midpoint.</p>
+    </dd>
+    <dt>When to use it</dt><dd><p>Fastest change is a quick way to compare timing across many droplets: "which reacted first, and by how much?"</p></dd>
+    <dt>What changing it does</dt><dd><p>The two extra views need a fit method; without one they show a hint instead. A straight-line fit changes at a constant speed, so it has no "fastest" moment and no bar.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Intensity.</strong></p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-axes">
+<h2>Axes, styling and export</h2>
+
+<article class="term" id="axes">
+  <h3>Auto / Min / Max / Log <span class="where">Axes tab</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>One row per axis. <strong>Auto</strong> fits the axis to the data. Untick it to type your own <strong>Min</strong> and <strong>Max</strong>.
+    <strong>Log</strong> spaces the axis by multiples (1, 10, 100…) instead of equal steps.</p></dd>
+    <dt>When to use it</dt><dd><p>Fixed limits make several saved figures directly comparable. A log axis helps when values span a huge range, or to check whether a decay is exponential (it becomes a straight line on a log Y axis).</p></dd>
+    <dt>What changing it does</dt><dd><p>Display only; data and fits are unchanged. Zero and negative values cannot be drawn on a log axis; they are counted in a note on the figure. You can also scroll to zoom and drag to pan the chart.</p></dd>
+    <dt>Typical value</dt><dd><p>Auto on, Log off. <strong>Legend</strong> (next to the X axis list) is on.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="xaxis">
+  <h3>X axis: Time or Temperature</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p><strong>Time (s)</strong>: seconds since the first image shown. <strong>Temperature (°C)</strong>: the heater's temperature at the moment each image was taken, read from the heater's log files.</p></dd>
+    <dt>When to use it</dt><dd><p>Temperature for melt curves and anything driven by heating; time for everything else.</p></dd>
+    <dt>What changing it does</dt><dd><p>The fits follow the X axis, so a sigmoid's midpoint comes out in °C instead of seconds. Images the heater log does not cover cannot be placed; the figure counts them ("N frames outside the heater log's coverage").</p></dd>
+    <dt>Typical value</dt><dd><p><strong>Time.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="heater">
+  <h3>Heater logs, Sensor, Window (ms) <span class="where">Axes tab, shown when X axis is Temperature</span></h3>
+  <figure class="demo" aria-label="Interactive heater log time-matching window">
+    <div class="controls">
+      <label>Window <input type="range" id="hw" min="0" max="3000" step="100" value="0"><output id="hw-o">0 ms</output></label>
+    </div>
+    <svg id="hw-svg" viewBox="0 0 600 170" role="img"><title>Heater samples once a second and three image capture times</title></svg>
+    <div class="status" id="hw-status" aria-live="polite"></div>
+    <figcaption>Dots: heater readings (once a second). Blue lines: moments images were taken. The shaded band is the window.
+    At 0 ms the temperature is read off the straight line between the two nearest readings.</figcaption>
+  </figure>
+  <dl class="facts">
+    <dt>Heater logs</dt><dd><p>The folder holding the heater's <code>.jsonl</code> log files. It defaults to the experiment's own <code>heater_logs</code> folder; use the folder button to pick another.
+    Logs and images are matched by the clock time each was recorded.</p></dd>
+    <dt>Sensor</dt><dd><p>Which temperature sensor to use. <strong>mean</strong> (the default) averages all sensors on each reading. Pick a single sensor if it sits nearest your droplets.</p></dd>
+    <dt>Window (ms)</dt><dd><p>How generous the time match is. Each image gets the average of all heater readings within ± half the window of its capture time.
+    <strong>0</strong> (the default) means exact: the temperature is worked out at the precise capture moment from the readings either side.
+    If a window holds no reading at all, that image becomes a gap rather than a guess. Range 0 to 300 000 ms.</p></dd>
+    <dt>When to use it</dt><dd><p>Leave Window at 0 unless the readings are noisy (a window then averages them) or the heater and camera clocks do not line up exactly.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="style">
+  <h3>Per-ROI styling and visibility <span class="where">Table under the plot</span></h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Each row of the table is one ROI. You can rename it, and set its <strong>eye</strong> (shown or hidden), <strong>Alpha</strong> (opacity, 0 to 100%), <strong>Color</strong>, <strong>Line</strong> style, <strong>Marker</strong> shape and marker <strong>Size</strong>. <strong>Bkg Ref</strong> marks it as a <a href="#bkgref">background reference</a>.</p></dd>
+    <dt>When to use it</dt><dd><p>To make a figure readable, or to hide reference ROIs once they have done their job.</p></dd>
+    <dt>What changing it does</dt><dd><p>Display only. A hidden ROI is still measured, listed in the table and exported to the CSV.</p></dd>
+    <dt>Typical value</dt><dd><p>Visible, fully opaque, solid line, no markers, colours assigned in turn.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="export">
+  <h3>Export (DPI, Format), Calculate, Reset and CSV</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd>
+      <p><strong>Calculate</strong> (chart button in the Image Viewer) measures every ROI in every shown image that has not been measured yet.
+      <strong>Reset</strong> throws away the stored measurements (and optionally the drift overrides) so they are recalculated.
+      <strong>Export</strong> writes the CSV to the experiment's <code>analysis</code> folder, calculating first if needed.</p>
+      <p>The save button above the chart saves the figure as an image, at the Export tab's <strong>DPI</strong> (dots per inch: sharpness when printed) and <strong>Format</strong>.</p>
+    </dd>
+    <dt>When to use it</dt><dd><p>PNG for slides and documents, SVG or PDF for figures you will edit or scale, TIFF where a journal asks for it.</p></dd>
+    <dt>What changing it does</dt><dd><p>Higher DPI gives a larger, sharper file.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>300 DPI, PNG</strong> (also 150 or 600 DPI; SVG, PDF, TIFF).</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Pixel</dt><dd>One dot of the camera image. Each holds one brightness number.</dd>
+  <dt>Intensity, counts</dt><dd>A pixel's brightness as the camera reports it. Bigger is brighter. A 16-bit camera counts from 0 to 65535.</dd>
+  <dt>ROI</dt><dd>Region of interest: an outline you draw around what you want to measure.</dd>
+  <dt>Background</dt><dd>Light that is not from your sample: chip glow, stray light, camera offset.</dd>
+  <dt>Halo, glow</dt><dd>The droplet's light spilling a pixel or two past its edge. It is signal, not background.</dd>
+  <dt>Annulus</dt><dd>A ring shape, like a washer. The background ring is one.</dd>
+  <dt>Mean, median</dt><dd>Mean: the average. Median: the middle value when sorted; not thrown off by a few extreme values.</dd>
+  <dt>Standard deviation (std)</dt><dd>How much values typically scatter around their mean.</dd>
+  <dt>MAD</dt><dd>Median absolute deviation: the typical distance of values from their median. A scatter measure that ignores extreme values.</dd>
+  <dt>Outlier</dt><dd>A single point far from its neighbours, usually caused by a glitch rather than the sample.</dd>
+  <dt>Saturated</dt><dd>A pixel at the camera's maximum count. The true brightness is higher but cannot be measured.</dd>
+  <dt>Fit, parameter</dt><dd>A fit finds the numbers (parameters) that make an equation pass as close as possible to your points.</dd>
+  <dt>R²</dt><dd>Fit quality from 0 to 1; 1 is perfect.</dd>
+  <dt>Sigmoid</dt><dd>An S-shaped curve going from one level to another. Its midpoint is where it is halfway and changing fastest.</dd>
+  <dt>Derivative</dt><dd>The rate of change: how steep the curve is. The second derivative (d²) is how quickly that steepness changes, which shows where the curve bends.</dd>
+  <dt>Normalize</dt><dd>Rescale to 0–100% of the curve's own range.</dd>
+  <dt>Baseline</dt><dd>The starting level a change is measured from.</dd>
+  <dt>Interpolate</dt><dd>Estimate a value between two known ones by drawing a straight line between them.</dd>
+  <dt>Low-pass filter</dt><dd>A smoother that keeps slow changes and removes fast jitter (Butterworth is one).</dd>
+  <dt>Nyquist frequency</dt><dd>The fastest change a series of points can show (an up-down every two points). Butterworth's cutoff is a fraction of it.</dd>
+  <dt>Rolling ball</dt><dd>A way to estimate uneven background by pushing a disk up under the brightness landscape. Things narrower than the disk count as signal.</dd>
+  <dt>Perspective</dt><dd>The distortion when a camera looks at a flat surface at an angle.</dd>
+  <dt>Calibration</dt><dd>Telling the software how long one pixel is in real units.</dd>
+  <dt>px², mm², µm²</dt><dd>Units of area: square pixels, square millimetres, square micrometres.</dd>
+  <dt>Thermistor, sensor</dt><dd>The heater's temperature probes.</dd>
+  <dt>DPI</dt><dd>Dots per inch: how sharp a saved figure is when printed.</dd>
+  <dt>Log axis</dt><dd>An axis where each step multiplies (1, 10, 100) instead of adds.</dd>
+</dl>
+</section>
+</main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function el(tag, attrs, parent) {
+    var node = document.createElementNS(SVGNS, tag);
+    for (var key in attrs) { node.setAttribute(key, attrs[key]); }
+    if (parent) { parent.appendChild(node); }
+    return node;
+  }
+
+  function text(parent, x, y, content, attrs) {
+    var node = el("text", Object.assign({ x: x, y: y }, attrs || {}), parent);
+    node.textContent = content;
+    return node;
+  }
+
+  function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+
+  function scale(d0, d1, r0, r1) {
+    return function (v) { return r0 + (v - d0) / (d1 - d0) * (r1 - r0); };
+  }
+
+  /* Path through (x, y) pairs, broken wherever y is NaN. */
+  function linePath(xs, ys, sx, sy) {
+    var d = "", pen = false;
+    for (var i = 0; i < xs.length; i++) {
+      if (ys[i] !== ys[i]) { pen = false; continue; }
+      d += (pen ? "L" : "M") + sx(xs[i]).toFixed(1) + "," + sy(ys[i]).toFixed(1);
+      pen = true;
+    }
+    return d;
+  }
+
+  function frame(svg, x0, y0, x1, y1) {
+    el("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: "plotbg" }, svg);
+    for (var k = 1; k < 4; k++) {
+      var gy = y0 + (y1 - y0) * k / 4;
+      el("line", { x1: x0, x2: x1, y1: gy, y2: gy, class: "gridline" }, svg);
+    }
+    el("line", { x1: x0, x2: x0, y1: y0, y2: y1, class: "axis" }, svg);
+    el("line", { x1: x0, x2: x1, y1: y1, y2: y1, class: "axis" }, svg);
+  }
+
+  function bind(id, fn, fmt) {
+    var input = document.getElementById(id);
+    var out = document.getElementById(id + "-o");
+    function update() {
+      if (out) { out.textContent = fmt ? fmt(input.value) : input.value; }
+      fn();
+    }
+    input.addEventListener("input", update);
+    return { input: input, refresh: update };
+  }
+
+  /* deterministic noise, so the demos look the same every time */
+  var seed = 7;
+  function rand() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  function noise(amount) { return (rand() + rand() + rand() - 1.5) * amount; }
+  function sigmoid(t, lo, hi, mid, rate) { return lo + (hi - lo) / (1 + Math.exp(-rate * (t - mid))); }
+
+  /* ---------------- table of contents ---------------- */
+  (function toc() {
+    var holder = document.querySelector("[data-toc-clone]");
+    var list = document.getElementById("toc");
+    holder.appendChild(list.cloneNode(true)).removeAttribute("id");
+    var mobile = document.getElementById("toc-mobile");
+    holder.addEventListener("click", function (event) {
+      if (event.target.tagName === "A") { mobile.open = false; }
+    });
+    if (!("IntersectionObserver" in window)) { return; }
+    var links = {};
+    list.querySelectorAll("a").forEach(function (a) { links[a.getAttribute("href").slice(1)] = a; });
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) { return; }
+        list.querySelectorAll("a.active").forEach(function (a) { a.classList.remove("active"); });
+        var link = links[entry.target.id];
+        if (link) { link.classList.add("active"); }
+      });
+    }, { rootMargin: "0px 0px -70% 0px" });
+    Object.keys(links).forEach(function (id) {
+      var target = document.getElementById(id);
+      if (target) { observer.observe(target); }
+    });
+  })();
+
+  /* ---------------- background ring ---------------- */
+  (function ring() {
+    var PX = 3, ROI_R = 18, HALO = 2;
+    var path = document.getElementById("ring-path");
+    var status = document.getElementById("ring-status");
+    var gap = document.getElementById("ring-gap"), width = document.getElementById("ring-width");
+
+    function circle(cx, cy, r) {
+      return "M" + (cx - r) + "," + cy + "a" + r + "," + r + " 0 1,0 " + 2 * r + ",0a" + r + "," + r + " 0 1,0 " + -2 * r + ",0Z";
+    }
+
+    function draw() {
+      var g = +gap.value, w = +width.value;
+      var inner = (ROI_R + g) * PX, outer = (ROI_R + g + w) * PX;
+      path.setAttribute("d", circle(260, 130, outer) + circle(260, 130, inner));
+      var notes = [];
+      if (g < HALO) {
+        notes.push('<span class="bad">Gap ' + g + ' px is inside the glow:</span> the ring reads too bright, so the corrected value comes out too low.');
+      } else {
+        notes.push('<span class="good">Ring clears the glow.</span>');
+      }
+      var reach = 260 + outer;
+      if (reach > 470 - 54) {
+        notes.push("It now reaches ROI 2; those pixels are cut out of the ring automatically.");
+      }
+      if (w < 3) {
+        notes.push("A very thin ring has few pixels, so its background value is noisier.");
+      }
+      status.innerHTML = notes.join(" ");
+    }
+    bind("ring-gap", draw, function (v) { return v + " px"; });
+    bind("ring-width", draw, function (v) { return v + " px"; });
+    draw();
+  })();
+
+  /* ---------------- rolling ball ---------------- */
+  (function ball() {
+    var N = 600, svg = document.getElementById("ball-svg");
+    var DROPS = [[110, 60], [230, 45], [330, 70], [470, 32], [540, 55]], DROP_R = 22;
+    var profile = [];
+    seed = 11;
+    for (var x = 0; x < N; x++) {
+      var v = 30 + 70 * Math.exp(-Math.pow((x - 260) / 230, 2)) + 0.03 * x;
+      DROPS.forEach(function (d) { v += d[1] * Math.exp(-Math.pow((x - d[0]) / DROP_R, 4)); });
+      profile.push(v + noise(2));
+    }
+    var radius = document.getElementById("ball-r"), pos = document.getElementById("ball-x");
+    var status = document.getElementById("ball-status"), play = document.getElementById("ball-play");
+    var top = scale(0, 220, 150, 10), bottom = scale(0, 120, 315, 190), sx = scale(0, N - 1, 30, 590);
+    var erosion = [], background = [];
+
+    function compute(r) {
+      erosion = []; background = [];
+      for (var i = 0; i < N; i++) {
+        var m = Infinity;
+        for (var j = Math.max(0, i - r); j <= Math.min(N - 1, i + r); j++) { m = Math.min(m, profile[j]); }
+        erosion.push(m);
+      }
+      for (i = 0; i < N; i++) {
+        var M = -Infinity;
+        for (j = Math.max(0, i - r); j <= Math.min(N - 1, i + r); j++) { M = Math.max(M, erosion[j]); }
+        background.push(M);
+      }
+    }
+
+    var xs = profile.map(function (_v, i) { return i; });
+    var staticLayer, ballLayer, lastR = -1;
+
+    function drawStatic(r) {
+      clear(svg);
+      frame(svg, 30, 10, 590, 150);
+      frame(svg, 30, 190, 590, 315);
+      text(svg, 36, 24, "Brightness across the image");
+      text(svg, 36, 204, "After subtracting the background");
+      el("path", { d: linePath(xs, profile, sx, top), fill: "none", stroke: "var(--glow)", "stroke-width": 2 }, svg);
+      el("path", { d: linePath(xs, background, sx, top), fill: "none", stroke: "var(--ball)", "stroke-width": 2, "stroke-dasharray": "6 4" }, svg);
+      var corrected = profile.map(function (v, i) { return Math.max(0, v - background[i]); });
+      el("path", { d: linePath(xs, corrected, sx, bottom), fill: "none", stroke: "var(--glow)", "stroke-width": 2 }, svg);
+      DROPS.forEach(function (d, k) {
+        var kept = corrected[d[0]] / (d[1] + 0.001) * 100;
+        text(svg, sx(d[0]), bottom(Math.max(corrected[d[0]], 0)) - 6, Math.round(Math.min(kept, 140)) + "%", { "text-anchor": "middle" });
+      });
+      text(svg, 586, 204, "numbers: % of each droplet kept", { "text-anchor": "end" });
+      ballLayer = el("g", {}, svg);
+      return corrected;
+    }
+
+    function drawBall() {
+      clear(ballLayer);
+      var r = +radius.value, c = +pos.value;
+      var h = erosion[c];
+      var x0 = sx(Math.max(0, c - r)), x1 = sx(Math.min(N - 1, c + r)), y = top(h);
+      el("rect", { x: x0, y: y, width: x1 - x0, height: 7, rx: 3.5, fill: "var(--ball)", opacity: 0.85 }, ballLayer);
+      el("line", { x1: sx(c), x2: sx(c), y1: y + 7, y2: 150, stroke: "var(--ball)", "stroke-width": 1, "stroke-dasharray": "2 3" }, ballLayer);
+    }
+
+    function draw() {
+      var r = +radius.value;
+      if (r !== lastR) {
+        compute(r);
+        var corrected = drawStatic(r);
+        lastR = r;
+        var kept = DROPS.map(function (d) { return corrected[d[0]] / d[1]; });
+        var worst = Math.min.apply(null, kept);
+        var bumpLeft = corrected[260] > 12;
+        if (r < 30) {
+          status.innerHTML = '<span class="bad">Too small:</span> the ball fits inside the droplets and removes part of them (as little as ' + Math.round(worst * 100) + "% kept).";
+        } else if (bumpLeft) {
+          status.innerHTML = '<span class="bad">Too large:</span> the ball cannot follow the broad hump of light, so some unevenness is left under the droplets.';
+        } else {
+          status.innerHTML = '<span class="good">About right:</span> droplets kept, uneven light removed.';
+        }
+      }
+      drawBall();
+    }
+
+    bind("ball-r", draw, function (v) { return v + " px"; });
+    pos.addEventListener("input", drawBall);
+    draw();
+
+    var playing = false, dir = 1, last = 0;
+    function step(time) {
+      if (!playing) { return; }
+      if (time - last > 16) {
+        var c = +pos.value + dir * 3;
+        if (c >= N - 1 || c <= 0) { dir = -dir; c = Math.max(0, Math.min(N - 1, c)); }
+        pos.value = c;
+        drawBall();
+        last = time;
+      }
+      requestAnimationFrame(step);
+    }
+    play.addEventListener("click", function () {
+      playing = !playing;
+      play.textContent = playing ? "Pause" : "Play";
+      if (playing) { requestAnimationFrame(step); }
+    });
+    if (!reduceMotion && "IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting && !playing && !play.dataset.started) {
+            play.dataset.started = "1";
+            play.click();
+          }
+        });
+      }, { threshold: 0.6 }).observe(svg);
+    }
+  })();
+
+  /* ---------------- size-aware stats ---------------- */
+  (function size() {
+    var svg = document.getElementById("size-svg"), table = document.getElementById("size-table");
+    var cal = document.getElementById("size-cal");
+    var INSIDE = 1200, RING = 200, UM_PER_PX = 2;
+
+    function fmt(v) { return Math.round(v).toLocaleString("en-US"); }
+
+    function draw() {
+      var r = +document.getElementById("size-r").value;
+      clear(svg);
+      el("rect", { width: 600, height: 120, fill: "#252c33", rx: 6 }, svg);
+      el("circle", { cx: 300, cy: 60, r: r * 1.3, fill: "var(--glow)", opacity: 0.9 }, svg);
+      el("circle", { cx: 300, cy: 60, r: r * 1.3, fill: "none", stroke: "var(--roi)", "stroke-width": 2 }, svg);
+      var count = Math.round(Math.PI * r * r);
+      var pixelArea = cal.checked ? UM_PER_PX * UM_PER_PX : 1;
+      var unit = cal.checked ? "µm²" : "px²";
+      var rows = [
+        ["Mean intensity", fmt(INSIDE), "no"],
+        ["Background-corrected mean", fmt(INSIDE - RING), "no"],
+        ["Outline ring mean", fmt(RING), "no"],
+        ["Integrated", fmt(INSIDE * count), "yes, grows with area"],
+        ["Integrated (bg-corrected)", fmt((INSIDE - RING) * count), "yes, grows with area"],
+        ["Per area", (INSIDE / pixelArea).toLocaleString("en-US") + " per " + unit, "no"],
+        ["Count (table)", fmt(count) + " px", "yes"],
+        ["Area (table)", fmt(count * pixelArea) + " " + unit, "yes"]
+      ];
+      table.innerHTML = rows.map(function (row) {
+        return "<tr><td>" + row[0] + '</td><td class="num">' + row[1] + "</td><td>" + row[2] + "</td></tr>";
+      }).join("");
+    }
+    bind("size-r", draw, function (v) { return v + " px"; });
+    cal.addEventListener("change", draw);
+    draw();
+  })();
+
+  /* ---------------- outliers (Hampel, as the app computes it) ---------------- */
+  var MAD_TO_SIGMA = 1.4826, MEAN_ABS_TO_SIGMA = 1.2533;
+
+  function median(values) {
+    var s = values.slice().sort(function (a, b) { return a - b; }), n = s.length, m = n >> 1;
+    return n % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  function robustScale(values, centre) {
+    var dev = values.map(function (v) { return Math.abs(v - centre); });
+    var mid = MAD_TO_SIGMA * median(dev);
+    if (mid > 0) { return mid; }
+    return MEAN_ABS_TO_SIGMA * dev.reduce(function (a, b) { return a + b; }, 0) / dev.length;
+  }
+
+  function hampel(values, threshold, window) {
+    var overall = robustScale(values, median(values)), half = window >> 1;
+    return values.map(function (v, i) {
+      var nb = values.slice(Math.max(0, i - half), i + half + 1);
+      var mid = median(nb), dev = Math.abs(v - mid);
+      var sc = robustScale(nb, mid) || overall;
+      return sc > 0 ? dev > threshold * sc : dev > 0;
+    });
+  }
+
+  (function outliers() {
+    var svg = document.getElementById("out-svg"), status = document.getElementById("out-status");
+    /* Seeded so the defaults (3 MADs, win 5) catch exactly the four planted
+       glitches, as image_viewer.analysis.plot_series.outlier_mask does. */
+    seed = 1;
+    var N = 40, ts = [], ys = [];
+    for (var i = 0; i < N; i++) { ts.push(i); ys.push(sigmoid(i, 200, 800, 20, 0.35) + noise(18)); }
+    ys[9] += 260; ys[5] -= 150; ys[31] += 230; ys[32] += 240;
+    var sx = scale(0, N - 1, 40, 585), sy = scale(100, 1150, 205, 12);
+    var t = document.getElementById("out-t"), w = document.getElementById("out-w");
+
+    function draw() {
+      clear(svg);
+      frame(svg, 40, 12, 585, 205);
+      var flags = hampel(ys, +t.value, +w.value);
+      var kept = ys.map(function (v, k) { return flags[k] ? NaN : v; });
+      el("path", { d: linePath(ts, kept, sx, sy), fill: "none", stroke: "var(--blue)", "stroke-width": 1.8 }, svg);
+      var dropped = 0;
+      ys.forEach(function (v, k) {
+        el("circle", { cx: sx(k), cy: sy(v), r: 3.2, fill: flags[k] ? "none" : "var(--blue)", stroke: flags[k] ? "var(--warn)" : "none", "stroke-width": 2 }, svg);
+        if (flags[k]) {
+          dropped++;
+          el("circle", { cx: sx(k), cy: sy(v), r: 7, fill: "none", stroke: "var(--warn)", "stroke-width": 1.5, class: "pulse" }, svg);
+        }
+      });
+      text(svg, 46, 26, "Measured value");
+      text(svg, 585, 200, "image →", { "text-anchor": "end" });
+      status.innerHTML = dropped + (dropped === 1 ? " point" : " points") + " dropped as outliers." +
+        (flags[31] || flags[32] ? "" : ' <span class="bad">The side-by-side pair survives: widen win.</span>');
+    }
+    bind("out-t", draw);
+    bind("out-w", draw);
+    draw();
+  })();
+
+  /* ---------------- Savitzky-Golay smoothing ---------------- */
+  /* Least-squares polynomial through (xs, ys), evaluated at ``at``: the
+     local fit Savitzky-Golay makes for every point (edges included). */
+  function polyFitAt(xs, ys, order, at) {
+    var n = order + 1, A = [], b = [], r, c, col;
+    for (r = 0; r < n; r++) { A.push(new Array(n).fill(0)); b.push(0); }
+    xs.forEach(function (x, i) {
+      var powers = [];
+      for (var k = 0; k < n; k++) { powers.push(Math.pow(x - at, k)); }
+      for (var row = 0; row < n; row++) {
+        b[row] += powers[row] * ys[i];
+        for (var cc = 0; cc < n; cc++) { A[row][cc] += powers[row] * powers[cc]; }
+      }
+    });
+    for (col = 0; col < n; col++) {
+      var pivot = col;
+      for (r = col + 1; r < n; r++) { if (Math.abs(A[r][col]) > Math.abs(A[pivot][col])) { pivot = r; } }
+      var swapRow = A[col]; A[col] = A[pivot]; A[pivot] = swapRow;
+      var swapB = b[col]; b[col] = b[pivot]; b[pivot] = swapB;
+      for (r = col + 1; r < n; r++) {
+        var factor = A[r][col] / A[col][col];
+        for (c = col; c < n; c++) { A[r][c] -= factor * A[col][c]; }
+        b[r] -= factor * b[col];
+      }
+    }
+    var coef = new Array(n).fill(0);
+    for (r = n - 1; r >= 0; r--) {
+      var sum = b[r];
+      for (c = r + 1; c < n; c++) { sum -= A[r][c] * coef[c]; }
+      coef[r] = sum / A[r][r];
+    }
+    return coef[0];
+  }
+
+  (function smoothing() {
+    var svg = document.getElementById("sg-svg");
+    seed = 21;
+    var N = 60, ts = [], ys = [];
+    for (var i = 0; i < N; i++) { ts.push(i); ys.push(sigmoid(i, 200, 800, 30, 0.45) + noise(55)); }
+    var sx = scale(0, N - 1, 40, 585), sy = scale(50, 950, 205, 12);
+    var w = document.getElementById("sg-w"), o = document.getElementById("sg-o");
+
+    function draw() {
+      clear(svg);
+      frame(svg, 40, 12, 585, 205);
+      var win = Math.min(+w.value, N - (N % 2 ? 0 : 1)), order = Math.min(+o.value, win - 1), half = win >> 1;
+      var smooth = ys.map(function (_v, k) {
+        var a = Math.min(Math.max(0, k - half), N - win);
+        return polyFitAt(ts.slice(a, a + win), ys.slice(a, a + win), order, k);
+      });
+      ys.forEach(function (v, k) { el("circle", { cx: sx(k), cy: sy(v), r: 2.6, fill: "var(--muted)", opacity: 0.6 }, svg); });
+      el("path", { d: linePath(ts, smooth, sx, sy), fill: "none", stroke: "var(--blue)", "stroke-width": 2.4 }, svg);
+      text(svg, 46, 26, "Savitzky-Golay, win " + win + ", order " + order);
+    }
+    bind("sg-w", draw);
+    bind("sg-o", draw);
+    draw();
+  })();
+
+  /* ---------------- Bkg Ref / Subtract first / Normalize ---------------- */
+  (function transforms() {
+    var svg = document.getElementById("tf-svg"), label = document.getElementById("tf-label");
+    var N = 41, ts = [], ref = [], a = [], b = [];
+    seed = 3;
+    for (var i = 0; i < N; i++) {
+      var drift = 100 + 6 * i;
+      ts.push(i);
+      ref.push(drift + noise(6));
+      a.push(drift + 250 + sigmoid(i, 0, 900, 16, 0.5) + noise(10));
+      b.push(drift + 60 + sigmoid(i, 0, 260, 24, 0.5) + noise(8));
+    }
+    var boxes = ["tf-ref", "tf-first", "tf-norm"].map(function (id) { return document.getElementById(id); });
+
+    function draw() {
+      var series = [a.slice(), b.slice(), ref.slice()];
+      var name = "Mean intensity";
+      if (boxes[0].checked) {
+        series = series.map(function (s) { return s.map(function (v, k) { return v - ref[k]; }); });
+        name += " (bkg-ref corrected)";
+      }
+      if (boxes[1].checked) {
+        series = series.map(function (s) { var f = s[0]; return s.map(function (v) { return v - f; }); });
+        name += " (change from first)";
+      }
+      if (boxes[2].checked) {
+        series = series.map(function (s) {
+          var lo = Math.min.apply(null, s), span = Math.max.apply(null, s) - lo;
+          return s.map(function (v) { return span === 0 ? 0 : (v - lo) / span * 100; });
+        });
+        name += " (% of range)";
+      }
+      var all = [].concat.apply([], series);
+      var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), pad = (hi - lo) * 0.06 || 1;
+      var sx = scale(0, N - 1, 50, 585), sy = scale(lo - pad, hi + pad, 220, 12);
+      clear(svg);
+      frame(svg, 50, 12, 585, 220);
+      if (lo < 0 && hi > 0) {
+        el("line", { x1: 50, x2: 585, y1: sy(0), y2: sy(0), stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+        text(svg, 46, sy(0) + 4, "0", { "text-anchor": "end" });
+      }
+      var colors = ["var(--blue)", "var(--orange)", "var(--muted)"];
+      series.forEach(function (s, k) {
+        el("path", { d: linePath(ts, s, sx, sy), fill: "none", stroke: colors[k], "stroke-width": k === 2 ? 1.6 : 2.4, "stroke-dasharray": k === 2 ? "6 4" : "" }, svg);
+      });
+      text(svg, 46, 22, Math.round(hi).toString(), { "text-anchor": "end" });
+      text(svg, 46, 220, Math.round(lo).toString(), { "text-anchor": "end" });
+      label.textContent = "Y axis: " + name;
+    }
+    boxes.forEach(function (box) { box.addEventListener("change", draw); });
+    draw();
+  })();
+
+  /* ---------------- fit, d² markers, fastest change, trim ---------------- */
+  (function fit() {
+    var svg = document.getElementById("fit-svg");
+    var LO = 150, HI = 850, MID = 20, RATE = 0.4, N = 50;
+    var BEND = Math.log(2 + Math.sqrt(3)) / RATE;
+    var ids = ["fit-max", "fit-min", "fit-v", "fit-h", "fit-c", "fit-fast", "fit-trim"];
+    var box = {};
+    ids.forEach(function (id) { box[id] = document.getElementById(id); box[id].addEventListener("change", draw); });
+    seed = 9;
+    var ts = [], clean = [], tail = [];
+    for (var i = 0; i < N; i++) {
+      ts.push(i);
+      var v = sigmoid(i, LO, HI, MID, RATE) + noise(22);
+      clean.push(v);
+      tail.push(i > 34 ? v - 26 * (i - 34) : v);
+    }
+
+    function d2(t, lo, hi, mid, rate) {
+      var s = 1 / (1 + Math.exp(-rate * (t - mid)));
+      return (hi - lo) * rate * rate * s * (1 - s) * (1 - 2 * s);
+    }
+
+    function draw() {
+      var trim = box["fit-trim"].checked;
+      var data = trim ? tail : clean;
+      /* Illustration, not a live solver: the dashed fit is the trimmed one
+         (it sees only the unshaded points); with the fading tail, a
+         whole-series fit would be pulled off the data like ``untrimmed``. */
+      var p = [LO, HI, MID, RATE];
+      var untrimmed = [LO, 760, MID - 1.5, 0.33];
+      var sx = scale(0, N - 1, 50, 585), sy = scale(0, 1000, 210, 12), sd = scale(-40, 40, 330, 250);
+      clear(svg);
+      frame(svg, 50, 12, 585, 210);
+      frame(svg, 50, 250, 585, 330);
+      text(svg, 56, 26, "Fitted value");
+      text(svg, 56, 264, "Second derivative (d²)");
+      if (trim) {
+        el("rect", { x: sx(35), y: 12, width: sx(N - 1) - sx(35), height: 198, fill: "var(--muted)", opacity: 0.15 }, svg);
+        text(svg, sx(42), 40, "trimmed tail", { "text-anchor": "middle" });
+        var grid0 = [], grid1 = [];
+        for (var g = 0; g <= 200; g++) { grid0.push(g * (N - 1) / 200); }
+        grid0.forEach(function (t) { grid1.push(sigmoid(t, untrimmed[0], untrimmed[1], untrimmed[2], untrimmed[3])); });
+        el("path", { d: linePath(grid0, grid1, sx, sy), fill: "none", stroke: "var(--warn)", "stroke-width": 1.4, "stroke-dasharray": "2 3" }, svg);
+        text(svg, sx(30), sy(560), "whole-series fit (pulled off)", { style: "fill:var(--warn)" });
+      }
+      data.forEach(function (y, k) { el("circle", { cx: sx(k), cy: sy(y), r: 2.6, fill: "var(--blue)", opacity: trim && k > 34 ? 0.45 : 1 }, svg); });
+      var grid = [], fitted = [], curv = [];
+      for (var j = 0; j <= 300; j++) { grid.push(j * (N - 1) / 300); }
+      grid.forEach(function (t) { fitted.push(sigmoid(t, p[0], p[1], p[2], p[3])); curv.push(d2(t, p[0], p[1], p[2], p[3])); });
+      el("path", { d: linePath(grid, fitted, sx, sy), fill: "none", stroke: "var(--blue)", "stroke-width": 2, "stroke-dasharray": "7 4" }, svg);
+      el("line", { x1: 50, x2: 585, y1: sd(0), y2: sd(0), stroke: "var(--line)" }, svg);
+      el("path", { d: linePath(grid, curv, sx, sd), fill: "none", stroke: "var(--blue)", "stroke-width": 2 }, svg);
+
+      function marker(t, color, name) {
+        var y = sigmoid(t, p[0], p[1], p[2], p[3]);
+        if (box["fit-v"].checked) { el("line", { x1: sx(t), x2: sx(t), y1: 12, y2: 330, stroke: color, "stroke-width": 1, "stroke-dasharray": "4 3" }, svg); }
+        if (box["fit-h"].checked) { el("line", { x1: 50, x2: 585, y1: sy(y), y2: sy(y), stroke: color, "stroke-width": 1, "stroke-dasharray": "4 3" }, svg); }
+        el("circle", { cx: sx(t), cy: sy(y), r: 6, fill: color, stroke: "var(--surface)", "stroke-width": 2 }, svg);
+        if (box["fit-c"].checked) { text(svg, sx(t) + 8, sy(y) - 8, name + " (" + t.toFixed(1) + ", " + Math.round(y) + ")", { style: "fill:" + color + ";font-weight:600" }); }
+      }
+      if (box["fit-max"].checked) { marker(MID - BEND, "var(--ok)", "d² max"); }
+      if (box["fit-min"].checked) { marker(MID + BEND, "var(--warn)", "d² min"); }
+      if (box["fit-fast"].checked) { marker(MID, "var(--ball)", "fastest"); }
+    }
+    draw();
+  })();
+
+  /* ---------------- heater-log time join ---------------- */
+  (function heater() {
+    var svg = document.getElementById("hw-svg"), status = document.getElementById("hw-status");
+    var samples = [], captures = [2.3, 4.8, 7.6];
+    for (var s = 0; s <= 10; s++) { samples.push([s, 60 + 2.4 * s + (s % 3 === 0 ? 0.6 : -0.3)]); }
+    var sx = scale(0, 10, 40, 585), sy = scale(55, 90, 140, 14);
+    var win = document.getElementById("hw");
+
+    function at(t, w) {
+      if (w > 0) {
+        var inside = samples.filter(function (p) { return Math.abs(p[0] - t) <= w / 2; });
+        if (!inside.length) { return { value: NaN, n: 0 }; }
+        return { value: inside.reduce(function (a, p) { return a + p[1]; }, 0) / inside.length, n: inside.length };
+      }
+      var k = Math.floor(t), f = t - k;
+      return { value: samples[k][1] + (samples[k + 1][1] - samples[k][1]) * f, n: -1 };
+    }
+
+    function draw() {
+      var w = +win.value / 1000;
+      clear(svg);
+      frame(svg, 40, 14, 585, 140);
+      el("path", { d: linePath(samples.map(function (p) { return p[0]; }), samples.map(function (p) { return p[1]; }), sx, sy), fill: "none", stroke: "var(--line)", "stroke-width": 1.5 }, svg);
+      var parts = [];
+      captures.forEach(function (t, k) {
+        if (w > 0) { el("rect", { x: sx(t - w / 2), y: 14, width: sx(t + w / 2) - sx(t - w / 2), height: 126, fill: "var(--blue)", opacity: 0.14 }, svg); }
+        el("line", { x1: sx(t), x2: sx(t), y1: 14, y2: 140, stroke: "var(--blue)", "stroke-width": 2 }, svg);
+        var r = at(t, w);
+        var label = r.value === r.value ? r.value.toFixed(1) + " °C" : "gap";
+        text(svg, sx(t), 160, "image " + (k + 1) + ": " + label, { "text-anchor": "middle", style: "fill:" + (r.value === r.value ? "var(--ink)" : "var(--warn)") });
+        parts.push(r.n === -1 ? "interpolated" : r.n === 0 ? "no reading in window" : "average of " + r.n);
+      });
+      samples.forEach(function (p) {
+        var used = w > 0 && captures.some(function (t) { return Math.abs(p[0] - t) <= w / 2; });
+        el("circle", { cx: sx(p[0]), cy: sy(p[1]), r: used ? 5 : 3.5, fill: used ? "var(--orange)" : "var(--muted)" }, svg);
+      });
+      status.textContent = w > 0 ? "Window ±" + (w * 500).toFixed(0) + " ms: " + parts.join(", ") + "." : "Exact (0 ms): each temperature is read off the line between neighbouring readings.";
+    }
+    bind("hw", draw, function (v) { return v + " ms"; });
+    draw();
+  })();
+})();
+</script>
+</body>
+</html>
