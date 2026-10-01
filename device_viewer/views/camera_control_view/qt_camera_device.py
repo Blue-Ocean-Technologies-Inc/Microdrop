@@ -64,7 +64,9 @@ class QtCameraDevice(HasTraits):
     _last_preview_frame_time = Float(0.0)
 
     def traits_init(self):
-        self.sink.videoFrameChanged.connect(self.forward_preview_frame)
+        # The sink's videoFrameChanged is connected by the owning widget, not
+        # here: frames arrive on the capture thread, and only a QObject
+        # receiver gets them queued onto the GUI thread.
         self.session.setVideoSink(self.sink)
 
     # ------------------------------------------------------------------ #
