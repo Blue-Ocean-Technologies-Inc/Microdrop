@@ -1165,7 +1165,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             device_image=image,
             scene_rect=scene_rect,
             path_scale=self.current_electrode_layer.path_scale,
-            device_name=self.camera_alignment_controller.current_device_key() or "",
+            device_name=self.model.device_key,
         ).edit_traits(parent=self.device_view.window())
 
     #################################################################################################################

@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # Enthought library imports.
 from pyface.undo.api import UndoManager
 from traits.api import (
@@ -143,6 +146,10 @@ class DeviceViewMainModel(HasTraits):
     )
 
     electrode_scale = Property(Float, observe="electrodes.svg_model.area_scale")
+
+    #: The loaded device's key — its SVG file's stem, which keys per-device
+    #: state such as the saved camera-alignment endpoints; "" with no device.
+    device_key = Property(Str, observe="electrodes.svg_model.filename")
 
     # mode properties
     step_id = Instance(
@@ -297,6 +304,14 @@ class DeviceViewMainModel(HasTraits):
     def _set_electrode_scale(self, value):
         if self.electrodes.svg_model is not None:
             self.electrodes.svg_model.area_scale = value
+
+    def _get_device_key(self):
+        svg_model = self.electrodes.svg_model
+
+        if svg_model is None or not svg_model.filename:
+            return ""
+
+        return Path(str(svg_model.filename)).stem
 
     def _get_mode_name(self):
         return self.mode.title().replace("-", " ")

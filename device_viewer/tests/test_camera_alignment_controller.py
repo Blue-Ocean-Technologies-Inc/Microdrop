@@ -103,8 +103,14 @@ def controller(model, tmp_path, dialogs):
     return controller
 
 
-def test_device_key_is_the_svg_stem(controller):
-    assert controller.current_device_key() == "2x3device"
+def test_device_key_is_the_svg_stem(model):
+    assert model.device_key == "2x3device"
+
+
+def test_device_key_is_empty_without_a_device(model):
+    model.electrodes.svg_model = None
+
+    assert model.device_key == ""
 
 
 def test_endpoint_saved_persists_for_the_current_device(controller):

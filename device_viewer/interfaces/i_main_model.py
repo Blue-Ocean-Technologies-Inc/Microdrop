@@ -8,19 +8,31 @@
 #
 # Thanks for using Microdrop open source!
 
-from traits.api import Interface, Instance, Enum, Property, Str, Bool, Float, Event, List, UUID
-from pyface.undo.undo_manager import UndoManager
+# Enthought library imports.
+from pyface.undo.api import UndoManager
+from traits.api import (
+    UUID,
+    Bool,
+    Enum,
+    Event,
+    Float,
+    Instance,
+    Interface,
+    List,
+    Property,
+    Str,
+)
 
-from .i_route_execution_service import IRouteExecutionService
-from ..preferences import DeviceViewerPreferences
+# Local imports.
 from ..models.calibration import CalibrationModel
-from ..models.perspective import PerspectiveModel
 from ..models.electrodes import Electrodes
+from ..models.perspective import PerspectiveModel
 from ..models.route import RouteLayerManager
+from ..preferences import DeviceViewerPreferences
+from .i_route_execution_service import IRouteExecutionService
 
 
 class IDeviceViewMainModel(Interface):
-
     # Compose device view model using components
     routes = Instance(RouteLayerManager)
     electrodes = Instance(Electrodes)
@@ -40,16 +52,19 @@ class IDeviceViewMainModel(Interface):
 
     undo_manager = Instance(UndoManager)  # Undo manager
 
-    # Draw: User can draw a single segment. Switches to draw-edit for extending the segment immediately
+    # Draw: User can draw a single segment. Switches to draw-edit for
+    # extending the segment immediately
     # Edit: User can only extend selected segment
     # Edit-Draw: Same as edit except we switch to draw on mouserelease
-    # Auto: Autorouting. User can only autoroute. Switches to edit once path has been created
+    # Auto: Autorouting. User can only autoroute. Switches to edit once
+    # path has been created
     # Merge: User can only merge paths. They cannot edit.
     # Channel-Edit: User can edit the channel of an electrode.
     # Display: User can only view the device. No editing allowed.
     # Camera-Edit: User can edit the perspecive correction of the camera feed
     # Pan: User can pan svg device (useful when zoomed in)
-    # To change the mode, set the mode property and clean up any references/inconsistencies
+    # To change the mode, set the mode property and clean up any
+    # references/inconsistencies
     mode = Enum(
         "draw",
         "edit",
@@ -90,6 +105,10 @@ class IDeviceViewMainModel(Interface):
 
     electrode_scale = Property(Float, observe="electrodes.svg_model.area_scale")
 
+    #: The loaded device's key — its SVG file's stem, which keys per-device
+    #: state such as the saved camera-alignment endpoints; "" with no device.
+    device_key = Property(Str, observe="electrodes.svg_model.filename")
+
     # mode properties
     step_id = Instance(
         str, allow_none=True
@@ -103,19 +122,16 @@ class IDeviceViewMainModel(Interface):
     connected = Bool(False)  # is dropbot connected
 
     uuid = UUID(
-        desc="The uuid of the model. Used to figure out if a state message is from this model or not."
+        desc="The uuid of the model. Used to figure out if a state message "
+        "is from this model or not."
     )
 
     # -------------------------------------- events ----------------------------------
-    zoom_in_event = Event(
-        desc="Increase device view scale -- zoom into device view"
-    )
-    zoom_out_event = Event(
-        desc="Decrease device view scale -- zoom out of device view"
-    )
+    zoom_in_event = Event(desc="Increase device view scale -- zoom into device view")
+    zoom_out_event = Event(desc="Decrease device view scale -- zoom out of device view")
     reset_view_event = Event(desc="Reset device view scaling -- reset zoom")
 
-    # --------------------------------- Alpha Color Model --------------------------------
+    # ------------------------- Alpha Color Model -------------------------
     alpha_map = (
         List()
     )  # We store the dict as a list since TraitsUI doesnt support dicts

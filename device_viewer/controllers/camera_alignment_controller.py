@@ -28,9 +28,6 @@ electrode layer, the offscreen device render, the dialog parent, and the
 status bar.
 """
 
-# Standard library imports.
-from pathlib import Path
-
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt, QTimer
 from traits.api import Any, Callable, HasTraits, Instance, Int, observe
@@ -95,16 +92,6 @@ class CameraAlignmentWorkflowController(HasTraits):
 
     #: Ticks elapsed in the running animation.
     _align_animation_step = Int()
-
-    def current_device_key(self):
-        """The per-device cache key: the loaded device SVG's stem."""
-        svg_model = self.model.electrodes.svg_model
-        filename = getattr(svg_model, "filename", None)
-
-        if not filename:
-            return None
-
-        return Path(str(filename)).stem
 
     def _camera_to_item_mapping(self):
         """The affine RAW-camera-pixel -> video-item-local mapping as
@@ -193,7 +180,7 @@ class CameraAlignmentWorkflowController(HasTraits):
     def go_to_endpoint(self):
         """Automate the drags: glide the marked points onto this
         device's saved endpoint."""
-        device_key = self.current_device_key()
+        device_key = self.model.device_key
         endpoint = self.endpoint_store.load(device_key) if device_key else None
 
         if endpoint is None:
@@ -262,10 +249,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         view and adjust — or a starter quad when none is saved) next
         to the outline pane (a captured camera frame, with a
         recapture glyph), plus the collapsible tuning sidebar."""
-        device_key = self.current_device_key()
+        device_key = self.model.device_key
         electrode_layer = self.get_electrode_layer()
 
-        if device_key is None or electrode_layer is None:
+        if not device_key or electrode_layer is None:
             warning(
                 None,
                 "No device is loaded — load a device SVG first.",
@@ -335,8 +322,9 @@ class CameraAlignmentWorkflowController(HasTraits):
     def _on_endpoint_editor_saved(self, event):
         """The endpoint pane's saved quad (``event.new``, device-scene
         coordinates): persist it as this device's endpoint."""
-        device_key = self.current_device_key()
-        if device_key is None:
+        device_key = self.model.device_key
+
+        if not device_key:
             return
 
         self.endpoint_store.save(device_key, event.new)
