@@ -68,7 +68,7 @@ def SvgUtil():
 
 @pytest.fixture
 def SVGProcessor():
-    from device_viewer.utils.dmf_utils_helpers import SVGProcessor
+    from microdrop_utils.svg_outline import SVGProcessor
 
     return SVGProcessor
 
