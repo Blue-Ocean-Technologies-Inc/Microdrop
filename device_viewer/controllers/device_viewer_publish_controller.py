@@ -149,6 +149,7 @@ class DeviceViewerPublishController(HasTraits):
 
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
+
             # The not-editable revert protects STEP state (electrodes,
             # routes, camera alignment) while a protocol runs. Alphas are
             # global display preferences, not step state — they stay
@@ -219,10 +220,13 @@ class DeviceViewerPublishController(HasTraits):
         """
         if self.model.step_id:
             return
+
         if self._disable_state_messages or self.model.routes._suspend_repeat_exclusion:
             return
+
         if not self.model.electrodes.svg_model:
             return
+
         self.message_buffer = gui_models_to_message_model(self.model).serialize()
         # self.publish_model_message()
 
@@ -239,6 +243,7 @@ class DeviceViewerPublishController(HasTraits):
         # a redundant hardware publish (#434).
         if self._disable_state_messages:
             return
+
         if self.model.realtime_mode and self.model.connected:
             if (
                 not self.model.protocol_running
@@ -287,8 +292,10 @@ class DeviceViewerPublishController(HasTraits):
         current = {
             eid: e.channel for eid, e in self.model.electrodes.electrodes.items()
         }
+
         if current == self._last_published_id_to_channel:
             return
+
         self._last_published_id_to_channel = dict(current)
         svg_model = self.model.electrodes.svg_model
         centroids = neighbours = None
