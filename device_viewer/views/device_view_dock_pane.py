@@ -1634,7 +1634,10 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.scene.interaction_service.route_redraw(None)
 
-    @observe("model.electrodes.electrodes.items.channel")
+    # Only a channel edit on an existing electrode notifies. A device load's
+    # clear() then update() would publish an empty map just before the full
+    # one, and receivers can apply the two out of order.
+    @observe("model:electrodes:electrodes:items:channel")
     def _on_electrode_channel_changed(self, event=None):
         """Re-publish geometry whenever any electrode's channel assignment changes
         (e.g., via channel-edit mode). Gated by _publish_geometry_if_changed."""
