@@ -416,16 +416,6 @@ ALIGNMENT_DEVICE_RENDER_WIDTH_PX = 1400
 DEVICE_VIEWER_CACHE_DIRNAME = ".device_viewer_cache"
 CAMERA_ENDPOINTS_FILENAME = "camera_endpoints.json"
 
-#: Where older builds kept the camera endpoints; moved into the cache
-#: directory once, on first use.
-LEGACY_CAMERA_ENDPOINTS_FILE = (
-    Path.home()
-    / "Documents"
-    / "MicroDropNextGen"
-    / "device_viewer"
-    / CAMERA_ENDPOINTS_FILENAME
-)
-
 # ---------------------------------------------------------------------------
 # Edit Connections dialog
 # ---------------------------------------------------------------------------
