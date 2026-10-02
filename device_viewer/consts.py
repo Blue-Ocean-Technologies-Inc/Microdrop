@@ -395,6 +395,9 @@ ALIGNMENT_ACTIVE_HALO_ALPHA = 0.3
 ALIGNMENT_LABEL_SCALE = 1.6
 ALIGNMENT_LABEL_MIN_PX = 10
 
+#: Opacity of the dot numbers (a sidebar setting); 0 hides them.
+ALIGNMENT_NUMBER_ALPHA = 1.0
+
 #: Bounds shared by the preference Range traits and the settings-sidebar
 #: spinners (one source, so they cannot drift apart).
 ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX = 0, 200

@@ -62,6 +62,7 @@ from .consts import (
     ALIGNMENT_HANDLE_RADIUS_MIN_PX,
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_NUMBER_ALPHA,
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
@@ -171,6 +172,7 @@ class DeviceViewerPreferences(PreferencesHelper):
         low=ALIGNMENT_ACTIVE_RING_SCALE_MIN,
         high=ALIGNMENT_ACTIVE_RING_SCALE_MAX,
     )
+    alignment_number_alpha = Range(value=ALIGNMENT_NUMBER_ALPHA, low=0.0, high=1.0)
 
     ### Recording viewer (video_viewer pane) prefs ###
     # Persisted zoom/pan of the playback canvas — the alignment transform

@@ -129,3 +129,17 @@ def test_dots_are_numbered_and_follow_the_dot_size(model):
 
     assert [handle.label_text() for handle in handles] == ["1", "2", "3", "4"]
     assert handles[0].label_pixel_size() > size
+
+
+def test_number_alpha_fades_and_hides_the_numbers_in_both_panes(model):
+    model.settings.number_alpha = 0.5
+
+    for pane in (model.outline_pane, model.endpoint_pane):
+        labels = [handle._label for handle in pane._overlay._handles]
+
+        assert all(label.isVisible() and label.opacity() == 0.5 for label in labels)
+
+    model.settings.number_alpha = 0.0
+
+    for pane in (model.outline_pane, model.endpoint_pane):
+        assert not any(handle._label.isVisible() for handle in pane._overlay._handles)

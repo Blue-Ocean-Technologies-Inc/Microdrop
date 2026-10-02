@@ -47,6 +47,7 @@ from ...consts import (
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
     ALIGNMENT_LABEL_MIN_PX,
     ALIGNMENT_LABEL_SCALE,
+    ALIGNMENT_NUMBER_ALPHA,
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
@@ -132,6 +133,7 @@ class QuadHandleItem(QGraphicsEllipseItem):
         active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
         active_alpha=ALIGNMENT_ACTIVE_ALPHA,
         active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
+        number_alpha=ALIGNMENT_NUMBER_ALPHA,
     ):
         super().__init__(-radius, -radius, 2 * radius, 2 * radius, parent)
         self._on_moved = on_moved
@@ -161,6 +163,7 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self._label = QGraphicsSimpleTextItem(label, self)
         self._label.setAcceptedMouseButtons(Qt.NoButton)
         self._sync_label()
+        self.set_number_alpha(number_alpha)
 
     def set_radius(self, radius):
         self.prepareGeometryChange()
@@ -171,6 +174,12 @@ class QuadHandleItem(QGraphicsEllipseItem):
         """Colour the dot and its number."""
         self.setBrush(QBrush(QColor(color)))
         self._sync_label()
+
+    def set_number_alpha(self, alpha):
+        """Fade the number; at 0 it is hidden, so it is neither drawn nor
+        hit-tested."""
+        self._label.setOpacity(float(alpha))
+        self._label.setVisible(alpha > 0)
 
     def label_text(self):
         return self._label.text()
@@ -326,6 +335,7 @@ class QuadOverlay:
         active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
         active_alpha=ALIGNMENT_ACTIVE_ALPHA,
         active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
+        number_alpha=ALIGNMENT_NUMBER_ALPHA,
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
@@ -375,6 +385,7 @@ class QuadOverlay:
                 active_color=active_color,
                 active_alpha=active_alpha,
                 active_ring_scale=active_ring_scale,
+                number_alpha=number_alpha,
             )
             if self._snap_points is not None:
                 handle.snap_fn = self._snap
@@ -456,12 +467,16 @@ class QuadOverlay:
         active_color=None,
         active_alpha=None,
         active_ring_scale=None,
+        number_alpha=None,
     ):
         """Restyle the overlay live; None leaves that aspect as-is."""
         for handle in self._handles:
             handle.set_active_style(
                 color=active_color, alpha=active_alpha, ring_scale=active_ring_scale
             )
+
+            if number_alpha is not None:
+                handle.set_number_alpha(number_alpha)
 
         if snap_marker_color is not None:
             self._snap_marker_color = snap_marker_color

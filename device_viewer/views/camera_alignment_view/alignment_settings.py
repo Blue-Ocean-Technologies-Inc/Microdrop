@@ -61,6 +61,7 @@ NUMERIC_SETTING_TRAITS = (
     "snap_marker_size_px",
     "active_alpha",
     "active_ring_scale",
+    "number_alpha",
 )
 COLOR_SETTING_TRAITS = (
     "quad_color",
@@ -101,6 +102,9 @@ class AlignmentSettingsModel(HasTraits):
     #: Opacity and ring size (in dot radii) of the highlight on the dot
     #: hovered or pressed, which marks the matching dot in both panes.
     active_alpha = Range(0.0, 1.0)
+    #: Opacity of the dot numbers (1-4); 0 hides them.
+    number_alpha = Range(0.0, 1.0)
+
     active_ring_scale = Range(
         ALIGNMENT_ACTIVE_RING_SCALE_MIN, ALIGNMENT_ACTIVE_RING_SCALE_MAX
     )
@@ -165,6 +169,7 @@ alignment_settings_view = View(
         Item("active_color", label="Highlight color"),
         Item("active_alpha", label="Highlight alpha"),
         Item("active_ring_scale", label="Highlight size (x dot)"),
+        Item("number_alpha", label="Number alpha"),
         label="Overlay Settings",
         show_border=True,
     ),
