@@ -484,7 +484,13 @@ def _shape_stats(*hu_root):
 
 
 def test_shape_quantities_are_plot_stats():
-    for stat in ("circularity", "shape_change", "axis_ratio", "solidity"):
+    for stat in (
+        "circularity",
+        "shape_change",
+        "axis_ratio",
+        "eccentricity",
+        "solidity",
+    ):
         assert stat in PLOT_STATS
 
 

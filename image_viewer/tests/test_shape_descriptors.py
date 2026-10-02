@@ -115,6 +115,7 @@ def test_roi_shape_stats_match_the_whole_frame_descriptors():
 
     assert set(stats) == set(ROI_SHAPE_KEYS)
     assert stats["axis_ratio"] == pytest.approx(whole["axis_ratio"])
+    assert stats["eccentricity"] == pytest.approx(math.sqrt(0.75), abs=0.01)
     assert stats["circularity"] == pytest.approx(whole["circularity"])
     assert stats["solidity"] == pytest.approx(whole["solidity"])
     # A list, as the JSON stats store holds it — and still comparable.
@@ -131,6 +132,7 @@ def test_roi_shape_stats_without_a_droplet_are_nan():
     ):
         assert math.isnan(stats["circularity"])
         assert math.isnan(stats["axis_ratio"])
+        assert math.isnan(stats["eccentricity"])
         assert math.isnan(stats["solidity"])
         assert stats[HU_ROOT_KEY] is None
 

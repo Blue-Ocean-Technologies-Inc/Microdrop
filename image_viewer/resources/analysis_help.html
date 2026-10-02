@@ -445,6 +445,7 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
         <li><a href="#stat-circularity">Circularity</a></li>
         <li><a href="#stat-shapechange">Shape change</a></li>
         <li><a href="#stat-axisratio">Axis ratio</a></li>
+        <li><a href="#stat-eccentricity">Eccentricity</a></li>
         <li><a href="#stat-solidity">Solidity</a></li>
         <li><a href="#stat-table">Table and CSV-only columns</a></li>
       </ol>
@@ -1103,7 +1104,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
 
 <article class="term" id="stat-shape">
   <h3>Droplet shape: how it is measured</h3>
-  <p>The four shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
+  <p>The five shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
   splits the pixels into "droplet" and "background" with an automatic brightness threshold (Otsu's method), takes the
   biggest bright blob, and measures its outline. This happens on the corrected image, after the
   <a href="#ball">rolling ball</a> and perspective correction when they are on. The droplet must be brighter than its
@@ -1141,6 +1142,17 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
     <dt>When to use it</dt><dd><p>To follow a droplet being stretched, for example while it is pulled onto the next electrode.</p></dd>
     <dt>How to read it</dt><dd><p>1 is round; 2 is twice as long as wide. It is never below 1. Very small droplets (under about 8 px across) read a little above 1 even when round.</p></dd>
     <dt>Typical value</dt><dd><p>About 1.0 for a resting droplet.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-eccentricity">
+  <h3>Eccentricity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>How stretched the droplet is, from the same best-matching ellipse as <a href="#stat-axisratio">axis ratio</a>, on a 0 to 1 scale.</p></dd>
+    <dt>When to use it</dt><dd><p>When you are used to thinking in eccentricity. It carries the same information as axis ratio, squeezed into 0 to 1.</p></dd>
+    <dt>How to read it</dt><dd><p>0 is a circle; it heads towards 1 as the droplet becomes a thin needle. A droplet twice as long as wide reads about 0.87.
+    It only sees stretching, not a ragged or lumpy edge: that is what <a href="#stat-circularity">circularity</a> adds.</p></dd>
+    <dt>Typical value</dt><dd><p>Near 0 (below about 0.2) for a resting round droplet; small values are noisy.</p></dd>
   </dl>
 </article>
 

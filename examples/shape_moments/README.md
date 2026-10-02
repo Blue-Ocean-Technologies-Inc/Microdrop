@@ -92,7 +92,8 @@ Not recommended:
   separate the two. Its absolute value also depends on the perimeter
   estimator (raw pixel contour: 0.90 for a circle; 1 px polygon smoothing,
   used here: 0.98).
-- **eccentricity** is axis_ratio on a compressed, less intuitive scale.
+- **eccentricity** is axis_ratio on a compressed, less intuitive scale; the
+  ROI pane exposes it too, for users who think in that scale.
 - **extent** changes with pure rotation (D: 0.59–0.76) — misleading.
 - **orientation_deg** is pure noise (±90°) for round droplets; only useful as
   a secondary "which way is it stretched" readout once axis_ratio > ~1.2.

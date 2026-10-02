@@ -126,6 +126,7 @@ PLOT_STAT_LABELS = {
     "circularity": "Circularity",
     "shape_change": "Shape change",
     "axis_ratio": "Axis ratio",
+    "eccentricity": "Eccentricity",
     "solidity": "Solidity",
 }
 

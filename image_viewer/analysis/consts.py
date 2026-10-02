@@ -67,7 +67,13 @@ MASK_ON = 255
 #: All unitless, so the scale calibration never touches them.
 #: "shape_change" is the one series quantity: each image's distance
 #: from the ROI's first analysed image with a droplet.
-SHAPE_STATS = ("circularity", "shape_change", "axis_ratio", "solidity")
+SHAPE_STATS = (
+    "circularity",
+    "shape_change",
+    "axis_ratio",
+    "eccentricity",
+    "solidity",
+)
 
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"

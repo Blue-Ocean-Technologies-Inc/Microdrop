@@ -142,6 +142,7 @@ def test_compute_image_stats_measures_the_droplet_shape(tmp_path):
     stats = result["stats"]["roi1"]
 
     assert abs(stats["axis_ratio"] - 2.0) < 0.05
+    assert abs(stats["eccentricity"] - math.sqrt(0.75)) < 0.01
     assert stats["solidity"] > 0.98
     assert len(stats["hu_root"]) == 7
     assert stats_are_current(stats)
