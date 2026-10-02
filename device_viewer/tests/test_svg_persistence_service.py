@@ -11,6 +11,7 @@
 """Tests for the Qt-free device SVG persistence service (#782)."""
 
 # Standard library imports.
+import shutil
 from pathlib import Path
 
 # Third-party imports.
@@ -75,3 +76,35 @@ def test_modified_flag_transitions(service, tmp_path):
     service.load(str(tmp_path / "device.svg"))
 
     assert not service.modified
+
+
+@pytest.mark.parametrize("device", ["pin_map.svg", "2x3device.svg", "90_pin_array.svg"])
+def test_freshly_loaded_device_is_not_modified(service, tmp_path, device):
+    # Copied so save() does not write over the bundled file.
+    device_file = tmp_path / device
+    shutil.copy(BUNDLED_2X3.with_name(device), device_file)
+
+    service.load(str(device_file))
+
+    assert not service.modified
+
+    electrode = next(iter(service.model.electrodes.electrodes.values()))
+    electrode.channel = electrode.channel + 100
+
+    assert service.modified
+
+    service.save()
+
+    assert not service.modified
+
+
+def test_connection_added_to_device_without_neighbours_is_modified(service, tmp_path):
+    # pin_map's electrodes have no neighbours, so it loads with no connections.
+    device_file = tmp_path / "pin_map.svg"
+    shutil.copy(BUNDLED_2X3.with_name("pin_map.svg"), device_file)
+    service.load(str(device_file))
+
+    first_id, second_id = list(service.model.electrodes.electrodes)[:2]
+    service.model.electrodes.svg_model.add_connection(first_id, second_id)
+
+    assert service.modified
