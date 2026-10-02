@@ -80,6 +80,13 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+#: Fresh quads start on the image bounds inset by these fractions a side:
+#: the camera frame well inside (the device is somewhere in it), the
+#: device render just inside its bounds so the edge dots and their
+#: numbers stay on the canvas.
+DEFAULT_QUAD_INSET = 0.25
+ENDPOINT_QUAD_INSET = 0.05
+
 #: The placeholder canvas shown before the camera delivers a frame.
 PLACEHOLDER_SIZE_PX = (640, 480)
 CANVAS_MIN_SIZE_PX = (320, 240)
@@ -221,16 +228,15 @@ class AlignmentPaneBase(HasTraits):
         self.canvas.fit_frame()
 
     @staticmethod
-    def _default_quad(pixmap) -> list:
-        """A centered half-image box to start from when there is no
-        previous quad to show."""
-        width, height = pixmap.width(), pixmap.height()
-        return [
-            [width * 0.25, height * 0.25],
-            [width * 0.75, height * 0.25],
-            [width * 0.75, height * 0.75],
-            [width * 0.25, height * 0.75],
-        ]
+    def _default_quad(image, inset=DEFAULT_QUAD_INSET) -> list:
+        """The starting quad when there is no previous one: the image
+        bounds inset by ``inset`` of each side, numbered TL/TR/BR/BL
+        like the other pane's, so both open on the same 1-2-3-4 grid."""
+        width, height = image.width(), image.height()
+        left, top = width * inset, height * inset
+        right, bottom = width - left, height - top
+
+        return [[left, top], [right, top], [right, bottom], [left, bottom]]
 
 
 class EndpointPane(AlignmentPaneBase):
@@ -269,7 +275,7 @@ class EndpointPane(AlignmentPaneBase):
         quad = (
             [self._scene_to_image(point) for point in quad]
             if quad
-            else self._default_quad(pixmap)
+            else self._default_quad(pixmap, inset=ENDPOINT_QUAD_INSET)
         )
         snap_points = (
             [self._scene_to_image(point) for point in self.snap_scene_points]

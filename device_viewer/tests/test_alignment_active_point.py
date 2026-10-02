@@ -23,6 +23,7 @@ from pyface.qt.QtWidgets import QApplication
 
 # Microdrop package imports.
 from device_viewer.preferences import DeviceViewerPreferences
+from device_viewer.utils.quad_order import quads_order_matches, top_left_index
 from device_viewer.views.camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -143,3 +144,13 @@ def test_number_alpha_fades_and_hides_the_numbers_in_both_panes(model):
 
     for pane in (model.outline_pane, model.endpoint_pane):
         assert not any(handle._label.isVisible() for handle in pane._overlay._handles)
+
+
+def test_fresh_panes_open_on_the_same_tl_tr_br_bl_grid(model):
+    outline_quad = model.outline_pane.shown_quad()
+    endpoint_quad = model.endpoint_pane.shown_quad()
+
+    # The endpoint starts just inside the device bounds (the render).
+    assert endpoint_quad == [[10, 5], [190, 5], [190, 95], [10, 95]]
+    assert top_left_index(outline_quad) == top_left_index(endpoint_quad) == 0
+    assert quads_order_matches(outline_quad, endpoint_quad)
