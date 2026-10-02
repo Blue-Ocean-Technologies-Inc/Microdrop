@@ -447,6 +447,8 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
         <li><a href="#stat-axisratio">Axis ratio</a></li>
         <li><a href="#stat-eccentricity">Eccentricity</a></li>
         <li><a href="#stat-solidity">Solidity</a></li>
+        <li><a href="#stat-extent">Extent</a></li>
+        <li><a href="#stat-orientation">Orientation</a></li>
         <li><a href="#stat-table">Table and CSV-only columns</a></li>
       </ol>
     </li>
@@ -1104,11 +1106,11 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
 
 <article class="term" id="stat-shape">
   <h3>Droplet shape: how it is measured</h3>
-  <p>The five shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
+  <p>The seven shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
   splits the pixels into "droplet" and "background" with an automatic brightness threshold (Otsu's method), takes the
   biggest bright blob, and measures its outline. This happens on the corrected image, after the
   <a href="#ball">rolling ball</a> and perspective correction when they are on. The droplet must be brighter than its
-  surroundings. Shape numbers have no unit, so the image scale does not change them. A cell stays empty when no droplet
+  surroundings. Shape numbers have no unit (orientation is in degrees), so the image scale does not change them. A cell stays empty when no droplet
   is found. Draw the ROI a little larger than the droplet: a droplet cut off by the ROI edge reads flattened, and two
   droplets touching inside one ROI read as one odd-shaped blob.</p>
 </article>
@@ -1163,6 +1165,29 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
     <dt>When to use it</dt><dd><p>To catch lobes, necks and a small satellite droplet merging in. Plain stretching does not lower it.</p></dd>
     <dt>How to read it</dt><dd><p>1 means no dents; it drops as the outline gains bumps or a waist.</p></dd>
     <dt>Typical value</dt><dd><p>Above 0.97 for a round or oval droplet.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-extent">
+  <h3>Extent</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>How much of its bounding box the droplet fills: its area ÷ the area of the smallest upright rectangle around it.</p></dd>
+    <dt>When to use it</dt><dd><p>As a "how much of its box does it fill" number, for example a droplet squaring off against electrode edges.</p></dd>
+    <dt>How to read it</dt><dd><p>1 for an upright square or rectangle, about 0.785 for a circle. The box is always upright (aligned with the image),
+    so the number changes when a droplet only <em>turns</em>: it is not a rotation-proof shape measure. For that, use circularity, solidity or shape change.</p></dd>
+    <dt>Typical value</dt><dd><p>About 0.78 for a round droplet.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-orientation">
+  <h3>Orientation</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Which way the droplet's long axis points, in degrees from the image's horizontal, from the same ellipse as
+    <a href="#stat-axisratio">axis ratio</a>. Positive is clockwise on screen; it runs from −90° to +90°.</p></dd>
+    <dt>When to use it</dt><dd><p>To see which way a stretched droplet is being pulled, or to follow a droplet that turns.</p></dd>
+    <dt>How to read it</dt><dd><p>Only meaningful once the droplet is clearly elongated (axis ratio well above 1, say 1.2). A round droplet has no long axis,
+    so its orientation is noise that jumps anywhere between ±90°. It also wraps: a droplet turning past +90° reappears near −90°, which is the same direction.</p></dd>
+    <dt>Typical value</dt><dd><p>0° for a droplet stretched left–right, ±90° for one stretched up–down.</p></dd>
   </dl>
 </article>
 

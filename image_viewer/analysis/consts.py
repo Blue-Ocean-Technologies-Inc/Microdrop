@@ -64,15 +64,18 @@ BUTTER_CUTOFF = 0.2
 MASK_ON = 255
 
 #: The droplet-shape quantities, in Plot-dropdown, table and CSV order.
-#: All unitless, so the scale calibration never touches them.
-#: "shape_change" is the one series quantity: each image's distance
-#: from the ROI's first analysed image with a droplet.
+#: None scales with the calibration: all are unitless but the
+#: orientation, an angle in degrees. "shape_change" is the one series
+#: quantity: each image's distance from the ROI's first analysed image
+#: with a droplet.
 SHAPE_STATS = (
     "circularity",
     "shape_change",
     "axis_ratio",
     "eccentricity",
     "solidity",
+    "extent",
+    "orientation_deg",
 )
 
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).

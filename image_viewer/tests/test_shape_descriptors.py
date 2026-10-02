@@ -116,6 +116,8 @@ def test_roi_shape_stats_match_the_whole_frame_descriptors():
     assert set(stats) == set(ROI_SHAPE_KEYS)
     assert stats["axis_ratio"] == pytest.approx(whole["axis_ratio"])
     assert stats["eccentricity"] == pytest.approx(math.sqrt(0.75), abs=0.01)
+    assert stats["orientation_deg"] == pytest.approx(20.0, abs=2.0)
+    assert stats["extent"] == pytest.approx(whole["extent"])
     assert stats["circularity"] == pytest.approx(whole["circularity"])
     assert stats["solidity"] == pytest.approx(whole["solidity"])
     # A list, as the JSON stats store holds it — and still comparable.
@@ -133,6 +135,8 @@ def test_roi_shape_stats_without_a_droplet_are_nan():
         assert math.isnan(stats["circularity"])
         assert math.isnan(stats["axis_ratio"])
         assert math.isnan(stats["eccentricity"])
+        assert math.isnan(stats["extent"])
+        assert math.isnan(stats["orientation_deg"])
         assert math.isnan(stats["solidity"])
         assert stats[HU_ROOT_KEY] is None
 
@@ -142,3 +146,17 @@ def test_roi_shape_stats_read_a_sixteen_bit_frame():
     stats = roi_shape_stats(frame, _whole_roi())
 
     assert stats["axis_ratio"] == pytest.approx(2.0, abs=0.05)
+
+
+def test_extent_of_a_square_and_a_circle():
+    square = np.full((SIZE, SIZE), BACKGROUND, dtype=np.uint8)
+    # Big, because the contour runs through pixel centres: its area is
+    # (side - 1)² against a (side)² box, a bias that shrinks with size.
+    cv2.rectangle(square, (40, 40), (160, 160), DROPLET, -1)
+    circle = _frame((CENTRE, (40, 40), 0))
+
+    square_extent = roi_shape_stats(square, _whole_roi())["extent"]
+    circle_extent = roi_shape_stats(circle, _whole_roi())["extent"]
+
+    assert square_extent == pytest.approx(1.0, abs=0.02)
+    assert circle_extent == pytest.approx(math.pi / 4, abs=0.02)

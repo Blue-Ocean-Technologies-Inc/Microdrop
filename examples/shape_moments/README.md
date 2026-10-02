@@ -94,7 +94,8 @@ Not recommended:
   used here: 0.98).
 - **eccentricity** is axis_ratio on a compressed, less intuitive scale; the
   ROI pane exposes it too, for users who think in that scale.
-- **extent** changes with pure rotation (D: 0.59–0.76) — misleading.
+- **extent** changes with pure rotation (D: 0.59–0.76) — misleading. The ROI
+  pane still exposes it (and orientation_deg), with that caveat in its help guide.
 - **orientation_deg** is pure noise (±90°) for round droplets; only useful as
   a secondary "which way is it stretched" readout once axis_ratio > ~1.2.
 - **hu_log_deviation** (the textbook log-Hu distance / `cv2.matchShapes`

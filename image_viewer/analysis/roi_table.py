@@ -245,12 +245,19 @@ class RoiStatsTable(QTableWidget):
         """Area spans decades with the unit chosen (0.28 mm² is 2.8e+05
         µm²), so it takes a significant-figure format where the
         intensity columns keep their fixed decimal; the unitless shape
-        quantities live near 1 (or 0), so they keep three."""
+        quantities live near 1 (or 0), so they keep three. The
+        orientation is in degrees, where one decimal is already finer
+        than its noise."""
         if value != value:
             return ""
+
         if stat == "area":
             return f"{value:.4g}"
-        return f"{value:.3f}" if stat in SHAPE_STATS else f"{value:.1f}"
+
+        if stat in SHAPE_STATS and stat != "orientation_deg":
+            return f"{value:.3f}"
+
+        return f"{value:.1f}"
 
     def _area_per_pixel(self):
         """One pixel's area in the session's unit (1.0 = px²)."""

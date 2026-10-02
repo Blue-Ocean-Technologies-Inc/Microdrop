@@ -490,6 +490,8 @@ def test_write_intensity_csv_includes_the_shape_columns(tmp_path):
                     "circularity": 0.98,
                     "axis_ratio": axis_ratio,
                     "eccentricity": math.sqrt(1.0 - 1.0 / axis_ratio**2),
+                    "extent": 0.785,
+                    "orientation_deg": 30.0,
                     "solidity": 0.99,
                     "hu_root": [1.0, change],
                 }
@@ -510,6 +512,8 @@ def test_write_intensity_csv_includes_the_shape_columns(tmp_path):
         "axis_ratio",
         "eccentricity",
         "solidity",
+        "extent",
+        "orientation_deg",
     ):
         assert name in header, name
 
@@ -517,6 +521,7 @@ def test_write_intensity_csv_includes_the_shape_columns(tmp_path):
     # measured from the ROI's first row.
     assert float(records[2][header.index("axis_ratio")]) == 1.5
     assert float(records[1][header.index("eccentricity")]) == 0.0
+    assert float(records[1][header.index("orientation_deg")]) == 30.0
     assert float(records[1][header.index("shape_change")]) == 0.0
     assert float(records[2][header.index("shape_change")]) == 0.25
     assert "hu_root" not in header

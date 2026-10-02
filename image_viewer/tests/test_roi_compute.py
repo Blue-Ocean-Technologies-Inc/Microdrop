@@ -132,7 +132,7 @@ def test_compute_image_stats_reads_16bit_png(tmp_path):
 
 def test_compute_image_stats_measures_the_droplet_shape(tmp_path):
     array = np.full((200, 200), 500, dtype=np.uint16)
-    cv2.ellipse(array, (100, 100), (40, 20), 0, 0, 360, 3000, -1)
+    cv2.ellipse(array, (100, 100), (40, 20), 30, 0, 360, 3000, -1)
     path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
     cv2.imwrite(str(path), array)
 
@@ -143,6 +143,8 @@ def test_compute_image_stats_measures_the_droplet_shape(tmp_path):
 
     assert abs(stats["axis_ratio"] - 2.0) < 0.05
     assert abs(stats["eccentricity"] - math.sqrt(0.75)) < 0.01
+    assert abs(stats["orientation_deg"] - 30.0) < 2.0
+    assert 0.0 < stats["extent"] < 1.0
     assert stats["solidity"] > 0.98
     assert len(stats["hu_root"]) == 7
     assert stats_are_current(stats)

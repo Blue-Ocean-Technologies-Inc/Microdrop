@@ -108,7 +108,14 @@ HU_ROOT_KEY = "hu_root"
 #: intensities, and the full stored set with the Hu vector (see
 #: ``roi_shape_stats``). Shape change is not stored: it needs a
 #: reference image, so the plot derives it from the Hu vectors.
-ROI_SHAPE_STATS = ("circularity", "axis_ratio", "eccentricity", "solidity")
+ROI_SHAPE_STATS = (
+    "circularity",
+    "axis_ratio",
+    "eccentricity",
+    "solidity",
+    "extent",
+    "orientation_deg",
+)
 ROI_SHAPE_KEYS = ROI_SHAPE_STATS + (HU_ROOT_KEY,)
 
 #: Series descriptors, measured against the ROI's reference frame.

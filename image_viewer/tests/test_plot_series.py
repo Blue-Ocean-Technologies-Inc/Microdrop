@@ -490,6 +490,8 @@ def test_shape_quantities_are_plot_stats():
         "axis_ratio",
         "eccentricity",
         "solidity",
+        "extent",
+        "orientation_deg",
     ):
         assert stat in PLOT_STATS
 
