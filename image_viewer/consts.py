@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -28,6 +31,10 @@ ACTOR_TOPIC_DICT = {}
 # filter appears without reopening the pane.
 # ---------------------------------------------------------------------------
 IMAGE_FILTERS = f"{PKG}.image_filters"
+
+#: Bundled plain-language guide to the ROI analysis terms, opened from the
+#: Help menu. Self-contained HTML (no network), so it works offline.
+ANALYSIS_HELP_HTML_PATH = Path(__file__).parent / "resources" / "analysis_help.html"
 
 #: Preferences node for the viewer's own settings.
 PREFERENCES_PATH = "microdrop.image_viewer"
