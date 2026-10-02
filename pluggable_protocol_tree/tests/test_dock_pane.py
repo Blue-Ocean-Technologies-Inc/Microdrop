@@ -323,6 +323,33 @@ def test_dock_pane_navigate_to_next_at_end_duplicates_step(build_dock_pane):
     assert len(dock_pane.manager.root.children) == 3
 
 
+def test_dock_pane_step_rep_combo_follows_repetitions_edit(build_dock_pane):
+    """Editing the current step's Reps cell refills the Step Rep combo — a
+    cell edit fires only cell_changed, never rows_changed."""
+    from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.repetitions_column import (
+        make_repetitions_column,
+    )
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+
+    dock_pane = build_dock_pane(
+        columns=[make_type_column(), make_name_column(), make_repetitions_column()]
+    )
+    dock_pane.navigate_to_first_step()
+    combo = dock_pane._pane.timeline_step_rep_combo
+
+    assert combo.isHidden()
+
+    dock_pane.manager.set_value((0,), "repetitions", 3)
+
+    assert not combo.isHidden()
+    assert [combo.itemText(i) for i in range(combo.count())] == ["1/3", "2/3", "3/3"]
+
+    dock_pane.manager.set_value((0,), "repetitions", 1)
+
+    assert combo.isHidden()
+
+
 # --- protocol_running publishing + protocol_running_changed signal -------
 
 

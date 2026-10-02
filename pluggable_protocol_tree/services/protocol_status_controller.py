@@ -251,11 +251,13 @@ class ProtocolStatusController(HasTraits):
     def _phases_for(row, n_repeats=None):
         """Materialized phase sequence for a row, mirroring the executor's
         iter_phases call (count/fixed steps). [] on failure. Duration-mode
-        precise phases are deferred (#477). Pass ``n_repeats`` to override the
-        row's route_repetitions (e.g. 1 for a single base loop)."""
+        precise phases are deferred (#477). Pass ``n_repeats`` to count exactly
+        that many loops (e.g. 1 for a single base loop) -- duration mode would
+        refill the loops up to the repeat duration, so it is ignored then."""
         try:
             in_duration_mode = (
-                bool(getattr(row, "repeat_duration_controls", False))
+                n_repeats is None
+                and bool(getattr(row, "repeat_duration_controls", False))
                 and float(getattr(row, "repeat_duration", 0.0) or 0.0) > 0
             )
             reps = (

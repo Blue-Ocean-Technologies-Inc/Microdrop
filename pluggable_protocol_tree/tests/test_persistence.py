@@ -10,25 +10,32 @@
 
 """Tests for persistence (save/load)."""
 
+# Third-party imports.
 import pytest
 
+# Enthought library imports.
 from traits.api import Int
 
-from pluggable_protocol_tree.models.column import BaseColumnModel, Column
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
+# Microdrop package imports.
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repetitions_column import make_repetitions_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import PERSISTENCE_SCHEMA_VERSION
+from pluggable_protocol_tree.models.column import BaseColumnModel, Column
+from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.views.columns.readonly_label import ReadOnlyLabelColumnView
 
 
 @pytest.fixture
 def columns():
-    return [make_type_column(), make_id_column(), make_name_column(),
-            make_duration_column()]
+    return [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_duration_column(),
+    ]
 
 
 @pytest.fixture
@@ -37,6 +44,7 @@ def manager(columns):
 
 
 # --- save ---
+
 
 def test_to_json_schema_version(manager):
     data = manager.to_json()
@@ -59,8 +67,7 @@ def test_to_json_fields_order(manager):
     # col_specs, so "type" and "name" each appear exactly once (in the fixed
     # row-metadata prefix).  The "id" and "duration_s" ordinary columns remain.
     data = manager.to_json()
-    assert data["fields"] == ["depth", "uuid", "type", "name",
-                              "id", "duration_s"]
+    assert data["fields"] == ["depth", "uuid", "type", "name", "id", "duration_s"]
 
 
 def test_to_json_rows_encoded_with_depth(manager):
@@ -83,6 +90,7 @@ def test_to_json_empty_tree_has_zero_rows(manager):
 
 
 # --- load ---
+
 
 def test_round_trip_flat(manager):
     manager.add_step(values={"name": "A", "duration_s": 2.5})
@@ -120,9 +128,12 @@ def test_from_json_missing_column_warns_and_skips(manager, caplog):
     logged. Full orphan preservation is deferred to a later PR."""
     data = manager.to_json()
     # Inject a fake column entry into the saved data
-    data["columns"].append({
-        "id": "fake", "cls": "nonexistent.module.FakeColumn",
-    })
+    data["columns"].append(
+        {
+            "id": "fake",
+            "cls": "nonexistent.module.FakeColumn",
+        }
+    )
     # The row tuples also need a placeholder value per new column
     data["fields"].append("fake")
     for r in data["rows"]:
@@ -135,15 +146,23 @@ def test_from_json_missing_column_warns_and_skips(manager, caplog):
 
 # --- PPT-3: protocol_metadata in the JSON header ---
 
+
 def test_protocol_metadata_round_trips():
-    cols = [make_type_column(), make_id_column(), make_name_column(),
-            make_repetitions_column(), make_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_repetitions_column(),
+        make_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     rm.protocol_metadata["electrode_to_channel"] = {"e00": 0, "e01": 1}
     rm.add_step(values={"name": "A"})
 
     payload = rm.to_json()
-    assert payload["protocol_metadata"] == {"electrode_to_channel": {"e00": 0, "e01": 1}}
+    assert payload["protocol_metadata"] == {
+        "electrode_to_channel": {"e00": 0, "e01": 1}
+    }
 
     rm2 = RowManager.from_json(payload, columns=list(cols))
     assert rm2.protocol_metadata == {"electrode_to_channel": {"e00": 0, "e01": 1}}
@@ -152,18 +171,24 @@ def test_protocol_metadata_round_trips():
 def test_protocol_metadata_missing_in_legacy_payload_loads_as_empty():
     """Backward-compat: a PPT-1/PPT-2 era JSON without the
     protocol_metadata key loads with manager.protocol_metadata == {}."""
-    cols = [make_type_column(), make_id_column(), make_name_column(),
-            make_repetitions_column(), make_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_repetitions_column(),
+        make_duration_column(),
+    ]
     rm = RowManager(columns=cols)
     rm.add_step(values={"name": "A"})
     payload = rm.to_json()
-    payload.pop("protocol_metadata", None)   # simulate older format
+    payload.pop("protocol_metadata", None)  # simulate older format
 
     rm2 = RowManager.from_json(payload, columns=list(cols))
     assert rm2.protocol_metadata == {}
 
 
 # --- repeat_duration_controls round-trip via row_flags (route-reps split) ---
+
 
 def test_row_flags_serialized_only_for_true_rows(manager):
     p = manager.add_step(values={"name": "A"})
@@ -198,7 +223,7 @@ def test_row_flags_round_trip_nested_step(manager):
 def test_load_old_payload_without_row_flags_defaults_false(manager):
     manager.add_step(values={"name": "A"})
     data = manager.to_json()
-    del data["row_flags"]            # simulate a pre-split save
+    del data["row_flags"]  # simulate a pre-split save
     new_mgr = RowManager.from_json(data, columns=list(manager.columns))
     assert new_mgr.root.children[0].repeat_duration_controls is False
 
@@ -207,27 +232,32 @@ def test_column_locks_are_never_serialized(manager):
     """Locks are runtime-derived; persisting one would strand a
     protocol opened without the owning plugin (issue #541)."""
     import json
+
     p = manager.add_step(values={"name": "A"})
     row = manager.get_row(p)
-    row.lock_column("route_repetitions", owner="repeat_duration",
-                     reason="Route Reps Dur is in control")
+    row.lock_column(
+        "route_repetitions",
+        owner="repeat_duration",
+        reason="Route Reps Dur is in control",
+    )
     data = manager.to_json()
     assert "column_locks" not in json.dumps(data)
 
 
-def test_loading_row_flags_rebuilds_route_reps_lock(manager):
-    """persistence writes repeat_duration_controls directly onto the
-    row; the BaseRow observer must rebuild the lock from it."""
+def test_loading_row_flags_keeps_route_reps_editable(manager):
+    """The duration-mode flag round-trips, and Route Reps stays editable:
+    the pair is mutually exclusive by last edit, not locked."""
     p = manager.add_step(values={"name": "A"})
     manager.get_row(p).repeat_duration_controls = True
     data = manager.to_json()
     new_mgr = RowManager.from_json(data, columns=list(manager.columns))
     loaded_step = new_mgr.root.children[0]
     assert loaded_step.repeat_duration_controls is True
-    assert loaded_step.is_column_locked("route_repetitions") is True
+    assert loaded_step.is_column_locked("route_repetitions") is False
 
 
 # --- Issue-1 dedup fix ---
+
 
 def test_serialize_no_duplicate_type_or_name_in_fields():
     """The builtin type/name columns must NOT be serialized in
@@ -268,8 +298,12 @@ def test_load_old_duplicate_fields_payload_still_loads():
     in col_specs still loads without error. The setattr calls for the
     orphan attributes are harmless because the row constructor already
     set name/row_type from the fixed metadata fields."""
-    cols = [make_type_column(), make_id_column(), make_name_column(),
-            make_duration_column()]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_duration_column(),
+    ]
     m = RowManager(columns=cols)
     m.add_step(values={"name": "OldStep", "duration_s": 3.0})
     g = m.add_group(name="OldGroup")
@@ -279,17 +313,22 @@ def test_load_old_duplicate_fields_payload_still_loads():
     # col_specs and duplicate values into every row.
     data = m.to_json()
     # Insert fake type/name col_specs at the front (as old saves did)
-    data["columns"] = (
-        [{"id": "type", "cls": "pluggable_protocol_tree.builtins.type_column.TypeColumnModel"},
-         {"id": "name", "cls": "pluggable_protocol_tree.builtins.name_column.NameColumnModel"}]
-        + data["columns"]
-    )
+    data["columns"] = [
+        {
+            "id": "type",
+            "cls": "pluggable_protocol_tree.builtins.type_column.TypeColumnModel",
+        },
+        {
+            "id": "name",
+            "cls": "pluggable_protocol_tree.builtins.name_column.NameColumnModel",
+        },
+    ] + data["columns"]
     # fields = ["depth", "uuid", "type", "name", "type", "name", "id", "duration_s"]
     # Insert the duplicated fields after the fixed prefix.
     data["fields"] = (
-        data["fields"][:4]                     # depth, uuid, type, name
-        + ["type", "name"]                     # duplicates (old format)
-        + data["fields"][4:]                   # remaining ordinary columns
+        data["fields"][:4]  # depth, uuid, type, name
+        + ["type", "name"]  # duplicates (old format)
+        + data["fields"][4:]  # remaining ordinary columns
     )
     # Inject duplicate values into each row at the right position.
     new_rows = []
@@ -311,6 +350,7 @@ def test_load_old_duplicate_fields_payload_still_loads():
 
 # --- on_row_loaded column hook (runtime-derived state, e.g. #541 locks) ---
 
+
 def test_on_row_loaded_hook_fires_per_loaded_row():
     """Columns with runtime-derived state (e.g. #541 locks) rebuild it
     on load via an optional on_row_loaded(row) model hook."""
@@ -323,12 +363,18 @@ def test_on_row_loaded_hook_fires_per_loaded_row():
         def on_row_loaded(self, row):
             seen.append(row.uuid)
 
-    hooked = Column(model=_HookedModel(col_id="hooked", col_name="Hooked",
-                                       default_value=0),
-                    view=ReadOnlyLabelColumnView())
+    hooked = Column(
+        model=_HookedModel(col_id="hooked", col_name="Hooked", default_value=0),
+        view=ReadOnlyLabelColumnView(),
+    )
 
-    cols = [make_type_column(), make_id_column(), make_name_column(),
-            make_duration_column(), hooked]
+    cols = [
+        make_type_column(),
+        make_id_column(),
+        make_name_column(),
+        make_duration_column(),
+        hooked,
+    ]
     m = RowManager(columns=cols)
     m.add_step(values={"name": "A"})
     m.add_step(values={"name": "B"})

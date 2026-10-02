@@ -16,13 +16,18 @@ coarse (layoutChanged on structural mutations) in PPT-1; finer-grained
 rowsInserted/dataChanged can be added when performance matters.
 """
 
+# Standard library imports.
 from functools import partial
 
+# Enthought library imports.
 from pyface.qt.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
 from pyface.qt.QtGui import QBrush, QColor
 
-from microdrop_style.helpers import is_dark_mode
+# Microdrop package imports.
 from pluggable_protocol_tree.models.row import GroupRow
+
+# Microdrop style imports.
+from microdrop_style.helpers import is_dark_mode
 
 
 class MvcTreeModel(QAbstractItemModel):
@@ -150,7 +155,8 @@ class MvcTreeModel(QAbstractItemModel):
             reasons = node.column_lock_reasons(col.model.col_id)
             if reasons:
                 return "\n".join(reasons)
-            return None
+
+            return col.view.get_tooltip(node)
 
         value = col.model.get_value(node)
 

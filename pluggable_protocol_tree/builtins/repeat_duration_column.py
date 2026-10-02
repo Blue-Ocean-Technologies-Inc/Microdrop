@@ -18,12 +18,12 @@ Route Reps + Duration + trail config. On confirm, the row's
 ``repeat_duration_controls`` flag flips to True; on cancel, the edit
 is rejected and the column reverts to its previous value.
 
-Flipping the flag to True locks the ``route_repetitions`` cell (via the
-BaseRow observer in models/row.py — issue #541), so once duration
-control is active Route Reps is genuinely read-only. Editing Route Reps
-Dur back to 0 is therefore the only way back to count mode: it prompts
-with the same handoff dialog and, on confirm, flips the flag back to
-False, which unlocks Route Reps again.
+The pair is mutually exclusive by last edit, like the DV sidebar's: in
+duration mode Route Reps shows the derived loop count and stays
+editable, and editing it hands control back (see
+route_repetitions_column.py). Editing Route Reps Dur to 0 is the other
+way back to count mode: it prompts with the same handoff dialog and, on
+confirm, flips the flag back to False.
 """
 
 # Enthought library imports.
@@ -36,6 +36,7 @@ from pluggable_protocol_tree.models.column import (
     BaseColumnModel,
     Column,
 )
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.phase_math import (
     estimate_repeat_duration_s,
     slug_shape_for_row,
@@ -54,6 +55,42 @@ class RepeatDurationColumnModel(BaseColumnModel):
         )
 
 
+class RepeatDurationColumnView(DoubleSpinBoxColumnView):
+    """Spinbox whose tooltip names the knob in control."""
+
+    def get_tooltip(self, row):
+        if isinstance(row, GroupRow):
+            return None
+
+        if getattr(row, "repeat_duration_controls", False):
+            return "Route Reps Dur is in control. Editing Route Reps takes over."
+
+        return (
+            "Route Reps is in control: this is the estimated loop time. "
+            "Editing Route Reps Dur takes over."
+        )
+
+
+#: Handoff dialog (title, message), keyed by whether the edit hands loop
+#: control TO Route Reps Dur (True) or back to Route Reps (False).
+HANDOFF_DIALOGS = {
+    True: (
+        "Switch to Repeat Duration Control",
+        "Using Repeat Duration will calculate the maximum number of "
+        "complete loops that fit within the specified time. Any "
+        "remaining time will be spent idling.<br><br>"
+        "Route Reps will show the number of loops that fit; "
+        "editing Route Reps takes control back.",
+    ),
+    False: (
+        "Switch to Route Reps Control",
+        "Setting Route Reps Dur to 0 hands loop control "
+        "back to Route Reps: routes loop until the largest "
+        "loop has completed all repetitions.",
+    ),
+}
+
+
 class RepeatDurationHandler(BaseColumnHandler):
     """Intercepts edits to prompt for the Route Reps <--> Route Reps Dur
     mode handoffs: entering duration mode on a diverging non-zero edit,
@@ -61,41 +98,43 @@ class RepeatDurationHandler(BaseColumnHandler):
     Read-through writes (no prompt) when:
       * the row is already in Route Reps Dur-controls mode and the new
         value is non-zero, or
+      * the row is in Route Reps mode and the new value is 0, or
       * the new value matches the auto-estimate (rounding to the
         column's display precision), or
       * the row has no routes (Route Reps Dur has no semantic effect, so
         treat as a plain write).
+    A bulk write prompts once for every row that hands off; Cancel writes
+    none of the rows.
     """
 
     def on_interact(self, row, model, value):
+        return bool(self.on_bulk_interact([row], model, value))
+
+    def on_bulk_interact(self, rows, model, value):
         new_value = float(value or 0.0)
-        already_controls = bool(getattr(row, "repeat_duration_controls", False))
-        if already_controls:
-            if new_value == 0.0:
-                # 0 disables duration control (matches the DV sidebar,
-                # which derives the flag from repeat_duration > 0) —
-                # and it is the only way back now that the lock makes
-                # Route Reps genuinely read-only in duration mode.
-                choice = confirm(
-                    None,
-                    title="Switch to Route Reps Control",
-                    message=(
-                        "Setting Route Reps Dur to 0 hands loop control "
-                        "back to Route Reps: routes loop until the largest "
-                        "loop has completed all repetitions.<br><br>"
-                        "Route Reps will become editable again."
-                    ),
-                    yes_label="Switch",
-                    no_label="Cancel",
-                )
-                if choice != YES:
-                    return False
-                row.repeat_duration_controls = False
-            return model.set_value(row, new_value)
+        to_duration = new_value > 0.0
+        handoffs = [row for row in rows if self._hands_off(row, new_value)]
+
+        if handoffs and not self._confirm_handoff(to_duration, len(rows)):
+            return []
+
+        for row in handoffs:
+            row.repeat_duration_controls = to_duration
+
+        return [row for row in rows if model.set_value(row, new_value)]
+
+    @staticmethod
+    def _hands_off(row, new_value):
+        """Whether writing ``new_value`` switches which knob is in control."""
+        if bool(getattr(row, "repeat_duration_controls", False)):
+            # 0 disables duration control (matches the DV sidebar, which
+            # derives the flag from repeat_duration > 0).
+            return new_value == 0.0
 
         routes = list(getattr(row, "routes", []) or [])
-        if not routes:
-            return model.set_value(row, new_value)
+
+        if new_value == 0.0 or not routes:
+            return False
 
         estimated = estimate_repeat_duration_s(
             routes=routes,
@@ -108,29 +147,28 @@ class RepeatDurationHandler(BaseColumnHandler):
             soft_end=bool(getattr(row, "soft_end", False)),
             **slug_shape_for_row(row),
         )
+
         # Compare at 0.01s resolution — matches the column's two-decimal
         # display so a user-typed value identical to what's shown does
         # not falsely trigger the dialog.
-        if abs(new_value - round(estimated, 2)) < 0.01:
-            return model.set_value(row, new_value)
+        return abs(new_value - round(estimated, 2)) >= 0.01
+
+    @staticmethod
+    def _confirm_handoff(to_duration, row_count):
+        title, message = HANDOFF_DIALOGS[to_duration]
+
+        if row_count > 1:
+            message = f"{message}<br><br>Apply to all {row_count} rows?"
 
         choice = confirm(
             None,
-            title="Switch to Repeat Duration Control",
-            message=(
-                "Using Repeat Duration will calculate the maximum number of "
-                "complete loops that fit within the specified time. Any "
-                "remaining time will be spent idling.<br><br>"
-                "Route Reps will become read-only while Route Reps Dur "
-                "is in control."
-            ),
+            title=title,
+            message=message,
             yes_label="Switch",
             no_label="Cancel",
         )
-        if choice != YES:
-            return False
-        row.repeat_duration_controls = True
-        return model.set_value(row, new_value)
+
+        return choice == YES
 
 
 def make_repeat_duration_column():
@@ -141,6 +179,8 @@ def make_repeat_duration_column():
             default_value=0.0,
         ),
         # Bounds mirror the DV sidebar's RouteLayerManager.repeat_duration.
-        view=DoubleSpinBoxColumnView(low=0.0, high=10000.0, decimals=2, single_step=10),
+        view=RepeatDurationColumnView(
+            low=0.0, high=10000.0, decimals=2, single_step=10
+        ),
         handler=RepeatDurationHandler(),
     )
