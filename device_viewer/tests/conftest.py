@@ -43,14 +43,18 @@ def _mock_redis_for_dock_pane_import():
 
 @pytest.fixture(autouse=True)
 def _isolate_app_globals_writes(monkeypatch):
-    """Route the main model's app-globals writes to a plain dict.
+    """Route the device models' app-globals writes to plain dicts.
 
-    Test modules import the model at collection time — before the session
-    mock above exists — so its ``app_globals`` is the live Redis hash. A
+    Test modules import the models at collection time — before the session
+    mock above exists — so their ``app_globals`` is the live Redis hash. A
     model loading a device SVG then published the test preferences'
     repo dir (``Documents/Enthought/Devices``) over a running app's,
-    which is what the image viewer's device dropdown read back.
+    which is what the image viewer's device dropdown read back. With no
+    Redis server, every write instead costs a ~2 s refused connect
+    (``Electrodes`` writes its area map on each device load), which
+    pushed the zone tests past any reasonable timeout.
     """
-    from device_viewer.models import main_model
+    from device_viewer.models import calibration, electrodes, main_model, zones
 
-    monkeypatch.setattr(main_model, "app_globals", {})
+    for module in (calibration, electrodes, main_model, zones):
+        monkeypatch.setattr(module, "app_globals", {})
