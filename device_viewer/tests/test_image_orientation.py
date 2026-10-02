@@ -132,3 +132,43 @@ def test_shown_frame_and_dots_follow_the_orientation(pane, ops):
     pane.save = True
 
     assert [[round(c, 6) for c in point] for point in accepted[0]] == raw_quad
+
+
+def _shown_image(pane):
+    return pane.canvas._pixmap_item.pixmap().toImage()
+
+
+def test_locked_rotate_turns_only_the_dots(pane):
+    quad = [[20.0, 10.0], [60.0, 10.0], [60.0, 30.0], [20.0, 30.0]]
+    pane._overlay.set_quad(quad)
+    frame = _shown_image(pane)
+
+    pane.image_locked = True
+    pane.rotate = True
+
+    # A quarter turn clockwise (y down) about the centroid (40, 20):
+    # (x, y) -> (40 - (y - 20), 20 + (x - 40)); the frame does not move.
+    assert _shown_image(pane) == frame
+    assert pane.orientation.quarter_turns == 0
+    assert pane._overlay.quad() == [
+        [50.0, 0.0],
+        [50.0, 40.0],
+        [30.0, 40.0],
+        [30.0, 0.0],
+    ]
+
+
+def test_locked_flip_mirrors_only_the_dots_and_saves_raw_pixels(pane):
+    quad = [[20.0, 10.0], [60.0, 10.0], [60.0, 30.0], [20.0, 30.0]]
+    pane._overlay.set_quad(quad)
+    frame = _shown_image(pane)
+
+    pane.image_locked = True
+    pane.flip_horizontal = True
+
+    accepted = []
+    pane.observe(lambda event: accepted.append(event.new), "quad_accepted")
+    pane.save = True
+
+    assert _shown_image(pane) == frame
+    assert accepted[0] == [[60.0, 10.0], [20.0, 10.0], [20.0, 30.0], [60.0, 30.0]]

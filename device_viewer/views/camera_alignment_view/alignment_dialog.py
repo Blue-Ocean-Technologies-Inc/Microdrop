@@ -32,12 +32,14 @@ The three pieces live separately in this module:
   model, live overlay restyling from the settings model, and the
   Confirm Alignment macro. Closing is the window's own X."""
 
+# Enthought library imports.
 from traits.api import (
     Bool,
     Button,
     Event,
     HasTraits,
     Instance,
+    Int,
     observe,
 )
 from traitsui.api import (
@@ -52,7 +54,10 @@ from traitsui.api import (
     spring,
 )
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
+# Microdrop style imports.
 from microdrop_style.button_styles import (
     SUCCESS_BUTTON_STYLE,
     TEXT_BUTTON_STYLE,
@@ -61,9 +66,13 @@ from microdrop_style.icons.icons import (
     ICON_CHEVRON_LEFT,
     ICON_CHEVRON_RIGHT,
 )
+
+# Microdrop utils imports.
 from microdrop_utils.color_helpers import rgb_to_hex
 from microdrop_utils.traitsui_qt_helpers import IconToggleEditor
 
+# Local imports.
+from ...utils.quad_order import quads_order_matches
 from .alignment_panes import EndpointPane, OutlinePane
 from .alignment_settings import (
     COLOR_SETTING_TRAITS,
@@ -71,6 +80,9 @@ from .alignment_settings import (
     AlignmentSettingsModel,
     alignment_settings_view,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -84,6 +96,11 @@ SIDEBAR_WIDTH_PX = 280
 #: look, but with a real-word text font (the success style inherits
 #: the Material Symbols icon font, which TEXT_BUTTON_STYLE overrides).
 CONFIRM_BUTTON_STYLE = f"{SUCCESS_BUTTON_STYLE}\n{TEXT_BUTTON_STYLE}"
+
+MISMATCHED_ORDER_MESSAGE = (
+    "The dots are not in the same order in both panes (e.g. dot 1 is "
+    "top-left in one and bottom-right in the other). Continue anyway?"
+)
 
 
 # ------------------------------ Model ----------------------------- #
@@ -102,6 +119,11 @@ class CameraAlignmentModel(HasTraits):
     #: True once the outline pane has a real camera frame — gates
     #: Confirm Alignment.
     outline_ready = Bool(False)
+
+    #: Index (TL/TR/BR/BL) of the corner dot hovered or pressed in
+    #: either pane, -1 for none. Both panes highlight their dot at this
+    #: index, so the user sees which dots correspond.
+    active_point_index = Int(-1)
 
     #: Reveals the settings sidebar.
     options_visible = Bool(False)
@@ -132,8 +154,7 @@ camera_alignment_dialog_view = View(
                     editor=IconToggleEditor(
                         on_glyph=ICON_CHEVRON_RIGHT,
                         off_glyph=ICON_CHEVRON_LEFT,
-                        tooltip="Hide or show the snap and "
-                        "quad-style settings sidebar",
+                        tooltip="Hide or show the snap and quad-style settings sidebar",
                     ),
                     springy=True,
                 ),
@@ -194,6 +215,17 @@ class CameraAlignmentController(Controller):
     def _on_outline_ready(self, event):
         self.model.outline_ready = event.new
 
+    @observe(
+        "model:outline_pane:active_point_index, model:endpoint_pane:active_point_index"
+    )
+    def _on_pane_active_point(self, event):
+        self.model.active_point_index = event.new
+
+    @observe("model:active_point_index")
+    def _on_active_point(self, event):
+        self.model.outline_pane.active_point_index = event.new
+        self.model.endpoint_pane.active_point_index = event.new
+
     @observe(", ".join(f"model:settings:{name}" for name in SETTING_TRAITS))
     def _on_setting_changed(self, event):
         """A sidebar edit (or Reset to Defaults): restyle the
@@ -220,6 +252,23 @@ class CameraAlignmentController(Controller):
             return
 
         model = self.model
+        outline_quad = model.outline_pane.shown_quad()
+        endpoint_quad = model.endpoint_pane.shown_quad()
+
+        # Compared as shown, so a frame turned in the pane to match the
+        # device counts as matching. A deliberate mismatch (an upside-down
+        # camera) stays possible.
+        if (
+            outline_quad is not None
+            and endpoint_quad is not None
+            and not quads_order_matches(outline_quad, endpoint_quad)
+            and confirm(
+                info.ui.control, MISMATCHED_ORDER_MESSAGE, title="Confirm Alignment"
+            )
+            != YES
+        ):
+            return
+
         model.endpoint_pane.save = True
         model.outline_pane.save = True
         model.alignment_confirmed = True

@@ -17,18 +17,37 @@ Used in two places: the start-point picker dialog (over the captured
 camera frame, in camera-pixel coordinates) and the endpoint
 viewer/adjuster (over the device scene, in scene coordinates)."""
 
+# Standard library imports.
+from functools import partial
+
 # Third-party imports.
 import numpy as np
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsPolygonItem
+
+# Enthought library imports.
+from pyface.qt.QtCore import QPointF, Qt
+from pyface.qt.QtGui import QBrush, QColor, QFont, QPen, QPolygonF
+from pyface.qt.QtWidgets import (
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsPolygonItem,
+    QGraphicsSimpleTextItem,
+)
 
 # Local imports.
 from ...consts import (
+    ALIGNMENT_ACTIVE_ALPHA,
+    ALIGNMENT_ACTIVE_COLOR_HEX,
+    ALIGNMENT_ACTIVE_HALO_ALPHA,
+    ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO,
+    ALIGNMENT_ACTIVE_RING_SCALE,
+    ALIGNMENT_ACTIVE_RING_WIDTH_PX,
     ALIGNMENT_FRAME_WIDTH_PX,
     ALIGNMENT_HANDLE_COLOR_HEX,
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_LABEL_MIN_PX,
+    ALIGNMENT_LABEL_SCALE,
+    ALIGNMENT_NUMBER_ALPHA,
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
@@ -105,16 +124,31 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self,
         on_moved,
         on_released,
+        on_active_changed=None,
         parent=None,
+        label="",
         radius=ALIGNMENT_HANDLE_RADIUS_PX,
         color=ALIGNMENT_HANDLE_COLOR_HEX,
         ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
+        active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
+        active_alpha=ALIGNMENT_ACTIVE_ALPHA,
+        active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
+        number_alpha=ALIGNMENT_NUMBER_ALPHA,
     ):
         super().__init__(-radius, -radius, 2 * radius, 2 * radius, parent)
         self._on_moved = on_moved
         self._on_released = on_released
+        #: Called with True when the dot is hovered or pressed, False
+        #: when the pointer leaves it (and no drag holds it).
+        self._on_active_changed = on_active_changed
         #: Optional QPointF -> QPointF hook applied while dragging.
         self.snap_fn = None
+        #: Drawn with the active ring and halo.
+        self._active = False
+        #: The active ring's colour, opacity and radius (in dot radii).
+        self._active_color = QColor(active_color)
+        self._active_alpha = float(active_alpha)
+        self._active_ring_scale = float(active_ring_scale)
         self.setBrush(QBrush(QColor(color)))
         self.setPen(QPen(QColor(ring_color), 2))
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -122,9 +156,135 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self.setCursor(Qt.OpenHandCursor)
+        self.setAcceptHoverEvents(True)
+
+        #: The dot's number, beside it in the dot's colour. Presses go
+        #: through to the dot.
+        self._label = QGraphicsSimpleTextItem(label, self)
+        self._label.setAcceptedMouseButtons(Qt.NoButton)
+        self._sync_label()
+        self.set_number_alpha(number_alpha)
 
     def set_radius(self, radius):
+        self.prepareGeometryChange()
         self.setRect(-radius, -radius, 2 * radius, 2 * radius)
+        self._sync_label()
+
+    def set_fill(self, color):
+        """Colour the dot and its number."""
+        self.setBrush(QBrush(QColor(color)))
+        self._sync_label()
+
+    def set_number_alpha(self, alpha):
+        """Fade the number; at 0 it is hidden, so it is neither drawn nor
+        hit-tested."""
+        self._label.setOpacity(float(alpha))
+        self._label.setVisible(alpha > 0)
+
+    def label_text(self):
+        return self._label.text()
+
+    def label_pixel_size(self):
+        return self._label.font().pixelSize()
+
+    def _sync_label(self):
+        """Size, colour and place the number for the current dot."""
+        radius = self.rect().width() / 2
+
+        font = QFont()
+        font.setBold(True)
+        font.setPixelSize(
+            max(ALIGNMENT_LABEL_MIN_PX, round(radius * ALIGNMENT_LABEL_SCALE))
+        )
+        self._label.setFont(font)
+        self._label.setBrush(self.brush())
+
+        # Up and to the right of the dot, clear of its ring.
+        self._label.setPos(radius, -radius - self._label.boundingRect().height())
+
+    def set_active(self, active):
+        """Show or hide the active ring and halo."""
+        if active == self._active:
+            return
+
+        # The halo extends the bounding rect.
+        self.prepareGeometryChange()
+        self._active = active
+        self.update()
+
+    def is_active(self):
+        return self._active
+
+    def set_active_style(self, color=None, alpha=None, ring_scale=None):
+        """Restyle the active ring and halo; None leaves that aspect as-is."""
+        if color is not None:
+            self._active_color = QColor(color)
+
+        if alpha is not None:
+            self._active_alpha = float(alpha)
+
+        if ring_scale is not None:
+            # The halo, and so the bounding rect, follows the ring size.
+            self.prepareGeometryChange()
+            self._active_ring_scale = float(ring_scale)
+
+        self.update()
+
+    def active_ring_radius(self):
+        """The active ring's radius in view pixels."""
+        return self.rect().width() / 2 * self._active_ring_scale
+
+    def active_ring_color(self):
+        """The active ring's colour, with its alpha applied."""
+        color = QColor(self._active_color)
+        color.setAlphaF(self._active_alpha)
+
+        return color
+
+    def boundingRect(self):
+        rect = super().boundingRect()
+
+        if not self._active:
+            return rect
+
+        halo_radius = self.active_ring_radius() * ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO
+        margin = max(halo_radius - self.rect().width() / 2, 0)
+
+        return rect.adjusted(-margin, -margin, margin, margin)
+
+    def paint(self, painter, option, widget=None):
+        if self._active:
+            ring_color = self.active_ring_color()
+            ring_radius = self.active_ring_radius()
+            centre = self.rect().center()
+
+            halo = QColor(ring_color)
+            halo.setAlphaF(self._active_alpha * ALIGNMENT_ACTIVE_HALO_ALPHA)
+            halo_radius = ring_radius * ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(centre, halo_radius, halo_radius)
+
+            painter.setPen(QPen(ring_color, ALIGNMENT_ACTIVE_RING_WIDTH_PX))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(centre, ring_radius, ring_radius)
+
+        super().paint(painter, option, widget)
+
+    def hoverEnterEvent(self, event):
+        super().hoverEnterEvent(event)
+        self._report_active(True)
+
+    def hoverLeaveEvent(self, event):
+        super().hoverLeaveEvent(event)
+
+        # A snapping drag can jump the dot out from under the pointer.
+        if self.scene() is None or self.scene().mouseGrabberItem() is not self:
+            self._report_active(False)
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._report_active(True)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange and self.snap_fn is not None:
@@ -138,8 +298,16 @@ class QuadHandleItem(QGraphicsEllipseItem):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+
         if self._on_released is not None:
             self._on_released()
+
+        if not self.isUnderMouse():
+            self._report_active(False)
+
+    def _report_active(self, active):
+        if self._on_active_changed is not None:
+            self._on_active_changed(active)
 
 
 class QuadOverlay:
@@ -152,6 +320,7 @@ class QuadOverlay:
         quad,
         on_changed=None,
         on_released=None,
+        on_active_changed=None,
         z_value=50.0,
         snap_points=None,
         snap_radius_px=ALIGNMENT_SNAP_RADIUS_PX,
@@ -163,10 +332,16 @@ class QuadOverlay:
         snap_marker_color=ALIGNMENT_SNAP_MARKER_COLOR_HEX,
         snap_marker_alpha=ALIGNMENT_SNAP_MARKER_ALPHA,
         snap_marker_size_px=ALIGNMENT_SNAP_MARKER_SIZE_PX,
+        active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
+        active_alpha=ALIGNMENT_ACTIVE_ALPHA,
+        active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
+        number_alpha=ALIGNMENT_NUMBER_ALPHA,
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
-        current quad); ``on_released`` when a drag ends.
+        current quad); ``on_released`` when a drag ends;
+        ``on_active_changed`` with the index of the dot hovered or
+        pressed, and -1 once none is.
         ``snap_points``: optional (x, y) scene points (e.g. device
         corner vertices) that dragged handles snap onto when within
         ``snap_radius_px`` view pixels. Colors accept anything
@@ -174,6 +349,7 @@ class QuadOverlay:
         self._scene = scene
         self._on_changed = on_changed
         self._on_released = on_released
+        self._on_active_changed = on_active_changed
         self._syncing = False
         self._snap_radius_px = float(snap_radius_px)
         self._snap_points = (
@@ -197,13 +373,19 @@ class QuadOverlay:
         scene.addItem(self._frame)
 
         self._handles = []
-        for _ in range(4):
+        for index in range(4):
             handle = QuadHandleItem(
                 self._handle_moved,
                 self._handle_released,
+                on_active_changed=partial(self._handle_active_changed, index),
+                label=str(index + 1),
                 radius=handle_radius_px,
                 color=handle_color,
                 ring_color=handle_ring_color,
+                active_color=active_color,
+                active_alpha=active_alpha,
+                active_ring_scale=active_ring_scale,
+                number_alpha=number_alpha,
             )
             if self._snap_points is not None:
                 handle.snap_fn = self._snap
@@ -225,6 +407,11 @@ class QuadOverlay:
         finally:
             self._syncing = False
         self._sync_frame()
+
+    def set_active_index(self, index):
+        """Highlight the dot at ``index`` (TL/TR/BR/BL); -1 for none."""
+        for handle_index, handle in enumerate(self._handles):
+            handle.set_active(handle_index == index)
 
     def set_editable(self, editable: bool):
         for handle in self._handles:
@@ -277,8 +464,20 @@ class QuadOverlay:
         snap_marker_color=None,
         snap_marker_alpha=None,
         snap_marker_size_px=None,
+        active_color=None,
+        active_alpha=None,
+        active_ring_scale=None,
+        number_alpha=None,
     ):
         """Restyle the overlay live; None leaves that aspect as-is."""
+        for handle in self._handles:
+            handle.set_active_style(
+                color=active_color, alpha=active_alpha, ring_scale=active_ring_scale
+            )
+
+            if number_alpha is not None:
+                handle.set_number_alpha(number_alpha)
+
         if snap_marker_color is not None:
             self._snap_marker_color = snap_marker_color
         if snap_marker_alpha is not None:
@@ -306,7 +505,7 @@ class QuadOverlay:
         self._frame.setPen(pen)
         if handle_color is not None:
             for handle in self._handles:
-                handle.setBrush(QBrush(QColor(handle_color)))
+                handle.set_fill(handle_color)
         if handle_ring_color is not None:
             for handle in self._handles:
                 ring_pen = handle.pen()
@@ -356,3 +555,7 @@ class QuadOverlay:
     def _handle_released(self):
         if self._on_released is not None:
             self._on_released(self.quad())
+
+    def _handle_active_changed(self, index, active):
+        if self._on_active_changed is not None:
+            self._on_active_changed(index if active else -1)

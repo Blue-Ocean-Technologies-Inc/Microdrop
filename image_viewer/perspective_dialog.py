@@ -26,7 +26,7 @@ from traitsui.api import EnumEditor, HGroup, Item, UItem, View
 
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, WARNING_COLOR
-from microdrop_style.icons.icons import ICON_FIT_SCREEN
+from microdrop_style.icons.icons import ICON_FIT_SCREEN, ICON_ROTATE_90_CW
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
@@ -293,7 +293,7 @@ perspective_tools_view = View(
         ),
         UItem(
             "rotate_button",
-            editor=IconButtonEditor(glyph="rotate_90_degrees_cw", tooltip="Rotate 90°"),
+            editor=IconButtonEditor(glyph=ICON_ROTATE_90_CW, tooltip="Rotate 90°"),
             enabled_when="defined",
         ),
         UItem(

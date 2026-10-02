@@ -11,10 +11,17 @@
 """The per-device camera-alignment endpoint cache: save/load
 round-trips, per-device isolation, and resilience to a missing or
 corrupt cache file."""
+
+# Standard library imports.
 import json
 
+# Third-party imports.
 import pytest
 
+# Enthought library imports.
+from traits.etsconfig.api import ETSConfig
+
+# Microdrop package imports.
 from device_viewer.utils.camera_endpoints import CameraEndpointStore
 
 QUAD = [[0.0, 0.0], [100.0, 0.0], [100.0, 80.0], [0.0, 80.0]]
@@ -65,8 +72,7 @@ def test_save_rejects_non_quads(store):
 
 def test_quad_points_are_coerced_to_floats(store):
     store.save("device_a", [(0, 0), (10, 0), (10, 8), (0, 8)])
-    assert store.load("device_a") == [[0.0, 0.0], [10.0, 0.0],
-                                      [10.0, 8.0], [0.0, 8.0]]
+    assert store.load("device_a") == [[0.0, 0.0], [10.0, 0.0], [10.0, 8.0], [0.0, 8.0]]
 
 
 def test_corrupt_file_reads_as_empty(store):
@@ -81,8 +87,8 @@ def test_corrupt_file_reads_as_empty(store):
 def test_malformed_stored_quad_is_ignored(store):
     store.path.parent.mkdir(parents=True, exist_ok=True)
     store.path.write_text(
-        json.dumps({"device_a": {"scene_quad": [[1, 2]]}}),
-        encoding="utf-8")
+        json.dumps({"device_a": {"scene_quad": [[1, 2]]}}), encoding="utf-8"
+    )
     assert store.load("device_a") is None
 
 
@@ -90,3 +96,34 @@ def test_saved_entry_carries_timestamp(store):
     store.save("device_a", QUAD)
     data = json.loads(store.path.read_text(encoding="utf-8"))
     assert "saved_at" in data["device_a"]
+
+
+#: QUAD as stored by older builds: bottom-right first.
+LEGACY_QUAD = [QUAD[2], QUAD[3], QUAD[0], QUAD[1]]
+
+
+def test_legacy_order_loads_from_top_left(store):
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text(
+        json.dumps({"device_a": {"scene_quad": LEGACY_QUAD}}), encoding="utf-8"
+    )
+
+    assert store.load("device_a") == QUAD
+
+
+def test_save_writes_the_canonical_order(store):
+    store.save("device_a", LEGACY_QUAD)
+
+    data = json.loads(store.path.read_text(encoding="utf-8"))
+    assert data["device_a"]["scene_quad"] == QUAD
+    assert store.load("device_a") == QUAD
+
+
+def test_default_store_lives_in_the_application_home_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(ETSConfig, "application_home", str(tmp_path))
+
+    store = CameraEndpointStore()
+    store.save("device_a", QUAD)
+
+    assert store.path == tmp_path / ".device_viewer_cache" / "camera_endpoints.json"
+    assert store.path.is_file()
