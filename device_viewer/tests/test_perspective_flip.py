@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """PerspectiveModel.flip_output / rotate_output: both move the scene-side
-quad about its centroid, so the camera transformation follows."""
+quad about its centroid, so the camera transformation follows; a
+degenerate quad leaves the transformation alone."""
 
 # Third-party imports.
 import pytest
@@ -120,3 +121,13 @@ def test_rotate_four_quarter_turns_restores_the_quad(model):
         model.rotate_output(90)
 
     assert _coords(model.transformed_reference_rect) == SCENE_QUAD
+
+
+def test_degenerate_quad_keeps_the_previous_transformation(model):
+    previous = model.transformation
+
+    # Collinear corners: no perspective maps the camera quad onto them.
+    model.transformed_reference_rect = _points([(0, 0), (10, 0), (20, 0), (30, 0)])
+
+    assert model.transformation is previous
+    assert not model.transformation.isIdentity()

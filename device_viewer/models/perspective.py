@@ -102,10 +102,17 @@ class PerspectiveModel(HasTraits):
             return
 
         new_transform = QTransform()
-        QTransform.quadToQuad(src, self.transformed_reference_rect, new_transform)
+        ok = QTransform.quadToQuad(src, self.transformed_reference_rect, new_transform)
 
-        if new_transform.isInvertible():  # Only apply transformation if it's valid
+        # A failed quadToQuad leaves the (invertible) identity behind.
+        if ok and new_transform.isInvertible():
             self.transformation = new_transform
+
+        else:
+            logger.warning(
+                "Degenerate reference rectangle (no perspective maps one quad "
+                "onto the other): Transformation not updated."
+            )
 
     def reset_rects(self):
         """Reset the perspective model to its initial state.
