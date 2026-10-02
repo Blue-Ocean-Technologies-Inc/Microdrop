@@ -48,6 +48,9 @@ from traits.api import (
 )
 from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
 # Microdrop style imports.
 from microdrop_style.colors import WARNING_COLOR
 from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
@@ -56,6 +59,7 @@ from microdrop_style.icons.icons import (
     ICON_LOCK,
     ICON_LOCK_OPEN,
     ICON_PHOTO_CAMERA,
+    ICON_RESTORE,
     ICON_ROTATE_90_CW,
     ICON_SAVE,
     ICON_VISIBILITY,
@@ -73,6 +77,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 
 # Local imports.
 from ...models.image_orientation import ImageOrientation
+from ...utils.camera_endpoints import CameraEndpointStore
 from ...utils.image_corners import detect_corner_points
 from ...utils.quad_order import canonical_quad
 from .quad_overlay import QuadOverlay
@@ -154,6 +159,8 @@ class AlignmentPaneBase(HasTraits):
     #: Commit just this pane (the dialog's Confirm Alignment fires
     #: both panes' ``save``).
     save = Button()
+    #: Put this pane's dots back on the fresh default grid.
+    reset = Button()
 
     _overlay = Instance(QuadOverlay)
 
@@ -264,6 +271,10 @@ class EndpointPane(AlignmentPaneBase):
     #: coordinates ([[x, y] * 4], TL/TR/BR/BL as placed).
     endpoint_saved = Event()
 
+    #: The endpoint cache Reset clears this device from (the default
+    #: file unless given).
+    endpoint_store = Instance(CameraEndpointStore, factory=CameraEndpointStore)
+
     _pixmap_size = Tuple(Int(), Int())
 
     def traits_init(self):
@@ -293,6 +304,14 @@ class EndpointPane(AlignmentPaneBase):
                 self._header_group(
                     ENDPOINT_INSTRUCTIONS,
                     UItem(
+                        "reset",
+                        editor=IconButtonEditor(
+                            glyph=ICON_RESTORE,
+                            tooltip="Clear the saved endpoint for this device and "
+                            "reset the dots",
+                        ),
+                    ),
+                    UItem(
                         "save",
                         editor=IconButtonEditor(
                             glyph=ICON_SAVE, tooltip="Save just this device's endpoint"
@@ -319,6 +338,27 @@ class EndpointPane(AlignmentPaneBase):
             rect.x() + float(point[0]) / width * rect.width(),
             rect.y() + float(point[1]) / height * rect.height(),
         ]
+
+    def _reset_fired(self):
+        """After confirming, forget this device's saved endpoint and put
+        the dots back on the default grid."""
+        device = self.device_name or "this device"
+        answer = confirm(
+            self.canvas,
+            f"Clear the saved endpoint for {device}? The dots return to the "
+            "default grid.",
+            title="Reset Endpoint",
+        )
+
+        if answer != YES:
+            return
+
+        if self.device_name:
+            self.endpoint_store.remove(self.device_name)
+
+        self._overlay.set_quad(
+            self._default_quad(self.device_image, inset=ENDPOINT_QUAD_INSET)
+        )
 
     def _save_fired(self):
         """Emit the placed endpoint in device-scene coordinates."""
@@ -462,6 +502,14 @@ class OutlinePane(AlignmentPaneBase):
                         ),
                     ),
                     UItem(
+                        "reset",
+                        editor=IconButtonEditor(
+                            glyph=ICON_RESTORE,
+                            tooltip="Reset the dots to the default grid",
+                        ),
+                        enabled_when="is_ready",
+                    ),
+                    UItem(
                         "save",
                         editor=IconButtonEditor(
                             glyph=ICON_SAVE,
@@ -560,6 +608,21 @@ class OutlinePane(AlignmentPaneBase):
 
     def _flip_vertical_fired(self):
         self._turn_or_mirror(lambda orientation: orientation.flip(horizontal=False))
+
+    def _reset_fired(self):
+        """Back to how the pane opens fresh: default grid, frame
+        unturned, image unlocked."""
+
+        if self._overlay is None:
+            return
+
+        self.orientation.reset_traits()
+        self.image_locked = False
+
+        self.canvas.set_pixmap(self._display_pixmap())
+        self._overlay.set_snap_points(self._to_display(self._raw_snap_points))
+        self._overlay.set_quad(self._default_quad(self._raw_image))
+        self.canvas.fit_frame()
 
     def _recapture_fired(self):
         """Grab a fresh frame: swap the canvas image and re-detect
