@@ -1285,6 +1285,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         )
         self._maybe_live_reapply(path, col_id)
 
+        # Cell values feed the timeline too (step labels, the Step Rep and
+        # Phase Rep combos, the full view's frame list); rows_changed does
+        # not fire for a cell edit.
+        self._rebuild_timeline()
+
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
         # The application can switch experiments before this pane is
