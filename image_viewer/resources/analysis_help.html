@@ -285,16 +285,6 @@ table.small th, table.small td {
 table.small th { color: var(--muted); font-weight: 700; }
 table.small td.num { font-variant-numeric: tabular-nums; text-align: right; }
 
-/* pipeline animation */
-.pipeline .flow-dot { fill: var(--accent); animation: flow 6s linear infinite; }
-.pipeline .flow-dot.d2 { animation-delay: -2s; }
-.pipeline .flow-dot.d3 { animation-delay: -4s; }
-@keyframes flow {
-  0% { transform: translateX(0); opacity: 0; }
-  4% { opacity: 1; }
-  96% { opacity: 1; }
-  100% { transform: translateX(560px); opacity: 0; }
-}
 .pulse { animation: pulse 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
 @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
@@ -413,7 +403,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .pipeline .flow-dot, .pulse { animation: none; }
+  .pulse { animation: none; }
 }
 </style>
 </head>
@@ -543,7 +533,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
   <p>Every point on the plot is one number, for one region, in one image. It is made in a fixed order.
   The first three steps change the picture itself, so they change what is measured.
   Everything after the measurement only changes how the numbers are shown or compared.</p>
-  <figure class="demo pipeline" aria-label="Analysis pipeline diagram">
+  <figure class="demo" aria-label="Analysis pipeline diagram">
     <svg viewBox="0 0 640 170" role="img">
       <title>The analysis pipeline, step by step</title>
       <g font-size="12">
@@ -581,9 +571,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
         <text x="220" y="136" text-anchor="middle">changes the measured pixels (stored with the results)</text>
         <line x1="442" y1="118" x2="630" y2="118" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4"/>
         <text x="536" y="136" text-anchor="middle">changes the display only</text>
-        <circle class="flow-dot" cx="20" cy="18" r="5"/>
-        <circle class="flow-dot d2" cx="20" cy="18" r="5"/>
-        <circle class="flow-dot d3" cx="20" cy="18" r="5"/>
+        <path d="M108 57l6 5-6 5M216 57l6 5-6 5M324 57l6 5-6 5M432 57l6 5-6 5M540 57l6 5-6 5" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
       </g>
     </svg>
     <figcaption>Left of the measurement, settings change the actual numbers, so MicroDrop recalculates when you change
