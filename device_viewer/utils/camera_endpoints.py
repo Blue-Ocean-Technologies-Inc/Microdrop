@@ -17,16 +17,26 @@ alignment is then just: mark the start points on the feed and go to
 the endpoint — the four precise drags happen automatically.
 
 Endpoints are cached on a device-to-device basis (keyed by the
-device SVG's stem) in one JSON file under the app's user-data
-directory, so they survive restarts and device switches.
+device SVG's stem) in one JSON file in the device viewer's cache
+directory under ETSConfig.application_home, so they survive restarts
+and device switches.
 """
 
 # Standard library imports.
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Enthought library imports.
+from traits.etsconfig.api import ETSConfig
+
 # Local imports.
+from ..consts import (
+    CAMERA_ENDPOINTS_FILENAME,
+    DEVICE_VIEWER_CACHE_DIRNAME,
+    LEGACY_CAMERA_ENDPOINTS_FILE,
+)
 from .quad_order import canonical_quad
 
 # Logger import.
@@ -36,12 +46,26 @@ logger = get_logger(__name__)
 
 
 def default_endpoints_file() -> Path:
-    """Where the per-device endpoints live by default. Resolved
-    lazily so this module stays importable (and testable) without
-    the whole application stack."""
-    from microdrop_application.consts import application_home_directory
+    """Where the per-device endpoints live by default. Resolved at call
+    time, after the application has configured ETSConfig."""
+    return (
+        Path(ETSConfig.application_home)
+        / DEVICE_VIEWER_CACHE_DIRNAME
+        / CAMERA_ENDPOINTS_FILENAME
+    )
 
-    return application_home_directory / "device_viewer" / "camera_endpoints.json"
+
+def migrate_legacy_endpoints_file(target):
+    """Move an older build's endpoints file to ``target``, once: only
+    when the old file exists and ``target`` does not yet."""
+    legacy = LEGACY_CAMERA_ENDPOINTS_FILE
+
+    if target.exists() or not legacy.is_file():
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(legacy), str(target))
+    logger.info(f"moved camera-alignment endpoints from {legacy} to {target}")
 
 
 def _validated_quad(scene_quad) -> list:
@@ -63,7 +87,11 @@ class CameraEndpointStore:
     canonical and are rewritten canonical on the next save)."""
 
     def __init__(self, path=None):
-        self.path = Path(path) if path is not None else default_endpoints_file()
+        if path is None:
+            path = default_endpoints_file()
+            migrate_legacy_endpoints_file(path)
+
+        self.path = Path(path)
 
     # ------------------------------------------------------------------ #
     def _read_all(self) -> dict:

@@ -411,6 +411,21 @@ ALIGNMENT_ACTIVE_RING_SCALE_MIN, ALIGNMENT_ACTIVE_RING_SCALE_MAX = 1.0, 4.0
 #: excessive image.
 ALIGNMENT_DEVICE_RENDER_WIDTH_PX = 1400
 
+#: The device viewer's cache directory, under ETSConfig.application_home
+#: (resolved at run time: the application configures ETSConfig first).
+DEVICE_VIEWER_CACHE_DIRNAME = ".device_viewer_cache"
+CAMERA_ENDPOINTS_FILENAME = "camera_endpoints.json"
+
+#: Where older builds kept the camera endpoints; moved into the cache
+#: directory once, on first use.
+LEGACY_CAMERA_ENDPOINTS_FILE = (
+    Path.home()
+    / "Documents"
+    / "MicroDropNextGen"
+    / "device_viewer"
+    / CAMERA_ENDPOINTS_FILENAME
+)
+
 # ---------------------------------------------------------------------------
 # Edit Connections dialog
 # ---------------------------------------------------------------------------

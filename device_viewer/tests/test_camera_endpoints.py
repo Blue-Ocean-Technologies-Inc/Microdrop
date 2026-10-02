@@ -18,7 +18,11 @@ import json
 # Third-party imports.
 import pytest
 
+# Enthought library imports.
+from traits.etsconfig.api import ETSConfig
+
 # Microdrop package imports.
+from device_viewer.utils import camera_endpoints
 from device_viewer.utils.camera_endpoints import CameraEndpointStore
 
 QUAD = [[0.0, 0.0], [100.0, 0.0], [100.0, 80.0], [0.0, 80.0]]
@@ -113,4 +117,39 @@ def test_save_writes_the_canonical_order(store):
 
     data = json.loads(store.path.read_text(encoding="utf-8"))
     assert data["device_a"]["scene_quad"] == QUAD
+    assert store.load("device_a") == QUAD
+
+
+@pytest.fixture
+def application_home(tmp_path, monkeypatch):
+    """A tmp application_home, and a tmp legacy file location so the
+    tests never touch the real one."""
+    monkeypatch.setattr(ETSConfig, "application_home", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        camera_endpoints,
+        "LEGACY_CAMERA_ENDPOINTS_FILE",
+        tmp_path / "legacy" / "camera_endpoints.json",
+    )
+
+    return tmp_path
+
+
+def test_default_store_lives_in_the_application_home_cache(application_home):
+    store = CameraEndpointStore()
+    store.save("device_a", QUAD)
+
+    assert store.path == (
+        application_home / "home" / ".device_viewer_cache" / "camera_endpoints.json"
+    )
+    assert store.path.is_file()
+
+
+def test_default_store_moves_a_legacy_file_once(application_home):
+    legacy = camera_endpoints.LEGACY_CAMERA_ENDPOINTS_FILE
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(json.dumps({"device_a": {"scene_quad": QUAD}}), encoding="utf-8")
+
+    store = CameraEndpointStore()
+
+    assert not legacy.exists()
     assert store.load("device_a") == QUAD
