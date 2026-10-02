@@ -195,6 +195,10 @@ class SvgUtil(HasTraits):
                 )
                 self.generate_connections_from_neighbouring_electrodes()
 
+                # Electrodes with no neighbours generate no connections, which
+                # is what the file already holds: nothing to write on save.
+                self.connections_modified = bool(self.neighbours)
+
     def generate_connections_from_neighbouring_electrodes(self):
         self.neighbours = self.find_neighbours_all()
         self.connections_modified = True
