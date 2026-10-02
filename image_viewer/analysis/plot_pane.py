@@ -123,6 +123,10 @@ PLOT_STAT_LABELS = {
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
     "area": "Area",
+    "circularity": "Circularity",
+    "shape_change": "Shape change",
+    "axis_ratio": "Axis ratio",
+    "solidity": "Solidity",
 }
 
 #: Y-axis wording for the stats whose numbers mean nothing without

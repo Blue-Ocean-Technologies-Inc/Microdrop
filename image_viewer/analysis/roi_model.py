@@ -69,6 +69,7 @@ from .consts import (
     SAVGOL_ORDER_BOUNDS,
     SAVGOL_WINDOW_BOUNDS_PTS,
     SAVGOL_WINDOW_PTS,
+    SHAPE_STATS,
     VIEW_MODES,
     X_AXIS_MODES,
 )
@@ -88,7 +89,7 @@ ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
 #: area-statistics design note). "area" is the ROI's own size, in
-#: the calibrated unit.
+#: the calibrated unit. The droplet-shape quantities close the list.
 PLOT_STATS = (
     "mean",
     "bg_corrected",
@@ -101,7 +102,7 @@ PLOT_STATS = (
     "per_area",
     "bg_per_area",
     "area",
-)
+) + SHAPE_STATS
 
 
 class RoiStyle(HasTraits):

@@ -19,10 +19,10 @@ on stats/current-image change — both scheduled onto the next event-loop
 turn so nothing mutates the table from inside the emitting Qt signal or
 traits notification."""
 
-# Third-party imports.
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import (
+# Enthought library imports.
+from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtGui import QColor, QFont
+from pyface.qt.QtWidgets import (
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
@@ -41,8 +41,9 @@ from microdrop_style.icons.icons import (
 
 # Local imports.
 from ..scale_bar import area_unit, pixel_area
-from .consts import ROI_ALPHA_BOUNDS_PCT
-from .plot_series import stat_value
+from .consts import ROI_ALPHA_BOUNDS_PCT, SHAPE_STATS
+from .plot_series import analysed_paths, shape_reference, stat_value
+from .shape_descriptors import shape_deviation
 
 
 def _visibility_glyph(visible):
@@ -50,7 +51,15 @@ def _visibility_glyph(visible):
 
 
 #: Value columns after the editors, shown for the current image.
-_STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max", "count", "area")
+_STAT_COLUMNS = (
+    "mean",
+    "bg_corrected",
+    "median",
+    "min",
+    "max",
+    "count",
+    "area",
+) + SHAPE_STATS
 #: The eye column's header stays blank, as in the device viewer's
 #: alpha sidebar; Name keeps column 0, where the rename handler
 #: expects it.
@@ -95,7 +104,7 @@ _TABLE_STRUCTURE = (
 #: refresh. The two geometry clauses close a staleness edge: editing an
 #: ROI back to an already-cached geometry never bumps stats_revision.
 _TABLE_VALUES = (
-    "session:stats_revision, current_image_path, "
+    "session:stats_revision, current_image_path, filtered_paths.items, "
     "session:rois:items:geometry, "
     "session:rois:items:overrides.items"
 )
@@ -166,6 +175,7 @@ class RoiStatsTable(QTableWidget):
                 for header in _HEADERS
             ]
         )
+        paths = analysed_paths(session, self._model.filtered_paths)
         for row, roi in enumerate(rois):
             name_item = QTableWidgetItem(roi.name)
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
@@ -193,28 +203,54 @@ class RoiStatsTable(QTableWidget):
                 ),
             )
             self.setCellWidget(row, 7, self._size_spin(roi))
-            stats = (
-                session.stats.get(session.cache_key(current, roi, stat_cache))
-                if current
-                else None
-            )
-            for column, stat in enumerate(
-                _STAT_COLUMNS, start=len(_HEADERS) - len(_STAT_COLUMNS)
+            texts = self._stat_texts(roi, current, paths, stat_cache, area_per_pixel)
+
+            for column, text in enumerate(
+                texts, start=len(_HEADERS) - len(_STAT_COLUMNS)
             ):
-                value = stat_value(stats, stat, area_per_pixel)
-                text = self._cell_text(stat, value)
                 value_item = QTableWidgetItem(text)
                 value_item.setFlags(value_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
         self._rebuilding = False
 
+    def _stat_texts(self, roi, current, paths, stat_cache, area_per_pixel):
+        """The ``_STAT_COLUMNS`` cell texts of ``roi`` on the ``current``
+        image. Shape change is measured from the ROI's first analysed
+        image (of ``paths``) with a droplet — the plot's own reference."""
+        session = self._model.session
+        stats = (
+            session.stats.get(session.cache_key(current, roi, stat_cache))
+            if current
+            else None
+        )
+        reference = shape_reference(
+            [
+                session.stats.get(session.cache_key(path, roi, stat_cache))
+                for path in paths
+            ]
+        )
+        texts = []
+
+        for stat in _STAT_COLUMNS:
+            if stat == "shape_change":
+                value = shape_deviation(stats or {}, reference or {})
+            else:
+                value = stat_value(stats, stat, area_per_pixel)
+
+            texts.append(self._cell_text(stat, value))
+
+        return texts
+
     def _cell_text(self, stat, value):
         """Area spans decades with the unit chosen (0.28 mm² is 2.8e+05
         µm²), so it takes a significant-figure format where the
-        intensity columns keep their fixed decimal."""
+        intensity columns keep their fixed decimal; the unitless shape
+        quantities live near 1 (or 0), so they keep three."""
         if value != value:
             return ""
-        return f"{value:.4g}" if stat == "area" else f"{value:.1f}"
+        if stat == "area":
+            return f"{value:.4g}"
+        return f"{value:.3f}" if stat in SHAPE_STATS else f"{value:.1f}"
 
     def _area_per_pixel(self):
         """One pixel's area in the session's unit (1.0 = px²)."""
@@ -233,21 +269,17 @@ class RoiStatsTable(QTableWidget):
         session = self._model.session
         rois = list(session.rois)
         current = self._model.current_image_path
+        paths = analysed_paths(session, self._model.filtered_paths)
         stat_cache = {}
         area_per_pixel = self._area_per_pixel()
         for row, roi in enumerate(rois):
             if row >= self.rowCount():
                 break
-            stats = (
-                session.stats.get(session.cache_key(current, roi, stat_cache))
-                if current
-                else None
-            )
-            for column, stat in enumerate(
-                _STAT_COLUMNS, start=len(_HEADERS) - len(_STAT_COLUMNS)
+            texts = self._stat_texts(roi, current, paths, stat_cache, area_per_pixel)
+
+            for column, text in enumerate(
+                texts, start=len(_HEADERS) - len(_STAT_COLUMNS)
             ):
-                value = stat_value(stats, stat, area_per_pixel)
-                text = self._cell_text(stat, value)
                 item = self.item(row, column)
                 if item is not None:
                     item.setText(text)

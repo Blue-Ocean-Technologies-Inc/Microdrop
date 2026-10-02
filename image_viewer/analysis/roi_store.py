@@ -26,8 +26,9 @@ from .consts import (
     OUTLINE_STATS_PREFIX,
     ROI_CONFIG_FILENAME,
     ROI_STATS_FILENAME,
+    SHAPE_STATS,
 )
-from .plot_series import normalized_series, stat_value
+from .plot_series import normalized_series, roi_stat_values
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
 from .roi_model import (
@@ -424,18 +425,30 @@ def load_roi_stats(experiment_directory) -> dict:
 
 
 #: Per-ROI CSV columns, in order: interior stats, outline stats, then
-#: the values derived from the pixel count and the scale.
+#: the values derived from the pixel count and the scale, then the
+#: droplet-shape quantities (SHAPE_STATS).
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
     OUTLINE_STATS_PREFIX + name for name in STAT_NAMES
 )
 CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated", "per_area", "bg_per_area")
 
 
-def _csv_cell(stats, stat, pixel_area):
-    """A derived value, blank where the stats cannot supply it — the
-    same empty cell an uncomputed image already writes."""
-    value = stat_value(stats, stat, pixel_area)
-    return "" if value != value else value
+def _csv_cells(values):
+    """Values as cells, blank where a value is NaN — the same empty
+    cell an uncomputed image already writes."""
+    return ["" if value != value else value for value in values]
+
+
+def _roi_columns(rows, rois, stat, pixel_area):
+    """{roi_id: [value, ...]}: ``stat`` down the rows for each ROI, by
+    the plot's own derivation — shape change included, whose reference
+    is the ROI's first row with a droplet."""
+    return {
+        roi.roi_id: roi_stat_values(
+            [row["stats"].get(roi.roi_id) for row in rows], stat, pixel_area
+        )
+        for roi in rois
+    }
 
 
 def _normalised_columns(rows, rois, normalize_stat, pixel_area):
@@ -443,18 +456,13 @@ def _normalised_columns(rows, rois, normalize_stat, pixel_area):
     plot's own normaliser so a CSV column and its curve can never
     disagree."""
     series = {
-        roi.roi_id: (
-            roi.name,
-            list(range(len(rows))),
-            [
-                stat_value(row["stats"].get(roi.roi_id, {}), normalize_stat, pixel_area)
-                for row in rows
-            ],
-        )
-        for roi in rois
+        roi_id: (roi_id, list(range(len(rows))), values)
+        for roi_id, values in _roi_columns(
+            rows, rois, normalize_stat, pixel_area
+        ).items()
     }
     return {
-        roi_id: ["" if value != value else value for value in values]
+        roi_id: _csv_cells(values)
         for roi_id, (_name, _elapsed, values) in normalized_series(series).items()
     }
 
@@ -506,6 +514,7 @@ def write_intensity_csv(
         + list(CSV_STAT_COLUMNS)
         + [f"area_{area_unit_label}"]
         + list(CSV_DERIVED_COLUMNS[1:])
+        + list(SHAPE_STATS)
     )
     if normalize_stat is not None:
         header += [f"{normalize_stat}_norm_pct"]
@@ -530,6 +539,15 @@ def write_intensity_csv(
         if normalize_stat is None
         else _normalised_columns(rows, rois, normalize_stat, pixel_area)
     )
+    # Every derived column is computed down the whole file per ROI: shape
+    # change needs the ROI's first row as its reference.
+    derived = {
+        stat: {
+            roi_id: _csv_cells(values)
+            for roi_id, values in _roi_columns(rows, rois, stat, pixel_area).items()
+        }
+        for stat in CSV_DERIVED_COLUMNS + SHAPE_STATS
+    }
     # utf-8, not the platform default: the area header carries µ and ².
     with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -550,7 +568,8 @@ def write_intensity_csv(
                 record = shared + [roi.name, int(roi.is_background_ref)]
                 record += [stats.get(stat, "") for stat in CSV_STAT_COLUMNS]
                 record += [
-                    _csv_cell(stats, stat, pixel_area) for stat in CSV_DERIVED_COLUMNS
+                    derived[stat][roi.roi_id][index]
+                    for stat in CSV_DERIVED_COLUMNS + SHAPE_STATS
                 ]
                 if normalize_stat is not None:
                     record += [normalised[roi.roi_id][index]]

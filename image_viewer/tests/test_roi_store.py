@@ -474,6 +474,46 @@ def test_write_intensity_csv_includes_the_derived_columns(tmp_path):
     assert float(integrated) == 250.0
 
 
+def test_write_intensity_csv_includes_the_shape_columns(tmp_path):
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [
+        {
+            "filename": f"img{index}_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": float(index),
+            "capture_session": "burst_a",
+            "filter": "Green 540 nm",
+            "stats": {
+                roi.roi_id: {
+                    "mean": 10.0,
+                    "count": 4.0,
+                    "circularity": 0.98,
+                    "axis_ratio": axis_ratio,
+                    "solidity": 0.99,
+                    "hu_root": [1.0, change],
+                }
+            },
+        }
+        for index, (axis_ratio, change) in enumerate(((1.0, 0.0), (1.5, 0.25)))
+    ]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, [roi], pixel_area=1e-4, area_unit_label="mm²")
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        records = list(csv.reader(handle))
+
+    header = records[0]
+
+    for name in ("circularity", "shape_change", "axis_ratio", "solidity"):
+        assert name in header, name
+
+    # Unitless, so the calibration leaves it alone; shape change is
+    # measured from the ROI's first row.
+    assert float(records[2][header.index("axis_ratio")]) == 1.5
+    assert float(records[1][header.index("shape_change")]) == 0.0
+    assert float(records[2][header.index("shape_change")]) == 0.25
+    assert "hu_root" not in header
+
+
 def test_write_intensity_csv_adds_the_normalised_column(tmp_path):
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
     rows = [

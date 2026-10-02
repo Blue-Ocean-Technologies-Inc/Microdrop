@@ -31,6 +31,7 @@ from .consts import (
 )
 from .perspective import warp_frame
 from .roi_geometry import normalize, outline_of
+from .shape_descriptors import ROI_SHAPE_KEYS, roi_shape_stats
 
 #: Stats computed for every mask, in column order.
 STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
@@ -204,6 +205,14 @@ def masked_stats(array, mask):
     }
 
 
+def stats_are_current(stats):
+    """True when ``stats`` (one cached (image, ROI) entry, or None)
+    carries everything a fresh compute stores — an entry cached before
+    the shape stats existed is measured again rather than left showing
+    gaps for them."""
+    return stats is not None and all(key in stats for key in ROI_SHAPE_KEYS)
+
+
 def compute_image_stats(
     image_path,
     effective_rois,
@@ -227,7 +236,10 @@ def compute_image_stats(
 
     ``perspective`` (a flattened homography, () for none) warps the frame
     first, so the ROIs — drawn on the warped frame — land where they were
-    drawn."""
+    drawn.
+
+    The droplet's shape (``roi_shape_stats``) is read off the same
+    corrected frame, inside the interior mask."""
     result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
@@ -251,6 +263,7 @@ def compute_image_stats(
             stats = masked_stats(array, interiors[roi_id])
             for name, value in masked_stats(array, ring).items():
                 stats[OUTLINE_STATS_PREFIX + name] = value
+            stats.update(roi_shape_stats(array, interiors[roi_id]))
             result["stats"][roi_id] = stats
     except Exception as error:
         result["error"] = str(error)

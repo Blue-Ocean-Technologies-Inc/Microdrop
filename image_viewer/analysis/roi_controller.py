@@ -56,6 +56,7 @@ from .roi_batch import (
     RoiBatchRunner,
     pool_is_warm,
 )
+from .roi_compute import stats_are_current
 from .roi_geometry import translated
 from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
 from .roi_store import (
@@ -470,7 +471,8 @@ class RoiAnalysisController(HasTraits):
     def _missing_work(self):
         """[(path_str, {roi_id: (kind, geometry)}), ...] for every
         filtered image with at least one uncached (image, ROI) pair —
-        only the missing ROIs are dispatched per image."""
+        only the missing ROIs are dispatched per image. A pair cached
+        before the shape stats existed counts as missing."""
         session = self.session
         stat_cache = {}
         work = []
@@ -480,7 +482,7 @@ class RoiAnalysisController(HasTraits):
             missing = {}
             for roi in session.rois:
                 key = session.cache_key(path, roi, stat_cache)
-                if key not in session.stats:
+                if not stats_are_current(session.stats.get(key)):
                     missing[roi.roi_id] = (roi.kind, tuple(key[4]))
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
             if missing:
@@ -601,7 +603,7 @@ class RoiAnalysisController(HasTraits):
             return
         key = self.session.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
-        if key in self.session.stats:
+        if stats_are_current(self.session.stats.get(key)):
             return
         self.runner.compute_single(
             current,

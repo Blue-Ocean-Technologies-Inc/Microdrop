@@ -24,6 +24,7 @@ from image_viewer.analysis.plot_series import (
     interpolated_series,
     normalized_series,
     outlier_mask,
+    shape_change_values,
     smoothed_values,
     stat_value,
     subtracted_series,
@@ -31,6 +32,7 @@ from image_viewer.analysis.plot_series import (
     without_outliers,
 )
 from image_viewer.analysis.roi_model import (
+    PLOT_STATS,
     AnalysisSession,
     Roi,
     RoiStyle,
@@ -474,3 +476,68 @@ def test_interpolation_passes_curves_it_cannot_bridge_through():
     assert all(value != value for value in bridged["a"][2])
     assert math.isnan(bridged["b"][2][0]) and bridged["b"][2][1] == 5.0
     assert bridged["c"][2] == [1.0, 2.0]
+
+
+def _shape_stats(*hu_root):
+    """Pane stats carrying a shape (a short Hu vector is enough here)."""
+    return {"circularity": 0.98, "hu_root": list(hu_root)}
+
+
+def test_shape_quantities_are_plot_stats():
+    for stat in ("circularity", "shape_change", "axis_ratio", "solidity"):
+        assert stat in PLOT_STATS
+
+
+def test_shape_change_is_measured_from_the_first_image_with_a_droplet():
+    no_droplet = {"circularity": math.nan, "hu_root": None}
+    values = shape_change_values(
+        [None, no_droplet, _shape_stats(1.0, 0.0), _shape_stats(1.0, 0.5)]
+    )
+
+    assert math.isnan(values[0])  # uncomputed
+    assert math.isnan(values[1])  # no droplet: no shape to compare
+    assert values[2] == 0.0
+    assert abs(values[3] - 0.5) < 1e-12
+
+
+def test_shape_change_without_any_droplet_is_all_nan():
+    values = shape_change_values([None, {"hu_root": None}])
+
+    assert all(math.isnan(value) for value in values)
+
+
+def test_shape_change_rebaselines_when_the_first_image_is_excluded(tmp_path):
+    first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
+    third = _image(tmp_path, "c_2026_07_20-10_01_00_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi], plot_stat="shape_change")
+
+    for path, hu_root in (
+        (first, (1.0, 0.0)),
+        (second, (1.0, 0.3)),
+        (third, (1.0, 0.4)),
+    ):
+        session.stats[session.cache_key(path, roi)] = _shape_stats(*hu_root)
+
+    _name, _x, values = derive_series(session, [first, second, third])[roi.roi_id]
+
+    assert [round(value, 9) for value in values] == [0.0, 0.3, 0.4]
+
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+    _name, _x, values = derive_series(session, [first, second, third])[roi.roi_id]
+
+    assert [round(value, 9) for value in values] == [0.0, 0.1]
+
+
+def test_per_image_shape_stats_plot_as_stored(tmp_path):
+    image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi], plot_stat="axis_ratio")
+    # Unitless: the calibration must not scale it.
+    session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
+    session.stats[session.cache_key(image, roi)] = {"axis_ratio": 2.0}
+
+    _name, _x, values = derive_series(session, [image])[roi.roi_id]
+
+    assert values == [2.0]

@@ -24,6 +24,7 @@ from image_viewer.analysis.roi_compute import (
     masked_stats,
     ring_contours,
     roi_masks,
+    stats_are_current,
     subtract_rolling_ball,
 )
 
@@ -127,6 +128,28 @@ def test_compute_image_stats_reads_16bit_png(tmp_path):
     assert result["stats"]["roi1"]["mean"] == 2000.0
     assert "outline_mean" in result["stats"]["roi1"]
     assert result["mtime"] > 0
+
+
+def test_compute_image_stats_measures_the_droplet_shape(tmp_path):
+    array = np.full((200, 200), 500, dtype=np.uint16)
+    cv2.ellipse(array, (100, 100), (40, 20), 0, 0, 360, 3000, -1)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+
+    result = compute_image_stats(
+        str(path), {"roi1": ("ellipse", (100.0, 100.0, 70.0, 70.0, 0.0))}
+    )
+    stats = result["stats"]["roi1"]
+
+    assert abs(stats["axis_ratio"] - 2.0) < 0.05
+    assert stats["solidity"] > 0.98
+    assert len(stats["hu_root"]) == 7
+    assert stats_are_current(stats)
+
+
+def test_stats_cached_before_the_shape_stats_are_not_current():
+    assert not stats_are_current(None)
+    assert not stats_are_current({"mean": 10.0, "count": 25.0})
 
 
 def test_compute_image_stats_reports_unreadable_file(tmp_path):
