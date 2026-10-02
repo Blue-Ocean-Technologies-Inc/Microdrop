@@ -99,5 +99,5 @@ ICON_COPY = "content_copy"  # copy the selected ROI
 ICON_PASTE = "content_paste"  # paste a copied ROI
 ICON_TONALITY = "tonality"  # rolling-ball flattening
 ICON_PHOTO_CAMERA = "photo_camera"  # capture a camera frame
-ICON_CAMERASWITCH = "cameraswitch"  # rotate the camera image
+ICON_ROTATE_90_CW = "rotate_90_degrees_cw"  # rotate a quarter turn clockwise
 ICON_ADJUST = "adjust"  # show the ball at its size

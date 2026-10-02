@@ -52,11 +52,11 @@ from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 from microdrop_style.colors import WARNING_COLOR
 from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
-    ICON_CAMERASWITCH,
     ICON_FIT_SCREEN,
     ICON_LOCK,
     ICON_LOCK_OPEN,
     ICON_PHOTO_CAMERA,
+    ICON_ROTATE_90_CW,
     ICON_SAVE,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
@@ -425,8 +425,8 @@ class OutlinePane(AlignmentPaneBase):
                     UItem(
                         "rotate",
                         editor=IconButtonEditor(
-                            glyph=ICON_CAMERASWITCH,
-                            tooltip="Rotate the camera image a quarter turn",
+                            glyph=ICON_ROTATE_90_CW,
+                            tooltip="Rotate a quarter turn clockwise",
                         ),
                         enabled_when="is_ready",
                     ),
