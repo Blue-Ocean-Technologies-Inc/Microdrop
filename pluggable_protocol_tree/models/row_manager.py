@@ -40,16 +40,24 @@ from traits.api import (
 from pluggable_protocol_tree.consts import PROTOCOL_ROWS_MIME
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow, GroupRow, build_row_type
-from pluggable_protocol_tree.services.protocol_validator import (
-    log_report,
-    validate_protocol,
+from pluggable_protocol_tree.models.row_manager_clipboard import (
+    RowManagerClipboardMixin,
+)
+from pluggable_protocol_tree.models.row_manager_persistence import (
+    RowManagerPersistenceMixin,
 )
 
 Path = Tuple[int, ...]
 
 
-class RowManager(HasTraits):
-    """Single public API for every tree operation."""
+class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits):
+    """Single public API for every tree operation.
+
+    JSON persistence (``to_json``/``from_json``/``set_state_from_json``) and
+    clipboard (``copy``/``cut``/``paste`` + their payload helpers) are mixed
+    in from ``row_manager_persistence``/``row_manager_clipboard`` — see
+    those modules' docstrings for why a mixin over a collaborator. Structure,
+    selection, and slicing stay here."""
 
     root = Instance(GroupRow)
     columns = ListTrait(Instance(IColumn))
@@ -385,164 +393,6 @@ class RowManager(HasTraits):
                     return found
         return None
 
-    # --- clipboard (payload-layer; QClipboard IO lives in copy/cut/paste) ---
-
-    def _field_index(self, col_id: str) -> int:
-        """Position of col_id in the serialized row tuple (depth/uuid/type/name
-        come first, then columns in their self.columns order)."""
-        fields = ["depth", "uuid", "type", "name"] + [
-            c.model.col_id for c in self.columns
-        ]
-        return fields.index(col_id)
-
-    def _serialize_selection(self) -> dict:
-        """Return a clipboard-style payload covering the current selection.
-
-        Format mirrors persistence (no schema_version on the clipboard):
-        {"columns": [...], "fields": [...],
-         "rows": [[depth, uuid, type, name, *values], ...]}
-        Children of a selected group are included automatically.
-        """
-        rows_out: list = []
-        field_names = ["depth", "uuid", "type", "name"] + [
-            c.model.col_id for c in self.columns
-        ]
-
-        def emit(row: BaseRow, depth: int):
-            vals = [depth, row.uuid, row.row_type, row.name]
-            for col in self.columns:
-                raw = col.model.get_value(row)
-                vals.append(col.model.serialize(raw))
-            rows_out.append(vals)
-            if isinstance(row, GroupRow):
-                for child in row.children:
-                    emit(child, depth + 1)
-
-        # Emit top-level selected rows; children handled recursively.
-        for p in self.selection:
-            row = self.get_row(p)
-            # Skip rows whose ancestor is also selected (covered already).
-            if any(
-                self._is_ancestor(tuple(other), tuple(p))
-                for other in self.selection
-                if other != p
-            ):
-                continue
-            emit(row, depth=0)
-
-        return {
-            "columns": [
-                {
-                    "id": c.model.col_id,
-                    "cls": f"{type(c.model).__module__}.{type(c.model).__name__}",
-                }
-                for c in self.columns
-            ],
-            "fields": field_names,
-            "rows": rows_out,
-        }
-
-    def _paste_from_payload(self, payload: dict, target_path: Optional[Path]) -> None:
-        """Reconstruct rows from `payload` and insert after `target_path`
-        (or at the end of root if None). Each pasted row gets a fresh uuid."""
-        import uuid as _uuid
-
-        fields: list = payload["fields"]
-        col_ids_in_payload: list = fields[4:]  # skip depth, uuid, type, name
-        live_by_col_id = {c.model.col_id: c for c in self.columns}
-
-        # Determine insertion target.
-        if target_path is None or target_path == ():
-            target_parent = self.root
-            insert_idx = len(self.root.children)
-        else:
-            target_row = self.get_row(target_path)
-            if isinstance(target_row, GroupRow):
-                target_parent = target_row
-                insert_idx = len(target_row.children)
-            else:
-                target_parent = target_row.parent or self.root
-                insert_idx = target_parent.children.index(target_row) + 1
-
-        # Reconstruct, honoring depth stacking.
-        stack: list = [target_parent]  # stack[-1] is the current parent
-        base_depth = 0
-        first = True
-        for row_tuple in payload["rows"]:
-            depth = row_tuple[0]
-            row_type = row_tuple[2]
-            row_name = row_tuple[3]
-            values = row_tuple[4:]
-
-            if first:
-                base_depth = depth
-                first = False
-
-            relative_depth = depth - base_depth
-            # Trim stack to relative_depth + 1 entries (we're a child of
-            # stack[relative_depth]).
-            stack = stack[: relative_depth + 1]
-            parent = stack[-1]
-
-            row_cls = self.step_type if row_type == "step" else self.group_type
-            row = row_cls(name=row_name, uuid=_uuid.uuid4().hex)
-            for col_id, raw in zip(col_ids_in_payload, values):
-                col = live_by_col_id.get(col_id)
-                if col is None:
-                    continue  # orphan column (PPT-1 scope: skip silently)
-                setattr(row, col_id, col.model.deserialize(raw))
-
-            # Insert either at the computed position (top-level) or
-            # just append for nested.
-            if relative_depth == 0:
-                parent.insert_row(insert_idx, row)
-                insert_idx += 1
-            else:
-                parent.add_row(row)
-
-            if row_type == "group":
-                stack.append(row)
-
-        self.rows_changed = True
-
-    # --- public clipboard API (wraps QClipboard) ---
-
-    def copy(self) -> None:
-        """Serialize the current selection onto the system QClipboard."""
-        import json
-
-        from pyface.qt.QtWidgets import QApplication
-
-        payload = self._serialize_selection()
-        mime_text = json.dumps(payload)
-        cb = QApplication.clipboard()
-        cb.setText(mime_text)  # TODO(PPT-1): use MIME-typed QMimeData for xplat
-        # NOTE: PPT-1 uses plain-text clipboard for simplicity; upgrading to
-        # a proper application/x-microdrop-rows+json MIME type via QMimeData
-        # lands when we also need cross-app paste. For within-app round-trip
-        # the plain-text path is sufficient.
-
-    def cut(self) -> None:
-        self.copy()
-        self.remove(list(self.selection))
-
-    def paste(self, target_path: Optional[Path] = None) -> None:
-        import json
-
-        from pyface.qt.QtWidgets import QApplication
-
-        cb = QApplication.clipboard()
-        text = cb.text()
-        if not text:
-            return
-        try:
-            payload = json.loads(text)
-        except (ValueError, TypeError):
-            return
-        if "rows" not in payload:
-            return
-        self._paste_from_payload(payload, target_path)
-
     # --- execution iteration ---
 
     def run_scope_roots(self, scope_paths: List[Path]) -> List[Path]:
@@ -760,90 +610,8 @@ class RowManager(HasTraits):
                 return c
         raise KeyError(col_id)
 
-    # --- persistence ---
-
-    def to_json(self) -> dict:
-        """Serialize the tree + per-protocol metadata to a JSON-ready dict."""
-        from pluggable_protocol_tree.services.persistence import serialize_tree
-
-        return serialize_tree(
-            self.root,
-            list(self.columns),
-            protocol_metadata=dict(self.protocol_metadata),
-        )
-
-    @classmethod
-    def from_json(
-        cls,
-        data: dict,
-        columns: list,
-        device_electrode_to_channel=None,
-        report_findings: bool = True,
-    ) -> "RowManager":
-        """Reconstruct a RowManager from a serialized payload.
-
-        When ``report_findings`` is True (headless default) the payload is
-        validated against ``columns`` + ``device_electrode_to_channel`` and any
-        findings are printed via the module logger before loading. The load
-        proceeds regardless - headless cannot prompt."""
-        from pluggable_protocol_tree.services.persistence import deserialize_tree
-
-        if report_findings:
-            report = validate_protocol(data, columns, device_electrode_to_channel)
-            if not report.is_empty:
-                log_report(report)
-        manager = cls(columns=list(columns))
-        root, metadata = deserialize_tree(
-            data,
-            columns,
-            step_type=manager.step_type,
-            group_type=manager.group_type,
-        )
-        manager.root = root
-        manager.protocol_metadata = metadata
-        return manager
-
-    def set_state_from_json(
-        self,
-        data: dict,
-        columns: list,
-        device_electrode_to_channel=None,
-        report_findings: bool = True,
-    ) -> None:
-        """Reconstruct tree state in-place from a serialized payload dynamically.
-
-        When ``report_findings`` is True (headless default) findings are
-        validated and printed via the module logger before applying state. The
-        GUI load path passes ``report_findings=False`` because it has already
-        shown them in a dialog."""
-        from pluggable_protocol_tree.services.persistence import deserialize_tree
-
-        if report_findings:
-            report = validate_protocol(data, columns, device_electrode_to_channel)
-            if not report.is_empty:
-                log_report(report)
-
-        # 1. Update columns. This triggers _on_columns_change via Traits,
-        #    which automatically rebuilds self.step_type and self.group_type.
-        self.columns = list(columns)
-
-        # 2. Deserialize the payload into a new root and metadata dict
-        root, metadata = deserialize_tree(
-            data,
-            self.columns,
-            step_type=self.step_type,
-            group_type=self.group_type,
-        )
-
-        # 3. Apply the new state
-        self.root = root
-        self.protocol_metadata = metadata
-
-        # 4. Clear any dangling selection paths, as the old tree structure is gone
-        self.selection = []
-
-        # 5. Notify the UI/observers that the structure has completely changed
-        self.rows_changed = True
+    # --- persistence (to_json/from_json/set_state_from_json: see
+    # row_manager_persistence.RowManagerPersistenceMixin) ---
 
     def set_columns(self, new_columns: list, data: dict = None) -> None:
         """Swap the active column set in place, preserving current cell values.
