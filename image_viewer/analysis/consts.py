@@ -135,11 +135,22 @@ DEFAULT_ROI_COLORS = (
     "#17becf",
 )
 
-#: Plot pane view modes: the intensity chart, the fits' second-
-#: derivative curves, or the per-ROI time-of-fastest-change bars.
-VIEW_MODES = ("intensity", "second_derivative", "fastest_change")
+#: Plot pane view modes: the plotted stat over time (the key predates
+#: the area stat and is persisted, so it stays "intensity"), its value
+#: per ROI on the displayed image, its distribution per ROI across the
+#: series, the fits' second-derivative curves, or the per-ROI
+#: time-of-fastest-change bars.
+VIEW_MODES = (
+    "intensity",
+    "per_image",
+    "distribution",
+    "second_derivative",
+    "fastest_change",
+)
 VIEW_MODE_LABELS = {
-    "intensity": "Intensity",
+    "intensity": "Over time",
+    "per_image": "Per image",
+    "distribution": "Distribution",
     "second_derivative": "2nd derivative",
     "fastest_change": "Fastest change",
 }
