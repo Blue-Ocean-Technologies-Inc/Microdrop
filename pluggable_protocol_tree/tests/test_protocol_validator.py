@@ -10,18 +10,24 @@
 
 """Tests for the pure protocol-load validator and its presenters."""
 
+# Standard library imports.
 import logging
 from types import SimpleNamespace
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.protocol_validator import (
-    validate_protocol, ValidationReport, Finding,
-    SEVERITY_ERROR, SEVERITY_WARNING,
-    log_report, _row_dotted_ids,
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+    Finding,
+    ValidationReport,
+    _row_dotted_ids,
+    log_report,
+    validate_protocol,
 )
 from pluggable_protocol_tree.views import protocol_validator_presenter as presenter
 from pluggable_protocol_tree.views.protocol_validator_presenter import (
@@ -66,7 +72,7 @@ def test_orphan_column_is_error():
 
 def test_non_list_columns_does_not_raise():
     data = make_data()
-    data["columns"] = "corrupted"   # not a list
+    data["columns"] = "corrupted"  # not a list
     report = validate_protocol(data, fake_columns("x"), {})
     assert report.is_empty
 
@@ -108,9 +114,10 @@ def test_unknown_electrode_in_electrodes_column():
         [0, "u0", "step", "A", ["E1", "E99"]],
         [0, "u1", "step", "B", ["E1"]],
     ]
-    device_map = {"E1": 1}   # E99 is unknown
-    report = validate_protocol(make_data(fields=fields, rows=rows),
-                               fake_columns("electrodes"), device_map)
+    device_map = {"E1": 1}  # E99 is unknown
+    report = validate_protocol(
+        make_data(fields=fields, rows=rows), fake_columns("electrodes"), device_map
+    )
     warns = report.warnings
     assert len(warns) == 1
     assert warns[0].category == "electrode_id"
@@ -122,9 +129,10 @@ def test_unknown_electrode_in_routes_column():
     rows = [
         [0, "u0", "step", "A", [["E1", "E2"], ["E2", "EX"]]],
     ]
-    device_map = {"E1": 1, "E2": 2}   # EX unknown
-    report = validate_protocol(make_data(fields=fields, rows=rows),
-                               fake_columns("routes"), device_map)
+    device_map = {"E1": 1, "E2": 2}  # EX unknown
+    report = validate_protocol(
+        make_data(fields=fields, rows=rows), fake_columns("routes"), device_map
+    )
     assert [f.category for f in report.warnings] == ["electrode_id"]
     assert report.warnings[0].items == ["EX  (steps 1)"]
 
@@ -133,18 +141,22 @@ def test_known_electrodes_no_findings():
     fields = ["depth", "uuid", "type", "name", "electrodes"]
     rows = [[0, "u0", "step", "A", ["E1", "E2"]]]
     device_map = {"E1": 1, "E2": 2}
-    report = validate_protocol(make_data(fields=fields, rows=rows),
-                               fake_columns("electrodes"), device_map)
+    report = validate_protocol(
+        make_data(fields=fields, rows=rows), fake_columns("electrodes"), device_map
+    )
     assert report.is_empty
 
 
 def test_stale_channel_mapping_flagged():
     fields = ["depth", "uuid", "type", "name", "electrodes"]
     rows = [[0, "u0", "step", "A", ["E1"]]]
-    metadata = {"electrode_to_channel": {"E1": 5}}   # protocol thinks E1 -> ch 5
-    device_map = {"E1": 7}                           # device now maps E1 -> ch 7
-    report = validate_protocol(make_data(fields=fields, rows=rows, metadata=metadata),
-                               fake_columns("electrodes"), device_map)
+    metadata = {"electrode_to_channel": {"E1": 5}}  # protocol thinks E1 -> ch 5
+    device_map = {"E1": 7}  # device now maps E1 -> ch 7
+    report = validate_protocol(
+        make_data(fields=fields, rows=rows, metadata=metadata),
+        fake_columns("electrodes"),
+        device_map,
+    )
     stale = [f for f in report.warnings if f.category == "stale_channel"]
     assert len(stale) == 1
     assert stale[0].items == ["E1: protocol ch 5 -> device ch 7"]
@@ -155,17 +167,23 @@ def test_matching_channel_not_flagged():
     rows = [[0, "u0", "step", "A", ["E1"]]]
     metadata = {"electrode_to_channel": {"E1": 7}}
     device_map = {"E1": 7}
-    report = validate_protocol(make_data(fields=fields, rows=rows, metadata=metadata),
-                               fake_columns("electrodes"), device_map)
+    report = validate_protocol(
+        make_data(fields=fields, rows=rows, metadata=metadata),
+        fake_columns("electrodes"),
+        device_map,
+    )
     assert report.is_empty
 
 
 def test_no_device_map_skips_device_checks_but_reports_orphan():
     fields = ["depth", "uuid", "type", "name", "electrodes"]
     rows = [[0, "u0", "step", "A", ["E_DOES_NOT_EXIST"]]]
-    data = make_data(fields=fields, rows=rows,
-                     columns=[{"id": "electrodes"}, {"id": "ghost"}],
-                     metadata={"electrode_to_channel": {"E1": 1}})
+    data = make_data(
+        fields=fields,
+        rows=rows,
+        columns=[{"id": "electrodes"}, {"id": "ghost"}],
+        metadata={"electrode_to_channel": {"E1": 1}},
+    )
     report = validate_protocol(data, fake_columns("electrodes"), {})  # no device
     # device checks skipped -> only the orphan-column error remains
     assert [f.category for f in report.findings] == ["orphan_column"]
@@ -175,27 +193,40 @@ def test_malformed_data_no_exception():
     assert validate_protocol(None, fake_columns("x"), {"E1": 1}).is_empty
     assert validate_protocol({}, fake_columns("x"), {"E1": 1}).is_empty
     # rows missing value slots / wrong types must not raise
-    bad = {"columns": [{"id": "electrodes"}], "fields": ["depth", "uuid", "type", "name", "electrodes"],
-           "rows": [[0, "u", "step", "A"], [0, "u2", "step", "B", "notalist"]]}
+    bad = {
+        "columns": [{"id": "electrodes"}],
+        "fields": ["depth", "uuid", "type", "name", "electrodes"],
+        "rows": [[0, "u", "step", "A"], [0, "u2", "step", "B", "notalist"]],
+    }
     report = validate_protocol(bad, fake_columns("electrodes"), {"E1": 1})
     assert isinstance(report, ValidationReport)
 
 
 def _report_with_error_and_warning():
-    return ValidationReport(findings=[
-        Finding(severity=SEVERITY_ERROR, category="orphan_column",
-                title="1 orphan column", items=["magnet"]),
-        Finding(severity=SEVERITY_WARNING, category="electrode_id",
-                title="1 unknown electrode", items=["E99  (steps 1)"]),
-    ])
+    return ValidationReport(
+        findings=[
+            Finding(
+                severity=SEVERITY_ERROR,
+                category="orphan_column",
+                title="1 orphan column",
+                items=["magnet"],
+            ),
+            Finding(
+                severity=SEVERITY_WARNING,
+                category="electrode_id",
+                title="1 unknown electrode",
+                items=["E99  (steps 1)"],
+            ),
+        ]
+    )
 
 
 def test_log_report_levels(caplog):
     with caplog.at_level(logging.WARNING):
         log_report(_report_with_error_and_warning())
     levels = {r.levelno for r in caplog.records}
-    assert logging.ERROR in levels      # orphan finding logged at ERROR
-    assert logging.WARNING in levels    # electrode finding logged at WARNING
+    assert logging.ERROR in levels  # orphan finding logged at ERROR
+    assert logging.WARNING in levels  # electrode finding logged at WARNING
     text = caplog.text
     assert "magnet" in text and "E99" in text
 
@@ -204,15 +235,16 @@ def test_confirm_report_proceed(monkeypatch):
     captured = {}
 
     def fake_confirm(parent=None, message="", title="", **kwargs):
-        captured.update(title=title, kwargs=kwargs)
-        return YES   # user clicked the proceed button
+        captured.update(title=title, message=message, kwargs=kwargs)
+        return YES  # user clicked the proceed button
 
     monkeypatch.setattr(presenter, "confirm", fake_confirm)
     decision = confirm_report(_report_with_error_and_warning(), parent=None)
     assert decision == YES
     # errors present -> the override-labelled proceed button + error title
     assert captured["title"] == "Protocol has errors"
-    assert captured["kwargs"]["yes_label"] == "Load anyway (drop columns)"
+    assert captured["kwargs"]["yes_label"] == "OK"
+    assert "drop the columns" in captured["message"]
     assert captured["kwargs"]["no_label"] == ""
     assert captured["kwargs"]["cancel"] is True
 
@@ -221,10 +253,16 @@ def test_confirm_report_cancel(monkeypatch):
     # confirm()'s result passes straight through; the caller treats anything
     # but YES as cancel.
     monkeypatch.setattr(presenter, "confirm", lambda *a, **k: CANCEL)
-    report = ValidationReport(findings=[
-        Finding(severity=SEVERITY_WARNING, category="electrode_id",
-                title="1 unknown electrode", items=["E99  (steps 1)"]),
-    ])
+    report = ValidationReport(
+        findings=[
+            Finding(
+                severity=SEVERITY_WARNING,
+                category="electrode_id",
+                title="1 unknown electrode",
+                items=["E99  (steps 1)"],
+            ),
+        ]
+    )
     assert confirm_report(report, parent=None) == CANCEL
 
 
@@ -239,8 +277,13 @@ def test_set_state_from_json_logs_orphan_and_still_loads(caplog):
         "schema_version": 1,
         "protocol_metadata": {},
         "columns": [
-            {"id": "duration_s",
-             "cls": "pluggable_protocol_tree.builtins.duration_column.DurationColumnModel"},
+            {
+                "id": "duration_s",
+                "cls": (
+                    "pluggable_protocol_tree.builtins.duration_column."
+                    "DurationColumnModel"
+                ),
+            },
             {"id": "magnet", "cls": "x.Y"},
         ],
         "fields": ["depth", "uuid", "type", "name", "duration_s", "magnet"],
@@ -248,14 +291,15 @@ def test_set_state_from_json_logs_orphan_and_still_loads(caplog):
     }
     with caplog.at_level(logging.ERROR):
         mgr.set_state_from_json(data, columns=_basic_columns())
-    assert "magnet" in caplog.text                 # orphan finding printed
-    assert len(mgr.root.children) == 1             # load still happened
+    assert "magnet" in caplog.text  # orphan finding printed
+    assert len(mgr.root.children) == 1  # load still happened
 
 
 def test_report_findings_false_suppresses_logging(caplog):
     mgr = RowManager(columns=_basic_columns())
     data = {
-        "schema_version": 1, "protocol_metadata": {},
+        "schema_version": 1,
+        "protocol_metadata": {},
         "columns": [{"id": "magnet", "cls": "x.Y"}],
         "fields": ["depth", "uuid", "type", "name", "magnet"],
         "rows": [[0, "u0", "step", "A", "ignored"]],

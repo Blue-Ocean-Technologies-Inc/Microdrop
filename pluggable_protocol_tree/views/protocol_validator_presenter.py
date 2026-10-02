@@ -16,6 +16,7 @@ validator service — because it pulls in Qt via the pyface dialog wrapper,
 and the service layer must stay Qt-free.
 """
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import confirm
 
 
@@ -46,16 +47,20 @@ def confirm_report(report, parent=None) -> int:
 
     Uses exactly two buttons - a proceed button (yes_label) and Cancel - by
     passing no_label="" to suppress confirm()'s default No button. When errors
-    are present the proceed button is the explicit drop-columns override."""
+    are present the proceed button is the explicit drop-columns override,
+    explained in the message so its label stays short enough to show."""
     if report.errors:
         title = "Protocol has errors"
-        proceed_label = "Load anyway (drop columns)"
+        message = "Press OK to continue anyway and drop the columns."
+        proceed_label = "OK"
     else:
         title = "Protocol warnings"
+        message = ""
         proceed_label = "Proceed anyway"
+
     return confirm(
         parent,
-        message="",
+        message=message,
         title=title,
         cancel=True,
         yes_label=proceed_label,
