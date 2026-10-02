@@ -1,3 +1,81 @@
+## [v1.26.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.26.0) (2026-10-02)
+
+### Feat
+
+- **device-viewer**: reset buttons in both alignment panes ([`4e34b14`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4e34b144f94171a4de9b69cef38d798771734445))
+- **device-viewer**: lock the camera image while rotating or flipping the grid ([`041aaaf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/041aaaff2dfe5c5d275ea0b76a39039b62458516))
+- **device-viewer**: start both alignment panes on the same TL/TR/BR/BL grid ([`0780017`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0780017127eebc1b8abe3291d7c71dd2a33c44f9))
+- **device-viewer**: dot-number alpha in the alignment sidebar ([`c79c698`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c79c6986dcc8109a53abb05143b063482920d1a0))
+- **device-viewer**: number the alignment dots and warn on mismatched order ([`7d2b873`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7d2b873cf653f76ae147782b71adc3cf9e84fc88))
+- **device-viewer**: alignment highlight colour, alpha and size in the sidebar ([`8d2f6d2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8d2f6d2ec8a9c8ea7a9c6a7796416719fb17de7f))
+- **device-viewer**: highlight the matching alignment dot in both panes ([`9091cd0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9091cd02f259c783c40d4e36211ff3b34c7dd4ff))
+- **device-viewer**: rotate and flip buttons in the alignment dialog ([`5d51cdc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5d51cdc5a2210177fcdb6cc603700e11ab6ff5d4))
+- **device-viewer**: flip the camera image in the perspective model ([`1a103de`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1a103de19d00effa22aa9a48f1f4bf4d3a45e484))
+- **image-viewer**: toolbar icons, plot examples and walkthrough in the help guide ([`0e14541`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0e145419998a5a34b253e71ad034caf200c5eae8))
+- **image-viewer**: open the analysis guide from the Help menu ([`f121de9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f121de97a09bdaa3a5b13a4046c295d9789128fe))
+- **image-viewer**: add the analysis terms help guide ([`8823a75`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8823a75e774ad7e028e67083b4f246ca4d15e506))
+- **image-viewer**: device outline reference in the transform pane ([`7015dec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7015dec0fa4d60ee99bfdb62c144ed3bd0e0ae50))
+- **image-viewer**: add per-image and distribution views ([`6af7c80`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6af7c803d1eef1b708ee427ad6fa79de2c7d5be3))
+- **image-viewer**: offer ROI area as a plot quantity ([`fbe034a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fbe034a783602127b51cbedb8bfabbe87b4e4d84))
+- **device-viewer**: host contributed layers ([`931ac26`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/931ac2687f13d6635b53756efeb46a716214a8d1))
+- **device-viewer**: add the layer contract ([`079f220`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/079f2202e1fe4329779e11e04c546666b23f2dae))
+
+### Fix
+
+- **device-viewer**: a freshly loaded device is not modified ([`b282dae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b282dae66350c9c6afb4ee76de45753cccd9842d))
+- **device-viewer**: let the endpoint reset prompt pick its parent ([`f3e9be7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3e9be7a8874824b0b35e792a76d6129496ed79d))
+- **device-viewer**: store the alignment cache under application_home ([`382a016`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/382a016c51399f09a069d20883b4099a6462a3bc))
+- **device-viewer**: always number the device-side dots from top-left ([`8940a9b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8940a9b9e5d281323bd892897a05f477201ef895))
+- **device-viewer**: generic rotate icon in the alignment dialog ([`f3654cb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3654cb4a47bd6b7c4e06718b7e670249f37fd54))
+- **device-viewer**: respect quadToQuad's failure flag ([`42b8e42`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/42b8e42d726d225d79717cb6bcff8530bac65adf))
+- **device-viewer**: isolate all model app-globals in tests ([`9743688`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9743688c2e53ef141c9d6a99cdde18793cb49d15))
+- **image-viewer**: use the device viewer's perspective icon ([`63aedbb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/63aedbbd7574cb9e2f97934f45d96ba4c4364942))
+- **device-viewer**: keep tests off the live repo-dir global ([`0035224`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/003522487ad17c717135dc9107b0e8c3d9845c58))
+- **image-viewer**: keep ROI names on fastest-change bars ([`b5706cb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b5706cb30d3f9a8449671bdb718359b936e9bb72))
+- **image-viewer**: show full labels in plot combos ([`c1e845e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c1e845e07b036e23b963edac1d5bbffb5994afe0))
+- **protocol-tree**: fit the Protocol Has Errors buttons ([`643f0f0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/643f0f0f37fbb0051b7dcbb57d87bf288924a279))
+- **protocol-tree**: route Bulk Set through the column handlers ([`803be13`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/803be13f6b70fed31edf74dc85df1a2b9cf301b8))
+- **protocol-tree**: honour the full-timeline toggle in duration mode ([`1b56346`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1b563464070cbe701fc3225aab8efa2ca1cd534a))
+- **protocol-tree**: route reps and repeat duration take over by last edit ([`68f087d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/68f087d6ce22db7911742a6cf317eebda752f8cd))
+- **protocol-tree**: refresh the timeline on cell edits ([`5f9c309`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5f9c30906ffb76c1c2ede172ee907854528eb96e))
+- **camera**: deliver preview frames on the GUI thread ([`62f7e45`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/62f7e45333eccef9d9a05d6cba2d598608a7f119))
+- **device-viewer**: recover from undoing the camera rect ([`9be2e92`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9be2e92f6f3a25579e5432a920b76b38a82f943a))
+- **device-viewer**: stop publishing an empty geometry map ([`3205369`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3205369cc5fe71aa7d05749f2afef7c3b4864a3b))
+- **device-viewer**: stop layer host test leaking preferences ([`748fe59`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/748fe599c19460538ece78dff26233e61d5a79a2))
+- **device-viewer**: guard layer host and alpha observer ([`f6215fd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f6215fdbb27ce0bc474b6999b124d0e3a37b5069))
+
+### Refactor
+
+- **device-viewer**: move SVG persistence to a service ([`a2073d4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a2073d405b36f041c979e0cb2f664d87a4b75d1c))
+- **utils**: share the zoomable graphics view ([`99c67f0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/99c67f0df8138029e268702ec16b45f68f4a2a1c))
+- **utils**: move SVG outline extraction to microdrop_utils ([`e5d979f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5d979fd20e722a70da871aa22aa7b268c8f623b))
+- **protocol-tree**: split RowManager persistence and clipboard ([`04f9d13`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/04f9d13ca9a1990fc659bda2babfdaa8c5949b4a))
+- **protocol-tree**: move column rebuild into RowManager ([`ee4be45`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ee4be45187933795d06d1e973f9e7ea17517614b))
+- **protocol-tree**: extract repeat-duration reconciler ([`d769b12`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d769b1262e54a1b256e7f8b2f94f3b47ea5b10f3))
+- **device-viewer**: breathing room in publish controller ([`9644001`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/96440015af4c173962bc65a76207b2908d005150))
+- **device-viewer**: move outbound publishing to a controller ([`fa52130`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fa52130bd852fb32e73fce70c47d0d44b48593a1))
+- **device-viewer**: tidy sidebar assembly out of create_contents ([`638531f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/638531f6dce3b3339b44d780be41c03515202c58))
+- **device-viewer**: move sidebar sections into builders ([`5432359`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54323597e535f93aade78d44aaec4d74cc9004fc))
+- **device-viewer**: build recorders in recording.factory ([`d61c4f1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d61c4f16953ad8ce84320708daec58e75d2ef431))
+- **device-viewer**: move the media-capture cache actor to services ([`9751040`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97510403467fda61dbf80a705f3252ce656ddb40))
+- **device-viewer**: split utils/camera.py into capture and recording ([`c069515`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c0695150087deaf56513445ead7391a6ee62f125))
+- **device-viewer**: extract CameraController from the camera widget ([`e163432`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e163432dc5321c2aea6f5a593fb5baa9e3cdec29))
+- **device-viewer**: move camera widget state into CameraModel ([`5880787`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/58807878a36daba32d4f0f78a31812549db282a9))
+
+### Test
+
+- **device-viewer**: cover the publish controller ([`5a56426`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5a5642609cd4ac20ce411295279234e67c59f730))
+- **device-viewer**: cover the layer contract and host ([`7d03354`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7d033540223c572e8063a7c2ba059c19e76b9314))
+- **device-viewer**: cover the sidebar host ([`9ace435`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9ace435fd1525be4362d869d477ca713b914d430))
+- **device-viewer**: cover CameraController with a stub camera ([`d8db3be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d8db3be6ca45120adfcbdc1122f3951c3ed34ece))
+
+### Chore
+
+- drop the legacy MicroDropNextGen application home ([`4940347`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4940347484919821709b1d5878c1589bef493473))
+- **examples**: scripts that regenerate the analysis help figures ([`3131429`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3131429a0da4b093f9868769ddf948d24136880e))
+- **protocol-tree**: ruff-clean row_manager.py ([`f76ccae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f76ccaebc3d97d3bba96737d0d0a6d658be765fa))
+- **device-viewer**: ruff-clean the plugin module ([`0e06f56`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0e06f56052ce9b547376737bc6f0d0d0d547e311))
+
 ## [v1.25.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.25.1) (2026-09-30)
 
 ### Fix
