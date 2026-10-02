@@ -19,14 +19,24 @@ Dynamic per-protocol subclasses (see `build_row_type`) inherit from these
 and add one trait per column in the active column set.
 """
 
+# Standard library imports.
 import uuid as _uuid
 
+# Enthought library imports.
 from traits.api import (
-    HasTraits, Str, List, Instance, Tuple, Property, Bool, Dict, provides,
-    observe,
+    Bool,
+    Dict,
+    HasTraits,
+    Instance,
+    List,
+    Property,
+    Str,
+    Tuple,
+    provides,
 )
 
-from pluggable_protocol_tree.interfaces.i_row import IRow, IGroupRow
+# Microdrop package imports.
+from pluggable_protocol_tree.interfaces.i_row import IGroupRow, IRow
 
 
 @provides(IRow)
@@ -35,19 +45,25 @@ class BaseRow(HasTraits):
     name = Str("Step", desc="User-visible row name")
     parent = Instance("BaseRow", desc="Owning GroupRow (None for rows at the top)")
     row_type = Str("step", desc="'step' or 'group' — drives per-column visibility")
-    path = Property(Tuple, observe="parent.path, parent.children.items",
-                    desc="0-indexed tuple of positions from the root (empty for orphans)")
+    path = Property(
+        Tuple,
+        observe="parent.path, parent.children.items",
+        desc="0-indexed tuple of positions from the root (empty for orphans)",
+    )
     repeat_duration_controls = Bool(
         False,
         desc="Internal mode flag: True when Route Reps Dur is the "
-             "authoritative loop knob; False when Route Reps controls. "
-             "Not a column — persisted via the row_flags map.")
+        "authoritative loop knob; False when Route Reps controls. "
+        "Not a column — persisted via the row_flags map.",
+    )
     column_locks = Dict(
-        Str, Dict,
+        Str,
+        Dict,
         desc="Owner-keyed per-row column locks: {col_id: {owner: reason}}. "
-             "Runtime-derived state, rebuilt from its source on load — "
-             "never persisted (a lock with no live owner could never be "
-             "released).")
+        "Runtime-derived state, rebuilt from its source on load — "
+        "never persisted (a lock with no live owner could never be "
+        "released).",
+    )
 
     def _uuid_default(self):
         return _uuid.uuid4().hex
@@ -59,7 +75,7 @@ class BaseRow(HasTraits):
             try:
                 idx = current.parent.children.index(current)
             except ValueError:
-                return ()   # row was detached mid-read; report empty
+                return ()  # row was detached mid-read; report empty
             indices.insert(0, idx)
             current = current.parent
         return tuple(indices)
@@ -100,21 +116,9 @@ class BaseRow(HasTraits):
 
     def column_lock_reasons(self, col_id: str) -> list:
         """Non-empty lock reasons for ``col_id`` — the cell tooltip."""
-        return [reason for reason in self.column_locks.get(col_id, {}).values()
-                if reason]
-
-    @observe("repeat_duration_controls")
-    def _sync_repeat_duration_lock(self, event):
-        # "Route Reps will become read-only while Route Reps Dur is in
-        # control" — the mode-handoff dialog's promise (issue #541
-        # debt). Observed on the trait, not done in the column handler,
-        # because DV-sidebar sync and protocol load write this flag
-        # directly and the lock must follow on every path.
-        if event.new:
-            self.lock_column("route_repetitions", owner="repeat_duration",
-                             reason="Route Reps Dur is in control")
-        else:
-            self.unlock_column("route_repetitions", owner="repeat_duration")
+        return [
+            reason for reason in self.column_locks.get(col_id, {}).values() if reason
+        ]
 
 
 @provides(IGroupRow)
@@ -155,8 +159,5 @@ def build_row_type(columns, base=BaseRow, name="ProtocolStepRow") -> type:
     Returns:
         A new class derived from `base` with each column's trait added.
     """
-    class_dict = {
-        col.model.col_id: col.model.trait_for_row()
-        for col in columns
-    }
+    class_dict = {col.model.col_id: col.model.trait_for_row() for col in columns}
     return type(name, (base,), class_dict)

@@ -211,3 +211,23 @@ def test_reconcile_duration_mode_ignores_other_columns(manager, monkeypatch):
         manager, path, "duration_s", is_protocol_active=False
     )
     assert called == []
+
+
+def test_route_reps_takeover_refreshes_repeat_duration_estimate(manager, monkeypatch):
+    """Editing Route Reps in duration mode hands control back; the next
+    reconcile pass then treats Route Reps Dur as the derived estimate."""
+    path = _add_row_with_route(
+        manager, repeat_duration=30.0, repeat_duration_controls=True
+    )
+    monkeypatch.setattr(reconciler, "estimate_repeat_duration_s", lambda **kw: 4.0)
+    col = make_route_repetitions_column()
+    row = manager.get_row(path)
+
+    col.handler.on_interact(row, col.model, 3)
+    reconciler.reconcile_repeat_duration_for_row(
+        manager, path, "route_repetitions", is_protocol_active=False
+    )
+
+    assert row.repeat_duration_controls is False
+    assert row.route_repetitions == 3
+    assert row.repeat_duration == 4.0

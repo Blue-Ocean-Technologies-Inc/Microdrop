@@ -15,33 +15,69 @@ open-route passes when Lin Reps is on). Distinct from the "Reps" column,
 which repeats the whole step/group via row_manager._expand_frames. On a
 step, total route plays = Reps x Route Reps. Inert on groups.
 
-While a row is in duration-controlled mode (``repeat_duration_controls``
-True) this cell is LOCKED read-only via the per-row column-lock
-mechanism (issue #541) — the lock is applied by a BaseRow observer on
-the flag, so it also holds on protocol load and DV-sidebar sync. The
-way back to count mode is editing Route Reps Dur to 0, which prompts
-(see repeat_duration_column.py). No custom handler remains: edits can
-only happen in count mode, where they are plain writes.
+Route Reps and Route Reps Dur are mutually exclusive by last edit, like
+the DV sidebar's pair: while Route Reps Dur is in control
+(``repeat_duration_controls`` True) this cell shows the derived loop
+count and stays editable — editing it hands control back to Route Reps,
+and the repeat-duration reconciler refreshes Route Reps Dur with the
+estimate.
 """
 
+# Enthought library imports.
 from traits.api import Int
 
-from pluggable_protocol_tree.models.column import BaseColumnModel, Column
+# Microdrop package imports.
+from pluggable_protocol_tree.models.column import (
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
+)
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
 
 class RouteRepetitionsColumnModel(BaseColumnModel):
     def trait_for_row(self):
-        return Int(1, desc="Number of times this step's routes loop "
-                           "(loop-route cycles / open-route passes).")
+        return Int(
+            1,
+            desc="Number of times this step's routes loop "
+            "(loop-route cycles / open-route passes).",
+        )
+
+
+class RouteRepetitionsHandler(BaseColumnHandler):
+    """A user edit takes loop control from Route Reps Dur."""
+
+    def on_interact(self, row, model, value):
+        row.repeat_duration_controls = False
+
+        return model.set_value(row, value)
+
+
+class RouteRepetitionsColumnView(IntSpinBoxColumnView):
+    """Spinbox whose tooltip names the knob in control."""
+
+    def get_tooltip(self, row):
+        if isinstance(row, GroupRow):
+            return None
+
+        if getattr(row, "repeat_duration_controls", False):
+            return (
+                "Route Reps Dur is in control: this is the number of full "
+                "loops that fit. Editing Route Reps takes control back."
+            )
+
+        return "Route Reps is in control. Editing Route Reps Dur takes over."
 
 
 def make_route_repetitions_column():
     return Column(
         model=RouteRepetitionsColumnModel(
-            col_id="route_repetitions", col_name="Route Reps",
+            col_id="route_repetitions",
+            col_name="Route Reps",
             default_value=1,
         ),
         # Bounds mirror the DV sidebar's RouteLayerManager.repetitions.
-        view=IntSpinBoxColumnView(low=1, high=10000),
+        view=RouteRepetitionsColumnView(low=1, high=10000),
+        handler=RouteRepetitionsHandler(),
     )

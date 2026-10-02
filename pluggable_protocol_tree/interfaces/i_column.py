@@ -16,9 +16,11 @@ plugins reuse the same model with different views, or the same view with
 different handlers, with no coupling.
 """
 
+# Third-party imports.
 from PySide6.QtCore import Signal
 
-from traits.api import Interface, Str, Any, Float, Int, Bool, Instance, List
+# Enthought library imports.
+from traits.api import Any, Bool, Float, Instance, Int, Interface, List, Str
 
 
 class IColumnModel(Interface):
@@ -61,6 +63,10 @@ class IColumnView(Interface):
     def get_check_state(self, value, row):
         """Qt.CheckState or None (returning None means no checkbox)."""
 
+    def get_tooltip(self, row):
+        """Cell tooltip for this row, or None. A column lock's reasons
+        take precedence."""
+
     def create_editor(self, parent, context):
         """Create a QWidget for editing. Return None for non-editable cells."""
 
@@ -102,19 +108,19 @@ class IColumnHandler(Interface):
     )
 
     model = Instance(
-        IColumnModel, desc="Wired by Column.traits_init; the handler's "
-        "view of its own column semantics."
+        IColumnModel,
+        desc="Wired by Column.traits_init; the handler's "
+        "view of its own column semantics.",
     )
-    view = Instance(
-        IColumnView, desc="Wired by Column.traits_init."
-    )
+    view = Instance(IColumnView, desc="Wired by Column.traits_init.")
 
     column_changed_signal = Instance(
         Signal, desc="Emit to signal parent tree model column needs refreshing"
     )
     trigger_column_change_when_wired = Bool(
         False,
-        desc="When column_changed_signal is initialized, does it have to be triggered from a missed past event before it was wired to this handler.",
+        desc="When column_changed_signal is initialized, does it have to be "
+        "triggered from a missed past event before it was wired to this handler.",
     )
 
     def on_interact(self, row, model, value):
@@ -161,7 +167,9 @@ class IColumn(Interface):
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
 
-    id = Str(desc="Identity of this column UNIT (model+view+handler) for "
-                  "unit-level maps like the ack-wait grid. Defaults to the "
-                  "model's col_id; compound expansion overrides it with the "
-                  "compound's base_id on every synthesized field cell.")
+    id = Str(
+        desc="Identity of this column UNIT (model+view+handler) for "
+        "unit-level maps like the ack-wait grid. Defaults to the "
+        "model's col_id; compound expansion overrides it with the "
+        "compound's base_id on every synthesized field cell."
+    )

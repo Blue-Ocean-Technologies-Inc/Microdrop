@@ -18,12 +18,12 @@ Route Reps + Duration + trail config. On confirm, the row's
 ``repeat_duration_controls`` flag flips to True; on cancel, the edit
 is rejected and the column reverts to its previous value.
 
-Flipping the flag to True locks the ``route_repetitions`` cell (via the
-BaseRow observer in models/row.py — issue #541), so once duration
-control is active Route Reps is genuinely read-only. Editing Route Reps
-Dur back to 0 is therefore the only way back to count mode: it prompts
-with the same handoff dialog and, on confirm, flips the flag back to
-False, which unlocks Route Reps again.
+The pair is mutually exclusive by last edit, like the DV sidebar's: in
+duration mode Route Reps shows the derived loop count and stays
+editable, and editing it hands control back (see
+route_repetitions_column.py). Editing Route Reps Dur to 0 is the other
+way back to count mode: it prompts with the same handoff dialog and, on
+confirm, flips the flag back to False.
 """
 
 # Enthought library imports.
@@ -36,6 +36,7 @@ from pluggable_protocol_tree.models.column import (
     BaseColumnModel,
     Column,
 )
+from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.services.phase_math import (
     estimate_repeat_duration_s,
     slug_shape_for_row,
@@ -51,6 +52,22 @@ class RepeatDurationColumnModel(BaseColumnModel):
             float(self.default_value or 0.0),
             desc="Loop cycles capped to fit within this many "
             "seconds. 0 disables (use linear n_repeats).",
+        )
+
+
+class RepeatDurationColumnView(DoubleSpinBoxColumnView):
+    """Spinbox whose tooltip names the knob in control."""
+
+    def get_tooltip(self, row):
+        if isinstance(row, GroupRow):
+            return None
+
+        if getattr(row, "repeat_duration_controls", False):
+            return "Route Reps Dur is in control. Editing Route Reps takes over."
+
+        return (
+            "Route Reps is in control: this is the estimated loop time. "
+            "Editing Route Reps Dur takes over."
         )
 
 
@@ -73,17 +90,14 @@ class RepeatDurationHandler(BaseColumnHandler):
         if already_controls:
             if new_value == 0.0:
                 # 0 disables duration control (matches the DV sidebar,
-                # which derives the flag from repeat_duration > 0) —
-                # and it is the only way back now that the lock makes
-                # Route Reps genuinely read-only in duration mode.
+                # which derives the flag from repeat_duration > 0).
                 choice = confirm(
                     None,
                     title="Switch to Route Reps Control",
                     message=(
                         "Setting Route Reps Dur to 0 hands loop control "
                         "back to Route Reps: routes loop until the largest "
-                        "loop has completed all repetitions.<br><br>"
-                        "Route Reps will become editable again."
+                        "loop has completed all repetitions."
                     ),
                     yes_label="Switch",
                     no_label="Cancel",
@@ -121,8 +135,8 @@ class RepeatDurationHandler(BaseColumnHandler):
                 "Using Repeat Duration will calculate the maximum number of "
                 "complete loops that fit within the specified time. Any "
                 "remaining time will be spent idling.<br><br>"
-                "Route Reps will become read-only while Route Reps Dur "
-                "is in control."
+                "Route Reps will show the number of loops that fit; "
+                "editing Route Reps takes control back."
             ),
             yes_label="Switch",
             no_label="Cancel",
@@ -141,6 +155,8 @@ def make_repeat_duration_column():
             default_value=0.0,
         ),
         # Bounds mirror the DV sidebar's RouteLayerManager.repeat_duration.
-        view=DoubleSpinBoxColumnView(low=0.0, high=10000.0, decimals=2, single_step=10),
+        view=RepeatDurationColumnView(
+            low=0.0, high=10000.0, decimals=2, single_step=10
+        ),
         handler=RepeatDurationHandler(),
     )

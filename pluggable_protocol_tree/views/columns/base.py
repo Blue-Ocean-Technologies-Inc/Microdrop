@@ -16,11 +16,13 @@ IntSpinBoxColumnView, DoubleSpinBoxColumnView, CheckboxColumnView,
 ReadOnlyLabelColumnView.
 """
 
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtWidgets import QLineEdit
-from traits.api import HasTraits, Bool, Instance, provides
+from traits.api import Bool, HasTraits, Instance, provides
 
-from pluggable_protocol_tree.interfaces.i_column import IColumnView, IColumnModel
+# Microdrop package imports.
+from pluggable_protocol_tree.interfaces.i_column import IColumnModel, IColumnView
 
 
 @provides(IColumnView)
@@ -40,6 +42,9 @@ class BaseColumnView(HasTraits):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def get_check_state(self, value, row):
+        return None
+
+    def get_tooltip(self, row):
         return None
 
     def create_editor(self, parent, context):
