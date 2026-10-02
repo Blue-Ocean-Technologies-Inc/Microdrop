@@ -28,8 +28,9 @@ drives live. The panes carry no commit buttons of their own beyond
 the per-pane save glyph — the dialog's single Confirm Alignment
 button drives both by firing their ``save`` traits."""
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QImage, QPixmap
+# Enthought library imports.
+from pyface.qt.QtCore import QRectF, Qt
+from pyface.qt.QtGui import QImage, QPixmap, QTransform
 from traits.api import (
     Bool,
     Button,
@@ -47,24 +48,35 @@ from traits.api import (
 )
 from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
-from logger.logger_service import get_logger
+# Microdrop style imports.
 from microdrop_style.colors import WARNING_COLOR
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
+    ICON_CAMERASWITCH,
     ICON_FIT_SCREEN,
     ICON_PHOTO_CAMERA,
     ICON_SAVE,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
+    MDI_ICON_FLIP_HORIZONTAL,
+    MDI_ICON_FLIP_VERTICAL,
 )
+
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     HtmlLabelEditor,
     IconButtonEditor,
     IconToggleEditor,
 )
 
+# Local imports.
+from ...models.image_orientation import ImageOrientation
 from ...utils.image_corners import detect_corner_points
 from .quad_overlay import QuadOverlay
 from .zoom_pan_view import ZoomPanImageView
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -74,7 +86,7 @@ CANVAS_MIN_SIZE_PX = (320, 240)
 
 HEADER_TITLE_STYLE_SHEET = "QLabel { font-weight: bold; }"
 NO_FRAME_WARNING_TEMPLATE = (
-    f'<span style="color: {WARNING_COLOR}; ' 'font-weight: bold;">{}</span>'
+    f'<span style="color: {WARNING_COLOR}; font-weight: bold;">{{}}</span>'
 )
 
 ENDPOINT_INSTRUCTIONS = (
@@ -289,7 +301,13 @@ class EndpointPane(AlignmentPaneBase):
 class OutlinePane(AlignmentPaneBase):
     """Mark the device outline on a captured camera frame, by hand.
     The user IS the detector — but the dots snap onto corner
-    features detected on the frame (Shi-Tomasi, sub-pixel)."""
+    features detected on the frame (Shi-Tomasi, sub-pixel).
+
+    The frame can be turned and mirrored in the pane to match the
+    device render beside it; the dots move with the image, and the
+    accepted quad is still reported in raw camera pixels, so the
+    orientation lands in the live alignment through the dot
+    correspondence alone."""
 
     #: Zero-arg callable returning a fresh camera QImage, or None
     #: when the camera has no frame. Called once at construction and
@@ -302,8 +320,21 @@ class OutlinePane(AlignmentPaneBase):
     #: save glyph here and Confirm Alignment in the dialog.
     is_ready = Bool(False)
 
+    #: How the frame is shown in this pane; dialog-only, so closing
+    #: the dialog discards it.
+    orientation = Instance(ImageOrientation, ())
+
     #: Grab a fresh frame from the camera.
     recapture = Button()
+
+    #: Turn the shown frame a quarter turn clockwise.
+    rotate = Button()
+
+    #: Mirror the shown frame left-right.
+    flip_horizontal = Button()
+
+    #: Mirror the shown frame top-bottom.
+    flip_vertical = Button()
 
     #: Fires on save with the quad in CAMERA pixels
     #: ([[x, y] * 4], TL/TR/BR/BL as placed).
@@ -316,17 +347,26 @@ class OutlinePane(AlignmentPaneBase):
         "above to capture one."
     )
 
+    #: The last captured frame, unturned, and its detected corners
+    #: (raw camera pixels).
+    _raw_image = Instance(QImage)
+    _raw_snap_points = List()
+
     def traits_init(self):
         self.title = "Device Outline"
         image = self.capture_frame() if self.capture_frame else None
+
         if image is not None and not image.isNull():
-            pixmap = QPixmap.fromImage(image)
+            self._raw_image = image
+            self._raw_snap_points = detect_corner_points(image)
+            pixmap = self._display_pixmap()
             self._install_canvas(pixmap)
             self._create_overlay(
-                _valid_quad(self.initial_quad) or self._default_quad(pixmap),
-                detect_corner_points(image),
+                _valid_quad(self.initial_quad) or self._default_quad(self._raw_image),
+                self._raw_snap_points,
             )
             self.is_ready = True
+
         else:
             # No frame yet (camera off?) — a black placeholder plus
             # the visible warning until the recapture glyph delivers
@@ -341,10 +381,36 @@ class OutlinePane(AlignmentPaneBase):
                 self._header_group(
                     OUTLINE_INSTRUCTIONS,
                     UItem(
+                        "rotate",
+                        editor=IconButtonEditor(
+                            glyph=ICON_CAMERASWITCH,
+                            tooltip="Rotate the camera image a quarter turn",
+                        ),
+                        enabled_when="is_ready",
+                    ),
+                    UItem(
+                        "flip_horizontal",
+                        editor=IconButtonEditor(
+                            glyph=MDI_ICON_FLIP_HORIZONTAL,
+                            font_family=MDI_ICON_FONT_FAMILY,
+                            tooltip="Mirror the camera image left–right",
+                        ),
+                        enabled_when="is_ready",
+                    ),
+                    UItem(
+                        "flip_vertical",
+                        editor=IconButtonEditor(
+                            glyph=MDI_ICON_FLIP_VERTICAL,
+                            font_family=MDI_ICON_FONT_FAMILY,
+                            tooltip="Mirror the camera image top–bottom",
+                        ),
+                        enabled_when="is_ready",
+                    ),
+                    UItem(
                         "recapture",
                         editor=IconButtonEditor(
                             glyph=ICON_PHOTO_CAMERA,
-                            tooltip="Recapture — grab a fresh frame " "from the camera",
+                            tooltip="Recapture — grab a fresh frame from the camera",
                         ),
                     ),
                     UItem(
@@ -367,34 +433,97 @@ class OutlinePane(AlignmentPaneBase):
         )
 
     # ------------------------------------------------------------------ #
+    def _create_overlay(self, raw_quad, raw_snap_points):
+        """Place the overlay from raw camera pixels."""
+        super()._create_overlay(
+            self._to_display(raw_quad), self._to_display(raw_snap_points)
+        )
+
+    def _display_pixmap(self):
+        """The raw frame turned and mirrored as the orientation says."""
+        orientation = self.orientation
+
+        # Points go through the turn first, then the mirrors; transformed()
+        # moves the result back to the origin.
+        transform = QTransform().scale(
+            -1 if orientation.flip_horizontal else 1,
+            -1 if orientation.flip_vertical else 1,
+        )
+        transform.rotate(90 * orientation.quarter_turns)
+
+        return QPixmap.fromImage(self._raw_image.transformed(transform))
+
+    def _raw_size(self):
+        return self._raw_image.width(), self._raw_image.height()
+
+    def _to_display(self, raw_points):
+        size = self._raw_size()
+
+        return [self.orientation.map_point(point, size) for point in raw_points]
+
+    def _to_raw(self, display_points):
+        size = self._raw_size()
+
+        return [self.orientation.unmap_point(point, size) for point in display_points]
+
+    def _reorient(self, change_orientation):
+        """Apply ``change_orientation`` to the shown frame, carrying the
+        dots and snap corners along with the image."""
+
+        if self._overlay is None:
+            return
+
+        raw_quad = self._to_raw(self._overlay.quad())
+        change_orientation()
+
+        self.canvas.set_pixmap(self._display_pixmap())
+        self._overlay.set_snap_points(self._to_display(self._raw_snap_points))
+        self._overlay.set_quad(self._to_display(raw_quad))
+        self.canvas.fit_frame()
+
+    def _rotate_fired(self):
+        self._reorient(self.orientation.rotate_clockwise)
+
+    def _flip_horizontal_fired(self):
+        self._reorient(lambda: self.orientation.flip(horizontal=True))
+
+    def _flip_vertical_fired(self):
+        self._reorient(lambda: self.orientation.flip(horizontal=False))
+
     def _recapture_fired(self):
         """Grab a fresh frame: swap the canvas image and re-detect
         the snap corners, leaving an already-placed quad where the
         user put it."""
         image = self.capture_frame() if self.capture_frame else None
+
         if image is None or image.isNull():
             logger.warning(
-                "outline recapture: nothing to capture " "— the camera has no frame"
+                "outline recapture: nothing to capture — the camera has no frame"
             )
             return
-        pixmap = QPixmap.fromImage(image)
+
+        self._raw_image = image
+        self._raw_snap_points = detect_corner_points(image)
+        pixmap = self._display_pixmap()
         self.canvas.set_pixmap(pixmap)
-        snap_points = detect_corner_points(image)
+
         if self._overlay is not None:
-            self._overlay.set_snap_points(snap_points)
+            self._overlay.set_snap_points(self._to_display(self._raw_snap_points))
+
         else:
             # First real frame after the placeholder: the pane
             # becomes usable now (the warning hides itself and the
             # save glyph enables through is_ready).
             self._create_overlay(
-                _valid_quad(self.initial_quad) or self._default_quad(pixmap),
-                snap_points,
+                _valid_quad(self.initial_quad) or self._default_quad(self._raw_image),
+                self._raw_snap_points,
             )
             self.canvas.fit_frame()
             self.is_ready = True
 
     def _save_fired(self):
-        """Emit the marked outline quad in camera pixels."""
+        """Emit the marked outline quad in raw camera pixels."""
         if self._overlay is None:
             return
-        self.quad_accepted = self._overlay.quad()
+
+        self.quad_accepted = self._to_raw(self._overlay.quad())
