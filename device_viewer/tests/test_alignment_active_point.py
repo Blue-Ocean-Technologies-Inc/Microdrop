@@ -119,3 +119,13 @@ def test_highlight_settings_restyle_the_ring_in_both_panes(model):
 
         assert new_radius > radius
         assert colour == "#0000ff"
+
+
+def test_dots_are_numbered_and_follow_the_dot_size(model):
+    handles = model.endpoint_pane._overlay._handles
+    size = handles[0].label_pixel_size()
+
+    model.settings.handle_radius_px = 20
+
+    assert [handle.label_text() for handle in handles] == ["1", "2", "3", "4"]
+    assert handles[0].label_pixel_size() > size

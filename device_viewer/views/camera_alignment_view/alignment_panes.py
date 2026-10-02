@@ -153,6 +153,10 @@ class AlignmentPaneBase(HasTraits):
         if self._overlay is not None:
             self._overlay.set_snap_radius(snap_radius_px)
 
+    def shown_quad(self):
+        """The dots as shown in this pane ([[x, y] * 4]), or None."""
+        return self._overlay.quad() if self._overlay is not None else None
+
     def set_appearance(self, **kwargs):
         """Forward QuadOverlay.set_appearance kwargs, remembered so
         an overlay created later (first recapture) picks them up."""

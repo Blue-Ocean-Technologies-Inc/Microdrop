@@ -54,6 +54,9 @@ from traitsui.api import (
     spring,
 )
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+
 # Microdrop style imports.
 from microdrop_style.button_styles import (
     SUCCESS_BUTTON_STYLE,
@@ -69,6 +72,7 @@ from microdrop_utils.color_helpers import rgb_to_hex
 from microdrop_utils.traitsui_qt_helpers import IconToggleEditor
 
 # Local imports.
+from ...utils.quad_order import quads_order_matches
 from .alignment_panes import EndpointPane, OutlinePane
 from .alignment_settings import (
     COLOR_SETTING_TRAITS,
@@ -92,6 +96,11 @@ SIDEBAR_WIDTH_PX = 280
 #: look, but with a real-word text font (the success style inherits
 #: the Material Symbols icon font, which TEXT_BUTTON_STYLE overrides).
 CONFIRM_BUTTON_STYLE = f"{SUCCESS_BUTTON_STYLE}\n{TEXT_BUTTON_STYLE}"
+
+MISMATCHED_ORDER_MESSAGE = (
+    "The dots are not in the same order in both panes (e.g. dot 1 is "
+    "top-left in one and bottom-right in the other). Continue anyway?"
+)
 
 
 # ------------------------------ Model ----------------------------- #
@@ -243,6 +252,23 @@ class CameraAlignmentController(Controller):
             return
 
         model = self.model
+        outline_quad = model.outline_pane.shown_quad()
+        endpoint_quad = model.endpoint_pane.shown_quad()
+
+        # Compared as shown, so a frame turned in the pane to match the
+        # device counts as matching. A deliberate mismatch (an upside-down
+        # camera) stays possible.
+        if (
+            outline_quad is not None
+            and endpoint_quad is not None
+            and not quads_order_matches(outline_quad, endpoint_quad)
+            and confirm(
+                info.ui.control, MISMATCHED_ORDER_MESSAGE, title="Confirm Alignment"
+            )
+            != YES
+        ):
+            return
+
         model.endpoint_pane.save = True
         model.outline_pane.save = True
         model.alignment_confirmed = True

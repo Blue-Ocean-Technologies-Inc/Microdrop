@@ -25,11 +25,12 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt
-from pyface.qt.QtGui import QBrush, QColor, QPen, QPolygonF
+from pyface.qt.QtGui import QBrush, QColor, QFont, QPen, QPolygonF
 from pyface.qt.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsPolygonItem,
+    QGraphicsSimpleTextItem,
 )
 
 # Local imports.
@@ -44,6 +45,8 @@ from ...consts import (
     ALIGNMENT_HANDLE_COLOR_HEX,
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_LABEL_MIN_PX,
+    ALIGNMENT_LABEL_SCALE,
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
@@ -122,6 +125,7 @@ class QuadHandleItem(QGraphicsEllipseItem):
         on_released,
         on_active_changed=None,
         parent=None,
+        label="",
         radius=ALIGNMENT_HANDLE_RADIUS_PX,
         color=ALIGNMENT_HANDLE_COLOR_HEX,
         ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
@@ -152,9 +156,42 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self.setCursor(Qt.OpenHandCursor)
         self.setAcceptHoverEvents(True)
 
+        #: The dot's number, beside it in the dot's colour. Presses go
+        #: through to the dot.
+        self._label = QGraphicsSimpleTextItem(label, self)
+        self._label.setAcceptedMouseButtons(Qt.NoButton)
+        self._sync_label()
+
     def set_radius(self, radius):
         self.prepareGeometryChange()
         self.setRect(-radius, -radius, 2 * radius, 2 * radius)
+        self._sync_label()
+
+    def set_fill(self, color):
+        """Colour the dot and its number."""
+        self.setBrush(QBrush(QColor(color)))
+        self._sync_label()
+
+    def label_text(self):
+        return self._label.text()
+
+    def label_pixel_size(self):
+        return self._label.font().pixelSize()
+
+    def _sync_label(self):
+        """Size, colour and place the number for the current dot."""
+        radius = self.rect().width() / 2
+
+        font = QFont()
+        font.setBold(True)
+        font.setPixelSize(
+            max(ALIGNMENT_LABEL_MIN_PX, round(radius * ALIGNMENT_LABEL_SCALE))
+        )
+        self._label.setFont(font)
+        self._label.setBrush(self.brush())
+
+        # Up and to the right of the dot, clear of its ring.
+        self._label.setPos(radius, -radius - self._label.boundingRect().height())
 
     def set_active(self, active):
         """Show or hide the active ring and halo."""
@@ -331,6 +368,7 @@ class QuadOverlay:
                 self._handle_moved,
                 self._handle_released,
                 on_active_changed=partial(self._handle_active_changed, index),
+                label=str(index + 1),
                 radius=handle_radius_px,
                 color=handle_color,
                 ring_color=handle_ring_color,
@@ -452,7 +490,7 @@ class QuadOverlay:
         self._frame.setPen(pen)
         if handle_color is not None:
             for handle in self._handles:
-                handle.setBrush(QBrush(QColor(handle_color)))
+                handle.set_fill(handle_color)
         if handle_ring_color is not None:
             for handle in self._handles:
                 ring_pen = handle.pen()

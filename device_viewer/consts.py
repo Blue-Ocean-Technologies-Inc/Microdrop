@@ -389,6 +389,12 @@ ALIGNMENT_ACTIVE_RING_WIDTH_PX = 3
 ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO = 2.4 / 1.7
 ALIGNMENT_ACTIVE_HALO_ALPHA = 0.3
 
+#: The number (1-4) drawn beside each corner dot, in the dot's colour:
+#: font pixel size as a multiple of the dot radius, with a floor so it
+#: stays readable on small dots.
+ALIGNMENT_LABEL_SCALE = 1.6
+ALIGNMENT_LABEL_MIN_PX = 10
+
 #: Bounds shared by the preference Range traits and the settings-sidebar
 #: spinners (one source, so they cannot drift apart).
 ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX = 0, 200
