@@ -12,6 +12,11 @@
 fake manager, no Qt). ExecutorSignals is a HasTraits, so "emitting" a signal
 is setting its Event trait; default-dispatch observers fire synchronously on
 the setting thread, so these asserts run inline with no event loop."""
+
+# Standard library imports.
+from types import SimpleNamespace
+
+# Microdrop package imports.
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.services.protocol_status_controller import (
     ProtocolStatusController,
@@ -21,6 +26,7 @@ from pluggable_protocol_tree.services.protocol_status_controller import (
 class _Executor:
     """Minimal executor stand-in: the controller reads .signals off it, and
     ``run_paths`` for the active run's selection scope (issue #558)."""
+
     def __init__(self, signals, run_paths=None):
         self.signals = signals
         self.run_paths = run_paths
@@ -50,7 +56,8 @@ def _make(rows=None):
     sigs = ExecutorSignals()
     clock = {"t": 0.0}
     ctrl = ProtocolStatusController(
-        executor=_Executor(sigs), manager=_Manager(rows),
+        executor=_Executor(sigs),
+        manager=_Manager(rows),
         clock=lambda: clock["t"],
     )
     return ctrl, sigs, clock, rows
@@ -124,8 +131,8 @@ def test_step_count_collapses_repetitions():
     ctrl, sigs, clock, rows = _make(rows=[shared, shared, shared])
     sigs.protocol_started = True
     assert ctrl.model.step_total == 1
-    sigs.step_started = (shared, 2, 3)   # executor's 2nd of 3 frames
-    assert ctrl.model.step_index == 1    # still the only distinct step
+    sigs.step_started = (shared, 2, 3)  # executor's 2nd of 3 frames
+    assert ctrl.model.step_index == 1  # still the only distinct step
     assert ctrl.model.step_total == 1
 
 
@@ -134,10 +141,10 @@ def test_frame_index_tracked_alongside_distinct_step():
     # separate from the collapsed step counter.
     ctrl, sigs, clock, rows = _make()
     sigs.protocol_started = True
-    sigs.step_started = (rows[0], 3, 5)   # executor frame 3 of 5
+    sigs.step_started = (rows[0], 3, 5)  # executor frame 3 of 5
     assert ctrl.model.frame_index == 3
     assert ctrl.model.frame_total == 5
-    assert ctrl.model.step_index == 1     # distinct step still 1
+    assert ctrl.model.step_index == 1  # distinct step still 1
 
 
 def test_step_rep_tracked_from_chain():
@@ -145,7 +152,7 @@ def test_step_rep_tracked_from_chain():
     sigs.step_repetition = [("Wash", 2, 8)]
     assert ctrl.model.step_rep_index == 2
     assert ctrl.model.step_rep_total == 8
-    sigs.step_repetition = []             # non-repeating step clears it
+    sigs.step_repetition = []  # non-repeating step clears it
     assert ctrl.model.step_rep_index == 0
     assert ctrl.model.step_rep_total == 0
 
@@ -176,23 +183,18 @@ def test_disconnect_stops_updates():
     ctrl, sigs, clock, rows = _make()
     ctrl.disconnect()
     sigs.protocol_started = True
-    assert ctrl.model.step_total == 0   # not wired anymore
+    assert ctrl.model.step_total == 0  # not wired anymore
 
 
 # ---------------------------------------------------------------------------
 # seek_to (#471)
 # ---------------------------------------------------------------------------
 
-from types import SimpleNamespace
-from pluggable_protocol_tree.services.protocol_status_controller import (
-    ProtocolStatusController,
-)
-
 
 class _StubExecutor:
     def __init__(self):
         self.seek_calls = []
-        self.signals = None    # this test drives seek_to directly, no events
+        self.signals = None  # this test drives seek_to directly, no events
         self.run_paths = None  # whole-protocol scope (issue #558)
 
     def seek(self, step_path, phase_index):
@@ -200,32 +202,43 @@ class _StubExecutor:
 
 
 def _row(path, name="S", **kw):
-    return SimpleNamespace(path=tuple(path), name=name, dotted_path=lambda: "1",
-                           **kw)
+    return SimpleNamespace(path=tuple(path), name=name, dotted_path=lambda: "1", **kw)
 
 
 def test_dyn_phase_and_idle_signals_update_model():
     ctrl, sigs, clock, rows = _make()
     sigs.dyn_phase_started = (2, 4, 2.0)
     assert ctrl.model.phase_index == 2
-    assert ctrl.model.phase_total == 5      # cycle_len + 1 trailing idle cell
+    assert ctrl.model.phase_total == 5  # cycle_len + 1 trailing idle cell
     assert ctrl.model.dyn_idle is False
     sigs.dyn_idle_entered = 4
     assert ctrl.model.dyn_idle is True
-    assert ctrl.model.phase_index == 5      # idle cell = cycle_len + 1
+    assert ctrl.model.phase_index == 5  # idle cell = cycle_len + 1
 
 
 def test_seek_to_calls_executor_and_updates_model():
-    row = _row((0,), name="Wash", electrodes=[], routes=[], trail_length=1,
-               trail_overlay=0, soft_start=False, soft_end=False,
-               repeat_duration=0.0, repeat_duration_controls=False,
-               linear_repeats=False, route_repetitions=1, duration_s=1.0)
+    row = _row(
+        (0,),
+        name="Wash",
+        electrodes=[],
+        routes=[],
+        trail_length=1,
+        trail_overlay=0,
+        soft_start=False,
+        soft_end=False,
+        repeat_duration=0.0,
+        repeat_duration_controls=False,
+        linear_repeats=False,
+        route_repetitions=1,
+        duration_s=1.0,
+    )
     manager = SimpleNamespace(
         iter_execution_steps=lambda scope_paths=None: iter([row]),
     )
     ex = _StubExecutor()
-    c = ProtocolStatusController(signals=None, manager=manager, executor=ex,
-                                 clock=lambda: 7.0)
+    c = ProtocolStatusController(
+        signals=None, manager=manager, executor=ex, clock=lambda: 7.0
+    )
     c.model.on_protocol_start(0.0, 1)
     c.model.on_step_start(0.0, 1, 1, (0,), "Wash", "-")
     c.model.pause(0.0)
@@ -233,7 +246,32 @@ def test_seek_to_calls_executor_and_updates_model():
     c.seek_to((0,), 0)
 
     assert ex.seek_calls == [((0,), 0)]
-    assert c.model.step_index == 1          # step (0,) is the 1st step
+    assert c.model.step_index == 1  # step (0,) is the 1st step
     assert c.model.step_total == 1
     assert c.model.current_step_path == (0,)
-    assert c.model.phase_index == 1         # phases are 1-based in the model
+    assert c.model.phase_index == 1  # phases are 1-based in the model
+
+
+def test_duration_mode_base_loop_ignores_repeat_duration():
+    """The timeline's collapsed view is one base loop. In duration mode the
+    base loop must not be refilled up to the repeat duration, or it equals
+    the full sequence and "Show full timeline" changes nothing."""
+    from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
+
+    row = SimpleNamespace(
+        routes=[["a", "b", "c", "d", "a"]],
+        duration_s=1.0,
+        route_repetitions=2,
+        repeat_duration=12.0,
+        repeat_duration_controls=True,
+    )
+    full = ProtocolStatusController._phases_for(row)
+    base = ProtocolStatusController._phases_for(row, n_repeats=1)
+
+    assert 1 < len(base) < len(full)
+
+    collapsed = collapse_phase_view(len(full), 0, len(base), 2, show_full=False)
+    expanded = collapse_phase_view(len(full), 0, len(base), 2, show_full=True)
+
+    assert collapsed["phase_total"] == len(base)
+    assert expanded["phase_total"] == len(full)
