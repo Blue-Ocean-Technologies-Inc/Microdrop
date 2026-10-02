@@ -11,8 +11,10 @@
 """Qt widget: QTreeView over a RowManager, with context menu for add /
 remove / copy / cut / paste / group."""
 
+# Standard library imports.
 from contextlib import contextmanager
 
+# Enthought library imports.
 from pyface.qt.QtCore import (
     QItemSelectionModel,
     QModelIndex,
@@ -29,6 +31,7 @@ from pyface.qt.QtWidgets import (
     QWidget,
 )
 
+# Microdrop package imports.
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
@@ -36,8 +39,10 @@ from pluggable_protocol_tree.views.bulk_set_dialog import BulkSetDialog
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
+# Microdrop utils imports.
 from microdrop_utils.system_config import is_rpi
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -602,10 +607,9 @@ class ProtocolTreeWidget(QWidget):
         targets = self._manager.steps_under(paths, recursive=dialog.apply_nested)
         if not updates or not targets:
             return
-        # Direct model writes (set_values) rather than per-row handler
-        # on_interact: a bulk action must not pop the per-cell confirm dialogs
-        # some handlers raise (e.g. route_repetitions). The pane's cell_changed
-        # reconciliation still runs for derived columns.
+        # set_values runs each column's handler over the whole batch, so a
+        # mode handoff (Route Reps Dur) prompts once, not per row. The pane's
+        # cell_changed reconciliation still runs for derived columns.
         for col_id, value in updates.items():
             self._manager.set_values(targets, col_id, value)
         logger.info(

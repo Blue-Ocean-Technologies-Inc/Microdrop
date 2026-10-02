@@ -16,15 +16,27 @@ BaseColumnHandler as-is or override only the hooks they need. Column
 itself is the composite that traits-wires model/view/handler together.
 """
 
-from PySide6.QtCore import Signal
+# Enthought library imports.
+from pyface.qt.QtCore import Signal
+from traits.api import (
+    Any,
+    Bool,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Str,
+    observe,
+    provides,
+)
 
-from traits.api import HasTraits, Instance, Str, Any, Float, Int, List, provides, observe, Bool
-
+# Microdrop package imports.
 from pluggable_protocol_tree.interfaces.i_column import (
     IColumn,
+    IColumnHandler,
     IColumnModel,
     IColumnView,
-    IColumnHandler,
 )
 
 
@@ -108,6 +120,11 @@ class BaseColumnHandler(HasTraits):
         """Default edit behaviour: write through to the model."""
         return model.set_value(row, value)
 
+    def on_bulk_interact(self, rows, model, value):
+        """Default bulk edit: ``on_interact`` per row. Returns the rows
+        written. Override to prompt once for the whole batch."""
+        return [row for row in rows if self.on_interact(row, model, value)]
+
     def on_live_edit(self, row, ctx):
         """Re-apply this cell's value to hardware mid-run (issue #434).
 
@@ -158,11 +175,15 @@ class Column(HasTraits):
     view = Instance(IColumnView)
     handler = Instance(IColumnHandler)
 
-    id = Str(desc="Identity of this column UNIT (model+view+handler) for unit-level; "
-                  "maps like the ack-wait grid. Defaults to the model's col_id; "
-                  "compound expansion overrides it so every synthesized field cell; "
-                  "reports the compound's base_id instead of its own field id.")
-    preference_display_name = Str(desc="Name to use for this column in preferences panes")
+    id = Str(
+        desc="Identity of this column UNIT (model+view+handler) for unit-level; "
+        "maps like the ack-wait grid. Defaults to the model's col_id; "
+        "compound expansion overrides it so every synthesized field cell; "
+        "reports the compound's base_id instead of its own field id."
+    )
+    preference_display_name = Str(
+        desc="Name to use for this column in preferences panes"
+    )
 
     def _id_default(self):
         return self.model.col_id

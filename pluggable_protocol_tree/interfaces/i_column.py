@@ -126,6 +126,10 @@ class IColumnHandler(Interface):
     def on_interact(self, row, model, value):
         """Called when the UI commits an edit. Default: model.set_value."""
 
+    def on_bulk_interact(self, rows, model, value):
+        """Bulk Set's edit of many rows at once; returns the rows written.
+        Default: on_interact per row."""
+
     def on_live_edit(self, row, ctx):
         """Re-apply this cell's value to hardware mid-run (issue #434).
 

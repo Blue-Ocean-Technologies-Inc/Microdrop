@@ -550,15 +550,22 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
         self._set_value(path, col, value)
 
     def set_values(self, paths: List[Path], col_id: str, value) -> None:
-        """Bulk write — the Bulk Set dialog's apply path. Rows where the
-        column is locked (issue #541) are skipped: a lock means some
-        owner arbitrates that cell, and a bulk write must not bypass
-        what the per-cell editor would refuse."""
+        """Bulk write — the Bulk Set dialog's apply path. Goes through the
+        column handler like a cell edit, as one batch so a handler prompts
+        once rather than per row. Rows where the column is locked (issue
+        #541) are skipped: a lock means some owner arbitrates that cell,
+        and a bulk write must not bypass what the per-cell editor would
+        refuse."""
         col = self._column_by_id(col_id)
-        for path in paths:
-            if self.get_row(path).is_column_locked(col.model.col_id):
-                continue
-            self._set_value(path, col, value)
+        rows = [
+            self.get_row(path)
+            for path in paths
+            if not self.get_row(path).is_column_locked(col.model.col_id)
+        ]
+
+        # cell_changed carries the per-cell model col_id, as in _set_value.
+        for row in col.handler.on_bulk_interact(rows, col.model, value):
+            self.cell_changed = {"path": tuple(row.path), "col_id": col.model.col_id}
 
     def apply(self, paths: List[Path], fn) -> None:
         # `fn` is arbitrary — could touch any column on any row, or
