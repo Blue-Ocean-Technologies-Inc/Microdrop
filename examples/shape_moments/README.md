@@ -19,9 +19,9 @@ ground truth), `descriptors.csv`, `descriptors_over_time.png`,
 | File | What it is |
 | --- | --- |
 | `synthetic.py` | 40 frames, 320×320 8-bit, five droplets each in a fixed circular ROI (r = 50 px), soft edges, σ = 4 noise |
-| `descriptors.py` | Pure numpy/cv2 (no Qt, no `image_viewer` imports): Otsu inside the ROI → largest external contour → moments → descriptors |
+| `descriptors.py` | Re-export of `image_viewer/analysis/shape_descriptors.py` (pure numpy/cv2, Qt-free): Otsu inside the ROI → largest external contour → moments → descriptors |
 | `run.py` | Generate, read frames back from disk, measure, write CSV + figures (matplotlib Agg) |
-| `../tests/test_shape_descriptors.py` | Analytic circle / ellipse / rotated copy / bump / empty ROI |
+| `image_viewer/tests/test_shape_descriptors.py` | Analytic circle / ellipse / rotated copy / bump / empty ROI |
 
 ## The test droplets
 
@@ -36,7 +36,7 @@ ground truth), `descriptors.csv`, `descriptors_over_time.png`,
 ## Descriptors
 
 Definitions and the plain-language meaning of each are in the
-`descriptors.py` module docstring. Summary: `area`, `centroid_x/y`,
+`image_viewer/analysis/shape_descriptors.py` module docstring. Summary: `area`, `centroid_x/y`,
 `axis_ratio` (≥ 1, moment-equivalent ellipse), `eccentricity`,
 `orientation_deg`, `circularity` (4πA/P²), `solidity` (A/hull),
 `extent` (A/bounding box), `hu1..hu7` (log-scaled), and two

@@ -19,10 +19,13 @@ import numpy as np
 import pytest
 
 # Microdrop package imports.
-from examples.shape_moments.descriptors import (
-    MASK_ON,
+from image_viewer.analysis.consts import MASK_ON
+from image_viewer.analysis.shape_descriptors import (
+    HU_ROOT_KEY,
+    ROI_SHAPE_KEYS,
     add_shape_deviation,
     describe_droplet,
+    roi_shape_stats,
     shape_deviation,
 )
 
@@ -53,6 +56,8 @@ def test_circle_is_round_and_convex():
     descriptors = describe_droplet(_frame((CENTRE, (40, 40), 0)), _whole_roi())
 
     assert descriptors["circularity"] == pytest.approx(1.0, abs=0.05)
+    # The smoothed perimeter, not the pixel staircase (which reads ~0.90).
+    assert descriptors["circularity"] > 0.95
     assert descriptors["axis_ratio"] == pytest.approx(1.0, abs=0.02)
     assert descriptors["solidity"] == pytest.approx(1.0, abs=0.02)
     assert descriptors["area"] == pytest.approx(math.pi * 40**2, rel=0.03)
@@ -66,6 +71,8 @@ def test_two_to_one_ellipse_axis_ratio_and_orientation(angle):
     assert descriptors["axis_ratio"] == pytest.approx(2.0, abs=0.05)
     assert descriptors["eccentricity"] == pytest.approx(math.sqrt(0.75), abs=0.01)
     assert descriptors["orientation_deg"] == pytest.approx(angle, abs=1.0)
+    assert descriptors["circularity"] == pytest.approx(0.84, abs=0.03)
+    assert descriptors["solidity"] == pytest.approx(1.0, abs=0.02)
 
 
 def test_rotated_copy_has_the_same_hu_vector():
@@ -98,3 +105,38 @@ def test_empty_roi_gives_nan():
     assert math.isnan(descriptors["area"])
     assert math.isnan(descriptors["axis_ratio"])
     assert math.isnan(series[0]["shape_deviation"])
+
+
+def test_roi_shape_stats_match_the_whole_frame_descriptors():
+    frame = _frame((CENTRE, (60, 30), 20))
+    mask = _whole_roi()
+    whole = describe_droplet(frame, mask)
+    stats = roi_shape_stats(frame, mask)
+
+    assert set(stats) == set(ROI_SHAPE_KEYS)
+    assert stats["axis_ratio"] == pytest.approx(whole["axis_ratio"])
+    assert stats["circularity"] == pytest.approx(whole["circularity"])
+    assert stats["solidity"] == pytest.approx(whole["solidity"])
+    # A list, as the JSON stats store holds it — and still comparable.
+    assert isinstance(stats[HU_ROOT_KEY], list)
+    assert shape_deviation(stats, whole) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_roi_shape_stats_without_a_droplet_are_nan():
+    empty_mask = np.zeros((SIZE, SIZE), dtype=np.uint8)
+
+    for stats in (
+        roi_shape_stats(_frame(), _whole_roi()),
+        roi_shape_stats(_frame((CENTRE, (40, 40), 0)), empty_mask),
+    ):
+        assert math.isnan(stats["circularity"])
+        assert math.isnan(stats["axis_ratio"])
+        assert math.isnan(stats["solidity"])
+        assert stats[HU_ROOT_KEY] is None
+
+
+def test_roi_shape_stats_read_a_sixteen_bit_frame():
+    frame = _frame((CENTRE, (60, 30), 0)).astype(np.uint16) * 200
+    stats = roi_shape_stats(frame, _whole_roi())
+
+    assert stats["axis_ratio"] == pytest.approx(2.0, abs=0.05)

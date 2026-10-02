@@ -23,6 +23,7 @@ import numpy as np
 
 # Local imports.
 from .consts import (
+    MASK_ON,
     MIN_POLYGON_POINTS,
     OUTLINE_STATS_PREFIX,
     RING_GAP_PX,
@@ -33,11 +34,6 @@ from .roi_geometry import normalize, outline_of
 
 #: Stats computed for every mask, in column order.
 STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
-
-#: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
-#: here is drawn, tested and combined with it, so it is one name rather
-#: than a 255 sprinkled through the file.
-MASK_ON = 255
 
 #: Sweep passed to cv2.ellipse for a whole ellipse rather than an arc.
 _FULL_SWEEP_DEGREES = (0, 360)

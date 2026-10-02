@@ -58,6 +58,11 @@ BUTTER_ORDER = 2
 BUTTER_CUTOFF_BOUNDS = (0.01, 0.99)
 BUTTER_CUTOFF = 0.2
 
+#: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
+#: the analysis draws, tests and combines uses it, so it is one name
+#: rather than a 255 sprinkled through the files.
+MASK_ON = 255
+
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
 
