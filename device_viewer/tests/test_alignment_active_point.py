@@ -16,11 +16,13 @@ CameraAlignmentModel.active_point_index. Headless; no exec()."""
 import pytest
 
 # Enthought library imports.
+from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import QRectF, Qt
 from pyface.qt.QtGui import QImage
 from pyface.qt.QtWidgets import QApplication
 
 # Microdrop package imports.
+from device_viewer.preferences import DeviceViewerPreferences
 from device_viewer.views.camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
     CameraAlignmentModel,
@@ -28,6 +30,9 @@ from device_viewer.views.camera_alignment_view.alignment_dialog import (
 from device_viewer.views.camera_alignment_view.alignment_panes import (
     EndpointPane,
     OutlinePane,
+)
+from device_viewer.views.camera_alignment_view.alignment_settings import (
+    AlignmentSettingsModel,
 )
 
 
@@ -46,6 +51,9 @@ def model():
         outline_pane=OutlinePane(capture_frame=_image),
         endpoint_pane=EndpointPane(
             device_image=_image(), scene_rect=QRectF(0, 0, 200, 100)
+        ),
+        settings=AlignmentSettingsModel(
+            preferences=DeviceViewerPreferences(preferences=Preferences())
         ),
     )
     # Held for the test: its observers do the cross-pane linking.
@@ -91,3 +99,23 @@ def test_active_dot_grows_a_halo(model):
     model.active_point_index = 0
 
     assert handle.boundingRect().width() > normal
+
+
+def _ring_of_dot_zero(pane):
+    handle = pane._overlay._handles[0]
+
+    return handle.active_ring_radius(), handle.active_ring_color().name()
+
+
+def test_highlight_settings_restyle_the_ring_in_both_panes(model):
+    model.active_point_index = 0
+    radius, _ = _ring_of_dot_zero(model.outline_pane)
+
+    model.settings.active_ring_scale = 3.0
+    model.settings.active_color = (0.0, 0.0, 1.0)
+
+    for pane in (model.outline_pane, model.endpoint_pane):
+        new_radius, colour = _ring_of_dot_zero(pane)
+
+        assert new_radius > radius
+        assert colour == "#0000ff"

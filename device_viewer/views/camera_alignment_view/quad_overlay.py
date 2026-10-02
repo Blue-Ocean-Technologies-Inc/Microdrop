@@ -34,8 +34,10 @@ from pyface.qt.QtWidgets import (
 
 # Local imports.
 from ...consts import (
+    ALIGNMENT_ACTIVE_ALPHA,
+    ALIGNMENT_ACTIVE_COLOR_HEX,
     ALIGNMENT_ACTIVE_HALO_ALPHA,
-    ALIGNMENT_ACTIVE_HALO_SCALE,
+    ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO,
     ALIGNMENT_ACTIVE_RING_SCALE,
     ALIGNMENT_ACTIVE_RING_WIDTH_PX,
     ALIGNMENT_FRAME_WIDTH_PX,
@@ -123,6 +125,9 @@ class QuadHandleItem(QGraphicsEllipseItem):
         radius=ALIGNMENT_HANDLE_RADIUS_PX,
         color=ALIGNMENT_HANDLE_COLOR_HEX,
         ring_color=ALIGNMENT_HANDLE_RING_COLOR_HEX,
+        active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
+        active_alpha=ALIGNMENT_ACTIVE_ALPHA,
+        active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
     ):
         super().__init__(-radius, -radius, 2 * radius, 2 * radius, parent)
         self._on_moved = on_moved
@@ -134,6 +139,10 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self.snap_fn = None
         #: Drawn with the active ring and halo.
         self._active = False
+        #: The active ring's colour, opacity and radius (in dot radii).
+        self._active_color = QColor(active_color)
+        self._active_alpha = float(active_alpha)
+        self._active_ring_scale = float(active_ring_scale)
         self.setBrush(QBrush(QColor(color)))
         self.setPen(QPen(QColor(ring_color), 2))
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -160,31 +169,57 @@ class QuadHandleItem(QGraphicsEllipseItem):
     def is_active(self):
         return self._active
 
+    def set_active_style(self, color=None, alpha=None, ring_scale=None):
+        """Restyle the active ring and halo; None leaves that aspect as-is."""
+        if color is not None:
+            self._active_color = QColor(color)
+
+        if alpha is not None:
+            self._active_alpha = float(alpha)
+
+        if ring_scale is not None:
+            # The halo, and so the bounding rect, follows the ring size.
+            self.prepareGeometryChange()
+            self._active_ring_scale = float(ring_scale)
+
+        self.update()
+
+    def active_ring_radius(self):
+        """The active ring's radius in view pixels."""
+        return self.rect().width() / 2 * self._active_ring_scale
+
+    def active_ring_color(self):
+        """The active ring's colour, with its alpha applied."""
+        color = QColor(self._active_color)
+        color.setAlphaF(self._active_alpha)
+
+        return color
+
     def boundingRect(self):
         rect = super().boundingRect()
 
         if not self._active:
             return rect
 
-        margin = self.rect().width() / 2 * (ALIGNMENT_ACTIVE_HALO_SCALE - 1)
+        halo_radius = self.active_ring_radius() * ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO
+        margin = max(halo_radius - self.rect().width() / 2, 0)
 
         return rect.adjusted(-margin, -margin, margin, margin)
 
     def paint(self, painter, option, widget=None):
         if self._active:
-            colour = self.brush().color()
-            radius = self.rect().width() / 2
+            ring_color = self.active_ring_color()
+            ring_radius = self.active_ring_radius()
             centre = self.rect().center()
 
-            halo = QColor(colour)
-            halo.setAlphaF(ALIGNMENT_ACTIVE_HALO_ALPHA)
-            halo_radius = radius * ALIGNMENT_ACTIVE_HALO_SCALE
+            halo = QColor(ring_color)
+            halo.setAlphaF(self._active_alpha * ALIGNMENT_ACTIVE_HALO_ALPHA)
+            halo_radius = ring_radius * ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO
             painter.setPen(Qt.NoPen)
             painter.setBrush(halo)
             painter.drawEllipse(centre, halo_radius, halo_radius)
 
-            ring_radius = radius * ALIGNMENT_ACTIVE_RING_SCALE
-            painter.setPen(QPen(colour, ALIGNMENT_ACTIVE_RING_WIDTH_PX))
+            painter.setPen(QPen(ring_color, ALIGNMENT_ACTIVE_RING_WIDTH_PX))
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(centre, ring_radius, ring_radius)
 
@@ -251,6 +286,9 @@ class QuadOverlay:
         snap_marker_color=ALIGNMENT_SNAP_MARKER_COLOR_HEX,
         snap_marker_alpha=ALIGNMENT_SNAP_MARKER_ALPHA,
         snap_marker_size_px=ALIGNMENT_SNAP_MARKER_SIZE_PX,
+        active_color=ALIGNMENT_ACTIVE_COLOR_HEX,
+        active_alpha=ALIGNMENT_ACTIVE_ALPHA,
+        active_ring_scale=ALIGNMENT_ACTIVE_RING_SCALE,
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
@@ -296,6 +334,9 @@ class QuadOverlay:
                 radius=handle_radius_px,
                 color=handle_color,
                 ring_color=handle_ring_color,
+                active_color=active_color,
+                active_alpha=active_alpha,
+                active_ring_scale=active_ring_scale,
             )
             if self._snap_points is not None:
                 handle.snap_fn = self._snap
@@ -374,8 +415,16 @@ class QuadOverlay:
         snap_marker_color=None,
         snap_marker_alpha=None,
         snap_marker_size_px=None,
+        active_color=None,
+        active_alpha=None,
+        active_ring_scale=None,
     ):
         """Restyle the overlay live; None leaves that aspect as-is."""
+        for handle in self._handles:
+            handle.set_active_style(
+                color=active_color, alpha=active_alpha, ring_scale=active_ring_scale
+            )
+
         if snap_marker_color is not None:
             self._snap_marker_color = snap_marker_color
         if snap_marker_alpha is not None:

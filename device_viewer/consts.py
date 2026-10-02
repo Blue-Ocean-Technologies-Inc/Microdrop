@@ -379,11 +379,14 @@ ALIGNMENT_SNAP_MARKER_ALPHA = 0.6
 ALIGNMENT_SNAP_MARKER_SIZE_PX = 6
 
 #: The active corner dot (the one pressed or hovered, highlighted in
-#: both panes): a ring and a translucent halo in the dot's own colour,
-#: sized as multiples of the dot radius.
+#: both panes): a ring plus a translucent halo. Colour, alpha and ring
+#: size (a multiple of the dot radius) are sidebar settings with these
+#: defaults; the halo follows the ring at a fixed size ratio and opacity.
+ALIGNMENT_ACTIVE_COLOR_HEX = ALIGNMENT_HANDLE_COLOR_HEX
+ALIGNMENT_ACTIVE_ALPHA = 1.0
 ALIGNMENT_ACTIVE_RING_SCALE = 1.7
 ALIGNMENT_ACTIVE_RING_WIDTH_PX = 3
-ALIGNMENT_ACTIVE_HALO_SCALE = 2.4
+ALIGNMENT_ACTIVE_HALO_TO_RING_RATIO = 2.4 / 1.7
 ALIGNMENT_ACTIVE_HALO_ALPHA = 0.3
 
 #: Bounds shared by the preference Range traits and the settings-sidebar
@@ -392,6 +395,7 @@ ALIGNMENT_SNAP_RADIUS_MIN_PX, ALIGNMENT_SNAP_RADIUS_MAX_PX = 0, 200
 ALIGNMENT_HANDLE_RADIUS_MIN_PX, ALIGNMENT_HANDLE_RADIUS_MAX_PX = 2, 40
 ALIGNMENT_FRAME_WIDTH_MIN_PX, ALIGNMENT_FRAME_WIDTH_MAX_PX = 1, 20
 ALIGNMENT_SNAP_MARKER_SIZE_MIN_PX, ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX = 1, 30
+ALIGNMENT_ACTIVE_RING_SCALE_MIN, ALIGNMENT_ACTIVE_RING_SCALE_MAX = 1.0, 4.0
 
 #: Width of the offscreen device-SVG render behind the endpoint pane —
 #: enough resolution to zoom into electrode corners without an
