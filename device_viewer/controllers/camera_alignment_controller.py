@@ -294,6 +294,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             scene_rect=scene_rect,
             initial_scene_quad=self.endpoint_store.load(device_key),
             device_name=device_key,
+            endpoint_store=self.endpoint_store,
             snap_scene_points=corner_points,
             overlay_options=overlay_options,
         )
