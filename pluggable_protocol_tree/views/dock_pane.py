@@ -48,7 +48,6 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_CHANGE,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_REQUEST,
-    REPEAT_DURATION_RECALC_TRIGGERS,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
@@ -67,11 +66,6 @@ from pluggable_protocol_tree.services.experiment_manager import ExperimentManage
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
-from pluggable_protocol_tree.services.phase_math import (
-    effective_repetitions_for_duration,
-    estimate_repeat_duration_s,
-    slug_shape_for_row,
-)
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
@@ -79,11 +73,13 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 from pluggable_protocol_tree.services.protocol_status_controller import (
     ProtocolStatusController,
 )
+from pluggable_protocol_tree.services.repeat_duration_reconciler import (
+    clamp_trail_overlay_for_row,
+    reconcile_repeat_duration_for_row,
+)
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
-    REPEAT_DURATION_DECIMALS,
-    REPEAT_DURATION_TOLERANCE_S,
     RUN_OUTCOME_ABORTED,
     RUN_OUTCOME_ERROR,
     RUN_OUTCOME_FINISHED,
@@ -1319,8 +1315,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self.manager,
         )
 
-        self._clamp_trail_overlay_for_row(path, col_id)
-        self._reconcile_repeat_duration_for_row(path, col_id)
+        clamp_trail_overlay_for_row(self.manager, path, col_id)
+        reconcile_repeat_duration_for_row(
+            self.manager, path, col_id, self.protocol_state_tracker.is_active
+        )
         self._maybe_live_reapply(path, col_id)
 
     @observe("task.window.application.experiment_changed", dispatch="ui")
@@ -1543,100 +1541,6 @@ class PluggableProtocolDockPane(TraitsDockPane):
             col.handler.on_live_edit(row, ctx)
         except Exception:
             logger.exception(f"live re-apply of {col_id!r} on the running step failed")
-
-    def _clamp_trail_overlay_for_row(self, path, col_id):
-        """Mirror the DV sidebar's dynamic bound (trail_overlay can never
-        reach trail_length): shrinking Trail Len drags an out-of-range
-        Trail Overlay down with it. Runs before the repeat-duration
-        reconciliation so the recalc sees the clamped overlay."""
-        if col_id != "trail_length":
-            return
-        try:
-            row = self.manager.get_row(tuple(path))
-        except (IndexError, AttributeError):
-            return
-        max_overlay = max(0, int(getattr(row, "trail_length", 1) or 1) - 1)
-        if int(getattr(row, "trail_overlay", 0) or 0) > max_overlay:
-            row.trail_overlay = max_overlay
-            self.manager.cell_changed = {
-                "path": tuple(path),
-                "col_id": "trail_overlay",
-            }
-
-    def _reconcile_repeat_duration_for_row(self, path, col_id):
-        """Mirror the legacy auto-recalc / effective-reps coupling:
-
-          * In Route-Reps-controlled mode (``repeat_duration_controls``
-            False): edits to any geometry/timing knob refresh the
-            Route Reps Dur cell with the new estimate.
-          * In Route-Reps-Dur-controlled mode (flag True): edits to
-            Route Reps Dur refresh the Route Reps cell with the effective
-            number of full cycles that fit.
-
-        Programmatic writes here go via ``setattr`` directly (NOT
-        ``model.set_value`` and NOT through ``on_interact``) so the
-        mode-switch dialog only ever fires for genuine user clicks,
-        never for these reconciliation passes.
-        """
-        if self.protocol_state_tracker.is_active:
-            return
-        try:
-            row = self.manager.get_row(tuple(path))
-        except (IndexError, AttributeError):
-            return
-        routes = list(getattr(row, "routes", []) or [])
-        if not routes:
-            return
-        controls = bool(getattr(row, "repeat_duration_controls", False))
-        duration_s = float(getattr(row, "duration_s", 1.0) or 0.0)
-        trail_length = int(getattr(row, "trail_length", 1) or 1)
-        trail_overlay = int(getattr(row, "trail_overlay", 0) or 0)
-        linear_repeats = bool(getattr(row, "linear_repeats", False))
-        soft_start = bool(getattr(row, "soft_start", False))
-        soft_end = bool(getattr(row, "soft_end", False))
-
-        if not controls and col_id in REPEAT_DURATION_RECALC_TRIGGERS:
-            n_repeats = int(getattr(row, "route_repetitions", 1) or 1)
-            estimated = estimate_repeat_duration_s(
-                routes=routes,
-                trail_length=trail_length,
-                trail_overlay=trail_overlay,
-                n_repeats=n_repeats,
-                step_duration_s=duration_s,
-                linear_repeats=linear_repeats,
-                soft_start=soft_start,
-                soft_end=soft_end,
-                **slug_shape_for_row(row),
-            )
-            estimated = round(estimated, REPEAT_DURATION_DECIMALS)
-            if (
-                abs(float(getattr(row, "repeat_duration", 0.0)) - estimated)
-                >= REPEAT_DURATION_TOLERANCE_S
-            ):
-                row.repeat_duration = estimated
-                # Re-entrancy is bounded: see the
-                # REPEAT_DURATION_RECALC_TRIGGERS guard + mode-check above;
-                # "repeat_duration" is not a trigger in
-                # route-reps-controlled mode so the next pass exits cleanly.
-                self.manager.cell_changed = {
-                    "path": tuple(path),
-                    "col_id": "repeat_duration",
-                }
-        elif controls and col_id == "repeat_duration":
-            effective = effective_repetitions_for_duration(
-                routes=routes,
-                trail_length=trail_length,
-                trail_overlay=trail_overlay,
-                step_duration_s=duration_s,
-                repeat_duration_s=float(getattr(row, "repeat_duration", 0.0) or 0.0),
-                **slug_shape_for_row(row),
-            )
-            if int(getattr(row, "route_repetitions", 1) or 1) != int(effective):
-                row.route_repetitions = int(effective)
-                self.manager.cell_changed = {
-                    "path": tuple(path),
-                    "col_id": "route_repetitions",
-                }
 
     def _emit_time_update_tick(self):
         # Runs on the scheduler's background thread. Setting the Traits event

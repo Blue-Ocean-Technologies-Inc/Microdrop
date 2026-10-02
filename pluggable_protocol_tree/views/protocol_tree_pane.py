@@ -138,10 +138,6 @@ NO_DEVICE_SVG_SENTINEL = "Null"
 RUN_OUTCOME_FINISHED = "finished"
 RUN_OUTCOME_ABORTED = "aborted"
 RUN_OUTCOME_ERROR = "error"
-# Route-Reps-Dur auto-recalc: display rounding + write-back tolerance
-# that stops estimate jitter from dirtying the cell.
-REPEAT_DURATION_DECIMALS = 2
-REPEAT_DURATION_TOLERANCE_S = 0.01
 
 
 class ProtocolTreePane(QWidget):
