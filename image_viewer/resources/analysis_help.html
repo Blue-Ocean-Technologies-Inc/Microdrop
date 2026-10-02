@@ -441,6 +441,11 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
         <li><a href="#stat-ring">Outline ring mean</a></li>
         <li><a href="#stat-integrated">Integrated</a></li>
         <li><a href="#stat-perarea">Per area</a></li>
+        <li><a href="#stat-shape">Droplet shape: how it is measured</a></li>
+        <li><a href="#stat-circularity">Circularity</a></li>
+        <li><a href="#stat-shapechange">Shape change</a></li>
+        <li><a href="#stat-axisratio">Axis ratio</a></li>
+        <li><a href="#stat-solidity">Solidity</a></li>
         <li><a href="#stat-table">Table and CSV-only columns</a></li>
       </ol>
     </li>
@@ -1093,6 +1098,59 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
     <dt>When to use it</dt><dd><p>To compare experiments taken at different magnifications or with different cameras, where one pixel covers a different area of chip.</p></dd>
     <dt>How to read it</dt><dd><p>Within one experiment its curve has exactly the same shape as the mean (it is the mean times a fixed number). It does not depend on how big the ROI is.</p></dd>
     <dt>Typical value</dt><dd><p>Only meaningful once the image scale is set.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-shape">
+  <h3>Droplet shape: how it is measured</h3>
+  <p>The four shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
+  splits the pixels into "droplet" and "background" with an automatic brightness threshold (Otsu's method), takes the
+  biggest bright blob, and measures its outline. This happens on the corrected image, after the
+  <a href="#ball">rolling ball</a> and perspective correction when they are on. The droplet must be brighter than its
+  surroundings. Shape numbers have no unit, so the image scale does not change them. A cell stays empty when no droplet
+  is found. Draw the ROI a little larger than the droplet: a droplet cut off by the ROI edge reads flattened, and two
+  droplets touching inside one ROI read as one odd-shaped blob.</p>
+</article>
+
+<article class="term" id="stat-circularity">
+  <h3>Circularity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>How close the droplet's outline is to a perfect circle: 4π × area ÷ perimeter².</p></dd>
+    <dt>When to use it</dt><dd><p>To spot a droplet that stops being round, whether it stretches or its edge turns ragged or lumpy.</p></dd>
+    <dt>How to read it</dt><dd><p>1 is a perfect circle; lower means less round. A droplet twice as long as it is wide reads about 0.84.</p></dd>
+    <dt>Typical value</dt><dd><p>About 0.98 for a round droplet (the outline is smoothed by 1 px first, so pixel steps do not count as roughness).</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-shapechange">
+  <h3>Shape change</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>One number for "how different is the droplet's shape from the first image?", built from its Hu shape moments.
+    Moving, turning, growing or shrinking alone does not change it.</p></dd>
+    <dt>When to use it</dt><dd><p>To find the moment a droplet starts to deform, split or merge, whatever kind of change it is.</p></dd>
+    <dt>How to read it</dt><dd><p>0 means the same shape as the ROI's first included image. Excluding that image makes the next one the reference.
+    A circle stretched to 2.5 : 1 reads about 1.2.</p></dd>
+    <dt>Typical value</dt><dd><p>Below 0.05 for a droplet that keeps its shape.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-axisratio">
+  <h3>Axis ratio</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>Length ÷ width of the droplet, from the ellipse that best matches it.</p></dd>
+    <dt>When to use it</dt><dd><p>To follow a droplet being stretched, for example while it is pulled onto the next electrode.</p></dd>
+    <dt>How to read it</dt><dd><p>1 is round; 2 is twice as long as wide. It is never below 1. Very small droplets (under about 8 px across) read a little above 1 even when round.</p></dd>
+    <dt>Typical value</dt><dd><p>About 1.0 for a resting droplet.</p></dd>
+  </dl>
+</article>
+
+<article class="term" id="stat-solidity">
+  <h3>Solidity</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd><p>The droplet's area ÷ the area of the tightest outline with no dents around it (its convex hull, like a rubber band stretched around it).</p></dd>
+    <dt>When to use it</dt><dd><p>To catch lobes, necks and a small satellite droplet merging in. Plain stretching does not lower it.</p></dd>
+    <dt>How to read it</dt><dd><p>1 means no dents; it drops as the outline gains bumps or a waist.</p></dd>
+    <dt>Typical value</dt><dd><p>Above 0.97 for a round or oval droplet.</p></dd>
   </dl>
 </article>
 
