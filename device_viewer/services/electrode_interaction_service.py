@@ -188,22 +188,13 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def _zoom_in(self, scale=None):
         logger.debug("Zoom In")
-        # disable auto fit if user wants to zoom in
-        if self.device_view.auto_fit:
-            self.device_view.auto_fit = False
 
-        if scale is None:
-            scale = self.device_viewer_preferences._zoom_scale
-
-        self.device_view.scale(scale, scale)
+        self.device_view.zoom_in(scale or self.device_viewer_preferences._zoom_scale)
 
     def _zoom_out(self, scale=None):
         logger.debug("Zoom Out")
 
-        if scale is None:
-            scale = self.device_viewer_preferences._zoom_scale
-
-        self.device_view.scale(1 / scale, 1 / scale)
+        self.device_view.zoom_out(scale or self.device_viewer_preferences._zoom_scale)
 
     def _rotate_device_view(self, angle_step):
 
@@ -226,15 +217,7 @@ class ElectrodeInteractionControllerService(HasTraits):
         self.device_view.fit_to_scene_rect()
 
     def _apply_pan_mode(self):
-        enabled = self.model.mode == "pan"
-
-        # Disable interaction with items (clicking/hovering) while panning
-        self.device_view.setInteractive(not enabled)
-
-        if enabled:
-            self.device_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        else:
-            self.device_view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        self.device_view.set_pan_mode(self.model.mode == "pan")
 
     def get_electrode_view_for_scene_pos(self, scene_pos):
         return self.device_view.scene().get_item_under_mouse(scene_pos, ElectrodeView)

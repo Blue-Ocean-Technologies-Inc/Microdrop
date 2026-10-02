@@ -30,6 +30,7 @@ from microdrop_style.icons.icons import ICON_FIT_SCREEN
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
+from microdrop_utils.zoomable_graphics_view import ZoomableGraphicsView
 
 # Local imports.
 from .analysis.perspective import rotated_quad
@@ -46,13 +47,15 @@ OUTLINE_WIDTH_PX = 2
 #: so the electrode edges stay readable against the image.
 DEVICE_OUTLINE_WIDTH_PX = 1
 
-#: Wheel-zoom factor per notch.
-ZOOM_STEP = 1.25
+#: How to move around the frame, as in the device viewer.
+NAVIGATION_HINT = "Ctrl+wheel zooms; Space toggles drag-panning."
 
-PLACE_HINT = "Click the four points to correct (e.g. the chip's corners)."
+PLACE_HINT = (
+    f"Click the four points to correct (e.g. the chip's corners). {NAVIGATION_HINT}"
+)
 EDIT_HINT = (
     "Drag each corner to where it belongs — the image re-warps live. "
-    "Reset to pick new points."
+    f"Reset to pick new points. {NAVIGATION_HINT}"
 )
 
 
@@ -64,10 +67,11 @@ def to_qtransform(matrix):
     return QtGui.QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8])
 
 
-class _QuadView(QtWidgets.QGraphicsView):
+class _QuadView(ZoomableGraphicsView):
     """The frame plus the quad being defined; mouse input drives the
     placement and corner drags against ``correction``. ``device_outline``
-    is the electrode outline drawn as an alignment reference."""
+    is the electrode outline drawn as an alignment reference. Zoom, pan and
+    fit come from the shared view the device viewer uses."""
 
     #: Emitted whenever the quads change (the dialog refreshes its hint
     #: and buttons).
@@ -84,7 +88,6 @@ class _QuadView(QtWidgets.QGraphicsView):
         self._dragging = -1
 
         self.setScene(QtWidgets.QGraphicsScene(self))
-        self.setRenderHint(QtGui.QPainter.Antialiasing)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setBackgroundBrush(QtGui.QColor(GREY["dark"]))
 
@@ -115,7 +118,8 @@ class _QuadView(QtWidgets.QGraphicsView):
     # Mouse interaction                                                    #
     # ------------------------------------------------------------------ #
     def mousePressEvent(self, event):
-        if event.button() != QtCore.Qt.LeftButton:
+        # While panning, the left button drags the view, not the quad.
+        if event.button() != QtCore.Qt.LeftButton or self.is_pan_mode():
             super().mousePressEvent(event)
             return
 
@@ -146,19 +150,6 @@ class _QuadView(QtWidgets.QGraphicsView):
     def mouseReleaseEvent(self, event):
         self._dragging = -1
         super().mouseReleaseEvent(event)
-
-    def wheelEvent(self, event):
-        factor = ZOOM_STEP if event.angleDelta().y() > 0 else 1 / ZOOM_STEP
-        self.scale(factor, factor)
-        self._redraw()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.fit()
-
-    def fit(self):
-        self.fitInView(self.scene().sceneRect(), QtCore.Qt.KeepAspectRatio)
-        self._redraw()
 
     def _nearest_corner(self, point):
         distances = [
@@ -286,7 +277,7 @@ class PerspectiveTools(HasTraits):
 
     @observe("fit_button")
     def _fit(self, event):
-        self.quad_view.fit()
+        self.quad_view.fit_to_scene_rect()
 
 
 # Glyphs match the device viewer: its Reset Camera Perspective and Rotate
