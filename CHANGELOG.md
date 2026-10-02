@@ -1,3 +1,28 @@
+## [v1.27.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.27.0) (2026-10-02)
+
+### Feat
+
+- **image-viewer**: extent and orientation plot quantities ([`978bd37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/978bd37c1001e18a46af580d8f0e79b563b7085a))
+- **image-viewer**: eccentricity plot quantity ([`bd20c67`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bd20c67ea8e4ed76d67c45d95f259d08a43f5ea6))
+- **image-viewer**: circularity, shape change, axis ratio and solidity plot quantities ([`ee557c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ee557c0dcb9feae989d9fd0827cf3877a631a160))
+- **examples**: shape-moments runner and findings ([`ff0127c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ff0127cdc1c1ec1759ddad4319dc5aa83bbc9c3e))
+- **examples**: shape-moment descriptors prototype ([`b1f50fe`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b1f50feb3946b7287982f0c911f6aff3e1a5c0eb))
+
+### Fix
+
+- **image-viewer**: name the help entry Image Analysis Tutorial ([`aaf9c37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aaf9c377f01189c1bacb008b87edf86765e3dccf))
+
+### Refactor
+
+- **image-viewer**: shape descriptors as an analysis module ([`b4b2c0a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b4b2c0a8c100ce9ca29ef161018081e0ed0a771d))
+
+### Docs
+
+- **image-viewer**: static pipeline diagram in the help guide ([`9fcf3f5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9fcf3f589b5e7f8ee6a827f9291101f806b219e9))
+- **image-viewer**: colour declines red in the shape demos ([`c3a115b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c3a115bc5fefbb644c04f9231cfee5d41f1ff586))
+- **image-viewer**: interactive droplet shape section in the help guide ([`82b9541`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/82b9541be74ed2c232a2a43f3ac7a37539c09eef))
+- **image-viewer**: explain the shape quantities in the help guide ([`3bdbd47`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3bdbd4774f40bb63ed9161faab205dc8de9f1209))
+
 ## [v1.26.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.26.0) (2026-10-02)
 
 ### Feat
