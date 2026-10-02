@@ -33,6 +33,7 @@
   --warn: #b4410c;
   --warn-soft: #fdecdf;
   --ok: #2f8a46;
+  --down: #c62828;
   --roi: #0b9bb0;
   --ring: #d99a00;
   --ball: #7a4fe0;
@@ -60,6 +61,7 @@
     --warn: #ff9a6b;
     --warn-soft: #3a2418;
     --ok: #5cc77a;
+    --down: #ff6b6b;
     --roi: #3fd0e3;
     --ring: #f2c14e;
     --ball: #a98bff;
@@ -84,6 +86,7 @@
   --warn: #ff9a6b;
   --warn-soft: #3a2418;
   --ok: #5cc77a;
+  --down: #ff6b6b;
   --roi: #3fd0e3;
   --ring: #f2c14e;
   --ball: #a98bff;
@@ -359,7 +362,9 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
 .shape-demo svg { display: block; width: 100%; max-width: 260px; height: auto; border-radius: 6px; }
 table.shape-read { margin: 0; max-width: 28em; }
 table.shape-read td.mark { width: 1.6em; text-align: center; color: var(--muted); }
-table.shape-read tr.moved td { color: var(--accent); font-weight: 600; }
+table.shape-read tr.up td.now, table.shape-read tr.up td.mark { color: var(--ok); font-weight: 600; }
+table.shape-read tr.down td.now, table.shape-read tr.down td.mark { color: var(--down); font-weight: 600; }
+table.shape-read tr.changed td.mark { color: var(--ink); }
 table.shape-read .na { color: var(--muted); font-style: italic; font-weight: 400; }
 table.shape-compare td:not(:first-child), table.shape-compare th:not(:first-child) { text-align: center; }
 .shape-key { font-size: .88rem; color: var(--muted); }
@@ -1214,7 +1219,7 @@ says which one to pick for what.</p>
   <h3>Live demos: five ways a droplet changes</h3>
   <p>Each picture below is measured live with the same steps and formulas MicroDrop uses, on an outline traced pixel by pixel,
   so the numbers are what the pane would show for that droplet (about 22 px radius). <strong>Shape change</strong> is measured
-  from the starting picture; the <em>Start</em> column holds the starting values, and a coloured row has moved. Droplet area is shown for reference only: the
+  from the starting picture; the <em>Start</em> column holds the starting values, a green ↑ means the value rose and a red ↓ that it fell. Droplet area is shown for reference only: the
   pane's <a href="#stat-table">Area</a> is the ROI's size, not the droplet's.</p>
   <p class="shape-key"><span><i class="k-drop"></i>droplet as traced</span>
   <span><i class="k-ell"></i>best-matching ellipse and its long axis</span>
@@ -2541,25 +2546,30 @@ midpoint of a melt curve or the speed of a decay.</p>
       return row[1] === "area" ? Math.round(v) + " px²" : row[1] === "orientation" ? Math.round(v) + "°" : v.toFixed(row[2]);
     }
 
+    /* "up", "down", "changed" (to or from n/a) or "": a change must show at
+       the displayed precision and clear the row's noise tolerance. */
     function moved(d, ref, row) {
-      if (!d || !ref) { return d === ref ? "" : "•"; }
+      if (!d || !ref) { return d === ref ? "" : "changed"; }
+      if (cell(d, row) === cell(ref, row)) { return ""; }
       var a = d[row[1]], b = ref[row[1]];
       if (row[1] === "orientation") {
-        if (round(d) !== round(ref)) { return "•"; }
-        if (!round(d)) { return ""; }
+        if (round(d) !== round(ref)) { return "changed"; }
         var turn = ((a - b + 90) % 180 + 180) % 180 - 90;
-        return Math.abs(turn) > row[3] ? (turn > 0 ? "▲" : "▼") : "";
+        return Math.abs(turn) > row[3] ? (turn > 0 ? "up" : "down") : "";
       }
       var tol = row[1] === "area" ? 0.03 * b : row[3];
-      return Math.abs(a - b) > tol ? (a > b ? "▲" : "▼") : "";
+      return Math.abs(a - b) > tol ? (a > b ? "up" : "down") : "";
     }
+
+    var MARKS = { up: ["↑", "increased"], down: ["↓", "decreased"], changed: ["•", "changed"] };
 
     function readout(table, d, ref) {
       var html = '<thead><tr><th>Quantity</th><th style="text-align:right">Now</th><th style="text-align:right">Start</th><th></th></tr></thead><tbody>';
       ROWS.forEach(function (row) {
-        var mark = moved(d, ref, row);
-        html += "<tr" + (mark ? ' class="moved"' : "") + "><td>" + row[0] + '</td><td class="num">' + cell(d, row) +
-          '</td><td class="num">' + cell(ref, row) + '</td><td class="mark">' + (mark || "–") + "</td></tr>";
+        var change = moved(d, ref, row), mark = MARKS[change];
+        var sign = mark ? '<span role="img" aria-label="' + mark[1] + '" title="' + mark[1] + '">' + mark[0] + "</span>" : "–";
+        html += "<tr" + (mark ? ' class="' + change + '"' : "") + "><td>" + row[0] + '</td><td class="num now">' + cell(d, row) +
+          '</td><td class="num">' + cell(ref, row) + '</td><td class="mark">' + sign + "</td></tr>";
       });
       table.innerHTML = html + "</tbody>";
     }
