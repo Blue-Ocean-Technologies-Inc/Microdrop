@@ -344,7 +344,7 @@ class EndpointPane(AlignmentPaneBase):
         the dots back on the default grid."""
         device = self.device_name or "this device"
         answer = confirm(
-            self.canvas,
+            None,
             f"Clear the saved endpoint for {device}? The dots return to the "
             "default grid.",
             title="Reset Endpoint",
