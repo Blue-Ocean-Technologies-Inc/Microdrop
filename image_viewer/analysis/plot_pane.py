@@ -123,6 +123,13 @@ PLOT_STAT_LABELS = {
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
     "area": "Area",
+    "circularity": "Circularity",
+    "shape_change": "Shape change",
+    "axis_ratio": "Axis ratio",
+    "eccentricity": "Eccentricity",
+    "solidity": "Solidity",
+    "extent": "Extent",
+    "orientation_deg": "Orientation",
 }
 
 #: Y-axis wording for the stats whose numbers mean nothing without
@@ -131,6 +138,7 @@ _Y_LABEL_TEMPLATES = {
     "per_area": "Intensity per {unit}",
     "bg_per_area": "Bg-corrected intensity per {unit}",
     "area": "Area ({unit})",
+    "orientation_deg": "Orientation (°)",
 }
 
 

@@ -27,6 +27,7 @@ from .consts import (
     SAVGOL_WINDOW_PTS,
 )
 from .heater_log import temperature_at
+from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -77,6 +78,42 @@ def stat_value(stats, stat, pixel_area=1.0):
     return math.nan if value is None else value
 
 
+def shape_reference(stats_run):
+    """The first stats dict in ``stats_run`` (one ROI's, image order)
+    with a droplet — the shape every later image's shape change is
+    measured from. None when no image has one."""
+    return next(
+        (stats for stats in stats_run if stats and stats.get(HU_ROOT_KEY) is not None),
+        None,
+    )
+
+
+def shape_change_values(stats_run):
+    """Shape change along one ROI's ``stats_run`` (stats dicts or None,
+    image order): each image's root-normalised Hu distance from
+    ``shape_reference``. NaN where an image has no droplet or no stats,
+    and everywhere when no image has a droplet.
+
+    The run is the analysed images, so excluding the first one moves
+    the reference to the next — the series re-baselines itself."""
+    reference = shape_reference(stats_run)
+
+    if reference is None:
+        return [math.nan] * len(stats_run)
+
+    return [shape_deviation(stats or {}, reference) for stats in stats_run]
+
+
+def roi_stat_values(stats_run, stat, pixel_area=1.0):
+    """``stat`` along one ROI's ``stats_run`` (stats dicts or None, image
+    order). Every stat but shape change is per image; shape change needs
+    the whole run for its reference."""
+    if stat == "shape_change":
+        return shape_change_values(stats_run)
+
+    return [stat_value(stats, stat, pixel_area) for stats in stats_run]
+
+
 def analysed_paths(session, filtered_paths):
     """The filtered images the analysis covers, user-excluded ones
     left out, in the order every derived series runs."""
@@ -112,13 +149,15 @@ def derive_series(session, filtered_paths):
         else [capture_time - start_time for capture_time in times]
     )
     series = {}
+
     for roi in session.rois:
-        elapsed, values = [], []
-        for index, path in enumerate(paths):
-            stats = session.stats.get(session.cache_key(path, roi, stat_cache))
-            elapsed.append(x_values[index])
-            values.append(stat_value(stats, session.plot_stat, area_per_pixel))
-        series[roi.roi_id] = (roi.name, elapsed, values)
+        stats_run = [
+            session.stats.get(session.cache_key(path, roi, stat_cache))
+            for path in paths
+        ]
+        values = roi_stat_values(stats_run, session.plot_stat, area_per_pixel)
+        series[roi.roi_id] = (roi.name, list(x_values), values)
+
     return series
 
 

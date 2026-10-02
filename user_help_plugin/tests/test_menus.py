@@ -38,7 +38,7 @@ def test_help_menu_offers_the_analysis_guide():
     action = _analysis_help_action()
 
     assert action is not None
-    assert action.window_title == "Analysis Terms"
+    assert action.window_title == "Image Analysis Tutorial"
 
 
 def test_analysis_guide_is_bundled_and_self_contained():

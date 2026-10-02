@@ -58,6 +58,26 @@ BUTTER_ORDER = 2
 BUTTER_CUTOFF_BOUNDS = (0.01, 0.99)
 BUTTER_CUTOFF = 0.2
 
+#: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
+#: the analysis draws, tests and combines uses it, so it is one name
+#: rather than a 255 sprinkled through the files.
+MASK_ON = 255
+
+#: The droplet-shape quantities, in Plot-dropdown, table and CSV order.
+#: None scales with the calibration: all are unitless but the
+#: orientation, an angle in degrees. "shape_change" is the one series
+#: quantity: each image's distance from the ROI's first analysed image
+#: with a droplet.
+SHAPE_STATS = (
+    "circularity",
+    "shape_change",
+    "axis_ratio",
+    "eccentricity",
+    "solidity",
+    "extent",
+    "orientation_deg",
+)
+
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
 
