@@ -9,8 +9,10 @@
 # Thanks for using Microdrop open source!
 
 """Dock pane plotting the ROI intensity series: the chosen stat vs
-elapsed time, one line per ROI — or, per the View dropdown, the fits'
-second-derivative curves or the per-ROI time-of-fastest-change bars.
+elapsed time, one line per ROI — or, per the View dropdown, that stat
+per ROI on the displayed image (bars) or across the series (violins),
+the fits' second-derivative curves, or the per-ROI
+time-of-fastest-change bars.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
@@ -63,6 +65,7 @@ from microdrop_style.icons.icons import (
 
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
+    HoverScrollEnumEditor,
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
@@ -96,7 +99,10 @@ from .fit_presets import fit_arguments, method_label
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
+    analysed_paths,
     analysed_series,
+    finite_values,
+    image_values,
     interpolated_series,
     smoothed_series,
 )
@@ -116,6 +122,7 @@ PLOT_STAT_LABELS = {
     "bg_integrated": "Integrated (bg-corrected)",
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
+    "area": "Area",
 }
 
 #: Y-axis wording for the stats whose numbers mean nothing without
@@ -123,6 +130,7 @@ PLOT_STAT_LABELS = {
 _Y_LABEL_TEMPLATES = {
     "per_area": "Intensity per {unit}",
     "bg_per_area": "Bg-corrected intensity per {unit}",
+    "area": "Area ({unit})",
 }
 
 
@@ -174,6 +182,18 @@ EQUATION_LINE_STEP_Y = 0.06
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
 NOTE_NO_TEMP_Y = 0.09
+
+#: The views drawn against the time (or temperature) axis; the rest
+#: put ROI names along x.
+TIME_VIEW_MODES = ("intensity", "second_derivative")
+
+#: The views a log value axis applies to. Not the bar charts: a bar
+#: grows from zero, which a log axis cannot show.
+LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution")
+
+#: A violin body's opacity as a fraction of its ROI's, so the median
+#: and extent lines drawn over it stay readable.
+VIOLIN_BODY_ALPHA = 0.5
 
 #: The grey wash over a trimmed-away tail: visible over white,
 #: faint enough to read the curves through.
@@ -239,7 +259,7 @@ def _top_row():
             "figure.view_mode",
             label="View",
             width=DROPDOWN_W,
-            editor=EnumEditor(
+            editor=HoverScrollEnumEditor(
                 values=list(VIEW_MODES), format_func=VIEW_MODE_LABELS.get
             ),
         ),
@@ -247,7 +267,7 @@ def _top_row():
             "session.plot_stat",
             label="Plot",
             width=DROPDOWN_W,
-            editor=EnumEditor(
+            editor=HoverScrollEnumEditor(
                 values=list(PLOT_STATS), format_func=PLOT_STAT_LABELS.get
             ),
         ),
@@ -301,7 +321,7 @@ def _axes_tab():
                 "figure.x_axis",
                 label="X axis",
                 width=DROPDOWN_W,
-                editor=EnumEditor(
+                editor=HoverScrollEnumEditor(
                     values=list(X_AXIS_MODES), format_func=X_AXIS_LABELS.get
                 ),
                 tooltip="What the curves are plotted against: "
@@ -657,6 +677,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._panning = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
+        model.observe(self._on_displayed_image_changed, "current_image_path")
         for event_name, handler in (
             ("scroll_event", self._on_scroll),
             ("button_press_event", self._on_press),
@@ -746,6 +767,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._detached = True
         self._model.observe(self._on_plot_state_changed, _PLOT_STATE, remove=True)
         self._model.observe(self._on_fit_requested, _VIEW_RESET_STATE, remove=True)
+        self._model.observe(
+            self._on_displayed_image_changed, "current_image_path", remove=True
+        )
 
     def showEvent(self, event):
         self._schedule_redraw()  # catch up on anything missed hidden
@@ -753,6 +777,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _on_plot_state_changed(self, event):
         self._schedule_redraw()
+
+    def _on_displayed_image_changed(self, event):
+        # Only the per-image view reads the displayed image; redrawing
+        # the others would refit every ROI on each step through the
+        # series for nothing.
+        if self._model.session.figure.view_mode == "per_image":
+            self._schedule_redraw()
 
     def _schedule_redraw(self):
         if self._redraw_pending:
@@ -790,23 +821,33 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if figure_settings.x_axis == "temperature"
             else "Elapsed time (s)"
         )
-        if figure_settings.view_mode == "intensity":
+        # After the locator reset above (which would fight the log
+        # locators), before relim, so autoscale sees the final scale,
+        # and before drawing: setting a scale resets the axis locators,
+        # which would wipe the ROI-name ticks the bar and violin views
+        # set. Those views keep a linear x.
+        view_mode = figure_settings.view_mode
+        time_axis = view_mode in TIME_VIEW_MODES
+        log_x = time_axis and figure_settings.log_x
+        log_y = view_mode in LOG_Y_VIEW_MODES and figure_settings.log_y
+        self._axes.set_xscale("log" if log_x else "linear")
+        self._axes.set_yscale("log" if log_y else "linear")
+
+        if view_mode == "intensity":
             trim_edges = self._refresh_intensity(series, figure_settings)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
-            if figure_settings.view_mode == "second_derivative":
+
+            if view_mode == "second_derivative":
                 trim_edges = self._draw_second_derivative(series, figure_settings)
+            elif view_mode == "per_image":
+                trim_edges = self._draw_per_image(series, figure_settings)
+            elif view_mode == "distribution":
+                trim_edges = self._draw_distribution(series, figure_settings)
             else:
                 trim_edges = self._draw_fastest_change(series, figure_settings)
-        # After the locator reset above (which would fight the log
-        # locators) and before relim, so autoscale sees the final
-        # scale. The bar view keeps linear: its x is ROI names.
-        time_axis = figure_settings.view_mode != "fastest_change"
-        log_x = time_axis and figure_settings.log_x
-        log_y = time_axis and figure_settings.log_y
-        self._axes.set_xscale("log" if log_x else "linear")
-        self._axes.set_yscale("log" if log_y else "linear")
+
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
         # axes back while they were still reading them.
@@ -838,7 +879,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._shade_trimmed_tails(trim_edges)
         self._note_hidden_points(series, log_x, log_y)
         self._note_dropped_outliers()
-        self._note_missing_temperatures(series, figure_settings)
+
+        # The per-ROI stat views draw every value whatever its
+        # temperature, so frames the log misses are not missing there.
+        if view_mode not in ("per_image", "distribution"):
+            self._note_missing_temperatures(series, figure_settings)
+
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
@@ -860,15 +906,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # neighbours rather than cutting under them.
         if figure_settings.interpolate_gaps:
             drawn = interpolated_series(drawn)
-        self._axes.set_ylabel(
-            y_axis_label(
-                session.plot_stat,
-                session.scale,
-                figure_settings.normalize,
-                figure_settings.subtract_first,
-                figure_settings.subtract_background_ref,
-            )
-        )
+        self._axes.set_ylabel(self._stat_axis_label(figure_settings))
         for roi_id in list(self._lines):
             if roi_id not in drawn:
                 self._lines.pop(roi_id).remove()
@@ -902,6 +940,147 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             trim_edges = self._draw_fits(series, figure_settings)
         self._apply_legend(bool(self._lines) and figure_settings.show_legend)
         return trim_edges
+
+    def _stat_axis_label(self, figure_settings):
+        """The plotted stat's y-axis text with its transforms noted —
+        shared by every view that draws the stat itself."""
+        session = self._model.session
+
+        return y_axis_label(
+            session.plot_stat,
+            session.scale,
+            figure_settings.normalize,
+            figure_settings.subtract_first,
+            figure_settings.subtract_background_ref,
+        )
+
+    def _draw_per_image(self, series, figure_settings):
+        """Bar per visible ROI: the plotted stat on the displayed image.
+        A cross-section of the time view at that image, corrections
+        and all, so the two always agree; it follows the viewer's
+        selection."""
+        session = self._model.session
+        image_path = self._model.current_image_path
+        paths = analysed_paths(session, self._model.filtered_paths)
+        values = image_values(series, paths, image_path)
+
+        self._axes.set_ylabel(self._stat_axis_label(figure_settings))
+        self._axes.set_xlabel(f"ROI — {Path(image_path).name}" if image_path else "ROI")
+        self._apply_legend(False)
+
+        if not image_path:
+            self._draw_hint("No image displayed")
+
+            return []
+
+        if values is None:
+            self._draw_hint(
+                "The displayed image is excluded from analysis"
+                if session.is_excluded(image_path)
+                else "The displayed image is not in the filtered series"
+            )
+
+            return []
+
+        entries = []
+
+        for roi_id, (name, value) in values.items():
+            roi = session.roi_by_id(roi_id)
+
+            if roi is not None:
+                entries.append((name, value, roi.style))
+
+        if not any(value == value for _name, value, _style in entries):
+            self._draw_hint("No stats computed for the displayed image")
+
+            return []
+
+        self._draw_roi_bars(entries)
+
+        return []  # ROI names on x: no time span to shade
+
+    def _draw_distribution(self, series, figure_settings):
+        """Violin per visible ROI: the spread of the plotted stat
+        across the analysed images, its median marked. A ROI with no
+        computed value gets no violin."""
+        session = self._model.session
+        samples = []
+
+        for roi_id, (name, values) in finite_values(series).items():
+            roi = session.roi_by_id(roi_id)
+
+            if roi is not None:
+                samples.append((name, values, roi.style))
+
+        self._axes.set_ylabel(self._stat_axis_label(figure_settings))
+        self._axes.set_xlabel("ROI")
+        self._apply_legend(False)
+
+        if not samples:
+            self._draw_hint("No computed values to show a distribution of")
+
+            return []
+
+        positions = list(range(len(samples)))
+        violins = self._axes.violinplot(
+            [values for _name, values, _style in samples],
+            positions,
+            showmedians=True,
+        )
+        colors = [style.color for _name, _values, style in samples]
+
+        for body, (_name, _values, style) in zip(violins["bodies"], samples):
+            body.set_facecolor(style.color)
+            body.set_edgecolor(style.color)
+            body.set_alpha(VIOLIN_BODY_ALPHA * style.plot_alpha)
+
+        # The bodies come as a list, the median and extent lines as one
+        # collection each; every one of them goes at the next redraw.
+        for key, artists in violins.items():
+            if key == "bodies":
+                self._fit_artists.extend(artists)
+            else:
+                artists.set_color(colors)
+                self._fit_artists.append(artists)
+
+        self._axes.set_xticks(positions, [name for name, _values, _style in samples])
+
+        return []  # ROI names on x: no time span to shade
+
+    def _draw_roi_bars(self, entries):
+        """Bar per (name, height, style) entry, coloured and faded by
+        the ROI's style and labelled with its value. A NaN height keeps
+        its slot as an empty bar marked n/a, so a ROI never shifts
+        along x when one image lacks it."""
+        positions = list(range(len(entries)))
+        # Keep the container, not its bars: its remove() also drops the
+        # axes.containers registration the bars alone would leave behind.
+        bars = self._axes.bar(
+            positions,
+            [0.0 if height != height else height for _name, height, _style in entries],
+            color=[style.color for _name, _height, style in entries],
+        )
+
+        for bar, (_name, _height, style) in zip(bars, entries):
+            bar.set_alpha(style.plot_alpha)
+
+        self._fit_artists.append(bars)
+        self._axes.set_xticks(positions, [name for name, _height, _style in entries])
+
+        for x, (_name, height, _style) in zip(positions, entries):
+            missing = height != height
+
+            self._fit_artists.append(
+                self._axes.annotate(
+                    "n/a" if missing else f"{height:.3g}",
+                    (x, 0.0 if missing else height),
+                    textcoords="offset points",
+                    xytext=(0, 4),
+                    ha="center",
+                    fontsize="x-small",
+                    color="gray" if missing else None,
+                )
+            )
 
     def _draw_second_derivative(self, series, figure_settings):
         """One curve per ROI: the fitted model's d²y/dt² over the ROI's
@@ -973,7 +1152,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.fit_method == "none":
             self._draw_hint("Select a fit method to view fastest change")
             return []
-        labels, times, colors, alphas = [], [], [], []
+        entries = []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
@@ -995,32 +1174,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             t_star = fastest_change_time(fit, finite_t.min(), finite_t.max())
             if t_star is None:
                 continue
-            labels.append(name)
-            times.append(t_star)
-            colors.append(roi.style.color)
-            alphas.append(roi.style.plot_alpha)
-        if not labels:
+            entries.append((name, t_star, roi.style))
+        if not entries:
             self._draw_hint("No fastest-change times (fits failed or rate is constant)")
             return []
-        positions = list(range(len(labels)))
-        # Keep the container, not its bars: its remove() also drops the
-        # axes.containers registration the bars alone would leave behind.
-        bars = self._axes.bar(positions, times, color=colors)
-        for bar, alpha in zip(bars, alphas):
-            bar.set_alpha(alpha)
-        self._fit_artists.append(bars)
-        self._axes.set_xticks(positions, labels)
-        for x, t_star in zip(positions, times):
-            self._fit_artists.append(
-                self._axes.annotate(
-                    f"{t_star:.3g}",
-                    (x, t_star),
-                    textcoords="offset points",
-                    xytext=(0, 4),
-                    ha="center",
-                    fontsize="x-small",
-                )
-            )
+
+        self._draw_roi_bars(entries)
+
         return []  # ROI names on x: no time span to shade
 
     def _shade_trimmed_tails(self, trim_edges):

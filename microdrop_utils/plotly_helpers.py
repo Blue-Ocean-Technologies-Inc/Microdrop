@@ -8,12 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-import plotly.graph_objects as go
-import numpy as np
+# Standard library imports.
+from pathlib import Path
+
+# Third-party imports.
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-from pathlib import Path
-from device_viewer.utils.dmf_utils_helpers import SVGProcessor
+import numpy as np
+import plotly.graph_objects as go
+
+# Microdrop utils imports.
+from microdrop_utils.svg_outline import SVGProcessor
 
 
 def format_time_tooltip(quant):
@@ -52,9 +57,11 @@ def create_plotly_svg_dropbot_device_heatmap(
     """
     Generates a Plotly heatmap with 'Invisible Polygon Hitboxes'.
 
-    The heatmap intensity is based on the channel quantities provided in channel_quantity_dict.
+    The heatmap intensity is based on the channel quantities provided in
+    channel_quantity_dict.
 
-    We expect it to be time values by default (actuation duration). They will be auto formatted.
+    We expect it to be time values by default (actuation duration). They will
+    be auto formatted.
 
     Architecture:
     1. Visual Layer: layout.shapes (Colored SVG Paths).

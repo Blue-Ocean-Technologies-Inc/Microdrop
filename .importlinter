@@ -102,13 +102,6 @@ ignore_imports =
     # specific leaf plugin's internals is a real violation, itemized below.
     ** -> pluggable_protocol_tree.**
 
-    # --- Seeded debt: pluggable_protocol_tree (the framework) reaching back
-    # into specific leaf plugins it should not know about ---
-    # Root cause of the reporting.py chain below: a "shared" microdrop_utils
-    # helper itself imports a specific plugin's internals, so anything using
-    # microdrop_utils.plotly_helpers transitively depends on device_viewer.
-    microdrop_utils.plotly_helpers -> device_viewer.utils.dmf_utils_helpers
-
     # Issue #611 (PR #658) — dropbot_tools_menu's self-test dialogs render
     # from the backend's self_tests model directly instead of a message.
     dropbot_tools_menu.self_test_dialogs -> dropbot_controller.models.self_tests

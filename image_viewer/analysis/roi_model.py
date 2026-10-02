@@ -84,10 +84,11 @@ ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 
 #: Stats the plot can show. "bg_corrected" is interior mean minus the
 #: outline-ring mean — the usual fluorescence background correction
-#: the ring exists for. The last four are size-aware: "integrated" is
+#: the ring exists for. The next four are size-aware: "integrated" is
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
-#: area-statistics design note).
+#: area-statistics design note). "area" is the ROI's own size, in
+#: the calibrated unit.
 PLOT_STATS = (
     "mean",
     "bg_corrected",
@@ -99,6 +100,7 @@ PLOT_STATS = (
     "bg_integrated",
     "per_area",
     "bg_per_area",
+    "area",
 )
 
 

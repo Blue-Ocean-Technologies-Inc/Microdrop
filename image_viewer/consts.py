@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
@@ -28,6 +31,10 @@ ACTOR_TOPIC_DICT = {}
 # filter appears without reopening the pane.
 # ---------------------------------------------------------------------------
 IMAGE_FILTERS = f"{PKG}.image_filters"
+
+#: Bundled plain-language guide to the ROI analysis terms, opened from the
+#: Help menu. Self-contained HTML (no network), so it works offline.
+ANALYSIS_HELP_HTML_PATH = Path(__file__).parent / "resources" / "analysis_help.html"
 
 #: Preferences node for the viewer's own settings.
 PREFERENCES_PATH = "microdrop.image_viewer"
@@ -83,3 +90,20 @@ IMAGE_CACHE_FRAMES = 8
 #: allows. 1.05 is barely perceptible per notch; 2.0 doubles per notch.
 IMAGE_ZOOM_STEP_DEFAULT = 1.25
 IMAGE_ZOOM_STEP_BOUNDS = (1.05, 2.0)
+
+#: The perspective window's device-outline alignment reference: default
+#: colour, and opacity bounds and default as percentages.
+DEVICE_OUTLINE_COLOR = "#00e5ff"
+DEVICE_OUTLINE_ALPHA_BOUNDS_PCT = (0, 100)
+DEVICE_OUTLINE_ALPHA_PCT = 80
+
+#: The device-outline dropdown's entry for drawing no outline.
+NO_DEVICE_OUTLINE_LABEL = "None"
+
+#: Device-outline settings persisted across sessions: DeviceOutlineReference
+#: trait -> ImageViewerPreferences trait.
+PERSISTED_DEVICE_OUTLINE_TRAITS = {
+    "svg_path": "device_outline_svg",
+    "alpha": "device_outline_alpha",
+    "color": "device_outline_color",
+}

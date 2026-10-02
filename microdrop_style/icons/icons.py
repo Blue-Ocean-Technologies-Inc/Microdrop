@@ -35,7 +35,7 @@ ICON_REDO = "redo"  # re-apply an undone edit
 ICON_RESTORE = "restore"  # revert to a baseline state
 
 # DEVICE VIEWER ICONS
-ICON_VIEW_3D = "\ue8b4"  # view_in_ar (3D view)
+ICON_VIEW_3D = "view_in_ar"  # camera perspective alignment
 ICON_REFRESH = "\ue5d5"  # refresh
 
 # PROTOCOL GRID ICONS
@@ -66,6 +66,8 @@ ICON_EJECT = "eject"  # pull the tray out
 ICON_INPUT = "input"  # push the tray back in
 MDI_ICON_MAGNET_ON = "\U000f0348"  # magnet up (engage)
 MDI_ICON_MAGNET = "\U000f0347"  # magnet down  (disengage)
+MDI_ICON_FLIP_HORIZONTAL = "\U000f10e7"  # flip-horizontal (mirror left-right)
+MDI_ICON_FLIP_VERTICAL = "\U000f10e8"  # flip-vertical (mirror top-bottom)
 ICON_MODE_FAN = "mode_fan"  # fan on
 ICON_MODE_FAN_OFF = "mode_fan_off"  # fan off
 ICON_LIGHTBULB = "lightbulb"  # light on
@@ -97,4 +99,5 @@ ICON_COPY = "content_copy"  # copy the selected ROI
 ICON_PASTE = "content_paste"  # paste a copied ROI
 ICON_TONALITY = "tonality"  # rolling-ball flattening
 ICON_PHOTO_CAMERA = "photo_camera"  # capture a camera frame
+ICON_ROTATE_90_CW = "rotate_90_degrees_cw"  # rotate a quarter turn clockwise
 ICON_ADJUST = "adjust"  # show the ball at its size

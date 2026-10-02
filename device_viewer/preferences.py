@@ -49,6 +49,11 @@ from microdrop_utils.preferences_UI_helpers import (
 
 # Local imports.
 from .consts import (
+    ALIGNMENT_ACTIVE_ALPHA,
+    ALIGNMENT_ACTIVE_COLOR_HEX,
+    ALIGNMENT_ACTIVE_RING_SCALE,
+    ALIGNMENT_ACTIVE_RING_SCALE_MAX,
+    ALIGNMENT_ACTIVE_RING_SCALE_MIN,
     ALIGNMENT_FRAME_WIDTH_MAX_PX,
     ALIGNMENT_FRAME_WIDTH_MIN_PX,
     ALIGNMENT_FRAME_WIDTH_PX,
@@ -57,6 +62,7 @@ from .consts import (
     ALIGNMENT_HANDLE_RADIUS_MIN_PX,
     ALIGNMENT_HANDLE_RADIUS_PX,
     ALIGNMENT_HANDLE_RING_COLOR_HEX,
+    ALIGNMENT_NUMBER_ALPHA,
     ALIGNMENT_QUAD_COLOR_HEX,
     ALIGNMENT_SNAP_MARKER_ALPHA,
     ALIGNMENT_SNAP_MARKER_COLOR_HEX,
@@ -159,6 +165,14 @@ class DeviceViewerPreferences(PreferencesHelper):
         high=ALIGNMENT_SNAP_MARKER_SIZE_MAX_PX,
         mode="spinner",
     )
+    alignment_active_color = Str(ALIGNMENT_ACTIVE_COLOR_HEX)
+    alignment_active_alpha = Range(value=ALIGNMENT_ACTIVE_ALPHA, low=0.0, high=1.0)
+    alignment_active_ring_scale = Range(
+        value=ALIGNMENT_ACTIVE_RING_SCALE,
+        low=ALIGNMENT_ACTIVE_RING_SCALE_MIN,
+        high=ALIGNMENT_ACTIVE_RING_SCALE_MAX,
+    )
+    alignment_number_alpha = Range(value=ALIGNMENT_NUMBER_ALPHA, low=0.0, high=1.0)
 
     ### Recording viewer (video_viewer pane) prefs ###
     # Persisted zoom/pan of the playback canvas — the alignment transform

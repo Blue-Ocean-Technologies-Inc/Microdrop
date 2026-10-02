@@ -29,6 +29,7 @@ from microdrop_application.dialogs.pyface_wrapper import confirm
 
 # Local imports.
 from ..consts import CAPTURE_TIMESTAMP_FORMAT
+from ..device_outline import DeviceOutlineReference, published_device_repo_dir
 from ..discovery import capture_timestamp, sanitize_label, utc_stamp
 from ..model import ImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
@@ -231,7 +232,13 @@ class RoiAnalysisController(HasTraits):
 
         perspective = self.session.perspective
         quads = define_perspective(
-            array, perspective.source_quad, perspective.target_quad
+            array,
+            perspective.source_quad,
+            perspective.target_quad,
+            DeviceOutlineReference(
+                preferences=self.viewer_model.preferences,
+                repo_dir=published_device_repo_dir(),
+            ),
         )
 
         if quads is not None:

@@ -18,6 +18,7 @@ from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Bool, Int, Str
 
 # Microdrop package imports.
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
@@ -206,6 +207,12 @@ def menu_factory():
             tooltip="View the full MicroDrop changelog",
             source=CHANGELOG_PATH,
             window_title="MicroDrop Changelog",
+        ),
+        OpenWebViewDialogAction(
+            name="&Analysis Terms...",
+            tooltip="Plain-language guide to the ROI analysis terms and settings",
+            source=ANALYSIS_HELP_HTML_PATH,
+            window_title="Analysis Terms",
         ),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",

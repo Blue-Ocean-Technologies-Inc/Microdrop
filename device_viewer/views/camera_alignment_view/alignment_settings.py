@@ -20,13 +20,17 @@ traits, and a Reset to Defaults button — instead of hand-built Qt
 widgets. Every model edit writes straight back to the preferences;
 the dialog observes the model to restyle the overlays live."""
 
+# Enthought library imports.
 from traits.api import Button, HasTraits, Instance, Range, observe
 from traitsui.api import Group, Item, RGBColor, View
 
-from logger.logger_service import get_logger
+# Microdrop utils imports.
 from microdrop_utils.color_helpers import hex_to_rgb, rgb_to_hex
 
+# Local imports.
 from ...consts import (
+    ALIGNMENT_ACTIVE_RING_SCALE_MAX,
+    ALIGNMENT_ACTIVE_RING_SCALE_MIN,
     ALIGNMENT_FRAME_WIDTH_MAX_PX,
     ALIGNMENT_FRAME_WIDTH_MIN_PX,
     ALIGNMENT_HANDLE_RADIUS_MAX_PX,
@@ -37,6 +41,9 @@ from ...consts import (
     ALIGNMENT_SNAP_RADIUS_MIN_PX,
 )
 from ...preferences import DeviceViewerPreferences
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -52,12 +59,16 @@ NUMERIC_SETTING_TRAITS = (
     "frame_width_px",
     "snap_marker_alpha",
     "snap_marker_size_px",
+    "active_alpha",
+    "active_ring_scale",
+    "number_alpha",
 )
 COLOR_SETTING_TRAITS = (
     "quad_color",
     "handle_color",
     "handle_ring_color",
     "snap_marker_color",
+    "active_color",
 )
 SETTING_TRAITS = NUMERIC_SETTING_TRAITS + COLOR_SETTING_TRAITS
 
@@ -88,10 +99,21 @@ class AlignmentSettingsModel(HasTraits):
         mode="spinner",
     )
 
+    #: Opacity and ring size (in dot radii) of the highlight on the dot
+    #: hovered or pressed, which marks the matching dot in both panes.
+    active_alpha = Range(0.0, 1.0)
+    #: Opacity of the dot numbers (1-4); 0 hides them.
+    number_alpha = Range(0.0, 1.0)
+
+    active_ring_scale = Range(
+        ALIGNMENT_ACTIVE_RING_SCALE_MIN, ALIGNMENT_ACTIVE_RING_SCALE_MAX
+    )
+
     quad_color = RGBColor()
     handle_color = RGBColor()
     handle_ring_color = RGBColor()
     snap_marker_color = RGBColor()
+    active_color = RGBColor()
 
     reset = Button("Reset to Defaults")
 
@@ -144,6 +166,10 @@ alignment_settings_view = View(
         Item("snap_marker_color", label="Corner marker color"),
         Item("snap_marker_alpha", label="Corner marker alpha"),
         Item("snap_marker_size_px", label="Corner marker size (px)"),
+        Item("active_color", label="Highlight color"),
+        Item("active_alpha", label="Highlight alpha"),
+        Item("active_ring_scale", label="Highlight size (x dot)"),
+        Item("number_alpha", label="Number alpha"),
         label="Overlay Settings",
         show_border=True,
     ),

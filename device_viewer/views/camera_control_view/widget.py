@@ -41,6 +41,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
 
 # Microdrop style imports.
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
+from microdrop_style.icons.icons import ICON_VIEW_3D
 
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
@@ -191,7 +192,7 @@ class CameraControlWidget(QWidget):
         self.resolution_select_layout.addWidget(self.combo_resolutions)
 
         # Buttons
-        self.button_align = QPushButton("view_in_ar")
+        self.button_align = QPushButton(ICON_VIEW_3D)
         self.button_align.setToolTip("Align Camera Perspective")
 
         self.button_reset = QPushButton("reset_focus")
