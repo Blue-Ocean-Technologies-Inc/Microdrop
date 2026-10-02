@@ -12,6 +12,7 @@
 
 # Microdrop package imports.
 from device_viewer.utils.quad_order import (
+    canonical_quad,
     quads_order_matches,
     signed_area,
     top_left_index,
@@ -39,3 +40,19 @@ def test_mirrored_order_is_a_mismatch():
 
     assert signed_area(QUAD) > 0 > signed_area(mirrored)
     assert not quads_order_matches(QUAD, mirrored)
+
+
+def test_canonical_quad_numbers_from_the_top_left_clockwise():
+    br_first = QUAD[2:] + QUAD[:2]
+
+    assert canonical_quad(br_first) == QUAD
+
+
+def test_canonical_quad_leaves_a_canonical_quad_alone():
+    assert canonical_quad(QUAD) == QUAD
+
+
+def test_canonical_quad_reverses_an_anticlockwise_quad():
+    anticlockwise = [QUAD[0], QUAD[3], QUAD[2], QUAD[1]]
+
+    assert canonical_quad(anticlockwise) == QUAD

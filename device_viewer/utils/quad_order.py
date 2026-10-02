@@ -15,6 +15,9 @@ one image and from the bottom-right (or anticlockwise) in the other maps
 the image turned or mirrored. Both quads are [[x, y] * 4] in y-down image
 coordinates, as shown to the user."""
 
+# Standard library imports.
+import math
+
 
 def signed_area(quad):
     """Shoelace area: positive for corners listed clockwise (y down)."""
@@ -33,6 +36,19 @@ def top_left_index(quad):
         range(len(quad)),
         key=lambda index: (quad[index][0] - left) ** 2 + (quad[index][1] - top) ** 2,
     )
+
+
+def canonical_quad(quad):
+    """The same four points numbered from the top-left (min x + y), then
+    clockwise in y-down coordinates: TL, TR, BR, BL."""
+    cx = sum(x for x, _ in quad) / 4
+    cy = sum(y for _, y in quad) / 4
+
+    # atan2 grows clockwise when y points down.
+    clockwise = sorted(quad, key=lambda point: math.atan2(point[1] - cy, point[0] - cx))
+    start = min(range(4), key=lambda index: clockwise[index][0] + clockwise[index][1])
+
+    return [list(point) for point in clockwise[start:] + clockwise[:start]]
 
 
 def quads_order_matches(quad_a, quad_b):

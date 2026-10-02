@@ -154,3 +154,16 @@ def test_fresh_panes_open_on_the_same_tl_tr_br_bl_grid(model):
     assert endpoint_quad == [[10, 5], [190, 5], [190, 95], [10, 95]]
     assert top_left_index(outline_quad) == top_left_index(endpoint_quad) == 0
     assert quads_order_matches(outline_quad, endpoint_quad)
+
+
+def test_endpoint_pane_numbers_a_legacy_endpoint_from_the_top_left():
+    QApplication.instance() or QApplication([])
+    corners = [[20, 10], [180, 10], [180, 90], [20, 90]]
+
+    pane = EndpointPane(
+        device_image=_image(),
+        scene_rect=QRectF(0, 0, 200, 100),
+        initial_scene_quad=corners[2:] + corners[:2],
+    )
+
+    assert pane.shown_quad() == corners

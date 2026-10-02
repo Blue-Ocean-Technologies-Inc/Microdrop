@@ -20,10 +20,16 @@ Endpoints are cached on a device-to-device basis (keyed by the
 device SVG's stem) in one JSON file under the app's user-data
 directory, so they survive restarts and device switches.
 """
+
+# Standard library imports.
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Local imports.
+from .quad_order import canonical_quad
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -34,28 +40,30 @@ def default_endpoints_file() -> Path:
     lazily so this module stays importable (and testable) without
     the whole application stack."""
     from microdrop_application.consts import application_home_directory
-    return (application_home_directory / "device_viewer"
-            / "camera_endpoints.json")
+
+    return application_home_directory / "device_viewer" / "camera_endpoints.json"
 
 
 def _validated_quad(scene_quad) -> list:
-    """The quad as a plain [[x, y] * 4] float list, or ValueError."""
+    """The quad as a plain [[x, y] * 4] float list numbered from the
+    top-left clockwise (whatever order it was placed or stored in), or
+    ValueError."""
     if scene_quad is None or len(scene_quad) != 4:
         raise ValueError("an endpoint needs exactly 4 points")
     quad = []
     for point in scene_quad:
         x, y = point
         quad.append([float(x), float(y)])
-    return quad
+    return canonical_quad(quad)
 
 
 class CameraEndpointStore:
     """Load/save the per-device alignment endpoints (scene-space
-    quads, TL/TR/BR/BL as placed by the user)."""
+    quads, always TL/TR/BR/BL: older entries in another order load
+    canonical and are rewritten canonical on the next save)."""
 
     def __init__(self, path=None):
-        self.path = (Path(path) if path is not None
-                     else default_endpoints_file())
+        self.path = Path(path) if path is not None else default_endpoints_file()
 
     # ------------------------------------------------------------------ #
     def _read_all(self) -> dict:
@@ -65,8 +73,7 @@ class CameraEndpointStore:
         except FileNotFoundError:
             return {}
         except Exception as exc:
-            logger.warning(f"camera endpoints file unreadable "
-                           f"({self.path}): {exc}")
+            logger.warning(f"camera endpoints file unreadable ({self.path}): {exc}")
             return {}
 
     def save(self, device_key: str, scene_quad) -> None:
@@ -81,10 +88,8 @@ class CameraEndpointStore:
             "saved_at": datetime.now(timezone.utc).isoformat(),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(data, indent=1),
-                             encoding="utf-8")
-        logger.info(f"saved camera-alignment endpoint for device "
-                    f"{device_key!r}")
+        self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        logger.info(f"saved camera-alignment endpoint for device {device_key!r}")
 
     def load(self, device_key: str):
         """The saved endpoint quad for ``device_key`` ([[x, y] * 4]),
@@ -95,8 +100,9 @@ class CameraEndpointStore:
         try:
             return _validated_quad(entry.get("scene_quad"))
         except (ValueError, TypeError):
-            logger.warning(f"stored endpoint for {device_key!r} is "
-                           f"malformed; ignoring it")
+            logger.warning(
+                f"stored endpoint for {device_key!r} is malformed; ignoring it"
+            )
             return None
 
     def remove(self, device_key: str) -> None:
@@ -104,8 +110,7 @@ class CameraEndpointStore:
         if device_key in data:
             del data[device_key]
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=1),
-                                 encoding="utf-8")
+            self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
 
     def device_keys(self) -> list:
         """Devices that have a stored endpoint."""

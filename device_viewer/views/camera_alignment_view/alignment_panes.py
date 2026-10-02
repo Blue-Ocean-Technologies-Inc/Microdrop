@@ -74,6 +74,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 # Local imports.
 from ...models.image_orientation import ImageOrientation
 from ...utils.image_corners import detect_corner_points
+from ...utils.quad_order import canonical_quad
 from .quad_overlay import QuadOverlay
 from .zoom_pan_view import ZoomPanImageView
 
@@ -275,7 +276,7 @@ class EndpointPane(AlignmentPaneBase):
 
         quad = _valid_quad(self.initial_scene_quad)
         quad = (
-            [self._scene_to_image(point) for point in quad]
+            [self._scene_to_image(point) for point in canonical_quad(quad)]
             if quad
             else self._default_quad(pixmap, inset=ENDPOINT_QUAD_INSET)
         )
@@ -321,9 +322,14 @@ class EndpointPane(AlignmentPaneBase):
 
     def _save_fired(self):
         """Emit the placed endpoint in device-scene coordinates."""
-        self.endpoint_saved = [
-            self._image_to_scene(point) for point in self._overlay.quad()
-        ]
+        scene_quad = canonical_quad(
+            [self._image_to_scene(point) for point in self._overlay.quad()]
+        )
+
+        # The device side is always numbered from the top-left: renumber
+        # the shown dots to match what is saved.
+        self._overlay.set_quad([self._scene_to_image(point) for point in scene_quad])
+        self.endpoint_saved = scene_quad
 
 
 class OutlinePane(AlignmentPaneBase):
