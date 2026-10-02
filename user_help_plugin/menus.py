@@ -209,10 +209,10 @@ def menu_factory():
             window_title="MicroDrop Changelog",
         ),
         OpenWebViewDialogAction(
-            name="&Analysis Terms...",
+            name="&Image Analysis Tutorial...",
             tooltip="Plain-language guide to the ROI analysis terms and settings",
             source=ANALYSIS_HELP_HTML_PATH,
-            window_title="Analysis Terms",
+            window_title="Image Analysis Tutorial",
         ),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
