@@ -134,6 +134,11 @@ class AlignmentPaneBase(HasTraits):
     #: Show every corner the dragged dots can snap onto.
     show_snap_points = Bool(False)
 
+    #: Index (TL/TR/BR/BL) of the corner dot drawn highlighted, -1 for
+    #: none: set while a dot here is hovered or pressed, and mirrored
+    #: by the dialog when the matching dot in the other pane is.
+    active_point_index = Int(-1)
+
     #: Refit the image in the view.
     fit = Button()
     #: Commit just this pane (the dialog's Confirm Alignment fires
@@ -187,8 +192,14 @@ class AlignmentPaneBase(HasTraits):
 
     def _create_overlay(self, quad, snap_points):
         self._overlay = QuadOverlay(
-            self.canvas.scene(), quad, snap_points=snap_points, **self.overlay_options
+            self.canvas.scene(),
+            quad,
+            snap_points=snap_points,
+            on_active_changed=lambda index: self.trait_set(active_point_index=index),
+            **self.overlay_options,
         )
+        self._overlay.set_active_index(self.active_point_index)
+
         if self.show_snap_points:
             self._overlay.set_snap_markers_visible(True)
 
@@ -196,6 +207,11 @@ class AlignmentPaneBase(HasTraits):
     def _show_snap_points_changed(self, event):
         if self._overlay is not None:
             self._overlay.set_snap_markers_visible(event.new)
+
+    @observe("active_point_index")
+    def _active_point_index_changed(self, event):
+        if self._overlay is not None:
+            self._overlay.set_active_index(event.new)
 
     def _fit_fired(self):
         self.canvas.fit_frame()

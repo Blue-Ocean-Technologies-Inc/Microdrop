@@ -17,14 +17,27 @@ Used in two places: the start-point picker dialog (over the captured
 camera frame, in camera-pixel coordinates) and the endpoint
 viewer/adjuster (over the device scene, in scene coordinates)."""
 
+# Standard library imports.
+from functools import partial
+
 # Third-party imports.
 import numpy as np
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QBrush, QColor, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsPolygonItem
+
+# Enthought library imports.
+from pyface.qt.QtCore import QPointF, Qt
+from pyface.qt.QtGui import QBrush, QColor, QPen, QPolygonF
+from pyface.qt.QtWidgets import (
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsPolygonItem,
+)
 
 # Local imports.
 from ...consts import (
+    ALIGNMENT_ACTIVE_HALO_ALPHA,
+    ALIGNMENT_ACTIVE_HALO_SCALE,
+    ALIGNMENT_ACTIVE_RING_SCALE,
+    ALIGNMENT_ACTIVE_RING_WIDTH_PX,
     ALIGNMENT_FRAME_WIDTH_PX,
     ALIGNMENT_HANDLE_COLOR_HEX,
     ALIGNMENT_HANDLE_RADIUS_PX,
@@ -105,6 +118,7 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self,
         on_moved,
         on_released,
+        on_active_changed=None,
         parent=None,
         radius=ALIGNMENT_HANDLE_RADIUS_PX,
         color=ALIGNMENT_HANDLE_COLOR_HEX,
@@ -113,8 +127,13 @@ class QuadHandleItem(QGraphicsEllipseItem):
         super().__init__(-radius, -radius, 2 * radius, 2 * radius, parent)
         self._on_moved = on_moved
         self._on_released = on_released
+        #: Called with True when the dot is hovered or pressed, False
+        #: when the pointer leaves it (and no drag holds it).
+        self._on_active_changed = on_active_changed
         #: Optional QPointF -> QPointF hook applied while dragging.
         self.snap_fn = None
+        #: Drawn with the active ring and halo.
+        self._active = False
         self.setBrush(QBrush(QColor(color)))
         self.setPen(QPen(QColor(ring_color), 2))
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -122,9 +141,69 @@ class QuadHandleItem(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self.setCursor(Qt.OpenHandCursor)
+        self.setAcceptHoverEvents(True)
 
     def set_radius(self, radius):
+        self.prepareGeometryChange()
         self.setRect(-radius, -radius, 2 * radius, 2 * radius)
+
+    def set_active(self, active):
+        """Show or hide the active ring and halo."""
+        if active == self._active:
+            return
+
+        # The halo extends the bounding rect.
+        self.prepareGeometryChange()
+        self._active = active
+        self.update()
+
+    def is_active(self):
+        return self._active
+
+    def boundingRect(self):
+        rect = super().boundingRect()
+
+        if not self._active:
+            return rect
+
+        margin = self.rect().width() / 2 * (ALIGNMENT_ACTIVE_HALO_SCALE - 1)
+
+        return rect.adjusted(-margin, -margin, margin, margin)
+
+    def paint(self, painter, option, widget=None):
+        if self._active:
+            colour = self.brush().color()
+            radius = self.rect().width() / 2
+            centre = self.rect().center()
+
+            halo = QColor(colour)
+            halo.setAlphaF(ALIGNMENT_ACTIVE_HALO_ALPHA)
+            halo_radius = radius * ALIGNMENT_ACTIVE_HALO_SCALE
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(centre, halo_radius, halo_radius)
+
+            ring_radius = radius * ALIGNMENT_ACTIVE_RING_SCALE
+            painter.setPen(QPen(colour, ALIGNMENT_ACTIVE_RING_WIDTH_PX))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(centre, ring_radius, ring_radius)
+
+        super().paint(painter, option, widget)
+
+    def hoverEnterEvent(self, event):
+        super().hoverEnterEvent(event)
+        self._report_active(True)
+
+    def hoverLeaveEvent(self, event):
+        super().hoverLeaveEvent(event)
+
+        # A snapping drag can jump the dot out from under the pointer.
+        if self.scene() is None or self.scene().mouseGrabberItem() is not self:
+            self._report_active(False)
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self._report_active(True)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionChange and self.snap_fn is not None:
@@ -138,8 +217,16 @@ class QuadHandleItem(QGraphicsEllipseItem):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+
         if self._on_released is not None:
             self._on_released()
+
+        if not self.isUnderMouse():
+            self._report_active(False)
+
+    def _report_active(self, active):
+        if self._on_active_changed is not None:
+            self._on_active_changed(active)
 
 
 class QuadOverlay:
@@ -152,6 +239,7 @@ class QuadOverlay:
         quad,
         on_changed=None,
         on_released=None,
+        on_active_changed=None,
         z_value=50.0,
         snap_points=None,
         snap_radius_px=ALIGNMENT_SNAP_RADIUS_PX,
@@ -166,7 +254,9 @@ class QuadOverlay:
     ):
         """``quad``: four (x, y) scene points, TL/TR/BR/BL.
         ``on_changed`` fires on every handle drag step (with the
-        current quad); ``on_released`` when a drag ends.
+        current quad); ``on_released`` when a drag ends;
+        ``on_active_changed`` with the index of the dot hovered or
+        pressed, and -1 once none is.
         ``snap_points``: optional (x, y) scene points (e.g. device
         corner vertices) that dragged handles snap onto when within
         ``snap_radius_px`` view pixels. Colors accept anything
@@ -174,6 +264,7 @@ class QuadOverlay:
         self._scene = scene
         self._on_changed = on_changed
         self._on_released = on_released
+        self._on_active_changed = on_active_changed
         self._syncing = False
         self._snap_radius_px = float(snap_radius_px)
         self._snap_points = (
@@ -197,10 +288,11 @@ class QuadOverlay:
         scene.addItem(self._frame)
 
         self._handles = []
-        for _ in range(4):
+        for index in range(4):
             handle = QuadHandleItem(
                 self._handle_moved,
                 self._handle_released,
+                on_active_changed=partial(self._handle_active_changed, index),
                 radius=handle_radius_px,
                 color=handle_color,
                 ring_color=handle_ring_color,
@@ -225,6 +317,11 @@ class QuadOverlay:
         finally:
             self._syncing = False
         self._sync_frame()
+
+    def set_active_index(self, index):
+        """Highlight the dot at ``index`` (TL/TR/BR/BL); -1 for none."""
+        for handle_index, handle in enumerate(self._handles):
+            handle.set_active(handle_index == index)
 
     def set_editable(self, editable: bool):
         for handle in self._handles:
@@ -356,3 +453,7 @@ class QuadOverlay:
     def _handle_released(self):
         if self._on_released is not None:
             self._on_released(self.quad())
+
+    def _handle_active_changed(self, index, active):
+        if self._on_active_changed is not None:
+            self._on_active_changed(index if active else -1)

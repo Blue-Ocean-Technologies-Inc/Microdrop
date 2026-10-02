@@ -32,12 +32,14 @@ The three pieces live separately in this module:
   model, live overlay restyling from the settings model, and the
   Confirm Alignment macro. Closing is the window's own X."""
 
+# Enthought library imports.
 from traits.api import (
     Bool,
     Button,
     Event,
     HasTraits,
     Instance,
+    Int,
     observe,
 )
 from traitsui.api import (
@@ -52,7 +54,7 @@ from traitsui.api import (
     spring,
 )
 
-from logger.logger_service import get_logger
+# Microdrop style imports.
 from microdrop_style.button_styles import (
     SUCCESS_BUTTON_STYLE,
     TEXT_BUTTON_STYLE,
@@ -61,9 +63,12 @@ from microdrop_style.icons.icons import (
     ICON_CHEVRON_LEFT,
     ICON_CHEVRON_RIGHT,
 )
+
+# Microdrop utils imports.
 from microdrop_utils.color_helpers import rgb_to_hex
 from microdrop_utils.traitsui_qt_helpers import IconToggleEditor
 
+# Local imports.
 from .alignment_panes import EndpointPane, OutlinePane
 from .alignment_settings import (
     COLOR_SETTING_TRAITS,
@@ -71,6 +76,9 @@ from .alignment_settings import (
     AlignmentSettingsModel,
     alignment_settings_view,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -103,6 +111,11 @@ class CameraAlignmentModel(HasTraits):
     #: Confirm Alignment.
     outline_ready = Bool(False)
 
+    #: Index (TL/TR/BR/BL) of the corner dot hovered or pressed in
+    #: either pane, -1 for none. Both panes highlight their dot at this
+    #: index, so the user sees which dots correspond.
+    active_point_index = Int(-1)
+
     #: Reveals the settings sidebar.
     options_visible = Bool(False)
 
@@ -132,8 +145,7 @@ camera_alignment_dialog_view = View(
                     editor=IconToggleEditor(
                         on_glyph=ICON_CHEVRON_RIGHT,
                         off_glyph=ICON_CHEVRON_LEFT,
-                        tooltip="Hide or show the snap and "
-                        "quad-style settings sidebar",
+                        tooltip="Hide or show the snap and quad-style settings sidebar",
                     ),
                     springy=True,
                 ),
@@ -193,6 +205,17 @@ class CameraAlignmentController(Controller):
     @observe("model:outline_pane:is_ready")
     def _on_outline_ready(self, event):
         self.model.outline_ready = event.new
+
+    @observe(
+        "model:outline_pane:active_point_index, model:endpoint_pane:active_point_index"
+    )
+    def _on_pane_active_point(self, event):
+        self.model.active_point_index = event.new
+
+    @observe("model:active_point_index")
+    def _on_active_point(self, event):
+        self.model.outline_pane.active_point_index = event.new
+        self.model.endpoint_pane.active_point_index = event.new
 
     @observe(", ".join(f"model:settings:{name}" for name in SETTING_TRAITS))
     def _on_setting_changed(self, event):
