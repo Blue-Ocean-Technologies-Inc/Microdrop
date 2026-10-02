@@ -54,6 +54,8 @@ from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_CAMERASWITCH,
     ICON_FIT_SCREEN,
+    ICON_LOCK,
+    ICON_LOCK_OPEN,
     ICON_PHOTO_CAMERA,
     ICON_SAVE,
     ICON_VISIBILITY,
@@ -350,6 +352,10 @@ class OutlinePane(AlignmentPaneBase):
     #: the dialog discards it.
     orientation = Instance(ImageOrientation, ())
 
+    #: Keep the frame still: rotate and flip then move only the dots,
+    #: about their centroid. Dialog-only, like the orientation.
+    image_locked = Bool(False)
+
     #: Grab a fresh frame from the camera.
     recapture = Button()
 
@@ -406,6 +412,16 @@ class OutlinePane(AlignmentPaneBase):
             VGroup(
                 self._header_group(
                     OUTLINE_INSTRUCTIONS,
+                    UItem(
+                        "image_locked",
+                        editor=IconToggleEditor(
+                            on_glyph=ICON_LOCK,
+                            off_glyph=ICON_LOCK_OPEN,
+                            tooltip="Lock the camera image: rotate and flip move "
+                            "only the reference grid",
+                        ),
+                        enabled_when="is_ready",
+                    ),
                     UItem(
                         "rotate",
                         editor=IconButtonEditor(
@@ -492,15 +508,38 @@ class OutlinePane(AlignmentPaneBase):
 
         return [self.orientation.unmap_point(point, size) for point in display_points]
 
-    def _reorient(self, change_orientation):
-        """Apply ``change_orientation`` to the shown frame, carrying the
-        dots and snap corners along with the image."""
+    def _turn_or_mirror(self, operate):
+        """Apply ``operate`` (an ImageOrientation step) to the frame and
+        dots together, or to the dots alone while the image is locked."""
 
         if self._overlay is None:
             return
 
+        if self.image_locked:
+            self._move_dots_only(operate)
+
+        else:
+            self._reorient(operate)
+
+    def _move_dots_only(self, operate):
+        """Turn or mirror just the dots about their centroid; the frame,
+        its orientation and the snap corners stay put."""
+        step = ImageOrientation()
+        operate(step)
+
+        quad = self._overlay.quad()
+        cx = sum(x for x, _ in quad) / 4
+        cy = sum(y for _, y in quad) / 4
+
+        # With a zero size, map_point is the bare turn/mirror about the origin.
+        moved = [step.map_point([x - cx, y - cy], (0, 0)) for x, y in quad]
+        self._overlay.set_quad([[x + cx, y + cy] for x, y in moved])
+
+    def _reorient(self, operate):
+        """Apply ``operate`` to the shown frame's orientation, carrying
+        the dots and snap corners along with the image."""
         raw_quad = self._to_raw(self._overlay.quad())
-        change_orientation()
+        operate(self.orientation)
 
         self.canvas.set_pixmap(self._display_pixmap())
         self._overlay.set_snap_points(self._to_display(self._raw_snap_points))
@@ -508,13 +547,13 @@ class OutlinePane(AlignmentPaneBase):
         self.canvas.fit_frame()
 
     def _rotate_fired(self):
-        self._reorient(self.orientation.rotate_clockwise)
+        self._turn_or_mirror(ImageOrientation.rotate_clockwise)
 
     def _flip_horizontal_fired(self):
-        self._reorient(lambda: self.orientation.flip(horizontal=True))
+        self._turn_or_mirror(lambda orientation: orientation.flip(horizontal=True))
 
     def _flip_vertical_fired(self):
-        self._reorient(lambda: self.orientation.flip(horizontal=False))
+        self._turn_or_mirror(lambda orientation: orientation.flip(horizontal=False))
 
     def _recapture_fired(self):
         """Grab a fresh frame: swap the canvas image and re-detect
