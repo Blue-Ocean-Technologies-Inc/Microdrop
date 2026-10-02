@@ -38,11 +38,12 @@ from traits.api import (
 from device_viewer.consts import ZONES_SVG_LAYER_LABEL
 from device_viewer.utils.dmf_utils_helpers import (
     AlgorithmError,
-    ElectrodeData,
     PolygonNeighborFinder,
-    SVGProcessor,
     create_adjacency_dict,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.svg_outline import ElectrodeData, SVGProcessor, is_device_layer
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -146,7 +147,7 @@ class SvgUtil(HasTraits):
         connection_lines = None
 
         for child in svg_processor.root:
-            if "device" in [val.casefold() for val in child.attrib.values()]:
+            if is_device_layer(child):
                 self.set_fill_black(child)
                 self.electrodes = svg_processor.svg_to_electrodes(child)
                 self.polygons = self.get_electrode_polygons()
@@ -450,7 +451,7 @@ class SvgUtil(HasTraits):
 
         electrodes = None
         for child in root:
-            if "device" in [val.casefold() for val in child.attrib.values()]:
+            if is_device_layer(child):
                 electrodes = child
 
             # Add metadata: e.g. area scale.

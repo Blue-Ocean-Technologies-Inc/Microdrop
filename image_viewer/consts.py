@@ -83,3 +83,20 @@ IMAGE_CACHE_FRAMES = 8
 #: allows. 1.05 is barely perceptible per notch; 2.0 doubles per notch.
 IMAGE_ZOOM_STEP_DEFAULT = 1.25
 IMAGE_ZOOM_STEP_BOUNDS = (1.05, 2.0)
+
+#: The perspective window's device-outline alignment reference: default
+#: colour, and opacity bounds and default as percentages.
+DEVICE_OUTLINE_COLOR = "#00e5ff"
+DEVICE_OUTLINE_ALPHA_BOUNDS_PCT = (0, 100)
+DEVICE_OUTLINE_ALPHA_PCT = 80
+
+#: The device-outline dropdown's entry for drawing no outline.
+NO_DEVICE_OUTLINE_LABEL = "None"
+
+#: Device-outline settings persisted across sessions: DeviceOutlineReference
+#: trait -> ImageViewerPreferences trait.
+PERSISTED_DEVICE_OUTLINE_TRAITS = {
+    "svg_path": "device_outline_svg",
+    "alpha": "device_outline_alpha",
+    "color": "device_outline_color",
+}

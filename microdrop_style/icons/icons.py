@@ -35,7 +35,7 @@ ICON_REDO = "redo"  # re-apply an undone edit
 ICON_RESTORE = "restore"  # revert to a baseline state
 
 # DEVICE VIEWER ICONS
-ICON_VIEW_3D = "\ue8b4"  # view_in_ar (3D view)
+ICON_VIEW_3D = "view_in_ar"  # camera perspective alignment
 ICON_REFRESH = "\ue5d5"  # refresh
 
 # PROTOCOL GRID ICONS

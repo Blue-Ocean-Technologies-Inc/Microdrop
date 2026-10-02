@@ -12,6 +12,8 @@
 interaction over a captured frame. Click four points on the image (e.g. the
 chip's corners), then drag each corner to where it belongs — the frame
 re-warps live. Reset starts over; the rotate button turns the result 90°.
+A chosen device's electrode outline, fitted into the output frame, is the
+fixed target to drag the corners against.
 
 Scene coordinates are image pixels, so the quads it returns are exactly
 what PerspectiveCorrection stores and warp_frame applies.
@@ -19,8 +21,8 @@ what PerspectiveCorrection stores and warp_frame applies.
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
-from traits.api import Any, Bool, Button, HasTraits, observe
-from traitsui.api import HGroup, UItem, View
+from traits.api import Any, Bool, Button, HasTraits, Instance, observe
+from traitsui.api import EnumEditor, HGroup, Item, UItem, View
 
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, WARNING_COLOR
@@ -28,10 +30,12 @@ from microdrop_style.icons.icons import ICON_FIT_SCREEN
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
+from microdrop_utils.zoomable_graphics_view import ZoomableGraphicsView
 
 # Local imports.
 from .analysis.perspective import rotated_quad
 from .analysis.roi_model import PerspectiveCorrection
+from .device_outline import DeviceOutlineReference
 from .display import frame_to_qimage, stretch_to_8bit
 
 #: Corner handle radius and outline width, in screen pixels (the view
@@ -39,13 +43,19 @@ from .display import frame_to_qimage, stretch_to_8bit
 HANDLE_RADIUS_PX = 6
 OUTLINE_WIDTH_PX = 2
 
-#: Wheel-zoom factor per notch.
-ZOOM_STEP = 1.25
+#: Device-outline stroke width, in screen pixels: thinner than the quad
+#: so the electrode edges stay readable against the image.
+DEVICE_OUTLINE_WIDTH_PX = 1
 
-PLACE_HINT = "Click the four points to correct (e.g. the chip's corners)."
+#: How to move around the frame, as in the device viewer.
+NAVIGATION_HINT = "Ctrl+wheel zooms; Space toggles drag-panning."
+
+PLACE_HINT = (
+    f"Click the four points to correct (e.g. the chip's corners). {NAVIGATION_HINT}"
+)
 EDIT_HINT = (
     "Drag each corner to where it belongs — the image re-warps live. "
-    "Reset to pick new points."
+    f"Reset to pick new points. {NAVIGATION_HINT}"
 )
 
 
@@ -57,15 +67,17 @@ def to_qtransform(matrix):
     return QtGui.QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8])
 
 
-class _QuadView(QtWidgets.QGraphicsView):
+class _QuadView(ZoomableGraphicsView):
     """The frame plus the quad being defined; mouse input drives the
-    placement and corner drags against ``correction``."""
+    placement and corner drags against ``correction``. ``device_outline``
+    is the electrode outline drawn as an alignment reference. Zoom, pan and
+    fit come from the shared view the device viewer uses."""
 
     #: Emitted whenever the quads change (the dialog refreshes its hint
     #: and buttons).
     changed = QtCore.Signal()
 
-    def __init__(self, array, correction, parent=None):
+    def __init__(self, array, correction, device_outline, parent=None):
         super().__init__(parent)
         self.correction = correction
 
@@ -76,7 +88,6 @@ class _QuadView(QtWidgets.QGraphicsView):
         self._dragging = -1
 
         self.setScene(QtWidgets.QGraphicsScene(self))
-        self.setRenderHint(QtGui.QPainter.Antialiasing)
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         self.setBackgroundBrush(QtGui.QColor(GREY["dark"]))
 
@@ -95,6 +106,10 @@ class _QuadView(QtWidgets.QGraphicsView):
             self._bounds.adjusted(-width / 4, -height / 4, width / 4, height / 4)
         )
 
+        # Added before the quad so the quad and its handles draw on top.
+        self._device_outline = self.scene().addPath(QtGui.QPainterPath())
+        self.draw_device_outline(device_outline)
+
         self._outline = self.scene().addPath(QtGui.QPainterPath())
         self._handles = []
         self._redraw()
@@ -103,7 +118,8 @@ class _QuadView(QtWidgets.QGraphicsView):
     # Mouse interaction                                                    #
     # ------------------------------------------------------------------ #
     def mousePressEvent(self, event):
-        if event.button() != QtCore.Qt.LeftButton:
+        # While panning, the left button drags the view, not the quad.
+        if event.button() != QtCore.Qt.LeftButton or self.is_pan_mode():
             super().mousePressEvent(event)
             return
 
@@ -134,19 +150,6 @@ class _QuadView(QtWidgets.QGraphicsView):
     def mouseReleaseEvent(self, event):
         self._dragging = -1
         super().mouseReleaseEvent(event)
-
-    def wheelEvent(self, event):
-        factor = ZOOM_STEP if event.angleDelta().y() > 0 else 1 / ZOOM_STEP
-        self.scale(factor, factor)
-        self._redraw()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.fit()
-
-    def fit(self):
-        self.fitInView(self.scene().sceneRect(), QtCore.Qt.KeepAspectRatio)
-        self._redraw()
 
     def _nearest_corner(self, point):
         distances = [
@@ -183,6 +186,24 @@ class _QuadView(QtWidgets.QGraphicsView):
                 self.correction.target_quad, degrees
             )
             self._redraw()
+
+    def draw_device_outline(self, reference):
+        """Draw ``reference``'s electrodes fitted into the output frame:
+        it stays put while the image warps under it."""
+        path = QtGui.QPainterPath()
+        rings = reference.outline_rings(self._bounds.width(), self._bounds.height())
+
+        for ring in rings:
+            path.addPolygon(QtGui.QPolygonF([QtCore.QPointF(x, y) for x, y in ring]))
+            path.closeSubpath()
+
+        colour = QtGui.QColor.fromRgbF(*reference.color)
+        colour.setAlphaF(reference.alpha / 100)
+        pen = QtGui.QPen(colour, DEVICE_OUTLINE_WIDTH_PX)
+        pen.setCosmetic(True)
+
+        self._device_outline.setPath(path)
+        self._device_outline.setPen(pen)
 
     def _redraw(self):
         defined = self.correction.is_defined()
@@ -256,7 +277,7 @@ class PerspectiveTools(HasTraits):
 
     @observe("fit_button")
     def _fit(self, event):
-        self.quad_view.fit()
+        self.quad_view.fit_to_scene_rect()
 
 
 # Glyphs match the device viewer: its Reset Camera Perspective and Rotate
@@ -285,11 +306,40 @@ perspective_tools_view = View(
 )
 
 
+class DeviceOutlineTools(HasTraits):
+    """Redraws the quad view's device outline as its reference changes."""
+
+    #: The outline settings the controls edit.
+    reference = Instance(DeviceOutlineReference)
+
+    #: The _QuadView drawing the outline.
+    quad_view = Any()
+
+    @observe("reference:[polygons, alpha, color]", post_init=True)
+    def _redraw_outline(self, event):
+        self.quad_view.draw_device_outline(self.reference)
+
+
+device_outline_view = View(
+    HGroup(
+        Item(
+            "svg_path",
+            label="Device outline",
+            editor=EnumEditor(name="devices"),
+            tooltip="Draw a device's electrodes over the image to align against",
+        ),
+        Item("alpha", label="Alpha", tooltip="Device outline opacity (%)"),
+        Item("color", label="Colour", tooltip="Device outline colour"),
+    ),
+)
+
+
 class PerspectiveDialog(QtWidgets.QDialog):
     """Define a perspective correction over ``array``, starting from the
-    stored quads (placement when there are none)."""
+    stored quads (placement when there are none), with ``device_outline``
+    as the alignment reference."""
 
-    def __init__(self, array, source_quad, target_quad, parent=None):
+    def __init__(self, array, source_quad, target_quad, device_outline, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Define Perspective Correction")
         self.resize(900, 700)
@@ -297,12 +347,19 @@ class PerspectiveDialog(QtWidgets.QDialog):
         self.correction = PerspectiveCorrection(
             source_quad=list(source_quad), target_quad=list(target_quad)
         )
-        self.view = _QuadView(array, self.correction, self)
+        self.view = _QuadView(array, self.correction, device_outline, self)
         self.hint = QtWidgets.QLabel()
 
         self.tools = PerspectiveTools(quad_view=self.view)
         self._tools_ui = self.tools.edit_traits(
             view=perspective_tools_view, kind="subpanel", parent=self
+        )
+
+        self.outline_tools = DeviceOutlineTools(
+            reference=device_outline, quad_view=self.view
+        )
+        self._outline_ui = device_outline.edit_traits(
+            view=device_outline_view, kind="subpanel", parent=self
         )
 
         self.buttons = QtWidgets.QDialogButtonBox(
@@ -313,6 +370,7 @@ class PerspectiveDialog(QtWidgets.QDialog):
 
         tools = QtWidgets.QHBoxLayout()
         tools.addWidget(self._tools_ui.control)
+        tools.addWidget(self._outline_ui.control)
         tools.addStretch()
         tools.addWidget(self.buttons)
 
@@ -332,13 +390,15 @@ class PerspectiveDialog(QtWidgets.QDialog):
 
     def done(self, result):
         self._tools_ui.dispose()
+        self._outline_ui.dispose()
         super().done(result)
 
 
-def define_perspective(array, source_quad, target_quad, parent=None):
+def define_perspective(array, source_quad, target_quad, device_outline, parent=None):
     """Run the definition window over ``array``; (source_quad,
-    target_quad) on OK, None on cancel."""
-    dialog = PerspectiveDialog(array, source_quad, target_quad, parent)
+    target_quad) on OK, None on cancel. ``device_outline`` is the
+    alignment reference (its settings persist either way)."""
+    dialog = PerspectiveDialog(array, source_quad, target_quad, device_outline, parent)
 
     if dialog.exec() != QtWidgets.QDialog.Accepted:
         return None
