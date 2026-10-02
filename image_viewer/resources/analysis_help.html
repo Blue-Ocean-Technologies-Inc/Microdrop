@@ -354,6 +354,30 @@ figure.step-panel svg text { fill: var(--muted); }
 .view-examples figure.demo { margin: 0; }
 svg.mpl { display: block; width: 100%; height: auto; border-radius: 6px; }
 svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif; }
+/* ---------- droplet shape demos ---------- */
+.shape-demo { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.shape-demo svg { display: block; width: 100%; max-width: 260px; height: auto; border-radius: 6px; }
+table.shape-read { margin: 0; max-width: 28em; }
+table.shape-read td.mark { width: 1.6em; text-align: center; color: var(--muted); }
+table.shape-read tr.moved td { color: var(--accent); font-weight: 600; }
+table.shape-read .na { color: var(--muted); font-style: italic; font-weight: 400; }
+table.shape-compare td:not(:first-child), table.shape-compare th:not(:first-child) { text-align: center; }
+.shape-key { font-size: .88rem; color: var(--muted); }
+.shape-key > span { white-space: nowrap; margin-right: 12px; }
+.shape-key i { display: inline-block; width: 18px; height: 10px; margin-right: 5px; vertical-align: middle; border-radius: 2px; }
+.shape-key .k-drop { background: var(--glow); }
+.shape-key .k-ell { border-top: 2px solid var(--orange); height: 0; }
+.shape-key .k-hull { border-top: 2px dashed var(--ring); height: 0; }
+.shape-key .k-box { border-top: 2px dotted var(--muted); height: 0; }
+.shape-key .k-roi { border-top: 2px dashed var(--roi); height: 0; }
+ul.uses { margin: 6px 0; padding-left: 1.2em; }
+ul.uses li { margin: 4px 0; max-width: 75ch; }
+@media (max-width: 560px) {
+  .shape-demo { grid-template-columns: minmax(0, 1fr); }
+  .shape-demo svg { max-width: 240px; margin: 0 auto; }
+  table.shape-compare { font-size: .8rem; }
+  table.shape-compare th, table.shape-compare td { padding: 4px 3px; }
+}
 /* ---------- narrow: dock-sized dialog, phones ---------- */
 @media (max-width: 860px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -441,7 +465,18 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
         <li><a href="#stat-ring">Outline ring mean</a></li>
         <li><a href="#stat-integrated">Integrated</a></li>
         <li><a href="#stat-perarea">Per area</a></li>
-        <li><a href="#stat-shape">Droplet shape: how it is measured</a></li>
+        <li><a href="#stat-shape-list">Shape quantities</a></li>
+        <li><a href="#stat-table">Table and CSV-only columns</a></li>
+      </ol>
+    </li>
+    <li><a href="#part-shape">Droplet shape</a>
+      <ol>
+        <li><a href="#stat-shape">How a shape number is made</a></li>
+        <li><a href="#shape-demos">Live demos</a></li>
+        <li><a href="#shape-time">Shape change over time</a></li>
+        <li><a href="#shape-pick">Which number to pick</a></li>
+        <li><a href="#shape-uses">Uses on a DMF chip</a></li>
+        <li><a href="#shape-caveats">Caveats</a></li>
         <li><a href="#stat-circularity">Circularity</a></li>
         <li><a href="#stat-shapechange">Shape change</a></li>
         <li><a href="#stat-axisratio">Axis ratio</a></li>
@@ -449,7 +484,6 @@ svg.mpl text { fill: #000; font-family: "DejaVu Sans", "Segoe UI", Arial, sans-s
         <li><a href="#stat-solidity">Solidity</a></li>
         <li><a href="#stat-extent">Extent</a></li>
         <li><a href="#stat-orientation">Orientation</a></li>
-        <li><a href="#stat-table">Table and CSV-only columns</a></li>
       </ol>
     </li>
     <li><a href="#part-cleanup">Cleanup tab</a>
@@ -1104,16 +1138,202 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
   </dl>
 </article>
 
-<article class="term" id="stat-shape">
-  <h3>Droplet shape: how it is measured</h3>
-  <p>The seven shape quantities below describe the <em>droplet</em>, not the ROI you drew. Inside each ROI MicroDrop
-  splits the pixels into "droplet" and "background" with an automatic brightness threshold (Otsu's method), takes the
-  biggest bright blob, and measures its outline. This happens on the corrected image, after the
-  <a href="#ball">rolling ball</a> and perspective correction when they are on. The droplet must be brighter than its
-  surroundings. Shape numbers have no unit (orientation is in degrees), so the image scale does not change them. A cell stays empty when no droplet
-  is found. Draw the ROI a little larger than the droplet: a droplet cut off by the ROI edge reads flattened, and two
-  droplets touching inside one ROI read as one odd-shaped blob.</p>
+<article class="term" id="stat-shape-list">
+  <h3>Shape quantities (Circularity, Shape change, Axis ratio, Eccentricity, Solidity, Extent, Orientation)</h3>
+  <p>These seven describe the droplet's <em>shape</em>, not its brightness. They have their own part of this guide,
+  <a href="#part-shape">Droplet shape</a>, with live demos, a comparison table and what each is useful for.</p>
 </article>
+
+<article class="term" id="stat-table">
+  <h3>Table and CSV-only columns (Count, Area, std, outline_*)</h3>
+  <dl class="facts">
+    <dt>What it is</dt><dd>
+      <p><strong>Count</strong>: how many pixels are inside the ROI. <strong>Area</strong>: count × the area of one pixel, in your calibrated unit (px² if not calibrated).</p>
+      <p>The CSV export also has <strong>std</strong> (standard deviation: how much the pixels vary around their mean) and the same stats for the ring, prefixed <code>outline_</code>.</p>
+    </dd>
+    <dt>When to use it</dt><dd><p>Count and Area confirm the ROI size; std tells you how even the droplet is. The table under the plot shows these for the image currently displayed.</p></dd>
+    <dt>How to read it</dt><dd><p>The CSV is one row per image per ROI. It also records the outlier flag and the ring, ball and perspective settings used, so a file always says how it was made.</p></dd>
+    <dt>Typical value</dt><dd><p>Not plotted.</p></dd>
+  </dl>
+</article>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="part-shape">
+<h2>Droplet shape</h2>
+<p class="intro">Seven Plot choices describe the droplet's <em>shape</em> rather than its brightness: is it round, stretched,
+lumpy, turned? This section shows how those numbers are made, lets you change a droplet and watch all seven respond, and
+says which one to pick for what.</p>
+
+<article class="term" id="stat-shape">
+  <h3>How a shape number is made</h3>
+  <p>"Shape" here is the shape of the <strong>bright droplet inside the ROI</strong>, not the outline you drew. The ROI only
+  says where to look: draw it a little larger than the droplet, and MicroDrop finds the droplet inside it by itself, in every image.</p>
+  <figure class="demo" aria-label="How a shape number is made, in three steps">
+    <svg viewBox="0 0 600 150" role="img">
+      <title>Threshold, outline, moments</title>
+      <g font-size="12">
+        <g transform="translate(20,10)">
+          <rect width="110" height="110" rx="6" fill="#252c33"/>
+          <ellipse cx="55" cy="55" rx="34" ry="24" fill="var(--glow)" opacity=".85"/>
+          <circle cx="55" cy="55" r="50" fill="none" stroke="var(--roi)" stroke-width="2" stroke-dasharray="5 3"/>
+          <text x="55" y="132" text-anchor="middle" style="fill:var(--ink);font-weight:600">Image + ROI</text>
+        </g>
+        <g transform="translate(170,10)">
+          <rect width="110" height="110" rx="6" fill="#000"/>
+          <ellipse cx="55" cy="55" rx="34" ry="24" fill="#fff"/>
+          <text x="55" y="132" text-anchor="middle" style="fill:var(--ink);font-weight:600">1. Threshold</text>
+        </g>
+        <g transform="translate(320,10)">
+          <rect width="110" height="110" rx="6" fill="var(--plot-bg)" stroke="var(--line)"/>
+          <ellipse cx="55" cy="55" rx="34" ry="24" fill="none" stroke="var(--glow)" stroke-width="2.5"/>
+          <text x="55" y="132" text-anchor="middle" style="fill:var(--ink);font-weight:600">2. Outline</text>
+        </g>
+        <g transform="translate(470,10)">
+          <rect width="110" height="110" rx="6" fill="var(--plot-bg)" stroke="var(--line)"/>
+          <ellipse cx="55" cy="55" rx="34" ry="24" fill="none" stroke="var(--glow)" stroke-width="1.5"/>
+          <line x1="17" y1="55" x2="93" y2="55" stroke="var(--orange)" stroke-width="2"/>
+          <circle cx="55" cy="55" r="3" fill="var(--orange)"/>
+          <text x="55" y="132" text-anchor="middle" style="fill:var(--ink);font-weight:600">3. Moments</text>
+        </g>
+        <path d="M134 65h30m-6-5 6 5-6 5M284 65h30m-6-5 6 5-6 5M434 65h30m-6-5 6 5-6 5" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+      </g>
+    </svg>
+    <figcaption>1: an automatic brightness threshold (Otsu's method, from the ROI's own pixels) splits droplet from background.
+    2: the outline of the biggest bright blob is traced, pixel by pixel; smaller specks and holes are ignored.
+    3: averages over that outline ("moments") give its centre, the best-matching ellipse, and the rest.</figcaption>
+  </figure>
+  <p>This runs on the corrected image, after the <a href="#ball">rolling ball</a> and perspective correction when they are on,
+  and it needs the droplet to be <strong>brighter</strong> than its surroundings. Every shape number is a ratio, so it has
+  <strong>no unit</strong> and the <a href="#scale">image scale</a> does not change it. The one exception is
+  <a href="#stat-orientation">Orientation</a>, an angle in degrees. When no droplet is found (an empty or flat ROI, or a blob
+  under 20 px²), the cell stays empty and the plot shows a gap.</p>
+</article>
+
+<article class="term" id="shape-demos">
+  <h3>Live demos: five ways a droplet changes</h3>
+  <p>Each picture below is measured live with the same steps and formulas MicroDrop uses, on an outline traced pixel by pixel,
+  so the numbers are what the pane would show for that droplet (about 22 px radius). <strong>Shape change</strong> is measured
+  from the starting picture; the <em>Start</em> column holds the starting values, and a coloured row has moved. Droplet area is shown for reference only: the
+  pane's <a href="#stat-table">Area</a> is the ROI's size, not the droplet's.</p>
+  <p class="shape-key"><span><i class="k-drop"></i>droplet as traced</span>
+  <span><i class="k-ell"></i>best-matching ellipse and its long axis</span>
+  <span><i class="k-hull"></i>convex hull ("rubber band")</span>
+  <span><i class="k-box"></i>upright bounding box</span>
+  <span><i class="k-roi"></i>ROI</span></p>
+
+  <figure class="demo" aria-label="Stretch demo">
+    <div class="controls"><label>Stretch <input type="range" id="shp-stretch" min="1" max="3" step="0.05" value="1"><output id="shp-stretch-o">1.00 : 1</output></label></div>
+    <div class="shape-demo"><svg id="shp-stretch-svg" viewBox="0 0 260 260" role="img"><title>A droplet stretched into an ellipse at constant area</title></svg><table class="small shape-read" id="shp-stretch-read"></table></div>
+    <div class="status" id="shp-stretch-status" aria-live="polite"></div>
+    <figcaption><strong>Notice:</strong> axis ratio and eccentricity rise, circularity falls and shape change climbs,
+    while solidity stays near 1: an ellipse has no dents.</figcaption>
+  </figure>
+
+  <figure class="demo" aria-label="Lobe and merge demo">
+    <div class="controls"><label>Bring together <input type="range" id="shp-lobe" min="0" max="24" value="0"><output id="shp-lobe-o">apart</output></label></div>
+    <div class="shape-demo"><svg id="shp-lobe-svg" viewBox="0 0 260 260" role="img"><title>A small satellite droplet sliding into a bigger one</title></svg><table class="small shape-read" id="shp-lobe-read"></table></div>
+    <div class="status" id="shp-lobe-status" aria-live="polite"></div>
+    <figcaption><strong>Notice:</strong> nothing moves while the two are apart (only the biggest blob is measured). The moment they
+    touch, solidity drops sharply, circularity falls, axis ratio jumps and shape change leaps; as the satellite sinks in, all of them recover part of the way.</figcaption>
+  </figure>
+
+  <figure class="demo" aria-label="Rotate demo">
+    <div class="controls"><label>Turn <input type="range" id="shp-rotate" min="-90" max="90" value="0"><output id="shp-rotate-o">0°</output></label></div>
+    <div class="shape-demo"><svg id="shp-rotate-svg" viewBox="0 0 260 260" role="img"><title>A 2 : 1 droplet turning on the spot</title></svg><table class="small shape-read" id="shp-rotate-read"></table></div>
+    <div class="status" id="shp-rotate-status" aria-live="polite"></div>
+    <figcaption><strong>Notice:</strong> orientation follows the turn (and wraps from +90° to −90°, the same direction), extent
+    swings because its box stays upright, and everything else stays put. That is what "rotation-invariant" means.</figcaption>
+  </figure>
+
+  <figure class="demo" aria-label="Shrink demo">
+    <div class="controls"><label>Size <input type="range" id="shp-shrink" min="3" max="40" value="22"><output id="shp-shrink-o">22 px</output></label></div>
+    <div class="shape-demo"><svg id="shp-shrink-svg" viewBox="0 0 260 260" role="img"><title>An oval droplet growing and shrinking</title></svg><table class="small shape-read" id="shp-shrink-read"></table></div>
+    <div class="status" id="shp-shrink-status" aria-live="polite"></div>
+    <figcaption><strong>Notice:</strong> the area follows the size, the shape numbers do not, until the droplet is only a few
+    pixels across and the pixel steps start to show.</figcaption>
+  </figure>
+
+  <figure class="demo" aria-label="Rough edge demo">
+    <div class="controls">
+      <label>Ripple <input type="range" id="shp-rough" min="0" max="3" step="0.1" value="0"><output id="shp-rough-o">0.0 px</output></label>
+      <label><input type="checkbox" id="shp-rough-smooth" checked> 1-px smoothing (as MicroDrop)</label>
+    </div>
+    <div class="shape-demo"><svg id="shp-rough-svg" viewBox="0 0 260 260" role="img"><title>A round droplet whose edge turns ragged</title></svg><table class="small shape-read" id="shp-rough-read"></table></div>
+    <div class="status" id="shp-rough-status" aria-live="polite"></div>
+    <figcaption><strong>Notice:</strong> circularity drops fast, because a ragged edge is a longer edge, while axis ratio does not
+    move and solidity dips only a little. Untick the smoothing: even a smooth circle then reads about 0.89, because the
+    pixel staircase is longer than the real edge. That is why MicroDrop smooths the outline by 1 px before measuring it.</figcaption>
+  </figure>
+</article>
+
+<article class="term" id="shape-time">
+  <h3>Shape change over time</h3>
+  <p>Shape change needs something to compare with: each ROI's <strong>first included image</strong> is its reference, and
+  reads 0. Below are five synthetic droplets over 40 images (MicroDrop's own test series), measured by the pane's code.</p>
+  <figure class="demo" aria-label="Shape change over time for five droplets">
+    <div class="controls">
+      <label>Exclude <input type="range" id="sc-skip" min="0" max="25" value="0"><output id="sc-skip-o">none</output></label>
+      <label>Image <input type="range" id="sc-t" min="0" max="39" value="39"><output id="sc-t-o">39</output></label>
+      <button type="button" id="sc-play">Play</button>
+    </div>
+    <svg id="sc-svg" viewBox="0 0 600 240" role="img"><title>Shape change of five droplets over 40 images</title></svg>
+    <div class="status" id="sc-status" aria-live="polite"></div>
+    <figcaption>Grey band: below 0.05, the noise of a droplet that keeps its shape. Set Exclude to 1 to drop the first image:
+    the next one becomes the reference and every curve is measured from it (here it barely moves, because images 0 and 1 look
+    alike). Set it to 21: C's lobe has already merged, so the big jump vanishes from C's curve, because shape change only counts
+    change <em>since the reference</em>.</figcaption>
+  </figure>
+</article>
+
+<article class="term" id="shape-pick">
+  <h3>Which number to pick</h3>
+  <table class="small shape-compare">
+    <thead><tr><th>Quantity</th><th>Stretch</th><th>Lobe / merge</th><th>Rotate</th><th>Shrink</th><th>Rough edge</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#stat-circularity">Circularity</a></td><td>✓ falls</td><td>✓ falls</td><td>–</td><td>–</td><td>✓ falls</td></tr>
+      <tr><td><a href="#stat-shapechange">Shape change</a></td><td>✓ rises</td><td>✓ jumps</td><td>–</td><td>–</td><td>–</td></tr>
+      <tr><td><a href="#stat-axisratio">Axis ratio</a></td><td>✓ rises</td><td>✓ rises</td><td>–</td><td>–</td><td>–</td></tr>
+      <tr><td><a href="#stat-eccentricity">Eccentricity</a></td><td>✓ rises</td><td>✓ rises</td><td>–</td><td>–</td><td>–</td></tr>
+      <tr><td><a href="#stat-solidity">Solidity</a></td><td>–</td><td>✓ drops</td><td>–</td><td>–</td><td>✓ dips a little</td></tr>
+      <tr><td><a href="#stat-extent">Extent</a></td><td>–</td><td>✓ falls</td><td>✓ swings</td><td>–</td><td>✓ falls</td></tr>
+      <tr><td><a href="#stat-orientation">Orientation</a></td><td>n/a → 0°</td><td>points at the lobe</td><td>✓ follows</td><td>–</td><td>n/a</td></tr>
+    </tbody>
+  </table>
+  <p>✓ changes, – stays put, n/a not meaningful (round droplet). For "has anything happened?" plot <strong>Shape change</strong>;
+  to tell <em>what</em> happened, add <strong>Axis ratio</strong> (stretching) and <strong>Solidity</strong> (lobes, necks, merging).
+  Circularity reacts to all three changes, so on its own it cannot say which one.</p>
+</article>
+
+<article class="term" id="shape-uses">
+  <h3>What this is useful for on a DMF chip</h3>
+  <ul class="uses">
+    <li><strong>Splitting and merging:</strong> a sudden drop in solidity and jump in shape change marks the frame where two droplets join, or one pinches apart.</li>
+    <li><strong>Stuck or stretched in transport:</strong> axis ratio that rises when a droplet is pulled to the next electrode and does not fall back suggests it is pinned between two.</li>
+    <li><strong>Evaporation or deformation:</strong> a droplet that only shrinks keeps its shape numbers flat (try the Shrink demo) while a fluorescent one creeps brighter as its dye concentrates; if the shape numbers move, it is deforming.</li>
+    <li><strong>Mixing after a merge:</strong> circularity and solidity climbing back towards round over the following images show the merged droplet settling.</li>
+    <li><strong>Wetting under actuation:</strong> circularity falling and axis ratio rising while an electrode is on show the droplet spreading towards it under electrowetting.</li>
+    <li><strong>Pinning and surface defects:</strong> solidity that stays low over many images points to a lobe held in place, for example by a defect in the dielectric.</li>
+    <li><strong>Satellite droplets:</strong> a one-image dip in solidity, or a step in shape change, often means a small satellite has just rejoined.</li>
+  </ul>
+  <p>These are indicators, not diagnoses: when a curve moves, open those images and look before drawing a conclusion.</p>
+</article>
+
+<article class="term" id="shape-caveats">
+  <h3>Caveats</h3>
+  <div class="callout warn">
+    <ul class="uses">
+      <li><strong>Bright on dark only.</strong> The threshold assumes a droplet brighter than its background. A dark, back-lit droplet is read the wrong way round.</li>
+      <li><strong>Uneven light:</strong> turn on the <a href="#ball">rolling ball</a> first, otherwise the threshold follows the light, not the droplet's edge.</li>
+      <li><strong>Two droplets in one ROI</strong> that touch read as one odd-shaped blob; if they do not touch, only the bigger one is measured.</li>
+      <li><strong>Clipped by the ROI edge:</strong> the droplet reads flattened. Draw the ROI a little larger than the droplet.</li>
+      <li><strong>Small droplets</strong> (under about 8 px radius) read noisier: axis ratio a little above 1 and circularity off by a few hundredths even when round.</li>
+    </ul>
+  </div>
+</article>
+
+
+<p class="intro" id="shape-terms">The seven quantities one by one, as they are named in the Plot list.</p>
 
 <article class="term" id="stat-circularity">
   <h3>Circularity</h3>
@@ -1142,7 +1362,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
   <dl class="facts">
     <dt>What it is</dt><dd><p>Length ÷ width of the droplet, from the ellipse that best matches it.</p></dd>
     <dt>When to use it</dt><dd><p>To follow a droplet being stretched, for example while it is pulled onto the next electrode.</p></dd>
-    <dt>How to read it</dt><dd><p>1 is round; 2 is twice as long as wide. It is never below 1. Very small droplets (under about 8 px across) read a little above 1 even when round.</p></dd>
+    <dt>How to read it</dt><dd><p>1 is round; 2 is twice as long as wide. It is never below 1. Very small droplets (under about 8 px radius) read a little above 1 even when round.</p></dd>
     <dt>Typical value</dt><dd><p>About 1.0 for a resting droplet.</p></dd>
   </dl>
 </article>
@@ -1188,19 +1408,6 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
     <dt>How to read it</dt><dd><p>Only meaningful once the droplet is clearly elongated (axis ratio well above 1, say 1.2). A round droplet has no long axis,
     so its orientation is noise that jumps anywhere between ±90°. It also wraps: a droplet turning past +90° reappears near −90°, which is the same direction.</p></dd>
     <dt>Typical value</dt><dd><p>0° for a droplet stretched left–right, ±90° for one stretched up–down.</p></dd>
-  </dl>
-</article>
-
-<article class="term" id="stat-table">
-  <h3>Table and CSV-only columns (Count, Area, std, outline_*)</h3>
-  <dl class="facts">
-    <dt>What it is</dt><dd>
-      <p><strong>Count</strong>: how many pixels are inside the ROI. <strong>Area</strong>: count × the area of one pixel, in your calibrated unit (px² if not calibrated).</p>
-      <p>The CSV export also has <strong>std</strong> (standard deviation: how much the pixels vary around their mean) and the same stats for the ring, prefixed <code>outline_</code>.</p>
-    </dd>
-    <dt>When to use it</dt><dd><p>Count and Area confirm the ROI size; std tells you how even the droplet is. The table under the plot shows these for the image currently displayed.</p></dd>
-    <dt>How to read it</dt><dd><p>The CSV is one row per image per ROI. It also records the outlier flag and the ring, ball and perspective settings used, so a file always says how it was made.</p></dd>
-    <dt>Typical value</dt><dd><p>Not plotted.</p></dd>
   </dl>
 </article>
 </section>
@@ -1573,6 +1780,9 @@ midpoint of a melt curve or the speed of a decay.</p>
   <dt>Interpolate</dt><dd>Estimate a value between two known ones by drawing a straight line between them.</dd>
   <dt>Low-pass filter</dt><dd>A smoother that keeps slow changes and removes fast jitter (Butterworth is one).</dd>
   <dt>Nyquist frequency</dt><dd>The fastest change a series of points can show (an up-down every two points). Butterworth's cutoff is a fraction of it.</dd>
+  <dt>Threshold (Otsu)</dt><dd>A brightness cut-off: brighter pixels count as droplet, darker as background. Otsu's method picks it automatically from the pixels.</dd>
+  <dt>Moments</dt><dd>Averages over a shape's pixels (its centre, its spread in each direction) that describe its size, stretch and lopsidedness. Hu moments are combinations that do not change when the shape moves, turns or is scaled.</dd>
+  <dt>Convex hull</dt><dd>The outline a rubber band would take if stretched around the shape: the shape with every dent filled in.</dd>
   <dt>Rolling ball</dt><dd>A way to estimate uneven background by pushing a disk up under the brightness landscape. Things narrower than the disk count as signal.</dd>
   <dt>Perspective</dt><dd>The distortion when a camera looks at a flat surface at an angle.</dd>
   <dt>Calibration</dt><dd>Telling the software how long one pixel is in real units.</dd>
@@ -2138,6 +2348,376 @@ midpoint of a melt curve or the speed of a decay.</p>
     }
     bind("hw", draw, function (v) { return v + " ms"; });
     draw();
+  })();
+
+  /* ---------------- droplet shape: the pane's descriptors, in JS ---------------- */
+  /* Mirrors image_viewer/analysis/shape_descriptors.py on an outline snapped
+     to whole pixels (as the pane's contour is): polygon moments, the moment
+     ellipse, a perimeter simplified by 1 px, convex hull, upright box, and
+     the root-normalised Hu vector that Shape change compares. */
+  var HU_ROOTS = [1, 2, 2, 2, 4, 3, 4], DISK_HU1 = 1 / (2 * Math.PI), MIN_AREA_PX = 20;
+
+  /* The outer outline of a droplet as the pane finds it: the pixels whose
+     centre is inside(x, y) (px), traced as a chain of boundary-pixel centres
+     (8-connected, like cv2.findContours) starting from the leftmost pixel on
+     row cy, so only the blob at (cx, cy) is traced. */
+  var STEPS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+
+  function pixelOutline(inside, cx, cy, reach) {
+    var y0 = Math.round(cy), x = Math.floor(cx - reach) - 1;
+    while (!inside(x, y0) && x < cx) { x++; }
+    var start = [x, y0], pts = [start], p = start, d = 0;
+    for (var guard = 0; guard < 20000; guard++) {
+      var next = null;
+      for (var k = 0; k < 8 && !next; k++) {
+        var dir = (d + 5 + k) % 8, q = [p[0] + STEPS[dir][0], p[1] + STEPS[dir][1]];
+        if (inside(q[0], q[1])) { next = q; d = dir; }
+      }
+      if (!next) { break; }
+      if (p === start && pts.length > 1 && next[0] === pts[1][0] && next[1] === pts[1][1]) { break; }
+      p = next[0] === start[0] && next[1] === start[1] ? start : next;
+      if (p !== start) { pts.push(p); }
+    }
+    return pts;
+  }
+
+  /* inside(x, y) for a star-shaped droplet of radius(θ) px around (cx, cy). */
+  function starInside(radius, cx, cy) {
+    return function (x, y) { return Math.hypot(x - cx, y - cy) <= radius(Math.atan2(y - cy, x - cx)); };
+  }
+
+  /* Raw and central moments up to third order of a closed polygon (Green's theorem, as cv2.moments). */
+  function polygonMoments(pts) {
+    var m = { m00: 0, m10: 0, m01: 0, m20: 0, m11: 0, m02: 0, m30: 0, m21: 0, m12: 0, m03: 0 };
+    for (var i = 0; i < pts.length; i++) {
+      var x0 = pts[i][0], y0 = pts[i][1], x1 = pts[(i + 1) % pts.length][0], y1 = pts[(i + 1) % pts.length][1];
+      var a = x0 * y1 - x1 * y0;
+      m.m00 += a;
+      m.m10 += a * (x0 + x1);
+      m.m01 += a * (y0 + y1);
+      m.m20 += a * (x0 * x0 + x0 * x1 + x1 * x1);
+      m.m02 += a * (y0 * y0 + y0 * y1 + y1 * y1);
+      m.m11 += a * (x0 * (2 * y0 + y1) + x1 * (y0 + 2 * y1));
+      m.m30 += a * (x0 + x1) * (x0 * x0 + x1 * x1);
+      m.m03 += a * (y0 + y1) * (y0 * y0 + y1 * y1);
+      m.m21 += a * (x0 * x0 * (3 * y0 + y1) + 2 * x0 * x1 * (y0 + y1) + x1 * x1 * (y0 + 3 * y1));
+      m.m12 += a * (y0 * y0 * (3 * x0 + x1) + 2 * y0 * y1 * (x0 + x1) + y1 * y1 * (x0 + 3 * x1));
+    }
+    var div = { m00: 2, m10: 6, m01: 6, m20: 12, m02: 12, m11: 24, m30: 20, m03: 20, m21: 60, m12: 60 };
+    var sign = m.m00 < 0 ? -1 : 1;
+    for (var key in div) { m[key] = sign * m[key] / div[key]; }
+    var cx = m.m10 / m.m00, cy = m.m01 / m.m00;
+    m.mu20 = m.m20 - cx * m.m10;
+    m.mu02 = m.m02 - cy * m.m01;
+    m.mu11 = m.m11 - cx * m.m01;
+    m.mu30 = m.m30 - 3 * cx * m.m20 + 2 * cx * cx * m.m10;
+    m.mu03 = m.m03 - 3 * cy * m.m02 + 2 * cy * cy * m.m01;
+    m.mu21 = m.m21 - 2 * cx * m.m11 - cy * m.m20 + 2 * cx * cx * m.m01;
+    m.mu12 = m.m12 - 2 * cy * m.m11 - cx * m.m02 + 2 * cy * cy * m.m10;
+    m.cx = cx; m.cy = cy;
+    return m;
+  }
+
+  function rootHu(m) {
+    function nu(p, q) { return m["mu" + p + q] / Math.pow(m.m00, (p + q) / 2 + 1); }
+    var n20 = nu(2, 0), n02 = nu(0, 2), n11 = nu(1, 1), n30 = nu(3, 0), n03 = nu(0, 3), n21 = nu(2, 1), n12 = nu(1, 2);
+    var a = n30 + n12, b = n21 + n03, c = n30 - 3 * n12, d = 3 * n21 - n03;
+    var hu = [
+      n20 + n02,
+      (n20 - n02) * (n20 - n02) + 4 * n11 * n11,
+      c * c + d * d,
+      a * a + b * b,
+      c * a * (a * a - 3 * b * b) + d * b * (3 * a * a - b * b),
+      (n20 - n02) * (a * a - b * b) + 4 * n11 * a * b,
+      d * a * (a * a - 3 * b * b) - c * b * (3 * a * a - b * b)
+    ];
+    return hu.map(function (h, k) { return Math.sign(h) * Math.pow(Math.abs(h), 1 / HU_ROOTS[k]) / DISK_HU1; });
+  }
+
+  function hullArea(pts) {
+    var s = pts.slice().sort(function (p, q) { return p[0] - q[0] || p[1] - q[1]; }), lower = [], upper = [];
+    function cross(o, p, q) { return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]); }
+    s.forEach(function (p) {
+      while (lower.length > 1 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) { lower.pop(); }
+      lower.push(p);
+    });
+    s.reverse().forEach(function (p) {
+      while (upper.length > 1 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) { upper.pop(); }
+      upper.push(p);
+    });
+    var hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+    return { pts: hull, area: Math.abs(polygonMoments(hull).m00) };
+  }
+
+  /* Douglas-Peucker on a closed outline (cv2.approxPolyDP), then its length. */
+  function smoothedPerimeter(pts, eps) {
+    function simplify(seg) {
+      var a = seg[0], b = seg[seg.length - 1], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+      var worst = 0, at = 0;
+      for (var i = 1; i < seg.length - 1; i++) {
+        var dist = Math.abs(dy * (seg[i][0] - a[0]) - dx * (seg[i][1] - a[1])) / len;
+        if (dist > worst) { worst = dist; at = i; }
+      }
+      if (worst <= eps) { return [a, b]; }
+      return simplify(seg.slice(0, at + 1)).slice(0, -1).concat(simplify(seg.slice(at)));
+    }
+    /* cv2 starts at the top-left pixel and refines the split pair three times. */
+    var top = 0;
+    pts.forEach(function (p, i) { if (p[1] < pts[top][1] || (p[1] === pts[top][1] && p[0] < pts[top][0])) { top = i; } });
+    var a = top, b = top;
+    for (var pass = 0; pass < 3; pass++) {
+      var best = -1;
+      a = b;
+      pts.forEach(function (p, i) { var d = Math.hypot(p[0] - pts[a][0], p[1] - pts[a][1]); if (d > best) { best = d; b = i; } });
+      if (best <= eps) { break; }
+    }
+    var lo = Math.min(a, b), hi = Math.max(a, b);
+    var ring = simplify(pts.slice(lo, hi + 1)).slice(0, -1).concat(simplify(pts.slice(hi).concat(pts.slice(0, lo + 1))).slice(0, -1));
+    var length = 0;
+    for (var i = 0; i < ring.length; i++) {
+      var q = ring[(i + 1) % ring.length];
+      length += Math.hypot(q[0] - ring[i][0], q[1] - ring[i][1]);
+    }
+    return length;
+  }
+
+  /* The pane's numbers for one pixel outline (NaN-free; null when too small to be a droplet). */
+  function describeShape(pts, smoothing) {
+    var m = polygonMoments(pts);
+    if (m.m00 < MIN_AREA_PX) { return null; }
+    var mu20 = m.mu20 / m.m00, mu02 = m.mu02 / m.m00, mu11 = m.mu11 / m.m00;
+    var half = (mu20 + mu02) / 2, spread = Math.hypot((mu20 - mu02) / 2, mu11);
+    var major = half + spread, minor = half - spread;
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var box = (Math.max.apply(null, xs) - Math.min.apply(null, xs) + 1) * (Math.max.apply(null, ys) - Math.min.apply(null, ys) + 1);
+    var hull = hullArea(pts), perimeter = smoothedPerimeter(pts, smoothing === false ? 0 : 1);
+    return {
+      area: m.m00,
+      circularity: 4 * Math.PI * m.m00 / (perimeter * perimeter),
+      axisRatio: Math.sqrt(major / minor),
+      eccentricity: Math.sqrt(1 - minor / major),
+      orientation: 0.5 * Math.atan2(2 * mu11, mu20 - mu02) * 180 / Math.PI,
+      solidity: m.m00 / hull.area,
+      extent: m.m00 / box,
+      hu: rootHu(m), major: major, minor: minor,
+      cx: m.cx, cy: m.cy, hull: hull.pts, outline: pts
+    };
+  }
+
+  function shapeChange(a, b) {
+    var sum = 0;
+    for (var k = 0; k < 7; k++) { var d = (a[k] || 0) - (b[k] || 0); sum += d * d; }
+    return Math.sqrt(sum);
+  }
+
+  /* ---------------- droplet shape demos ---------------- */
+  (function shapeDemos() {
+    var C = [60.3, 60.6], K = 2.4, R = 22, MID = 130;
+    var ROWS = [
+      ["Circularity", "circularity", 2, 0.02],
+      ["Shape change", "change", 2, 0.05],
+      ["Axis ratio", "axisRatio", 2, 0.03],
+      ["Eccentricity", "eccentricity", 2, 0.15],
+      ["Solidity", "solidity", 2, 0.015],
+      ["Extent", "extent", 2, 0.02],
+      ["Orientation", "orientation", 0, 5],
+      ["Droplet area", "area", 0, 0]
+    ];
+
+    function X(x) { return MID + (x - C[0]) * K; }
+    function Y(y) { return MID + (y - C[1]) * K; }
+    function ellipse(a, b, phi) {
+      return function (t) { return a * b / Math.hypot(b * Math.cos(t - phi), a * Math.sin(t - phi)); };
+    }
+    function star(radius, reach, smoothing) {
+      return describeShape(pixelOutline(starInside(radius, C[0], C[1]), C[0], C[1], reach), smoothing);
+    }
+    function round(d) { return d && d.axisRatio >= 1.2; }
+
+    function cell(d, row) {
+      if (!d) { return '<span class="na">n/a</span>'; }
+      if (row[1] === "orientation" && !round(d)) { return '<span class="na" title="not meaningful when round">n/a</span>'; }
+      var v = d[row[1]];
+      return row[1] === "area" ? Math.round(v) + " px²" : row[1] === "orientation" ? Math.round(v) + "°" : v.toFixed(row[2]);
+    }
+
+    function moved(d, ref, row) {
+      if (!d || !ref) { return d === ref ? "" : "•"; }
+      var a = d[row[1]], b = ref[row[1]];
+      if (row[1] === "orientation") {
+        if (round(d) !== round(ref)) { return "•"; }
+        if (!round(d)) { return ""; }
+        var turn = ((a - b + 90) % 180 + 180) % 180 - 90;
+        return Math.abs(turn) > row[3] ? (turn > 0 ? "▲" : "▼") : "";
+      }
+      var tol = row[1] === "area" ? 0.03 * b : row[3];
+      return Math.abs(a - b) > tol ? (a > b ? "▲" : "▼") : "";
+    }
+
+    function readout(table, d, ref) {
+      var html = '<thead><tr><th>Quantity</th><th style="text-align:right">Now</th><th style="text-align:right">Start</th><th></th></tr></thead><tbody>';
+      ROWS.forEach(function (row) {
+        var mark = moved(d, ref, row);
+        html += "<tr" + (mark ? ' class="moved"' : "") + "><td>" + row[0] + '</td><td class="num">' + cell(d, row) +
+          '</td><td class="num">' + cell(ref, row) + '</td><td class="mark">' + (mark || "–") + "</td></tr>";
+      });
+      table.innerHTML = html + "</tbody>";
+    }
+
+    function picture(svg, d, extra) {
+      clear(svg);
+      el("rect", { width: 260, height: 260, rx: 6, fill: "#252c33" }, svg);
+      el("circle", { cx: MID, cy: MID, r: 50 * K, fill: "none", stroke: "var(--roi)", "stroke-width": 1.5, "stroke-dasharray": "6 4" }, svg);
+      if (extra) { extra(svg); }
+      if (!d) {
+        text(svg, MID, MID + 4, "no droplet (under 20 px²)", { "text-anchor": "middle", style: "fill:#cfd8de" });
+        return;
+      }
+      function poly(pts) { return pts.map(function (p) { return X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join(" "); }
+      el("polygon", { points: poly(d.outline), fill: "var(--glow)", opacity: 0.9 }, svg);
+      el("polygon", { points: poly(d.hull), fill: "none", stroke: "var(--ring)", "stroke-width": 1.5, "stroke-dasharray": "5 3" }, svg);
+      var xs = d.outline.map(function (p) { return p[0]; }), ys = d.outline.map(function (p) { return p[1]; });
+      var x0 = Math.min.apply(null, xs) - 0.5, y0 = Math.min.apply(null, ys) - 0.5;
+      el("rect", { x: X(x0), y: Y(y0), width: (Math.max.apply(null, xs) + 0.5 - x0) * K, height: (Math.max.apply(null, ys) + 0.5 - y0) * K,
+        fill: "none", stroke: "#cfd8de", "stroke-width": 1, "stroke-dasharray": "1 3" }, svg);
+      var ex = X(d.cx), ey = Y(d.cy), rx = 2 * Math.sqrt(d.major) * K;
+      el("ellipse", { cx: ex, cy: ey, rx: rx, ry: 2 * Math.sqrt(d.minor) * K, fill: "none", stroke: "var(--orange)", "stroke-width": 1.5,
+        transform: "rotate(" + d.orientation.toFixed(2) + " " + ex + " " + ey + ")" }, svg);
+      if (round(d)) {
+        var t = d.orientation * Math.PI / 180;
+        el("line", { x1: ex - rx * Math.cos(t), y1: ey - rx * Math.sin(t), x2: ex + rx * Math.cos(t), y2: ey + rx * Math.sin(t),
+          stroke: "var(--orange)", "stroke-width": 2 }, svg);
+      }
+      el("circle", { cx: ex, cy: ey, r: 3, fill: "var(--orange)" }, svg);
+    }
+
+    /* One demo: measure(value) gives { d, extra }, status(value, d) one line. */
+    function demo(id, measure, status, fmt, also) {
+      var input = document.getElementById(id), svg = document.getElementById(id + "-svg");
+      var table = document.getElementById(id + "-read"), line = document.getElementById(id + "-status");
+      var start = input.value;
+      function draw() {
+        var now = measure(+input.value), ref = measure(+start).d;
+        if (now.d && ref) { now.d.change = shapeChange(now.d.hu, ref.hu); }
+        if (ref) { ref.change = 0; }
+        picture(svg, now.d, now.extra);
+        readout(table, now.d, ref);
+        line.innerHTML = status(+input.value, now.d);
+      }
+      bind(id, draw, fmt);
+      if (also) { also.addEventListener("change", draw); }
+      draw();
+    }
+
+    demo("shp-stretch", function (v) {
+      return { d: star(ellipse(R * Math.sqrt(v), R / Math.sqrt(v), 0), R * 1.8) };
+    }, function (v) {
+      return v < 1.2 ? "Still round: orientation has no long axis to report yet." : "Length ÷ width is " + v.toFixed(2) + "; the pane reads it from the pixel outline.";
+    }, function (v) { return (+v).toFixed(2) + " : 1"; });
+
+    var SAT = 11, TILT = -20 * Math.PI / 180, main = [C[0] - 10, C[1]];
+    demo("shp-lobe", function (v) {
+      var dist = 42 - v, sat = [main[0] + dist * Math.cos(TILT), main[1] + dist * Math.sin(TILT)];
+      var inside = function (x, y) { return Math.hypot(x - main[0], y - main[1]) <= R || Math.hypot(x - sat[0], y - sat[1]) <= SAT; };
+      return {
+        d: describeShape(pixelOutline(inside, main[0], main[1], R + 2)),
+        extra: function (svg) { el("circle", { cx: X(sat[0]), cy: Y(sat[1]), r: SAT * K, fill: "var(--glow)", opacity: 0.35 }, svg); }
+      };
+    }, function (v) {
+      var dist = 42 - v;
+      return dist > R + SAT ? "Apart: the satellite is a separate, smaller blob, so it is ignored." :
+        '<span class="bad">Merged:</span> one outline now wraps both; the waist between them is a dent.';
+    }, function (v) { return 42 - v > R + SAT ? "apart" : "merged"; });
+
+    demo("shp-rotate", function (v) {
+      return { d: star(ellipse(R * Math.SQRT2, R / Math.SQRT2, v * Math.PI / 180), R * 1.6) };
+    }, function (v) {
+      return Math.abs(v) > 80 ? "Near ±90° the long axis is vertical; +90° and −90° are the same direction, so the readout can flip sign." : "Turned " + v + "° clockwise.";
+    }, function (v) { return v + "°"; });
+
+    demo("shp-shrink", function (v) {
+      return { d: star(ellipse(v * Math.sqrt(1.5), v / Math.sqrt(1.5), 15 * Math.PI / 180), v * 1.3 + 2) };
+    }, function (v, d) {
+      if (!d) { return '<span class="bad">Too small:</span> under 20 px² the pane treats it as noise and leaves the cell empty.'; }
+      return v < 8 ? '<span class="bad">Small:</span> the pixel steps now matter, so the shape numbers wobble.' : "A 1.5 : 1 droplet with a mean radius of " + v + " px.";
+    }, function (v) { return v + " px"; });
+
+    var smooth = document.getElementById("shp-rough-smooth");
+    var RIPPLE = [[7, 1, 0.3], [11, 0.8, 1.1], [17, 0.7, 2.0], [23, 0.6, 0.7], [31, 0.5, 2.6]], WEIGHT = 3.6;
+    demo("shp-rough", function (v) {
+      return { d: star(function (t) {
+        var r = R;
+        RIPPLE.forEach(function (h) { r += v * h[1] * Math.sin(h[0] * t + h[2]) / WEIGHT; });
+        return r;
+      }, R + 4, smooth.checked) };
+    }, function (v) {
+      return smooth.checked ? (v < 1 ? "Ripple under about 1 px is mostly smoothed away, like the pixel steps." : "A ragged edge is longer, so circularity falls.") :
+        '<span class="bad">Smoothing off:</span> the pixel staircase itself counts as roughness.';
+    }, function (v) { return (+v).toFixed(1) + " px"; }, smooth);
+  })();
+
+  /* ---------------- shape change over time ---------------- */
+  (function shapeOverTime() {
+    /* Root-normalised Hu vectors (thousandths) of the five synthetic droplets
+       in examples/shape_moments; regenerate with
+       examples/analysis_help/generate_shape_series.py. */
+    var SHAPE_SERIES = {"A_circle":[[1000,4,2],[1000,2],[1000,2,2],[1000,1,1],[1000,6,4],[1000,3,3],[1000,3,3],[1000,3,3],[1000,3,2],[1000,1,3],[1000,3,3],[1000,6,3],[1000,4,2],[1000,2,1],[1000,2,2],[1000,3,4],[1000,4,3],[1000,1,4],[1000,2,2],[1000,4,5],[1000,2,5],[1000,4,7],[1000,1,1],[1000,1,1],[1000,5,2],[1000,2,3],[1000,4,2],[1000,2,3],[1000,3,3],[1000,2,1],[1000,3,3],[1000,4,3],[1000,1],[1000,2,2],[1000,2,1],[1000,3,4],[1000,4,4],[1000,0,4],[1000,2,3],[1000,1,4]],"B_elongate":[[1000,3,3],[1002,45,2,0,0,1],[1003,78],[1007,113,4,0,0,-2],[1012,151,3,0,0,-2],[1016,176,3,0,0,-2],[1024,218,1,0,0,1],[1029,241,4,1,1,3,-1],[1038,278,3,0,1,3,1],[1045,303,3,0,1,4,1],[1056,337,3,0,-1,-4,-1],[1062,356,4,1,1,5,-1],[1074,390,2,0,1,4],[1086,424,1,0,0,3],[1094,444,2,0,0,-1,-1],[1112,485,6,1,-2,-8,1],[1124,512,1,0,0,2],[1134,535,3,1,-1,-5,1],[1142,550,4,1,1,5,-1],[1153,573,3,1,1,4,1],[1172,611,1,0,0,4],[1192,649,3,1,2,10],[1203,669,2,0,0,-4,-1],[1219,696,3,1,1,7,1],[1231,718,1,0,1,4,1],[1237,727,2,1,1,8,-1],[1256,760,2,1,1,7],[1265,775,4,2,2,14,1],[1294,820,1,0,0,-3],[1298,827,2,1,1,5,1],[1317,857,4,1,1,6,-1],[1332,880,1,0,0,-4],[1342,894,7,3,4,19,3],[1368,933,4,2,3,17,-2],[1374,941,1,1,1,8,1],[1416,1001,2,1,-1,-7,1],[1415,1000,4,1,2,9,2],[1417,1003,2,1,1,8,1],[1453,1053,3,2,2,15,1],[1459,1062,3,1,2,11,-1]],"C_bump":[[1000,5,1],[1000,1,4],[1000,2,4],[1000,3,4],[1000,4,2],[1000,0,1],[1000,3,6],[1000,2,3],[1000,2,2],[1000,2,3],[1000,2,2],[1000,2,2],[1000,8,3],[1000,1,2],[1000,1,4],[1000,2,1],[1000,4,1],[1000,0,2],[1000,1,1],[1000,2,2],[1124,272,176,80,97,120,30],[1131,299,186,82,101,126,26],[1135,313,191,82,101,128,32],[1146,345,203,85,106,136,35],[1151,363,208,86,107,139,27],[1156,379,211,87,109,142,-30],[1165,403,219,89,112,148,30],[1172,420,224,91,114,152,42],[1174,432,224,90,113,151,-19],[1183,456,227,91,114,155,13],[1190,468,231,93,117,159,34],[1190,478,227,90,113,157,18],[1196,498,228,89,113,158,39],[1205,515,231,91,115,162,32],[1203,520,226,88,111,159,-29],[1212,543,226,87,111,161,13],[1215,555,220,85,108,159,-28],[1214,559,216,82,105,156,-20],[1222,579,214,82,104,157,-29],[1224,586,209,79,101,154,-26]],"D_rotate":[[1251,751,4,1,-1,-7,1],[1252,753,3,1,2,12,-1],[1249,747,6,2,-2,-10,-2],[1255,757,2,1,1,6,1],[1252,753,1,0,0,3],[1248,746,1,0,0,3],[1252,753,3,1,1,10,1],[1254,756,4,1,1,-2,-1],[1256,759,4,1,1,6,-1],[1252,752,7,2,3,12,-3],[1249,747,1,0,0,1],[1259,764,6,2,3,14,2],[1251,751,2,1,-1,-5,1],[1255,757,2,1,1,6,1],[1257,761,0,0,0,1],[1253,755,6,2,3,15,-2],[1256,760,7,2,2,9,3],[1263,771,5,2,3,16,-1],[1264,772,5,2,2,13,2],[1260,766,7,2,1,-8,3],[1259,765,3,1,2,11,1],[1262,768,2,1,1,8,-1],[1255,758,4,1,1,7,-1],[1260,765,7,3,4,19,-2],[1250,750,2,1,1,-3,-1],[1256,759,4,2,2,13,1],[1258,762,4,2,2,12,-1],[1252,753,2,0,-1,-5],[1258,762,4,1,-1,-9,-1],[1250,749,0,0,0,2],[1251,751,2,1,1,8,1],[1253,755,4,1,-1,-8,1],[1251,751,3,1,1,9,-1],[1253,755,3,1,1,5,-1],[1250,750,3,1,1,7,-1],[1250,750,2,1,1,6,-1],[1249,748,3,1,1,8,-1],[1247,745,4,2,2,13,2],[1255,758,3,1,1,6,1],[1251,750,2,1,-1,-6]],"E_shrink":[[1000,4,3],[1000,0,1],[1000,2,2],[1001,0,2],[1000,3,2],[1001,7,2],[1001,3,3],[1000,6,2],[1001,2,2],[1001,5,5],[1001,4,3],[1001,3,7],[1001,6,3],[1001,11,2],[1000,0,1],[1001,7,2],[1001,11,3],[1001,3,4],[1001,6,6],[1001,3,1],[1001,2,2],[1001,8,2],[1001,6,2],[1001,5,4],[1001,5,5],[1001,5,5],[1001,3,4],[1001,11,1,0,0,-1],[1001,19,6],[1001,4,6],[1001,5,2],[1001,5,5],[1001,7,2],[1001,8,2],[1002,12,2],[1001,12,4],[1001,5,3],[1002,11,7,0,0,-1,1],[1002,2,5,0,0,0,1],[1002,4,8]]};
+    var LINES = [["A_circle", "A unchanged", "var(--muted)"], ["B_elongate", "B stretches", "var(--blue)"],
+      ["C_bump", "C lobe merges", "var(--orange)"], ["D_rotate", "D turns", "var(--ball)"], ["E_shrink", "E shrinks", "var(--ok)"]];
+    var N = 40, svg = document.getElementById("sc-svg"), status = document.getElementById("sc-status");
+    var skip = document.getElementById("sc-skip"), cursor = document.getElementById("sc-t"), play = document.getElementById("sc-play");
+    var sx = scale(0, N - 1, 50, 585), sy = scale(0, 1.3, 215, 34), xs = [];
+    for (var i = 0; i < N; i++) { xs.push(i); }
+
+    function curve(key, first) {
+      var hu = SHAPE_SERIES[key];
+      return hu.map(function (h, k) { return k < first ? NaN : shapeChange(h, hu[first]) / 1000; });
+    }
+
+    function draw() {
+      var first = +skip.value, t = +cursor.value;
+      clear(svg);
+      frame(svg, 50, 34, 585, 215);
+      el("rect", { x: 50, y: sy(0.05), width: 535, height: sy(0) - sy(0.05), fill: "var(--muted)", opacity: 0.18 }, svg);
+      [0, 0.5, 1].forEach(function (v) { text(svg, 44, sy(v) + 4, v.toFixed(1), { "text-anchor": "end" }); });
+      text(svg, 585, 232, "image →", { "text-anchor": "end" });
+      if (first > 0) {
+        el("rect", { x: 50, y: 34, width: sx(first - 0.5) - 50, height: 181, fill: "var(--warn)", opacity: 0.12 }, svg);
+        if (first > 3) { text(svg, 56, 66, "excluded"); }
+      }
+      el("line", { x1: sx(first), x2: sx(first), y1: 34, y2: 215, stroke: "var(--muted)", "stroke-dasharray": "3 3" }, svg);
+      text(svg, sx(first) + 4, 50, "reference");
+      var parts = [];
+      LINES.forEach(function (line, k) {
+        var ys = curve(line[0], first);
+        el("path", { d: linePath(xs, ys, sx, sy), fill: "none", stroke: line[2], "stroke-width": 2 }, svg);
+        el("line", { x1: 50 + k * 108, x2: 66 + k * 108, y1: 14, y2: 14, stroke: line[2], "stroke-width": 3 }, svg);
+        text(svg, 70 + k * 108, 18, line[1]);
+        if (ys[t] === ys[t]) {
+          el("circle", { cx: sx(t), cy: sy(ys[t]), r: 4, fill: line[2], stroke: "var(--surface)", "stroke-width": 1.5 }, svg);
+          parts.push(line[0][0] + " " + ys[t].toFixed(2));
+        }
+      });
+      el("line", { x1: sx(t), x2: sx(t), y1: 34, y2: 215, stroke: "var(--ink)", "stroke-width": 1, opacity: 0.5 }, svg);
+      status.textContent = parts.length ? "Image " + t + ": " + parts.join(" · ") + " (reference: image " + first + ")" : "Image " + t + " is excluded: no value.";
+    }
+
+    bind("sc-skip", draw, function (v) { return +v === 0 ? "none" : +v === 1 ? "first image" : "first " + v; });
+    bind("sc-t", draw);
+    draw();
+
+    var timer = null;
+    play.addEventListener("click", function () {
+      if (timer) { clearInterval(timer); timer = null; play.textContent = "Play"; return; }
+      if (+cursor.value >= N - 1) { cursor.value = 0; }
+      play.textContent = "Pause";
+      timer = setInterval(function () {
+        cursor.value = +cursor.value + 1;
+        document.getElementById("sc-t-o").textContent = cursor.value;
+        draw();
+        if (+cursor.value >= N - 1) { play.click(); }
+      }, reduceMotion ? 400 : 120);
+    });
   })();
 })();
 </script>
