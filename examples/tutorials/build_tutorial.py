@@ -13,8 +13,9 @@
 Reads ``<slug>.src.html`` (content only, see ``README.md`` next to this
 script), inlines the shared kit CSS/JS, the traced toolbar glyphs and any
 local figures, and writes ``<slug>.html`` next to it unless an output path is
-given. Traced glyphs are cached in ``<slug>.glyphs.json`` beside the source,
-so a rebuild needs Qt only when a new glyph appears. From ``src``::
+given. The previous build doubles as the glyph cache (its ``<symbol>``
+elements keep the font text they were traced from), so a rebuild is
+deterministic and needs Qt only when a new glyph appears. From ``src``::
 
     pixi run python -m examples.tutorials.build_tutorial <src> [out]
     pixi run python -m examples.tutorials.build_tutorial <src> --check
@@ -27,7 +28,6 @@ Set ``QT_QPA_PLATFORM=offscreen`` to trace glyphs without a display.
 import argparse
 import base64
 import html
-import json
 import mimetypes
 import re
 import sys
@@ -39,6 +39,7 @@ from microdrop_style.tutorial import TUTORIAL_CSS_PATH, TUTORIAL_JS_PATH
 from microdrop_style.tutorial.glyphs import (
     glyph_id,
     glyph_text,
+    read_symbols,
     symbol_markup,
     trace_glyphs,
 )
@@ -49,7 +50,6 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 SOURCE_SUFFIX = ".src.html"
-GLYPH_CACHE_SUFFIX = ".glyphs.json"
 #: Built pages above this size get a warning; the reference guide is ~260 KB.
 SIZE_BUDGET_BYTES = 300_000
 
@@ -603,35 +603,27 @@ def default_output_path(source_path):
     return source_path.with_name(name[: -len(SOURCE_SUFFIX)] + ".html")
 
 
-def glyph_cache_path(source_path):
-    """``<slug>.src.html`` -> ``<slug>.glyphs.json`` in the same folder."""
-    return default_output_path(source_path).with_suffix(GLYPH_CACHE_SUFFIX)
+def _render_file(source_path, output_path, retrace=False):
+    """Render ``source_path``, reusing the glyphs the previous build of
+    ``output_path`` traced; return the page text."""
+    previous = output_path.read_text(encoding="utf-8") if output_path.is_file() else ""
 
-
-def build_tutorial(source_path, output_path=None, retrace=False):
-    """Build ``source_path`` and write the page and glyph cache; return the
-    page path."""
-    source_path = Path(source_path)
-    output_path = Path(output_path) if output_path else default_output_path(source_path)
-    cache_path = glyph_cache_path(source_path)
-    cache = (
-        json.loads(cache_path.read_text(encoding="utf-8"))
-        if cache_path.is_file()
-        else {}
-    )
-
-    page, new_cache = render_tutorial(
+    page, _cache = render_tutorial(
         source_path.read_text(encoding="utf-8"),
         source_path.parent,
-        cache,
+        read_symbols(previous),
         source_path.name,
         retrace=retrace,
     )
 
-    if new_cache != cache:
-        cache_text = json.dumps(new_cache, indent=1, sort_keys=True) + "\n"
-        cache_path.write_text(cache_text, encoding="utf-8", newline="\n")
+    return page
 
+
+def build_tutorial(source_path, output_path=None, retrace=False):
+    """Build ``source_path`` and write the page; return the page path."""
+    source_path = Path(source_path)
+    output_path = Path(output_path) if output_path else default_output_path(source_path)
+    page = _render_file(source_path, output_path, retrace=retrace)
     output_path.write_text(page, encoding="utf-8", newline="\n")
     size = len(page.encode("utf-8"))
 
@@ -647,19 +639,7 @@ def is_up_to_date(source_path, output_path=None):
     """Return True when rebuilding ``source_path`` reproduces its output."""
     source_path = Path(source_path)
     output_path = Path(output_path) if output_path else default_output_path(source_path)
-    cache_path = glyph_cache_path(source_path)
-    cache = (
-        json.loads(cache_path.read_text(encoding="utf-8"))
-        if cache_path.is_file()
-        else {}
-    )
-
-    page, _cache = render_tutorial(
-        source_path.read_text(encoding="utf-8"),
-        source_path.parent,
-        cache,
-        source_path.name,
-    )
+    page = _render_file(source_path, output_path)
     committed = output_path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
     return page == committed

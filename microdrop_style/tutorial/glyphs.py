@@ -20,6 +20,8 @@ when missing; set ``QT_QPA_PLATFORM=offscreen`` to run without a display).
 """
 
 # Standard library imports.
+import html
+import re
 import sys
 
 # Enthought library imports.
@@ -33,6 +35,10 @@ from microdrop_style.icons import icons
 GLYPH_PIXEL_SIZE = 48
 ICON_FONT_NAME = "material_symbols"
 ICON_PREFIX = "ICON_"
+SYMBOL_PATTERN = re.compile(
+    r'<symbol id="ic-(?P<id>[A-Za-z0-9_]+)" viewBox="(?P<viewBox>[^"]*)" '
+    r'data-text="(?P<text>[^"]*)"><path d="(?P<d>[^"]*)"/></symbol>'
+)
 
 
 def glyph_id(name):
@@ -122,8 +128,27 @@ def trace_glyphs(names, pixel_size=GLYPH_PIXEL_SIZE):
 
 
 def symbol_markup(symbol_id, glyph):
-    """Return the ``<symbol>`` element for a traced glyph."""
+    """Return the ``<symbol>`` element for a traced glyph.
+
+    ``data-text`` keeps the font text it was traced from, so the built page
+    doubles as the glyph cache for its next build (see ``read_symbols``).
+    """
+    text = html.escape(glyph["text"], quote=True)
+
     return (
-        f'<symbol id="ic-{symbol_id}" viewBox="{glyph["viewBox"]}">'
-        f'<path d="{glyph["d"]}"/></symbol>'
+        f'<symbol id="ic-{symbol_id}" viewBox="{glyph["viewBox"]}" '
+        f'data-text="{text}"><path d="{glyph["d"]}"/></symbol>'
     )
+
+
+def read_symbols(page):
+    """Return ``{id: {"text", "d", "viewBox"}}`` for the glyph symbols a built
+    page holds."""
+    return {
+        match["id"]: {
+            "text": html.unescape(match["text"]),
+            "d": match["d"],
+            "viewBox": match["viewBox"],
+        }
+        for match in SYMBOL_PATTERN.finditer(page)
+    }
