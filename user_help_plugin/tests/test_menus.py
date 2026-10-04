@@ -8,76 +8,105 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Unit tests for the Help-menu document actions."""
+"""Unit tests for the Help menu and its Tutorials extension point."""
 
 # Standard library imports.
-import re
+from pathlib import Path
 
-# Microdrop package imports.
-from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
-from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
+# Third-party imports.
+import pytest
+
+# Enthought library imports.
+from apptools.preferences import package_globals
+from envisage.api import Application, Plugin
+from traits.api import List
 
 # Local imports.
-from ..menus import OpenWebViewDialogAction, menu_factory
+from ..consts import TUTORIALS, TutorialEntry
+from ..menus import (
+    OpenWebViewDialogAction,
+    TutorialCatalog,
+    TutorialsMenuManager,
+    menu_factory,
+)
+from ..plugin import UserHelpPlugin
 
-#: A tag attribute that would make the page fetch something at load time.
-NETWORK_RESOURCE_PATTERN = re.compile(r"""(?:src|href)\s*=\s*["']?\s*(?:https?:)?//""")
+PAGE = Path(__file__).resolve()
 
 
-def _analysis_help_action():
-    actions = [
-        item
-        for item in menu_factory().items
-        if isinstance(item, OpenWebViewDialogAction)
-        and item.source == ANALYSIS_HELP_HTML_PATH
+class TutorialContributingPlugin(Plugin):
+    id = "test.tutorial_contributor"
+
+    tutorials = List(contributes_to=TUTORIALS)
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(title="Zebra Tutorial", path=PAGE),
+            TutorialEntry(title="Heater & Magnet Tutorial", path=PAGE),
+        ]
+
+
+def _tutorial_titles(menu):
+    return [
+        item.action.window_title
+        for group in menu.groups
+        for item in group.items
+        if isinstance(item.action, OpenWebViewDialogAction)
     ]
 
-    return actions[0] if actions else None
+
+@pytest.fixture
+def help_plugin(monkeypatch):
+    """A started Help plugin in an otherwise empty application."""
+    # An envisage Application installs its preferences as the process-wide
+    # default node; restore it so later PreferencesHelper tests don't share it.
+    monkeypatch.setattr(package_globals, "_default_preferences", None)
+
+    plugin = UserHelpPlugin()
+    application = Application(plugins=[plugin])
+    application.start()
+
+    yield plugin
+
+    application.stop()
 
 
-def test_help_menu_offers_the_analysis_guide():
-    action = _analysis_help_action()
-
-    assert action is not None
-    assert action.window_title == "Image Analysis Tutorial"
-
-
-def _tutorials_submenu():
+def test_help_group_holds_the_tutorials_submenu():
+    catalog = TutorialCatalog(entries=[TutorialEntry(title="A", path=PAGE)])
     submenus = [
         item
-        for item in menu_factory().items
-        if getattr(item, "id", None) == "tutorials_submenu"
+        for item in menu_factory(tutorial_catalog=catalog).items
+        if isinstance(item, TutorialsMenuManager)
     ]
 
-    return submenus[0] if submenus else None
+    assert len(submenus) == 1
+    assert submenus[0].name == "&Tutorials"
+    assert _tutorial_titles(submenus[0]) == ["A"]
 
 
-def test_tutorials_submenu_offers_the_dropbot_tutorial():
-    submenu = _tutorials_submenu()
+def test_submenu_follows_the_catalog():
+    catalog = TutorialCatalog()
+    menu = TutorialsMenuManager(catalog=catalog)
 
-    assert submenu is not None
-    assert submenu.name == "&Tutorials"
+    assert _tutorial_titles(menu) == []
+    assert not menu.enabled
 
-    actions = [
-        item
-        for item in submenu.items
-        if isinstance(item, OpenWebViewDialogAction)
-        and item.source == DROPBOT_STATUS_TUTORIAL_HTML_PATH
-    ]
+    catalog.entries = [TutorialEntry(title="Heater & Magnet Tutorial", path=PAGE)]
+    action = menu.groups[0].items[0].action
 
-    assert len(actions) == 1
-    assert actions[0].name == "Dropbot Status && Controls Tutorial..."
-    assert DROPBOT_STATUS_TUTORIAL_HTML_PATH.is_file()
+    assert menu.enabled
+    assert action.name == "Heater && Magnet Tutorial..."
+    assert action.source == PAGE
 
 
-def test_dropbot_tutorial_is_self_contained():
-    html = DROPBOT_STATUS_TUTORIAL_HTML_PATH.read_text(encoding="utf-8")
+def test_a_plugin_loaded_at_runtime_adds_its_tutorials(help_plugin):
+    contributor = TutorialContributingPlugin()
+    menu = TutorialsMenuManager(catalog=help_plugin.tutorial_catalog)
 
-    assert NETWORK_RESOURCE_PATTERN.search(html) is None
+    help_plugin.application.add_plugin(contributor)
 
+    assert _tutorial_titles(menu) == ["Heater & Magnet Tutorial", "Zebra Tutorial"]
 
-def test_analysis_guide_is_bundled_and_self_contained():
-    html = ANALYSIS_HELP_HTML_PATH.read_text(encoding="utf-8")
+    help_plugin.application.remove_plugin(contributor)
 
-    assert ANALYSIS_HELP_HTML_PATH.is_file()
-    assert NETWORK_RESOURCE_PATTERN.search(html) is None
+    assert _tutorial_titles(menu) == []
