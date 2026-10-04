@@ -18,6 +18,7 @@ from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Bool, Int, Str
 
 # Microdrop package imports.
+from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
 from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
@@ -40,6 +41,13 @@ from .consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: Help > Tutorials entries: (menu title, built page). New entries are added by
+#: examples/tutorials/new_tutorial.py.
+# TODO(#804): once #804 renames the analysis guide, move menu_factory's
+# "&Analysis Terms..." action here as
+# ("Image Analysis Tutorial", ANALYSIS_HELP_HTML_PATH).
+TUTORIALS = (("Dropbot Status & Controls Tutorial", DROPBOT_STATUS_TUTORIAL_HTML_PATH),)
 
 
 class OpenWebViewDialogAction(Action):
@@ -174,6 +182,23 @@ class ContactSupportAction(Action):
         webbrowser.open(f"mailto:{self.email}")
 
 
+def tutorials_menu_factory():
+    """Help > Tutorials: one entry per bundled tutorial page."""
+    return SMenu(
+        *[
+            OpenWebViewDialogAction(
+                name=f"{title.replace('&', '&&')}...",
+                tooltip=f"Open the {title}",
+                source=path,
+                window_title=title,
+            )
+            for title, path in TUTORIALS
+        ],
+        id="tutorials_submenu",
+        name="&Tutorials",
+    )
+
+
 def menu_factory():
     contact_submenu = SMenu(
         ContactSupportAction(
@@ -208,6 +233,7 @@ def menu_factory():
             source=CHANGELOG_PATH,
             window_title="MicroDrop Changelog",
         ),
+        tutorials_menu_factory(),
         OpenWebViewDialogAction(
             name="&Image Analysis Tutorial...",
             tooltip="Plain-language guide to the ROI analysis terms and settings",
