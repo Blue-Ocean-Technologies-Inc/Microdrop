@@ -2,8 +2,9 @@
 
 MicroDrop ships plain-language tutorials as single HTML files that open from
 **Help ▸ Tutorials** in a `WebViewDialog` (QtWebEngine, with a system-browser
-fallback). Each one is written as a slim *source* page and built into a
-self-contained page by this folder's scripts.
+fallback). Each one is written as a slim *source* page, built into a
+self-contained page by this folder's scripts, and contributed to the menu by
+its own plugin.
 
 | Piece | Where |
 |---|---|
@@ -30,13 +31,36 @@ The scaffolder is idempotent. It:
    Quick walkthrough, Toolbar icons, Terms, Caveats, Glossary) unless it exists;
 2. builds `<slug>.html` next to it;
 3. adds `<SLUG>_TUTORIAL_HTML_PATH` to `<plugin>/consts.py`;
-4. adds `("<Title>", <SLUG>_TUTORIAL_HTML_PATH)` to `TUTORIALS` in
-   `user_help_plugin/menus.py`, importing the constant from the plugin's
-   `consts` (the one cross-plugin import `.importlinter` allows), and creates
-   the Tutorials submenu if the file has none.
+4. makes `<plugin>/plugin.py` contribute the page to the Help menu (see
+   below): it adds the `tutorials` trait and `_tutorials_default` the first
+   time, and one more `TutorialEntry` for each later tutorial.
 
-Run ruff on the touched `consts.py` and `menus.py` before committing; the
-pre-commit hooks finish import order and section headers.
+Run `ruff check --fix` and `ruff format` on the touched `consts.py` and
+`plugin.py` before committing; the pre-commit hooks finish import order and
+section headers.
+
+## How a tutorial reaches the Help menu
+
+`user_help_plugin` offers the `TUTORIALS` extension point. A plugin
+contributes `TutorialEntry` records to it, and Help ▸ Tutorials lists every
+contribution sorted by title. The menu follows plugins that are loaded or
+unloaded while the app runs. `user_help_plugin` never imports the
+contributing plugins.
+
+```python
+from traits.api import List
+from user_help_plugin.consts import TUTORIALS, TutorialEntry   # the only import needed
+from .consts import HEATER_TUTORIAL_HTML_PATH
+
+class HeaterPlugin(Plugin):
+    tutorials = List(contributes_to=TUTORIALS)
+
+    def _tutorials_default(self):
+        return [TutorialEntry(title="Heater Tutorial", path=HEATER_TUTORIAL_HTML_PATH)]
+```
+
+The title is both the menu label (with `...` appended; a `&` shows as
+written) and the dialog title.
 
 ## Commit both files
 
@@ -135,7 +159,16 @@ Scope element lookups to the figure (`figure.querySelector`).
 
 ## Tutorials for plugins in other repos
 
-The heater, magnet and fluorescence plugins live in their own repos. Their
-tutorials can use the same kit and build script (both import only
-`microdrop_style`); where their pages are built and how they reach the Help
-menu is not settled yet.
+The heater, magnet and fluorescence plugins live in their own repos, but
+their environment always contains MicroDrop, so they can do the same:
+
+1. Write `<package>/resources/<slug>.src.html` in the plugin's repo and build
+   it with this repo's script; it needs only `microdrop_style` for the kit:
+   `pixi run python -m examples.tutorials.build_tutorial path/to/<slug>.src.html`
+   (from MicroDrop's `src`). Commit the source and the built page there, and
+   ship the built page as package data.
+2. Contribute it from the plugin class exactly as above. The only MicroDrop
+   import is `user_help_plugin.consts`, which every plugin's environment has.
+
+`new_tutorial.py --root <their src root> <package> <slug> "<Title>"` does both
+steps for a repo laid out like this one.
