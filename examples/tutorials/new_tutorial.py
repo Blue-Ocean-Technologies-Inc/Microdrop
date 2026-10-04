@@ -8,16 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Scaffold a new in-app tutorial and wire it into Help > Tutorials.
+"""Scaffold a new in-app tutorial and contribute it to Help > Tutorials.
 
 Creates ``<plugin>/resources/<slug>.src.html`` from ``template.src.html``,
 builds it, adds ``<SLUG>_TUTORIAL_HTML_PATH`` to ``<plugin>/consts.py`` and
-registers the page in ``user_help_plugin/menus.py``'s ``TUTORIALS``. Every
-step is idempotent: re-running leaves existing files alone. From ``src``::
+makes ``<plugin>/plugin.py`` contribute a ``TutorialEntry`` for it to the
+``TUTORIALS`` extension point. Every step is idempotent: re-running leaves
+existing work alone. From ``src``::
 
     pixi run python -m examples.tutorials.new_tutorial <plugin> <slug> "<Title>"
 
-Set ``QT_QPA_PLATFORM=offscreen`` to trace the template's glyph headless.
+Then run ``ruff check --fix`` and ``ruff format`` on the touched ``consts.py``
+and ``plugin.py`` to settle import order. Set ``QT_QPA_PLATFORM=offscreen``
+to trace the template's glyph headless.
 """
 
 # Standard library imports.
@@ -38,36 +41,11 @@ logger = get_logger(__name__)
 
 SRC_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_PATH = Path(__file__).parent / "template.src.html"
-MENUS_RELATIVE_PATH = Path("user_help_plugin") / "menus.py"
 LINE_LENGTH = 88
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-PACKAGE_IMPORTS_HEADER = "# Microdrop package imports.\n"
-
-#: Inserted into a menus.py that has no Tutorials submenu yet.
-TUTORIALS_BLOCK = """
-#: Help > Tutorials entries: (menu title, built page). New entries are added by
-#: examples/tutorials/new_tutorial.py.
-TUTORIALS = (
-)
-"""
-TUTORIALS_FACTORY = '''def tutorials_menu_factory():
-    """Help > Tutorials: one entry per bundled tutorial page."""
-    return SMenu(
-        *[
-            OpenWebViewDialogAction(
-                name=f"{title.replace('&', '&&')}...",
-                tooltip=f"Open the {title}",
-                source=path,
-                window_title=title,
-            )
-            for title, path in TUTORIALS
-        ],
-        id="tutorials_submenu",
-        name="&Tutorials",
-    )
-
-
-'''
+IMPORT_LINE = re.compile(r"^(import|from) \S+")
+TUTORIALS_DEFAULT = "    def _tutorials_default(self):\n        return [\n"
+CONTRIBUTION_IMPORT = "from user_help_plugin.consts import TUTORIALS, TutorialEntry"
 
 
 def tutorial_constant_name(slug):
@@ -77,7 +55,7 @@ def tutorial_constant_name(slug):
 
 def _fit(one_line, wrapped):
     """Return ``one_line`` when it fits ruff's line length, else ``wrapped``."""
-    return one_line if len(one_line) <= LINE_LENGTH else wrapped
+    return one_line if len(one_line.rstrip("\n")) <= LINE_LENGTH else wrapped
 
 
 def write_source(plugin_dir, slug, title):
@@ -108,7 +86,7 @@ def add_constant(consts_path, slug):
         return False
 
     if "from pathlib import Path" not in text:
-        text = _insert_path_import(text)
+        text = _add_imports(text, ["from pathlib import Path"])
 
     value = f'Path(__file__).parent / "resources" / "{slug}.html"'
     assignment = _fit(f"{name} = {value}", f"{name} = (\n    {value}\n)")
@@ -123,128 +101,95 @@ def add_constant(consts_path, slug):
     return True
 
 
-def _insert_path_import(text):
-    """Put ``from pathlib import Path`` after the file's first import block."""
+def _add_imports(text, statements):
+    """Put ``statements`` after the file's last top-level import line."""
     lines = text.split("\n")
-    indices = [i for i, line in enumerate(lines) if re.match(r"(import|from) ", line)]
+    indices = [i for i, line in enumerate(lines) if IMPORT_LINE.match(line)]
+    end = indices[-1] if indices else -1
 
-    if not indices:
-        return "from pathlib import Path\n" + text
+    # A parenthesised import continues to its closing bracket.
+    if end >= 0 and lines[end].rstrip().endswith("("):
+        while lines[end].strip() != ")":
+            end += 1
 
-    end = indices[0]
-
-    while end + 1 < len(lines) and re.match(r"(import|from) ", lines[end + 1]):
-        end += 1
-
-    lines.insert(end + 1, "from pathlib import Path")
+    lines[end + 1 : end + 1] = statements
 
     return "\n".join(lines)
 
 
-def _import_statements(block):
-    """Split an import block into whole statements (parenthesised ones kept)."""
-    statements = []
-    current = []
-
-    for line in block.splitlines(keepends=True):
-        current.append(line)
-        parenthesised = current[0].rstrip().endswith("(")
-
-        if not parenthesised or line.strip() == ")":
-            statements.append("".join(current))
-            current = []
-
-    return statements
-
-
-def register_menu_entry(menus_path, plugin, slug, title):
-    """Add the tutorial to ``TUTORIALS`` in menus.py, creating the Tutorials
-    submenu when the file has none; return True when the file changed."""
+def contribute_to_plugin(plugin_path, slug, title):
+    """Make ``plugin.py`` contribute the tutorial to ``TUTORIALS``; return
+    True when the file changed."""
     name = tutorial_constant_name(slug)
-    text = menus_path.read_text(encoding="utf-8").replace("\r\n", "\n")
-    original = text
+    text = plugin_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    quoted = json.dumps(title, ensure_ascii=False)
+    entry = _fit(
+        f"            TutorialEntry(title={quoted}, path={name}),\n",
+        f"            TutorialEntry(\n                title={quoted},\n"
+        f"                path={name},\n            ),\n",
+    )
 
-    if "TUTORIALS = (" not in text:
-        text = _add_tutorials_submenu(text)
-
-    if f"import {name}" not in text:
-        text = _add_package_import(text, f"from {plugin}.consts import {name}\n")
-
-    entry_start = text.index("TUTORIALS = (\n") + len("TUTORIALS = (\n")
-    entry_end = text.index("\n)\n", entry_start - 1) + 1
-
-    if not re.search(rf"\b{name}\b", text[entry_start:entry_end]):
-        quoted = json.dumps(title, ensure_ascii=False)
-        entry = _fit(
-            f"    ({quoted}, {name}),\n",
-            f"    (\n        {quoted},\n        {name},\n    ),\n",
-        )
-        text = text[:entry_end] + entry + text[entry_end:]
-
-    if text == original:
+    if re.search(rf"\bpath={name}\b", text):
         return False
 
-    menus_path.write_text(text, encoding="utf-8", newline="\n")
-    logger.info(f"Registered '{title}' in {menus_path}")
+    if TUTORIALS_DEFAULT in text:
+        # Add to the plugin's existing list of tutorials.
+        start = text.index(TUTORIALS_DEFAULT) + len(TUTORIALS_DEFAULT)
+        end = text.index("        ]\n", start)
+        text = text[:end] + entry + text[end:]
+    else:
+        text = _add_contribution(text, entry)
+
+    text = _add_imports(text, [f"from .consts import {name}"])
+    plugin_path.write_text(text, encoding="utf-8", newline="\n")
+    logger.info(f"{plugin_path} now contributes '{title}'")
 
     return True
 
 
-def _add_tutorials_submenu(text):
-    anchors = (
-        "logger = get_logger(__name__)\n",
-        "def menu_factory():",
-        'id="user_help_actions"',
+def _add_contribution(text, entry):
+    """Give the file's plugin class a ``tutorials`` contribution."""
+    match = re.search(r"^class \w+\(.*Plugin\w*\):\n", text, re.MULTILINE)
+
+    if match is None:
+        raise ValueError("plugin.py has no Plugin class to contribute from")
+
+    next_top_level = re.search(r"^\S", text[match.end() :], re.MULTILINE)
+    end = match.end() + next_top_level.start() if next_top_level else len(text)
+    block = (
+        "\n    #: Help > Tutorials entries for this plugin's panes.\n"
+        "    tutorials = List(contributes_to=TUTORIALS)\n\n"
+        f"{TUTORIALS_DEFAULT}{entry}        ]\n"
     )
+    body = text[:end].rstrip("\n") + "\n" + block
+    rest = text[end:]
+    text = body + ("\n\n" + rest if rest else "")
+    imports = [CONTRIBUTION_IMPORT]
 
-    for anchor in anchors:
-        if anchor not in text:
-            raise ValueError(
-                f"menus.py has no '{anchor}' to anchor the Tutorials submenu"
-            )
+    if not re.search(r"from traits\.api import [^\n]*\bList\b", text):
+        imports.append("from traits.api import List")
 
-    text = text.replace(anchors[0], anchors[0] + TUTORIALS_BLOCK, 1)
-    text = text.replace(anchors[1], TUTORIALS_FACTORY + anchors[1], 1)
-    group_end = text.index(anchors[2])
-    line_start = text.rindex("\n", 0, group_end) + 1
-    indent = text[line_start:group_end]
-
-    return (
-        text[:line_start] + f"{indent}tutorials_menu_factory(),\n" + text[line_start:]
-    )
-
-
-def _add_package_import(text, statement):
-    """Insert ``statement`` into the sorted Microdrop package imports block."""
-    if PACKAGE_IMPORTS_HEADER not in text:
-        raise ValueError("menus.py has no '# Microdrop package imports.' section")
-
-    start = text.index(PACKAGE_IMPORTS_HEADER) + len(PACKAGE_IMPORTS_HEADER)
-    end = text.index("\n\n", start) + 1
-    statements = _import_statements(text[start:end]) + [statement]
-    statements.sort(key=lambda line: line.split()[1])
-
-    return text[:start] + "".join(statements) + text[end:]
+    return _add_imports(text, imports)
 
 
 def scaffold_tutorial(plugin, slug, title, root=SRC_ROOT, build=True):
-    """Create, build and wire one tutorial; return the source path."""
+    """Create, build and contribute one tutorial; return the source path."""
     if not SLUG_PATTERN.match(slug):
         raise ValueError(f"Slugs are lower_snake_case identifiers: {slug!r}")
 
     plugin_dir = Path(root) / plugin
-    consts_path = plugin_dir / "consts.py"
 
-    if not consts_path.is_file():
-        raise ValueError(f"{consts_path} does not exist")
+    for required in ("consts.py", "plugin.py"):
+        if not (plugin_dir / required).is_file():
+            raise ValueError(f"{plugin_dir / required} does not exist")
 
     source = write_source(plugin_dir, slug, title)
 
     if build:
         build_tutorial(source)
 
-    add_constant(consts_path, slug)
-    register_menu_entry(Path(root) / MENUS_RELATIVE_PATH, plugin, slug, title)
+    add_constant(plugin_dir / "consts.py", slug)
+    contribute_to_plugin(plugin_dir / "plugin.py", slug, title)
 
     return source
 

@@ -11,13 +11,20 @@
 """Tests for the tutorial kit: build, scaffold and glyph tracing."""
 
 # Standard library imports.
+import importlib
 import os
+import sys
 
 # Third-party imports.
 import pytest
 
+# Enthought library imports.
+from apptools.preferences import package_globals
+from envisage.api import Application
+
 # Microdrop package imports.
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
+from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from examples.tutorials.build_tutorial import (
     SIZE_BUDGET_BYTES,
     TutorialBuildError,
@@ -26,6 +33,8 @@ from examples.tutorials.build_tutorial import (
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import scaffold_tutorial
+from image_viewer.plugin import ImageViewerPlugin
+from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
 from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_glyphs
@@ -34,63 +43,106 @@ from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_g
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
+FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
-#: The anchors new_tutorial.py needs in user_help_plugin/menus.py.
-MENUS_FIXTURE = """# Microdrop package imports.
-from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
+#: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
+PLUGIN_FIXTURE = """# Enthought library imports.
+from envisage.api import Plugin
 
-# Logger import.
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
+# Local imports.
+from .consts import PKG
 
 
-def menu_factory():
-    return SGroup(
-        OpenWebViewDialogAction(source=ANALYSIS_HELP_HTML_PATH),
-        id="user_help_actions",
-    )
+class FixturePlugin(Plugin):
+    id = PKG + ".plugin"
 """
 
 
 @pytest.fixture
-def scaffold_root(tmp_path):
-    """A source root with one plugin and a Help menu without Tutorials."""
-    (tmp_path / "demo_plugin").mkdir()
-    (tmp_path / "demo_plugin" / "consts.py").write_text("import os\n\nPKG = 'x'\n")
-    (tmp_path / "user_help_plugin").mkdir()
-    (tmp_path / "user_help_plugin" / "menus.py").write_text(MENUS_FIXTURE)
+def scaffold_root(tmp_path, monkeypatch):
+    """An importable source root holding one plugin without tutorials."""
+    package = tmp_path / FIXTURE_PLUGIN
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "consts.py").write_text(f"import os\n\nPKG = '{FIXTURE_PLUGIN}'\n")
+    (package / "plugin.py").write_text(PLUGIN_FIXTURE)
+    monkeypatch.syspath_prepend(str(tmp_path))
 
-    return tmp_path
+    yield tmp_path
+
+    for module in [name for name in sys.modules if name.startswith(FIXTURE_PLUGIN)]:
+        del sys.modules[module]
 
 
-def test_scaffold_builds_an_offline_page_and_wires_the_menu(scaffold_root):
-    source = scaffold_tutorial("demo_plugin", "demo", "Demo Tutorial", scaffold_root)
-    page = source.with_name("demo.html").read_text(encoding="utf-8")
-    consts = (scaffold_root / "demo_plugin" / "consts.py").read_text()
-    menus = (scaffold_root / "user_help_plugin" / "menus.py").read_text()
+def _fixture_plugin_tutorials():
+    plugin_module = importlib.import_module(f"{FIXTURE_PLUGIN}.plugin")
+
+    return [
+        (entry.title, entry.path) for entry in plugin_module.FixturePlugin().tutorials
+    ]
+
+
+def test_scaffold_builds_an_offline_page_and_contributes_it(scaffold_root):
+    source = scaffold_tutorial(FIXTURE_PLUGIN, "demo", "Demo Tutorial", scaffold_root)
+    page_path = source.with_name("demo.html")
+    page = page_path.read_text(encoding="utf-8")
 
     assert find_network_references(page) == []
     assert "<title>Demo Tutorial</title>" in page
     assert 'id="ic-info"' in page
-    assert "from pathlib import Path" in consts
-    assert "DEMO_TUTORIAL_HTML_PATH = " in consts
-    assert "from demo_plugin.consts import DEMO_TUTORIAL_HTML_PATH" in menus
-    assert '("Demo Tutorial", DEMO_TUTORIAL_HTML_PATH),' in menus
-    assert "tutorials_menu_factory()," in menus
+    assert _fixture_plugin_tutorials() == [("Demo Tutorial", page_path)]
 
-    compile(consts, "consts.py", "exec")
-    compile(menus, "menus.py", "exec")
+
+def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
+    scaffold_tutorial(FIXTURE_PLUGIN, "demo", "Demo Tutorial", scaffold_root)
+    scaffold_tutorial(FIXTURE_PLUGIN, "more", "More & Less Tutorial", scaffold_root)
+
+    assert [title for title, _path in _fixture_plugin_tutorials()] == [
+        "Demo Tutorial",
+        "More & Less Tutorial",
+    ]
 
 
 def test_scaffold_is_idempotent(scaffold_root):
-    scaffold_tutorial("demo_plugin", "demo", "Demo Tutorial", scaffold_root)
+    scaffold_tutorial(FIXTURE_PLUGIN, "demo", "Demo Tutorial", scaffold_root)
     files = sorted(scaffold_root.rglob("*.*"))
     before = {path: path.read_bytes() for path in files}
 
-    scaffold_tutorial("demo_plugin", "demo", "Demo Tutorial", scaffold_root)
+    scaffold_tutorial(FIXTURE_PLUGIN, "demo", "Demo Tutorial", scaffold_root)
 
     assert {path: path.read_bytes() for path in files} == before
+
+
+def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
+    # An envisage Application installs its preferences as the process-wide
+    # default node; restore it so later PreferencesHelper tests don't share it.
+    monkeypatch.setattr(package_globals, "_default_preferences", None)
+
+    help_plugin = UserHelpPlugin()
+    application = Application(plugins=[help_plugin])
+    application.start()
+    contributors = [ImageViewerPlugin(), DropbotStatusAndControlsPlugin()]
+
+    # Added, not started: contributions resolve without the plugins running.
+    for plugin in contributors:
+        application.add_plugin(plugin)
+
+    entries = help_plugin.tutorial_catalog.entries
+
+    for plugin in contributors:
+        application.remove_plugin(plugin)
+
+    application.stop()
+
+    assert [entry.title for entry in entries] == [
+        "Dropbot Status & Controls Tutorial",
+        "Image Analysis Tutorial",
+    ]
+
+    for entry in entries:
+        page = entry.path.read_text(encoding="utf-8")
+
+        assert find_network_references(page) == []
 
 
 def test_dropbot_tutorial_rebuilds_identically():
