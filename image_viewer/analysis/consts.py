@@ -187,6 +187,12 @@ HEATER_LOGS_DIR_NAME = "heater_logs"
 #: range, so interpolation has bracketing points at the edges.
 HEATER_SAMPLE_MARGIN_S = 60.0
 
+#: How many of the most recent sibling experiments are searched for a
+#: heater log when the experiment's own folder covers none of its
+#: captures (the heater plugin has filed a run's log under the
+#: previous experiment).
+HEATER_SIBLING_SEARCH_LIMIT = 10
+
 #: The sensor choice averaging every thermistor on a log line.
 HEATER_SENSOR_MEAN = "mean"
 

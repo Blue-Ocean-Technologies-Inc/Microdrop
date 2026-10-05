@@ -412,6 +412,22 @@ class AnalysisSession(HasTraits):
     #: experiment's own heater_logs folder as the default.
     heater_log_dir = Str()
 
+    #: The sibling experiment's heater_logs folder the samples came
+    #: from when the default heater_log_dir covers none of the captures
+    #: (a folder the user picked is never second-guessed); "" when
+    #: heater_log_dir served. Set by the controller, never persisted —
+    #: an auto-found folder is not the user's choice.
+    heater_log_fallback_dir = Str()
+
+    #: "(found in <experiment>)" under the folder field while a
+    #: fallback folder is in use, else "".
+    heater_log_hint = Property(Str, observe="heater_log_fallback_dir")
+
+    #: Where the heater join looked and what it found (folder, log
+    #: span, capture span, any sibling stand-in) — the plot's coverage
+    #: note. Set by the controller, never persisted.
+    heater_log_coverage = Str()
+
     #: The loaded heater samples for the current capture range,
     #: [(epoch, {sensor: °C}), ...] — set by the controller, never
     #: persisted (the logs themselves are the record).
@@ -430,6 +446,12 @@ class AnalysisSession(HasTraits):
 
     #: Perspective warp applied before everything else (cache key too).
     perspective = Instance(PerspectiveCorrection, ())
+
+    def _get_heater_log_hint(self):
+        if not self.heater_log_fallback_dir:
+            return ""
+
+        return f"(found in {Path(self.heater_log_fallback_dir).parent.name})"
 
     def roi_by_id(self, roi_id):
         for roi in self.rois:

@@ -43,8 +43,10 @@ from .consts import (
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_log import (
+    describe_heater_coverage,
     heater_log_files,
-    read_heater_samples,
+    heater_log_span,
+    resolve_heater_samples,
     sensors_in,
     temperature_at,
 )
@@ -783,6 +785,9 @@ class RoiAnalysisController(HasTraits):
         folder = session.heater_log_dir
         paths = self.viewer_model.paths
         if not folder or not paths:
+            session.heater_log_fallback_dir = ""
+            session.heater_log_coverage = ""
+
             if session.heater_samples:
                 session.heater_samples = []
             return
@@ -801,15 +806,29 @@ class RoiAnalysisController(HasTraits):
             fingerprint = None  # a vanished file: read what remains
         if fingerprint is not None and fingerprint == self._heater_fingerprint:
             return
-        samples = read_heater_samples(folder, start, end)
+
+        samples, fallback, match_count = resolve_heater_samples(
+            folder, self._experiment_directory(), start, end
+        )
+
+        if fallback:
+            logger.info(
+                f"Heater log: nothing in {folder} covers the captures; using "
+                f"{fallback} (most overlap of {match_count} sibling match(es))"
+            )
+
         self._heater_fingerprint = fingerprint
+        # Reported, never written to heater_log_dir: only an explicit
+        # pick is persisted as the experiment's heater folder.
+        session.heater_log_fallback_dir = fallback
+        session.heater_log_coverage = describe_heater_coverage(
+            folder, heater_log_span(folder), (start, end), fallback, match_count
+        )
         session.heater_samples = samples
         self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors_in(
             samples
         )
-        logger.info(
-            f"Heater log: {len(samples)} samples from {len(files)} file(s) in {folder}"
-        )
+        logger.info(f"Heater log: {len(samples)} samples from {fallback or folder}")
 
     @observe("viewer_model:paths.items")
     def _mirror_filtered_paths(self, event):
