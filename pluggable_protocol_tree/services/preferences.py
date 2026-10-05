@@ -17,25 +17,42 @@ legacy plugin keeps its own untouched copy — both plugins are standalone
 until PPT-9 deletes protocol_grid.
 """
 
+# Standard library imports.
 from pathlib import Path
 
 # Enthought library imports.
-from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from apptools.preferences.api import PreferencesHelper
+from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from traits.api import Bool, Dict, Directory, Enum, Float, List, Str
 from traits.etsconfig.api import ETSConfig
-from traitsui.api import Group, View, Item
+from traitsui.api import Group, Item, View
 
+# Microdrop style imports.
 from microdrop_style.text_styles import preferences_group_style_sheet
+
+# Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_grid_group
 from microdrop_utils.traitsui_qt_helpers import (
-    DictFloatTableEditor, RangeWithViewHints,
+    DictFloatTableEditor,
+    RangeWithViewHints,
 )
 
-from ..consts import ACK_TIMEOUT_MAX_S, ACK_TIMEOUT_MIN_S, ACK_WAIT_FOREVER, CAMERA_PREWARM_MAX_S, CAMERA_PREWARM_MIN_S, \
-    DEFAULT_CAMERA_PREWARM_SECONDS, DEFAULT_LOGS_SETTLING_SECONDS, DEFAULT_REALTIME_SETTLING_SECONDS, \
-    PROTOCOL_TREE_PREFERENCES_TAB_ID, SETTLING_TIME_MAX_S, SETTLING_TIME_MIN_S
+# Local imports.
+from ..consts import (
+    ACK_TIMEOUT_MAX_S,
+    ACK_TIMEOUT_MIN_S,
+    ACK_WAIT_FOREVER,
+    CAMERA_PREWARM_MAX_S,
+    CAMERA_PREWARM_MIN_S,
+    DEFAULT_CAMERA_PREWARM_SECONDS,
+    DEFAULT_LOGS_SETTLING_SECONDS,
+    DEFAULT_REALTIME_SETTLING_SECONDS,
+    PROTOCOL_TREE_PREFERENCES_TAB_ID,
+    SETTLING_TIME_MAX_S,
+    SETTLING_TIME_MIN_S,
+)
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -71,21 +88,21 @@ class ProtocolPreferences(PreferencesHelper):
         value=DEFAULT_CAMERA_PREWARM_SECONDS,
         low=CAMERA_PREWARM_MIN_S,
         high=CAMERA_PREWARM_MAX_S,
-        desc="Camera switch on lead time"
+        desc="Camera switch on lead time",
     )
 
     realtime_mode_settling_time_s = RangeWithViewHints(
         value=DEFAULT_REALTIME_SETTLING_SECONDS,
         low=SETTLING_TIME_MIN_S,
         high=SETTLING_TIME_MAX_S,
-        desc="Time to allow for realtime mode to settle pre protocol start"
+        desc="Time to allow for realtime mode to settle pre protocol start",
     )
 
     logs_settling_time_s = RangeWithViewHints(
         value=DEFAULT_LOGS_SETTLING_SECONDS,
         low=SETTLING_TIME_MIN_S,
         high=SETTLING_TIME_MAX_S,
-        desc="Time to allow logs post protocol end"
+        desc="Time to allow logs post protocol end",
     )
 
     prompt_to_restore_realtime_mode = Bool(True)
@@ -189,7 +206,8 @@ class ProtocolPreferences(PreferencesHelper):
 
         for column in columns:
             default_ack_time_s = float(
-                getattr(column.handler, "default_ack_time_s", 0.0) or 0.0)
+                getattr(column.handler, "default_ack_time_s", 0.0) or 0.0
+            )
             if default_ack_time_s <= 0:
                 continue
             # Display name for the grid's key column. An optional
@@ -202,9 +220,9 @@ class ProtocolPreferences(PreferencesHelper):
             # label wins.
             field_specs = getattr(column.model, "field_specs", None)
             display_name = (
-                    getattr(column, "preference_display_name", "")
-                    or getattr(column.model, "col_name", "")
-                    or (field_specs()[0].col_name if field_specs else column.id)
+                getattr(column, "preference_display_name", "")
+                or getattr(column.model, "col_name", "")
+                or (field_specs()[0].col_name if field_specs else column.id)
             )
             default_column_names.setdefault(column.id, display_name)
             default_ack_times[column.id] = default_ack_time_s
@@ -228,7 +246,7 @@ protocol_tree_tab = PreferencesCategory(
     id=PROTOCOL_TREE_PREFERENCES_TAB_ID,
     name="Protocol Settings",
     after="microdrop.device_viewer.preferences",
-    before="microdrop.peripheral_settings"
+    before="microdrop.peripheral_settings",
 )
 
 
@@ -254,7 +272,10 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     general_protocol_settings_grid = create_grid_group(
         items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
-        label_text=["Realtime Mode Pre-Protocol (s)", "Logs Accepted Post-Protocol (s)"],
+        label_text=[
+            "Realtime Mode Pre-Protocol (s)",
+            "Logs Accepted Post-Protocol (s)",
+        ],
         group_label="Protocol Settling Times",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,
@@ -269,16 +290,22 @@ class ProtocolPreferencesPane(PreferencesPane):
     )
 
     ack_times_grid = Group(
-        Item("protocol_tree_ack_times", show_label=False,
-             editor=DictFloatTableEditor(
-                 key_label="Column", value_label="Wait Time (s)",
-                 key_labels_name="protocol_tree_column_names",
-                 low=ACK_TIMEOUT_MIN_S, high=ACK_TIMEOUT_MAX_S,
-                 decimals=1, step=0.5,
-                 allow_infinity=True,
-                 infinity_value=ACK_WAIT_FOREVER,
-                 infinity_text="∞ (wait forever)",
-             )),
+        Item(
+            "protocol_tree_ack_times",
+            show_label=False,
+            editor=DictFloatTableEditor(
+                key_label="Column",
+                value_label="Wait Time (s)",
+                key_labels_name="protocol_tree_column_names",
+                low=ACK_TIMEOUT_MIN_S,
+                high=ACK_TIMEOUT_MAX_S,
+                decimals=1,
+                step=0.5,
+                allow_infinity=True,
+                infinity_value=ACK_WAIT_FOREVER,
+                infinity_text="∞ (wait forever)",
+            ),
+        ),
         label="Column Ack Wait Times (0 = don't wait)",
         show_border=True,
         style_sheet=preferences_group_style_sheet,
@@ -293,6 +320,7 @@ class ProtocolPreferencesPane(PreferencesPane):
         camera_settings_grid,
         Item("_"),
         ack_times_grid,
-        Item("_"),  # Separator to space this out from further contributions to the pane.
-        resizable=True
+        # Separator to space this out from further contributions to the pane.
+        Item("_"),
+        resizable=True,
     )
