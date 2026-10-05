@@ -162,13 +162,17 @@ def sibling_heater_log_folders(
 def resolve_heater_samples(folder, experiment_directory, start_epoch, end_epoch):
     """``(samples, fallback folder, match count)`` for the capture
     range: the configured folder's samples, or — when it has none in
-    range and the experiment is known — those of the sibling
-    experiment whose logs overlap the range most. The fallback folder
-    is "" when the configured one served; it is only ever reported,
-    never a replacement for the user's choice."""
+    range and is the experiment's default heater_logs folder — those
+    of the sibling experiment whose logs overlap the range most. A
+    folder the user picked is respected, covered or not. The fallback
+    folder is "" when the configured one served; it is only ever
+    reported, never a replacement for the user's choice."""
     samples = read_heater_samples(folder, start_epoch, end_epoch)
 
     if samples or experiment_directory is None:
+        return samples, "", 0
+
+    if Path(folder) != Path(experiment_directory) / HEATER_LOGS_DIR_NAME:
         return samples, "", 0
 
     matches = sibling_heater_log_folders(experiment_directory, start_epoch, end_epoch)

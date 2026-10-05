@@ -413,7 +413,8 @@ class AnalysisSession(HasTraits):
     heater_log_dir = Str()
 
     #: The sibling experiment's heater_logs folder the samples came
-    #: from when heater_log_dir covers none of the captures; "" when
+    #: from when the default heater_log_dir covers none of the captures
+    #: (a folder the user picked is never second-guessed); "" when
     #: heater_log_dir served. Set by the controller, never persisted —
     #: an auto-found folder is not the user's choice.
     heater_log_fallback_dir = Str()

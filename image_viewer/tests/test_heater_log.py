@@ -154,6 +154,26 @@ def test_resolve_keeps_a_configured_folder_that_covers(tmp_path):
     assert (fallback, match_count) == ("", 0)
 
 
+def test_resolve_respects_a_user_picked_folder_without_coverage(tmp_path):
+    current = _current_experiment(tmp_path)
+    picked = tmp_path / "elsewhere" / "logs"
+    picked.mkdir(parents=True)
+    _write_log(tmp_path / "20261005_110000", _at(11), _at(12, 30))
+    capture_span = (_at(11, 30).timestamp(), _at(11, 45).timestamp())
+
+    samples, fallback, match_count = resolve_heater_samples(
+        picked, current, *capture_span
+    )
+    line = describe_heater_coverage(
+        picked, heater_log_span(picked), capture_span, fallback, match_count
+    )
+
+    assert (samples, fallback, match_count) == ([], "", 0)
+    assert line == (
+        "searched elsewhere/logs: no heater log files; captures 11:30:00–11:45:00"
+    )
+
+
 def test_resolve_without_any_coverage_reports_no_fallback(tmp_path):
     current = _current_experiment(tmp_path)
     _write_log(tmp_path / "20261005_100000", _at(10), _at(10, 30))
