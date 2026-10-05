@@ -1213,16 +1213,16 @@ class DeviceViewerDockPane(TraitsDockPane):
             )
 
     @observe("model.camera_perspective.transformation")
-    @observe("model.camera_perspective.camera_resolution")
+    @observe("video_item")
     def camera_perspective_change_handler(self, event):
-        """
-        Handle changes to the camera perspective transformation.
-        This is used to update the scene's transformation when the camera
-        perspective changes.
-        """
-        if not self.model.camera_perspective.camera_resolution:
-            return
+        """Apply the camera perspective transformation to the video feed.
 
+        The matrix maps item coordinates (the item is sized to the scene, not
+        to the camera's native resolution), so it applies to any source,
+        including provider cameras that never report a resolution. Observing
+        the video item applies a matrix loaded from preferences before the
+        item existed.
+        """
         if self.video_item:
             self.video_item.setTransform(self.model.camera_perspective.transformation)
 
