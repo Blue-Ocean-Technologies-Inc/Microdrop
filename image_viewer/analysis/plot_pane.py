@@ -361,6 +361,14 @@ def _axes_tab():
                     ),
                 ),
             ),
+            UItem(
+                "session.heater_log_hint",
+                style="readonly",
+                visible_when="session.heater_log_hint",
+                tooltip="The folder above covers none of these captures; "
+                "the heater log was found in this sibling experiment "
+                "instead (not saved as this experiment's folder).",
+            ),
             Item(
                 "figure.heater_sensor",
                 label="Sensor",

@@ -23,7 +23,12 @@ from datetime import datetime
 from pathlib import Path
 
 # Local imports.
-from .consts import HEATER_SAMPLE_MARGIN_S, HEATER_SENSOR_MEAN
+from .consts import (
+    HEATER_LOGS_DIR_NAME,
+    HEATER_SAMPLE_MARGIN_S,
+    HEATER_SENSOR_MEAN,
+    HEATER_SIBLING_SEARCH_LIMIT,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -48,19 +53,141 @@ def _file_start(path):
         return None
 
 
-def heater_log_files(folder, start_epoch, end_epoch):
-    """The folder's ``*.jsonl`` logs overlapping the capture range
-    (±HEATER_SAMPLE_MARGIN_S), ordered by name stamp. A log covers
-    from its own stamp until the next one begins; the last runs
-    open-ended, since nothing marks where it stopped."""
+def _stamped_logs(folder):
+    """``[(stamp epoch, path), ...]`` of the folder's ``*.jsonl`` logs
+    that carry a name stamp, oldest first; empty for a missing folder."""
     try:
-        stamped = sorted(
+        return sorted(
             (stamp, path)
             for path in Path(folder).glob("*.jsonl")
             if (stamp := _file_start(path)) is not None
         )
     except OSError:
         return []
+
+
+def _sample_epoch(line):
+    """Epoch of a ``TEMP`` log line, or None for any other line."""
+    try:
+        record = json.loads(line)
+
+        if record.get("_frame") != "TEMP":
+            return None
+
+        return datetime.fromisoformat(record["timestamp"]).timestamp()
+
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def heater_log_span(folder):
+    """``(first, last)`` epochs the folder's logs cover — the oldest
+    name stamp to the newest log's last ``TEMP`` line — or None when
+    the folder holds no stamped log. Only the newest log is read: it
+    is the open-ended one whose end the stamps cannot tell."""
+    stamped = _stamped_logs(folder)
+
+    if not stamped:
+        return None
+
+    first = stamped[0][0]
+    newest_stamp, newest_path = stamped[-1]
+
+    try:
+        lines = newest_path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        logger.warning(f"Unreadable heater log {newest_path}: {error}")
+        lines = []
+
+    last = next(
+        (
+            epoch
+            for line in reversed(lines)
+            if (epoch := _sample_epoch(line)) is not None
+        ),
+        newest_stamp,
+    )
+
+    return first, max(first, last)
+
+
+def _overlap_s(span, start_epoch, end_epoch):
+    """Seconds a log span shares with the capture range
+    (±HEATER_SAMPLE_MARGIN_S); negative when they are apart."""
+    low = start_epoch - HEATER_SAMPLE_MARGIN_S
+    high = end_epoch + HEATER_SAMPLE_MARGIN_S
+
+    return min(high, span[1]) - max(low, span[0])
+
+
+def sibling_heater_log_folders(
+    experiment_directory, start_epoch, end_epoch, limit=HEATER_SIBLING_SEARCH_LIMIT
+):
+    """``[(heater_logs folder, overlap s), ...]`` of the sibling
+    experiments whose heater logs overlap the capture range, most
+    overlap first. Only the ``limit`` most recently modified siblings
+    with a heater_logs folder are searched, newest first."""
+    experiment = Path(experiment_directory)
+
+    try:
+        siblings = [
+            path
+            for path in experiment.parent.iterdir()
+            if path.name != experiment.name and (path / HEATER_LOGS_DIR_NAME).is_dir()
+        ]
+        siblings.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    except OSError as error:
+        logger.warning(f"Could not list experiments beside {experiment}: {error}")
+        return []
+
+    matches = []
+
+    for sibling in siblings[:limit]:
+        folder = sibling / HEATER_LOGS_DIR_NAME
+        span = heater_log_span(folder)
+
+        if span is None:
+            continue
+
+        overlap = _overlap_s(span, start_epoch, end_epoch)
+
+        if overlap >= 0:
+            matches.append((folder, overlap))
+
+    matches.sort(key=lambda match: match[1], reverse=True)
+
+    return matches
+
+
+def resolve_heater_samples(folder, experiment_directory, start_epoch, end_epoch):
+    """``(samples, fallback folder, match count)`` for the capture
+    range: the configured folder's samples, or — when it has none in
+    range and the experiment is known — those of the sibling
+    experiment whose logs overlap the range most. The fallback folder
+    is "" when the configured one served; it is only ever reported,
+    never a replacement for the user's choice."""
+    samples = read_heater_samples(folder, start_epoch, end_epoch)
+
+    if samples or experiment_directory is None:
+        return samples, "", 0
+
+    matches = sibling_heater_log_folders(experiment_directory, start_epoch, end_epoch)
+
+    for sibling, _overlap in matches:
+        samples = read_heater_samples(sibling, start_epoch, end_epoch)
+
+        if samples:
+            return samples, str(sibling), len(matches)
+
+    return [], "", 0
+
+
+def heater_log_files(folder, start_epoch, end_epoch):
+    """The folder's ``*.jsonl`` logs overlapping the capture range
+    (±HEATER_SAMPLE_MARGIN_S), ordered by name stamp. A log covers
+    from its own stamp until the next one begins; the last runs
+    open-ended, since nothing marks where it stopped."""
+    stamped = _stamped_logs(folder)
     low = start_epoch - HEATER_SAMPLE_MARGIN_S
     high = end_epoch + HEATER_SAMPLE_MARGIN_S
     chosen = []
