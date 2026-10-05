@@ -96,6 +96,7 @@ from .curve_fit import (
 )
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
+from .heater_log import heater_coverage_note
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
@@ -649,6 +650,7 @@ _PLOT_STATE = (
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
     "session:heater_samples, "
+    "session:heater_log_coverage, "
     "session:figure:smooth_method, "
     "session:figure:savgol_window, "
     "session:figure:savgol_order, "
@@ -1290,19 +1292,28 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         temperature axis) — they cannot be drawn anywhere honest, so
         they are counted instead of silently vanishing. Frames, not
         points: every ROI shares the same x, and multiplying the count
-        by the ROIs would overstate what is missing."""
+        by the ROIs would overstate what is missing. The coverage line
+        under the count says where the logs were looked for, so a gap
+        reads as a misfiled log rather than a broken join."""
         if figure_settings.x_axis != "temperature":
             return
+
+        session = self._model.session
         frames = next((elapsed for _name, elapsed, _values in series.values()), [])
-        missing = sum(1 for x in frames if x != x)
-        if not missing:
+        note = heater_coverage_note(
+            sum(1 for x in frames if x != x),
+            session.heater_log_coverage,
+            bool(session.heater_log_fallback_dir),
+        )
+
+        if not note:
             return
+
         self._fit_artists.append(
             self._axes.text(
                 0.5,
                 NOTE_NO_TEMP_Y,
-                f"{missing} {'frame' if missing == 1 else 'frames'} "
-                f"outside the heater log's coverage",
+                note,
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",

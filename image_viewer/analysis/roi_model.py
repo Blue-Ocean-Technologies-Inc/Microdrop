@@ -422,6 +422,11 @@ class AnalysisSession(HasTraits):
     #: fallback folder is in use, else "".
     heater_log_hint = Property(Str, observe="heater_log_fallback_dir")
 
+    #: Where the heater join looked and what it found (folder, log
+    #: span, capture span, any sibling stand-in) — the plot's coverage
+    #: note. Set by the controller, never persisted.
+    heater_log_coverage = Str()
+
     #: The loaded heater samples for the current capture range,
     #: [(epoch, {sensor: °C}), ...] — set by the controller, never
     #: persisted (the logs themselves are the record).

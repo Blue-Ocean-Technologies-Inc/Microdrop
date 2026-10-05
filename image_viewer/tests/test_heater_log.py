@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 # Microdrop package imports.
 from image_viewer.analysis.consts import HEATER_LOGS_DIR_NAME
 from image_viewer.analysis.heater_log import (
+    describe_heater_coverage,
+    heater_coverage_note,
     heater_log_span,
     resolve_heater_samples,
     sibling_heater_log_folders,
@@ -30,8 +32,8 @@ from image_viewer.analysis.roi_store import load_session, save_session
 DAY = datetime(2026, 10, 5)
 
 
-def _at(hour, minute=0):
-    return DAY + timedelta(hours=hour, minutes=minute)
+def _at(hour, minute=0, second=0):
+    return DAY + timedelta(hours=hour, minutes=minute, seconds=second)
 
 
 def _write_log(experiment, start, end, mtime=None):
@@ -180,3 +182,57 @@ def test_auto_found_folder_is_shown_but_never_persisted(tmp_path):
     assert loaded.heater_log_dir == session.heater_log_dir
     assert loaded.heater_log_fallback_dir == ""
     assert loaded.heater_log_hint == ""
+
+
+def test_coverage_line_names_the_folder_its_logs_and_the_captures(tmp_path):
+    folder = tmp_path / "20261005_113000" / HEATER_LOGS_DIR_NAME
+    yesterday = DAY - timedelta(days=1)
+
+    line = describe_heater_coverage(
+        folder,
+        (yesterday.replace(hour=9).timestamp(), _at(10, 15).timestamp()),
+        (_at(11, 30).timestamp(), _at(11, 45, 30).timestamp()),
+    )
+
+    assert line == (
+        "searched 20261005_113000/heater_logs: logs 2026-10-04 09:00–10:15:00; "
+        "captures 11:30:00–11:45:30"
+    )
+
+
+def test_coverage_line_without_logs_and_with_a_sibling_stand_in(tmp_path):
+    folder = tmp_path / "20261005_113000" / HEATER_LOGS_DIR_NAME
+    sibling = tmp_path / "20261005_110000" / HEATER_LOGS_DIR_NAME
+    capture_span = (_at(11, 30).timestamp(), _at(11, 45).timestamp())
+
+    alone = describe_heater_coverage(folder, None, capture_span, str(sibling), 1)
+    several = describe_heater_coverage(folder, None, capture_span, str(sibling), 3)
+
+    assert alone == (
+        "using logs from 20261005_110000 — searched 20261005_113000/heater_logs: "
+        "no heater log files; captures 11:30:00–11:45:00"
+    )
+    assert several.startswith(
+        "using logs from 20261005_110000 (most overlap of 3 matches) — "
+    )
+
+
+def test_coverage_note_counts_missing_frames_above_the_coverage_line():
+    assert heater_coverage_note(
+        12,
+        "searched x/heater_logs: no heater log files; captures 11:30:00–11:45:00",
+        False,
+    ) == (
+        "12 frames outside the heater log's coverage\n"
+        "searched x/heater_logs: no heater log files; captures 11:30:00–11:45:00"
+    )
+    assert heater_coverage_note(1, "", False) == (
+        "1 frame outside the heater log's coverage"
+    )
+
+
+def test_coverage_note_keeps_a_sibling_stand_in_visible_when_complete():
+    assert heater_coverage_note(0, "using logs from b — searched a", True) == (
+        "using logs from b — searched a"
+    )
+    assert heater_coverage_note(0, "searched a", False) == ""

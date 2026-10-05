@@ -182,6 +182,72 @@ def resolve_heater_samples(folder, experiment_directory, start_epoch, end_epoch)
     return [], "", 0
 
 
+def _clock_range(first, last, reference_epoch):
+    """``first–last`` as wall-clock times; a time on another day than
+    ``reference_epoch`` carries its date, so a stale log reads as one."""
+    reference_day = time.localtime(reference_epoch)[:3]
+    clocks = []
+
+    for epoch in (first, last):
+        moment = time.localtime(epoch)
+        same_day = moment[:3] == reference_day
+        clocks.append(
+            time.strftime("%H:%M:%S" if same_day else "%Y-%m-%d %H:%M", moment)
+        )
+
+    return "–".join(clocks)
+
+
+def describe_heater_coverage(
+    searched_folder, log_span, capture_span, fallback_folder="", match_count=0
+):
+    """One line on where the temperature axis looked and what it found:
+    the folder searched, its log span (or that it has no logs), the
+    capture span, and — when a sibling experiment's logs stood in —
+    which experiment they came from."""
+    start, end = capture_span
+    searched = Path(searched_folder)
+    found = (
+        "no heater log files"
+        if log_span is None
+        else f"logs {_clock_range(*log_span, start)}"
+    )
+    detail = (
+        f"searched {searched.parent.name}/{searched.name}: {found}; "
+        f"captures {_clock_range(start, end, start)}"
+    )
+
+    if not fallback_folder:
+        return detail
+
+    using = f"using logs from {Path(fallback_folder).parent.name}"
+
+    if match_count > 1:
+        using += f" (most overlap of {match_count} matches)"
+
+    return f"{using} — {detail}"
+
+
+def heater_coverage_note(missing, coverage, fallback_used):
+    """The plot's note on the heater join: how many frames have no
+    temperature, then the coverage line explaining why — or, when a
+    sibling's logs covered every frame, that line alone so the borrowed
+    source stays visible. "" when there is nothing to say."""
+    if not missing and not fallback_used:
+        return ""
+
+    lines = []
+
+    if missing:
+        noun = "frame" if missing == 1 else "frames"
+        lines.append(f"{missing} {noun} outside the heater log's coverage")
+
+    if coverage:
+        lines.append(coverage)
+
+    return "\n".join(lines)
+
+
 def heater_log_files(folder, start_epoch, end_epoch):
     """The folder's ``*.jsonl`` logs overlapping the capture range
     (±HEATER_SAMPLE_MARGIN_S), ordered by name stamp. A log covers

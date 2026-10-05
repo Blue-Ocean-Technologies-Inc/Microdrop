@@ -43,7 +43,9 @@ from .consts import (
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_log import (
+    describe_heater_coverage,
     heater_log_files,
+    heater_log_span,
     resolve_heater_samples,
     sensors_in,
     temperature_at,
@@ -784,6 +786,7 @@ class RoiAnalysisController(HasTraits):
         paths = self.viewer_model.paths
         if not folder or not paths:
             session.heater_log_fallback_dir = ""
+            session.heater_log_coverage = ""
 
             if session.heater_samples:
                 session.heater_samples = []
@@ -818,6 +821,9 @@ class RoiAnalysisController(HasTraits):
         # Reported, never written to heater_log_dir: only an explicit
         # pick is persisted as the experiment's heater folder.
         session.heater_log_fallback_dir = fallback
+        session.heater_log_coverage = describe_heater_coverage(
+            folder, heater_log_span(folder), (start, end), fallback, match_count
+        )
         session.heater_samples = samples
         self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors_in(
             samples
