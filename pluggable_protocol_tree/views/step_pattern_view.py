@@ -8,16 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-# (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
-# All rights reserved.
-#
-# This software is provided without warranty under the terms of the AGPL-3.0
-# license included in LICENSE and may be redistributed only under the
-# conditions described in the aforementioned license. The license is also
-# available online at https://www.gnu.org/licenses/agpl-3.0.txt
-#
-# Thanks for using Microdrop open source!
-
 """The Fill Pattern dialog: pick a numeric column, Ramp or Alternate, and
 the pattern's values; the summary line previews what OK will do, and OK
 stays disabled while the inputs are invalid."""
@@ -53,12 +43,20 @@ alternate = VGroup(
     visible_when="mode == 'Alternate'",
 )
 
+#: Create mode only — fitting edits existing steps, so there is nothing to group.
+grouping = VGroup(
+    Item("create_in_group", label="Create steps in a new group"),
+    Item("group_name", label="Group name", enabled_when="create_in_group"),
+    visible_when="not is_fit",
+)
+
 step_pattern_view = View(
     VGroup(
         Item("field_label", label="Column"),
         Item("mode", label="Pattern", style="custom"),
         ramp,
         alternate,
+        grouping,
         Item("_"),
         Item("summary", style="readonly", show_label=False),
     ),

@@ -135,6 +135,9 @@ STEP_PATTERN_ALTERNATE = "Alternate"
 STEP_PATTERN_MODES = (STEP_PATTERN_RAMP, STEP_PATTERN_ALTERNATE)
 STEP_PATTERN_DEFAULT_CREATE_COUNT = 4
 STEP_PATTERN_MAX_STEPS = 500
+# Tree-scoped shortcut opening the dialog; shown in its menu entry and on the
+# quick-action button's tooltip.
+STEP_PATTERN_SHORTCUT = "Ctrl+Shift+F"
 
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:

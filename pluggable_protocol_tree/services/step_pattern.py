@@ -8,16 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-# (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
-# All rights reserved.
-#
-# This software is provided without warranty under the terms of the AGPL-3.0
-# license included in LICENSE and may be redistributed only under the
-# conditions described in the aforementioned license. The license is also
-# available online at https://www.gnu.org/licenses/agpl-3.0.txt
-#
-# Thanks for using Microdrop open source!
-
 """Qt-free logic behind the Fill Pattern dialog.
 
 Three concerns, all independent of any widget:
@@ -38,6 +28,7 @@ Three concerns, all independent of any widget:
 
 # Standard library imports.
 import math
+import re
 
 # Enthought library imports.
 from traits.api import (
@@ -53,7 +44,11 @@ from traits.api import (
 from traits.api import List as ListTrait
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import STEP_PATTERN_RAMP
 from pluggable_protocol_tree.models.row import GroupRow
+
+#: Trailing '(unit)' / '[col_id]' groups stripped from a default group name.
+_LABEL_SUFFIX = re.compile(r"(\s*(\([^)]*\)|\[[^\]]*\]))+\s*$")
 
 #: Slack for float division when counting ramp steps (0.3 / 0.1 must be 3).
 _RAMP_EPSILON = 1e-9
@@ -333,6 +328,18 @@ def format_value(value):
     return f"{value:g}"
 
 
+def default_group_name(field_label, mode):
+    """Suggested name for a group of created steps, e.g. 'Target Temp ramp'.
+
+    The label's trailing unit / col_id suffixes ('(°C)', '[col_id]') are
+    dropped; a ramp is a 'ramp', any other pattern a 'pattern'.
+    """
+    base = _LABEL_SUFFIX.sub("", field_label or "").strip() or "Step"
+    kind = "ramp" if mode == STEP_PATTERN_RAMP else "pattern"
+
+    return f"{base} {kind}"
+
+
 # --- applying to the tree ----------------------------------------------------
 
 
@@ -377,12 +384,14 @@ def step_copy_values(manager, row):
     }
 
 
-def insert_pattern_steps(manager, anchor_path, field, values):
+def insert_pattern_steps(manager, anchor_path, field, values, group_name=""):
     """Insert one new step per value, each a copy of the anchor step.
 
     The new steps go right after ``anchor_path`` in its group, or at the end
     of the protocol when ``anchor_path`` is None (then seeded from the last
-    step, if any). Returns the new steps' paths.
+    step, if any). With a ``group_name``, a new group of that name takes that
+    position instead and the steps become its children, in order. Returns the
+    new steps' paths.
     """
     seed_path = anchor_path if anchor_path is not None else last_step_path(manager)
     seed = (
@@ -398,6 +407,12 @@ def insert_pattern_steps(manager, anchor_path, field, values):
         parent_path, first_index = (), len(manager.root.children)
     else:
         parent_path, first_index = anchor_path[:-1], anchor_path[-1] + 1
+
+    if group_name:
+        parent_path = manager.add_group(
+            parent_path=parent_path, index=first_index, name=group_name
+        )
+        first_index = 0
 
     new_paths = []
 

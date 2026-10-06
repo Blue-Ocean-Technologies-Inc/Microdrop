@@ -8,16 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-# (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
-# All rights reserved.
-#
-# This software is provided without warranty under the terms of the AGPL-3.0
-# license included in LICENSE and may be redistributed only under the
-# conditions described in the aforementioned license. The license is also
-# available online at https://www.gnu.org/licenses/agpl-3.0.txt
-#
-# Thanks for using Microdrop open source!
-
 """Opens the Fill Pattern dialog on the tree's selection and applies it.
 
 Two or more selected steps: the pattern is fitted onto them. One selected
@@ -122,7 +112,11 @@ class StepPatternController(HasTraits):
 
         anchor_path = step_paths[0] if step_paths else None
         new_paths = insert_pattern_steps(
-            self.manager, anchor_path, model.field, model.values
+            self.manager,
+            anchor_path,
+            model.field,
+            model.values,
+            group_name=model.new_group_name,
         )
         logger.info(
             f"Fill Pattern created {len(new_paths)} steps for "

@@ -32,6 +32,7 @@ from pyface.qt.QtWidgets import (
 )
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import STEP_PATTERN_SHORTCUT
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
@@ -177,6 +178,9 @@ class ProtocolTreeWidget(QWidget):
             (QKeySequence("Ctrl+Shift+G"), self._unfold_shortcut),
             # Run just the selected rows (#529-style guard, issue #558).
             (QKeySequence("Ctrl+R"), self._run_selected_shortcut),
+            # Fill Pattern dialog — the one registration; the quick-action
+            # button only advertises it in its tooltip.
+            (QKeySequence(STEP_PATTERN_SHORTCUT), self._fill_pattern_shortcut),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -353,7 +357,9 @@ class ProtocolTreeWidget(QWidget):
         menu.addAction("Paste", self._paste)
         menu.addSeparator()
         menu.addAction("Bulk Set Values…", self._bulk_set_values)
-        menu.addAction("Fill Pattern…", self._fill_pattern)
+        fill_pattern = menu.addAction("Fill Pattern…", self.fill_pattern)
+        # Display only: the live binding is the tree-scoped QShortcut.
+        fill_pattern.setShortcut(QKeySequence(STEP_PATTERN_SHORTCUT))
         menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
@@ -478,6 +484,11 @@ class ProtocolTreeWidget(QWidget):
         # start. The dock pane re-checks against the executor regardless.
         if self._structural_editable:
             self._run_selected()
+
+    def _fill_pattern_shortcut(self):
+        # Keyboard path for "Fill Pattern…"; run-locked like the menu entry.
+        if self._structural_editable:
+            self.fill_pattern()
 
     def _selection_roots(self):
         """Normalized selection roots for a scoped run — descendants of an
@@ -621,9 +632,9 @@ class ProtocolTreeWidget(QWidget):
             f"(nested={dialog.apply_nested})"
         )
 
-    def _fill_pattern(self):
+    def fill_pattern(self):
         """Open the Fill Pattern dialog on the selection, then select any
-        steps it created so the user sees the new run."""
+        steps it created (expanding a new group) so the user sees the run."""
         controller = StepPatternController(
             manager=self._manager, is_editable=self._is_cell_editable
         )

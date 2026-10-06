@@ -8,16 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-# (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
-# All rights reserved.
-#
-# This software is provided without warranty under the terms of the AGPL-3.0
-# license included in LICENSE and may be redistributed only under the
-# conditions described in the aforementioned license. The license is also
-# available online at https://www.gnu.org/licenses/agpl-3.0.txt
-#
-# Thanks for using Microdrop open source!
-
 """Qt-free state for the Fill Pattern dialog.
 
 Holds the user's choices (target field, Ramp/Alternate, their parameters)
@@ -56,6 +46,7 @@ from pluggable_protocol_tree.services.step_pattern import (
     alternate_values,
     bounds_error,
     coerce_values,
+    default_group_name,
     fit_increment,
     fit_ramp_values,
     format_value,
@@ -66,7 +57,8 @@ from pluggable_protocol_tree.services.step_pattern import (
 
 #: Traits whose change re-runs the preview.
 _PREVIEW_INPUTS = (
-    "field_label, mode, start, stop, increment, alternate_text, create_count, fit_count"
+    "field_label, mode, start, stop, increment, alternate_text, create_count, "
+    "fit_count, create_in_group, group_name"
 )
 
 
@@ -115,6 +107,19 @@ class StepPatternModel(HasTraits):
     #: Alternate, create mode: how many new steps to create.
     create_count = Range(1, STEP_PATTERN_MAX_STEPS, STEP_PATTERN_DEFAULT_CREATE_COUNT)
 
+    #: Create mode: put the new steps inside a new group (ignored when fitting).
+    create_in_group = Bool(False)
+
+    #: Create mode: name of that group; defaults from the column and mode.
+    group_name = Str()
+
+    #: The last suggested ``group_name``; a name still equal to it was not
+    #: edited by the user, so it follows column/mode changes.
+    _suggested_group_name = Str()
+
+    #: Name of the group OK will create — '' when fitting or not grouping.
+    new_group_name = Property(Str, observe="fit_count, create_in_group, group_name")
+
     #: Generated values, one per affected step (empty while invalid).
     values = List()
 
@@ -142,6 +147,12 @@ class StepPatternModel(HasTraits):
     def _get_fitted_increment(self):
         return fit_increment(self.start, self.stop, self.fit_count)
 
+    def _get_new_group_name(self):
+        if self.is_fit or not self.create_in_group:
+            return ""
+
+        return self.group_name.strip()
+
     # --- reactions ---
 
     @observe("fields.items")
@@ -164,6 +175,20 @@ class StepPatternModel(HasTraits):
             format_value(value) for value in dict.fromkeys(current)
         )
 
+    @observe("create_in_group, field_label, mode", post_init=True)
+    def _suggest_group_name(self, event=None):
+        """Fill the group name with the column/mode suggestion while the
+        option is ticked, unless the user has typed their own name."""
+        if not self.create_in_group:
+            return
+
+        suggestion = default_group_name(self.field_label, self.mode)
+
+        if self.group_name.strip() in ("", self._suggested_group_name):
+            self.group_name = suggestion
+
+        self._suggested_group_name = suggestion
+
     @observe(_PREVIEW_INPUTS, post_init=True)
     def _update_preview(self, event=None):
         try:
@@ -184,6 +209,7 @@ class StepPatternModel(HasTraits):
             self.field_label = self.field_labels[0]
 
         self._prefill_from_current_values()
+        self._suggest_group_name()
         self._update_preview()
 
     # --- preview helpers ---
@@ -195,6 +221,9 @@ class StepPatternModel(HasTraits):
 
         if field is None:
             raise ValueError("Pick a column to fill.")
+
+        if self.create_in_group and not self.is_fit and not self.new_group_name:
+            raise ValueError("Enter a name for the new group.")
 
         self.clamped = False
 
@@ -248,6 +277,9 @@ class StepPatternModel(HasTraits):
             action = f"Will set {len(values)} selected steps"
         else:
             action = f"Will create {len(values)} steps"
+
+            if self.new_group_name:
+                action += f" in group '{self.new_group_name}'"
 
         if self.mode == STEP_PATTERN_ALTERNATE:
             cycle = ", ".join(

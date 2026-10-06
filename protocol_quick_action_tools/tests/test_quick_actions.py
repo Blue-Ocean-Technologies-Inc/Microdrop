@@ -13,8 +13,8 @@ MagicMock pane and asserts:
   * on_execute_action(ctx) calls the right pane method (or constructs
     the dialog with the right args).
   * is_enabled(ctx) matrix is correct for the meaningful states.
-The plugin's _contributed_quick_actions_default returns all 8 actions
-in priority order.
+The plugin's _contributed_quick_actions_default returns every action
+(the 8 legacy ones plus Fill Pattern).
 """
 
 # Standard library imports.
@@ -24,6 +24,7 @@ from unittest.mock import MagicMock
 import pytest
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import STEP_PATTERN_SHORTCUT
 from pluggable_protocol_tree.models.quick_action import QuickActionCtx
 from pluggable_protocol_tree.models.row import GroupRow
 from protocol_quick_action_tools.consts import (
@@ -31,6 +32,7 @@ from protocol_quick_action_tools.consts import (
     ACTION_ADD_STEP,
     ACTION_BROWSE_REPORTS,
     ACTION_DELETE_ROW,
+    ACTION_FILL_PATTERN,
     ACTION_IMPORT_PROTOCOL,
     ACTION_NEW_PROTOCOL,
     ACTION_OPEN_PROTOCOL,
@@ -51,6 +53,9 @@ from protocol_quick_action_tools.quick_actions.browse_reports import (
 from protocol_quick_action_tools.quick_actions.delete_row import (
     make_delete_row_action,
 )
+from protocol_quick_action_tools.quick_actions.fill_pattern import (
+    make_fill_pattern_action,
+)
 from protocol_quick_action_tools.quick_actions.import_protocol import (
     make_import_protocol_action,
 )
@@ -63,6 +68,9 @@ from protocol_quick_action_tools.quick_actions.open_protocol import (
 from protocol_quick_action_tools.quick_actions.save_protocol import (
     make_save_protocol_action,
 )
+
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_STACKED_LINE_CHART
 
 
 def _ctx(*, selected_paths=(), is_running=False, group=False, experiment_manager=True):
@@ -145,6 +153,31 @@ def test_add_group_execute_calls_pane_helper():
     ctx = _ctx()
     a.on_execute_action(ctx)
     ctx.pane.add_group_after_selection.assert_called_once_with()
+
+
+# --- fill_pattern -------------------------------------------------
+
+
+def test_fill_pattern_metadata():
+    a = make_fill_pattern_action()
+    assert a.action_id == ACTION_FILL_PATTERN
+    assert a.icon_text == ICON_STACKED_LINE_CHART
+    # Sits right after Add group; the tree widget owns the key binding.
+    assert a.priority == 35
+    assert a.shortcut == ""
+    assert f"({STEP_PATTERN_SHORTCUT})" in a.tooltip
+
+
+def test_fill_pattern_execute_calls_pane_helper():
+    a = make_fill_pattern_action()
+    ctx = _ctx()
+    a.on_execute_action(ctx)
+    ctx.pane.fill_pattern.assert_called_once_with()
+
+
+@pytest.mark.parametrize("running,expected", [(False, True), (True, False)])
+def test_fill_pattern_is_enabled(running, expected):
+    assert make_fill_pattern_action().is_enabled(_ctx(is_running=running)) is expected
 
 
 # --- import_protocol ----------------------------------------------
@@ -297,7 +330,7 @@ def test_browse_reports_disabled_without_experiment_manager():
 # --- plugin default contributions list ----------------------------
 
 
-def test_plugin_default_contributions_includes_all_eight_actions():
+def test_plugin_default_contributions_includes_all_actions():
     plugin = ProtocolQuickActionToolsPlugin()
     contribs = plugin._contributed_quick_actions_default()
     ids = sorted(a.action_id for a in contribs)
@@ -306,6 +339,7 @@ def test_plugin_default_contributions_includes_all_eight_actions():
             ACTION_ADD_STEP,
             ACTION_DELETE_ROW,
             ACTION_ADD_GROUP,
+            ACTION_FILL_PATTERN,
             ACTION_IMPORT_PROTOCOL,
             ACTION_OPEN_PROTOCOL,
             ACTION_SAVE_PROTOCOL,
