@@ -13,21 +13,36 @@
 Follows the MicroDrop convention: PKG derived from __name__, topic constants
 defined here, ACTOR_TOPIC_DICT aggregating the listener-->topic map."""
 
+# Standard library imports.
 import os
 
-from device_viewer.consts import PROTOCOL_RUNNING, PROTOCOL_GRID_DISPLAY_STATE, DEVICE_VIEWER_GEOMETRY_CHANGED, \
-    DEVICE_VIEWER_STATE_CHANGED, DEVICE_VIEWER_MEDIA_CAPTURED, CALIBRATION_DATA, STEP_PARAMS_COMMIT, \
-    PHASE_NAVIGATION_MODE, PHASE_NAVIGATION_REQUEST, PHASE_NAVIGATION_STATE
-
-from dropbot_controller.consts import CAPACITANCE_UPDATED, REALTIME_MODE_UPDATED, DROPBOT_DISCONNECTED
-
+# Microdrop package imports.
+from device_viewer.consts import (
+    CALIBRATION_DATA,
+    DEVICE_VIEWER_GEOMETRY_CHANGED,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+    DEVICE_VIEWER_STATE_CHANGED,
+    PHASE_NAVIGATION_MODE,
+    PHASE_NAVIGATION_REQUEST,  # noqa: F401  # re-exported
+    PHASE_NAVIGATION_STATE,
+    PROTOCOL_GRID_DISPLAY_STATE,  # noqa: F401  # re-exported
+    PROTOCOL_RUNNING,
+    STEP_PARAMS_COMMIT,
+)
+from dropbot_controller.consts import (
+    CAPACITANCE_UPDATED,
+    DROPBOT_DISCONNECTED,
+    REALTIME_MODE_UPDATED,
+)
+from electrode_controller.consts import (
+    ELECTRODES_STATE_APPLIED,  # noqa: F401  # re-exported
+    ELECTRODES_STATE_CHANGE,
+)
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
-
-from electrode_controller.consts import ELECTRODES_STATE_CHANGE, ELECTRODES_STATE_APPLIED
-
 from pluggable_protocol_tree.models.cell_sync import (
-    ProtocolTreeRowSelectedPublisher, ProtocolTreeSetCellPublisher,
     ProtocolTreeAddStepPublisher,
+    ProtocolTreeRowSelectedPublisher,
+    ProtocolTreeSetCellPublisher,
 )
 from pluggable_protocol_tree.models.report_contributions import (
     ProtocolLoggingDataContributionPublisher,
@@ -55,12 +70,9 @@ PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 
 # ProtocolPreferences defaults (ported from protocol_grid with the
 # preferences model, #419 / PPT-14.1).
-DEFAULT_CAMERA_PREWARM_SECONDS = 3.0
 DEFAULT_REALTIME_SETTLING_SECONDS = 1.0
 DEFAULT_LOGS_SETTLING_SECONDS = 3.0
 # Slider bounds for those preference fields.
-CAMERA_PREWARM_MIN_S = 0.2
-CAMERA_PREWARM_MAX_S = 15.0
 SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
 
@@ -77,19 +89,35 @@ ACK_WAIT_FOREVER = -1.0
 # Fields whose change triggers an auto-recalc of Route Reps Dur while the
 # row is in Route-Reps-controlled mode (see ProtocolTreePane.
 # _reconcile_repeat_duration_for_row).
-REPEAT_DURATION_RECALC_TRIGGERS = frozenset({
-    "route_repetitions", "duration_s", "trail_length", "trail_overlay",
-    "routes", "soft_start", "soft_end", "linear_repeats",
-})
+REPEAT_DURATION_RECALC_TRIGGERS = frozenset(
+    {
+        "route_repetitions",
+        "duration_s",
+        "trail_length",
+        "trail_overlay",
+        "routes",
+        "soft_start",
+        "soft_end",
+        "linear_repeats",
+    }
+)
 
 # Step columns mirrored into the DV sidebar route executor (the tree side
 # of the ProtocolTreeDisplayMessage.execution_params contract). A change to
 # any of these on the selected step republishes display state so the DV
 # sidebar reloads + rebaselines - protocol values supersede the sidebar.
-DV_EXECUTION_PARAM_COL_IDS = frozenset({
-    "duration_s", "route_repetitions", "repeat_duration", "trail_length",
-    "trail_overlay", "soft_start", "soft_end", "linear_repeats",
-})
+DV_EXECUTION_PARAM_COL_IDS = frozenset(
+    {
+        "duration_s",
+        "route_repetitions",
+        "repeat_duration",
+        "trail_length",
+        "trail_overlay",
+        "soft_start",
+        "soft_end",
+        "linear_repeats",
+    }
+)
 
 # protocol_metadata / executor-scratch key carrying the per-device
 # electrode-id -> channel map (written by the DV sync controller, read
@@ -127,19 +155,24 @@ PROTOCOL_LOGGING_DATA_CONTRIBUTION = f"{PROTOCOL_TOPIC_PREFIX}/logging/data"
 
 # Public endpoints for contributing plugins (validated flat-mapping
 # payloads; contracts in models/report_contributions.py).
-protocol_logging_metadata_contribution_publisher = \
+protocol_logging_metadata_contribution_publisher = (
     ProtocolLoggingMetadataContributionPublisher(
-        topic=PROTOCOL_LOGGING_METADATA_CONTRIBUTION)
-protocol_logging_data_contribution_publisher = \
-    ProtocolLoggingDataContributionPublisher(
-        topic=PROTOCOL_LOGGING_DATA_CONTRIBUTION)
+        topic=PROTOCOL_LOGGING_METADATA_CONTRIBUTION
+    )
+)
+protocol_logging_data_contribution_publisher = ProtocolLoggingDataContributionPublisher(
+    topic=PROTOCOL_LOGGING_DATA_CONTRIBUTION
+)
 
 protocol_tree_row_selected_publisher = ProtocolTreeRowSelectedPublisher(
-    topic=PROTOCOL_TREE_ROW_SELECTED)
+    topic=PROTOCOL_TREE_ROW_SELECTED
+)
 protocol_tree_set_cell_publisher = ProtocolTreeSetCellPublisher(
-    topic=PROTOCOL_TREE_SET_CELL)
+    topic=PROTOCOL_TREE_SET_CELL
+)
 protocol_tree_add_step_publisher = ProtocolTreeAddStepPublisher(
-    topic=PROTOCOL_TREE_ADD_STEP)
+    topic=PROTOCOL_TREE_ADD_STEP
+)
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
@@ -159,7 +192,6 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_TREE_ADD_STEP,
         DROPBOT_DISCONNECTED,
     ],
-
     LOGGING_LISTENER_NAME: [
         CAPACITANCE_UPDATED,
         ELECTRODES_STATE_CHANGE,
@@ -167,7 +199,7 @@ ACTOR_TOPIC_DICT = {
         CALIBRATION_DATA,
         PROTOCOL_LOGGING_METADATA_CONTRIBUTION,
         PROTOCOL_LOGGING_DATA_CONTRIBUTION,
-    ]
+    ],
 }
 
 # Envisage extension point — plugins contribute IQuickAction instances

@@ -9,13 +9,12 @@
 # Thanks for using Microdrop open source!
 
 """Tests for the capture compound column (#396 / PPT-19) — per-step
-capture timing (capture Bool + capture_at Step Start/Step End) and the
-preference acting as default-only."""
+capture timing (capture Bool + capture_at Step Start/Step End, new
+steps defaulting to Step Start)."""
 
 # Standard library imports.
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
@@ -26,8 +25,8 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.services.preferences import StepTime
 from pluggable_protocol_tree.session import resolve_columns
+from video_protocol_controls.consts import StepTime
 from video_protocol_controls.protocol_columns.capture_column import (
     CHOICES,
     CaptureAtComboBoxView,
@@ -101,23 +100,14 @@ def test_factory_returns_compound_with_checkbox_and_combobox():
     assert at_view.options == [StepTime.START, StepTime.END]
 
 
-def test_factory_seeds_capture_at_default_from_pref():
-    for pref_value in (StepTime.START, StepTime.END):
-        with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
-            P.return_value = SimpleNamespace(capture_time=pref_value)
-            col = make_capture_column()
-        assert col.model.default_capture_at == pref_value
+def test_new_step_defaults_to_step_start_without_overriding_edits():
+    manager = _capture_manager()
 
-
-def test_new_step_gets_pref_default_without_overriding_edits():
-    """The pref is the DEFAULT for new steps; per-step values stand."""
-    with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
-        P.return_value = SimpleNamespace(capture_time=StepTime.END)
-        manager = _capture_manager()
     manager.add_step(values={"name": "defaulted"})
-    manager.add_step(values={"name": "explicit", "capture_at": StepTime.START})
-    assert manager.get_row((0,)).capture_at == StepTime.END
-    assert manager.get_row((1,)).capture_at == StepTime.START
+    manager.add_step(values={"name": "explicit", "capture_at": StepTime.END})
+
+    assert manager.get_row((0,)).capture_at == StepTime.START
+    assert manager.get_row((1,)).capture_at == StepTime.END
 
 
 # --- handler ----------------------------------------------------------------
@@ -241,29 +231,26 @@ def test_round_trip_preserves_per_step_capture_at(qapp):
     ]
 
 
-def test_payload_missing_capture_at_fills_from_pref_default(qapp):
+def test_payload_missing_capture_at_fills_with_step_start(qapp):
     """A payload without the capture_at field (e.g. written before the
     column existed) loads with capture flags intact and capture_at
-    falling back to the factory default = current pref."""
+    falling back to the model default, Step Start."""
     manager = _capture_manager()
-    manager.add_step(values={"name": "captures", "capture": True})
-    manager.add_step(values={"name": "plain"})
+    manager.add_step(
+        values={"name": "captures", "capture": True, "capture_at": StepTime.END}
+    )
+    manager.add_step(values={"name": "plain", "capture_at": StepTime.END})
     data = json.loads(json.dumps(manager.to_json()))
     at_idx = data["fields"].index("capture_at")
     data["fields"].remove("capture_at")
     data["rows"] = [row[:at_idx] + row[at_idx + 1 :] for row in data["rows"]]
 
-    with patch(f"{CAPTURE_COLUMN_MODULE}.ProtocolPreferences") as P:
-        P.return_value = SimpleNamespace(capture_time=StepTime.END)
-        manager_end_pref = _capture_manager()
-    loaded = RowManager.from_json(
-        data,
-        columns=list(manager_end_pref.columns),
-    )
+    loaded = RowManager.from_json(data, columns=list(_capture_manager().columns))
     captures, plain = loaded.get_row((0,)), loaded.get_row((1,))
+
     assert captures.capture is True and plain.capture is False
-    assert captures.capture_at == StepTime.END  # filled from the pref
-    assert plain.capture_at == StepTime.END
+    assert captures.capture_at == StepTime.START
+    assert plain.capture_at == StepTime.START
 
 
 def test_capture_at_view_declares_capture_dependency():
