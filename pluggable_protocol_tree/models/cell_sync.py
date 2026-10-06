@@ -31,10 +31,13 @@ the group ``group_id``, or appended at the root when neither is given.
 Ignored while a protocol runs — the executor owns the rows then.
 """
 
+# Standard library imports.
 from typing import Any
 
+# Third-party imports.
 from pydantic import BaseModel
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 
@@ -67,24 +70,30 @@ class ProtocolTreeSetCellMessage(BaseModel):
 
 class ProtocolTreeRowSelectedPublisher(ValidatedTopicPublisher):
     """Validated publisher for ``PROTOCOL_TREE_ROW_SELECTED``."""
+
     validator_class = ProtocolTreeRowSelectedMessage
 
     def publish(self, *, step_id, cells, group_id=None, **kw):
         super().publish(
-            {"step_id": step_id, "group_id": group_id, "cells": cells}, **kw)
+            {"step_id": step_id, "group_id": group_id, "cells": cells}, **kw
+        )
 
 
 class ProtocolTreeSetCellPublisher(ValidatedTopicPublisher):
     """Validated publisher for ``PROTOCOL_TREE_SET_CELL``."""
+
     validator_class = ProtocolTreeSetCellMessage
 
     def publish(self, *, step_id, col_id, value, only_if_set=False, **kw):
-        super().publish({
-            "step_id": step_id,
-            "col_id": col_id,
-            "value": value,
-            "only_if_set": only_if_set,
-        }, **kw)
+        super().publish(
+            {
+                "step_id": step_id,
+                "col_id": col_id,
+                "value": value,
+                "only_if_set": only_if_set,
+            },
+            **kw,
+        )
 
 
 class ProtocolTreeAddStepMessage(BaseModel):
@@ -103,13 +112,16 @@ class ProtocolTreeAddStepMessage(BaseModel):
 
 class ProtocolTreeAddStepPublisher(ValidatedTopicPublisher):
     """Validated publisher for ``PROTOCOL_TREE_ADD_STEP``."""
+
     validator_class = ProtocolTreeAddStepMessage
 
-    def publish(self, *, after_step_id=None, group_id=None, cells,
-                name=None, **kw):
-        super().publish({
-            "after_step_id": after_step_id,
-            "group_id": group_id,
-            "cells": cells,
-            "name": name,
-        }, **kw)
+    def publish(self, *, after_step_id=None, group_id=None, cells, name=None, **kw):
+        super().publish(
+            {
+                "after_step_id": after_step_id,
+                "group_id": group_id,
+                "cells": cells,
+                "name": name,
+            },
+            **kw,
+        )
