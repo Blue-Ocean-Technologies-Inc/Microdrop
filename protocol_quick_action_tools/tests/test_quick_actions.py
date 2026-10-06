@@ -17,17 +17,24 @@ The plugin's _contributed_quick_actions_default returns all 8 actions
 in priority order.
 """
 
+# Standard library imports.
 from unittest.mock import MagicMock
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from pluggable_protocol_tree.models.quick_action import QuickActionCtx
 from pluggable_protocol_tree.models.row import GroupRow
-
 from protocol_quick_action_tools.consts import (
-    ACTION_ADD_GROUP, ACTION_ADD_STEP, ACTION_BROWSE_REPORTS,
-    ACTION_DELETE_ROW, ACTION_IMPORT_PROTOCOL, ACTION_NEW_PROTOCOL,
-    ACTION_OPEN_PROTOCOL, ACTION_SAVE_PROTOCOL,
+    ACTION_ADD_GROUP,
+    ACTION_ADD_STEP,
+    ACTION_BROWSE_REPORTS,
+    ACTION_DELETE_ROW,
+    ACTION_IMPORT_PROTOCOL,
+    ACTION_NEW_PROTOCOL,
+    ACTION_OPEN_PROTOCOL,
+    ACTION_SAVE_PROTOCOL,
 )
 from protocol_quick_action_tools.plugin import (
     ProtocolQuickActionToolsPlugin,
@@ -58,8 +65,7 @@ from protocol_quick_action_tools.quick_actions.save_protocol import (
 )
 
 
-def _ctx(*, selected_paths=(), is_running=False, group=False,
-         experiment_manager=True):
+def _ctx(*, selected_paths=(), is_running=False, group=False, experiment_manager=True):
     pane = MagicMock()
     if group and selected_paths:
         pane.manager.get_row.return_value = GroupRow(name="G")
@@ -69,12 +75,13 @@ def _ctx(*, selected_paths=(), is_running=False, group=False,
     # The ctx carries the dock pane; ctx.pane resolves to dock_pane._pane.
     dock_pane = MagicMock()
     dock_pane._pane = pane
-    return QuickActionCtx(dock_pane=dock_pane,
-                          selected_paths=tuple(selected_paths),
-                          is_running=is_running)
+    return QuickActionCtx(
+        dock_pane=dock_pane, selected_paths=tuple(selected_paths), is_running=is_running
+    )
 
 
 # --- add_step -----------------------------------------------------
+
 
 def test_add_step_metadata():
     a = make_add_step_action()
@@ -91,13 +98,13 @@ def test_add_step_execute_calls_pane_helper():
     ctx.pane.add_step_after_selection.assert_called_once_with()
 
 
-@pytest.mark.parametrize("running,expected",
-                         [(False, True), (True, False)])
+@pytest.mark.parametrize("running,expected", [(False, True), (True, False)])
 def test_add_step_is_enabled(running, expected):
     assert make_add_step_action().is_enabled(_ctx(is_running=running)) is expected
 
 
 # --- delete_row ---------------------------------------------------
+
 
 def test_delete_row_metadata():
     a = make_delete_row_action()
@@ -117,13 +124,14 @@ def test_delete_row_is_enabled_only_gated_by_is_running():
     """Per #433 follow-up: delete button is always available when the
     protocol isn't running — selection state is irrelevant."""
     a = make_delete_row_action()
-    assert a.is_enabled(_ctx()) is True                       # no selection
+    assert a.is_enabled(_ctx()) is True  # no selection
     assert a.is_enabled(_ctx(selected_paths=[(0,)])) is True
     assert a.is_enabled(_ctx(selected_paths=[(0,), (1,)])) is True
     assert a.is_enabled(_ctx(is_running=True)) is False
 
 
 # --- add_group ----------------------------------------------------
+
 
 def test_add_group_metadata():
     a = make_add_group_action()
@@ -141,6 +149,7 @@ def test_add_group_execute_calls_pane_helper():
 
 # --- import_protocol ----------------------------------------------
 
+
 def test_import_protocol_metadata():
     a = make_import_protocol_action()
     assert a.action_id == ACTION_IMPORT_PROTOCOL
@@ -157,19 +166,21 @@ def test_import_protocol_execute_calls_pane_helper():
 
 def test_import_protocol_is_enabled_requires_single_group_selection():
     a = make_import_protocol_action()
-    assert a.is_enabled(_ctx()) is False                       # no sel
-    assert a.is_enabled(_ctx(selected_paths=[(0,)],
-                              group=False)) is False           # step, not group
-    assert a.is_enabled(_ctx(selected_paths=[(0,)],
-                              group=True)) is True
-    assert a.is_enabled(_ctx(selected_paths=[(0,), (1,)],
-                              group=True)) is False            # multi-sel
-    assert a.is_enabled(_ctx(selected_paths=[(0,)],
-                              group=True,
-                              is_running=True)) is False
+    assert a.is_enabled(_ctx()) is False  # no sel
+    assert (
+        a.is_enabled(_ctx(selected_paths=[(0,)], group=False)) is False
+    )  # step, not group
+    assert a.is_enabled(_ctx(selected_paths=[(0,)], group=True)) is True
+    assert (
+        a.is_enabled(_ctx(selected_paths=[(0,), (1,)], group=True)) is False
+    )  # multi-sel
+    assert (
+        a.is_enabled(_ctx(selected_paths=[(0,)], group=True, is_running=True)) is False
+    )
 
 
 # --- open / save / new_protocol -----------------------------------
+
 
 def test_open_protocol_calls_pane_helper():
     a = make_open_protocol_action()
@@ -203,6 +214,7 @@ def test_new_protocol_calls_pane_helper():
 
 # --- browse_reports -----------------------------------------------
 
+
 def test_browse_reports_metadata_and_shortcut():
     a = make_browse_reports_action()
     assert a.action_id == ACTION_BROWSE_REPORTS
@@ -218,12 +230,14 @@ def test_browse_reports_execute_opens_dialog_with_session_paths(monkeypatch):
     from pathlib import Path
 
     from protocol_quick_action_tools.quick_actions import browse_reports as mod
+
     captured = {}
 
     class _FakeDialog:
         def __init__(self_inner, paths, parent=None):
             captured["paths"] = list(paths)
             captured["parent"] = parent
+
         def exec(self_inner):
             return 0
 
@@ -251,11 +265,13 @@ def test_browse_reports_execute_empty_session_opens_empty_dialog(monkeypatch):
     """No reports yet (empty session list) -> dialog opens with an
     empty path list rather than raising."""
     from protocol_quick_action_tools.quick_actions import browse_reports as mod
+
     captured = {}
 
     class _FakeDialog:
         def __init__(self_inner, paths, parent=None):
             captured["paths"] = list(paths)
+
         def exec(self_inner):
             return 0
 
@@ -275,18 +291,25 @@ def test_browse_reports_disabled_without_experiment_manager():
     a = make_browse_reports_action()
     assert a.is_enabled(_ctx(experiment_manager=False)) is False
     assert a.is_enabled(_ctx(experiment_manager=True)) is True
-    assert a.is_enabled(_ctx(experiment_manager=True,
-                              is_running=True)) is False
+    assert a.is_enabled(_ctx(experiment_manager=True, is_running=True)) is False
 
 
 # --- plugin default contributions list ----------------------------
+
 
 def test_plugin_default_contributions_includes_all_eight_actions():
     plugin = ProtocolQuickActionToolsPlugin()
     contribs = plugin._contributed_quick_actions_default()
     ids = sorted(a.action_id for a in contribs)
-    assert ids == sorted([
-        ACTION_ADD_STEP, ACTION_DELETE_ROW, ACTION_ADD_GROUP,
-        ACTION_IMPORT_PROTOCOL, ACTION_OPEN_PROTOCOL, ACTION_SAVE_PROTOCOL,
-        ACTION_NEW_PROTOCOL, ACTION_BROWSE_REPORTS,
-    ])
+    assert ids == sorted(
+        [
+            ACTION_ADD_STEP,
+            ACTION_DELETE_ROW,
+            ACTION_ADD_GROUP,
+            ACTION_IMPORT_PROTOCOL,
+            ACTION_OPEN_PROTOCOL,
+            ACTION_SAVE_PROTOCOL,
+            ACTION_NEW_PROTOCOL,
+            ACTION_BROWSE_REPORTS,
+        ]
+    )
