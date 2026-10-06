@@ -313,7 +313,9 @@ class BaseStatusDockPane(TraitsDockPane):
         """
         icon = QLabel(self.status_bar_icon_glyph)
         icon.setFont(status_bar_icon_font())
-        icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
+        # The bar can be populated after the device has already connected, so
+        # the icon starts from the model's current colour, not the default.
+        icon.setStyleSheet(f"color: {self.model.icon_color}")
         return icon
 
     def _create_status_bar_widgets(self):
