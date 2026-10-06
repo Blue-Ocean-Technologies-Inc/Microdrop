@@ -35,6 +35,9 @@ from pyface.qt.QtWidgets import (
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.step_pattern_controller import (
+    StepPatternController,
+)
 from pluggable_protocol_tree.views.bulk_set_dialog import BulkSetDialog
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
@@ -350,6 +353,7 @@ class ProtocolTreeWidget(QWidget):
         menu.addAction("Paste", self._paste)
         menu.addSeparator()
         menu.addAction("Bulk Set Values…", self._bulk_set_values)
+        menu.addAction("Fill Pattern…", self._fill_pattern)
         menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
@@ -616,6 +620,43 @@ class ProtocolTreeWidget(QWidget):
             f"Bulk set {list(updates)} on {len(targets)} step(s) "
             f"(nested={dialog.apply_nested})"
         )
+
+    def _fill_pattern(self):
+        """Open the Fill Pattern dialog on the selection, then select any
+        steps it created so the user sees the new run."""
+        controller = StepPatternController(
+            manager=self._manager, is_editable=self._is_cell_editable
+        )
+        new_paths = controller.open(parent=self)
+
+        if new_paths:
+            self._select_paths(new_paths)
+
+    @staticmethod
+    def _is_cell_editable(column, row):
+        """Whether the user may edit ``column``'s cell on ``row`` in the grid."""
+        return bool(column.view.get_flags(row) & Qt.ItemIsEditable)
+
+    def _select_paths(self, paths):
+        """Select the rows at ``paths``, making the first one current."""
+        indexes = [self._node_to_index(self._manager.get_row(p)) for p in paths]
+        indexes = [idx for idx in indexes if idx.isValid()]
+
+        if not indexes:
+            return
+
+        rows_flag = QItemSelectionModel.SelectionFlag.Rows
+        selection_model = self.tree.selectionModel()
+
+        self._expand_ancestors(indexes[0])
+        selection_model.setCurrentIndex(
+            indexes[0], QItemSelectionModel.SelectionFlag.ClearAndSelect | rows_flag
+        )
+
+        for idx in indexes[1:]:
+            selection_model.select(
+                idx, QItemSelectionModel.SelectionFlag.Select | rows_flag
+            )
 
     def _delete_selection(self):
         """Remove the currently-selected rows. Defensive: stale paths
