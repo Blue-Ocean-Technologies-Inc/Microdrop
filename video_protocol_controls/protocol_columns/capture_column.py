@@ -13,9 +13,7 @@ coupled cells (capture Bool + capture_at Step Start / Step End choice)
 sharing one model + one handler via the PPT-11 compound framework (#396).
 
 Timing is PER STEP: each row picks start-of-step or end-of-step capture
-independently. The global ProtocolPreferences.capture_time pref is the
-DEFAULT for newly added steps (read once at factory time) — it never
-overrides a per-step value.
+independently; newly added steps start at Step Start.
 
 Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic.
 
@@ -47,13 +45,9 @@ from pluggable_protocol_tree.models.compound_column import (
     CompoundColumn,
     DictCompoundColumnView,
 )
-from pluggable_protocol_tree.services.preferences import (
-    ProtocolPreferences,
-    StepTime,
-)
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
-from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY
+from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY, StepTime
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -71,8 +65,7 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
     base_id = "capture"
 
     # Default capture_at for newly added steps (and the fill-in for any
-    # payload missing the field). The factory seeds it from
-    # ProtocolPreferences.capture_time.
+    # payload missing the field): Step Start, the first choice.
     default_capture_at = Enum(*CHOICES)
 
     def field_specs(self):
@@ -179,16 +172,9 @@ class CaptureHandler(BaseCompoundColumnHandler):
 
 
 def make_capture_column():
-    """Return a fresh Capture compound column (capture + capture_at).
-
-    ProtocolPreferences.capture_time is read once at call time and
-    becomes the capture_at default for newly added steps; per-step edits
-    are never overridden by the pref.
-    """
-    prefs = ProtocolPreferences()
-    model = CaptureCompoundModel(default_capture_at=prefs.capture_time)
+    """Return a fresh Capture compound column (capture + capture_at)."""
     return CompoundColumn(
-        model=model,
+        model=CaptureCompoundModel(),
         view=DictCompoundColumnView(
             cell_views={
                 "capture": CheckboxColumnView(),

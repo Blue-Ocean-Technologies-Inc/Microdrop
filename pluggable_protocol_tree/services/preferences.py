@@ -23,7 +23,7 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Bool, Dict, Directory, Enum, Float, List, Str
+from traits.api import Bool, Dict, Directory, Float, List, Str
 from traits.etsconfig.api import ETSConfig
 from traitsui.api import Group, Item, View
 
@@ -56,15 +56,6 @@ from ..consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-class StepTime:
-    """Values for the capture_time preference. Plain str constants, NOT a
-    Python enum — they are persisted and compared as bare strings (e.g.
-    capture_column's ``capture_time == StepTime.START``)."""
-
-    END = "Step End"
-    START = "Step Start"
 
 
 class ProtocolPreferences(PreferencesHelper):
@@ -107,8 +98,6 @@ class ProtocolPreferences(PreferencesHelper):
 
     prompt_to_restore_realtime_mode = Bool(True)
     keep_realtime_mode_after_protocol = Bool(True)
-
-    capture_time = Enum(StepTime.START, StepTime.END, value=StepTime.START)
 
     PROTOCOL_REPO_DIR = Directory()
 
@@ -263,8 +252,8 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     # Create the grid group for the sidebar items.
     camera_settings_grid = create_grid_group(
-        ["camera_prewarm_seconds", "capture_time"],
-        label_text=["Camera On Lead Time (s)", "When to Capture Step Picture?"],
+        ["camera_prewarm_seconds"],
+        label_text=["Camera On Lead Time (s)"],
         group_label="Camera Config",
         group_show_border=True,
         group_style_sheet=preferences_group_style_sheet,
