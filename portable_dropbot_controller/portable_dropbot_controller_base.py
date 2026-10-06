@@ -263,7 +263,9 @@ class PortableDropbotControllerBase(HasTraits):
                 signal[field] = signal[field] / 100.0
         if "chip_on_pad" in signal:
             # A contact mask, not a flag: partial pogo contact (3 or 5) is
-            # deliberately reported as no chip.
+            # deliberately reported as no chip. The raw mask rides along
+            # so the pane can say which pogo pads touch the chip.
+            signal["chip_pad_contacts"] = int(signal["chip_on_pad"])
             signal["chip_on_pad"] = (
                 signal["chip_on_pad"] & CHIP_ON_PAD_SEATED_MASK
             ) == CHIP_ON_PAD_SEATED_MASK
