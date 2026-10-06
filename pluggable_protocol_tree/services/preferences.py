@@ -42,9 +42,6 @@ from ..consts import (
     ACK_TIMEOUT_MAX_S,
     ACK_TIMEOUT_MIN_S,
     ACK_WAIT_FOREVER,
-    CAMERA_PREWARM_MAX_S,
-    CAMERA_PREWARM_MIN_S,
-    DEFAULT_CAMERA_PREWARM_SECONDS,
     DEFAULT_LOGS_SETTLING_SECONDS,
     DEFAULT_REALTIME_SETTLING_SECONDS,
     PROTOCOL_TREE_PREFERENCES_TAB_ID,
@@ -75,13 +72,6 @@ class ProtocolPreferences(PreferencesHelper):
     preferences_path = "microdrop.protocol"
 
     #### Preferences ##########################################################
-    camera_prewarm_seconds = RangeWithViewHints(
-        value=DEFAULT_CAMERA_PREWARM_SECONDS,
-        low=CAMERA_PREWARM_MIN_S,
-        high=CAMERA_PREWARM_MAX_S,
-        desc="Camera switch on lead time",
-    )
-
     realtime_mode_settling_time_s = RangeWithViewHints(
         value=DEFAULT_REALTIME_SETTLING_SECONDS,
         low=SETTLING_TIME_MIN_S,
@@ -250,15 +240,6 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     category = protocol_tree_tab.id
 
-    # Create the grid group for the sidebar items.
-    camera_settings_grid = create_grid_group(
-        ["camera_prewarm_seconds"],
-        label_text=["Camera On Lead Time (s)"],
-        group_label="Camera Config",
-        group_show_border=True,
-        group_style_sheet=preferences_group_style_sheet,
-    )
-
     general_protocol_settings_grid = create_grid_group(
         items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
         label_text=[
@@ -305,8 +286,6 @@ class ProtocolPreferencesPane(PreferencesPane):
         general_protocol_settings_grid,
         Item("_"),
         realtime_mode_settings_grid,
-        Item("_"),
-        camera_settings_grid,
         Item("_"),
         ack_times_grid,
         # Separator to space this out from further contributions to the pane.
