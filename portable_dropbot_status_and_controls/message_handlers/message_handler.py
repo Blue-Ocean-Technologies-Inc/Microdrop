@@ -10,6 +10,7 @@
 
 # Standard library imports.
 import json
+from datetime import datetime
 
 # Enthought library imports.
 from traits.api import Instance
@@ -21,6 +22,7 @@ from template_status_and_controls.base_message_handler import (
 )
 
 # Local imports.
+from ..consts import ALARM_LOG_LENGTH
 from ..models.model import PortableDropbotStatusAndControlsModel
 
 # Logger import.
@@ -41,6 +43,24 @@ def summarize_mechanisms(mechanisms: dict) -> str:
         f"pogo:{mechanisms.get('lpush', '-')}/"
         f"{mechanisms.get('rpush', '-')}"
     )
+
+
+def summarize_chip_pad_contacts(contacts):
+    """Say which pogo pads touch the chip, from the STATUS chip_on_pad
+    contact mask (bit1 left pad, bit2 right pad; bit0 is the debounced
+    presence verdict), with the raw mask appended for reference."""
+    left, right = bool(contacts & 0b010), bool(contacts & 0b100)
+
+    if left and right:
+        summary = "All pogos on chip"
+    elif left:
+        summary = "1 pogo on chip, left"
+    elif right:
+        summary = "1 pogo on chip, right"
+    else:
+        summary = "No pogo on chip"
+
+    return f"{summary} ({contacts})"
 
 
 class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
@@ -67,6 +87,12 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         logger.debug(data)
 
         self.model.chip_inserted = bool(data.get("chip_on_pad", False))
+
+        chip_pad_contacts = data.get("chip_pad_contacts")
+        if chip_pad_contacts is not None:
+            self.model.chip_pad_status_text = summarize_chip_pad_contacts(
+                chip_pad_contacts
+            )
 
         hv_vol, hv_freq = data.get("hv_vol"), data.get("hv_freq")
         if hv_vol is not None:
@@ -156,10 +182,22 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         data = json.loads(str(body))
         alarms = data.get("alarms", [])
         if alarms:
-            self.model.last_alarm = "; ".join(str(alarm) for alarm in alarms)
+            self._record_alarm("; ".join(str(alarm) for alarm in alarms))
 
     def _on_error_triggered(self, body):
         data = json.loads(str(body))
-        self.model.last_alarm = (
+        self._record_alarm(
             f"{data.get('context', 'operation')}: {data.get('error', 'failed')}"
         )
+
+    def _record_alarm(self, text):
+        """Show text as the last alarm and push it, timestamped, onto the
+        top of the alarm log, which keeps the newest ALARM_LOG_LENGTH."""
+        self.model.last_alarm = text
+
+        entries = [f"{datetime.now():%H:%M:%S} {text}"]
+
+        if self.model.alarm_log != "-":
+            entries += self.model.alarm_log.splitlines()
+
+        self.model.alarm_log = "\n".join(entries[:ALARM_LOG_LENGTH])

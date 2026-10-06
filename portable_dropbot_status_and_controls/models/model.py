@@ -81,6 +81,7 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     # lighting controls live in the Temp & Lighting pane) --------------
     show_environment = Bool(False)
     show_board_status = Bool(False)
+    show_alarms = Bool(False)
 
     #: Fired by clicking the device picture: eject the tray, click
     #: again to bring it back in (the original pane's gesture).
@@ -152,9 +153,14 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     device_humidity_display = Str("-", desc="Instrument internal relative humidity")
     mechanisms_display = Str("-", desc="Tray/magnet/filter/pogo states")
     last_alarm = Str("-", desc="Most recent decoded alarm or error")
+    #: Timestamped, one per line; the handler trims it to ALARM_LOG_LENGTH.
+    alarm_log = Str("-", desc="Recent alarms and errors, newest first")
 
     # ---- The rest of the signal board's STATUS fields, mirroring
     # the vendor UI's Connection/Status tab -----------------------------
+    #: Decoded from the raw chip_on_pad contact mask, unlike the base
+    #: model's chip_status_text which only says detected or not.
+    chip_pad_status_text = Str("-", desc="Which pogo pads are on the chip")
     out_power_display = Str("-", desc="Heater output power (%)")
     heater_on_display = Str("-", desc="Heater enable flag (temp_onoff)")
     fan_duty_display = Str("-", desc="Cooling fan duty (%)")

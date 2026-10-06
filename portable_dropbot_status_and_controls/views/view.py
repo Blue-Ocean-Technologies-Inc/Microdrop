@@ -12,7 +12,7 @@
 DropBot one (device photo + connection column on the left, a
 readback/setter grid on the right) so users move between the two
 without relearning anything. The portable's many extra readouts are
-folded into chevron-collapsed groups — Environment, Board Status —
+folded into chevron-collapsed groups — Environment, Board Status, Alarms —
 so the pane shows only the actuation essentials until the user opens
 them; deeper controls each have their own pane (calibration, temp &
 lighting, PMT, and the advanced-mode power-system / motor-params
@@ -25,6 +25,7 @@ from traitsui.api import (
     Item,
     Label,
     Spring,
+    TextEditor,
     UItem,
     VGrid,
     VGroup,
@@ -208,8 +209,6 @@ grid = VGrid(
     UItem("light_intensity", enabled_when="connected and light_on"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
-    Item("last_alarm", style="readonly", label="Last Alarm"),
-    UItem(""),
     id="data_grid",
 )
 
@@ -238,6 +237,7 @@ board_status = VGroup(
         Label("Board Status"),
     ),
     VGrid(
+        Item("chip_pad_status_text", style="readonly", label="Chip Status"),
         Item("mechanisms_display", style="readonly", label="Mechanisms"),
         Item("illumination_display", style="readonly", label="Illumination"),
         Item("pmt_display", style="readonly", label="PMT"),
@@ -248,8 +248,29 @@ board_status = VGroup(
     ),
 )
 
+# Recent alarms and errors, newest first. The box keeps a fixed height
+# (negative = ignore Qt's size hint) so new entries scroll inside it
+# instead of growing the pane.
+alarms = VGroup(
+    HGroup(
+        UItem("show_alarms", editor=IconToggleEditor()),
+        Label("Alarms"),
+    ),
+    VGroup(
+        UItem(
+            "alarm_log",
+            # Only the custom style is a QTextEdit; the simple one is a
+            # QLineEdit that flattens the lines onto one row.
+            style="custom",
+            editor=TextEditor(multi_line=True, read_only=True),
+            height=-120,
+        ),
+        visible_when="show_alarms",
+    ),
+)
+
 UnifiedView = View(
-    HGroup(left, "12", VGroup(grid, environment, board_status)),
+    HGroup(left, "12", VGroup(grid, environment, board_status, alarms)),
     resizable=True,
     # Let the dock pane shrink below the grids' natural size — the
     # content then scrolls instead of pinning the pane width.
