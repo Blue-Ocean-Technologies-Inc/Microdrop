@@ -17,6 +17,9 @@ Owns:
     mapping cache, written to row_manager.protocol_metadata)
   - subscription to PROTOCOL_RUNNING (gate selection-driven publishes)
   - tree.selectionModel().currentChanged (selection -> DV publish)
+  - tree.selectionModel().selectionChanged (multi-selection ->
+    PROTOCOL_TREE_ROW_SELECTED only; selection broadcasts are deferred
+    one event-loop turn and coalesced, see _schedule_row_selected)
   - publishes PROTOCOL_TREE_DISPLAY_STATE
   - the unsaved-free-mode confirm dialog and the
     'Insert as new step' RowManager.add_step call
@@ -37,6 +40,7 @@ from collections import defaultdict
 import dramatiq
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.qt.QtCore import QObject
 from pyface.qt.QtWidgets import QWidget
 from traits.api import (
@@ -228,6 +232,27 @@ def _insert_step_from_message(row_manager, msg) -> None:
             hook(new_row)
 
 
+def _selected_step_uuids(row_manager):
+    """Uuids of the tree's selected step rows in tree order, groups
+    excluded — PROTOCOL_TREE_ROW_SELECTED's ``selected_step_ids``.
+    ``RowManager.selection`` holds the paths in click order; sorting the
+    path tuples restores tree order."""
+    uuids = []
+
+    for path in sorted(tuple(p) for p in row_manager.selection):
+        try:
+            row = row_manager.get_row(path)
+        except (IndexError, AttributeError):
+            # A path left stale by a structure edit the Qt selection has
+            # not re-synced yet — not a selected row any more.
+            continue
+
+        if not isinstance(row, GroupRow):
+            uuids.append(row.uuid)
+
+    return uuids
+
+
 class DeviceViewerSyncController(HasTraits):
     row_manager = Instance(RowManager)
     parent_widget = Instance(QWidget, allow_none=True)
@@ -241,6 +266,23 @@ class DeviceViewerSyncController(HasTraits):
     _last_selected_uuid = Str()
     _protocol_running = Bool(False)
     _suppress_publish = Bool(False)
+
+    #: (step_id, group_id, selected_step_ids) of the last
+    #: PROTOCOL_TREE_ROW_SELECTED broadcast — a selection-only change is
+    #: not rebroadcast when it would repeat it.
+    _last_row_selected_key = Tuple()
+
+    #: A deferred row_selected broadcast is queued (`_schedule_row_selected`);
+    #: coalesces one click's currentChanged + selectionChanged signals.
+    _row_selected_pending = Bool(False)
+
+    #: The queued broadcast follows a current-row change, so it publishes
+    #: even when the selection identity repeats.
+    _row_selected_forced = Bool(False)
+
+    #: The currentChanged slot is running (its free-mode prompt can spin a
+    #: nested event loop that would run the queued broadcast early).
+    _current_change_in_progress = Bool(False)
 
     #: Map of the unique channels found amongst the electrodes, and various
     #: electrode ids associated with them. Note that channel-electrode_id is
@@ -311,21 +353,26 @@ class DeviceViewerSyncController(HasTraits):
 
         The dramatiq-topic handlers are wired declaratively via @observe on the
         trait Events below (no Qt signal bridge); only the tree's own selection
-        signal is connected here."""
+        signals are connected here."""
         self._tree_widget = tree_widget
         selection_model = tree_widget.tree.selectionModel()
         selection_model.currentChanged.connect(self._on_current_changed)
+        selection_model.selectionChanged.connect(self._on_selection_changed)
         self._selection_model = selection_model
 
     def detach(self) -> None:
-        """Disconnect the tree selection signal. The @observe handlers tear
+        """Disconnect the tree selection signals. The @observe handlers tear
         down with the controller; dramatiq broker shutdown handles the actor."""
         try:
             if self._selection_model is not None:
                 self._selection_model.currentChanged.disconnect(
                     self._on_current_changed,
                 )
+                self._selection_model.selectionChanged.disconnect(
+                    self._on_selection_changed,
+                )
         except (RuntimeError, TypeError):
+            # Already disconnected, or the Qt object is gone — nothing to do.
             pass
         self._selection_model = None
         self._tree_widget = None
@@ -690,31 +737,50 @@ class DeviceViewerSyncController(HasTraits):
         finally:
             self._suppress_publish = False
 
-    def _publish_row_selected(self, row) -> None:
-        """Broadcast PROTOCOL_TREE_ROW_SELECTED: the selected step's uuid
-        plus every column's serialized value (step_id None for free mode /
-        group selection). Column-owning panes (fluorescence) live-track
-        the selected step through this without reaching into the tree."""
-        if row is None:
-            protocol_tree_row_selected_publisher.publish(step_id=None, cells={})
-            return
-        if isinstance(row, GroupRow):
-            protocol_tree_row_selected_publisher.publish(
-                step_id=None, group_id=row.uuid, cells={}
-            )
-            return
-        cells = {
-            column.model.col_id: column.model.serialize(column.model.get_value(row))
-            for column in self.row_manager.columns
-        }
-        protocol_tree_row_selected_publisher.publish(step_id=row.uuid, cells=cells)
+    def _row_selected_key(self, row):
+        """(step_id, group_id, selected_step_ids) a row_selected broadcast
+        for current row ``row`` carries."""
+        selected_step_ids = tuple(_selected_step_uuids(self.row_manager))
 
-    def _publish_for_row(self, row) -> None:
+        if row is None:
+            return None, None, selected_step_ids
+
+        if isinstance(row, GroupRow):
+            return None, row.uuid, selected_step_ids
+
+        return row.uuid, None, selected_step_ids
+
+    def _publish_row_selected(self, row) -> None:
+        """Broadcast PROTOCOL_TREE_ROW_SELECTED: the current step's uuid
+        plus every column's serialized value (step_id None for free mode /
+        group selection), and every selected step's uuid in tree order.
+        Column-owning panes (fluorescence) live-track the selection
+        through this without reaching into the tree."""
+        step_id, group_id, selected_step_ids = self._row_selected_key(row)
+        cells = {}
+
+        if step_id is not None:
+            cells = {
+                column.model.col_id: column.model.serialize(column.model.get_value(row))
+                for column in self.row_manager.columns
+            }
+
+        self._last_row_selected_key = (step_id, group_id, selected_step_ids)
+        protocol_tree_row_selected_publisher.publish(
+            step_id=step_id,
+            group_id=group_id,
+            cells=cells,
+            selected_step_ids=list(selected_step_ids),
+        )
+
+    def _publish_for_row(self, row, publish_row_selected=True) -> None:
         """Publish PROTOCOL_TREE_DISPLAY_STATE for the given row (or
         free-mode payload if row is None / a group). Gated only on the
         suppress flag — selection-driven publishes happen during a run
         too (executor advances + nav buttons + user clicks all push the
-        DV to the right step display)."""
+        DV to the right step display). ``publish_row_selected`` False
+        leaves the PROTOCOL_TREE_ROW_SELECTED broadcast to the caller
+        (the currentChanged slot defers it)."""
         if self._suppress_publish:
             return
 
@@ -781,7 +847,9 @@ class DeviceViewerSyncController(HasTraits):
             topic=PROTOCOL_TREE_DISPLAY_STATE,
             message=msg.serialize(),
         )
-        self._publish_row_selected(row)
+
+        if publish_row_selected:
+            self._publish_row_selected(row)
 
     def _insert_free_mode_as_new_step(self) -> None:
         """Reentrancy-guarded RowManager.add_step for the free-mode capture.
@@ -816,19 +884,81 @@ class DeviceViewerSyncController(HasTraits):
 
     def _on_current_changed(self, current, _previous) -> None:
         """Qt slot wired to selectionModel().currentChanged. Resolves the
-        QModelIndex to a row, then delegates to _publish_for_row."""
+        QModelIndex to a row and publishes the device-viewer display for
+        it now; its PROTOCOL_TREE_ROW_SELECTED follows one event-loop turn
+        later (`_schedule_row_selected`), once the click's selection has
+        settled."""
         if self._suppress_publish:
             return
         # Race guard: signal can fire after detach() clears _tree_widget.
         if self._tree_widget is None:
             return
-        if not current.isValid():
-            self._publish_for_row(None)
-            return
-        path = self._tree_widget.index_to_path(current)
+
+        self._current_change_in_progress = True
+
         try:
-            row = self.row_manager.get_row(path)
+            self._publish_for_row(
+                self._row_for_index(current), publish_row_selected=False
+            )
+        finally:
+            self._current_change_in_progress = False
+
+        self._schedule_row_selected(forced=True)
+
+    def _row_for_index(self, index):
+        """The row at QModelIndex ``index``; None for an invalid or stale
+        index."""
+        if not index.isValid():
+            return None
+
+        try:
+            return self.row_manager.get_row(self._tree_widget.index_to_path(index))
         except IndexError:
-            self._publish_for_row(None)
+            return None
+
+    def _on_selection_changed(self, _selected, _deselected):
+        """Qt slot wired to selectionModel().selectionChanged. Selection
+        changes that keep the current row (Ctrl+A, Ctrl-click deselect)
+        fire no currentChanged, yet change row_selected's
+        ``selected_step_ids`` — schedule a publish-only broadcast (no
+        device-viewer redisplay, no free-mode prompt)."""
+        if self._suppress_publish:
             return
-        self._publish_for_row(row)
+
+        self._schedule_row_selected()
+
+    def _schedule_row_selected(self, forced=False):
+        """Queue ONE PROTOCOL_TREE_ROW_SELECTED broadcast for the next
+        event-loop turn. Deferred because a mouse click moves the current
+        index BEFORE it updates the selection (keyboard moves the reverse):
+        a broadcast from inside currentChanged would carry the previous
+        selection. Coalesced so one click — currentChanged plus
+        selectionChanged — still yields a single broadcast. ``forced``
+        (a current-row change) publishes even when the selection identity
+        repeats, e.g. a protocol reload re-selecting a same-uuid step."""
+        self._row_selected_forced = self._row_selected_forced or forced
+
+        if self._row_selected_pending:
+            return
+
+        self._row_selected_pending = True
+        GUI.invoke_later(self._flush_row_selected)
+
+    def _flush_row_selected(self):
+        """Publish the scheduled PROTOCOL_TREE_ROW_SELECTED for the current
+        row; a selection-only change is skipped when its (step_id,
+        group_id, selected_step_ids) repeats the last broadcast."""
+        forced = self._row_selected_forced
+        self._row_selected_pending = False
+        self._row_selected_forced = False
+
+        # The free-mode prompt's nested event loop can run this mid-
+        # currentChanged; that slot schedules a forced flush once it
+        # returns. Also guards a queued call landing after detach().
+        if self._current_change_in_progress or self._tree_widget is None:
+            return
+
+        row = self._row_for_index(self._tree_widget.tree.currentIndex())
+
+        if forced or self._row_selected_key(row) != self._last_row_selected_key:
+            self._publish_row_selected(row)
