@@ -64,10 +64,12 @@ class ResetLayoutAction(TaskWindowAction):
     tooltip = "Restore the default arrangement of the dock panes"
 
     def perform(self, event=None):
-        window = self.object
+        # The menu-bar rebuild on plugin hot-load clears `self.task` on this
+        # shared action instance, so the click event's task is the reliable
+        # source.
+        task = getattr(event, "task", None) or self.task
+        window = task.window if task is not None else None
 
-        # The framework disables the action while it has no window, so this
-        # only guards a click racing the window's teardown.
         if window is None:
             logger.warning("Reset Layout: no task window to reset")
 
@@ -79,4 +81,4 @@ class ResetLayoutAction(TaskWindowAction):
             pane.floating = False
 
         window.reset_layout()
-        logger.info(f"Reset the layout of task '{self.task.id}' to its default")
+        logger.info(f"Reset the layout of task '{task.id}' to its default")
