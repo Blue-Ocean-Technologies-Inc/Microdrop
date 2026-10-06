@@ -17,7 +17,8 @@ so the pane shows only the actuation essentials until the user opens
 them; deeper controls each have their own pane (calibration, temp &
 lighting, PMT, and the advanced-mode power-system / motor-params
 panes)."""
-from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
+
+# Enthought library imports.
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -30,6 +31,8 @@ from traitsui.api import (
     View,
 )
 
+# Microdrop style imports.
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_EJECT,
     ICON_INPUT,
@@ -42,9 +45,11 @@ from microdrop_style.icons.icons import (
     ICON_MODE_FAN,
     ICON_MODE_FAN_OFF,
     ICON_REFRESH,
+    MDI_ICON_MAGNET,
     MDI_ICON_MAGNET_ON,
-    MDI_ICON_MAGNET
 )
+
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
@@ -72,7 +77,7 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_LOCK,
             off_glyph=ICON_LOCK_OPEN,
-            tooltip="Lock/unlock the chip (the pogo pads " "press/release it)",
+            tooltip="Lock/unlock the chip (the pogo pads press/release it)",
         ),
         enabled_when="connected",
     ),
@@ -110,7 +115,7 @@ mechanism_toolbar = HGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_LIGHTBULB,
             off_glyph=ICON_LIGHT_OFF,
-            tooltip="Illumination light on/off (keeps the % " "setpoint)",
+            tooltip="Illumination light on/off (keeps the % setpoint)",
         ),
         enabled_when="connected",
     ),
@@ -171,7 +176,7 @@ left = VGroup(
             editor=IconToggleEditor(
                 on_glyph=ICON_LINK,
                 off_glyph=ICON_LINK_OFF,
-                tooltip="Connect to the selected port / " "disconnect",
+                tooltip="Connect to the selected port / disconnect",
             ),
             enabled_when="connected or selected_port",
             visible_when="advanced_mode",
@@ -196,13 +201,9 @@ grid = VGrid(
         label="Voltage",
         enabled_when="realtime_mode",
     ),
-    UItem(
-        "voltage", enabled_when="connected and free_mode and " "not protocol_running"
-    ),
+    UItem("voltage", enabled_when="connected and free_mode and not protocol_running"),
     Item("frequency_display", style="readonly", label="Frequency"),
-    UItem(
-        "frequency", enabled_when="connected and free_mode and " "not protocol_running"
-    ),
+    UItem("frequency", enabled_when="connected and free_mode and not protocol_running"),
     Item("light_display", style="readonly", label="Light"),
     UItem("light_intensity", enabled_when="connected and light_on"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
@@ -259,11 +260,12 @@ UnifiedView = View(
 if __name__ == "__main__":
     # Layout preview without the app (no Redis/hardware; the toggles
     # publish nothing here). Run from the src directory:
-    #   ..\.pixi\envs\default\python.exe -m portable_dropbot_status_and_controls.views.view
+    #   ..\.pixi\envs\default\python.exe -m portable_dropbot_status_and_controls.views.view  # noqa: E501
+    from pyface.qt.QtWidgets import QApplication
+
     from portable_dropbot_status_and_controls.models.model import (
         PortableDropbotStatusAndControlsModel,
     )
-    from pyface.qt.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])
     from microdrop_style.helpers import style_app

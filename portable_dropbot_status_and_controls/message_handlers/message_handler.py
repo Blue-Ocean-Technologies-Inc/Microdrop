@@ -8,17 +8,23 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import Instance
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
+# Local imports.
 from ..models.model import PortableDropbotStatusAndControlsModel
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
