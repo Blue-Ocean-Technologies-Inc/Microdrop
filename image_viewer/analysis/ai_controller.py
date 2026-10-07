@@ -33,6 +33,7 @@ from ..discovery import capture_timestamp
 from ..model import ImageViewerModel
 from ..sam_download import download_ai_model, model_is_cached
 from .perspective import embedding_id, warp_frame
+from .protocol_guard import proceed_despite_protocol
 from .roi_geometry import centre_of
 from .roi_model import RoiAnalysisModel
 from .sam_detect import (
@@ -199,6 +200,9 @@ class AiRoiController(HasTraits):
 
     @observe("analysis_model:ai_detect_button")
     def _on_detect(self, event):
+        if not proceed_despite_protocol(self.analysis_model):
+            return
+
         if not self._ensure_model_ready():
             return
         current = self.viewer_model.current_path
@@ -222,6 +226,10 @@ class AiRoiController(HasTraits):
         if self.runner.track_running:
             self.runner.cancel()
             return
+
+        if not proceed_despite_protocol(self.analysis_model):
+            return
+
         if not self._ensure_model_ready():
             return
         current = self.viewer_model.current_path
