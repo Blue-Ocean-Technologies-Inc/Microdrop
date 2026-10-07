@@ -127,6 +127,18 @@ ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
 
+# Fill Pattern dialog: the pattern kinds, the default new-step count for an
+# alternating fill, and the ceiling on steps one fill may create or set (a
+# fat-fingered increment must not insert thousands of rows).
+STEP_PATTERN_RAMP = "Ramp"
+STEP_PATTERN_ALTERNATE = "Alternate"
+STEP_PATTERN_MODES = (STEP_PATTERN_RAMP, STEP_PATTERN_ALTERNATE)
+STEP_PATTERN_DEFAULT_CREATE_COUNT = 4
+STEP_PATTERN_MAX_STEPS = 500
+# Tree-scoped shortcut opening the dialog; shown in its menu entry and on the
+# quick-action button's tooltip.
+STEP_PATTERN_SHORTCUT = "Ctrl+Shift+F"
+
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:
 PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"

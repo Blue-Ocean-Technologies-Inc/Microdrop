@@ -32,9 +32,13 @@ from pyface.qt.QtWidgets import (
 )
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import STEP_PATTERN_SHORTCUT
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.step_pattern_controller import (
+    StepPatternController,
+)
 from pluggable_protocol_tree.views.bulk_set_dialog import BulkSetDialog
 from pluggable_protocol_tree.views.delegate import ProtocolItemDelegate
 from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
@@ -174,6 +178,9 @@ class ProtocolTreeWidget(QWidget):
             (QKeySequence("Ctrl+Shift+G"), self._unfold_shortcut),
             # Run just the selected rows (#529-style guard, issue #558).
             (QKeySequence("Ctrl+R"), self._run_selected_shortcut),
+            # Fill Pattern dialog — the one registration; the quick-action
+            # button only advertises it in its tooltip.
+            (QKeySequence(STEP_PATTERN_SHORTCUT), self._fill_pattern_shortcut),
         ):
             sc = QShortcut(seq, self.tree)
             sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -350,6 +357,9 @@ class ProtocolTreeWidget(QWidget):
         menu.addAction("Paste", self._paste)
         menu.addSeparator()
         menu.addAction("Bulk Set Values…", self._bulk_set_values)
+        fill_pattern = menu.addAction("Fill Pattern…", self.fill_pattern)
+        # Display only: the live binding is the tree-scoped QShortcut.
+        fill_pattern.setShortcut(QKeySequence(STEP_PATTERN_SHORTCUT))
         menu.addSeparator()
         menu.addAction("Delete", self._delete_selection)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
@@ -474,6 +484,11 @@ class ProtocolTreeWidget(QWidget):
         # start. The dock pane re-checks against the executor regardless.
         if self._structural_editable:
             self._run_selected()
+
+    def _fill_pattern_shortcut(self):
+        # Keyboard path for "Fill Pattern…"; run-locked like the menu entry.
+        if self._structural_editable:
+            self.fill_pattern()
 
     def _selection_roots(self):
         """Normalized selection roots for a scoped run — descendants of an
@@ -616,6 +631,43 @@ class ProtocolTreeWidget(QWidget):
             f"Bulk set {list(updates)} on {len(targets)} step(s) "
             f"(nested={dialog.apply_nested})"
         )
+
+    def fill_pattern(self):
+        """Open the Fill Pattern dialog on the selection, then select any
+        steps it created (expanding a new group) so the user sees the run."""
+        controller = StepPatternController(
+            manager=self._manager, is_editable=self._is_cell_editable
+        )
+        new_paths = controller.open(parent=self)
+
+        if new_paths:
+            self._select_paths(new_paths)
+
+    @staticmethod
+    def _is_cell_editable(column, row):
+        """Whether the user may edit ``column``'s cell on ``row`` in the grid."""
+        return bool(column.view.get_flags(row) & Qt.ItemIsEditable)
+
+    def _select_paths(self, paths):
+        """Select the rows at ``paths``, making the first one current."""
+        indexes = [self._node_to_index(self._manager.get_row(p)) for p in paths]
+        indexes = [idx for idx in indexes if idx.isValid()]
+
+        if not indexes:
+            return
+
+        rows_flag = QItemSelectionModel.SelectionFlag.Rows
+        selection_model = self.tree.selectionModel()
+
+        self._expand_ancestors(indexes[0])
+        selection_model.setCurrentIndex(
+            indexes[0], QItemSelectionModel.SelectionFlag.ClearAndSelect | rows_flag
+        )
+
+        for idx in indexes[1:]:
+            selection_model.select(
+                idx, QItemSelectionModel.SelectionFlag.Select | rows_flag
+            )
 
     def _delete_selection(self):
         """Remove the currently-selected rows. Defensive: stale paths
