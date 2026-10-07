@@ -20,6 +20,10 @@ from types import SimpleNamespace
 from pyface.qt.QtCore import Qt
 
 # Microdrop package imports.
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_SCREEN_CAPTURE,
+)
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
@@ -32,13 +36,23 @@ from video_protocol_controls.protocol_columns.capture_column import (
     CaptureAtComboBoxView,
     CaptureCompoundModel,
     CaptureHandler,
+    CaptureLeadSpinBoxView,
     make_capture_column,
+)
+from video_protocol_controls.protocol_columns.video_column import (
+    VIDEO_CAMERA_ON_KEY,
 )
 
 CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column"
 
 
-def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
+def _row(
+    name="step",
+    capture=False,
+    capture_at=StepTime.START,
+    uuid="u-1",
+    capture_lead_ms=0,
+):
     # dotted_path() is the step_id source (#396 follow-up: matches the
     # recording scheme) — a bare attribute won't do since the handler
     # calls it.
@@ -47,13 +61,19 @@ def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
         uuid=uuid,
         capture=capture,
         capture_at=capture_at,
+        capture_lead_ms=capture_lead_ms,
         dotted_path=lambda: uuid,
     )
 
 
 def _ctx(experiment_dir=""):
     scratch = {"experiment_dir": experiment_dir} if experiment_dir else {}
-    return SimpleNamespace(protocol=SimpleNamespace(scratch=scratch))
+    sleeps = []
+
+    return SimpleNamespace(
+        protocol=SimpleNamespace(scratch=scratch, sleep=sleeps.append),
+        sleeps=sleeps,
+    )
 
 
 def _capture_manager():
@@ -69,14 +89,16 @@ def _capture_manager():
 # --- model ----------------------------------------------------------------
 
 
-def test_field_specs_capture_then_capture_at():
+def test_field_specs_capture_then_capture_at_then_lead():
     specs = CaptureCompoundModel().field_specs()
     assert [(s.field_id, s.col_name) for s in specs] == [
         ("capture", "Capture"),
         ("capture_at", "Capture At"),
+        ("capture_lead_ms", "Camera Lead (ms)"),
     ]
     assert specs[0].default_value is False
     assert specs[1].default_value == StepTime.START
+    assert specs[2].default_value == 0
 
 
 def test_capture_at_default_follows_model_default():
@@ -115,7 +137,9 @@ def test_new_step_defaults_to_step_start_without_overriding_edits():
 
 def test_handler_priority_and_fire_and_forget():
     handler = make_capture_column().handler
-    assert handler.priority == 10
+    # One bucket after Video (10) so VideoHandler settles the camera
+    # state before a lead hands it a camera-on.
+    assert handler.priority == 11
     assert list(handler.wait_for_topics) == []
 
 
@@ -228,6 +252,7 @@ def test_round_trip_preserves_per_step_capture_at(qapp):
     assert [c["compound_field_id"] for c in cap_entries] == [
         "capture",
         "capture_at",
+        "capture_lead_ms",
     ]
 
 
@@ -240,10 +265,7 @@ def test_payload_missing_capture_at_fills_with_step_start(qapp):
         values={"name": "captures", "capture": True, "capture_at": StepTime.END}
     )
     manager.add_step(values={"name": "plain", "capture_at": StepTime.END})
-    data = json.loads(json.dumps(manager.to_json()))
-    at_idx = data["fields"].index("capture_at")
-    data["fields"].remove("capture_at")
-    data["rows"] = [row[:at_idx] + row[at_idx + 1 :] for row in data["rows"]]
+    data = _without_field(json.loads(json.dumps(manager.to_json())), "capture_at")
 
     loaded = RowManager.from_json(data, columns=list(_capture_manager().columns))
     captures, plain = loaded.get_row((0,)), loaded.get_row((1,))
@@ -251,6 +273,36 @@ def test_payload_missing_capture_at_fills_with_step_start(qapp):
     assert captures.capture is True and plain.capture is False
     assert captures.capture_at == StepTime.START
     assert plain.capture_at == StepTime.START
+
+
+def test_payload_missing_capture_lead_fills_with_zero(qapp):
+    """A protocol saved before the lead cell existed loads with no lead."""
+    manager = _capture_manager()
+    manager.add_step(
+        values={"name": "captures", "capture": True, "capture_at": StepTime.END}
+    )
+    data = _without_field(json.loads(json.dumps(manager.to_json())), "capture_lead_ms")
+
+    loaded = RowManager.from_json(data, columns=list(_capture_manager().columns))
+    step = loaded.get_row((0,))
+
+    assert step.capture is True
+    assert step.capture_at == StepTime.END
+    assert step.capture_lead_ms == 0
+
+
+def _without_field(data, field_id):
+    """Strip one field from a saved payload, as if written before it existed.
+
+    Values deserialize against the saved columns list, so the column entry
+    goes too — not just the fields header and the row cells.
+    """
+    value_idx = data["fields"].index(field_id)
+    data["fields"].remove(field_id)
+    data["columns"] = [c for c in data["columns"] if c["id"] != field_id]
+    data["rows"] = [row[:value_idx] + row[value_idx + 1 :] for row in data["rows"]]
+
+    return data
 
 
 def test_capture_at_view_declares_capture_dependency():
@@ -262,3 +314,117 @@ def test_capture_at_view_declares_capture_dependency():
     )
 
     assert list(CaptureAtComboBoxView().depends_on_row_traits) == ["capture"]
+
+
+# --- camera lead -------------------------------------------------------------
+
+
+def _fake_clock(monkeypatch, start=100.0):
+    """Freeze the handler's monotonic clock; return a setter to advance it."""
+    now = [start]
+    monkeypatch.setattr(f"{CAPTURE_COLUMN_MODULE}.time.monotonic", lambda: now[0])
+
+    def advance(seconds):
+        now[0] += seconds
+
+    return advance
+
+
+def test_factory_registers_lead_spinbox():
+    view = make_capture_column().view.cell_view_for_field("capture_lead_ms")
+
+    assert isinstance(view, CaptureLeadSpinBoxView)
+    assert (view.low, view.high) == (0, 60000)
+    assert list(view.depends_on_row_traits) == ["capture"]
+
+
+def test_lead_cell_read_only_and_blank_until_capture_on():
+    view = make_capture_column().view.cell_view_for_field("capture_lead_ms")
+    off = _row(capture=False, capture_lead_ms=500)
+    on = _row(capture=True, capture_lead_ms=500)
+
+    assert not (view.get_flags(off) & Qt.ItemIsEditable)
+    assert view.get_flags(on) & Qt.ItemIsEditable
+    assert view.format_display(500, off) == ""
+    assert view.format_display(500, on) == "500"
+
+
+def test_zero_lead_publishes_only_capture(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+
+    for at in (StepTime.START, StepTime.END):
+        ctx = _ctx()
+        row = _row(capture=True, capture_at=at, capture_lead_ms=0)
+        handler.on_pre_step(row, ctx)
+        handler.on_post_step(row, ctx)
+
+        assert ctx.sleeps == []
+        assert VIDEO_CAMERA_ON_KEY not in ctx.protocol.scratch
+
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE] * 2
+
+
+def test_lead_at_step_start_turns_camera_on_then_waits_full_lead(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    _fake_clock(monkeypatch)
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.START, capture_lead_ms=1500)
+
+    CaptureHandler().on_pre_step(row, ctx)
+
+    assert [topic for topic, _payload in fired] == [
+        DEVICE_VIEWER_CAMERA_ACTIVE,
+        DEVICE_VIEWER_SCREEN_CAPTURE,
+    ]
+    assert fired[0][1] is True  # "true" json-decoded
+    assert ctx.sleeps == [1.5]
+    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is True
+
+
+def test_lead_at_step_end_waits_only_the_remainder(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    advance = _fake_clock(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.END, capture_lead_ms=2000)
+
+    handler.on_pre_step(row, ctx)
+
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_CAMERA_ACTIVE]
+    assert ctx.sleeps == []
+
+    advance(0.5)
+    handler.on_post_step(row, ctx)
+
+    assert [topic for topic, _payload in fired] == [
+        DEVICE_VIEWER_CAMERA_ACTIVE,
+        DEVICE_VIEWER_SCREEN_CAPTURE,
+    ]
+    assert ctx.sleeps == [1.5]
+
+
+def test_lead_at_step_end_no_wait_when_step_outlasts_lead(monkeypatch):
+    _patched_fires(monkeypatch)
+    advance = _fake_clock(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.END, capture_lead_ms=2000)
+
+    handler.on_pre_step(row, ctx)
+    advance(5.0)
+    handler.on_post_step(row, ctx)
+
+    assert ctx.sleeps == [0.0]
+
+
+def test_no_camera_or_wait_when_capture_false(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    ctx = _ctx()
+    row = _row(capture=False, capture_lead_ms=1000)
+
+    CaptureHandler().on_pre_step(row, ctx)
+    CaptureHandler().on_post_step(row, ctx)
+
+    assert fired == []
+    assert ctx.sleeps == []
