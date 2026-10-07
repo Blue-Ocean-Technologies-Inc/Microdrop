@@ -12,10 +12,14 @@
 
 # Standard library imports.
 import os
+import time
 
 # Microdrop package imports.
 from image_viewer.discovery import (
+    NO_IMAGE_GROUP,
+    UNGROUPED_BURST,
     CaptureFolderWatch,
+    CaptureReadiness,
     discover_captures,
     discover_image_groups,
 )
@@ -69,3 +73,32 @@ def test_full_walk_interval_catches_unannounced_changes(tmp_path):
     first = watch.image_groups(tmp_path)
 
     assert watch.image_groups(tmp_path) is not first
+
+
+def test_held_back_file_forces_the_next_walk(tmp_path):
+    # Still being written: modified just now, so the readiness holds it.
+    writing = _make(tmp_path / "writing.png", time.time())
+    readiness = CaptureReadiness(settle_seconds=60.0)
+    watch = CaptureFolderWatch()
+
+    assert watch.image_groups(tmp_path, readiness) == {}
+    assert readiness.holding
+
+    # The writer has gone quiet. The folder's mtime has not moved, so
+    # only the held file can make the watch walk again.
+    readiness.settle_seconds = 0.0
+
+    assert watch.image_groups(tmp_path, readiness) == {
+        NO_IMAGE_GROUP: [(UNGROUPED_BURST, [writing])]
+    }
+    assert not readiness.holding
+
+
+def test_walk_is_still_skipped_when_nothing_is_held(tmp_path):
+    _make(tmp_path / "done.png", 1_000)
+    readiness = CaptureReadiness(settle_seconds=2.0)
+    watch = CaptureFolderWatch()
+    first = watch.image_groups(tmp_path, readiness)
+
+    assert not readiness.holding
+    assert watch.image_groups(tmp_path, readiness) is first

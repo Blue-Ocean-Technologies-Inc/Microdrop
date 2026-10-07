@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import Any, Dict, Float, HasTraits, Set, Str
+from traits.api import Any, Bool, Dict, Float, HasTraits, Set, Str
 
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
@@ -186,12 +186,19 @@ class CaptureReadiness(HasTraits):
     its size and mtime match what the previous scan saw (a file new to
     this scan has nothing to match). A held-back file is offered on a
     later scan, once its writer has been quiet that long. Files their
-    writer reports complete skip the wait.
+    writer reports complete skip the wait. Thread-safe: scans run on the
+    discovery worker while the capture event marks files on the GUI
+    thread.
     """
 
     #: How long a file must go unmodified before it counts as written —
     #: one discovery poll interval.
     settle_seconds = Float()
+
+    #: Whether the last scan held a file back. Its next scan must look at
+    #: the files again: a file finishing its write need not touch its
+    #: folder's mtime, so a cached walk would hide it indefinitely.
+    holding = Bool(False)
 
     #: path -> file_signature as the previous scan saw it.
     _previous = Dict()
@@ -200,8 +207,14 @@ class CaptureReadiness(HasTraits):
     #: event): ready at once.
     _complete = Set(Str)
 
+    _lock = Any()
+
+    def __lock_default(self):
+        return threading.Lock()
+
     def mark_complete(self, path):
-        self._complete.add(_path_key(path))
+        with self._lock:
+            self._complete.add(_path_key(path))
 
     def ready_paths(self, paths, now=None):
         """``paths`` (order kept) less those that may still be being
@@ -211,19 +224,21 @@ class CaptureReadiness(HasTraits):
         observed = {}
         ready = []
 
-        for path in paths:
-            signature = file_signature(path)
+        with self._lock:
+            for path in paths:
+                signature = file_signature(path)
 
-            if signature is None:
-                continue
+                if signature is None:
+                    continue
 
-            observed[path] = signature
+                observed[path] = signature
 
-            if self._is_ready(path, signature, now):
-                ready.append(path)
+                if self._is_ready(path, signature, now):
+                    ready.append(path)
 
-        self._previous = observed
-        self._complete = {_path_key(path) for path in observed} & self._complete
+            self._previous = observed
+            self._complete = {_path_key(path) for path in observed} & self._complete
+            self.holding = len(ready) < len(observed)
 
         return ready
 
@@ -301,8 +316,10 @@ class CaptureFolderWatch(HasTraits):
     renamed in it, NOT when a file's contents change: a file rewritten in
     place keeps its old save time (and place in the order) until the next
     walk. Some filesystems never move it at all, hence a walk at least
-    every ``full_walk_interval_s`` regardless. Thread-safe: the discovery
-    worker and a direct rescan may share one.
+    every ``full_walk_interval_s`` regardless. Nor is it skipped while a
+    :class:`CaptureReadiness` is holding files back, which only a fresh
+    scan can release. Thread-safe: the discovery worker and a direct
+    rescan may share one.
     """
 
     #: Longest the cached result is reused without a walk (s).
@@ -335,7 +352,9 @@ class CaptureFolderWatch(HasTraits):
         root = Path(directory)
 
         with self._lock:
-            if not self._is_unchanged(root):
+            holding = readiness is not None and readiness.holding
+
+            if holding or not self._is_unchanged(root):
                 self._image_groups, self._folder_mtimes = _image_groups_of(
                     root, readiness
                 )
