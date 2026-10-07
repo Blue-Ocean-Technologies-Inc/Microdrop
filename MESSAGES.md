@@ -205,6 +205,26 @@ Opt-in mode letting the user step through a route's phases without running the p
 - `PHASE_NAVIGATION_MODE` is published by whichever UI the user toggled and consumed by both (applying an equal value is a trait no-op, so the echo is harmless).
 - Mode is force-exited (`PHASE_NAVIGATION_MODE` published `"False"`) when a protocol run starts; the paused-run phase-seeking flow (#471) is untouched and gated separately.
 
+### Protocol Tree → column-owning panes: row selection + cell write-back
+
+Plugin panes that author a protocol column (fluorescence capture chain, PMT, magnet, ...) live-track the tree's selection and write their cell back without reaching into the tree.
+
+**Topics**
+- `PROTOCOL_TREE_ROW_SELECTED = "ui/protocol_tree/row_selected"` — defined in `pluggable_protocol_tree/consts.py`; publish through `protocol_tree_row_selected_publisher`.
+- `PROTOCOL_TREE_SET_CELL = "ui/protocol_tree/set_cell"` — request; publish through `protocol_tree_set_cell_publisher`.
+
+**Payload schema**
+- Pydantic `ProtocolTreeRowSelectedMessage` / `ProtocolTreeSetCellMessage` at `pluggable_protocol_tree/models/cell_sync.py`.
+- row_selected: `step_id` (the tree's current row; None for a group or no selection), `group_id`, `cells` (every column's serialized value for `step_id`), and `selected_step_ids` — every selected step row's uuid in tree order, groups excluded. It need not contain `step_id` (Ctrl-click can deselect the current row) and is `[]` from senders that predate the field.
+- set_cell: `step_id`, `col_id`, `value` (the column's serialized form), `only_if_set`.
+
+**Publisher side (pluggable_protocol_tree)**
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_publish_row_selected` broadcasts immediately on any cell edit of the current step (`_republish_on_param_cell_change`) and on a step-params commit; selection changes go through `_schedule_row_selected`, ONE coalesced broadcast one event-loop turn later (a mouse click moves the current index before it updates the selection, so an immediate broadcast would carry the previous selection). A current-row change (`_on_current_changed`, which still publishes `PROTOCOL_TREE_DISPLAY_STATE` immediately) always broadcasts; a selection-only change (`_on_selection_changed`: Ctrl+A, Ctrl-click deselect) is publish-only — no device-viewer redisplay — and skipped when `(step_id, group_id, selected_step_ids)` repeats the last broadcast.
+- `_on_set_cell_request` writes one cell (equality-skipped, ignored during a run) through `RowManager.set_value`, so the edit rebroadcasts row_selected only when it targets the current step.
+
+**Subscriber side**
+- Column-owning plugin panes (e.g. the fluorescence plugin's `fluorescence_controls_ui`) — load their editor from `cells`; a pane writing to several steps (`selected_step_ids`) sends one set_cell per step and sees one echo, for the current step.
+
 ### Backend → Microdrop task: shorts detected
 
 One topic carries both the spontaneous hardware shorts signal and the answer to an explicit user check, so the payload has to say which one it is: an empty channel list means "no shorts", and only the publisher knows whether the user is waiting to hear that.
