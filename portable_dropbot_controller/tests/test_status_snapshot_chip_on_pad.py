@@ -10,7 +10,8 @@
 
 """The signal board reports chip_on_pad as a 3-bit contact mask (debounced
 presence, left pogo, right pogo); the status snapshot publishes a chip only
-when all three are set. Hardware-free, no Redis."""
+when all three are set, and the raw mask rides along as chip_pad_contacts.
+Hardware-free, no Redis."""
 
 # Standard library imports.
 import json
@@ -59,4 +60,4 @@ def test_chip_on_pad_needs_every_contact_bit(monkeypatch, chip_on_pad, expected)
 
     harness._publish_status_snapshot()
 
-    assert published == [{"chip_on_pad": expected}]
+    assert published == [{"chip_on_pad": expected, "chip_pad_contacts": chip_on_pad}]
