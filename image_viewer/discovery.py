@@ -15,9 +15,13 @@ stays hardware/Qt-free testable.
 
 # Standard library imports.
 import calendar
+import os
 import re
 import time
 from pathlib import Path
+
+# Enthought library imports.
+from traits.api import Dict, Float, HasTraits, Set, Str
 
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
@@ -108,12 +112,89 @@ def _session_folders(root):
     }
 
 
-def discover_image_groups(directory) -> dict:
+def file_signature(path):
+    """``(size, mtime_ns)`` of a file — what changes while it is being
+    written — or None when it cannot be read."""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return None
+
+    return stat.st_size, stat.st_mtime_ns
+
+
+def _path_key(path):
+    """``path`` spelled one way: the capture event and the folder walk
+    may differ in slashes or (on Windows) case."""
+    return os.path.normcase(str(Path(path)))
+
+
+class CaptureReadiness(HasTraits):
+    """Holds back capture files that may still be being written, so a
+    discovery poll never offers a half-written PNG for loading.
+
+    A file is ready once its mtime is at least ``settle_seconds`` old and
+    its size and mtime match what the previous scan saw (a file new to
+    this scan has nothing to match). A held-back file is offered on a
+    later scan, once its writer has been quiet that long. Files their
+    writer reports complete skip the wait.
+    """
+
+    #: How long a file must go unmodified before it counts as written —
+    #: one discovery poll interval.
+    settle_seconds = Float()
+
+    #: path -> file_signature as the previous scan saw it.
+    _previous = Dict()
+
+    #: Paths their writer reported complete (the device viewer's capture
+    #: event): ready at once.
+    _complete = Set(Str)
+
+    def mark_complete(self, path):
+        self._complete.add(_path_key(path))
+
+    def ready_paths(self, paths, now=None):
+        """``paths`` (order kept) less those that may still be being
+        written. One stat per path; remembers this scan's signatures for
+        the next."""
+        now = time.time() if now is None else now
+        observed = {}
+        ready = []
+
+        for path in paths:
+            signature = file_signature(path)
+
+            if signature is None:
+                continue
+
+            observed[path] = signature
+
+            if self._is_ready(path, signature, now):
+                ready.append(path)
+
+        self._previous = observed
+        self._complete = {_path_key(path) for path in observed} & self._complete
+
+        return ready
+
+    def _is_ready(self, path, signature, now):
+        if _path_key(path) in self._complete:
+            return True
+
+        _size, mtime_ns = signature
+        settled = now - mtime_ns / 1e9 >= self.settle_seconds
+
+        return settled and self._previous.get(path, signature) == signature
+
+
+def discover_image_groups(directory, readiness=None) -> dict:
     """The captures under ``directory`` by Image Group, each split into
     Capture Sessions: ``{image_group: [(session, [paths...]), ...]}``,
     sessions oldest first (by their first image's save time), images
     within a session oldest first. {} when the directory is unset or
-    missing.
+    missing. A :class:`CaptureReadiness` leaves out files that may still
+    be being written.
 
     An image's folders below ``directory`` place it: none -> no session,
     ``NO_IMAGE_GROUP``; a session folder first -> that session, with the
@@ -125,8 +206,12 @@ def discover_image_groups(directory) -> dict:
     root = Path(directory)
     sessions = _session_folders(root)
     groups: dict = {}
+    paths = discover_captures(root)
 
-    for path in discover_captures(root):
+    if readiness is not None:
+        paths = readiness.ready_paths(paths)
+
+    for path in paths:
         folders = path.relative_to(root).parts[:-1]
 
         if folders and folders[0] in sessions:

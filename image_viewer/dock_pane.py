@@ -135,7 +135,7 @@ class ImageViewerDockPane(TraitsDockPane):
         super().destroy()
 
     def _on_media_captured(self, event):
-        self.controller.rescan()
+        self.controller.capture_saved(event.new)
 
     def create_contents(self, parent):
         self.ui = self.edit_traits(

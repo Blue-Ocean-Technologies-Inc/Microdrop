@@ -42,11 +42,13 @@ from traitsui.api import Controller
 from microdrop_utils.file_handler import open_file
 
 # Local imports.
-from .consts import IMAGE_CACHE_FRAMES
+from .consts import DISCOVERY_POLL_INTERVAL_MS, IMAGE_CACHE_FRAMES
 from .discovery import (
+    CaptureReadiness,
     current_captures_directory,
     discover_experiments,
     discover_image_groups,
+    file_signature,
 )
 from .display import load_image_array, render_display_frame
 from .model import (
@@ -100,6 +102,17 @@ class ImageViewerController(Controller):
     _pending_load_lock = Instance(object)
     _load_wakeup = Instance(object)
     _load_worker = Instance(object)
+
+    #: (path, file_signature) of the displayed image whose load failed,
+    #: or None. The failure is not final: a capture caught mid-write
+    #: loads once the file changes, so each rescan retries it then.
+    _failed_load = Any(None)
+
+    #: Keeps files still being written out of discovery.
+    _capture_readiness = Instance(CaptureReadiness)
+
+    def __capture_readiness_default(self):
+        return CaptureReadiness(settle_seconds=DISCOVERY_POLL_INTERVAL_MS / 1000)
 
     def __pending_load_lock_default(self):
         return threading.Lock()
@@ -369,6 +382,7 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     @observe("model:current_path")
     def _load_current_path(self, event):
+        self._failed_load = None
         self._render_current_path()
 
     @observe(
@@ -486,6 +500,7 @@ class ImageViewerController(Controller):
             if rendered is None:
                 logger.error(f"Could not load image: {path}")
                 self.model.info_text = "Could not load image"
+                self._failed_load = (path, file_signature(path))
                 continue
 
             self._apply_loaded(path, array, *rendered)
@@ -518,11 +533,32 @@ class ImageViewerController(Controller):
             return Path(self.model.directory)
         return current_captures_directory()
 
+    def capture_saved(self, path):
+        """A capture's writer reports ``path`` complete: show it without
+        waiting out the settle time, then rescan."""
+        self._capture_readiness.mark_complete(path)
+        self.rescan()
+
+    def _retry_failed_load(self):
+        """Reload the displayed image whose load failed once the file
+        has changed since — it was most likely caught mid-write."""
+        path, signature = self._failed_load
+
+        if file_signature(path) == signature:
+            return
+
+        self._failed_load = None
+        self._render_current_path()
+
     def rescan(self):
         """Sync with the browsed folder's Image Groups and their Capture
         Sessions; a newly landed session / image is followed automatically
         unless the user is parked on an older one. Also refreshes the
-        image-filter choices from what the filenames embed."""
+        image-filter choices from what the filenames embed, and retries a
+        failed load whose file has changed."""
+        if self._failed_load is not None:
+            self._retry_failed_load()
+
         # Refresh the experiment list (cheap dir listing) so the Experiments
         # dropdown tracks newly created experiments; the user's selection is
         # left untouched.
@@ -539,7 +575,7 @@ class ImageViewerController(Controller):
 
         directory = self._scan_directory()
         self.model.browsed_directory = str(directory) if directory else ""
-        image_groups = discover_image_groups(directory)
+        image_groups = discover_image_groups(directory, self._capture_readiness)
 
         if image_groups == self.model.image_groups:
             return
