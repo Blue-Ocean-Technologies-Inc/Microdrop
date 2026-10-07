@@ -32,6 +32,7 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.session import resolve_columns
 from video_protocol_controls.consts import StepTime
 from video_protocol_controls.protocol_columns.capture_column import (
+    CAPTURE_CAMERA_ON_KEY,
     CHOICES,
     CaptureAtComboBoxView,
     CaptureCompoundModel,
@@ -41,6 +42,7 @@ from video_protocol_controls.protocol_columns.capture_column import (
 )
 from video_protocol_controls.protocol_columns.video_column import (
     VIDEO_CAMERA_ON_KEY,
+    VideoHandler,
 )
 
 CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column"
@@ -360,7 +362,7 @@ def test_zero_lead_publishes_only_capture(monkeypatch):
         handler.on_post_step(row, ctx)
 
         assert ctx.sleeps == []
-        assert VIDEO_CAMERA_ON_KEY not in ctx.protocol.scratch
+        assert CAPTURE_CAMERA_ON_KEY not in ctx.protocol.scratch
 
     assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE] * 2
 
@@ -379,7 +381,9 @@ def test_lead_at_step_start_turns_camera_on_then_waits_full_lead(monkeypatch):
     ]
     assert fired[0][1] is True  # "true" json-decoded
     assert ctx.sleeps == [1.5]
-    assert ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] is True
+    assert ctx.protocol.scratch[CAPTURE_CAMERA_ON_KEY] is True
+    # Video's change-detection key is never written (#845 live bug).
+    assert VIDEO_CAMERA_ON_KEY not in ctx.protocol.scratch
 
 
 def test_lead_at_step_end_waits_only_the_remainder(monkeypatch):
@@ -428,3 +432,78 @@ def test_no_camera_or_wait_when_capture_false(monkeypatch):
 
     assert fired == []
     assert ctx.sleeps == []
+
+
+# --- camera ownership at protocol end ----------------------------------------
+
+
+def _camera_publishes(monkeypatch):
+    """Record (source, message) for camera publishes from Video and Capture."""
+    published = []
+
+    def recorder(source):
+        def publish(topic, message):
+            if topic == DEVICE_VIEWER_CAMERA_ACTIVE:
+                published.append((source, message))
+
+        return publish
+
+    monkeypatch.setattr(
+        "video_protocol_controls.protocol_columns.video_column.publish_message",
+        recorder("video"),
+    )
+    monkeypatch.setattr(f"{CAPTURE_COLUMN_MODULE}.publish_message", recorder("capture"))
+
+    return published
+
+
+def test_protocol_end_switches_off_camera_a_lead_left_on(monkeypatch):
+    published = _camera_publishes(monkeypatch)
+    ctx = SimpleNamespace(scratch={CAPTURE_CAMERA_ON_KEY: True})
+
+    CaptureHandler().on_protocol_end(ctx)
+
+    assert published == [("capture", "false")]
+    assert ctx.scratch[CAPTURE_CAMERA_ON_KEY] is False
+
+
+def test_protocol_end_leaves_camera_to_video_when_video_wants_it(monkeypatch):
+    published = _camera_publishes(monkeypatch)
+    ctx = SimpleNamespace(
+        scratch={CAPTURE_CAMERA_ON_KEY: True, VIDEO_CAMERA_ON_KEY: True}
+    )
+
+    CaptureHandler().on_protocol_end(ctx)
+
+    assert published == []
+
+
+def test_protocol_end_silent_without_a_lead(monkeypatch):
+    published = _camera_publishes(monkeypatch)
+
+    CaptureHandler().on_protocol_end(SimpleNamespace(scratch={}))
+
+    assert published == []
+
+
+def test_video_never_switches_off_a_lead_camera_between_steps(monkeypatch):
+    """Regression (#845 live test): with Video off on every step, the lead's
+    camera-on must not make VideoHandler publish "false" on the next step,
+    which raced the lead's "true" and left the camera off for the lead."""
+    published = _camera_publishes(monkeypatch)
+    _fake_clock(monkeypatch)
+    video, capture = VideoHandler(), CaptureHandler()
+    ctx = _ctx()
+
+    for uuid in ("u1", "u2"):
+        row = _row(
+            uuid=uuid, capture=True, capture_at=StepTime.END, capture_lead_ms=5000
+        )
+        row.video = False
+
+        # Executor order: Video's bucket (10) before Capture's (11).
+        video.on_pre_step(row, ctx)
+        capture.on_pre_step(row, ctx)
+        capture.on_post_step(row, ctx)
+
+    assert published == [("capture", "true"), ("capture", "true")]
