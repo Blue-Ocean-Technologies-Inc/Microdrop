@@ -150,7 +150,7 @@ class ImageViewerDockPane(TraitsDockPane):
         self._play_timer.timeout.connect(lambda: self.controller.step(1))
         self._poll_timer = QTimer(control)
         self._poll_timer.setInterval(DISCOVERY_POLL_INTERVAL_MS)
-        self._poll_timer.timeout.connect(self.controller.rescan)
+        self._poll_timer.timeout.connect(self.controller.request_rescan)
         self._poll_timer.start()
         self._drain_timer = QTimer(control)
         self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
@@ -163,12 +163,13 @@ class ImageViewerDockPane(TraitsDockPane):
                 IMAGE_FILTERS
             )
 
-        self.controller.rescan()
+        self.controller.request_rescan()
 
         return control
 
     def _drain_tick(self):
         self.controller.drain_loaded()
+        self.controller.drain_discovered()
         # ai_controller first: its TRACK_FRAME handling marks
         # tracked-override config dirty, and analysis_controller's
         # drain_results/flush_stats should flush that in the same tick

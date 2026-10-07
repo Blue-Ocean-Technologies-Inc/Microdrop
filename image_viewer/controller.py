@@ -11,7 +11,7 @@
 """Controller for the image viewer pane: turns toolbar events into model
 mutations, loads whatever ``current_path`` points at, keeps the dropdown /
 seek slider / path selection in sync, and rescans the browsed folder
-(called from the pane's poll timer).
+(requested by the pane's poll timer).
 
 Loading is asynchronous, latest-wins: ``current_path`` changes replace
 the loader thread's single pending request, so dragging the seek slider
@@ -22,6 +22,9 @@ same way, so a dragged contrast slider only ever renders its newest
 window. Finished renders land through ``drain_loaded()`` (the dock pane's
 drain timer) and a small LRU cache of decoded frames spares re-decoding
 recently viewed ones.
+Folder discovery runs the same way on its own worker: requested
+rescans are latest-wins and their results land through
+``drain_discovered()``.
 """
 
 # Standard library imports.
@@ -35,7 +38,7 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.api import OK, DirectoryDialog
-from traits.api import Any, Callable, Instance, observe
+from traits.api import Any, Callable, Instance, Int, observe
 from traitsui.api import Controller
 
 # Microdrop utils imports.
@@ -44,13 +47,14 @@ from microdrop_utils.file_handler import open_file
 # Local imports.
 from .consts import DISCOVERY_POLL_INTERVAL_MS, IMAGE_CACHE_FRAMES
 from .discovery import (
+    CaptureFolderWatch,
     CaptureReadiness,
     current_captures_directory,
     discover_experiments,
-    discover_image_groups,
     file_signature,
 )
 from .display import load_image_array, render_display_frame
+from .latest_wins_worker import LatestWinsWorker
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
@@ -114,8 +118,25 @@ class ImageViewerController(Controller):
     def __capture_readiness_default(self):
         return CaptureReadiness(settle_seconds=DISCOVERY_POLL_INTERVAL_MS / 1000)
 
+    #: Skips re-walking the browsed folder while nothing in it changed.
+    _capture_folders = Instance(CaptureFolderWatch, ())
+
+    #: Runs requested rescans' discovery off the GUI thread.
+    _discovery_worker = Instance(LatestWinsWorker)
+
+    #: Requested rescans so far — each request's sequence number.
+    _rescan_requests = Int(0)
+
+    #: (sequence number, (burst index, show)) — the jump to make once the
+    #: rescan with that number (or a later one) has been applied; None
+    #: when there is none.
+    _pending_jump = Any(None)
+
     def __pending_load_lock_default(self):
         return threading.Lock()
+
+    def __discovery_worker_default(self):
+        return LatestWinsWorker(work=self._discover_request, name="image-discovery")
 
     def __load_wakeup_default(self):
         return threading.Event()
@@ -145,8 +166,7 @@ class ImageViewerController(Controller):
         newest instead)."""
         if not event.new:
             return
-        self.rescan()
-        self._jump_to_burst(0, "first")
+        self.request_rescan(jump=(0, "first"))
 
     @observe("model:home_button")
     def _return_to_experiment_captures(self, event):
@@ -154,8 +174,7 @@ class ImageViewerController(Controller):
         again and show the newest burst's newest image (so new captures
         auto-follow)."""
         self.model.directory = ""
-        self.rescan()
-        self._jump_to_burst(-1, "last")
+        self.request_rescan(jump=(-1, "last"))
 
     @observe("model:open_folder_button")
     def _open_images_folder(self, event):
@@ -526,18 +545,60 @@ class ImageViewerController(Controller):
         logger.info(f"Loaded image: {path} ({bits}-bit {kind})")
 
     # ------------------------------------------------------------------ #
-    # Folder discovery (driven by the pane's poll timer, GUI thread)       #
+    # Folder discovery (requested by the pane's poll timer)                #
     # ------------------------------------------------------------------ #
     def _scan_directory(self):
-        if self.model.directory:
-            return Path(self.model.directory)
-        return current_captures_directory()
+        return _resolve_scan_directory(self.model.directory)
+
+    def request_rescan(self, jump=None):
+        """Rescan off the GUI thread; the result is applied by
+        drain_discovered(). ``jump`` — (burst index, show) — is made once
+        it has been (the folder and home buttons' landing)."""
+        self._rescan_requests += 1
+
+        if jump is not None:
+            self._pending_jump = (self._rescan_requests, jump)
+
+        self._discovery_worker.submit((self._rescan_requests, self.model.directory))
+
+    def _discover_request(self, request):
+        """Worker side of request_rescan: reads no traits, only the
+        request's snapshot of ``model.directory``."""
+        number, directory = request
+        scan_directory = _resolve_scan_directory(directory)
+
+        return number, directory, scan_directory, *self._discover(scan_directory)
+
+    def _discover(self, scan_directory):
+        """The experiment list and ``scan_directory``'s Image Groups."""
+        return (
+            discover_experiments(),
+            self._capture_folders.image_groups(scan_directory, self._capture_readiness),
+        )
+
+    def drain_discovered(self):
+        """Called by the dock pane's drain timer (GUI thread): apply
+        finished rescans, then any jump waiting on them. A rescan of a
+        folder the user has since left is dropped — the rescan the switch
+        requested is already queued behind it."""
+        for result in self._discovery_worker.drain():
+            number, directory, scan_directory, *discovered = result
+
+            if directory != self.model.directory:
+                continue
+
+            self._apply_discovery(scan_directory, *discovered)
+
+            if self._pending_jump is not None and self._pending_jump[0] <= number:
+                _number, jump = self._pending_jump
+                self._pending_jump = None
+                self._jump_to_burst(*jump)
 
     def capture_saved(self, path):
         """A capture's writer reports ``path`` complete: show it without
         waiting out the settle time, then rescan."""
         self._capture_readiness.mark_complete(path)
-        self.rescan()
+        self.request_rescan()
 
     def _retry_failed_load(self):
         """Reload the displayed image whose load failed once the file
@@ -551,18 +612,22 @@ class ImageViewerController(Controller):
         self._render_current_path()
 
     def rescan(self):
-        """Sync with the browsed folder's Image Groups and their Capture
-        Sessions; a newly landed session / image is followed automatically
-        unless the user is parked on an older one. Also refreshes the
-        image-filter choices from what the filenames embed, and retries a
-        failed load whose file has changed."""
+        """Rescan on the calling thread (request_rescan is the GUI's
+        path): sync with the browsed folder's Image Groups and their
+        Capture Sessions."""
+        scan_directory = self._scan_directory()
+        self._apply_discovery(scan_directory, *self._discover(scan_directory))
+
+    def _apply_discovery(self, directory, experiments, image_groups):
+        """Apply a rescan: a newly landed session / image is followed
+        automatically unless the user is parked on an older one. Also
+        refreshes the image-filter choices from what the filenames embed,
+        and retries a failed load whose file has changed."""
         if self._failed_load is not None:
             self._retry_failed_load()
 
-        # Refresh the experiment list (cheap dir listing) so the Experiments
-        # dropdown tracks newly created experiments; the user's selection is
-        # left untouched.
-        experiments = discover_experiments()
+        # The Experiments dropdown tracks newly created experiments; the
+        # user's selection is left untouched.
         if experiments != self.model.experiments:
             self.model.experiments = experiments
 
@@ -573,9 +638,7 @@ class ImageViewerController(Controller):
             self.model.image_filter = image_filter
             self._refresh_filter_names()
 
-        directory = self._scan_directory()
         self.model.browsed_directory = str(directory) if directory else ""
-        image_groups = discover_image_groups(directory, self._capture_readiness)
 
         if image_groups == self.model.image_groups:
             return
@@ -637,3 +700,12 @@ class ImageViewerController(Controller):
 
         if self.model.selected_filter not in self.model.filter_names:
             self.model.selected_filter = IMAGE_FILTER_ALL
+
+
+def _resolve_scan_directory(directory):
+    """The folder a rescan walks: ``directory`` when one is browsed ('' =
+    follow the current experiment's captures folder)."""
+    if directory:
+        return Path(directory)
+
+    return current_captures_directory()

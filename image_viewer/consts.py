@@ -72,6 +72,10 @@ PERSISTED_VIEWER_TRAITS = {
 IMAGE_PATTERNS = ("*.png", "*.tif", "*.tiff", "*.jpg", "*.jpeg", "*.bmp")
 #: Rescan cadence for newly landed captures / experiment switches (ms).
 DISCOVERY_POLL_INTERVAL_MS = 2_000
+#: Longest discovery goes without walking the captures tree even though
+#: no folder's mtime moved: some filesystems (FAT, some network shares)
+#: never update a folder's mtime when files land in it (s).
+DISCOVERY_FULL_WALK_INTERVAL_S = 30.0
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 
