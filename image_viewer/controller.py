@@ -16,8 +16,12 @@ seek slider / path selection in sync, and rescans the browsed folder
 Loading is asynchronous, latest-wins: ``current_path`` changes replace
 the loader thread's single pending request, so dragging the seek slider
 never decodes the frames dragged past and never blocks the GUI thread.
-Finished decodes land through ``drain_loaded()`` (the dock pane's drain
-timer) and a small LRU cache makes recently viewed frames instant.
+The loader thread also renders the display frame (corrections plus the
+8-bit window), and display-window / correction edits re-render there the
+same way, so a dragged contrast slider only ever renders its newest
+window. Finished renders land through ``drain_loaded()`` (the dock pane's
+drain timer) and a small LRU cache of decoded frames spares re-decoding
+recently viewed ones.
 """
 
 # Standard library imports.
@@ -31,7 +35,7 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.api import OK, DirectoryDialog
-from traits.api import Any, Callable, Instance, Str, observe
+from traits.api import Any, Callable, Instance, observe
 from traitsui.api import Controller
 
 # Microdrop utils imports.
@@ -44,7 +48,7 @@ from .discovery import (
     discover_experiments,
     discover_image_groups,
 )
-from .display import load_image_array
+from .display import load_image_array, render_display_frame
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
@@ -79,13 +83,20 @@ class ImageViewerController(Controller):
     #: IMAGE_CACHE_FRAMES so recently viewed frames re-display instantly.
     _decoded_cache = Instance(OrderedDict, ())
 
-    #: (path, array | None) results from the loader thread, applied on
-    #: the GUI thread by drain_loaded().
+    #: (path, array | None, settings, (corrected, display) | None)
+    #: results from the loader thread, applied on the GUI thread by
+    #: drain_loaded().
     _load_results = Instance(queue.SimpleQueue, ())
 
-    #: The newest not-yet-started decode request. The loader always takes
-    #: this and only this, so frames the slider dragged past are skipped.
-    _pending_load = Str()
+    #: The newest not-yet-started (path, decoded array | None, settings)
+    #: request, None when there is none. The loader always takes this and
+    #: only this, so frames the slider dragged past are skipped.
+    _pending_load = Any(None)
+
+    #: The display settings of the newest request — a window edit under
+    #: auto-contrast changes nothing on screen, so it is not re-rendered.
+    _requested_settings = Any(None)
+
     _pending_load_lock = Instance(object)
     _load_wakeup = Instance(object)
     _load_worker = Instance(object)
@@ -358,21 +369,59 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     @observe("model:current_path")
     def _load_current_path(self, event):
-        path = event.new
+        self._render_current_path()
+
+    @observe(
+        "model:auto_contrast, model:window_min, model:window_max, "
+        "model:roi_analysis:session, "
+        "model:roi_analysis:session:ball:enabled, "
+        "model:roi_analysis:session:ball:radius_px, "
+        "model:roi_analysis:session:perspective:enabled, "
+        "model:roi_analysis:session:perspective:matrix"
+    )
+    def _display_settings_changed(self, event):
+        if self._display_settings() != self._requested_settings:
+            self._render_current_path()
+
+    def _display_settings(self):
+        """The window and corrections a frame renders with, snapshotted
+        on the GUI thread as :func:`render_display_frame`'s trailing
+        arguments — the loader thread never reads traits."""
+        model = self.model
+        session = model.roi_analysis.session
+        window = None if model.auto_contrast else (model.window_min, model.window_max)
+
+        return (
+            model.auto_contrast,
+            window,
+            session.ball.effective_radius(),
+            session.perspective.effective_matrix(),
+        )
+
+    def _render_current_path(self):
+        """Hand the loader thread the displayed path to render with the
+        current settings, decoding it first unless it is cached. Latest
+        wins: this replaces any not-yet-started request, so frames the
+        slider dragged past are never decoded at all."""
+        path = self.model.current_path
+
         if not path:
             return
-        cached = self._decoded_cache.get(path)
-        if cached is not None:
+
+        array = self._decoded_cache.get(path)
+
+        if array is None:
+            self.model.info_text = f"Loading {Path(path).name}…"
+        else:
             self._decoded_cache.move_to_end(path)
-            self._apply_loaded(path, cached)
-            return
-        # Latest wins: replace any not-yet-started request so frames the
-        # slider dragged past are never decoded at all.
+
+        self._requested_settings = self._display_settings()
+
         with self._pending_load_lock:
-            self._pending_load = path
+            self._pending_load = (path, array, self._requested_settings)
             self._load_wakeup.set()
+
         self._ensure_load_worker()
-        self.model.info_text = f"Loading {Path(path).name}…"
 
     def _ensure_load_worker(self):
         if self._load_worker is not None and self._load_worker.is_alive():
@@ -381,46 +430,78 @@ class ImageViewerController(Controller):
         self._load_worker.start()
 
     def _run_loader(self):
-        """Daemon loader: decode the newest pending path, report on the
-        results queue, wait for the next request."""
+        """Daemon loader: decode the newest pending path unless it came
+        decoded, render its display frame, report on the results queue,
+        wait for the next request."""
         while True:
             self._load_wakeup.wait()
+
             with self._pending_load_lock:
-                path = self._pending_load
-                self._pending_load = ""
+                request = self._pending_load
+                self._pending_load = None
                 self._load_wakeup.clear()
-            if not path:
+
+            if request is None:
                 continue
-            try:
-                array = load_image_array(path)
-            except Exception as error:
-                logger.warning(f"Image decode failed for {path}: {error}")
-                array = None
-            self._load_results.put((path, array))
+
+            path, array, settings = request
+            rendered = None
+
+            if array is None:
+                try:
+                    array = load_image_array(path)
+                except Exception as error:
+                    logger.warning(f"Image decode failed for {path}: {error}")
+
+            if array is not None:
+                try:
+                    rendered = render_display_frame(array, *settings)
+                except Exception as error:
+                    logger.warning(f"Image render failed for {path}: {error}")
+
+            self._load_results.put((path, array, settings, rendered))
 
     def drain_loaded(self):
         """Called by the dock pane's drain timer (GUI thread): apply
-        finished decodes. Only the currently displayed path is shown, but
-        every successful decode enters the cache."""
+        finished renders. Only the currently displayed path is shown, but
+        every successful decode enters the cache. A render whose settings
+        have since moved is still shown: the newer request is already
+        queued behind it, so a dragged slider previews as it goes."""
         while True:
             try:
-                path, array = self._load_results.get_nowait()
+                path, array, _settings, rendered = self._load_results.get_nowait()
             except queue.Empty:
                 return
-            if array is None:
-                if path == self.model.current_path:
-                    logger.error(f"Could not load image: {path}")
-                    self.model.info_text = "Could not load image"
-                continue
-            self._decoded_cache[path] = array
-            self._decoded_cache.move_to_end(path)
-            while len(self._decoded_cache) > IMAGE_CACHE_FRAMES:
-                self._decoded_cache.popitem(last=False)
-            if path == self.model.current_path:
-                self._apply_loaded(path, array)
 
-    def _apply_loaded(self, path, array):
+            if array is not None:
+                self._decoded_cache[path] = array
+                self._decoded_cache.move_to_end(path)
+
+                while len(self._decoded_cache) > IMAGE_CACHE_FRAMES:
+                    self._decoded_cache.popitem(last=False)
+
+            if path != self.model.current_path:
+                continue
+
+            if rendered is None:
+                logger.error(f"Could not load image: {path}")
+                self.model.info_text = "Could not load image"
+                continue
+
+            self._apply_loaded(path, array, *rendered)
+
+    def _apply_loaded(self, path, array, corrected, display):
+        is_new_image = array is not self.model.array
+
+        # The canvas draws display_frame and refits on array, so the
+        # frame must be in place before array announces a new image.
+        self.model.corrected_array = corrected
+        self.model.display_frame = display
         self.model.array = array
+
+        if not is_new_image:
+            return
+
         bits = 16 if array.dtype == np.uint16 else 8
         kind = "gray" if array.ndim == 2 else "RGB"
         self.model.info_text = (
