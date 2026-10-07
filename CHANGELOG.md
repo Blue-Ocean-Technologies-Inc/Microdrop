@@ -1,3 +1,33 @@
+## [v1.28.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.28.0) (2026-10-07)
+
+### Feat
+
+- **image-viewer**: run analysis lighter during a protocol ([`c08d858`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c08d858b19dcf57d0db2545b12bec980754bd0e7))
+- **image-viewer**: hold the view under a draw during a run ([`0febfd3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0febfd3e42e56e4dfae92e4fcb546e44f816bcc8))
+- **portable-controls**: chip status readout and alarms log ([`949272d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/949272d478cf5864281556692d2ffd4c1b75cce6))
+- **portable**: publish the chip pad contact mask ([`57e55af`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/57e55af83319c8847220234ead1d31727797b3ab))
+
+### Fix
+
+- **image-viewer**: tail heater logs off the GUI thread ([`44cf566`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/44cf56602a8299d590b42d753b16c8265c53eb43))
+- **image-viewer**: rescan while capture files are held ([`9c50912`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9c50912613af2ccc06dcad82bb3d56574ce52e61))
+- **image-viewer**: skip capture files still being written ([`0995c9d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0995c9d6d20bd6ba23556c7321512fc3682df4be))
+- **image-viewer**: render display frames off the GUI thread ([`da43cbe`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/da43cbe06830c9bcf92e8532772044fced8f045e))
+- **portable-controls**: name the pogo side in the chip status ([`41c1548`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/41c1548c88480aab2bd4bd5d93b8b0438376122e))
+
+### Perf
+
+- **image-viewer**: coalesce the pixel readout repaint ([`786e99c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/786e99c9867f54ec5f099773a1588453fcc706b7))
+- **image-viewer**: walk captures once, off the GUI thread ([`cf7c9da`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cf7c9da659b772f24a357d64162cdce4a94cdc8e))
+
+### Test
+
+- **portable**: expect the pad contact mask in the snapshot ([`f719bb3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f719bb3edecae62d9dd54e6415c85873b214f53c))
+
+### Style
+
+- **portable-controls**: ruff-clean the status view and handler ([`44b82f0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/44b82f047a3b87ef602e35079b20e0eaff984460))
+
 ## [v1.27.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.27.0) (2026-10-07)
 
 ### Feat
