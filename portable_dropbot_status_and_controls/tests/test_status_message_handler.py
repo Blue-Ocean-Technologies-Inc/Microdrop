@@ -24,10 +24,10 @@ from portable_dropbot_status_and_controls.message_handlers.message_handler impor
 @pytest.mark.parametrize(
     "contacts, expected",
     [
-        (0, "No pogo on chip (0)"),
-        (1, "No pogo on chip (1)"),
-        (3, "1 pogo on chip, left (3)"),
-        (5, "1 pogo on chip, right (5)"),
+        (0, "No pogos on chip (0)"),
+        (1, "No pogos on chip (1)"),
+        (3, "Left pogos on chip (3)"),
+        (5, "Right pogos on chip (5)"),
         (7, "All pogos on chip (7)"),
     ],
 )

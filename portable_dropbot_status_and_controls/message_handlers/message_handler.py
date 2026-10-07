@@ -54,11 +54,11 @@ def summarize_chip_pad_contacts(contacts):
     if left and right:
         summary = "All pogos on chip"
     elif left:
-        summary = "1 pogo on chip, left"
+        summary = "Left pogos on chip"
     elif right:
-        summary = "1 pogo on chip, right"
+        summary = "Right pogos on chip"
     else:
-        summary = "No pogo on chip"
+        summary = "No pogos on chip"
 
     return f"{summary} ({contacts})"
 
