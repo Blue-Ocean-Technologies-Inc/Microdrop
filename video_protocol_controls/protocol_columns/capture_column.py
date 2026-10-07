@@ -8,12 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Capture compound column — one-shot screen capture per step. Two
-coupled cells (capture Bool + capture_at Step Start / Step End choice)
-sharing one model + one handler via the PPT-11 compound framework (#396).
+"""Capture compound column — one-shot screen capture per step. Three
+coupled cells (capture Bool, capture_at Step Start / Step End choice,
+capture_lead_ms camera lead time) sharing one model + one handler via
+the PPT-11 compound framework (#396).
 
 Timing is PER STEP: each row picks start-of-step or end-of-step capture
 independently; newly added steps start at Step Start.
+
+Camera lead: when capture_lead_ms > 0 the handler turns the camera on
+(DEVICE_VIEWER_CAMERA_ACTIVE "true") at step start and holds the capture
+until the camera has been on for at least that long — a stop-aware sleep
+of the full lead for Step Start, of only the unelapsed remainder for
+Step End. The camera-on is recorded under VideoHandler's scratch key, so
+the Video column's change detection turns the camera off at the next
+step without Video, or at protocol end. A lead of 0 leaves the camera
+alone and captures without waiting.
 
 Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic.
 
@@ -23,21 +33,21 @@ Capture payload format:
 
 ⚠ Key is "directory" (NOT "experiment_dir") — preserves the legacy wire
 format the device_viewer consumer expects.
-
-This handler has no cross-step state — capture is per-step, not bracketed
-like Record or Video. So no scratch key needed; no on_protocol_end cleanup
-needed.
 """
 
 # Standard library imports.
 import json
+import time
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
-from traits.api import Bool, Enum, List, Str
+from traits.api import Bool, Enum, Int, List, Str
 
 # Microdrop package imports.
-from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_SCREEN_CAPTURE,
+)
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
     BaseCompoundColumnHandler,
@@ -47,7 +57,11 @@ from pluggable_protocol_tree.models.compound_column import (
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
+from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY, StepTime
+from video_protocol_controls.protocol_columns.video_column import (
+    VIDEO_CAMERA_ON_KEY,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -57,9 +71,13 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 #: combobox options all derive from it.
 CHOICES = (StepTime.START, StepTime.END)
 
+#: Per-step scratch entry: time.monotonic() at which this step's lead
+#: turned the camera on; consumed (popped) when the capture fires.
+CAMERA_ON_AT_SCRATCH_KEY = "video_protocol_controls.capture_camera_on_at"
+
 
 class CaptureCompoundModel(BaseCompoundColumnModel):
-    """Two coupled fields. base_id 'capture' appears as compound_id on
+    """Three coupled fields. base_id 'capture' appears as compound_id on
     each field's column entry in JSON (PPT-11 framework)."""
 
     base_id = "capture"
@@ -72,17 +90,23 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
         return [
             FieldSpec("capture", "Capture", False),
             FieldSpec("capture_at", "Capture At", self.default_capture_at),
+            FieldSpec("capture_lead_ms", "Camera Lead (ms)", 0),
         ]
 
     def trait_for_field(self, field_id):
         if field_id == "capture":
             return Bool(False, desc="Capture image during step")
+
         if field_id == "capture_at":
             return Enum(
                 self.default_capture_at,
                 *CHOICES,
                 desc="When during the step the capture fires",
             )
+
+        if field_id == "capture_lead_ms":
+            return Int(0, desc="Milliseconds the camera is on before the capture fires")
+
         raise KeyError(field_id)
 
 
@@ -115,34 +139,73 @@ class CaptureAtComboBoxView(ComboBoxColumnView):
         return super().format_display(value, row)
 
 
+class CaptureLeadSpinBoxView(IntSpinBoxColumnView):
+    """Read-only and blank while row.capture is False — a camera lead is
+    meaningless when the step doesn't capture (same cross-cell pattern as
+    CaptureAtComboBoxView)."""
+
+    #: get_flags/format_display are pure functions of row.capture; repaint
+    #: the cell the moment the checkbox toggles.
+    depends_on_row_traits = List(Str, value=["capture"])
+
+    low = 0
+    high = 60000
+
+    def get_flags(self, row):
+        flags = super().get_flags(row)
+
+        if not getattr(row, "capture", False):
+            flags &= ~Qt.ItemIsEditable
+
+        return flags
+
+    def format_display(self, value, row):
+        if not getattr(row, "capture", False):
+            return ""
+
+        return super().format_display(value, row)
+
+
 class CaptureHandler(BaseCompoundColumnHandler):
     """Publishes a single image-capture event per step where row.capture
-    is True, at the row's chosen moment (row.capture_at).
+    is True, at the row's chosen moment (row.capture_at), after the
+    row's camera lead (row.capture_lead_ms) has elapsed.
 
-    Priority 10 — same earliest bucket as Video and Record, since the three
-    fire to independent topics and parallel execution is safe (see notes in
-    VideoHandler / RecordHandler about priority-10 cleanup parallelism;
-    Capture has no on_protocol_end so it's not even part of that race).
+    Priority 11 — just after Video and Record (10). Same-priority hooks
+    run in parallel, and a lead writes VideoHandler's scratch key: in one
+    bucket, VideoHandler could read the previous step's camera-on and
+    switch the camera off after this handler switched it on. Running one
+    bucket later lets VideoHandler settle the camera state first; still
+    ahead of V/F (20) and routes (30).
 
-    This handler has no cross-step state (no scratch key). Each step is
-    fully independent — if row.capture is True, the event fires; if False,
-    it doesn't. There is no change-detection suppression, so calling
-    on_pre_step twice with row.capture=True fires two publishes.
+    The only cross-step state is the camera-on handed to
+    VIDEO_CAMERA_ON_KEY; the camera-on time is per-step scratch, consumed
+    when the capture fires. There is no change-detection suppression, so
+    calling on_pre_step twice with row.capture=True fires two publishes.
     """
 
-    priority = 10
+    priority = 11
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
     def on_pre_step(self, row, ctx):
-        """Fire at step start when the row's capture_at says Step Start.
+        """Turn the camera on for a lead, and fire now when the row's
+        capture_at says Step Start.
 
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
         if not getattr(row, "capture", False):
             return
+
+        lead_ms = getattr(row, "capture_lead_ms", 0)
+
+        if lead_ms > 0:
+            self._turn_camera_on(ctx)
+
         if getattr(row, "capture_at", StepTime.START) != StepTime.START:
             return
+
+        self._wait_out_lead(lead_ms, ctx)
         self._fire_capture(row, ctx)
 
     def on_post_step(self, row, ctx):
@@ -153,9 +216,30 @@ class CaptureHandler(BaseCompoundColumnHandler):
         """
         if not getattr(row, "capture", False):
             return
+
         if getattr(row, "capture_at", StepTime.START) != StepTime.END:
             return
+
+        self._wait_out_lead(getattr(row, "capture_lead_ms", 0), ctx)
         self._fire_capture(row, ctx)
+
+    def _turn_camera_on(self, ctx):
+        """Switch the camera on and hand it to VideoHandler for turn-off."""
+        publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="true")
+
+        ctx.protocol.scratch[VIDEO_CAMERA_ON_KEY] = True
+        ctx.protocol.scratch[CAMERA_ON_AT_SCRATCH_KEY] = time.monotonic()
+
+    def _wait_out_lead(self, lead_ms, ctx):
+        """Sleep until the camera has been on for lead_ms (stop-aware)."""
+        camera_on_at = ctx.protocol.scratch.pop(CAMERA_ON_AT_SCRATCH_KEY, None)
+
+        if lead_ms <= 0 or camera_on_at is None:
+            return
+
+        elapsed = time.monotonic() - camera_on_at
+
+        ctx.protocol.sleep(max(0.0, lead_ms / 1000 - elapsed))
 
     def _fire_capture(self, row, ctx):
         """Build the legacy-compatible payload and publish it."""
@@ -172,13 +256,15 @@ class CaptureHandler(BaseCompoundColumnHandler):
 
 
 def make_capture_column():
-    """Return a fresh Capture compound column (capture + capture_at)."""
+    """Return a fresh Capture compound column (capture, capture_at,
+    capture_lead_ms)."""
     return CompoundColumn(
         model=CaptureCompoundModel(),
         view=DictCompoundColumnView(
             cell_views={
                 "capture": CheckboxColumnView(),
                 "capture_at": CaptureAtComboBoxView(),
+                "capture_lead_ms": CaptureLeadSpinBoxView(),
             }
         ),
         handler=CaptureHandler(),
