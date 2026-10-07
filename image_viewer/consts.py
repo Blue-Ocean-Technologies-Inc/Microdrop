@@ -11,13 +11,17 @@
 # Standard library imports.
 from pathlib import Path
 
+# Microdrop package imports.
+from device_viewer.consts import PROTOCOL_RUNNING
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-# The viewer reads capture files straight off disk; it subscribes to no
-# topics.
-ACTOR_TOPIC_DICT = {}
+#: The viewer reads capture files straight off disk; its one topic is
+#: whether a protocol is running, while which it runs lighter.
+LISTENER_NAME = f"{PKG}_listener"
+ACTOR_TOPIC_DICT = {LISTENER_NAME: [PROTOCOL_RUNNING]}
 
 # ---------------------------------------------------------------------------
 # Extension point: filename-derived filters for the image list (e.g. the

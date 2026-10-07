@@ -110,6 +110,11 @@ Sending: (Via publish_method)
 - ** PHASE_NAVIGATION_MODE "ui/phase_navigation_mode"
 - PHASE_NAVIGATION_STATE "ui/device_viewer/phase_navigation_state" (via route_execution_service)
 
+### image_viewer
+
+Receiving: (Via handlers, image_viewer/message_handler.py)
+- PROTOCOL_RUNNING "microdrop/protocol_running" — sets the ROI analysis model's `protocol_running` on the GUI thread: Calculate/Export/AI Detect/Track ask before starting, the ROI batch computes at most 2 images at once, and a draw/edit holds the view (no auto-follow, no refit)
+
 ---
 
 ## Detailed Flows

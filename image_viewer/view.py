@@ -548,10 +548,14 @@ class _ImageCanvasEditor(QtEditor):
 
     def update_editor(self):
         # A new image arrived in `array`; its display frame is already
-        # drawn (the controller sets it first).
+        # drawn (the controller sets it first). A draw or edit during a
+        # run keeps the zoom.
         array = self.value
         image_size = None if array is None else array.shape[:2]
-        self.control.fit_new_image(image_size != self._image_size)
+
+        if not self.object.roi_analysis.holds_view:
+            self.control.fit_new_image(image_size != self._image_size)
+
         self._image_size = image_size
         self._sync_roi_layer()
 
