@@ -555,6 +555,11 @@ class RoiAnalysisModel(HasTraits):
     batch_failed = Int(0)
     batch_running = Bool(False)
 
+    #: Whether the ROI plot pane is showing — mirrored from its dock
+    #: visibility, so work only the plot would show (the heater join)
+    #: can wait until someone can see it.
+    plot_visible = Bool(False)
+
     # Toolbar buttons (view events; RoiAnalysisController reacts).
     draw_ellipse_button = Button()
     draw_box_button = Button()

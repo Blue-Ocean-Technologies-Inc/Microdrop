@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 
 from pyface.api import OK, DirectoryDialog, FileDialog
 from pyface.tasks.api import DockPane
-from traits.api import Any, Instance
+from traits.api import Any, Instance, observe
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -1566,6 +1566,10 @@ class RoiPlotDockPane(DockPane):
             parent=parent,
         )
 
+    @observe("visible")
+    def _mirror_visibility(self, event):
+        roi_analysis_model.plot_visible = event.new
+
     def _on_session_swapped(self, event):
         old_ui = self._controls_ui
         self._controls_ui = self._build_controls(self._controls_scroll)
@@ -1608,6 +1612,7 @@ class RoiPlotDockPane(DockPane):
         # constructed-but-never-shown pane never ran (pyface's own
         # destroy() guards its teardown the same way).
         if self.control is not None:
+            roi_analysis_model.plot_visible = False
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()
