@@ -38,7 +38,7 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.api import OK, DirectoryDialog
-from traits.api import Any, Callable, Instance, Int, observe
+from traits.api import Any, Bool, Callable, Instance, Int, observe
 from traitsui.api import Controller
 
 # Microdrop utils imports.
@@ -131,6 +131,10 @@ class ImageViewerController(Controller):
     #: rescan with that number (or a later one) has been applied; None
     #: when there is none.
     _pending_jump = Any(None)
+
+    #: New captures landed while the analysis model held the view: follow
+    #: them once the hold ends.
+    _follow_deferred = Bool(False)
 
     def __pending_load_lock_default(self):
         return threading.Lock()
@@ -648,7 +652,8 @@ class ImageViewerController(Controller):
         # captures land; anyone parked elsewhere stays parked.
         on_all = self.model.selected_burst == BURST_FILTER_ALL
         following_newest = (
-            not self.model.current_path
+            self._follow_deferred
+            or not self.model.current_path
             or not self.model.paths
             or (on_all and self.model.current_path == str(self.model.paths[-1]))
             or (
@@ -674,16 +679,29 @@ class ImageViewerController(Controller):
             self.model.paths = []
             self.model.selected_image = ""
             return
-        if following_newest:
-            if on_all:
-                self._refresh_visible("last")
-            else:
-                self._jump_to_burst(-1, "last")
+        if following_newest and self.model.roi_analysis.holds_view:
+            self._follow_deferred = True
+            self._refresh_visible("keep")
+        elif following_newest:
+            self._follow_newest()
         elif self.model.selected_burst not in names:
             # The parked burst vanished (folder pruned): fall to newest.
             self._jump_to_burst(-1, "first")
         else:
             self._refresh_visible("keep")
+
+    def _follow_newest(self):
+        self._follow_deferred = False
+
+        if self.model.selected_burst == BURST_FILTER_ALL:
+            self._refresh_visible("last")
+        else:
+            self._jump_to_burst(-1, "last")
+
+    @observe("model:roi_analysis:holds_view")
+    def _follow_after_hold(self, event):
+        if self._follow_deferred and not event.new:
+            self._follow_newest()
 
     def _refresh_filter_names(self):
         """Offer "All" plus every filter value the discovered files carry;

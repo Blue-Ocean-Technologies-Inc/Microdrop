@@ -70,6 +70,7 @@ from .consts import (
     SAVGOL_WINDOW_BOUNDS_PTS,
     SAVGOL_WINDOW_PTS,
     SHAPE_STATS,
+    VIEW_HOLDING_MODES,
     VIEW_MODES,
     X_AXIS_MODES,
 )
@@ -559,6 +560,19 @@ class RoiAnalysisModel(HasTraits):
     #: visibility, so work only the plot would show (the heater join)
     #: can wait until someone can see it.
     plot_visible = Bool(False)
+
+    #: Whether a protocol is running (PROTOCOL_RUNNING, set on the GUI
+    #: thread by the image viewer's message handler): heavy analysis
+    #: work asks first and the batch runs narrower.
+    protocol_running = Bool(False)
+
+    #: A draw or edit is under way during a run: the viewer holds the
+    #: shown frame — no auto-follow to new captures, no refit — until
+    #: it ends.
+    holds_view = Property(Bool, observe="protocol_running, interaction_mode")
+
+    def _get_holds_view(self):
+        return self.protocol_running and self.interaction_mode in VIEW_HOLDING_MODES
 
     # Toolbar buttons (view events; RoiAnalysisController reacts).
     draw_ellipse_button = Button()

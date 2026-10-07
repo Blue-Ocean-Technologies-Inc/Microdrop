@@ -14,7 +14,7 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 """
 
 # Third-party imports.
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
@@ -113,6 +113,10 @@ SCALE_BAR_TICK_PX = 5
 SCALE_BAR_TEXT_RISE_PX = 24
 SCALE_BAR_TEXT_HEIGHT_PX = 18
 
+#: Shortest interval between hovered-pixel readout repaints (~30 Hz):
+#: mouse moves arrive faster than anyone can read the numbers.
+PIXEL_READOUT_INTERVAL_MS = 33
+
 #: Keeps the status row's progress bar from bulking up the row.
 PROGRESS_BAR_HEIGHT_PX = 16
 
@@ -189,6 +193,12 @@ class _ImageView(QGraphicsView):
         self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
         self._pixel_text = ""
+        #: The newest readout, shown when the coalescing timer fires.
+        self._pending_pixel_text = ""
+        self._pixel_text_timer = QTimer(self)
+        self._pixel_text_timer.setSingleShot(True)
+        self._pixel_text_timer.setInterval(PIXEL_READOUT_INTERVAL_MS)
+        self._pixel_text_timer.timeout.connect(self._show_pending_pixel_text)
         self._zoom_step = IMAGE_ZOOM_STEP_DEFAULT
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
@@ -288,10 +298,27 @@ class _ImageView(QGraphicsView):
 
     def set_pixel_text(self, text):
         """The hovered pixel's "(x, y) = value" readout, drawn as a HUD
-        in the bottom-right corner ('' hides it)."""
-        if text != self._pixel_text:
-            self._pixel_text = text
-            self.viewport().update()
+        in the bottom-right corner ('' hides it). Coalesced: the newest
+        text shows at most every PIXEL_READOUT_INTERVAL_MS."""
+        self._pending_pixel_text = text
+
+        if not self._pixel_text_timer.isActive():
+            self._pixel_text_timer.start()
+
+    def _show_pending_pixel_text(self):
+        """Repaint just the readout's corner — the old box and the new
+        one — rather than the whole viewport and the image under it."""
+        if self._pending_pixel_text == self._pixel_text:
+            return
+
+        viewport = self.viewport().rect()
+        stale = self._pixel_readout_box(self._pixel_text, viewport)
+        self._pixel_text = self._pending_pixel_text
+        fresh = self._pixel_readout_box(self._pixel_text, viewport)
+
+        self.viewport().update(
+            stale.united(fresh).toAlignedRect().adjusted(-2, -2, 2, 2)
+        )
 
     def drawForeground(self, painter, rect):
         """Paint the HUD overlays in viewport pixels: the scale bar in
@@ -347,18 +374,29 @@ class _ImageView(QGraphicsView):
         backdrop-and-lettering style (the corner the bar doesn't use)."""
         if not self._pixel_text:
             return
-        text_px = painter.fontMetrics().horizontalAdvance(self._pixel_text)
+
+        box = self._pixel_readout_box(self._pixel_text, viewport)
+        painter.fillRect(box, QColor(0, 0, 0, 110))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, self._pixel_text)
+
+    def _pixel_readout_box(self, text, viewport):
+        """The readout's backdrop for ``text`` in viewport pixels — what
+        _draw_pixel_readout paints and what a change must repaint; null
+        for ''."""
+        if not text:
+            return QRectF()
+
+        text_px = self.viewport().fontMetrics().horizontalAdvance(text)
         right = viewport.right() - SCALE_BAR_MARGIN_PX
         bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
-        box = QRectF(
+
+        return QRectF(
             right - text_px - 2 * SCALE_BAR_PAD_PX,
             bottom - SCALE_BAR_TEXT_HEIGHT_PX - SCALE_BAR_PAD_PX,
             text_px + 2 * SCALE_BAR_PAD_PX,
             SCALE_BAR_TEXT_HEIGHT_PX + SCALE_BAR_PAD_PX,
         )
-        painter.fillRect(box, QColor(0, 0, 0, 110))
-        painter.setPen(QPen(QColor(255, 255, 255), 2))
-        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, self._pixel_text)
 
     def fit(self):
         if self.scene() is not None and not self.scene().sceneRect().isEmpty():
@@ -510,10 +548,14 @@ class _ImageCanvasEditor(QtEditor):
 
     def update_editor(self):
         # A new image arrived in `array`; its display frame is already
-        # drawn (the controller sets it first).
+        # drawn (the controller sets it first). A draw or edit during a
+        # run keeps the zoom.
         array = self.value
         image_size = None if array is None else array.shape[:2]
-        self.control.fit_new_image(image_size != self._image_size)
+
+        if not self.object.roi_analysis.holds_view:
+            self.control.fit_new_image(image_size != self._image_size)
+
         self._image_size = image_size
         self._sync_roi_layer()
 

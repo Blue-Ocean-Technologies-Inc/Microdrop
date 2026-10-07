@@ -38,6 +38,7 @@ from .consts import (
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
     PASTE_OFFSET_PX,
+    ROI_BATCH_PROTOCOL_WORKERS,
     STATS_SAVE_DEBOUNCE_S,
 )
 from .curve_fit import FIT_LABELS, fit_series
@@ -45,6 +46,7 @@ from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_loader import HeaterSamplesLoader
 from .heater_log import describe_heater_coverage, sensors_in, temperature_at
 from .plot_series import analysed_series
+from .protocol_guard import proceed_despite_protocol
 from .roi_batch import (
     BATCH_FINISHED,
     BATCH_RESULT,
@@ -442,13 +444,18 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:calculate_button")
     def _calculate(self, event):
-        self._start_batch()
+        if proceed_despite_protocol(self.analysis_model):
+            self._start_batch()
 
     @observe("analysis_model:export_csv_button")
     def _export(self, event):
         if not self.session.rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
+
+        if not proceed_despite_protocol(self.analysis_model):
+            return
+
         self._dispatched_keys = {}
         work = self._missing_work()
         if work:
@@ -466,6 +473,11 @@ class RoiAnalysisController(HasTraits):
         """The filtered series changed mid-batch: restart on the new
         snapshot (the work list is a snapshot by design; the plot pane
         observes the filters itself)."""
+        self._restart_batch_if_running()
+
+    @observe("analysis_model:protocol_running")
+    def _on_protocol_running_changed(self, event):
+        # A batch narrows when a run starts and widens when it ends.
         self._restart_batch_if_running()
 
     def _missing_work(self):
@@ -521,7 +533,10 @@ class RoiAnalysisController(HasTraits):
             self.analysis_model.progress_text = (
                 f"Starting workers for {len(work)} images…"
             )
-        self.runner.start(work)
+        self.runner.start(
+            work,
+            ROI_BATCH_PROTOCOL_WORKERS if self.analysis_model.protocol_running else 0,
+        )
 
     def _restart_batch_if_running(self):
         if self.analysis_model.batch_running:
