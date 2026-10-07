@@ -8,13 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
+# Enthought library imports.
+from traits.api import HasTraits, Instance, Str
+
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-ARCHITECTURE_HTML_PATH = Path(__file__).parent / "resources" / "microdrop-architecture.html"
+ARCHITECTURE_HTML_PATH = (
+    Path(__file__).parent / "resources" / "microdrop-architecture.html"
+)
 MICRODROP_LAUNCHER_README_URL = "https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/blob/main/README.md"
 
 FEEDBACK_URL = "https://blueoceantechnologies.ca/feedback"
@@ -22,3 +28,19 @@ GITHUB_ISSUES_URL = "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/is
 SCIBOTS_URL = "https://sci-bots.com"
 INFO_EMAIL = "info@sci-bots.com"
 SUPPORT_EMAIL = "support@sci-bots.com"
+
+# Extension point: Help > Tutorials. Contributions are TutorialEntry records;
+# a plugin offers its tutorials with ``List(contributes_to=TUTORIALS)``, and
+# the submenu follows plugins loaded or unloaded at runtime. Contributors,
+# in this repo or another, import only this module.
+TUTORIALS = f"{PKG}.tutorials"
+
+
+class TutorialEntry(HasTraits):
+    """One Help > Tutorials entry: a self-contained, offline HTML page."""
+
+    #: Menu and window title, e.g. "Image Analysis Tutorial".
+    title = Str()
+
+    #: The built page (see examples/tutorials/README.md).
+    path = Instance(Path)

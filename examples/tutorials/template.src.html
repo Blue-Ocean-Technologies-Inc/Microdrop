@@ -1,0 +1,97 @@
+<!--
+  (C) Copyright {{year}}-{{year}} Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>{{title}}</title>
+<nav data-contents></nav>
+
+<header data-hero>
+  <h1>{{title}}</h1>
+  <p>TODO: one or two sentences on what this pane is for and who it helps.</p>
+</header>
+
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">TODO: what the pane shows, where it lives in MicroDrop, and the one thing a new user should know first.</p>
+</section>
+
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="TODO: describe the schematic"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="150" y="90" text-anchor="middle">TODO: schematic</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>TODO: first step</h4><p>TODO: what to click, and what you should see.</p></div>
+  </li>
+</ol>
+</section>
+
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">TODO: the buttons this pane adds. Hover over a button in MicroDrop to see its tooltip.</p>
+<section data-term id="tb-main" data-where="TODO: where the buttons are">
+  <h3>Buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_INFO"></i></td><td class="lbl">TODO: tooltip text</td><td>TODO: what happens when you click it.</td></tr>
+    </tbody>
+  </table>
+</section>
+</section>
+
+<section data-part id="part-terms">
+<h2>Terms</h2>
+<p class="intro">TODO: one card per setting or number the pane shows.</p>
+<section data-term id="term-example" data-where="TODO: where it is">
+  <h3>TODO: term name</h3>
+  <p>TODO: one plain-language sentence.</p>
+  <div data-what><p>TODO</p></div>
+  <div data-when><p>TODO</p></div>
+  <div data-read><p>TODO</p></div>
+  <div data-typical><p>TODO</p></div>
+  <figure data-demo="example">
+    <div class="controls">
+      <label>Value <input type="range" id="example-v" min="0" max="10" value="5"></label>
+      <output for="example-v"></output>
+    </div>
+    <table data-readout></table>
+    <figcaption>TODO: what to try with the slider.</figcaption>
+  </figure>
+</section>
+</section>
+
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>TODO:</strong> a limitation or trap, and what to do about it.</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>TODO</dt><dd>TODO: a short definition.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("example", function (figure, T) {
+  var input = figure.querySelector("#example-v");
+  var table = figure.querySelector("table[data-readout]");
+  var start = +input.value;
+
+  T.bind(input, function (value) {
+    T.readout(table, [{ label: "Value", now: +value, start: start }]);
+  });
+  T.readout(table, [{ label: "Value", now: start, start: start }]);
+});
+</script>
