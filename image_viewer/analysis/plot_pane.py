@@ -502,7 +502,8 @@ def _cleanup_tab():
                 "figure.outlier_window",
                 label="win",
                 enabled_when="figure.remove_outliers",
-                tooltip="Points either side used for the "
+                tooltip="Total points in the local window — 5 means "
+                "the point plus two each side — used for the "
                 "local median and MAD. Wide enough to "
                 "describe the trend, narrow enough "
                 "not to span a real change.",
