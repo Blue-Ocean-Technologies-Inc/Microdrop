@@ -300,11 +300,17 @@ def migrate_gamepad_preferences(preferences):
     # A fresh install changed nothing worth an immediate write; the marker
     # is saved with the rest on exit.
     if stored:
-        preferences.flush()
         logger.info(
             f"Moved gamepad preferences to {GAMEPAD_PLUGIN_PREFERENCES_PATH}: "
             f"{', '.join(sorted(stored))}"
         )
+
+        # This runs inside plugin start, where an error aborts the app. The
+        # move stands in memory; unsaved, it simply runs again next start.
+        try:
+            preferences.flush()
+        except OSError as error:
+            logger.error(f"Could not save moved gamepad preferences: {error}")
 
 
 device_viewer_tab = PreferencesCategory(

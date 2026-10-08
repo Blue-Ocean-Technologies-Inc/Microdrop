@@ -83,3 +83,31 @@ def test_a_fresh_install_only_records_the_marker(preferences):
 
     assert preferences.keys(GAMEPAD_PLUGIN_PREFERENCES_PATH) == []
     assert preferences.get(_old(GAMEPAD_PREFERENCES_MOVED_KEY)) is not None
+
+
+def test_the_move_is_saved_to_the_preferences_file(tmp_path):
+    filename = str(tmp_path / "prefs.ini")
+    preferences = Preferences(filename=filename)
+    preferences.set(_old("gamepad_btn_split"), "7")
+    preferences.set(_old("gamepad_enabled"), "True")
+
+    migrate_gamepad_preferences(preferences)
+    reloaded = Preferences(filename=filename)
+
+    assert reloaded.get(_new("gamepad_btn_split")) == "7"
+    assert reloaded.get(_old(GAMEPAD_PREFERENCES_MOVED_KEY)) is not None
+    assert reloaded.get(_old("gamepad_btn_split")) is None
+    assert reloaded.get(_old("gamepad_enabled")) is None
+
+
+def test_a_failed_save_keeps_the_move_in_memory(preferences, monkeypatch):
+    def fail_flush():
+        raise OSError("preferences file is read-only")
+
+    monkeypatch.setattr(preferences, "flush", fail_flush)
+    preferences.set(_old("gamepad_btn_add"), "3")
+
+    migrate_gamepad_preferences(preferences)
+
+    assert preferences.get(_new("gamepad_btn_add")) == "3"
+    assert preferences.get(_old("gamepad_btn_add")) is None
