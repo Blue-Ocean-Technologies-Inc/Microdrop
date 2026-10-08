@@ -25,6 +25,7 @@ to trace the template's glyph headless.
 
 # Standard library imports.
 import argparse
+import ast
 import datetime
 import json
 import re
@@ -43,8 +44,13 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_PATH = Path(__file__).parent / "template.src.html"
 LINE_LENGTH = 88
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-IMPORT_LINE = re.compile(r"^(import|from) \S+")
 TUTORIALS_DEFAULT = "    def _tutorials_default(self):\n        return [\n"
+#: Any tutorials trait or default method, however it is written.
+TUTORIALS_DECLARATION = re.compile(
+    r"^\s+(?:tutorials\s*=|def _tutorials_default\b)", re.MULTILINE
+)
+#: The indentation of a line outside the ``_tutorials_default`` list.
+OUTSIDE_TUTORIALS_LIST = re.compile(r"^ {0,11}\S", re.MULTILINE)
 CONTRIBUTION_IMPORT = "from user_help_plugin.consts import TUTORIALS, TutorialEntry"
 
 
@@ -86,7 +92,7 @@ def add_constant(consts_path, slug):
         return False
 
     if "from pathlib import Path" not in text:
-        text = _add_imports(text, ["from pathlib import Path"])
+        text = _add_imports(text, ["from pathlib import Path"], consts_path)
 
     value = f'Path(__file__).parent / "resources" / "{slug}.html"'
     assignment = _fit(f"{name} = {value}", f"{name} = (\n    {value}\n)")
@@ -101,20 +107,57 @@ def add_constant(consts_path, slug):
     return True
 
 
-def _add_imports(text, statements):
-    """Put ``statements`` after the file's last top-level import line."""
+def _add_imports(text, statements, path):
+    """Put ``statements`` after the last top-level import that comes before
+    the file's first class or function."""
+    last_import = None
+
+    try:
+        module = ast.parse(text)
+    except SyntaxError as error:
+        raise ValueError(f"{path} does not parse; fix it first: {error}") from error
+
+    for node in module.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            break
+
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            last_import = node
+
+    if last_import is None:
+        raise ValueError(
+            f"{path} has no top-level import before its first class or "
+            f"function to add these after; add them by hand: {statements}"
+        )
+
     lines = text.split("\n")
-    indices = [i for i, line in enumerate(lines) if IMPORT_LINE.match(line)]
-    end = indices[-1] if indices else -1
-
-    # A parenthesised import continues to its closing bracket.
-    if end >= 0 and lines[end].rstrip().endswith("("):
-        while lines[end].strip() != ")":
-            end += 1
-
-    lines[end + 1 : end + 1] = statements
+    lines[last_import.end_lineno : last_import.end_lineno] = statements
 
     return "\n".join(lines)
+
+
+def _has_entry(text, name):
+    """Return True when a ``TutorialEntry(...)`` call already names ``name``."""
+    pattern = rf"TutorialEntry\((?:(?!TutorialEntry\(|\n {{0,4}}\S).)*?\b{name}\b"
+
+    return re.search(pattern, text, re.DOTALL) is not None
+
+
+def _add_entry(text, entry, by_hand):
+    """Add ``entry`` to the plugin's existing ``_tutorials_default`` list,
+    after a comma the last entry may have been written without."""
+    start = text.index(TUTORIALS_DEFAULT) + len(TUTORIALS_DEFAULT)
+    end = text.find("        ]\n", start)
+
+    if end < 0 or OUTSIDE_TUTORIALS_LIST.search(text, start, end):
+        raise ValueError(f"Cannot find the end of the tutorials list in {by_hand}")
+
+    head = text[:end].rstrip()
+
+    if not head.endswith(("[", ",")):
+        head += ","
+
+    return f"{head}\n{entry}{text[end:]}"
 
 
 def contribute_to_plugin(plugin_path, slug, title):
@@ -129,31 +172,29 @@ def contribute_to_plugin(plugin_path, slug, title):
         f"                path={name},\n            ),\n",
     )
 
-    if re.search(rf"\bpath={name}\b", text):
+    by_hand = (
+        f"{plugin_path}; add TutorialEntry(title={quoted}, path={name}) to its "
+        f"_tutorials_default by hand, importing {name} from .consts"
+    )
+
+    if _has_entry(text, name):
         return False
 
     if TUTORIALS_DEFAULT in text:
-        # Add to the plugin's existing list of tutorials, after a comma the
-        # last entry may have been written without.
-        start = text.index(TUTORIALS_DEFAULT) + len(TUTORIALS_DEFAULT)
-        end = text.index("        ]\n", start)
-        head = text[:end].rstrip()
-
-        if not head.endswith(("[", ",")):
-            head += ","
-
-        text = f"{head}\n{entry}{text[end:]}"
+        text = _add_entry(text, entry, by_hand)
+    elif TUTORIALS_DECLARATION.search(text):
+        raise ValueError(f"Tutorials are declared in an unfamiliar shape in {by_hand}")
     else:
-        text = _add_contribution(text, entry)
+        text = _add_contribution(text, entry, plugin_path)
 
-    text = _add_imports(text, [f"from .consts import {name}"])
+    text = _add_imports(text, [f"from .consts import {name}"], plugin_path)
     plugin_path.write_text(text, encoding="utf-8", newline="\n")
     logger.info(f"{plugin_path} now contributes '{title}'")
 
     return True
 
 
-def _add_contribution(text, entry):
+def _add_contribution(text, entry, plugin_path):
     """Give the file's plugin class a ``tutorials`` contribution."""
     match = re.search(r"^class \w+\(.*Plugin\w*\):\n", text, re.MULTILINE)
 
@@ -175,7 +216,7 @@ def _add_contribution(text, entry):
     if not re.search(r"from traits\.api import [^\n]*\bList\b", text):
         imports.append("from traits.api import List")
 
-    return _add_imports(text, imports)
+    return _add_imports(text, imports, plugin_path)
 
 
 def scaffold_tutorial(plugin, slug, title, root=SRC_ROOT, build=True):

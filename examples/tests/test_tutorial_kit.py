@@ -32,7 +32,7 @@ from examples.tutorials.build_tutorial import (
     is_up_to_date,
     render_tutorial,
 )
-from examples.tutorials.new_tutorial import scaffold_tutorial
+from examples.tutorials.new_tutorial import _add_imports, scaffold_tutorial
 from image_viewer.plugin import ImageViewerPlugin
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -89,6 +89,22 @@ class FixturePlugin(Plugin):
             )
         ]
 """
+
+#: Import layouts a line-based scan misreads: an import-like docstring line
+#: and a parenthesised import closed with a trailing comment.
+IMPORTS_FIXTURE = '''"""A module.
+
+from the docstring, not an import
+"""
+
+from envisage.api import (
+    Plugin,
+)  # the base class
+
+
+def helper():
+    import os
+'''
 
 
 @pytest.fixture
@@ -149,6 +165,45 @@ def test_scaffold_adds_to_a_list_without_a_trailing_comma(scaffold_root):
         "Existing Tutorial",
         "More Tutorial",
     ]
+
+
+def test_scaffold_recognises_a_positional_entry(scaffold_root):
+    package = scaffold_root / FIXTURE_PLUGIN
+    positional = PLUGIN_WITH_TUTORIAL_FIXTURE.replace(
+        'title="Existing Tutorial",\n                path=', '"Existing Tutorial", '
+    )
+    (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
+    (package / "plugin.py").write_text(positional)
+
+    scaffold_tutorial(FIXTURE_PLUGIN, "existing", "Existing", scaffold_root, False)
+
+    assert (package / "plugin.py").read_text() == positional
+
+
+def test_scaffold_refuses_an_unfamiliar_tutorials_declaration(scaffold_root):
+    package = scaffold_root / FIXTURE_PLUGIN
+    unfamiliar = PLUGIN_WITH_TUTORIAL_FIXTURE.replace(
+        "List(contributes_to=TUTORIALS)", "List([], contributes_to=TUTORIALS)"
+    ).replace("_tutorials_default", "_other_tutorials")
+    (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
+    (package / "plugin.py").write_text(unfamiliar)
+
+    with pytest.raises(ValueError, match="by hand"):
+        scaffold_tutorial(FIXTURE_PLUGIN, "more", "More", scaffold_root, False)
+
+    assert (package / "plugin.py").read_text() == unfamiliar
+
+
+def test_imports_go_after_the_last_top_level_import():
+    lines = _add_imports(IMPORTS_FIXTURE, ["import json"], "m.py").split("\n")
+
+    assert lines[lines.index(")  # the base class") + 1] == "import json"
+    assert lines.count("import json") == 1
+
+
+def test_imports_need_an_existing_import_to_follow():
+    with pytest.raises(ValueError, match="by hand"):
+        _add_imports('"""No imports."""\n\nX = 1\n', ["import json"], "m.py")
 
 
 def test_scaffold_is_idempotent(scaffold_root):
