@@ -357,6 +357,7 @@ class _SourceRewriter(HTMLParser):
             frame.role = "part"
             frame.entry = {"id": names.get("id"), "title": "", "terms": []}
             self.parts.append(frame.entry)
+
             kept = [(n, v) for n, v in attrs if n != "data-part"]
             markup = f"<section{_attrs_markup(_with_class(kept, 'part'))}>"
 
@@ -365,8 +366,10 @@ class _SourceRewriter(HTMLParser):
             frame.where = names.get("data-where")
             frame.facts_open = False
             frame.entry = {"id": names.get("id"), "title": ""}
+
             part = self._part()
             (part.entry["terms"] if part else self.parts).append(frame.entry)
+
             kept = [(n, v) for n, v in attrs if n not in ("data-term", "data-where")]
             tag_markup = _attrs_markup(_with_class(kept, "term"))
             markup = f"<article{tag_markup}>"
@@ -661,12 +664,14 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
         f"<script{_attrs_markup(attrs)}>\n{script}</script>\n"
         for attrs, script in parser.scripts
     )
+
     glyphs = dict(parser.glyphs)
 
     for symbol in GLYPH_REFERENCE_PATTERN.findall(body + scripts):
         glyphs.setdefault(symbol, symbol)
 
     cache = _resolve_glyphs(glyphs, glyph_cache, retrace) if glyphs else {}
+
     css = TUTORIAL_CSS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
     js = TUTORIAL_JS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
 
@@ -755,8 +760,10 @@ def build_tutorial(source_path, output_path=None, retrace=False):
     """Build ``source_path`` and write the page; return the page path."""
     source_path = Path(source_path)
     output_path = Path(output_path) if output_path else default_output_path(source_path)
+
     page = _render_file(source_path, output_path, retrace=retrace)
     output_path.write_text(page, encoding="utf-8", newline="\n")
+
     logger.info(f"Built {output_path} ({len(page.encode('utf-8'))} bytes)")
 
     return output_path

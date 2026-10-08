@@ -77,6 +77,7 @@ def write_source(plugin_dir, slug, title):
     year = str(datetime.date.today().year)
     text = TEMPLATE_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
     text = text.replace("{{year}}", year).replace("{{title}}", html.escape(title))
+
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(text, encoding="utf-8", newline="\n")
     logger.info(f"Created {source}")
@@ -204,6 +205,7 @@ def _add_contribution(text, entry, plugin_path):
 
     next_top_level = re.search(r"^\S", text[match.end() :], re.MULTILINE)
     end = match.end() + next_top_level.start() if next_top_level else len(text)
+
     block = (
         "\n    #: Help > Tutorials entries for this plugin's panes.\n"
         "    tutorials = List(contributes_to=TUTORIALS)\n\n"
@@ -212,6 +214,7 @@ def _add_contribution(text, entry, plugin_path):
     body = text[:end].rstrip("\n") + "\n" + block
     rest = text[end:]
     text = body + ("\n\n" + rest if rest else "")
+
     imports = [CONTRIBUTION_IMPORT]
 
     if not re.search(r"from traits\.api import [^\n]*\bList\b", text):
