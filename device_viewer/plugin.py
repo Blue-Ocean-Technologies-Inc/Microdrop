@@ -63,7 +63,7 @@ class DeviceViewerPlugin(Plugin):
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     #: Status-bar widgets contributed at runtime: the device-viewer dock
-    #: pane extends this list (joystick + recording icons); the
+    #: pane extends this list (the recording icon); the
     #: microdrop_status_bar plugin places, spaces, and removes them.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 

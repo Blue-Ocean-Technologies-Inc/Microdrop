@@ -174,16 +174,6 @@ class DeviceViewerMessageController(HasTraits):
         else:
             logger.warning(f"Unknown phase-navigation action: {action!r}")
 
-    def _on_gamepad_capture_request_triggered(self, message):
-        """Relay a Gamepad-prefs remap request to the live gamepad service."""
-        if self.pane.gamepad_service is not None:
-            self.pane.gamepad_service.begin_button_capture(message)
-
-    def _on_gamepad_reconnect_request_triggered(self, message):
-        """Relay a manual gamepad-reconnect request to the gamepad service."""
-        if self.pane.gamepad_service is not None:
-            self.pane.gamepad_service.reconnect_gamepad()
-
     def _on_load_svg_request_triggered(self, message):
         """Load the SVG at ``message`` (a file path) into the device view.
 

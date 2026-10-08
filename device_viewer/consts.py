@@ -117,15 +117,6 @@ PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"
 # device_viewer/models/step_params_commit.py.
 STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 
-# Live gamepad button-capture (remap) request: payload is the action name being
-# rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
-# the device-viewer listener to the live interaction service. Dispatches to
-# _on_gamepad_capture_request_triggered (topic.split("/")[-1] == unique segment).
-GAMEPAD_CAPTURE_REQUEST = "ui/device_viewer/gamepad_capture_request"
-# Manual gamepad reconnect request (payload unused). Lets the user re-attempt
-# controller acquisition from the UI after an unplug/replug. Dispatches to
-# _on_gamepad_reconnect_request_triggered.
-GAMEPAD_RECONNECT_REQUEST = "ui/device_viewer/gamepad_reconnect_request"
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
@@ -168,8 +159,6 @@ ACTOR_TOPIC_DICT = {
         DISABLED_CHANNELS_CHANGED,
         HALTED,
         PROTOCOL_TREE_DISPLAY_STATE,
-        GAMEPAD_CAPTURE_REQUEST,
-        GAMEPAD_RECONNECT_REQUEST,
         DEVICE_VIEWER_LOAD_SVG_REQUEST,
         PHASE_NAVIGATION_MODE,
         PHASE_NAVIGATION_REQUEST,
@@ -264,31 +253,6 @@ MAX_SLUG_WIDTH = 5
 ZOOM_SENSITIVITY = 5
 # device view margin when auto fit
 AUTO_FIT_MARGIN_SCALE = 95
-
-# ---------------------------------------------------------------------------
-# Gamepad defaults (configurable in Device Viewer preferences). Env vars of the
-# form MICRODROP_GAMEPAD_* still override the stored preference at runtime.
-# Button indices are for the common NES/SNES-style USB pad:
-#   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
-# ---------------------------------------------------------------------------
-GAMEPAD_BTN_CLEAR = 1  # A      -> clear all electrodes
-GAMEPAD_BTN_FIND = 8  # Select -> find liquid
-GAMEPAD_BTN_SPLIT = 2  # B hold -> split
-GAMEPAD_BTN_ADD = 3  # Y hold -> add electrode
-GAMEPAD_BTN_REMOVE = 0  # X hold -> remove electrode
-GAMEPAD_BTN_REALTIME = 9  # Start  -> toggle realtime mode
-
-GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7  # D-pad move / split step debounce
-GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3  # D-pad add / remove debounce
-GAMEPAD_DEBOUNCE_FIND_S = 2.0  # find-liquid button debounce
-GAMEPAD_DEBOUNCE_REALTIME_S = 0.4  # realtime-toggle button debounce
-GAMEPAD_AXIS_THRESHOLD = 0.6  # analog-stick-as-D-pad activation threshold
-
-# Poll cadence: ~100 Hz only while a controller is attached; with none,
-# a slow tick suffices to catch JOYDEVICEADDED hot-plug events instead
-# of waking the GUI thread 100x a second for nothing.
-GAMEPAD_POLL_INTERVAL_MS = 10
-GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
 
 # Sidecar written next to every recording by NativeVideoRecorder: the video
 # item's alignment geometry, letting viewers reproduce the device-aligned

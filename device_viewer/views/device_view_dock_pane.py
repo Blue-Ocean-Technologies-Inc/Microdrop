@@ -20,7 +20,6 @@ from pyface.qt.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
-    QLabel,
     QMenu,
     QWidget,
 )
@@ -41,14 +40,11 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     warning,
 )
-from microdrop_status_bar.consts import (
-    ICON_PRIORITY_LEFT,
-    ICON_PRIORITY_LEFTMOST,
-)
+from microdrop_status_bar.consts import ICON_PRIORITY_LEFT
 
 # Microdrop style imports.
 from microdrop_style.button_styles import get_tooltip_style
-from microdrop_style.colors import BLACK, GREY
+from microdrop_style.colors import BLACK
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
 from microdrop_style.helpers import (
     QT_THEME_NAMES,
@@ -56,7 +52,6 @@ from microdrop_style.helpers import (
     is_dark_mode,
 )
 from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
-from microdrop_style.icons.icons import ICON_JOYSTICK
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -106,7 +101,6 @@ from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
 from ..services.electrode_stepping_service import ElectrodeSteppingService
-from ..services.gamepad_interaction_service import GamepadInteractionService
 from ..services.svg_persistence_service import SvgPersistenceService
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
@@ -152,9 +146,6 @@ class DeviceViewerDockPane(TraitsDockPane):
     device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
-    #: Gamepad driver for the current device; exists only while the gamepad
-    #: preference is on, rebuilt on every model reload.
-    gamepad_service = Instance(GamepadInteractionService, allow_none=True)
     layer_ui = None
     zones_ui = None
 
@@ -278,7 +269,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.message_controller = DeviceViewerMessageController(pane=self)
 
     ################################################################################################
-    # ------- Phase-navigation mode and gamepad lifecycle -------------
+    # ------- Phase-navigation mode -------------
     ################################################################################################
 
     def apply_phase_navigation_mode(self, enabled):
@@ -292,38 +283,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.phase_navigation_mode = enabled
         finally:
             self.publish_controller._applying_phase_nav_message = False
-
-    @observe("device_viewer_preferences:gamepad_enabled")
-    def _on_gamepad_enabled_changed(self, event):
-        if event.new and getattr(self.scene, "interaction_service", None):
-            self._build_gamepad_service()
-        else:
-            self._release_gamepad_service()
-        if getattr(self, "gamepad_icon", None) is not None:
-            self.gamepad_icon.setVisible(event.new)
-
-    def _build_gamepad_service(self):
-        """Start gamepad support against the current device.
-
-        pygame/SDL is initialized here and nowhere else, so the preference
-        being off means no poll timer and no controller probing at all.
-        """
-        self._release_gamepad_service()
-        interaction_service = self.scene.interaction_service
-        self.gamepad_service = GamepadInteractionService(
-            model=interaction_service.model,
-            device_view=self.device_view,
-            device_viewer_preferences=self.device_viewer_preferences,
-            stepping=interaction_service.stepping,
-            status_bar_manager=self.task.window.status_bar_manager,
-            gamepad_icon=getattr(self, "gamepad_icon", None),
-        )
-
-    def _release_gamepad_service(self):
-        """Stop the poll timer and drop the controller, if any."""
-        if self.gamepad_service is not None:
-            self.gamepad_service.cleanup()
-            self.gamepad_service = None
 
     ################################################################################################
     # ------- Offscreen device render (camera alignment, connections editor) -------
@@ -618,14 +577,13 @@ class DeviceViewerDockPane(TraitsDockPane):
             f"New Electrode Layer added --> {new_model.electrodes.svg_model.filename}"
         )
 
-        # The gamepad service polls against the old device; rebuilt below.
-        self._release_gamepad_service()
         # The old interaction service's zone overlays sit on the old scene.
         if self.scene.interaction_service is not None:
             self.scene.interaction_service.cleanup()
 
         # One stepping service per loaded device, shared by the keyboard
-        # handlers and the gamepad so both move the same electrode cursor.
+        # handlers and the layers (LayerContext.stepping), so every input
+        # moves the same electrode cursor.
         stepping = ElectrodeSteppingService(model=new_model)
 
         # Initialize the electrode mouse / key interaction service with the
@@ -640,8 +598,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         # Update the scene with the interaction service
         self.scene.interaction_service = interaction_service
-        if self.device_viewer_preferences.gamepad_enabled:
-            self._build_gamepad_service()
         self.scene.interaction_service.electrode_state_recolor(None)
         # Paint the white "possible connections" base layer for the freshly
         # loaded device.
@@ -1308,7 +1264,7 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @observe("task:window:status_bar_manager")
     def _setup_app_statusbar(self, event):
-        if getattr(self, "gamepad_icon", None) is not None:
+        if getattr(self, "recording_icon", None) is not None:
             return  # already built; a re-fired manager
             # assignment must not duplicate icons
         # Push the manager to the camera widget now that it exists, so
@@ -1331,29 +1287,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.recording_icon.set_enabled
         )
 
-        # Joystick indicator: always visible, outermost-left of all status
-        # icons via priority. Created in the disconnected state; the gamepad
-        # interaction service recolors it on controller connect/disconnect.
-        self.gamepad_icon = QLabel(ICON_JOYSTICK)
-        self.gamepad_icon.setFont(_font)
-        self.gamepad_icon.setStyleSheet(f"color: {GREY['lighter']};")
-        self.gamepad_icon.setToolTip("Gamepad disconnected")
-        self.gamepad_icon.status_bar_icon_priority = ICON_PRIORITY_LEFTMOST
-        # Shown only while gamepad support is on; the preference observer
-        # toggles it from then on.
-        self.gamepad_icon.setVisible(self.device_viewer_preferences.gamepad_enabled)
-
-        # Hand the gamepad service its HUD sink (the manager) and its
-        # indicator icon if it was built before the status bar existed.
-        # Setting gamepad_icon re-applies the current connection state.
-        if self.gamepad_service is not None:
-            self.gamepad_service.status_bar_manager = event.new
-            self.gamepad_service.gamepad_icon = self.gamepad_icon
-
-        # Contribute both icons; the microdrop_status_bar plugin owns their
+        # Contribute the icon; the microdrop_status_bar plugin owns its
         # placement, spacing, and removal.
         plugin = self.task.window.application.get_plugin(PKG)
+
         if plugin is None:
             logger.warning(f"{PKG}: plugin not found; status-bar icons not shown")
             return
-        plugin.status_bar_icons.extend([self.gamepad_icon, self.recording_icon])
+
+        plugin.status_bar_icons.append(self.recording_icon)

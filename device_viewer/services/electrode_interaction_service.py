@@ -114,7 +114,7 @@ class ElectrodeInteractionControllerService(HasTraits):
     device_viewer_preferences = Instance(DeviceViewerPreferences)
 
     #: Electrode cursor actions (arrow stepping, split); shared with the
-    #: gamepad service so both inputs move the same cursor
+    #: layers through LayerContext.stepping so every input moves one cursor
     stepping = Instance(ElectrodeSteppingService)
 
     autoroute_paths = Dict({})
