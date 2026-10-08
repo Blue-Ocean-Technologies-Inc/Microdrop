@@ -50,7 +50,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 SOURCE_SUFFIX = ".src.html"
-#: Built pages above this size get a warning; the reference guide is ~260 KB.
+#: Built pages above this size fail the build; the reference guide is ~260 KB.
 SIZE_BUDGET_BYTES = 300_000
 
 #: Attributes whose URL the page fetches at load time.
@@ -715,6 +715,13 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
     if network:
         raise TutorialBuildError(f"Network references in the page: {network}")
 
+    size = len(page.encode("utf-8"))
+
+    if size > SIZE_BUDGET_BYTES:
+        raise TutorialBuildError(
+            f"The page is {size} bytes, over the {SIZE_BUDGET_BYTES}-byte budget"
+        )
+
     return page, cache
 
 
@@ -750,12 +757,7 @@ def build_tutorial(source_path, output_path=None, retrace=False):
     output_path = Path(output_path) if output_path else default_output_path(source_path)
     page = _render_file(source_path, output_path, retrace=retrace)
     output_path.write_text(page, encoding="utf-8", newline="\n")
-    size = len(page.encode("utf-8"))
-
-    if size > SIZE_BUDGET_BYTES:
-        logger.warning(f"{output_path} is {size} bytes, over the {SIZE_BUDGET_BYTES}")
-
-    logger.info(f"Built {output_path} ({size} bytes)")
+    logger.info(f"Built {output_path} ({len(page.encode('utf-8'))} bytes)")
 
     return output_path
 

@@ -251,17 +251,18 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         page = entry.path.read_text(encoding="utf-8")
 
         assert find_network_references(page) == []
+        assert len(page.encode("utf-8")) <= SIZE_BUDGET_BYTES
 
 
 def test_dropbot_tutorial_rebuilds_identically():
     assert is_up_to_date(DROPBOT_SOURCE)
 
 
-def test_dropbot_tutorial_is_offline_and_small():
-    page = DROPBOT_STATUS_TUTORIAL_HTML_PATH.read_text(encoding="utf-8")
+def test_a_page_over_budget_fails_the_build(tmp_path):
+    source = f"<title>T</title><p>{'x' * SIZE_BUDGET_BYTES}</p>"
 
-    assert find_network_references(page) == []
-    assert len(page.encode("utf-8")) < SIZE_BUDGET_BYTES
+    with pytest.raises(TutorialBuildError, match="budget"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
 
 
 def test_a_page_never_built_is_not_up_to_date(tmp_path):

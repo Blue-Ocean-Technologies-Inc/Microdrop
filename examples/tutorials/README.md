@@ -137,7 +137,7 @@ Scope element lookups to the figure (`figure.querySelector`).
   `poster`, `data` or `action` attribute or in a `<style>`'s or `style`
   attribute's CSS `url()`, and no `@import`. The build fails on one. A plain
   link (`<a href="https://â€¦">`) loads nothing and is allowed.
-- Under ~300 KB built (the build warns above that). Schematics as inline SVG,
+- Under ~300 KB built (the build fails above that). Schematics as inline SVG,
   not screenshots.
 - Light and dark both work through the theme variables; never hard-code a
   text or background colour.
