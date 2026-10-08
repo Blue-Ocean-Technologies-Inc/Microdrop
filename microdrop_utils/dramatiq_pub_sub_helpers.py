@@ -27,6 +27,10 @@ logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
 
+#: Prefix of the per-process router listener queues ("_" + uuid4). Only these
+#: queues belong to a single session; every other queue is shared.
+LISTENER_QUEUE_PREFIX = "_"
+
 
 class ValidatedTopicPublisher(HasTraits):
     topic = Str
@@ -204,6 +208,44 @@ class MQTTMatcher:
         return rec(self._root)
 
 
+def prune_dead_listener_queues(topic_subscriber_map, dead_queues):
+    """Return the subscriber map without the pairs routed to dead queues.
+
+    Only listener queues are ever dropped: ``default`` and any other shared
+    queue survive even when named in ``dead_queues``. Topics left without a
+    subscriber are dropped too.
+
+    Parameters
+    ----------
+    topic_subscriber_map : dict
+        ``{topic: [[actor_name, queue], ...]}``; topics may be ``bytes``,
+        as Redis returns them.
+    dead_queues : set of str
+        Queues whose owning session is gone.
+
+    Returns
+    -------
+    dict
+        The pruned map, keyed by ``str`` topics.
+    """
+    dead_listener_queues = {
+        queue for queue in dead_queues if queue.startswith(LISTENER_QUEUE_PREFIX)
+    }
+
+    pruned = {}
+
+    for topic, pairs in topic_subscriber_map.items():
+        if isinstance(topic, bytes):
+            topic = topic.decode()
+
+        kept_pairs = [pair for pair in pairs if pair[1] not in dead_listener_queues]
+
+        if kept_pairs:
+            pruned[topic] = kept_pairs
+
+    return pruned
+
+
 class MessageRouterData(HasTraits):
     """
      A class that stores topics and their subscribers, with MQTT-style wildcards.
@@ -365,6 +407,41 @@ class MessageRouterData(HasTraits):
 
             else:
                 self.topic_subscriber_map[topic] = new_list
+
+    def prune_dead_listener_queues(self, dead_queues):
+        """Withdraw every subscription routed to one of ``dead_queues``.
+
+        Only the topics that change are written back, so subscriptions on
+        other topics are never rewritten.
+
+        Returns
+        -------
+        list of str
+            The topics whose subscriber lists changed.
+        """
+        current = {
+            topic.decode() if isinstance(topic, bytes) else topic: pairs
+            for topic, pairs in self.topic_subscriber_map.items()
+        }
+
+        pruned = prune_dead_listener_queues(current, dead_queues)
+        changed_topics = [
+            topic for topic, pairs in current.items() if pruned.get(topic) != pairs
+        ]
+
+        for topic in changed_topics:
+            if topic in pruned:
+                self.topic_subscriber_map[topic] = pruned[topic]
+
+            else:
+                try:
+                    del self.topic_subscriber_map[topic]
+                except KeyError:
+                    # Another process emptied the topic meanwhile; nothing
+                    # left to drop.
+                    pass
+
+        return changed_topics
 
     def get_subscribers_for_topic(self, topic: str) -> list:
         """
