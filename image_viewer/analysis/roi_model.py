@@ -227,8 +227,10 @@ class FigureSettings(HasTraits):
 
 
 class ScaleCalibration(HasTraits):
-    """Image scale for the on-canvas bar (persisted per experiment).
-    Display-only: nothing computed from the images depends on it."""
+    """Image scale for the on-canvas bar and the area readouts
+    (persisted per experiment). It never changes which pixels are
+    measured, only the units the Area and Per area values are
+    reported in."""
 
     #: Metres one image pixel spans; 0.0 means not calibrated.
     metres_per_pixel = Float(0.0)
@@ -436,7 +438,7 @@ class AnalysisSession(HasTraits):
 
     figure = Instance(FigureSettings, ())
 
-    #: Image scale for the canvas bar (display-only).
+    #: Image scale for the canvas bar and the area readouts.
     scale = Instance(ScaleCalibration, ())
 
     #: Where each ROI's background is measured (part of the cache key).
