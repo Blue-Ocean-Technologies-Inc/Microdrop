@@ -57,6 +57,39 @@ class FixturePlugin(Plugin):
     id = PKG + ".plugin"
 """
 
+#: The consts.py and plugin.py of a plugin already contributing a tutorial,
+#: shaped like the bundled ones: no comma after the list's last entry.
+CONSTS_WITH_TUTORIAL_FIXTURE = f"""from pathlib import Path
+
+PKG = '{FIXTURE_PLUGIN}'
+EXISTING_TUTORIAL_HTML_PATH = Path(__file__).parent / "existing.html"
+"""
+PLUGIN_WITH_TUTORIAL_FIXTURE = """# Enthought library imports.
+from envisage.api import Plugin
+from traits.api import List
+
+# Microdrop package imports.
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
+
+# Local imports.
+from .consts import EXISTING_TUTORIAL_HTML_PATH, PKG
+
+
+class FixturePlugin(Plugin):
+    id = PKG + ".plugin"
+
+    #: Help > Tutorials entries for this plugin's panes.
+    tutorials = List(contributes_to=TUTORIALS)
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(
+                title="Existing Tutorial",
+                path=EXISTING_TUTORIAL_HTML_PATH,
+            )
+        ]
+"""
+
 
 @pytest.fixture
 def scaffold_root(tmp_path, monkeypatch):
@@ -100,6 +133,21 @@ def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
     assert [title for title, _path in _fixture_plugin_tutorials()] == [
         "Demo Tutorial",
         "More & Less Tutorial",
+    ]
+
+
+def test_scaffold_adds_to_a_list_without_a_trailing_comma(scaffold_root):
+    package = scaffold_root / FIXTURE_PLUGIN
+    (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
+    (package / "plugin.py").write_text(PLUGIN_WITH_TUTORIAL_FIXTURE)
+
+    scaffold_tutorial(FIXTURE_PLUGIN, "more", "More Tutorial", scaffold_root, False)
+    plugin_text = (package / "plugin.py").read_text()
+
+    compile(plugin_text, "plugin.py", "exec")
+    assert [title for title, _path in _fixture_plugin_tutorials()] == [
+        "Existing Tutorial",
+        "More Tutorial",
     ]
 
 

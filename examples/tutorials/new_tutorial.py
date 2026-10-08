@@ -133,10 +133,16 @@ def contribute_to_plugin(plugin_path, slug, title):
         return False
 
     if TUTORIALS_DEFAULT in text:
-        # Add to the plugin's existing list of tutorials.
+        # Add to the plugin's existing list of tutorials, after a comma the
+        # last entry may have been written without.
         start = text.index(TUTORIALS_DEFAULT) + len(TUTORIALS_DEFAULT)
         end = text.index("        ]\n", start)
-        text = text[:end] + entry + text[end:]
+        head = text[:end].rstrip()
+
+        if not head.endswith(("[", ",")):
+            head += ","
+
+        text = f"{head}\n{entry}{text[end:]}"
     else:
         text = _add_contribution(text, entry)
 
