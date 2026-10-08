@@ -1329,5 +1329,10 @@ ImageViewerView = View(
         ),
         analysis_toolbar,
     ),
+    # Scrollable so the dock can be dragged to any size: the toolbars and
+    # setting grids keep their natural size and scroll once the pane is
+    # smaller than them, while the canvas (minimum 1x1) still takes all
+    # the room the pane has to spare.
     resizable=True,
+    scrollable=True,
 )
