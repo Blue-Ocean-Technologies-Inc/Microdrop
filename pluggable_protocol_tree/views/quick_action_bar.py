@@ -11,7 +11,8 @@
 """Pure-rendering toolbar widget for the pluggable protocol tree.
 
 Owns no state. Takes a sorted list of IQuickAction implementations and
-produces one icon-font QToolButton per action, keyed by action_id.
+produces one icon-font QToolButton per action, keyed by action_id,
+in a row that scrolls horizontally when the pane is narrower than it.
 The QuickActionsController (separate unit) drives click routing,
 per-action enabled state, and keyboard-shortcut wiring.
 """
@@ -22,7 +23,15 @@ from typing import Dict, List
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
-from pyface.qt.QtWidgets import QHBoxLayout, QToolButton, QWidget
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
+    QWidget,
+)
 
 # Microdrop package imports.
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
@@ -37,17 +46,24 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class QuickActionBar(QWidget):
-    """Horizontal row of icon-only QToolButtons, one per action."""
+class QuickActionBar(QScrollArea):
+    """Horizontal row of icon-only QToolButtons, one per action.
+
+    The row scrolls sideways rather than imposing its full width as the
+    minimum width of the pane that hosts it.
+    """
 
     def __init__(self, actions: List[IQuickAction], parent: QWidget = None):
         super().__init__(parent)
         self.buttons: Dict[str, QToolButton] = {}
         sorted_actions = sorted(actions, key=lambda a: (a.priority, a.action_id))
-        layout = QHBoxLayout(self)
+
+        row = QWidget()
+        layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         icon_font = QFont(ICON_FONT_FAMILY)
         icon_font.setPixelSize(20)
+
         for action in sorted_actions:
             if action.action_id in self.buttons:
                 logger.warning(
@@ -55,6 +71,7 @@ class QuickActionBar(QWidget):
                     f"keeping first contribution; skipping subsequent entry."
                 )
                 continue
+
             btn = QToolButton()
             btn.setText(action.icon_text)
             btn.setFont(icon_font)
@@ -62,7 +79,34 @@ class QuickActionBar(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             self.buttons[action.action_id] = btn
             layout.addWidget(btn)
+
         layout.addStretch()
+
+        self.setWidget(row)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # An ignored width lets the pane shrink below the buttons' total
+        # width; the fixed height leaves the tree all the remaining space.
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.setFixedHeight(row.sizeHint().height())
+
+    def resizeEvent(self, event):
+        """Make room for the scrollbar only while the row overflows."""
+        super().resizeEvent(event)
+
+        # The base class has just decided the scrollbar's visibility; without
+        # the extra height a shown scrollbar would clip the buttons.
+        scrollbar = self.horizontalScrollBar()
+        reserve = scrollbar.sizeHint().height() if scrollbar.isVisibleTo(self) else 0
+
+        self.setFixedHeight(self.widget().sizeHint().height() + reserve)
+
+    def wheelEvent(self, event):
+        """Scroll the row sideways with an ordinary vertical wheel."""
+        QApplication.sendEvent(self.horizontalScrollBar(), event)
 
 
 # --- controller ----------------------------------------------------
