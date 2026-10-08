@@ -133,8 +133,10 @@ Scope element lookups to the figure (`figure.querySelector`).
 
 ## Offline and size rules
 
-- No network: no `http(s)://` or `//` in any `src`, `href`, CSS `url()`, and
-  no `@import`. The build fails on one; external links are out too.
+- No network: no `http(s)://` or `//` URL in any `src`, `srcset`, `href`,
+  `poster`, `data` or `action` attribute or in a `<style>`'s or `style`
+  attribute's CSS `url()`, and no `@import`. The build fails on one. A plain
+  link (`<a href="https://â€¦">`) loads nothing and is allowed.
 - Under ~300 KB built (the build warns above that). Schematics as inline SVG,
   not screenshots.
 - Light and dark both work through the theme variables; never hard-code a
