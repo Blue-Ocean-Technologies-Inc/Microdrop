@@ -1,3 +1,25 @@
+## [v1.29.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.29.0) (2026-10-08)
+
+### Feat
+
+- **protocol-tree**: scroll the quick-action bar ([`6a08562`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6a08562fbfa86ed458e2d81a75d3b56067a19cb8))
+- **video**: camera lead time cell on Capture ([`5407309`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5407309d07ac9e61568c92bd571c1a4e379ecccd))
+
+### Fix
+
+- **video**: wait for the capture ack before the step ends ([`025b761`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/025b761d38cf2a60be0547942f6106a506ded40b))
+- **video**: let the Video column publish the lead's camera-on ([`9b35997`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9b359972e318975ef0d9d67ea228d3fc826cdd32))
+- **video**: keep the camera on across lead-time steps ([`2eddf46`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2eddf46cd16e3cd5bfb42bf700279fd5d6b5225b))
+- **image-viewer**: make the viewer pane scrollable ([`a4f611b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a4f611b9256f013636a46c81060ab6a3f87123e9))
+
+### Test
+
+- **video**: cover the Capture camera lead cell ([`6bb4db9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6bb4db9c2b89f87cb24ec2cd7ce6e3525f4971a4))
+
+### Style
+
+- **protocol-tree**: ruff-format quick_action_bar.py ([`71b55c8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/71b55c84e1e822b934d5e1803658b8ab76bf8374))
+
 ## [v1.28.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.28.0) (2026-10-07)
 
 ### Feat
