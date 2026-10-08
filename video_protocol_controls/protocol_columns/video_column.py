@@ -18,18 +18,36 @@ can add their own keys without colliding with each other or with any other
 plugin's scratch entries (e.g. routes_column's DURATION_CONSUMED_KEY).
 """
 
+# Enthought library imports.
 from traits.api import Bool
 
+# Microdrop package imports.
+from device_viewer.consts import DEVICE_VIEWER_CAMERA_ACTIVE
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from device_viewer.consts import DEVICE_VIEWER_CAMERA_ACTIVE
-
-
 VIDEO_CAMERA_ON_KEY = "video_protocol_controls.camera_on"
+
+
+def camera_wanted(row):
+    """Return whether a step wants the live camera on.
+
+    The Video column is the single publisher of DEVICE_VIEWER_CAMERA_ACTIVE
+    during a run; a Capture camera lead (capture on, capture_lead_ms > 0)
+    is a second reason a step wants the camera, besides row.video.
+    """
+    lead_ms = int(getattr(row, "capture_lead_ms", 0) or 0)
+
+    return bool(getattr(row, "video", False)) or (
+        bool(getattr(row, "capture", False)) and lead_ms > 0
+    )
 
 
 class VideoColumnModel(BaseColumnModel):
@@ -40,7 +58,9 @@ class VideoColumnModel(BaseColumnModel):
 
 
 class VideoHandler(BaseColumnHandler):
-    """Publishes camera on/off only when the value flips between steps.
+    """Publishes camera on/off only when camera_wanted(row) flips between
+    steps — the one publisher of camera state during a run, covering both
+    the Video checkbox and a Capture camera lead.
 
     Priority 10 — runs in the earliest bucket so the camera is on
     before V/F (priority 20) or RoutesHandler (priority 30). Fire and
@@ -58,19 +78,23 @@ class VideoHandler(BaseColumnHandler):
     if you add a hook at priority 10 that needs to run before/after this
     one, give it a different priority rather than relying on dict order.
     """
+
     priority = 10
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
     def on_pre_step(self, row, ctx):
-        """Publish camera state only when it flips from the previous step.
+        """Publish camera state only when camera_wanted(row) flips from the
+        previous step.
 
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
         """
-        desired = bool(row.video)
+        desired = camera_wanted(row)
         last = bool(ctx.protocol.scratch.get(VIDEO_CAMERA_ON_KEY, False))
+
         if desired == last:
             return
+
         publish_message(
             topic=DEVICE_VIEWER_CAMERA_ACTIVE,
             message="true" if desired else "false",

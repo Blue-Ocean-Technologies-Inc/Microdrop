@@ -32,9 +32,10 @@ from video_protocol_controls.protocol_columns import (
 
 
 def _build_columns():
-    """Build the 8-cell column set used by the video_protocol_controls
-    plugin: the builtins, Video, Record, and Capture's two synthesized
-    cells (capture + capture_at — Capture became a PPT-11 compound, #396).
+    """Build the 9-cell column set used by the video_protocol_controls
+    plugin: the builtins, Video, Record, and Capture's three synthesized
+    cells (capture, capture_at, capture_lead_ms — Capture became a PPT-11
+    compound, #396).
     """
     return [
         make_type_column(),
@@ -158,7 +159,7 @@ def test_column_class_paths_in_json():
     assert col_cls_by_id["record"] == (
         "video_protocol_controls.protocol_columns.record_column.RecordColumnModel"
     )
-    # Capture is a PPT-11 compound (#396): both synthesized field cells
+    # Capture is a PPT-11 compound (#396): all synthesized field cells
     # persist under the compound MODEL's qualname, not an adapter's.
     assert col_cls_by_id["capture"] == (
         "video_protocol_controls.protocol_columns.capture_column.CaptureCompoundModel"
@@ -166,3 +167,24 @@ def test_column_class_paths_in_json():
     assert col_cls_by_id["capture_at"] == (
         "video_protocol_controls.protocol_columns.capture_column.CaptureCompoundModel"
     )
+    assert col_cls_by_id["capture_lead_ms"] == (
+        "video_protocol_controls.protocol_columns.capture_column.CaptureCompoundModel"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. Camera lead round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_capture_lead_round_trip():
+    """A non-zero camera lead survives to_json -> from_json as an Int."""
+    rm = RowManager(columns=_build_columns())
+    rm.add_step(values={"name": "S1", "capture": True, "capture_lead_ms": 750})
+    rm.add_step(values={"name": "S2"})
+
+    parsed = json.loads(json.dumps(rm.to_json()))
+    steps = RowManager.from_json(parsed, columns=_build_columns()).root.children
+
+    assert steps[0].capture_lead_ms == 750
+    assert steps[1].capture_lead_ms == 0

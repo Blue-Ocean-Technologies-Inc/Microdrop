@@ -14,12 +14,22 @@ steps defaulting to Step Start)."""
 
 # Standard library imports.
 import json
+import re
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+# Third-party imports.
+import pytest
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
 
 # Microdrop package imports.
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+    DEVICE_VIEWER_SCREEN_CAPTURE,
+)
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
@@ -32,13 +42,23 @@ from video_protocol_controls.protocol_columns.capture_column import (
     CaptureAtComboBoxView,
     CaptureCompoundModel,
     CaptureHandler,
+    CaptureLeadSpinBoxView,
     make_capture_column,
+)
+from video_protocol_controls.protocol_columns.video_column import (
+    VideoHandler,
 )
 
 CAPTURE_COLUMN_MODULE = "video_protocol_controls.protocol_columns.capture_column"
 
 
-def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
+def _row(
+    name="step",
+    capture=False,
+    capture_at=StepTime.START,
+    uuid="u-1",
+    capture_lead_ms=0,
+):
     # dotted_path() is the step_id source (#396 follow-up: matches the
     # recording scheme) — a bare attribute won't do since the handler
     # calls it.
@@ -47,13 +67,22 @@ def _row(name="step", capture=False, capture_at=StepTime.START, uuid="u-1"):
         uuid=uuid,
         capture=capture,
         capture_at=capture_at,
+        capture_lead_ms=capture_lead_ms,
         dotted_path=lambda: uuid,
     )
 
 
 def _ctx(experiment_dir=""):
+    """StepContext stand-in: protocol scratch + recorded sleeps, and a
+    wait_for mock standing in for the device viewer's capture ack."""
     scratch = {"experiment_dir": experiment_dir} if experiment_dir else {}
-    return SimpleNamespace(protocol=SimpleNamespace(scratch=scratch))
+    sleeps = []
+
+    return SimpleNamespace(
+        protocol=SimpleNamespace(scratch=scratch, sleep=sleeps.append),
+        sleeps=sleeps,
+        wait_for=MagicMock(return_value="{}"),
+    )
 
 
 def _capture_manager():
@@ -69,14 +98,16 @@ def _capture_manager():
 # --- model ----------------------------------------------------------------
 
 
-def test_field_specs_capture_then_capture_at():
+def test_field_specs_capture_then_capture_at_then_lead():
     specs = CaptureCompoundModel().field_specs()
     assert [(s.field_id, s.col_name) for s in specs] == [
         ("capture", "Capture"),
         ("capture_at", "Capture At"),
+        ("capture_lead_ms", "Camera Lead (ms)"),
     ]
     assert specs[0].default_value is False
     assert specs[1].default_value == StepTime.START
+    assert specs[2].default_value == 0
 
 
 def test_capture_at_default_follows_model_default():
@@ -113,10 +144,13 @@ def test_new_step_defaults_to_step_start_without_overriding_edits():
 # --- handler ----------------------------------------------------------------
 
 
-def test_handler_priority_and_fire_and_forget():
+def test_handler_priority_and_capture_ack():
     handler = make_capture_column().handler
-    assert handler.priority == 10
-    assert list(handler.wait_for_topics) == []
+    # One bucket after Video (10), so the lead counts from after the
+    # camera-on request.
+    assert handler.priority == 11
+    assert list(handler.wait_for_topics) == [DEVICE_VIEWER_MEDIA_CAPTURED]
+    assert handler.ack_time_s == 15.0
 
 
 def _patched_fires(monkeypatch):
@@ -180,12 +214,15 @@ def test_payload_uses_legacy_directory_key(monkeypatch):
     row = _row(name="snap", uuid="u-9", capture=True)
     CaptureHandler().on_pre_step(row, _ctx(experiment_dir="exp/dir"))
     _topic, payload = fired[0]
+    request_id = payload.pop("request_id")
+
     assert payload == {
         "directory": "exp/dir",
         "step_description": "snap",
         "step_id": "u-9",
         "show_status_message": False,
     }
+    assert re.fullmatch(r"[0-9a-f]{32}", request_id)
 
 
 def test_no_cross_step_state_two_calls_two_publishes(monkeypatch):
@@ -228,6 +265,7 @@ def test_round_trip_preserves_per_step_capture_at(qapp):
     assert [c["compound_field_id"] for c in cap_entries] == [
         "capture",
         "capture_at",
+        "capture_lead_ms",
     ]
 
 
@@ -240,10 +278,7 @@ def test_payload_missing_capture_at_fills_with_step_start(qapp):
         values={"name": "captures", "capture": True, "capture_at": StepTime.END}
     )
     manager.add_step(values={"name": "plain", "capture_at": StepTime.END})
-    data = json.loads(json.dumps(manager.to_json()))
-    at_idx = data["fields"].index("capture_at")
-    data["fields"].remove("capture_at")
-    data["rows"] = [row[:at_idx] + row[at_idx + 1 :] for row in data["rows"]]
+    data = _without_field(json.loads(json.dumps(manager.to_json())), "capture_at")
 
     loaded = RowManager.from_json(data, columns=list(_capture_manager().columns))
     captures, plain = loaded.get_row((0,)), loaded.get_row((1,))
@@ -251,6 +286,36 @@ def test_payload_missing_capture_at_fills_with_step_start(qapp):
     assert captures.capture is True and plain.capture is False
     assert captures.capture_at == StepTime.START
     assert plain.capture_at == StepTime.START
+
+
+def test_payload_missing_capture_lead_fills_with_zero(qapp):
+    """A protocol saved before the lead cell existed loads with no lead."""
+    manager = _capture_manager()
+    manager.add_step(
+        values={"name": "captures", "capture": True, "capture_at": StepTime.END}
+    )
+    data = _without_field(json.loads(json.dumps(manager.to_json())), "capture_lead_ms")
+
+    loaded = RowManager.from_json(data, columns=list(_capture_manager().columns))
+    step = loaded.get_row((0,))
+
+    assert step.capture is True
+    assert step.capture_at == StepTime.END
+    assert step.capture_lead_ms == 0
+
+
+def _without_field(data, field_id):
+    """Strip one field from a saved payload, as if written before it existed.
+
+    Values deserialize against the saved columns list, so the column entry
+    goes too — not just the fields header and the row cells.
+    """
+    value_idx = data["fields"].index(field_id)
+    data["fields"].remove(field_id)
+    data["columns"] = [c for c in data["columns"] if c["id"] != field_id]
+    data["rows"] = [row[:value_idx] + row[value_idx + 1 :] for row in data["rows"]]
+
+    return data
 
 
 def test_capture_at_view_declares_capture_dependency():
@@ -262,3 +327,253 @@ def test_capture_at_view_declares_capture_dependency():
     )
 
     assert list(CaptureAtComboBoxView().depends_on_row_traits) == ["capture"]
+
+
+# --- camera lead -------------------------------------------------------------
+
+
+def _fake_clock(monkeypatch, start=100.0):
+    """Freeze the handler's monotonic clock; return a setter to advance it."""
+    now = [start]
+    monkeypatch.setattr(f"{CAPTURE_COLUMN_MODULE}.time.monotonic", lambda: now[0])
+
+    def advance(seconds):
+        now[0] += seconds
+
+    return advance
+
+
+def test_factory_registers_lead_spinbox():
+    view = make_capture_column().view.cell_view_for_field("capture_lead_ms")
+
+    assert isinstance(view, CaptureLeadSpinBoxView)
+    assert (view.low, view.high) == (0, 60000)
+    assert list(view.depends_on_row_traits) == ["capture"]
+
+
+def test_lead_cell_read_only_and_blank_until_capture_on():
+    view = make_capture_column().view.cell_view_for_field("capture_lead_ms")
+    off = _row(capture=False, capture_lead_ms=500)
+    on = _row(capture=True, capture_lead_ms=500)
+
+    assert not (view.get_flags(off) & Qt.ItemIsEditable)
+    assert view.get_flags(on) & Qt.ItemIsEditable
+    assert view.format_display(500, off) == ""
+    assert view.format_display(500, on) == "500"
+
+
+def test_zero_lead_publishes_only_capture(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+
+    for at in (StepTime.START, StepTime.END):
+        ctx = _ctx()
+        row = _row(capture=True, capture_at=at, capture_lead_ms=0)
+        handler.on_pre_step(row, ctx)
+        handler.on_post_step(row, ctx)
+
+        assert ctx.sleeps == []
+
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE] * 2
+
+
+def test_lead_at_step_start_waits_full_lead_without_camera_publish(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    _fake_clock(monkeypatch)
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.START, capture_lead_ms=1500)
+
+    CaptureHandler().on_pre_step(row, ctx)
+
+    # The Video column publishes camera state; Capture only waits.
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE]
+    assert ctx.sleeps == [1.5]
+
+
+def test_lead_at_step_end_waits_only_the_remainder(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    advance = _fake_clock(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.END, capture_lead_ms=2000)
+
+    handler.on_pre_step(row, ctx)
+
+    assert fired == []
+    assert ctx.sleeps == []
+
+    advance(0.5)
+    handler.on_post_step(row, ctx)
+
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE]
+    assert ctx.sleeps == [1.5]
+
+
+def test_lead_at_step_end_no_wait_when_step_outlasts_lead(monkeypatch):
+    _patched_fires(monkeypatch)
+    advance = _fake_clock(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+    row = _row(capture=True, capture_at=StepTime.END, capture_lead_ms=2000)
+
+    handler.on_pre_step(row, ctx)
+    advance(5.0)
+    handler.on_post_step(row, ctx)
+
+    assert ctx.sleeps == [0.0]
+
+
+def test_no_wait_when_capture_false(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    ctx = _ctx()
+    row = _row(capture=False, capture_lead_ms=1000)
+
+    CaptureHandler().on_pre_step(row, ctx)
+    CaptureHandler().on_post_step(row, ctx)
+
+    assert fired == []
+    assert ctx.sleeps == []
+
+
+# --- Video + Capture: one camera publisher ------------------------------------
+
+
+def _camera_messages(monkeypatch):
+    """Record (source, message) for camera publishes from Video and Capture."""
+    published = []
+
+    def recorder(source):
+        def publish(topic, message):
+            if topic == DEVICE_VIEWER_CAMERA_ACTIVE:
+                published.append((source, message))
+
+        return publish
+
+    monkeypatch.setattr(
+        "video_protocol_controls.protocol_columns.video_column.publish_message",
+        recorder("video"),
+    )
+    monkeypatch.setattr(f"{CAPTURE_COLUMN_MODULE}.publish_message", recorder("capture"))
+
+    return published
+
+
+def _run_steps(rows):
+    """Run each row through Video then Capture in executor order (10, 11)."""
+    video, capture = VideoHandler(), CaptureHandler()
+    ctx = _ctx()
+
+    for row in rows:
+        video.on_pre_step(row, ctx)
+        capture.on_pre_step(row, ctx)
+        capture.on_post_step(row, ctx)
+
+
+def _lead_step(uuid, video=False, capture=True, capture_lead_ms=5000):
+    row = _row(
+        uuid=uuid,
+        capture=capture,
+        capture_at=StepTime.END,
+        capture_lead_ms=capture_lead_ms,
+    )
+    row.video = video
+
+    return row
+
+
+def test_consecutive_lead_steps_publish_one_camera_on(monkeypatch):
+    """Regression (#845 live test): a lead's camera-on must never be
+    followed by a "false" on the next lead step."""
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps([_lead_step("u1"), _lead_step("u2")])
+
+    assert published == [("video", "true")]
+
+
+def test_video_then_lead_step_keeps_camera_on(monkeypatch):
+    """Live failure: Video on (no lead), then Video off with a lead. The
+    old two-publisher design sent "false" then "true" on one step, and
+    concurrent delivery left the camera off for the whole lead."""
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps(
+        [
+            _lead_step("a", video=True, capture=False, capture_lead_ms=0),
+            _lead_step("b"),
+        ]
+    )
+
+    assert published == [("video", "true")]
+
+
+def test_camera_off_once_a_step_wants_neither(monkeypatch):
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps(
+        [
+            _lead_step("a", video=True, capture=False, capture_lead_ms=0),
+            _lead_step("b"),
+            _lead_step("c", capture=False, capture_lead_ms=0),
+        ]
+    )
+
+    assert published == [("video", "true"), ("video", "false")]
+
+
+# --- acknowledged capture ------------------------------------------------------
+
+
+def test_capture_waits_for_its_own_media_ack(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+
+    handler.on_pre_step(_row(capture=True), ctx)
+
+    request_id = fired[0][1]["request_id"]
+    ctx.wait_for.assert_called_once()
+    (topic,), kwargs = ctx.wait_for.call_args
+
+    assert topic == DEVICE_VIEWER_MEDIA_CAPTURED
+    assert kwargs["timeout"] == handler.ack_time_s
+
+    predicate = kwargs["predicate"]
+    ack = {"path": "captures/step.png", "type": "image"}
+
+    assert predicate(json.dumps({**ack, "request_id": request_id}))
+    assert not predicate(json.dumps({**ack, "request_id": "someone-else"}))
+
+
+def test_each_capture_gets_a_fresh_request_id(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    row = _row(capture=True)
+
+    handler.on_pre_step(row, _ctx())
+    handler.on_pre_step(row, _ctx())
+
+    assert fired[0][1]["request_id"] != fired[1][1]["request_id"]
+
+
+def test_zero_ack_time_is_fire_and_forget(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler(ack_time_s=0)
+    ctx = _ctx()
+
+    handler.on_pre_step(_row(capture=True), ctx)
+
+    assert len(fired) == 1
+    ctx.wait_for.assert_not_called()
+
+
+def test_ack_timeout_propagates(monkeypatch):
+    _patched_fires(monkeypatch)
+    ctx = _ctx()
+    ctx.wait_for.side_effect = TimeoutError("no media ack")
+
+    with pytest.raises(TimeoutError):
+        CaptureHandler().on_post_step(_row(capture=True, capture_at=StepTime.END), ctx)
