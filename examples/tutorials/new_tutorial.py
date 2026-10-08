@@ -27,6 +27,7 @@ to trace the template's glyph headless.
 import argparse
 import ast
 import datetime
+import html
 import json
 import re
 import sys
@@ -75,7 +76,7 @@ def write_source(plugin_dir, slug, title):
 
     year = str(datetime.date.today().year)
     text = TEMPLATE_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
-    text = text.replace("{{year}}", year).replace("{{title}}", title)
+    text = text.replace("{{year}}", year).replace("{{title}}", html.escape(title))
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text(text, encoding="utf-8", newline="\n")
     logger.info(f"Created {source}")

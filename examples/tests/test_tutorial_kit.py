@@ -150,8 +150,11 @@ def test_scaffold_builds_an_offline_page_and_contributes_it(scaffold_root):
 
 def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
     scaffold_tutorial(FIXTURE_PLUGIN, "demo", "Demo Tutorial", scaffold_root)
-    scaffold_tutorial(FIXTURE_PLUGIN, "more", "More & Less Tutorial", scaffold_root)
+    source = scaffold_tutorial(
+        FIXTURE_PLUGIN, "more", "More & Less Tutorial", scaffold_root
+    )
 
+    assert "<title>More &amp; Less Tutorial</title>" in source.read_text()
     assert [title for title, _path in _fixture_plugin_tutorials()] == [
         "Demo Tutorial",
         "More & Less Tutorial",
