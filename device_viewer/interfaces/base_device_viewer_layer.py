@@ -33,6 +33,10 @@ class BaseDeviceViewerLayer(HasTraits):
     #: Stable id ("zones", "gamepad"); one layer per id is attached.
     id = Str()
 
+    #: The ``LAYER_CONTRACT_VERSION`` the layer was built against; empty when
+    #: undeclared. The base warns, and still mounts the layer, when it differs.
+    contract_version = Str()
+
     #: Order of the layer's sidebar section after the built-in ones.
     priority = Int(50)
 

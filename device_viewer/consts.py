@@ -475,9 +475,13 @@ CAMERA_SOURCES = "device_viewer.camera_sources"
 DEVICE_VIEWER_LAYERS = "device_viewer.layers"
 
 # Version of the layer contract re-exported above. Layer plugins shipped
-# from other repos pin against it: the major part changes only for a
-# breaking change, after a deprecation period; additions bump the minor.
-LAYER_CONTRACT_VERSION = "0.1.0"
+# from other repos declare the one they were built against
+# (``contract_version``); the base logs a warning and mounts them anyway
+# when it differs. The major part changes only for a breaking change, after
+# a deprecation period; additions bump the minor.
+# 0.2.0: IElectrodeStepping types LayerContext.stepping; layers declare
+# contract_version (#783).
+LAYER_CONTRACT_VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Electrode zones (#596): named, colored electrode regions drawn on the

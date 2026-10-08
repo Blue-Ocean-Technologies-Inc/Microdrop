@@ -126,3 +126,8 @@ def test_the_stepping_service_provides_the_interface():
 def test_the_context_takes_only_a_stepping_provider():
     with pytest.raises(TraitError):
         LayerContext(stepping=HasTraits())
+
+
+def test_the_contract_is_at_0_2_0_and_layers_start_undeclared():
+    assert LAYER_CONTRACT_VERSION == "0.2.0"
+    assert LifecycleOnlyLayer(id="gamepad").contract_version == ""

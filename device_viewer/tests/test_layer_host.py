@@ -11,6 +11,7 @@
 """Tests for the host that mounts device viewer layers on a pane (#650)."""
 
 # Standard library imports.
+import logging
 from pathlib import Path
 
 # Third-party imports.
@@ -25,6 +26,7 @@ from traits.api import HasTraits, List, Str, provides
 # Microdrop package imports.
 from device_viewer.consts import (
     DEVICE_VIEWER_LAYERS,
+    LAYER_CONTRACT_VERSION,
     AlphaEntry,
     BaseDeviceViewerLayer,
     IInteractionHandler,
@@ -302,3 +304,27 @@ def test_hot_load_and_unload_follow_the_extension_point(host, monkeypatch):
     assert _box_titles(host) == ["A", "B"]
 
     application.stop()
+
+
+def test_a_layer_built_against_another_contract_warns_and_mounts(host, caplog):
+    with caplog.at_level(logging.WARNING):
+        host.add_layers([_factory(id="gamepad", contract_version="0.1.0")])
+
+    assert [layer.id for layer in host.layers] == ["gamepad"]
+    assert "built against layer contract 0.1.0" in caplog.text
+    assert f"provides {LAYER_CONTRACT_VERSION}" in caplog.text
+
+
+def test_an_undeclared_contract_version_also_warns(host, caplog):
+    with caplog.at_level(logging.WARNING):
+        host.add_layers([_factory(id="zones")])
+
+    assert [layer.id for layer in host.layers] == ["zones"]
+    assert "an undeclared version" in caplog.text
+
+
+def test_a_layer_on_the_current_contract_mounts_quietly(host, caplog):
+    with caplog.at_level(logging.WARNING):
+        host.add_layers([_factory(id="zones", contract_version=LAYER_CONTRACT_VERSION)])
+
+    assert "layer contract" not in caplog.text
