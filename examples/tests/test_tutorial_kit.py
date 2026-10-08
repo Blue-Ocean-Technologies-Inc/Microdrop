@@ -16,6 +16,10 @@ import os
 import subprocess
 import sys
 
+# Qt reads the platform when the first QApplication is made, which importing
+# the plugins below can do; set it first so no test ever opens a window.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 # Third-party imports.
 import pytest
 
@@ -43,9 +47,6 @@ from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
 from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_glyphs
-
-# Tracing glyphs needs a QGuiApplication; never open a window for it.
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
