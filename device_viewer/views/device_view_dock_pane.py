@@ -1267,6 +1267,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         if getattr(self, "recording_icon", None) is not None:
             return  # already built; a re-fired manager
             # assignment must not duplicate icons
+
         # Push the manager to the camera widget now that it exists, so
         # media-capture notifications can use it directly.
         self.camera_control_widget.status_bar_manager = event.new
