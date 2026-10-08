@@ -8,19 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
-from pydantic import BaseModel
-from traits.api import HasTraits, Dict, Str, Instance, Type
+# Third-party imports.
 import dramatiq
+from pydantic import BaseModel
 
+# Enthought library imports.
+from traits.api import HasTraits, Instance, Str, Type
+
+# Microdrop utils imports.
+from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.dramatiq_controller_base import DramatiqControllerBase
 from microdrop_utils.redis_manager import RedisHashDictProxy
 
-from logger.logger_service import get_logger, debug_throttled
-from microdrop_utils.datetime_helpers import TimestampedMessage
+# Logger import.
+from logger.logger_service import debug_throttled, get_logger
 
 logger = get_logger(__name__)
 
 DEFAULT_STORAGE_KEY_NAME = "microdrop:message_router_data"
+
 
 class ValidatedTopicPublisher(HasTraits):
     topic = Str
@@ -32,11 +38,11 @@ class ValidatedTopicPublisher(HasTraits):
         self,
         payload,
         dramatiq_send: bool = False,
-        validation_context = None,
-        actor_to_send = None,
-        queue_name = None,
-        message_kwargs = None,
-        message_options = None,
+        validation_context=None,
+        actor_to_send=None,
+        queue_name=None,
+        message_kwargs=None,
+        message_options=None,
     ):
         """
         Validates the payload, converts it to JSON, and publishes it to the topic.
@@ -76,13 +82,22 @@ class ValidatedTopicPublisher(HasTraits):
 
 
 @dramatiq.actor
-def publish_message(message: str, topic: str, actor_to_send: str = "message_router_actor", queue_name: str = "default",
-                    message_kwargs=None, message_options=None):
+def publish_message(
+    message: str,
+    topic: str,
+    actor_to_send: str = "message_router_actor",
+    queue_name: str = "default",
+    message_kwargs=None,
+    message_options=None,
+):
     """
     Publish a message to a given actor with a certain topic
     """
-    debug_throttled(logger, f"publish:{topic}:{actor_to_send}",
-                    f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}")
+    debug_throttled(
+        logger,
+        f"publish:{topic}:{actor_to_send}",
+        f"Publishing message: {message} to actor: {actor_to_send} on topic: {topic}",
+    )
 
     broker = dramatiq.get_broker()
 
@@ -116,7 +131,7 @@ class MQTTMatcher:
     """
 
     class Node:
-        __slots__ = '_children', '_content'
+        __slots__ = "_children", "_content"
 
         def __init__(self):
             self._children = {}
@@ -129,7 +144,7 @@ class MQTTMatcher:
         """Add a topic filter :key to the prefix tree
         and associate it to :value"""
         node = self._root
-        for sym in key.split('/'):
+        for sym in key.split("/"):
             node = node._children.setdefault(sym, self.Node())
         node._content = value
 
@@ -137,7 +152,7 @@ class MQTTMatcher:
         """Retrieve the value associated with some topic filter :key"""
         try:
             node = self._root
-            for sym in key.split('/'):
+            for sym in key.split("/"):
                 node = node._children[sym]
             if node._content is None:
                 raise KeyError(key)
@@ -150,7 +165,7 @@ class MQTTMatcher:
         lst = []
         try:
             parent, node = None, self._root
-            for k in key.split('/'):
+            for k in key.split("/"):
                 parent, node = node, node._children[k]
                 lst.append((parent, k, node))
             # TODO
@@ -166,8 +181,8 @@ class MQTTMatcher:
     def iter_match(self, topic):
         """Return an iterator on all values associated with filters
         that match the :topic"""
-        lst = topic.split('/')
-        normal = not topic.startswith('$')
+        lst = topic.split("/")
+        normal = not topic.startswith("$")
 
         def rec(node, i=0):
             if i == len(lst):
@@ -178,11 +193,11 @@ class MQTTMatcher:
                 if part in node._children:
                     for content in rec(node._children[part], i + 1):
                         yield content
-                if '+' in node._children and (normal or i > 0):
-                    for content in rec(node._children['+'], i + 1):
+                if "+" in node._children and (normal or i > 0):
+                    for content in rec(node._children["+"], i + 1):
                         yield content
-            if '#' in node._children and (normal or i > 0):
-                content = node._children['#']._content
+            if "#" in node._children and (normal or i > 0):
+                content = node._children["#"]._content
                 if content is not None:
                     yield content
 
@@ -191,78 +206,98 @@ class MQTTMatcher:
 
 class MessageRouterData(HasTraits):
     """
-    A class that stores topics and their subscribers, with MQTT-style wildcards.
+     A class that stores topics and their subscribers, with MQTT-style wildcards.
 
-    It follows the guidelines from here: https://eclipse.dev/paho/files/mqttdoc/MQTTClient/html/wildcard.html
+     It follows the guidelines from here:
+     https://eclipse.dev/paho/files/mqttdoc/MQTTClient/html/wildcard.html
 
-    As it states in the link above:
-    To provide more flexibility, MQTT supports a hierarchical topic namespace. This allows application designers to
-    organize topics to simplify their management. Levels in the hierarchy are delimited by the '/' character,
-    such as SENSOR/1/HUMIDITY. Publishers and subscribers use these hierarchical topics as already described.
+     As it states in the link above:
+     To provide more flexibility, MQTT supports a hierarchical topic namespace.
+     This allows application designers to organize topics to simplify their
+     management. Levels in the hierarchy are delimited by the '/' character,
+     such as SENSOR/1/HUMIDITY. Publishers and subscribers use these
+     hierarchical topics as already described.
 
-    For subscriptions, two wildcard characters are supported:
+     For subscriptions, two wildcard characters are supported:
 
-   - A '#' character represents a complete sub-tree of the hierarchy and thus must be the last character in a
-   subscription topic string, such as SENSOR/#. This will match any topic starting with SENSOR/,
-   such as SENSOR/1/TEMP and SENSOR/2/HUMIDITY.
+    - A '#' character represents a complete sub-tree of the hierarchy and thus
+    must be the last character in a subscription topic string, such as SENSOR/#.
+    This will match any topic starting with SENSOR/, such as SENSOR/1/TEMP and
+    SENSOR/2/HUMIDITY.
 
-    - A '+' character represents a single level of the hierarchy and is used between delimiters. For
-    example, SENSOR/+/TEMP will match SENSOR/1/TEMP and SENSOR/2/TEMP.
+     - A '+' character represents a single level of the hierarchy and is used
+     between delimiters. For example, SENSOR/+/TEMP will match SENSOR/1/TEMP and
+     SENSOR/2/TEMP.
 
-    - Publishers are not allowed to use the wildcard characters in their topic names.
+     - Publishers are not allowed to use the wildcard characters in their topic names.
 
-    - Deciding on your topic hierarchy is an important step in your system design.
+     - Deciding on your topic hierarchy is an important step in your system design.
 
-    The matcher here will pass all the tests here: https://github.com/eclipse/paho.mqtt.python/blob/master/tests/test_matcher.py
+     The matcher here will pass all the tests here:
+     https://github.com/eclipse/paho.mqtt.python/blob/master/tests/test_matcher.py
 
-    We are using the same matcher as the one in the link above.
+     We are using the same matcher as the one in the link above.
 
-    This will also be shown in the pytest module for this project.
+     This will also be shown in the pytest module for this project.
 
-    Attributes:
-        topic_subscriber_map (Dict): A dictionary mapping topics to a list of their subscribing actor names.
+     Attributes:
+         topic_subscriber_map (Dict): A dictionary mapping topics to a list of
+             their subscribing actor names.
 
-    Preconditions:
-        - `topic` should be a string.
-        - `subscribing_actor_name` should be a string.
-        - Topics can contain wildcards '+' for single level and '#' for multiple levels. The '#' character must be the last character in the subscription topic string.
+     Preconditions:
+         - `topic` should be a string.
+         - `subscribing_actor_name` should be a string.
+         - Topics can contain wildcards '+' for single level and '#' for
+           multiple levels. The '#' character must be the last character in the
+           subscription topic string.
 
-    Example:
+     Example:
 
-        # while assigning subscribers top topics, you can use wildcards in teh topics
+         # while assigning subscribers top topics, you can use wildcards in teh topics
 
-        >>> router_data = MessageRouterData()
-        >>> router_data.add_subscriber_to_topic("SENSOR/+", "actor1")
-        >>> router_data.add_subscriber_to_topic("SENSOR/1/HUMIDITY", "actor2")
-        >>> router_data.add_subscriber_to_topic("SENSOR/#", "actor3")
-        >>> router_data.add_subscriber_to_topic("SENSOR/2/TEMP", "actor4")
+         >>> router_data = MessageRouterData()
+         >>> router_data.add_subscriber_to_topic("SENSOR/+", "actor1")
+         >>> router_data.add_subscriber_to_topic("SENSOR/1/HUMIDITY", "actor2")
+         >>> router_data.add_subscriber_to_topic("SENSOR/#", "actor3")
+         >>> router_data.add_subscriber_to_topic("SENSOR/2/TEMP", "actor4")
 
-        # While trying to find subscribers for a certain topic published, you cannot use wildcards in the topics
-        >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1/HUMIDITY"))
-        ['actor2', 'actor3']
-        >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1/TEMP"))
-        ['actor3']
-        >>> sorted(router_data.get_subscribers_for_topic("SENSOR/2/TEMP"))
-        ['actor3', 'actor4']
-        >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1"))
-        ['actor1', 'actor3']
-        >>> router_data.get_subscribers_for_topic("NONEXISTENT")
-        []
+         # While trying to find subscribers for a certain topic published, you
+         # cannot use wildcards in the topics
+         >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1/HUMIDITY"))
+         ['actor2', 'actor3']
+         >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1/TEMP"))
+         ['actor3']
+         >>> sorted(router_data.get_subscribers_for_topic("SENSOR/2/TEMP"))
+         ['actor3', 'actor4']
+         >>> sorted(router_data.get_subscribers_for_topic("SENSOR/1"))
+         ['actor1', 'actor3']
+         >>> router_data.get_subscribers_for_topic("NONEXISTENT")
+         []
     """
-    topic_subscriber_map = Instance('RedisHashDictProxy',
-                                    desc="A dictionary of topics and a list of tuples containing topic subscribed "
-                                         "actor name, listening queue pairs stored in redis as a hash")
 
-    storage_key_name = Str(DEFAULT_STORAGE_KEY_NAME, desc="The name of the redis key under which this data will be "
-                                                          "stored")
-    listener_queue = Str("default", desc="The unique queue for a message router actor that it is listening to")
+    topic_subscriber_map = Instance(
+        "RedisHashDictProxy",
+        desc="A dictionary of topics and a list of tuples containing topic subscribed "
+        "actor name, listening queue pairs stored in redis as a hash",
+    )
+
+    storage_key_name = Str(
+        DEFAULT_STORAGE_KEY_NAME,
+        desc="The name of the redis key under which this data will be stored",
+    )
+    listener_queue = Str(
+        "default",
+        desc="The unique queue for a message router actor that it is listening to",
+    )
 
     # ------- default trait setters ----------- #
 
     # ------- trait change handler ---------#
 
     def _topic_subscriber_map_default(self):
-        return RedisHashDictProxy(redis_client=dramatiq.get_broker().client, hash_name=self.storage_key_name)
+        return RedisHashDictProxy(
+            redis_client=dramatiq.get_broker().client, hash_name=self.storage_key_name
+        )
 
     def add_subscriber_to_topic(self, topic: Str, subscribing_actor_name: Str):
         """
@@ -286,11 +321,19 @@ class MessageRouterData(HasTraits):
 
         # initialize topic with the sub actor. listener queue pair if it does not exist
         if topic not in self.topic_subscriber_map:
-            self.topic_subscriber_map[topic] = [(subscribing_actor_name, self.listener_queue)]
+            self.topic_subscriber_map[topic] = [
+                (subscribing_actor_name, self.listener_queue)
+            ]
 
-        # if the sub actor, listener queue pair is not a value for the topic, then add it
-        elif [subscribing_actor_name, self.listener_queue] not in self.topic_subscriber_map[topic]:
-            self.topic_subscriber_map[topic] += [(subscribing_actor_name, self.listener_queue)]
+        # if the sub actor, listener queue pair is not a value for the topic,
+        # then add it
+        elif [
+            subscribing_actor_name,
+            self.listener_queue,
+        ] not in self.topic_subscriber_map[topic]:
+            self.topic_subscriber_map[topic] += [
+                (subscribing_actor_name, self.listener_queue)
+            ]
 
     def remove_subscriber_from_topic(self, topic: Str, subscribing_actor_name: Str):
         """
@@ -325,7 +368,8 @@ class MessageRouterData(HasTraits):
 
     def get_subscribers_for_topic(self, topic: str) -> list:
         """
-        Gets the list of subscribers for a specific topic. Supports MQTT-style wildcard patterns.
+        Gets the list of subscribers for a specific topic. Supports MQTT-style
+        wildcard patterns.
 
         Args:
             topic (str): The topic to get subscribers for.
@@ -337,7 +381,9 @@ class MessageRouterData(HasTraits):
             - `topic` should be a valid string.
 
         """
-        bytes_to_str = lambda x: x.decode() if isinstance(x, bytes) else x
+
+        def bytes_to_str(x):
+            return x.decode() if isinstance(x, bytes) else x
 
         subscribers = set()
         for key, value in self.topic_subscriber_map.items():
@@ -355,7 +401,8 @@ class MessageRouterData(HasTraits):
         """
         Checks if a topic matches a pattern with MQTT-style wildcards.
 
-        This method was taken from here: https://github.com/eclipse/paho.mqtt.python/blob/master/src/paho/mqtt/client.py
+        This method was taken from here:
+        https://github.com/eclipse/paho.mqtt.python/blob/master/src/paho/mqtt/client.py
 
         Args:
             pattern (str): The pattern with wildcards.
@@ -371,9 +418,13 @@ class MessageRouterData(HasTraits):
         Example:
             >>> MessageRouterData._topic_matches_pattern("SENSOR/+", "SENSOR/1")
             True
-            >>> MessageRouterData._topic_matches_pattern("SENSOR/+", "SENSOR/1/HUMIDITY")
+            >>> MessageRouterData._topic_matches_pattern(
+            ...     "SENSOR/+", "SENSOR/1/HUMIDITY"
+            ... )
             False
-            >>> MessageRouterData._topic_matches_pattern("SENSOR/#", "SENSOR/1/HUMIDITY")
+            >>> MessageRouterData._topic_matches_pattern(
+            ...     "SENSOR/#", "SENSOR/1/HUMIDITY"
+            ... )
             True
             >>> MessageRouterData._topic_matches_pattern("SENSOR/#", "SENSOR")
             True
@@ -393,10 +444,11 @@ class MessageRouterActor(DramatiqControllerBase):
     """
     A class that routes messages to subscribers based on topics.
 
-    Each instance of this class has one message router actor with a specific queue unique to it.
+    Each instance of this class has one message router actor with a specific
+    queue unique to it.
     """
 
-    ######## Message Router Interface #######################################################
+    ######## Message Router Interface ######################################
     message_router_data = Instance(MessageRouterData)
 
     def _message_router_data_default(self):
@@ -408,19 +460,38 @@ class MessageRouterActor(DramatiqControllerBase):
         """returns a default listener actor method for message routing"""
 
         def listener_actor_method(timestamped_message: TimestampedMessage, topic: Str):
-            debug_throttled(logger, f"router_rx:{topic}",
-                            f"MESSAGE_ROUTER: Received message: {timestamped_message} on topic: {topic}")
+            debug_throttled(
+                logger,
+                f"router_rx:{topic}",
+                f"MESSAGE_ROUTER: Received message: {timestamped_message} "
+                f"on topic: {topic}",
+            )
 
-            subscribing_actor_queue_info = self.message_router_data.get_subscribers_for_topic(topic)
+            subscribing_actor_queue_info = (
+                self.message_router_data.get_subscribers_for_topic(topic)
+            )
 
             for subscribing_actor, queue in subscribing_actor_queue_info:
-                debug_throttled(logger, f"router_tx:{topic}:{subscribing_actor}",
-                                f"MESSAGE_ROUTER: Publishing message: {timestamped_message} to actor: {subscribing_actor}")
+                debug_throttled(
+                    logger,
+                    f"router_tx:{topic}:{subscribing_actor}",
+                    f"MESSAGE_ROUTER: Publishing message: {timestamped_message} "
+                    f"to actor: {subscribing_actor}",
+                )
 
-                publish_message(str(timestamped_message), topic, subscribing_actor, queue_name=queue, message_kwargs={"timestamp": timestamped_message._timestamp_ms})
+                publish_message(
+                    str(timestamped_message),
+                    topic,
+                    subscribing_actor,
+                    queue_name=queue,
+                    message_kwargs={"timestamp": timestamped_message._timestamp_ms},
+                )
 
             debug_throttled(
-                logger, f"router_done:{topic}",
-                f"MESSAGE_ROUTER: Message: {timestamped_message} on topic {topic} published to {len(subscribing_actor_queue_info)} subscribers")
+                logger,
+                f"router_done:{topic}",
+                f"MESSAGE_ROUTER: Message: {timestamped_message} on topic {topic} "
+                f"published to {len(subscribing_actor_queue_info)} subscribers",
+            )
 
         return listener_actor_method
