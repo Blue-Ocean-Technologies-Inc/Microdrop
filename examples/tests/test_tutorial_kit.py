@@ -266,6 +266,38 @@ def test_network_reference_fails_the_build(tmp_path):
         render_tutorial(source, tmp_path, {}, "t.src.html")
 
 
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<IMG SRC="HTTPS://example.com/a.png">',
+        '<img srcset="a.png 1x, //example.com/a.png 2x">',
+        '<img src="&#104;ttps://example.com/a.png">',
+        '<img src="ht&#9;tps://example.com/a.png">',
+        '<video poster="https://example.com/p.png"></video>',
+        '<object data="https://example.com/a.svg"></object>',
+        '<form action="https://example.com/submit"></form>',
+        '<link rel="stylesheet" href="//example.com/a.css">',
+        '<div style="background: URL(https://example.com/a.png)"></div>',
+        '<style>@import "theme.css";</style>',
+    ],
+)
+def test_network_references_are_found(markup):
+    assert find_network_references(markup) != []
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<a href="https://example.com/docs">docs</a>',
+        "<p>Write url(https://example.com) or @import in a stylesheet.</p>",
+        '<img src="data:image/png;base64,AAAA" alt="">',
+        '<svg><use href="#ic-info"/></svg>',
+    ],
+)
+def test_links_and_prose_are_not_network_references(markup):
+    assert find_network_references(markup) == []
+
+
 def test_term_facts_become_a_definition_list(tmp_path):
     source = (
         "<title>T</title><section data-term id='a' data-where='here'>"

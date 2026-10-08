@@ -53,11 +53,30 @@ SOURCE_SUFFIX = ".src.html"
 #: Built pages above this size get a warning; the reference guide is ~260 KB.
 SIZE_BUDGET_BYTES = 300_000
 
-#: A tag attribute or CSS rule that would make the page fetch at load time.
-NETWORK_REFERENCE_PATTERN = re.compile(
-    r"""(?:src|href)\s*=\s*["']?\s*(?:https?:)?//"""
-    r"""|url\(\s*["']?\s*(?:https?:)?//|@import"""
+#: Attributes whose URL the page fetches at load time.
+FETCHING_ATTRIBUTES = {
+    "src",
+    "href",
+    "xlink:href",
+    "srcset",
+    "poster",
+    "data",
+    "action",
+}
+#: Elements whose ``href`` is a link the reader may follow, not a load.
+LINK_TAGS = {"a"}
+#: A URL off the page: scheme-relative, or a scheme with an authority.
+NETWORK_URL_PATTERN = re.compile(r"\s*(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE)
+#: A ``srcset`` with any candidate off the page.
+NETWORK_SRCSET_PATTERN = re.compile(
+    r"(?:^|,)\s*(?:[a-z][a-z0-9+.-]*:)?//", re.IGNORECASE
 )
+#: CSS, in a ``<style>`` block or ``style`` attribute, that fetches at load.
+NETWORK_CSS_PATTERN = re.compile(
+    r"""url\(\s*["']?\s*(?:[a-z][a-z0-9+.-]*:)?//|@import""", re.IGNORECASE
+)
+#: Characters a browser's URL parser strips from anywhere in a URL.
+URL_STRIPPED_CHARACTERS = str.maketrans("", "", "\t\n\r")
 GLYPH_REFERENCE_PATTERN = re.compile(r"""href=["']#ic-([A-Za-z0-9_]+)["']""")
 
 #: Term-card fact divs and their default labels, in reading order.
@@ -431,7 +450,7 @@ class _SourceRewriter(HTMLParser):
         names = dict(attrs)
         source = names.get("src", "")
 
-        if not source or re.match(r"(?:[a-z]+:)?//|data:", source):
+        if not source or re.match(r"(?:[a-z]+:)?//|data:", source, re.IGNORECASE):
             return self.get_starttag_text()
 
         path = (self.base_dir / source).resolve()
@@ -522,9 +541,57 @@ def _resolve_glyphs(glyphs, cache, retrace):
     return {symbol: resolved[symbol] for symbol in sorted(resolved)}
 
 
+class _NetworkReferenceFinder(HTMLParser):
+    """Collect the attributes and CSS of a page that load over the network.
+
+    Attribute values arrive entity-decoded, as the browser reads them.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.found = []
+        self._in_style = False
+
+    def handle_starttag(self, tag, attrs):
+        self._in_style = tag == "style"
+
+        for name, value in attrs:
+            if value is None:
+                continue
+
+            url = value.translate(URL_STRIPPED_CHARACTERS)
+
+            if name == "style":
+                self._check_css(value)
+            elif name == "href" and tag in LINK_TAGS:
+                continue
+            elif name == "srcset" and NETWORK_SRCSET_PATTERN.search(url):
+                self.found.append(f'<{tag} {name}="{value}">')
+            elif name in FETCHING_ATTRIBUTES and NETWORK_URL_PATTERN.match(url):
+                self.found.append(f'<{tag} {name}="{value}">')
+
+    def handle_endtag(self, tag):
+        if tag == "style":
+            self._in_style = False
+
+    def handle_data(self, data):
+        if self._in_style:
+            self._check_css(data)
+
+    def _check_css(self, css):
+        self.found.extend(match[0] for match in NETWORK_CSS_PATTERN.finditer(css))
+
+
 def find_network_references(page):
-    """Return every fragment of ``page`` that would load over the network."""
-    return [match.group(0) for match in NETWORK_REFERENCE_PATTERN.finditer(page)]
+    """Return every fragment of ``page`` that would load over the network.
+
+    Links (``<a href>``) and text that merely mentions CSS are not loads.
+    """
+    finder = _NetworkReferenceFinder()
+    finder.feed(page)
+    finder.close()
+
+    return finder.found
 
 
 def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=False):
