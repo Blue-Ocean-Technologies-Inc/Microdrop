@@ -14,7 +14,12 @@ steps defaulting to Step Start)."""
 
 # Standard library imports.
 import json
+import re
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+# Third-party imports.
+import pytest
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
@@ -22,6 +27,7 @@ from pyface.qt.QtCore import Qt
 # Microdrop package imports.
 from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_MEDIA_CAPTURED,
     DEVICE_VIEWER_SCREEN_CAPTURE,
 )
 from pluggable_protocol_tree.builtins.name_column import make_name_column
@@ -67,12 +73,15 @@ def _row(
 
 
 def _ctx(experiment_dir=""):
+    """StepContext stand-in: protocol scratch + recorded sleeps, and a
+    wait_for mock standing in for the device viewer's capture ack."""
     scratch = {"experiment_dir": experiment_dir} if experiment_dir else {}
     sleeps = []
 
     return SimpleNamespace(
         protocol=SimpleNamespace(scratch=scratch, sleep=sleeps.append),
         sleeps=sleeps,
+        wait_for=MagicMock(return_value="{}"),
     )
 
 
@@ -135,12 +144,13 @@ def test_new_step_defaults_to_step_start_without_overriding_edits():
 # --- handler ----------------------------------------------------------------
 
 
-def test_handler_priority_and_fire_and_forget():
+def test_handler_priority_and_capture_ack():
     handler = make_capture_column().handler
     # One bucket after Video (10), so the lead counts from after the
     # camera-on request.
     assert handler.priority == 11
-    assert list(handler.wait_for_topics) == []
+    assert list(handler.wait_for_topics) == [DEVICE_VIEWER_MEDIA_CAPTURED]
+    assert handler.ack_time_s == 15.0
 
 
 def _patched_fires(monkeypatch):
@@ -204,12 +214,15 @@ def test_payload_uses_legacy_directory_key(monkeypatch):
     row = _row(name="snap", uuid="u-9", capture=True)
     CaptureHandler().on_pre_step(row, _ctx(experiment_dir="exp/dir"))
     _topic, payload = fired[0]
+    request_id = payload.pop("request_id")
+
     assert payload == {
         "directory": "exp/dir",
         "step_description": "snap",
         "step_id": "u-9",
         "show_status_message": False,
     }
+    assert re.fullmatch(r"[0-9a-f]{32}", request_id)
 
 
 def test_no_cross_step_state_two_calls_two_publishes(monkeypatch):
@@ -509,3 +522,58 @@ def test_camera_off_once_a_step_wants_neither(monkeypatch):
     )
 
     assert published == [("video", "true"), ("video", "false")]
+
+
+# --- acknowledged capture ------------------------------------------------------
+
+
+def test_capture_waits_for_its_own_media_ack(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    ctx = _ctx()
+
+    handler.on_pre_step(_row(capture=True), ctx)
+
+    request_id = fired[0][1]["request_id"]
+    ctx.wait_for.assert_called_once()
+    (topic,), kwargs = ctx.wait_for.call_args
+
+    assert topic == DEVICE_VIEWER_MEDIA_CAPTURED
+    assert kwargs["timeout"] == handler.ack_time_s
+
+    predicate = kwargs["predicate"]
+    ack = {"path": "captures/step.png", "type": "image"}
+
+    assert predicate(json.dumps({**ack, "request_id": request_id}))
+    assert not predicate(json.dumps({**ack, "request_id": "someone-else"}))
+
+
+def test_each_capture_gets_a_fresh_request_id(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler()
+    row = _row(capture=True)
+
+    handler.on_pre_step(row, _ctx())
+    handler.on_pre_step(row, _ctx())
+
+    assert fired[0][1]["request_id"] != fired[1][1]["request_id"]
+
+
+def test_zero_ack_time_is_fire_and_forget(monkeypatch):
+    fired = _patched_fires(monkeypatch)
+    handler = CaptureHandler(ack_time_s=0)
+    ctx = _ctx()
+
+    handler.on_pre_step(_row(capture=True), ctx)
+
+    assert len(fired) == 1
+    ctx.wait_for.assert_not_called()
+
+
+def test_ack_timeout_propagates(monkeypatch):
+    _patched_fires(monkeypatch)
+    ctx = _ctx()
+    ctx.wait_for.side_effect = TimeoutError("no media ack")
+
+    with pytest.raises(TimeoutError):
+        CaptureHandler().on_post_step(_row(capture=True, capture_at=StepTime.END), ctx)

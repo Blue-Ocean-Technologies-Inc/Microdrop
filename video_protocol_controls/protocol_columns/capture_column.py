@@ -25,11 +25,17 @@ Camera ownership: the Video column is the single publisher of camera
 state during a run (see video_column.camera_wanted). Capture contributes
 the lead as a reason a step wants the camera, and only waits.
 
-Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic.
+Acknowledged capture: each capture carries a fresh request_id and the
+handler waits for the DEVICE_VIEWER_MEDIA_CAPTURED with that request_id,
+so the step does not end until the image is on disk. Without the wait,
+the next step's camera-off (or any later message) can overtake the frame
+grab in the frontend's queue — observed live, with the device viewer
+then re-arming the camera for its own warm-up. The wait is the Protocol
+Settings ack grid value; 0 restores fire-and-forget.
 
 Capture payload format:
     {"directory": experiment_dir, "step_description": ..., "step_id": ...,
-     "show_status_message": false}
+     "show_status_message": false, "request_id": ...}
 
 ⚠ Key is "directory" (NOT "experiment_dir") — preserves the legacy wire
 format the device_viewer consumer expects.
@@ -38,13 +44,17 @@ format the device_viewer consumer expects.
 # Standard library imports.
 import json
 import time
+import uuid
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
 from traits.api import Bool, Enum, Int, List, Str
 
 # Microdrop package imports.
-from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
+from device_viewer.consts import (
+    DEVICE_VIEWER_MEDIA_CAPTURED,
+    DEVICE_VIEWER_SCREEN_CAPTURE,
+)
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
     BaseCompoundColumnHandler,
@@ -164,7 +174,10 @@ class CaptureLeadSpinBoxView(IntSpinBoxColumnView):
 class CaptureHandler(BaseCompoundColumnHandler):
     """Publishes a single image-capture event per step where row.capture
     is True, at the row's chosen moment (row.capture_at), after the
-    row's camera lead (row.capture_lead_ms) has elapsed.
+    row's camera lead (row.capture_lead_ms) has elapsed, and blocks until
+    the device viewer acknowledges the saved image (request_id match on
+    DEVICE_VIEWER_MEDIA_CAPTURED). TimeoutError and AbortError propagate;
+    an ack time of 0 publishes without waiting.
 
     Priority 11 — one bucket after Video and Record (10): Video has
     already published this step's camera state when the lead wait starts,
@@ -177,7 +190,8 @@ class CaptureHandler(BaseCompoundColumnHandler):
     """
 
     priority = 11
-    # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
+    wait_for_topics = [DEVICE_VIEWER_MEDIA_CAPTURED]
+    default_ack_time_s = 15.0
 
     def on_pre_step(self, row, ctx):
         """Start the lead clock, and fire now when the row's capture_at
@@ -228,16 +242,33 @@ class CaptureHandler(BaseCompoundColumnHandler):
         ctx.protocol.sleep(max(0.0, lead_ms / 1000 - elapsed))
 
     def _fire_capture(self, row, ctx):
-        """Build the legacy-compatible payload and publish it."""
+        """Publish the legacy-compatible payload and wait for its ack.
+
+        `ctx` is the StepContext — wait_for lives there.
+        """
+        request_id = uuid.uuid4().hex
         payload = {
             "directory": ctx.protocol.scratch.get(EXPERIMENT_DIR_SCRATCH_KEY, ""),
             "step_description": row.name,
             "step_id": row.dotted_path(),
             "show_status_message": False,
+            "request_id": request_id,
         }
+
         publish_message(
             topic=DEVICE_VIEWER_SCREEN_CAPTURE,
             message=json.dumps(payload),
+        )
+
+        if self.ack_time_s <= 0:
+            return
+
+        ctx.wait_for(
+            DEVICE_VIEWER_MEDIA_CAPTURED,
+            timeout=self.ack_time_s,
+            predicate=lambda message: (
+                json.loads(message).get("request_id") == request_id
+            ),
         )
 
 
