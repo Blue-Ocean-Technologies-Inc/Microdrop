@@ -24,6 +24,12 @@ from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import CurrentMessage
 from redis.exceptions import ConnectionError as RedisConnectionError
 
+# Microdrop utils imports.
+from microdrop_utils.child_process_lifetime import (
+    kill_child_with_parent,
+    parent_death_preexec_fn,
+)
+
 # Logger import.
 from logger.logger_service import get_logger
 
@@ -157,11 +163,16 @@ def start_redis_server(
                 str(port),
                 "--bind",
                 host,
-            ]
+            ],
+            preexec_fn=parent_death_preexec_fn(),
         )
     except FileNotFoundError:
         print("FAILURE: Failed to start: 'redis-server' executable not found in PATH.")
         return None
+
+    # A crash or kill -9 skips stop_redis_server; without this the orphaned
+    # server outlives us and the next launch finds it running but unowned.
+    kill_child_with_parent(process)
 
     print("Waiting for Redis server to start...")
 

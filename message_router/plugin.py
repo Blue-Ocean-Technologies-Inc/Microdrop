@@ -13,6 +13,7 @@ import uuid
 
 # Third-party imports.
 import dramatiq
+from redis.exceptions import RedisError
 
 # Enthought library imports.
 from envisage.api import ExtensionPoint, Plugin
@@ -20,7 +21,14 @@ from traits.api import Dict, Instance, List, Str, observe, on_trait_change
 
 # Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
-from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
+from microdrop_utils.dramatiq_pub_sub_helpers import (
+    LISTENER_QUEUE_PREFIX,
+    MessageRouterActor,
+)
+from microdrop_utils.session_heartbeat import (
+    SessionHeartbeat,
+    sweep_dead_listener_queues,
+)
 
 # Local imports.
 from .consts import ACTOR_TOPIC_ROUTES, PKG, PKG_name
@@ -41,8 +49,12 @@ class MessageRouterPlugin(Plugin):
     name = f"{PKG_name} Plugin"
     router_actor = Instance(MessageRouterActor)
 
+    #: Advertises this process's listener queue as alive, so the startup
+    #: sweep of a sibling process leaves it alone.
+    heartbeat = Instance(SessionHeartbeat)
+
     # Queue names must start with a letter or underscore, not a digit.
-    listener_queue = "_" + str(uuid.uuid4())
+    listener_queue = LISTENER_QUEUE_PREFIX + str(uuid.uuid4())
 
     # This tells us that the plugin offers the 'greetings' extension point,
     # and that plugins that want to contribute to it must each provide a list
@@ -58,6 +70,12 @@ class MessageRouterPlugin(Plugin):
         """Trait initializer for pubsub actor"""
         return MessageRouterActor(listener_queue=self.listener_queue)
 
+    def _heartbeat_default(self):
+        return SessionHeartbeat(
+            redis_client=dramatiq.get_broker().client,
+            listener_queue=self.listener_queue,
+        )
+
     def start(self):
         # Wire the registry's extension-point listeners to this plugin's
         # traits so the handlers below fire when contributions change at
@@ -65,6 +83,23 @@ class MessageRouterPlugin(Plugin):
         # possible here: the registry is reachable once the plugin is
         # attached to the application, not at construction.
         self.connect_extension_point_traits()
+
+        # Heartbeat, then sweep, then register. A sibling process sharing
+        # this Redis writes its heartbeat before its pairs reach the map, so
+        # a sibling starting alongside us is never mistaken for a dead one.
+        self.heartbeat.start()
+
+        try:
+            sweep_dead_listener_queues(
+                broker=dramatiq.get_broker(),
+                router_data=self.router_actor.message_router_data,
+                own_queue=self.listener_queue,
+            )
+        except RedisError:
+            # Housekeeping must never stop the instrument from starting.
+            logger.exception(
+                "startup sweep of dead listener queues failed; continuing without it"
+            )
 
         # assign topics to actors when plugin starts
         self._update_router_subscriptions(added=self.actor_topic_routing, removed=[])
@@ -80,6 +115,8 @@ class MessageRouterPlugin(Plugin):
 
         dramatiq.get_broker().flush(self.listener_queue)
         logger.info(f"router listener queue {self.listener_queue} dropped")
+
+        self.heartbeat.stop()
 
     def _update_router_subscriptions(self, added, removed):
         """Apply contribution deltas to the router's topic->subscriber map.
