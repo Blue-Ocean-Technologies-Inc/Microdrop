@@ -121,7 +121,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <title>{title}</title>
 <style>
 {css}</style>
-</head>
+{styles}</head>
 <body>
 {glyphs}{mobile_contents}<div class="{layout_class}">
 {contents}<main>
@@ -212,6 +212,7 @@ class _SourceRewriter(HTMLParser):
         self.out = []
         self.header_comments = []
         self.title = None
+        #: ``(attrs, text)`` of each source ``<style>`` and ``<script>``.
         self.styles = []
         self.scripts = []
         #: Glyph id -> name as written (``ICON_*`` or a ligature).
@@ -316,8 +317,14 @@ class _SourceRewriter(HTMLParser):
         if self._is_term_child() and not any(name in names for name in FACT_LABELS):
             self._close_facts(self.stack[-1])
 
+        if tag == "script" and "src" in names:
+            raise TutorialBuildError(
+                f"<script src> at line {self.getpos()[0]}: tutorials allow only "
+                "inline scripts"
+            )
+
         if tag in ("title", "style", "script"):
-            self.stack.append(_Frame(tag, tag, text=[]))
+            self.stack.append(_Frame(tag, tag, text=[], attrs=attrs))
 
             return
 
@@ -401,9 +408,9 @@ class _SourceRewriter(HTMLParser):
             if frame.role == "title":
                 self.title = text.strip()
             elif frame.role == "style":
-                self.styles.append(text.strip("\n") + "\n")
+                self.styles.append((frame.attrs, text.strip("\n") + "\n"))
             else:
-                self.scripts.append(text.strip("\n") + "\n")
+                self.scripts.append((frame.attrs, text.strip("\n") + "\n"))
 
             return
 
@@ -640,7 +647,10 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
         raise TutorialBuildError("The source needs a <title>")
 
     body = "".join(parser.out).strip("\n")
-    scripts = "".join(f"<script>\n{script}</script>\n" for script in parser.scripts)
+    scripts = "".join(
+        f"<script{_attrs_markup(attrs)}>\n{script}</script>\n"
+        for attrs, script in parser.scripts
+    )
     glyphs = dict(parser.glyphs)
 
     for symbol in GLYPH_REFERENCE_PATTERN.findall(body + scripts):
@@ -650,8 +660,17 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
     css = TUTORIAL_CSS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
     js = TUTORIAL_JS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
 
-    if parser.styles:
-        css += "\n/* ---------- this tutorial ---------- */\n" + "".join(parser.styles)
+    # Plain styles join the kit's; one with attributes (media=...) keeps
+    # its own element.
+    plain_css = "".join(text for attrs, text in parser.styles if not attrs)
+    styles = "".join(
+        f"<style{_attrs_markup(attrs)}>\n{text}</style>\n"
+        for attrs, text in parser.styles
+        if attrs
+    )
+
+    if plain_css:
+        css += "\n/* ---------- this tutorial ---------- */\n" + plain_css
 
     if parser.wants_contents:
         contents = (
@@ -672,6 +691,7 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
         source_name=source_name,
         title=parser.title,
         css=css,
+        styles=styles,
         glyphs=_glyph_defs(cache),
         mobile_contents=mobile_contents,
         layout_class="layout" if parser.wants_contents else "layout no-toc",

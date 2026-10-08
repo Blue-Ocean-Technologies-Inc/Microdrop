@@ -307,6 +307,20 @@ def test_inline_svg_merges_its_class_and_needs_no_alt(tmp_path):
     assert '<svg class="a&amp;b own" viewBox="0 0 1 1"></svg>' in page
 
 
+def test_script_sources_fail_the_build(tmp_path):
+    source = '<title>T</title><script src="local.js"></script>'
+
+    with pytest.raises(TutorialBuildError, match="script src"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
+
+
+def test_style_attributes_are_kept(tmp_path):
+    source = '<title>T</title><style media="print">p { color: red; }</style>'
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert '<style media="print">\np { color: red; }\n</style>\n</head>' in page
+
+
 def test_term_facts_become_a_definition_list(tmp_path):
     source = (
         "<title>T</title><section data-term id='a' data-where='here'>"

@@ -104,7 +104,7 @@ these elements explicitly):
 | `<figure data-demo="name">` | `figure.demo`, started by `Tutorial.demo("name", …)` |
 | `<i data-glyph="ICON_X">` or `<i data-glyph="ligature">` | a toolbar button showing that glyph; add `data-on` for the switched-on look, `data-inline` for text size, `data-label="…"` to announce it |
 | `<img src="figure.svg">`, `.png` | inlined as a data URI; `data-inline` on an SVG pastes its markup instead, so it can use the theme colours |
-| `<style>` / `<script>` | moved after the kit's CSS / JS |
+| `<style>` / `<script>` | moved after the kit's CSS / JS; a `<style>` with attributes (`media="print"`) keeps its own element. Scripts must be inline: `<script src>` fails the build |
 
 Raw SVG can reuse a glyph with `<use href="#ic-<id>">`; the build includes
 every glyph referenced that way. A glyph id is the `ICON_*` name without the
