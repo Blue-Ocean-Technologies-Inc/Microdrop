@@ -24,6 +24,9 @@ from device_viewer.interfaces.descriptors import SidebarSection as SidebarSectio
 from device_viewer.interfaces.i_device_viewer_layer import (
     IDeviceViewerLayer as IDeviceViewerLayer,
 )
+from device_viewer.interfaces.i_electrode_stepping import (
+    IElectrodeStepping as IElectrodeStepping,
+)
 from device_viewer.interfaces.i_interaction_handler import (
     IInteractionHandler as IInteractionHandler,
 )
