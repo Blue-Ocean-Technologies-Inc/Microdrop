@@ -13,6 +13,7 @@
 # Standard library imports.
 import importlib
 import os
+import subprocess
 import sys
 
 # Third-party imports.
@@ -32,7 +33,11 @@ from examples.tutorials.build_tutorial import (
     is_up_to_date,
     render_tutorial,
 )
-from examples.tutorials.new_tutorial import _add_imports, scaffold_tutorial
+from examples.tutorials.new_tutorial import (
+    SRC_ROOT,
+    _add_imports,
+    scaffold_tutorial,
+)
 from image_viewer.plugin import ImageViewerPlugin
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -257,6 +262,30 @@ def test_dropbot_tutorial_is_offline_and_small():
 
     assert find_network_references(page) == []
     assert len(page.encode("utf-8")) < SIZE_BUDGET_BYTES
+
+
+def test_a_page_never_built_is_not_up_to_date(tmp_path):
+    source = tmp_path / "t.src.html"
+    source.write_text("<title>T</title>")
+
+    assert not is_up_to_date(source)
+
+
+def test_unknown_icon_constant_fails_the_build(tmp_path):
+    source = '<title>T</title><i data-glyph="ICON_NO_SUCH_THING"></i>'
+
+    with pytest.raises(TutorialBuildError, match="ICON_NO_SUCH_THING"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
+
+
+def test_build_tool_imports_without_qt():
+    probe = (
+        "import sys, examples.tutorials.build_tutorial; "
+        "sys.exit(any(name.startswith(('PySide6', 'pyface.qt')) "
+        "for name in sys.modules))"
+    )
+
+    assert subprocess.run([sys.executable, "-c", probe], cwd=SRC_ROOT).returncode == 0
 
 
 def test_network_reference_fails_the_build(tmp_path):

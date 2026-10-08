@@ -561,7 +561,11 @@ def _glyph_defs(cache):
 
 def _resolve_glyphs(glyphs, cache, retrace):
     """Return ``cache`` limited to ``glyphs``, tracing any missing or stale."""
-    wanted = {symbol: glyph_text(name) for symbol, name in glyphs.items()}
+    try:
+        wanted = {symbol: glyph_text(name) for symbol, name in glyphs.items()}
+    except ValueError as error:
+        raise TutorialBuildError(str(error)) from error
+
     stale = {
         symbol
         for symbol, text in wanted.items()
@@ -571,7 +575,13 @@ def _resolve_glyphs(glyphs, cache, retrace):
 
     if stale:
         logger.info(f"Tracing glyphs: {', '.join(sorted(stale))}")
-        resolved.update(trace_glyphs([glyphs[symbol] for symbol in sorted(stale)]))
+
+        try:
+            traced = trace_glyphs([glyphs[symbol] for symbol in sorted(stale)])
+        except ValueError as error:
+            raise TutorialBuildError(str(error)) from error
+
+        resolved.update(traced)
 
     return {symbol: resolved[symbol] for symbol in sorted(resolved)}
 
@@ -751,9 +761,14 @@ def build_tutorial(source_path, output_path=None, retrace=False):
 
 
 def is_up_to_date(source_path, output_path=None):
-    """Return True when rebuilding ``source_path`` reproduces its output."""
+    """Return True when rebuilding ``source_path`` reproduces its output; a
+    page never built is not up to date."""
     source_path = Path(source_path)
     output_path = Path(output_path) if output_path else default_output_path(source_path)
+
+    if not output_path.is_file():
+        return False
+
     page = _render_file(source_path, output_path)
     committed = output_path.read_text(encoding="utf-8").replace("\r\n", "\n")
 

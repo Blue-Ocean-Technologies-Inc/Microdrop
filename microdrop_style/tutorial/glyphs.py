@@ -17,16 +17,14 @@ the constant name without ``ICON_``, lower-cased (``drop_ec``), or the
 ligature itself. Tracing goes through Qt's own text outlining of the font the
 app draws its buttons with, so it needs a ``QGuiApplication`` (one is created
 when missing; set ``QT_QPA_PLATFORM=offscreen`` to run without a display).
+Qt is imported only by the tracing functions, so reading a built page's
+glyphs stays Qt-free.
 """
 
 # Standard library imports.
 import html
 import re
 import sys
-
-# Enthought library imports.
-from pyface.qt.QtCore import QPointF
-from pyface.qt.QtGui import QFont, QFontMetricsF, QGuiApplication, QPainterPath
 
 # Microdrop style imports.
 from microdrop_style.font_paths import load_font_and_get_family
@@ -56,6 +54,11 @@ def glyph_text(name):
     constant when there is one, else it is taken as a ligature name.
     """
     if name.startswith(ICON_PREFIX):
+        if not hasattr(icons, name):
+            raise ValueError(
+                f"Unknown glyph {name}: microdrop_style.icons.icons has no {name}"
+            )
+
         return getattr(icons, name)
 
     return getattr(icons, ICON_PREFIX + name.upper(), name)
@@ -63,6 +66,8 @@ def glyph_text(name):
 
 def path_data(path):
     """Return the SVG ``d`` attribute for a QPainterPath of lines and cubics."""
+    from pyface.qt.QtGui import QPainterPath
+
     commands = []
     index = 0
 
@@ -99,6 +104,9 @@ def trace_glyphs(names, pixel_size=GLYPH_PIXEL_SIZE):
     the app's buttons draw it in. Raises ``ValueError`` for a ligature the
     font does not have (Qt would otherwise outline its letters).
     """
+    from pyface.qt.QtCore import QPointF
+    from pyface.qt.QtGui import QFont, QFontMetricsF, QGuiApplication, QPainterPath
+
     # Font loading needs a live QGuiApplication for the whole run.
     app = QGuiApplication.instance() or QGuiApplication(sys.argv)  # noqa: F841
 
