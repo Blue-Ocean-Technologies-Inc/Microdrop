@@ -1165,6 +1165,10 @@ class ProtocolTreePane(QWidget):
         self.manager.add_group(parent_path=parent_path, index=index)
 
     @attempt_func_execution_with_error_dialog
+    def fill_pattern(self):
+        self.widget.fill_pattern()
+
+    @attempt_func_execution_with_error_dialog
     def delete_selected_rows(self):
         sel = list(self.manager.selection or [])
         if not sel:

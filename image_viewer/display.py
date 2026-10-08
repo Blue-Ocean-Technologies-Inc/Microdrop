@@ -11,12 +11,28 @@
 """Pure display helpers for the 16-bit image viewer (hardware/Qt-light,
 testable): loading QImages into numpy and window/level stretching."""
 
+# Standard library imports.
+import math
+
 # Third-party imports.
 import numpy as np
 from PySide6.QtGui import QImage
 
+# Local imports.
+from .analysis.perspective import warp_frame
+from .analysis.roi_compute import subtract_rolling_ball
+
 #: Percentiles used by auto-contrast (ignores hot pixels / dark borders).
 AUTO_CONTRAST_PERCENTILES = (0.1, 99.9)
+
+#: Most pixels auto-contrast reads its percentiles from: larger frames
+#: are sampled on an even grid (a 4K frame on every 3rd row and column),
+#: still ~1M pixels, ample for a 0.1/99.9 percentile.
+AUTO_CONTRAST_SAMPLE_PIXELS = 1 << 20
+
+#: Widest integer dtype windowed through a lookup table (one uint8 entry
+#: per possible value); anything wider takes the float path.
+MAX_LOOKUP_TABLE_BYTES = 2
 
 
 def qimage_to_array(image: QImage) -> np.ndarray:
@@ -70,19 +86,62 @@ def stretch_to_8bit(
     without it a typical fluorescence frame (small bright signal on a dark
     field) renders nearly black. Off = the manual ``window`` (low, high)
     when given, else the full dtype range, linearly.
+
+    Integer frames go through a per-value lookup table, so a 4K 16-bit
+    frame costs one indexing pass rather than several float64 copies.
     """
     if array.ndim != 2:
         return array if array.dtype == np.uint8 else (array >> 8).astype(np.uint8)
-    data = array.astype(np.float64)
+
     if auto_contrast:
-        low, high = np.percentile(data, AUTO_CONTRAST_PERCENTILES)
+        low, high = np.percentile(_contrast_sample(array), AUTO_CONTRAST_PERCENTILES)
+
         if high <= low:
-            low, high = float(data.min()), float(data.max() or 1)
+            low, high = float(array.min()), float(array.max() or 1)
     elif window is not None:
         low, high = float(window[0]), float(window[1])
     else:
         low, high = 0.0, float(np.iinfo(array.dtype).max)
+
     if high <= low:
         return np.zeros(array.shape, dtype=np.uint8)
-    scaled = np.clip((data - low) / (high - low) * 255.0, 0, 255)
-    return scaled.astype(np.uint8)
+
+    if array.dtype.kind == "u" and array.dtype.itemsize <= MAX_LOOKUP_TABLE_BYTES:
+        values = np.arange(np.iinfo(array.dtype).max + 1, dtype=np.float64)
+
+        return np.take(_window_to_8bit(values, low, high), array)
+
+    return _window_to_8bit(array.astype(np.float64), low, high)
+
+
+def _contrast_sample(array):
+    """The pixels auto-contrast reads: the whole frame up to
+    AUTO_CONTRAST_SAMPLE_PIXELS, an even strided grid beyond."""
+    stride = math.ceil(math.sqrt(array.size / AUTO_CONTRAST_SAMPLE_PIXELS))
+
+    return array[::stride, ::stride] if stride > 1 else array
+
+
+def _window_to_8bit(values, low, high):
+    """``values`` (float64) mapped linearly from ``low``..``high`` onto
+    0..255, clipped."""
+    return np.clip((values - low) / (high - low) * 255.0, 0, 255).astype(np.uint8)
+
+
+def render_display_frame(array, auto_contrast, window, ball_radius_px, perspective):
+    """What the canvas shows for ``array``: perspective-warped, then
+    rolling-ball corrected while those corrections are on — the canvas
+    shows what is measured rather than what was on disk — and windowed
+    to 8-bit.
+
+    Returns ``(corrected, display)``: the corrected frame at its true
+    values (``array`` itself when no correction is on; the hover readout
+    reads it) and the 8-bit frame to draw. Pure numpy/cv2, so the
+    controller runs it on its loader thread.
+    """
+    corrected = warp_frame(array, perspective)
+
+    if ball_radius_px:
+        corrected = subtract_rolling_ball(corrected, ball_radius_px)
+
+    return corrected, stretch_to_8bit(corrected, auto_contrast, window=window)

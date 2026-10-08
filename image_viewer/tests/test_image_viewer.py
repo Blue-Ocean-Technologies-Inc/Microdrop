@@ -88,6 +88,22 @@ def test_manual_window_ignored_while_auto_contrast_on():
     assert auto.max() == 255  # percentile window, not the manual one
 
 
+def test_lookup_table_matches_float_windowing():
+    raw = np.random.default_rng(1).integers(0, 65535, (64, 64), dtype=np.uint16)
+    out = stretch_to_8bit(raw, auto_contrast=False, window=(1000, 50000))
+    expected = np.clip((raw.astype(np.float64) - 1000) / 49000 * 255.0, 0, 255)
+    assert np.array_equal(out, expected.astype(np.uint8))
+
+
+def test_sampled_auto_contrast_tracks_full_frame_percentiles():
+    # Large enough to be sampled on a strided grid.
+    raw = np.random.default_rng(2).integers(0, 4000, (1200, 1600), dtype=np.uint16)
+    low, high = np.percentile(raw, (0.1, 99.9))
+    expected = np.clip((raw.astype(np.float64) - low) / (high - low) * 255.0, 0, 255)
+    difference = stretch_to_8bit(raw).astype(int) - expected.astype(np.uint8)
+    assert np.abs(difference).max() <= 2
+
+
 def test_viewer_model_positions():
     from pathlib import Path
 

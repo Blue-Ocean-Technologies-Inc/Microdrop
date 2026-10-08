@@ -13,7 +13,7 @@ import dramatiq
 
 # Enthought library imports.
 from pyface.api import GUI
-from pyface.tasks.action.api import SMenu, SMenuBar, TaskToggleGroup
+from pyface.tasks.action.api import SGroup, SMenu, SMenuBar, TaskToggleGroup
 from pyface.tasks.api import PaneItem, Task, TaskLayout, VSplitter
 from traits.api import Instance, provides
 
@@ -32,7 +32,7 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 # Local imports.
 from .consts import PKG
 from .dialogs.pyface_wrapper import YES, confirm, information
-from .menus import AdvancedModeAction
+from .menus import AdvancedModeAction, ResetLayoutAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
 
@@ -89,7 +89,12 @@ class MicrodropTask(Task):
         SMenu(id="File", name="&File"),
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
         SMenu(touch_assist_menu(), id="Tools", name="&Tools"),
-        SMenu(TaskToggleGroup(), id="View", name="&View"),
+        SMenu(
+            TaskToggleGroup(),
+            SGroup(ResetLayoutAction(), id="LayoutGroup"),
+            id="View",
+            name="&View",
+        ),
         SMenu(id="Help", name="&Help"),
     )
 

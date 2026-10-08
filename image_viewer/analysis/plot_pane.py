@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 
 from pyface.api import OK, DirectoryDialog, FileDialog
 from pyface.tasks.api import DockPane
-from traits.api import Any, Instance
+from traits.api import Any, Instance, observe
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -96,6 +96,7 @@ from .curve_fit import (
 )
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
+from .heater_log import heater_coverage_note
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
@@ -361,6 +362,14 @@ def _axes_tab():
                     ),
                 ),
             ),
+            UItem(
+                "session.heater_log_hint",
+                style="readonly",
+                visible_when="session.heater_log_hint",
+                tooltip="The folder above covers none of these captures; "
+                "the heater log was found in this sibling experiment "
+                "instead (not saved as this experiment's folder).",
+            ),
             Item(
                 "figure.heater_sensor",
                 label="Sensor",
@@ -493,7 +502,8 @@ def _cleanup_tab():
                 "figure.outlier_window",
                 label="win",
                 enabled_when="figure.remove_outliers",
-                tooltip="Points either side used for the "
+                tooltip="Total points in the local window — 5 means "
+                "the point plus two each side — used for the "
                 "local median and MAD. Wide enough to "
                 "describe the trend, narrow enough "
                 "not to span a real change.",
@@ -641,6 +651,7 @@ _PLOT_STATE = (
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
     "session:heater_samples, "
+    "session:heater_log_coverage, "
     "session:figure:smooth_method, "
     "session:figure:savgol_window, "
     "session:figure:savgol_order, "
@@ -1282,19 +1293,28 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         temperature axis) — they cannot be drawn anywhere honest, so
         they are counted instead of silently vanishing. Frames, not
         points: every ROI shares the same x, and multiplying the count
-        by the ROIs would overstate what is missing."""
+        by the ROIs would overstate what is missing. The coverage line
+        under the count says where the logs were looked for, so a gap
+        reads as a misfiled log rather than a broken join."""
         if figure_settings.x_axis != "temperature":
             return
+
+        session = self._model.session
         frames = next((elapsed for _name, elapsed, _values in series.values()), [])
-        missing = sum(1 for x in frames if x != x)
-        if not missing:
+        note = heater_coverage_note(
+            sum(1 for x in frames if x != x),
+            session.heater_log_coverage,
+            bool(session.heater_log_fallback_dir),
+        )
+
+        if not note:
             return
+
         self._fit_artists.append(
             self._axes.text(
                 0.5,
                 NOTE_NO_TEMP_Y,
-                f"{missing} {'frame' if missing == 1 else 'frames'} "
-                f"outside the heater log's coverage",
+                note,
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
@@ -1547,6 +1567,10 @@ class RoiPlotDockPane(DockPane):
             parent=parent,
         )
 
+    @observe("visible")
+    def _mirror_visibility(self, event):
+        roi_analysis_model.plot_visible = event.new
+
     def _on_session_swapped(self, event):
         old_ui = self._controls_ui
         self._controls_ui = self._build_controls(self._controls_scroll)
@@ -1589,6 +1613,7 @@ class RoiPlotDockPane(DockPane):
         # constructed-but-never-shown pane never ran (pyface's own
         # destroy() guards its teardown the same way).
         if self.control is not None:
+            roi_analysis_model.plot_visible = False
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()

@@ -172,6 +172,18 @@ class PortableDropbotMonitorMixinService(HasTraits):
                 # A port the user pointed at is the best possible
                 # hint for the next scan.
                 self.preferences.port_hint = port_name
+
+                # A user disconnect paused the scanner, and with it the
+                # status poll: a successful connect must restart it.
+                if (
+                    self.monitor_scheduler is not None
+                    and self.monitor_scheduler.state == STATE_PAUSED
+                ):
+                    self.monitor_scheduler.resume()
+                    logger.info(
+                        f"Resumed Portable Dropbot monitor after connect "
+                        f"on {port_name}."
+                    )
             else:
                 self._publish_error(
                     f"connect to {port_name}",

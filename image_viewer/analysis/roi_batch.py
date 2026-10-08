@@ -73,6 +73,21 @@ def _shared_executor():
         return _executor
 
 
+def _compute_in_slot(slots, cancel, path, rois, correction):
+    """compute_image_stats holding one of ``slots`` (None: no bound),
+    so at most that many images compute at once however wide the shared
+    pool; a batch cancelled while this waited for a slot computes
+    nothing."""
+    if slots is None:
+        return compute_image_stats(path, rois, *correction)
+
+    with slots:
+        if cancel.is_set():
+            return None
+
+        return compute_image_stats(path, rois, *correction)
+
+
 def pool_is_warm():
     """Whether the shared pool already exists. Threads start in
     microseconds, so this is nearly always true by the time anything is
@@ -109,17 +124,21 @@ class RoiBatchRunner(HasTraits):
     def __cancel_default(self):
         return threading.Event()
 
-    def start(self, work_items):
+    def start(self, work_items, max_in_flight=0):
         """``work_items``: [(path, effective_rois, correction), ...] with
         ``effective_rois`` = roi_id -> (kind, geometry tuple) and
         ``correction`` = (gap_px, thickness_px, ball_radius_px,
-        perspective_matrix) — RoiAnalysisSession.correction_key()."""
+        perspective_matrix) — RoiAnalysisSession.correction_key().
+        ``max_in_flight`` bounds how many images compute at once (0:
+        the pool's width)."""
         self.cancel()
         self.results = queue.SimpleQueue()
         self._cancel = threading.Event()
         cancel, results = self._cancel, self.results
         self._thread = threading.Thread(
-            target=self._run, args=(list(work_items), cancel, results), daemon=True
+            target=self._run,
+            args=(list(work_items), cancel, results, max_in_flight),
+            daemon=True,
         )
         self._thread.start()
 
@@ -139,12 +158,13 @@ class RoiBatchRunner(HasTraits):
         thread.start()
 
     @staticmethod
-    def _run(work_items, cancel, results):
+    def _run(work_items, cancel, results, max_in_flight=0):
         # No `with`: this is the shared, persistent executor — it must
         # outlive this batch for the next one to reuse it.
         executor = _shared_executor()
+        slots = threading.BoundedSemaphore(max_in_flight) if max_in_flight else None
         futures = [
-            executor.submit(compute_image_stats, path, rois, *correction)
+            executor.submit(_compute_in_slot, slots, cancel, path, rois, correction)
             for path, rois, correction in work_items
         ]
         for future in as_completed(futures):

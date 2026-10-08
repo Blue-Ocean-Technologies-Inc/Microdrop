@@ -132,6 +132,9 @@ ACTOR_TOPIC_DICT = {
     ],
 }
 
+#: Alarms/errors kept in the status pane's Alarms box; older ones drop off.
+ALARM_LOG_LENGTH = 20
+
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000
 

@@ -49,6 +49,7 @@ ICON_NEXT_PHASE = "\ue5cc"  # next_phase
 ICON_STOP = "\ue047"  # stop
 ICON_NEXT = "\ue01f"  # next
 ICON_LAST = "\ue044"  # last
+ICON_STACKED_LINE_CHART = "stacked_line_chart"  # fill a column with a pattern
 
 ICON_MENU = "\ue5d2"
 

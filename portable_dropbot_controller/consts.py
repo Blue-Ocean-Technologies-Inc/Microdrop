@@ -256,6 +256,10 @@ MONITOR_INTERVAL_S = 2
 #: "Active".
 STATUS_FAILURE_DISCONNECT_LIMIT = 3
 
+#: chip_on_pad status bits: bit0 debounced presence, bit1/bit2 raw left/right
+#: pogo contact. A chip counts as on the pad only with all three set.
+CHIP_ON_PAD_SEATED_MASK = 0b111
+
 # ---------------------------------------------------------------------------
 # app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
 # ---------------------------------------------------------------------------

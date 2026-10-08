@@ -14,7 +14,7 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 """
 
 # Third-party imports.
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
@@ -90,11 +90,9 @@ from .analysis.consts import (
     RING_THICKNESS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
 )
-from .analysis.perspective import warp_frame
 from .analysis.roi_canvas_layer import RoiCanvasLayer
-from .analysis.roi_compute import subtract_rolling_ball
 from .consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
-from .display import frame_to_qimage, stretch_to_8bit
+from .display import frame_to_qimage
 from .scale_bar import (
     DEFAULT_UNIT,
     UNITS,
@@ -114,6 +112,10 @@ SCALE_BAR_BOX_HEIGHT_PX = 32
 SCALE_BAR_TICK_PX = 5
 SCALE_BAR_TEXT_RISE_PX = 24
 SCALE_BAR_TEXT_HEIGHT_PX = 18
+
+#: Shortest interval between hovered-pixel readout repaints (~30 Hz):
+#: mouse moves arrive faster than anyone can read the numbers.
+PIXEL_READOUT_INTERVAL_MS = 33
 
 #: Keeps the status row's progress bar from bulking up the row.
 PROGRESS_BAR_HEIGHT_PX = 16
@@ -191,6 +193,12 @@ class _ImageView(QGraphicsView):
         self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
         self._pixel_text = ""
+        #: The newest readout, shown when the coalescing timer fires.
+        self._pending_pixel_text = ""
+        self._pixel_text_timer = QTimer(self)
+        self._pixel_text_timer.setSingleShot(True)
+        self._pixel_text_timer.setInterval(PIXEL_READOUT_INTERVAL_MS)
+        self._pixel_text_timer.timeout.connect(self._show_pending_pixel_text)
         self._zoom_step = IMAGE_ZOOM_STEP_DEFAULT
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
@@ -290,10 +298,27 @@ class _ImageView(QGraphicsView):
 
     def set_pixel_text(self, text):
         """The hovered pixel's "(x, y) = value" readout, drawn as a HUD
-        in the bottom-right corner ('' hides it)."""
-        if text != self._pixel_text:
-            self._pixel_text = text
-            self.viewport().update()
+        in the bottom-right corner ('' hides it). Coalesced: the newest
+        text shows at most every PIXEL_READOUT_INTERVAL_MS."""
+        self._pending_pixel_text = text
+
+        if not self._pixel_text_timer.isActive():
+            self._pixel_text_timer.start()
+
+    def _show_pending_pixel_text(self):
+        """Repaint just the readout's corner — the old box and the new
+        one — rather than the whole viewport and the image under it."""
+        if self._pending_pixel_text == self._pixel_text:
+            return
+
+        viewport = self.viewport().rect()
+        stale = self._pixel_readout_box(self._pixel_text, viewport)
+        self._pixel_text = self._pending_pixel_text
+        fresh = self._pixel_readout_box(self._pixel_text, viewport)
+
+        self.viewport().update(
+            stale.united(fresh).toAlignedRect().adjusted(-2, -2, 2, 2)
+        )
 
     def drawForeground(self, painter, rect):
         """Paint the HUD overlays in viewport pixels: the scale bar in
@@ -349,24 +374,42 @@ class _ImageView(QGraphicsView):
         backdrop-and-lettering style (the corner the bar doesn't use)."""
         if not self._pixel_text:
             return
-        text_px = painter.fontMetrics().horizontalAdvance(self._pixel_text)
+
+        box = self._pixel_readout_box(self._pixel_text, viewport)
+        painter.fillRect(box, QColor(0, 0, 0, 110))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, self._pixel_text)
+
+    def _pixel_readout_box(self, text, viewport):
+        """The readout's backdrop for ``text`` in viewport pixels — what
+        _draw_pixel_readout paints and what a change must repaint; null
+        for ''."""
+        if not text:
+            return QRectF()
+
+        text_px = self.viewport().fontMetrics().horizontalAdvance(text)
         right = viewport.right() - SCALE_BAR_MARGIN_PX
         bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
-        box = QRectF(
+
+        return QRectF(
             right - text_px - 2 * SCALE_BAR_PAD_PX,
             bottom - SCALE_BAR_TEXT_HEIGHT_PX - SCALE_BAR_PAD_PX,
             text_px + 2 * SCALE_BAR_PAD_PX,
             SCALE_BAR_TEXT_HEIGHT_PX + SCALE_BAR_PAD_PX,
         )
-        painter.fillRect(box, QColor(0, 0, 0, 110))
-        painter.setPen(QPen(QColor(255, 255, 255), 2))
-        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, self._pixel_text)
 
     def fit(self):
         if self.scene() is not None and not self.scene().sceneRect().isEmpty():
             self._auto_fit = True
             self.resetTransform()
             self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def fit_new_image(self, size_changed):
+        """Refit for a newly shown image, unless the user has zoomed and
+        the image is the same size: stepping through a burst keeps their
+        zoom and pan."""
+        if size_changed or self._auto_fit:
+            self.fit()
 
     def zoom(self, direction):
         """One zoom step in (+1) or out (-1) — the toolbar buttons'
@@ -381,16 +424,16 @@ class _ImageView(QGraphicsView):
 
 
 class _ImageCanvasEditor(QtEditor):
-    """Canvas bound to the model's ``array``: renders it through the display
-    window, refits on every newly loaded image (and on ``fit_request``),
-    redraws in place on window edits, and writes the hovered pixel's true
-    value back to ``pixel_text``."""
+    """Canvas bound to the model's ``array``: draws the model's
+    ``display_frame`` (rendered off the GUI thread by the controller),
+    refits on a newly loaded image unless the user zoomed (and on
+    ``fit_request``), redraws in place on window edits, and writes the
+    hovered pixel's true value back to ``pixel_text``."""
 
     scrollable = True
 
     def init(self, parent):
-        self._corrected = None
-        self._corrected_key = None
+        self._image_size = None
         self._scene = QGraphicsScene()
         self._pixmap_item = QGraphicsPixmapItem()
         self._scene.addItem(self._pixmap_item)
@@ -425,17 +468,7 @@ class _ImageCanvasEditor(QtEditor):
         )
         self.control.set_zoom_step(self.object.zoom_step)
         self.object.observe(self._on_zoom_step_changed, "zoom_step")
-        self.object.observe(
-            self._on_window_changed, "auto_contrast, window_min, window_max"
-        )
-        self.object.observe(
-            self._on_correction_changed,
-            "roi_analysis:session:ball:enabled, "
-            "roi_analysis:session:ball:radius_px, "
-            "roi_analysis:session:perspective:enabled, "
-            "roi_analysis:session:perspective:matrix, "
-            "roi_analysis:session",
-        )
+        self.object.observe(self._on_display_frame_changed, "display_frame")
         self.object.observe(self._on_fit_request, "fit_request")
         self.object.observe(self._on_zoom_request, "zoom_request")
         self.object.observe(
@@ -468,21 +501,13 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_max_size",
         )
 
+        # A rebuilt pane opens on a frame the controller already rendered.
+        self._redraw()
+
     def dispose(self):
         self.object.observe(self._on_zoom_step_changed, "zoom_step", remove=True)
         self.object.observe(
-            self._on_window_changed,
-            "auto_contrast, window_min, window_max",
-            remove=True,
-        )
-        self.object.observe(
-            self._on_correction_changed,
-            "roi_analysis:session:ball:enabled, "
-            "roi_analysis:session:ball:radius_px, "
-            "roi_analysis:session:perspective:enabled, "
-            "roi_analysis:session:perspective:matrix, "
-            "roi_analysis:session",
-            remove=True,
+            self._on_display_frame_changed, "display_frame", remove=True
         )
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
         self.object.observe(self._on_zoom_request, "zoom_request", remove=True)
@@ -522,19 +547,23 @@ class _ImageCanvasEditor(QtEditor):
         super().dispose()
 
     def update_editor(self):
-        # A new image arrived in `array`: redraw and refit.
-        self._redraw()
-        self.control.fit()
+        # A new image arrived in `array`; its display frame is already
+        # drawn (the controller sets it first). A draw or edit during a
+        # run keeps the zoom.
+        array = self.value
+        image_size = None if array is None else array.shape[:2]
+
+        if not self.object.roi_analysis.holds_view:
+            self.control.fit_new_image(image_size != self._image_size)
+
+        self._image_size = image_size
         self._sync_roi_layer()
 
     def _on_zoom_step_changed(self, event):
         self.control.set_zoom_step(event.new)
 
-    def _on_window_changed(self, event):
-        self._redraw()  # window edit: keep the user's zoom
-
-    def _on_correction_changed(self, event):
-        self._redraw()  # a different frame to show, same zoom
+    def _on_display_frame_changed(self, event):
+        self._redraw()  # a window or correction edit keeps the user's zoom
 
     def _on_fit_request(self, event):
         self.control.fit()
@@ -630,49 +659,21 @@ class _ImageCanvasEditor(QtEditor):
             else self.control.DragMode.NoDrag
         )
 
-    def _display_array(self):
-        """The frame to show: perspective-warped, then rolling-ball
-        corrected, while those corrections are on — the canvas shows what
-        is being measured rather than what was on disk.
-
-        Cached against the frame and the corrections — they cost real
-        work, and a redraw also happens for every contrast nudge, which
-        changes nothing about them."""
-        array = self.value
-        session = self.object.roi_analysis.session
-        radius = session.ball.effective_radius()
-        perspective = session.perspective.effective_matrix()
-
-        if array is None or not (radius or perspective):
-            return array
-
-        key = (id(array), radius, perspective)
-
-        if self._corrected_key != key:
-            self._corrected_key = key
-            corrected = warp_frame(array, perspective)
-            self._corrected = (
-                subtract_rolling_ball(corrected, radius) if radius else corrected
-            )
-
-        return self._corrected
-
     def _redraw(self):
-        array = self._display_array()
-        if array is None:
+        """Wrap the controller's ready 8-bit frame: the only per-frame
+        work left on the GUI thread."""
+        display = self.object.display_frame
+
+        if display is None:
             self._pixmap_item.setPixmap(QPixmap())
             return
-        display = stretch_to_8bit(
-            array,
-            self.object.auto_contrast,
-            window=(self.object.window_min, self.object.window_max),
-        )
+
         self._pixmap_item.setPixmap(QPixmap.fromImage(frame_to_qimage(display)))
         self._scene.setSceneRect(self._pixmap_item.boundingRect())
 
     def _on_hover(self, x, y):
         # The shown frame: what the cursor is over, and what is measured.
-        array = self._display_array()
+        array = self.object.corrected_array
         if array is None:
             return
         height, width = array.shape[:2]
@@ -1328,5 +1329,10 @@ ImageViewerView = View(
         ),
         analysis_toolbar,
     ),
+    # Scrollable so the dock can be dragged to any size: the toolbars and
+    # setting grids keep their natural size and scroll once the pane is
+    # smaller than them, while the canvas (minimum 1x1) still takes all
+    # the room the pane has to spare.
     resizable=True,
+    scrollable=True,
 )

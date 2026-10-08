@@ -30,6 +30,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 # Local imports.
 from .consts import (
     ALARM_RAISED,
+    CHIP_ON_PAD_SEATED_MASK,
     CONNECT_TO_PORT,
     ERROR_RAISED,
     FLUORESCENCE_LED_RAW_MAX,
@@ -261,7 +262,13 @@ class PortableDropbotControllerBase(HasTraits):
             if field in signal:
                 signal[field] = signal[field] / 100.0
         if "chip_on_pad" in signal:
-            signal["chip_on_pad"] = signal["chip_on_pad"] == 1
+            # A contact mask, not a flag: partial pogo contact (3 or 5) is
+            # deliberately reported as no chip. The raw mask rides along
+            # so the pane can say which pogo pads touch the chip.
+            signal["chip_pad_contacts"] = int(signal["chip_on_pad"])
+            signal["chip_on_pad"] = (
+                signal["chip_on_pad"] & CHIP_ON_PAD_SEATED_MASK
+            ) == CHIP_ON_PAD_SEATED_MASK
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
         self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
 

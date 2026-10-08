@@ -159,6 +159,17 @@ class ImageViewerModel(HasTraits):
     #: Loaded pixel data (numpy uint16/uint8, gray or RGB), or None.
     array = Any()
 
+    #: ``array`` perspective-warped and rolling-ball corrected while those
+    #: corrections are on (``array`` itself otherwise), at its true values
+    #: — what the canvas shows and the hover readout reads. Rendered off
+    #: the GUI thread by the controller and set just before ``array``.
+    corrected_array = Any()
+
+    #: ``corrected_array`` windowed to 8-bit — the frame the canvas
+    #: draws. Re-rendered off the GUI thread on every display-window or
+    #: correction change.
+    display_frame = Any()
+
     #: "name — WxH 16-bit gray" summary of the loaded image (shown in
     #: the dock pane's title).
     info_text = Str()

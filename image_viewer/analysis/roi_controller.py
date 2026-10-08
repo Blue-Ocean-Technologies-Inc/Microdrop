@@ -38,17 +38,15 @@ from .consts import (
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
     PASTE_OFFSET_PX,
+    ROI_BATCH_PROTOCOL_WORKERS,
     STATS_SAVE_DEBOUNCE_S,
 )
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
-from .heater_log import (
-    heater_log_files,
-    read_heater_samples,
-    sensors_in,
-    temperature_at,
-)
+from .heater_loader import HeaterSamplesLoader
+from .heater_log import describe_heater_coverage, sensors_in, temperature_at
 from .plot_series import analysed_series
+from .protocol_guard import proceed_despite_protocol
 from .roi_batch import (
     BATCH_FINISHED,
     BATCH_RESULT,
@@ -99,10 +97,14 @@ class RoiAnalysisController(HasTraits):
     #: When the running batch started, for the finished-in log line.
     _batch_started = Float(0.0)
 
-    #: What the loaded heater samples were read from — (folder, range,
-    #: (file, mtime) pairs) — so an unchanged folder is not re-parsed
-    #: on every trigger. None forces the next load.
+    #: What the applied heater samples were read from (their
+    #: HeaterSamples.fingerprint), so a load that found no new lines is
+    #: not applied again. None forces the next apply.
     _heater_fingerprint = Any()
+
+    #: Tails the heater logs off the GUI thread; drain_results() applies
+    #: what it finds.
+    _heater_loader = Instance(HeaterSamplesLoader, ())
 
     #: A drift re-check updated an ROI's geometry since the last save —
     #: flushed by drain_results() once per drain tick rather than once
@@ -442,13 +444,18 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:calculate_button")
     def _calculate(self, event):
-        self._start_batch()
+        if proceed_despite_protocol(self.analysis_model):
+            self._start_batch()
 
     @observe("analysis_model:export_csv_button")
     def _export(self, event):
         if not self.session.rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
+
+        if not proceed_despite_protocol(self.analysis_model):
+            return
+
         self._dispatched_keys = {}
         work = self._missing_work()
         if work:
@@ -466,6 +473,11 @@ class RoiAnalysisController(HasTraits):
         """The filtered series changed mid-batch: restart on the new
         snapshot (the work list is a snapshot by design; the plot pane
         observes the filters itself)."""
+        self._restart_batch_if_running()
+
+    @observe("analysis_model:protocol_running")
+    def _on_protocol_running_changed(self, event):
+        # A batch narrows when a run starts and widens when it ends.
         self._restart_batch_if_running()
 
     def _missing_work(self):
@@ -521,7 +533,10 @@ class RoiAnalysisController(HasTraits):
             self.analysis_model.progress_text = (
                 f"Starting workers for {len(work)} images…"
             )
-        self.runner.start(work)
+        self.runner.start(
+            work,
+            ROI_BATCH_PROTOCOL_WORKERS if self.analysis_model.protocol_running else 0,
+        )
 
     def _restart_batch_if_running(self):
         if self.analysis_model.batch_running:
@@ -536,6 +551,11 @@ class RoiAnalysisController(HasTraits):
         What stays coalesced is the expensive part: a stats_revision
         bump redraws the plot, refitting every ROI, and doing that per
         result starved the GUI that has to paint the progress."""
+        heater = self._heater_loader.latest_result()
+
+        if heater is not None:
+            self._apply_heater_samples(heater)
+
         absorbed = False
         finished = False
         while True:
@@ -700,6 +720,7 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.perspective_enabled = session.perspective.enabled
         self.analysis_model.perspective_defined = session.perspective.is_defined()
         self._dispatched_keys = {}
+        self._heater_loader.reset()
         self._heater_fingerprint = None
         self._ensure_heater_samples()
 
@@ -772,43 +793,110 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:heater_log_dir, analysis_model:session:figure:x_axis"
     )
     def _on_heater_settings_changed(self, event):
+        # Other logs, or a fresh look for a sibling's: tail from scratch.
+        self._heater_loader.reset()
+        self._heater_fingerprint = None
         self._ensure_heater_samples()
 
-    def _ensure_heater_samples(self):
-        """Load the heater folder's samples for the current capture
-        range — skipped when the folder, its files and the range are
-        the ones already loaded, so redraw triggers cost a stat each,
-        not a parse."""
+    @observe("analysis_model:plot_visible")
+    def _on_plot_visibility_changed(self, event):
+        self._ensure_heater_samples()
+
+    def _heater_samples_wanted(self):
+        """Only a shown plot on the temperature axis reads the samples
+        (the CSV export loads its own), so nothing else pays for them."""
+        return (
+            self.analysis_model.plot_visible
+            and self.session.figure.x_axis == "temperature"
+        )
+
+    def _has_heater_inputs(self):
+        """A folder to read and captures to join it to."""
+        return bool(self.session.heater_log_dir and self.viewer_model.paths)
+
+    def _clear_heater_samples(self):
         session = self.session
-        folder = session.heater_log_dir
-        paths = self.viewer_model.paths
-        if not folder or not paths:
-            if session.heater_samples:
-                session.heater_samples = []
-            return
+
+        self._heater_loader.cancel()
+        self._heater_fingerprint = None
+        session.heater_log_fallback_dir = ""
+        session.heater_log_coverage = ""
+
+        if session.heater_samples:
+            session.heater_samples = []
+
+    def _heater_request(self):
+        """(folder, experiment directory, start, end) — the loader's
+        arguments for the current capture range."""
+        session = self.session
         stat_cache = {}
-        times = [session.stat_info(path, stat_cache)[1] for path in paths]
-        start, end = min(times), max(times)
-        files = heater_log_files(folder, start, end)
-        try:
-            fingerprint = (
-                folder,
-                round(start),
-                round(end),
-                tuple((str(path), path.stat().st_mtime) for path in files),
-            )
-        except OSError:
-            fingerprint = None  # a vanished file: read what remains
-        if fingerprint is not None and fingerprint == self._heater_fingerprint:
+        times = [
+            session.stat_info(path, stat_cache)[1] for path in self.viewer_model.paths
+        ]
+
+        return (
+            session.heater_log_dir,
+            self._experiment_directory(),
+            min(times),
+            max(times),
+        )
+
+    def _ensure_heater_samples(self):
+        """Have the loader tail the heater logs for the current capture
+        range, when the plot needs them; the result lands through
+        drain_results(). Without a folder or captures there is nothing
+        to join, and what was loaded is cleared."""
+        if not self._has_heater_inputs():
+            self._clear_heater_samples()
             return
-        samples = read_heater_samples(folder, start, end)
-        self._heater_fingerprint = fingerprint
-        session.heater_samples = samples
+
+        if self._heater_samples_wanted():
+            self._heater_loader.request(*self._heater_request())
+
+    def _load_heater_samples_now(self):
+        """The export's load: synchronous, and whatever axis is shown —
+        the CSV carries each frame's temperature whenever a log covers
+        it."""
+        if not self._has_heater_inputs():
+            self._clear_heater_samples()
+            return
+
+        self._apply_heater_samples(
+            self._heater_loader.load_now(*self._heater_request())
+        )
+
+    def _apply_heater_samples(self, result):
+        """Publish a load's HeaterSamples to the session (GUI thread)."""
+        if result.fingerprint == self._heater_fingerprint:
+            return
+
+        session = self.session
+
+        if result.fallback:
+            logger.info(
+                f"Heater log: nothing in {result.folder} covers the captures; "
+                f"using {result.fallback} (most overlap of {result.match_count} "
+                f"sibling match(es))"
+            )
+
+        self._heater_fingerprint = result.fingerprint
+        # Reported, never written to heater_log_dir: only an explicit
+        # pick is persisted as the experiment's heater folder.
+        session.heater_log_fallback_dir = result.fallback
+        session.heater_log_coverage = describe_heater_coverage(
+            result.folder,
+            result.span,
+            result.capture_span,
+            result.fallback,
+            result.match_count,
+        )
+        session.heater_samples = result.samples
         self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors_in(
-            samples
+            result.samples
         )
         logger.info(
-            f"Heater log: {len(samples)} samples from {len(files)} file(s) in {folder}"
+            f"Heater log: {len(result.samples)} samples from "
+            f"{result.fallback or result.folder}"
         )
 
     @observe("viewer_model:paths.items")
@@ -921,9 +1009,7 @@ class RoiAnalysisController(HasTraits):
         stat_cache = {}
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
-        # Whatever x-axis is displayed, the CSV carries the heater's
-        # reading per frame whenever a log covers it.
-        self._ensure_heater_samples()
+        self._load_heater_samples_now()
         temperatures = (
             temperature_at(
                 session.heater_samples,

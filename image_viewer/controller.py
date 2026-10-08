@@ -11,13 +11,20 @@
 """Controller for the image viewer pane: turns toolbar events into model
 mutations, loads whatever ``current_path`` points at, keeps the dropdown /
 seek slider / path selection in sync, and rescans the browsed folder
-(called from the pane's poll timer).
+(requested by the pane's poll timer).
 
 Loading is asynchronous, latest-wins: ``current_path`` changes replace
 the loader thread's single pending request, so dragging the seek slider
 never decodes the frames dragged past and never blocks the GUI thread.
-Finished decodes land through ``drain_loaded()`` (the dock pane's drain
-timer) and a small LRU cache makes recently viewed frames instant.
+The loader thread also renders the display frame (corrections plus the
+8-bit window), and display-window / correction edits re-render there the
+same way, so a dragged contrast slider only ever renders its newest
+window. Finished renders land through ``drain_loaded()`` (the dock pane's
+drain timer) and a small LRU cache of decoded frames spares re-decoding
+recently viewed ones.
+Folder discovery runs the same way on its own worker: requested
+rescans are latest-wins and their results land through
+``drain_discovered()``.
 """
 
 # Standard library imports.
@@ -31,20 +38,23 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.api import OK, DirectoryDialog
-from traits.api import Any, Callable, Instance, Str, observe
+from traits.api import Any, Bool, Callable, Instance, Int, observe
 from traitsui.api import Controller
 
 # Microdrop utils imports.
 from microdrop_utils.file_handler import open_file
 
 # Local imports.
-from .consts import IMAGE_CACHE_FRAMES
+from .consts import DISCOVERY_POLL_INTERVAL_MS, IMAGE_CACHE_FRAMES
 from .discovery import (
+    CaptureFolderWatch,
+    CaptureReadiness,
     current_captures_directory,
     discover_experiments,
-    discover_image_groups,
+    file_signature,
 )
-from .display import load_image_array
+from .display import load_image_array, render_display_frame
+from .latest_wins_worker import LatestWinsWorker
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
@@ -79,19 +89,58 @@ class ImageViewerController(Controller):
     #: IMAGE_CACHE_FRAMES so recently viewed frames re-display instantly.
     _decoded_cache = Instance(OrderedDict, ())
 
-    #: (path, array | None) results from the loader thread, applied on
-    #: the GUI thread by drain_loaded().
+    #: (path, array | None, settings, (corrected, display) | None)
+    #: results from the loader thread, applied on the GUI thread by
+    #: drain_loaded().
     _load_results = Instance(queue.SimpleQueue, ())
 
-    #: The newest not-yet-started decode request. The loader always takes
-    #: this and only this, so frames the slider dragged past are skipped.
-    _pending_load = Str()
+    #: The newest not-yet-started (path, decoded array | None, settings)
+    #: request, None when there is none. The loader always takes this and
+    #: only this, so frames the slider dragged past are skipped.
+    _pending_load = Any(None)
+
+    #: The display settings of the newest request — a window edit under
+    #: auto-contrast changes nothing on screen, so it is not re-rendered.
+    _requested_settings = Any(None)
+
     _pending_load_lock = Instance(object)
     _load_wakeup = Instance(object)
     _load_worker = Instance(object)
 
+    #: (path, file_signature) of the displayed image whose load failed,
+    #: or None. The failure is not final: a capture caught mid-write
+    #: loads once the file changes, so each rescan retries it then.
+    _failed_load = Any(None)
+
+    #: Keeps files still being written out of discovery.
+    _capture_readiness = Instance(CaptureReadiness)
+
+    def __capture_readiness_default(self):
+        return CaptureReadiness(settle_seconds=DISCOVERY_POLL_INTERVAL_MS / 1000)
+
+    #: Skips re-walking the browsed folder while nothing in it changed.
+    _capture_folders = Instance(CaptureFolderWatch, ())
+
+    #: Runs requested rescans' discovery off the GUI thread.
+    _discovery_worker = Instance(LatestWinsWorker)
+
+    #: Requested rescans so far — each request's sequence number.
+    _rescan_requests = Int(0)
+
+    #: (sequence number, (burst index, show)) — the jump to make once the
+    #: rescan with that number (or a later one) has been applied; None
+    #: when there is none.
+    _pending_jump = Any(None)
+
+    #: New captures landed while the analysis model held the view: follow
+    #: them once the hold ends.
+    _follow_deferred = Bool(False)
+
     def __pending_load_lock_default(self):
         return threading.Lock()
+
+    def __discovery_worker_default(self):
+        return LatestWinsWorker(work=self._discover_request, name="image-discovery")
 
     def __load_wakeup_default(self):
         return threading.Event()
@@ -121,8 +170,7 @@ class ImageViewerController(Controller):
         newest instead)."""
         if not event.new:
             return
-        self.rescan()
-        self._jump_to_burst(0, "first")
+        self.request_rescan(jump=(0, "first"))
 
     @observe("model:home_button")
     def _return_to_experiment_captures(self, event):
@@ -130,8 +178,7 @@ class ImageViewerController(Controller):
         again and show the newest burst's newest image (so new captures
         auto-follow)."""
         self.model.directory = ""
-        self.rescan()
-        self._jump_to_burst(-1, "last")
+        self.request_rescan(jump=(-1, "last"))
 
     @observe("model:open_folder_button")
     def _open_images_folder(self, event):
@@ -358,21 +405,60 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     @observe("model:current_path")
     def _load_current_path(self, event):
-        path = event.new
+        self._failed_load = None
+        self._render_current_path()
+
+    @observe(
+        "model:auto_contrast, model:window_min, model:window_max, "
+        "model:roi_analysis:session, "
+        "model:roi_analysis:session:ball:enabled, "
+        "model:roi_analysis:session:ball:radius_px, "
+        "model:roi_analysis:session:perspective:enabled, "
+        "model:roi_analysis:session:perspective:matrix"
+    )
+    def _display_settings_changed(self, event):
+        if self._display_settings() != self._requested_settings:
+            self._render_current_path()
+
+    def _display_settings(self):
+        """The window and corrections a frame renders with, snapshotted
+        on the GUI thread as :func:`render_display_frame`'s trailing
+        arguments — the loader thread never reads traits."""
+        model = self.model
+        session = model.roi_analysis.session
+        window = None if model.auto_contrast else (model.window_min, model.window_max)
+
+        return (
+            model.auto_contrast,
+            window,
+            session.ball.effective_radius(),
+            session.perspective.effective_matrix(),
+        )
+
+    def _render_current_path(self):
+        """Hand the loader thread the displayed path to render with the
+        current settings, decoding it first unless it is cached. Latest
+        wins: this replaces any not-yet-started request, so frames the
+        slider dragged past are never decoded at all."""
+        path = self.model.current_path
+
         if not path:
             return
-        cached = self._decoded_cache.get(path)
-        if cached is not None:
+
+        array = self._decoded_cache.get(path)
+
+        if array is None:
+            self.model.info_text = f"Loading {Path(path).name}…"
+        else:
             self._decoded_cache.move_to_end(path)
-            self._apply_loaded(path, cached)
-            return
-        # Latest wins: replace any not-yet-started request so frames the
-        # slider dragged past are never decoded at all.
+
+        self._requested_settings = self._display_settings()
+
         with self._pending_load_lock:
-            self._pending_load = path
+            self._pending_load = (path, array, self._requested_settings)
             self._load_wakeup.set()
+
         self._ensure_load_worker()
-        self.model.info_text = f"Loading {Path(path).name}…"
 
     def _ensure_load_worker(self):
         if self._load_worker is not None and self._load_worker.is_alive():
@@ -381,46 +467,79 @@ class ImageViewerController(Controller):
         self._load_worker.start()
 
     def _run_loader(self):
-        """Daemon loader: decode the newest pending path, report on the
-        results queue, wait for the next request."""
+        """Daemon loader: decode the newest pending path unless it came
+        decoded, render its display frame, report on the results queue,
+        wait for the next request."""
         while True:
             self._load_wakeup.wait()
+
             with self._pending_load_lock:
-                path = self._pending_load
-                self._pending_load = ""
+                request = self._pending_load
+                self._pending_load = None
                 self._load_wakeup.clear()
-            if not path:
+
+            if request is None:
                 continue
-            try:
-                array = load_image_array(path)
-            except Exception as error:
-                logger.warning(f"Image decode failed for {path}: {error}")
-                array = None
-            self._load_results.put((path, array))
+
+            path, array, settings = request
+            rendered = None
+
+            if array is None:
+                try:
+                    array = load_image_array(path)
+                except Exception as error:
+                    logger.warning(f"Image decode failed for {path}: {error}")
+
+            if array is not None:
+                try:
+                    rendered = render_display_frame(array, *settings)
+                except Exception as error:
+                    logger.warning(f"Image render failed for {path}: {error}")
+
+            self._load_results.put((path, array, settings, rendered))
 
     def drain_loaded(self):
         """Called by the dock pane's drain timer (GUI thread): apply
-        finished decodes. Only the currently displayed path is shown, but
-        every successful decode enters the cache."""
+        finished renders. Only the currently displayed path is shown, but
+        every successful decode enters the cache. A render whose settings
+        have since moved is still shown: the newer request is already
+        queued behind it, so a dragged slider previews as it goes."""
         while True:
             try:
-                path, array = self._load_results.get_nowait()
+                path, array, _settings, rendered = self._load_results.get_nowait()
             except queue.Empty:
                 return
-            if array is None:
-                if path == self.model.current_path:
-                    logger.error(f"Could not load image: {path}")
-                    self.model.info_text = "Could not load image"
-                continue
-            self._decoded_cache[path] = array
-            self._decoded_cache.move_to_end(path)
-            while len(self._decoded_cache) > IMAGE_CACHE_FRAMES:
-                self._decoded_cache.popitem(last=False)
-            if path == self.model.current_path:
-                self._apply_loaded(path, array)
 
-    def _apply_loaded(self, path, array):
+            if array is not None:
+                self._decoded_cache[path] = array
+                self._decoded_cache.move_to_end(path)
+
+                while len(self._decoded_cache) > IMAGE_CACHE_FRAMES:
+                    self._decoded_cache.popitem(last=False)
+
+            if path != self.model.current_path:
+                continue
+
+            if rendered is None:
+                logger.error(f"Could not load image: {path}")
+                self.model.info_text = "Could not load image"
+                self._failed_load = (path, file_signature(path))
+                continue
+
+            self._apply_loaded(path, array, *rendered)
+
+    def _apply_loaded(self, path, array, corrected, display):
+        is_new_image = array is not self.model.array
+
+        # The canvas draws display_frame and refits on array, so the
+        # frame must be in place before array announces a new image.
+        self.model.corrected_array = corrected
+        self.model.display_frame = display
         self.model.array = array
+
+        if not is_new_image:
+            return
+
         bits = 16 if array.dtype == np.uint16 else 8
         kind = "gray" if array.ndim == 2 else "RGB"
         self.model.info_text = (
@@ -430,22 +549,89 @@ class ImageViewerController(Controller):
         logger.info(f"Loaded image: {path} ({bits}-bit {kind})")
 
     # ------------------------------------------------------------------ #
-    # Folder discovery (driven by the pane's poll timer, GUI thread)       #
+    # Folder discovery (requested by the pane's poll timer)                #
     # ------------------------------------------------------------------ #
     def _scan_directory(self):
-        if self.model.directory:
-            return Path(self.model.directory)
-        return current_captures_directory()
+        return _resolve_scan_directory(self.model.directory)
+
+    def request_rescan(self, jump=None):
+        """Rescan off the GUI thread; the result is applied by
+        drain_discovered(). ``jump`` — (burst index, show) — is made once
+        it has been (the folder and home buttons' landing)."""
+        self._rescan_requests += 1
+
+        if jump is not None:
+            self._pending_jump = (self._rescan_requests, jump)
+
+        self._discovery_worker.submit((self._rescan_requests, self.model.directory))
+
+    def _discover_request(self, request):
+        """Worker side of request_rescan: reads no traits, only the
+        request's snapshot of ``model.directory``."""
+        number, directory = request
+        scan_directory = _resolve_scan_directory(directory)
+
+        return number, directory, scan_directory, *self._discover(scan_directory)
+
+    def _discover(self, scan_directory):
+        """The experiment list and ``scan_directory``'s Image Groups."""
+        return (
+            discover_experiments(),
+            self._capture_folders.image_groups(scan_directory, self._capture_readiness),
+        )
+
+    def drain_discovered(self):
+        """Called by the dock pane's drain timer (GUI thread): apply
+        finished rescans, then any jump waiting on them. A rescan of a
+        folder the user has since left is dropped — the rescan the switch
+        requested is already queued behind it."""
+        for result in self._discovery_worker.drain():
+            number, directory, scan_directory, *discovered = result
+
+            if directory != self.model.directory:
+                continue
+
+            self._apply_discovery(scan_directory, *discovered)
+
+            if self._pending_jump is not None and self._pending_jump[0] <= number:
+                _number, jump = self._pending_jump
+                self._pending_jump = None
+                self._jump_to_burst(*jump)
+
+    def capture_saved(self, path):
+        """A capture's writer reports ``path`` complete: show it without
+        waiting out the settle time, then rescan."""
+        self._capture_readiness.mark_complete(path)
+        self.request_rescan()
+
+    def _retry_failed_load(self):
+        """Reload the displayed image whose load failed once the file
+        has changed since — it was most likely caught mid-write."""
+        path, signature = self._failed_load
+
+        if file_signature(path) == signature:
+            return
+
+        self._failed_load = None
+        self._render_current_path()
 
     def rescan(self):
-        """Sync with the browsed folder's Image Groups and their Capture
-        Sessions; a newly landed session / image is followed automatically
-        unless the user is parked on an older one. Also refreshes the
-        image-filter choices from what the filenames embed."""
-        # Refresh the experiment list (cheap dir listing) so the Experiments
-        # dropdown tracks newly created experiments; the user's selection is
-        # left untouched.
-        experiments = discover_experiments()
+        """Rescan on the calling thread (request_rescan is the GUI's
+        path): sync with the browsed folder's Image Groups and their
+        Capture Sessions."""
+        scan_directory = self._scan_directory()
+        self._apply_discovery(scan_directory, *self._discover(scan_directory))
+
+    def _apply_discovery(self, directory, experiments, image_groups):
+        """Apply a rescan: a newly landed session / image is followed
+        automatically unless the user is parked on an older one. Also
+        refreshes the image-filter choices from what the filenames embed,
+        and retries a failed load whose file has changed."""
+        if self._failed_load is not None:
+            self._retry_failed_load()
+
+        # The Experiments dropdown tracks newly created experiments; the
+        # user's selection is left untouched.
         if experiments != self.model.experiments:
             self.model.experiments = experiments
 
@@ -456,9 +642,7 @@ class ImageViewerController(Controller):
             self.model.image_filter = image_filter
             self._refresh_filter_names()
 
-        directory = self._scan_directory()
         self.model.browsed_directory = str(directory) if directory else ""
-        image_groups = discover_image_groups(directory)
 
         if image_groups == self.model.image_groups:
             return
@@ -468,7 +652,8 @@ class ImageViewerController(Controller):
         # captures land; anyone parked elsewhere stays parked.
         on_all = self.model.selected_burst == BURST_FILTER_ALL
         following_newest = (
-            not self.model.current_path
+            self._follow_deferred
+            or not self.model.current_path
             or not self.model.paths
             or (on_all and self.model.current_path == str(self.model.paths[-1]))
             or (
@@ -494,16 +679,29 @@ class ImageViewerController(Controller):
             self.model.paths = []
             self.model.selected_image = ""
             return
-        if following_newest:
-            if on_all:
-                self._refresh_visible("last")
-            else:
-                self._jump_to_burst(-1, "last")
+        if following_newest and self.model.roi_analysis.holds_view:
+            self._follow_deferred = True
+            self._refresh_visible("keep")
+        elif following_newest:
+            self._follow_newest()
         elif self.model.selected_burst not in names:
             # The parked burst vanished (folder pruned): fall to newest.
             self._jump_to_burst(-1, "first")
         else:
             self._refresh_visible("keep")
+
+    def _follow_newest(self):
+        self._follow_deferred = False
+
+        if self.model.selected_burst == BURST_FILTER_ALL:
+            self._refresh_visible("last")
+        else:
+            self._jump_to_burst(-1, "last")
+
+    @observe("model:roi_analysis:holds_view")
+    def _follow_after_hold(self, event):
+        if self._follow_deferred and not event.new:
+            self._follow_newest()
 
     def _refresh_filter_names(self):
         """Offer "All" plus every filter value the discovered files carry;
@@ -520,3 +718,12 @@ class ImageViewerController(Controller):
 
         if self.model.selected_filter not in self.model.filter_names:
             self.model.selected_filter = IMAGE_FILTER_ALL
+
+
+def _resolve_scan_directory(directory):
+    """The folder a rescan walks: ``directory`` when one is browsed ('' =
+    follow the current experiment's captures folder)."""
+    if directory:
+        return Path(directory)
+
+    return current_captures_directory()

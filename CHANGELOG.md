@@ -1,3 +1,97 @@
+## [v1.29.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.29.0) (2026-10-08)
+
+### Feat
+
+- **protocol-tree**: scroll the quick-action bar ([`6a08562`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6a08562fbfa86ed458e2d81a75d3b56067a19cb8))
+- **video**: camera lead time cell on Capture ([`5407309`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5407309d07ac9e61568c92bd571c1a4e379ecccd))
+
+### Fix
+
+- **video**: wait for the capture ack before the step ends ([`025b761`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/025b761d38cf2a60be0547942f6106a506ded40b))
+- **video**: let the Video column publish the lead's camera-on ([`9b35997`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9b359972e318975ef0d9d67ea228d3fc826cdd32))
+- **video**: keep the camera on across lead-time steps ([`2eddf46`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2eddf46cd16e3cd5bfb42bf700279fd5d6b5225b))
+- **image-viewer**: make the viewer pane scrollable ([`a4f611b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a4f611b9256f013636a46c81060ab6a3f87123e9))
+
+### Test
+
+- **video**: cover the Capture camera lead cell ([`6bb4db9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6bb4db9c2b89f87cb24ec2cd7ce6e3525f4971a4))
+
+### Style
+
+- **protocol-tree**: ruff-format quick_action_bar.py ([`71b55c8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/71b55c84e1e822b934d5e1803658b8ab76bf8374))
+
+## [v1.28.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.28.0) (2026-10-07)
+
+### Feat
+
+- **image-viewer**: run analysis lighter during a protocol ([`c08d858`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c08d858b19dcf57d0db2545b12bec980754bd0e7))
+- **image-viewer**: hold the view under a draw during a run ([`0febfd3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0febfd3e42e56e4dfae92e4fcb546e44f816bcc8))
+- **portable-controls**: chip status readout and alarms log ([`949272d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/949272d478cf5864281556692d2ffd4c1b75cce6))
+- **portable**: publish the chip pad contact mask ([`57e55af`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/57e55af83319c8847220234ead1d31727797b3ab))
+
+### Fix
+
+- **image-viewer**: tail heater logs off the GUI thread ([`44cf566`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/44cf56602a8299d590b42d753b16c8265c53eb43))
+- **image-viewer**: rescan while capture files are held ([`9c50912`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9c50912613af2ccc06dcad82bb3d56574ce52e61))
+- **image-viewer**: skip capture files still being written ([`0995c9d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0995c9d6d20bd6ba23556c7321512fc3682df4be))
+- **image-viewer**: render display frames off the GUI thread ([`da43cbe`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/da43cbe06830c9bcf92e8532772044fced8f045e))
+- **portable-controls**: name the pogo side in the chip status ([`41c1548`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/41c1548c88480aab2bd4bd5d93b8b0438376122e))
+
+### Perf
+
+- **image-viewer**: coalesce the pixel readout repaint ([`786e99c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/786e99c9867f54ec5f099773a1588453fcc706b7))
+- **image-viewer**: walk captures once, off the GUI thread ([`cf7c9da`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cf7c9da659b772f24a357d64162cdce4a94cdc8e))
+
+### Test
+
+- **portable**: expect the pad contact mask in the snapshot ([`f719bb3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f719bb3edecae62d9dd54e6415c85873b214f53c))
+
+### Style
+
+- **portable-controls**: ruff-clean the status view and handler ([`44b82f0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/44b82f047a3b87ef602e35079b20e0eaff984460))
+
+## [v1.27.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.27.0) (2026-10-07)
+
+### Feat
+
+- **protocol-tree**: Fill Pattern button, shortcut and grouping ([`4cf5076`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4cf50765880c43f888b4ebc3403f3c9a9fe8032e))
+- **protocol-tree**: Fill Pattern dialog for step runs ([`54f64d6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54f64d617f404ba319950da4647c11c950d44d38))
+- **image-viewer**: extent and orientation plot quantities ([`978bd37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/978bd37c1001e18a46af580d8f0e79b563b7085a))
+- **image-viewer**: eccentricity plot quantity ([`bd20c67`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bd20c67ea8e4ed76d67c45d95f259d08a43f5ea6))
+- **image-viewer**: circularity, shape change, axis ratio and solidity plot quantities ([`ee557c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ee557c0dcb9feae989d9fd0827cf3877a631a160))
+- **examples**: shape-moments runner and findings ([`ff0127c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ff0127cdc1c1ec1759ddad4319dc5aa83bbc9c3e))
+- **examples**: shape-moment descriptors prototype ([`b1f50fe`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b1f50feb3946b7287982f0c911f6aff3e1a5c0eb))
+
+### Fix
+
+- **protocol-tree**: bulk-set every compound field ([`ae7fae7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ae7fae72b11b53c87df5ae33762551497c65f168))
+- **status-bar**: seed the device icon from the live colour ([`6409ec3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6409ec3907d684f58870df7a4f62c139b21c464d))
+- **portable**: resume status polling after connect-on-port ([`0c9c1ce`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0c9c1ce0c30d4019cbc29dc0c80ea854c23cf191))
+- **portable**: read chip_on_pad as a contact mask ([`0e1e10b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0e1e10ba868e841d4433dd2fef560ea99640fe4f))
+- **device_viewer**: align provider camera feeds ([`a171cb2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a171cb2d124a1ef8aefd8bbc19a1e8cae4006dfe))
+- **image-viewer**: search sibling heater logs only from the default folder ([`63eda06`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/63eda06ce903946da7a966f7eae322aa3691247c))
+- **image-viewer**: explain missing heater-log coverage ([`4655a2e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4655a2e8b0a37340c89a95f5ee395e3f693fc1b7))
+- **image-viewer**: find heater logs in sibling experiments ([`3aaf0bf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3aaf0bfd9aadc7a1ac3ad7950066e183cec8e7fa))
+- **image-viewer**: name the help entry Image Analysis Tutorial ([`aaf9c37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aaf9c377f01189c1bacb008b87edf86765e3dccf))
+
+### Refactor
+
+- **protocol**: drop unused camera prewarm preference ([`31c6905`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/31c6905859a6e92e7fe984ba773acdaeb6077110))
+- **protocol**: drop stale capture_time preference ([`a85f1cb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a85f1cbd4c8a24b353b80d08670b8ee3a0c8312b))
+- **image-viewer**: shape descriptors as an analysis module ([`b4b2c0a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b4b2c0a8c100ce9ca29ef161018081e0ed0a771d))
+
+### Docs
+
+- **image-viewer**: static pipeline diagram in the help guide ([`9fcf3f5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9fcf3f589b5e7f8ee6a827f9291101f806b219e9))
+- **image-viewer**: colour declines red in the shape demos ([`c3a115b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c3a115bc5fefbb644c04f9231cfee5d41f1ff586))
+- **image-viewer**: interactive droplet shape section in the help guide ([`82b9541`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/82b9541be74ed2c232a2a43f3ac7a37539c09eef))
+- **image-viewer**: explain the shape quantities in the help guide ([`3bdbd47`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3bdbd4774f40bb63ed9161faab205dc8de9f1209))
+
+### Style
+
+- **quick-actions**: ruff-format files Fill Pattern touches ([`99ade39`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/99ade39dd6ac1fae6a209ef1ca4c85e8931cc41f))
+- **pluggable_protocol_tree**: ruff-clean consts, preferences ([`cba6636`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cba6636a7d9409e644635461fa5e7ae0d163c472))
+
 ## [v1.26.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.26.0) (2026-10-02)
 
 ### Feat

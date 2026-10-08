@@ -17,14 +17,21 @@ from envisage.api import (
     Plugin,
 )
 from envisage.ui.tasks.api import TaskExtension
-from traits.api import List
+from traits.api import Instance, List
 
 # Microdrop package imports.
+from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from user_help_plugin.consts import TUTORIALS, TutorialEntry
 
 # Local imports.
-from .consts import ANALYSIS_HELP_HTML_PATH, IMAGE_FILTERS, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    ANALYSIS_HELP_HTML_PATH,
+    IMAGE_FILTERS,
+    PKG,
+    PKG_name,
+)
 
 
 class ImageViewerPlugin(Plugin):
@@ -41,6 +48,7 @@ class ImageViewerPlugin(Plugin):
     )
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
@@ -79,7 +87,18 @@ class ImageViewerPlugin(Plugin):
 
         return [image_viewer_tab]
 
+    #: Receives PROTOCOL_RUNNING for the analysis model; made in start().
+    message_handler = Instance("image_viewer.message_handler.ImageViewerMessageHandler")
+
     def start(self):
+        from .analysis.roi_model import roi_analysis_model
+        from .message_handler import ImageViewerMessageHandler
         from .preferences import migrate_legacy_preferences
 
         migrate_legacy_preferences(self.application.preferences)
+        self.message_handler = ImageViewerMessageHandler(model=roi_analysis_model)
+
+    def stop(self):
+        if self.message_handler is not None:
+            self.message_handler.teardown()
+            self.message_handler = None

@@ -11,13 +11,17 @@
 # Standard library imports.
 from pathlib import Path
 
+# Microdrop package imports.
+from device_viewer.consts import PROTOCOL_RUNNING
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-# The viewer reads capture files straight off disk; it subscribes to no
-# topics.
-ACTOR_TOPIC_DICT = {}
+#: The viewer reads capture files straight off disk; its one topic is
+#: whether a protocol is running, while which it runs lighter.
+LISTENER_NAME = f"{PKG}_listener"
+ACTOR_TOPIC_DICT = {LISTENER_NAME: [PROTOCOL_RUNNING]}
 
 # ---------------------------------------------------------------------------
 # Extension point: filename-derived filters for the image list (e.g. the
@@ -72,6 +76,10 @@ PERSISTED_VIEWER_TRAITS = {
 IMAGE_PATTERNS = ("*.png", "*.tif", "*.tiff", "*.jpg", "*.jpeg", "*.bmp")
 #: Rescan cadence for newly landed captures / experiment switches (ms).
 DISCOVERY_POLL_INTERVAL_MS = 2_000
+#: Longest discovery goes without walking the captures tree even though
+#: no folder's mtime moved: some filesystems (FAT, some network shares)
+#: never update a folder's mtime when files land in it (s).
+DISCOVERY_FULL_WALK_INTERVAL_S = 30.0
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 

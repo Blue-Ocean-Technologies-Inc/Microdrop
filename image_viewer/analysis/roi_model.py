@@ -70,6 +70,7 @@ from .consts import (
     SAVGOL_WINDOW_BOUNDS_PTS,
     SAVGOL_WINDOW_PTS,
     SHAPE_STATS,
+    VIEW_HOLDING_MODES,
     VIEW_MODES,
     X_AXIS_MODES,
 )
@@ -226,8 +227,10 @@ class FigureSettings(HasTraits):
 
 
 class ScaleCalibration(HasTraits):
-    """Image scale for the on-canvas bar (persisted per experiment).
-    Display-only: nothing computed from the images depends on it."""
+    """Image scale for the on-canvas bar and the area readouts
+    (persisted per experiment). It never changes which pixels are
+    measured, only the units the Area and Per area values are
+    reported in."""
 
     #: Metres one image pixel spans; 0.0 means not calibrated.
     metres_per_pixel = Float(0.0)
@@ -412,6 +415,22 @@ class AnalysisSession(HasTraits):
     #: experiment's own heater_logs folder as the default.
     heater_log_dir = Str()
 
+    #: The sibling experiment's heater_logs folder the samples came
+    #: from when the default heater_log_dir covers none of the captures
+    #: (a folder the user picked is never second-guessed); "" when
+    #: heater_log_dir served. Set by the controller, never persisted —
+    #: an auto-found folder is not the user's choice.
+    heater_log_fallback_dir = Str()
+
+    #: "(found in <experiment>)" under the folder field while a
+    #: fallback folder is in use, else "".
+    heater_log_hint = Property(Str, observe="heater_log_fallback_dir")
+
+    #: Where the heater join looked and what it found (folder, log
+    #: span, capture span, any sibling stand-in) — the plot's coverage
+    #: note. Set by the controller, never persisted.
+    heater_log_coverage = Str()
+
     #: The loaded heater samples for the current capture range,
     #: [(epoch, {sensor: °C}), ...] — set by the controller, never
     #: persisted (the logs themselves are the record).
@@ -419,7 +438,7 @@ class AnalysisSession(HasTraits):
 
     figure = Instance(FigureSettings, ())
 
-    #: Image scale for the canvas bar (display-only).
+    #: Image scale for the canvas bar and the area readouts.
     scale = Instance(ScaleCalibration, ())
 
     #: Where each ROI's background is measured (part of the cache key).
@@ -430,6 +449,12 @@ class AnalysisSession(HasTraits):
 
     #: Perspective warp applied before everything else (cache key too).
     perspective = Instance(PerspectiveCorrection, ())
+
+    def _get_heater_log_hint(self):
+        if not self.heater_log_fallback_dir:
+            return ""
+
+        return f"(found in {Path(self.heater_log_fallback_dir).parent.name})"
 
     def roi_by_id(self, roi_id):
         for roi in self.rois:
@@ -532,6 +557,24 @@ class RoiAnalysisModel(HasTraits):
     batch_done = Int(0)
     batch_failed = Int(0)
     batch_running = Bool(False)
+
+    #: Whether the ROI plot pane is showing — mirrored from its dock
+    #: visibility, so work only the plot would show (the heater join)
+    #: can wait until someone can see it.
+    plot_visible = Bool(False)
+
+    #: Whether a protocol is running (PROTOCOL_RUNNING, set on the GUI
+    #: thread by the image viewer's message handler): heavy analysis
+    #: work asks first and the batch runs narrower.
+    protocol_running = Bool(False)
+
+    #: A draw or edit is under way during a run: the viewer holds the
+    #: shown frame — no auto-follow to new captures, no refit — until
+    #: it ends.
+    holds_view = Property(Bool, observe="protocol_running, interaction_mode")
+
+    def _get_holds_view(self):
+        return self.protocol_running and self.interaction_mode in VIEW_HOLDING_MODES
 
     # Toolbar buttons (view events; RoiAnalysisController reacts).
     draw_ellipse_button = Button()

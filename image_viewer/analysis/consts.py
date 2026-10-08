@@ -104,6 +104,29 @@ ROI_PLOT_COALESCE_MS = 100
 #: readout the user is watching never gets painted.
 ROI_PLOT_BATCH_COALESCE_MS = 1000
 
+#: Images an ROI batch computes at once while a protocol runs, however
+#: wide the shared pool: the run's captures and device I/O need the
+#: rest of the CPU.
+ROI_BATCH_PROTOCOL_WORKERS = 2
+
+#: Canvas modes during which a running protocol's new captures do not
+#: take over the view (no auto-follow, no refit) — a shape half drawn
+#: or being edited would otherwise land on a different frame.
+VIEW_HOLDING_MODES = (
+    "draw_ellipse",
+    "draw_box",
+    "draw_capsule",
+    "draw_polygon",
+    "draw_scale",
+    "edit",
+)
+
+#: Asked before heavy analysis work (Calculate, Export, AI Detect/Track)
+#: starts while a protocol runs.
+PROTOCOL_RUNNING_CONFIRM_MESSAGE = (
+    "A protocol is running; this can stall the app and delay captures. Continue?"
+)
+
 #: Wheel-zoom step on the plot canvas: one notch multiplies the span
 #: by this going in, and by its reciprocal going out. Matches the
 #: image canvas's 1.25/0.8 so the two feel the same.
@@ -186,6 +209,12 @@ HEATER_LOGS_DIR_NAME = "heater_logs"
 #: Seconds of heater samples kept beyond each end of the capture
 #: range, so interpolation has bracketing points at the edges.
 HEATER_SAMPLE_MARGIN_S = 60.0
+
+#: How many of the most recent sibling experiments are searched for a
+#: heater log when the experiment's own folder covers none of its
+#: captures (the heater plugin has filed a run's log under the
+#: previous experiment).
+HEATER_SIBLING_SEARCH_LIMIT = 10
 
 #: The sensor choice averaging every thermistor on a log line.
 HEATER_SENSOR_MEAN = "mean"
