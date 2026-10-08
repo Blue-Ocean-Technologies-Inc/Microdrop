@@ -78,6 +78,8 @@ NETWORK_CSS_PATTERN = re.compile(
 #: Characters a browser's URL parser strips from anywhere in a URL.
 URL_STRIPPED_CHARACTERS = str.maketrans("", "", "\t\n\r")
 GLYPH_REFERENCE_PATTERN = re.compile(r"""href=["']#ic-([A-Za-z0-9_]+)["']""")
+SVG_START_TAG_PATTERN = re.compile(r"<svg\b[^>]*>")
+CLASS_ATTRIBUTE_PATTERN = re.compile(r"""\sclass\s*=\s*(["'])(.*?)\1""", re.DOTALL)
 
 #: Term-card fact divs and their default labels, in reading order.
 FACT_LABELS = {
@@ -148,6 +150,35 @@ def _attrs_markup(attrs):
             parts.append(f' {name}="{html.escape(value, quote=True)}"')
 
     return "".join(parts)
+
+
+def _label_svg(svg, class_name, alt, source):
+    """Give an inlined SVG's root element an ``<img>``'s class and alt text."""
+    match = SVG_START_TAG_PATTERN.search(svg)
+
+    if match is None:
+        raise TutorialBuildError(f"Inlined figure has no <svg> element: {source}")
+
+    tag = match[0]
+    added = ""
+
+    if class_name:
+        escaped = html.escape(class_name, quote=True)
+        existing = CLASS_ATTRIBUTE_PATTERN.search(tag)
+
+        if existing:
+            quote, value = existing[1], existing[2]
+            merged = f" class={quote}{escaped} {value}{quote}"
+            tag = tag[: existing.start()] + merged + tag[existing.end() :]
+        else:
+            added += f' class="{escaped}"'
+
+    if alt:
+        added += f' role="img" aria-label="{html.escape(alt, quote=True)}"'
+
+    tag = f"<svg{added}{tag[len('<svg') :]}"
+
+    return svg[: match.start()] + tag + svg[match.end() :]
 
 
 def _with_class(attrs, class_name):
@@ -461,11 +492,8 @@ class _SourceRewriter(HTMLParser):
         if "data-inline" in names and path.suffix == ".svg":
             svg = path.read_text(encoding="utf-8")
             svg = re.sub(r"<\?xml[^>]*\?>|<!DOCTYPE[^>]*>", "", svg).strip()
-            alt = names.get("alt")
-            label = f' role="img" aria-label="{html.escape(alt, quote=True)}"'
-            classes = f' class="{names["class"]}"' if "class" in names else ""
 
-            return re.sub(r"<svg\b", f"<svg{classes}{label if alt else ''}", svg, 1)
+            return _label_svg(svg, names.get("class"), names.get("alt"), source)
 
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")

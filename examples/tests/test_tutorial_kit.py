@@ -298,6 +298,15 @@ def test_links_and_prose_are_not_network_references(markup):
     assert find_network_references(markup) == []
 
 
+def test_inline_svg_merges_its_class_and_needs_no_alt(tmp_path):
+    svg = '<?xml version="1.0"?>\n<svg class="own" viewBox="0 0 1 1"></svg>'
+    (tmp_path / "f.svg").write_text(svg)
+    source = '<title>T</title><img data-inline src="f.svg" class="a&amp;b">'
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert '<svg class="a&amp;b own" viewBox="0 0 1 1"></svg>' in page
+
+
 def test_term_facts_become_a_definition_list(tmp_path):
     source = (
         "<title>T</title><section data-term id='a' data-where='here'>"
