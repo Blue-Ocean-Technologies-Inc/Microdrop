@@ -16,24 +16,14 @@ the PPT-11 compound framework (#396).
 Timing is PER STEP: each row picks start-of-step or end-of-step capture
 independently; newly added steps start at Step Start.
 
-Camera lead: when capture_lead_ms > 0 the handler turns the camera on
-(DEVICE_VIEWER_CAMERA_ACTIVE "true") at step start and holds the capture
+Camera lead: when capture_lead_ms > 0 the handler holds the capture
 until the camera has been on for at least that long — a stop-aware sleep
 of the full lead for Step Start, of only the unelapsed remainder for
-Step End. A lead of 0 leaves the camera alone and captures without
-waiting.
+Step End. A lead of 0 captures without waiting.
 
-Camera ownership: Capture keeps its own camera-on state
-(CAPTURE_CAMERA_ON_KEY) and never writes the Video column's
-VIDEO_CAMERA_ON_KEY. A lead's camera-on stays on for the rest of the run
-unless the Video column switches it off; at protocol end Capture switches
-it off only if Video does not want it on. Running after VideoHandler
-(priority 11 vs 10) publishes Video's "false" before the lead's "true"
-on a step where Video flips off, but both publishes on the one topic are
-delivered by concurrent frontend workers, so that ordering is
-best-effort. That is why Capture never feeds Video's change detection: a
-"false" that Video derived from Capture's state could land after the
-lead's "true" and leave the camera off for the whole lead.
+Camera ownership: the Video column is the single publisher of camera
+state during a run (see video_column.camera_wanted). Capture contributes
+the lead as a reason a step wants the camera, and only waits.
 
 Fire-and-forget — DEVICE_VIEWER_SCREEN_CAPTURE has no ack topic.
 
@@ -54,10 +44,7 @@ from pyface.qt.QtCore import Qt
 from traits.api import Bool, Enum, Int, List, Str
 
 # Microdrop package imports.
-from device_viewer.consts import (
-    DEVICE_VIEWER_CAMERA_ACTIVE,
-    DEVICE_VIEWER_SCREEN_CAPTURE,
-)
+from device_viewer.consts import DEVICE_VIEWER_SCREEN_CAPTURE
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
     BaseCompoundColumnHandler,
@@ -69,9 +56,6 @@ from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY, StepTime
-from video_protocol_controls.protocol_columns.video_column import (
-    VIDEO_CAMERA_ON_KEY,
-)
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -81,12 +65,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 #: combobox options all derive from it.
 CHOICES = (StepTime.START, StepTime.END)
 
-#: Cross-step scratch entry: True once a lead has switched the camera on
-#: in this run; on_protocol_end switches it off unless Video owns it.
-CAPTURE_CAMERA_ON_KEY = "video_protocol_controls.capture_camera_on"
-
 #: Per-step scratch entry: time.monotonic() at which this step's lead
-#: turned the camera on; consumed (popped) when the capture fires.
+#: started, just after VideoHandler's camera-on request; consumed (popped)
+#: when the capture fires.
 CAMERA_ON_AT_SCRATCH_KEY = "video_protocol_controls.capture_camera_on_at"
 
 
@@ -185,24 +166,22 @@ class CaptureHandler(BaseCompoundColumnHandler):
     is True, at the row's chosen moment (row.capture_at), after the
     row's camera lead (row.capture_lead_ms) has elapsed.
 
-    Priority 11 — one bucket after Video and Record (10), whose hooks run
-    in parallel with each other. On a step where Video flips off, this
-    publishes VideoHandler's "false" before the lead's "true" rather than
-    alongside it; still ahead of V/F (20) and routes (30).
+    Priority 11 — one bucket after Video and Record (10): Video has
+    already published this step's camera state when the lead wait starts,
+    so the lead counts from after the camera-on request; still ahead of
+    V/F (20) and routes (30).
 
-    Cross-step state is CAPTURE_CAMERA_ON_KEY only (Video's key is never
-    written — see the module docstring); the camera-on time is per-step
-    scratch, consumed when the capture fires. There is no
-    change-detection suppression, so calling on_pre_step twice with
-    row.capture=True fires two publishes.
+    No cross-step state; the camera-on time is per-step scratch, consumed
+    when the capture fires. There is no change-detection suppression, so
+    calling on_pre_step twice with row.capture=True fires two publishes.
     """
 
     priority = 11
     # No wait_for_topics — fire-and-forget; list stays empty (inherited default).
 
     def on_pre_step(self, row, ctx):
-        """Turn the camera on for a lead, and fire now when the row's
-        capture_at says Step Start.
+        """Start the lead clock, and fire now when the row's capture_at
+        says Step Start.
 
         `ctx` here is a StepContext; protocol-scoped scratch is accessed via
         `ctx.protocol.scratch`.
@@ -213,7 +192,8 @@ class CaptureHandler(BaseCompoundColumnHandler):
         lead_ms = getattr(row, "capture_lead_ms", 0)
 
         if lead_ms > 0:
-            self._turn_camera_on(ctx)
+            # VideoHandler (priority 10) has already asked for the camera.
+            ctx.protocol.scratch[CAMERA_ON_AT_SCRATCH_KEY] = time.monotonic()
 
         if getattr(row, "capture_at", StepTime.START) != StepTime.START:
             return
@@ -235,29 +215,6 @@ class CaptureHandler(BaseCompoundColumnHandler):
 
         self._wait_out_lead(getattr(row, "capture_lead_ms", 0), ctx)
         self._fire_capture(row, ctx)
-
-    def on_protocol_end(self, ctx):
-        """Switch off a camera a lead left on, unless Video wants it on.
-
-        `ctx` here is a ProtocolContext; scratch is accessed directly via
-        `ctx.scratch` (not `ctx.protocol.scratch`).
-        """
-        if not ctx.scratch.get(CAPTURE_CAMERA_ON_KEY, False):
-            return
-
-        if not ctx.scratch.get(VIDEO_CAMERA_ON_KEY, False):
-            publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="false")
-
-        ctx.scratch[CAPTURE_CAMERA_ON_KEY] = False
-
-    def _turn_camera_on(self, ctx):
-        """Switch the camera on and record when, for the lead wait."""
-        # Unconditional: the device viewer's turn-on is a no-op when the
-        # feed is already live.
-        publish_message(topic=DEVICE_VIEWER_CAMERA_ACTIVE, message="true")
-
-        ctx.protocol.scratch[CAPTURE_CAMERA_ON_KEY] = True
-        ctx.protocol.scratch[CAMERA_ON_AT_SCRATCH_KEY] = time.monotonic()
 
     def _wait_out_lead(self, lead_ms, ctx):
         """Sleep until the camera has been on for lead_ms (stop-aware)."""

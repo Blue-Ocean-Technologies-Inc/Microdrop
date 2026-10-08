@@ -10,20 +10,27 @@
 
 """Tests for the video column — model, factory, view, handler."""
 
+# Standard library imports.
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+# Enthought library imports.
 from traits.api import HasTraits
 
-from video_protocol_controls.protocol_columns.video_column import (
-    VideoColumnModel, VideoHandler, make_video_column, VIDEO_CAMERA_ON_KEY,
-)
-from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
+# Microdrop package imports.
 from device_viewer.consts import DEVICE_VIEWER_CAMERA_ACTIVE
-
+from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
+from video_protocol_controls.protocol_columns.video_column import (
+    VIDEO_CAMERA_ON_KEY,
+    VideoColumnModel,
+    VideoHandler,
+    make_video_column,
+)
 
 # ---------------------------------------------------------------------------
 # 1. Model trait type / default
 # ---------------------------------------------------------------------------
+
 
 def test_video_column_model_trait_for_row_is_bool_with_default_false():
     """Row trait stores Bool with default False."""
@@ -44,6 +51,7 @@ def test_video_column_model_trait_for_row_is_bool_with_default_false():
 # ---------------------------------------------------------------------------
 # 2. Factory composition
 # ---------------------------------------------------------------------------
+
 
 def test_make_video_column_returns_column_with_correct_ids():
     """Factory yields a Column with col_id='video', col_name='Video'."""
@@ -71,6 +79,7 @@ def test_make_video_column_default_value_is_false():
 # 3. Handler priority
 # ---------------------------------------------------------------------------
 
+
 def test_video_handler_priority_is_10():
     handler = VideoHandler()
     assert handler.priority == 10
@@ -79,6 +88,7 @@ def test_video_handler_priority_is_10():
 # ---------------------------------------------------------------------------
 # 4. Handler has no wait_for_topics (empty list)
 # ---------------------------------------------------------------------------
+
 
 def test_video_handler_wait_for_topics_is_empty():
     handler = VideoHandler()
@@ -89,10 +99,11 @@ def test_video_handler_wait_for_topics_is_empty():
 # 5. on_pre_step does NOT publish if state is unchanged
 # ---------------------------------------------------------------------------
 
+
 def test_on_pre_step_no_publish_when_state_unchanged_false():
     """video=False and last=False --> no publish."""
     handler = VideoHandler()
-    row = MagicMock()
+    row = SimpleNamespace()
     row.video = False
 
     ctx = MagicMock()
@@ -110,7 +121,7 @@ def test_on_pre_step_no_publish_when_state_unchanged_false():
 def test_on_pre_step_no_publish_when_state_unchanged_true():
     """video=True and last=True --> no publish (symmetric to the False case)."""
     handler = VideoHandler()
-    row = MagicMock()
+    row = SimpleNamespace()
     row.video = True
 
     ctx = MagicMock()
@@ -129,10 +140,11 @@ def test_on_pre_step_no_publish_when_state_unchanged_true():
 # 6. on_pre_step publishes "true" on flip-on
 # ---------------------------------------------------------------------------
 
+
 def test_on_pre_step_publishes_true_on_flip_on():
     """video=True, last=False --> publish 'true'; scratch updated to True."""
     handler = VideoHandler()
-    row = MagicMock()
+    row = SimpleNamespace()
     row.video = True
 
     ctx = MagicMock()
@@ -153,10 +165,11 @@ def test_on_pre_step_publishes_true_on_flip_on():
 # 7. on_pre_step publishes "false" on flip-off
 # ---------------------------------------------------------------------------
 
+
 def test_on_pre_step_publishes_false_on_flip_off():
     """video=False, last=True --> publish 'false'; scratch updated to False."""
     handler = VideoHandler()
-    row = MagicMock()
+    row = SimpleNamespace()
     row.video = False
 
     ctx = MagicMock()
@@ -177,6 +190,7 @@ def test_on_pre_step_publishes_false_on_flip_off():
 # 8. Re-arming: flip-on --> flip-off → flip-on → three publishes total
 # ---------------------------------------------------------------------------
 
+
 def test_on_pre_step_rearming_across_three_calls():
     """Simulate three steps: on, off, on — three publishes, all correct."""
     handler = VideoHandler()
@@ -185,20 +199,22 @@ def test_on_pre_step_rearming_across_three_calls():
     ctx.protocol.scratch = {}  # empty scratch = last is False
 
     published = []
-    patch_target = "video_protocol_controls.protocol_columns.video_column.publish_message"
+    patch_target = (
+        "video_protocol_controls.protocol_columns.video_column.publish_message"
+    )
 
     # Step 1: flip on
-    row1 = MagicMock(); row1.video = True
+    row1 = SimpleNamespace(video=True)
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
         handler.on_pre_step(row1, ctx)
 
     # Step 2: flip off
-    row2 = MagicMock(); row2.video = False
+    row2 = SimpleNamespace(video=False)
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
         handler.on_pre_step(row2, ctx)
 
     # Step 3: flip on again
-    row3 = MagicMock(); row3.video = True
+    row3 = SimpleNamespace(video=True)
     with patch(patch_target, side_effect=lambda **kw: published.append(kw)):
         handler.on_pre_step(row3, ctx)
 
@@ -212,6 +228,7 @@ def test_on_pre_step_rearming_across_three_calls():
 # ---------------------------------------------------------------------------
 # 9. on_protocol_end publishes "false" when camera was on
 # ---------------------------------------------------------------------------
+
 
 def test_on_protocol_end_publishes_false_when_camera_was_on():
     """Protocol ends with camera on → publish 'false'; scratch reset to False."""
@@ -235,6 +252,7 @@ def test_on_protocol_end_publishes_false_when_camera_was_on():
 # ---------------------------------------------------------------------------
 # 10. on_protocol_end is a no-op when camera was already off
 # ---------------------------------------------------------------------------
+
 
 def test_on_protocol_end_noop_when_camera_was_off():
     """Protocol ends with camera off → no publish."""
@@ -264,3 +282,46 @@ def test_on_protocol_end_noop_when_scratch_key_absent():
         handler.on_protocol_end(ctx)
 
     mock_pub.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 11. A Capture camera lead is a second reason to want the camera
+# ---------------------------------------------------------------------------
+
+
+def _lead_row(video=False, capture=True, capture_lead_ms=2000):
+    return SimpleNamespace(
+        video=video, capture=capture, capture_lead_ms=capture_lead_ms
+    )
+
+
+def _camera_messages(handler, rows):
+    """Run on_pre_step over rows with one shared scratch; return messages."""
+    ctx = SimpleNamespace(protocol=SimpleNamespace(scratch={}))
+    published = []
+
+    with patch(
+        "video_protocol_controls.protocol_columns.video_column.publish_message",
+        side_effect=lambda **kw: published.append(kw["message"]),
+    ):
+        for row in rows:
+            handler.on_pre_step(row, ctx)
+
+    return published
+
+
+def test_capture_lead_turns_camera_on_once():
+    """Video off, Capture on with a lead → 'true' once, then nothing."""
+    assert _camera_messages(VideoHandler(), [_lead_row(), _lead_row()]) == ["true"]
+
+
+def test_no_camera_without_a_lead_or_without_capture():
+    rows = [_lead_row(capture_lead_ms=0), _lead_row(capture=False)]
+
+    assert _camera_messages(VideoHandler(), rows) == []
+
+
+def test_camera_off_after_lead_step_when_next_step_wants_neither():
+    rows = [_lead_row(), _lead_row(capture=False, capture_lead_ms=0)]
+
+    assert _camera_messages(VideoHandler(), rows) == ["true", "false"]

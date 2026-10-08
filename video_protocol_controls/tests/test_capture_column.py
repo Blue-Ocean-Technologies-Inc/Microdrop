@@ -32,7 +32,6 @@ from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.session import resolve_columns
 from video_protocol_controls.consts import StepTime
 from video_protocol_controls.protocol_columns.capture_column import (
-    CAPTURE_CAMERA_ON_KEY,
     CHOICES,
     CaptureAtComboBoxView,
     CaptureCompoundModel,
@@ -41,7 +40,6 @@ from video_protocol_controls.protocol_columns.capture_column import (
     make_capture_column,
 )
 from video_protocol_controls.protocol_columns.video_column import (
-    VIDEO_CAMERA_ON_KEY,
     VideoHandler,
 )
 
@@ -139,8 +137,8 @@ def test_new_step_defaults_to_step_start_without_overriding_edits():
 
 def test_handler_priority_and_fire_and_forget():
     handler = make_capture_column().handler
-    # One bucket after Video (10) so VideoHandler settles the camera
-    # state before a lead hands it a camera-on.
+    # One bucket after Video (10), so the lead counts from after the
+    # camera-on request.
     assert handler.priority == 11
     assert list(handler.wait_for_topics) == []
 
@@ -362,12 +360,11 @@ def test_zero_lead_publishes_only_capture(monkeypatch):
         handler.on_post_step(row, ctx)
 
         assert ctx.sleeps == []
-        assert CAPTURE_CAMERA_ON_KEY not in ctx.protocol.scratch
 
     assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE] * 2
 
 
-def test_lead_at_step_start_turns_camera_on_then_waits_full_lead(monkeypatch):
+def test_lead_at_step_start_waits_full_lead_without_camera_publish(monkeypatch):
     fired = _patched_fires(monkeypatch)
     _fake_clock(monkeypatch)
     ctx = _ctx()
@@ -375,15 +372,9 @@ def test_lead_at_step_start_turns_camera_on_then_waits_full_lead(monkeypatch):
 
     CaptureHandler().on_pre_step(row, ctx)
 
-    assert [topic for topic, _payload in fired] == [
-        DEVICE_VIEWER_CAMERA_ACTIVE,
-        DEVICE_VIEWER_SCREEN_CAPTURE,
-    ]
-    assert fired[0][1] is True  # "true" json-decoded
+    # The Video column publishes camera state; Capture only waits.
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE]
     assert ctx.sleeps == [1.5]
-    assert ctx.protocol.scratch[CAPTURE_CAMERA_ON_KEY] is True
-    # Video's change-detection key is never written (#845 live bug).
-    assert VIDEO_CAMERA_ON_KEY not in ctx.protocol.scratch
 
 
 def test_lead_at_step_end_waits_only_the_remainder(monkeypatch):
@@ -395,16 +386,13 @@ def test_lead_at_step_end_waits_only_the_remainder(monkeypatch):
 
     handler.on_pre_step(row, ctx)
 
-    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_CAMERA_ACTIVE]
+    assert fired == []
     assert ctx.sleeps == []
 
     advance(0.5)
     handler.on_post_step(row, ctx)
 
-    assert [topic for topic, _payload in fired] == [
-        DEVICE_VIEWER_CAMERA_ACTIVE,
-        DEVICE_VIEWER_SCREEN_CAPTURE,
-    ]
+    assert [topic for topic, _payload in fired] == [DEVICE_VIEWER_SCREEN_CAPTURE]
     assert ctx.sleeps == [1.5]
 
 
@@ -422,7 +410,7 @@ def test_lead_at_step_end_no_wait_when_step_outlasts_lead(monkeypatch):
     assert ctx.sleeps == [0.0]
 
 
-def test_no_camera_or_wait_when_capture_false(monkeypatch):
+def test_no_wait_when_capture_false(monkeypatch):
     fired = _patched_fires(monkeypatch)
     ctx = _ctx()
     row = _row(capture=False, capture_lead_ms=1000)
@@ -434,10 +422,10 @@ def test_no_camera_or_wait_when_capture_false(monkeypatch):
     assert ctx.sleeps == []
 
 
-# --- camera ownership at protocol end ----------------------------------------
+# --- Video + Capture: one camera publisher ------------------------------------
 
 
-def _camera_publishes(monkeypatch):
+def _camera_messages(monkeypatch):
     """Record (source, message) for camera publishes from Video and Capture."""
     published = []
 
@@ -457,53 +445,67 @@ def _camera_publishes(monkeypatch):
     return published
 
 
-def test_protocol_end_switches_off_camera_a_lead_left_on(monkeypatch):
-    published = _camera_publishes(monkeypatch)
-    ctx = SimpleNamespace(scratch={CAPTURE_CAMERA_ON_KEY: True})
-
-    CaptureHandler().on_protocol_end(ctx)
-
-    assert published == [("capture", "false")]
-    assert ctx.scratch[CAPTURE_CAMERA_ON_KEY] is False
-
-
-def test_protocol_end_leaves_camera_to_video_when_video_wants_it(monkeypatch):
-    published = _camera_publishes(monkeypatch)
-    ctx = SimpleNamespace(
-        scratch={CAPTURE_CAMERA_ON_KEY: True, VIDEO_CAMERA_ON_KEY: True}
-    )
-
-    CaptureHandler().on_protocol_end(ctx)
-
-    assert published == []
-
-
-def test_protocol_end_silent_without_a_lead(monkeypatch):
-    published = _camera_publishes(monkeypatch)
-
-    CaptureHandler().on_protocol_end(SimpleNamespace(scratch={}))
-
-    assert published == []
-
-
-def test_video_never_switches_off_a_lead_camera_between_steps(monkeypatch):
-    """Regression (#845 live test): with Video off on every step, the lead's
-    camera-on must not make VideoHandler publish "false" on the next step,
-    which raced the lead's "true" and left the camera off for the lead."""
-    published = _camera_publishes(monkeypatch)
-    _fake_clock(monkeypatch)
+def _run_steps(rows):
+    """Run each row through Video then Capture in executor order (10, 11)."""
     video, capture = VideoHandler(), CaptureHandler()
     ctx = _ctx()
 
-    for uuid in ("u1", "u2"):
-        row = _row(
-            uuid=uuid, capture=True, capture_at=StepTime.END, capture_lead_ms=5000
-        )
-        row.video = False
-
-        # Executor order: Video's bucket (10) before Capture's (11).
+    for row in rows:
         video.on_pre_step(row, ctx)
         capture.on_pre_step(row, ctx)
         capture.on_post_step(row, ctx)
 
-    assert published == [("capture", "true"), ("capture", "true")]
+
+def _lead_step(uuid, video=False, capture=True, capture_lead_ms=5000):
+    row = _row(
+        uuid=uuid,
+        capture=capture,
+        capture_at=StepTime.END,
+        capture_lead_ms=capture_lead_ms,
+    )
+    row.video = video
+
+    return row
+
+
+def test_consecutive_lead_steps_publish_one_camera_on(monkeypatch):
+    """Regression (#845 live test): a lead's camera-on must never be
+    followed by a "false" on the next lead step."""
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps([_lead_step("u1"), _lead_step("u2")])
+
+    assert published == [("video", "true")]
+
+
+def test_video_then_lead_step_keeps_camera_on(monkeypatch):
+    """Live failure: Video on (no lead), then Video off with a lead. The
+    old two-publisher design sent "false" then "true" on one step, and
+    concurrent delivery left the camera off for the whole lead."""
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps(
+        [
+            _lead_step("a", video=True, capture=False, capture_lead_ms=0),
+            _lead_step("b"),
+        ]
+    )
+
+    assert published == [("video", "true")]
+
+
+def test_camera_off_once_a_step_wants_neither(monkeypatch):
+    published = _camera_messages(monkeypatch)
+    _fake_clock(monkeypatch)
+
+    _run_steps(
+        [
+            _lead_step("a", video=True, capture=False, capture_lead_ms=0),
+            _lead_step("b"),
+            _lead_step("c", capture=False, capture_lead_ms=0),
+        ]
+    )
+
+    assert published == [("video", "true"), ("video", "false")]
