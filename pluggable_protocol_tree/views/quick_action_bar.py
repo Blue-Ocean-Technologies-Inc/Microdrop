@@ -16,17 +16,23 @@ The QuickActionsController (separate unit) drives click routing,
 per-action enabled state, and keyboard-shortcut wiring.
 """
 
+# Standard library imports.
 from typing import Dict, List
 
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import QHBoxLayout, QToolButton, QWidget
 
-from logger.logger_service import get_logger
-from microdrop_style.button_styles import ICON_FONT_FAMILY
-
+# Microdrop package imports.
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
 from pluggable_protocol_tree.models.quick_action import QuickActionCtx
+
+# Microdrop style imports.
+from microdrop_style.button_styles import ICON_FONT_FAMILY
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,8 +43,7 @@ class QuickActionBar(QWidget):
     def __init__(self, actions: List[IQuickAction], parent: QWidget = None):
         super().__init__(parent)
         self.buttons: Dict[str, QToolButton] = {}
-        sorted_actions = sorted(actions,
-                                key=lambda a: (a.priority, a.action_id))
+        sorted_actions = sorted(actions, key=lambda a: (a.priority, a.action_id))
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         icon_font = QFont(ICON_FONT_FAMILY)
@@ -47,7 +52,8 @@ class QuickActionBar(QWidget):
             if action.action_id in self.buttons:
                 logger.warning(
                     f"quick-action duplicate action_id {action.action_id!r}: "
-                    f"keeping first contribution; skipping subsequent entry.")
+                    f"keeping first contribution; skipping subsequent entry."
+                )
                 continue
             btn = QToolButton()
             btn.setText(action.icon_text)
@@ -107,9 +113,9 @@ class QuickActionsController:
 
     def _build_ctx(self) -> QuickActionCtx:
         sel = tuple(tuple(p) for p in (self._pane.manager.selection or []))
-        return QuickActionCtx(dock_pane=self._dock_pane,
-                              selected_paths=sel,
-                              is_running=self._is_running)
+        return QuickActionCtx(
+            dock_pane=self._dock_pane, selected_paths=sel, is_running=self._is_running
+        )
 
     def _on_running_changed(self, running: bool) -> None:
         self._is_running = bool(running)
@@ -126,10 +132,11 @@ class QuickActionsController:
             _seen.add(action.action_id)
             try:
                 enabled = bool(action.is_enabled(ctx)) and not ctx.is_running
-            except Exception as e:                # pragma: no cover - defensive
+            except Exception as e:  # pragma: no cover - defensive
                 logger.warning(
                     f"is_enabled failed for {action.action_id!r}: {e}; "
-                    f"disabling button.")
+                    f"disabling button."
+                )
                 enabled = False
             self._bar.buttons[action.action_id].setEnabled(enabled)
 
@@ -144,10 +151,11 @@ class QuickActionsController:
             action.on_execute_action(ctx)
         except Exception as e:
             logger.error(
-                f"quick-action {action.action_id!r} raised: {e}", exc_info=True)
+                f"quick-action {action.action_id!r} raised: {e}", exc_info=True
+            )
 
     def _wire_shortcuts(self) -> None:
-        claimed = {}                              # shortcut str -> action_id
+        claimed = {}  # shortcut str -> action_id
         for action in self._actions:
             if action.action_id not in self._bar.buttons:
                 continue
@@ -159,7 +167,8 @@ class QuickActionsController:
                 logger.warning(
                     f"quick-action shortcut conflict on {key_str!r}: "
                     f"{existing!r} already registered; skipping "
-                    f"{action.action_id!r}.")
+                    f"{action.action_id!r}."
+                )
                 continue
             claimed[key_str] = action.action_id
             qs = QShortcut(QKeySequence(key_str), self._pane)
