@@ -254,6 +254,39 @@ ZOOM_SENSITIVITY = 5
 # device view margin when auto fit
 AUTO_FIT_MARGIN_SCALE = 95
 
+# The device viewer's preferences node (DeviceViewerPreferences).
+PREFERENCES_PATH = "microdrop.device_viewer"
+
+# ---------------------------------------------------------------------------
+# Gamepad support moved to gamepad-microdrop-plugin (#783). On start the
+# device viewer moves the gamepad_* keys its node used to hold onto the
+# plugin's node, once. The path is a literal: the plugin lives in its own
+# repo and core never imports it (it must equal the plugin's
+# gamepad_controls.consts.PREFERENCES_PATH).
+# ---------------------------------------------------------------------------
+GAMEPAD_PLUGIN_PREFERENCES_PATH = "microdrop.gamepad_controls"
+
+# Copied verbatim; the plugin keeps the key names.
+GAMEPAD_MOVED_PREFERENCE_KEYS = (
+    "gamepad_btn_clear",
+    "gamepad_btn_find",
+    "gamepad_btn_split",
+    "gamepad_btn_add",
+    "gamepad_btn_remove",
+    "gamepad_btn_realtime",
+    "gamepad_debounce_move_split",
+    "gamepad_debounce_add_remove",
+    "gamepad_debounce_find",
+    "gamepad_debounce_realtime",
+    "gamepad_axis_threshold",
+)
+
+# Removed without a copy: loading the plugin's group now turns it on.
+GAMEPAD_DROPPED_PREFERENCE_KEYS = ("gamepad_enabled",)
+
+# Set on this plugin's node once the move has run.
+GAMEPAD_PREFERENCES_MOVED_KEY = "gamepad_preferences_moved"
+
 # Sidecar written next to every recording by NativeVideoRecorder: the video
 # item's alignment geometry, letting viewers reproduce the device-aligned
 # (perspective-warped) view of the raw camera file on demand.

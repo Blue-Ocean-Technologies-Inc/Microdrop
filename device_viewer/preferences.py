@@ -70,11 +70,16 @@ from .consts import (
     ALPHA_VIEW_MIN_HEIGHT,
     AUTO_FIT_MARGIN_SCALE,
     DEVICE_VIEWER_SIDEBAR_WIDTH,
+    GAMEPAD_DROPPED_PREFERENCE_KEYS,
+    GAMEPAD_MOVED_PREFERENCE_KEYS,
+    GAMEPAD_PLUGIN_PREFERENCES_PATH,
+    GAMEPAD_PREFERENCES_MOVED_KEY,
     LAYERS_VIEW_MIN_HEIGHT,
     MASTER_SVG_FILE,
     MAX_SLUG_WIDTH,
     NUMBER_OF_CHANNELS,
     PIN_MAP_SVG_FILE,
+    PREFERENCES_PATH,
     ZONES_VIEW_MIN_HEIGHT,
     ZOOM_SENSITIVITY,
 )
@@ -94,7 +99,7 @@ class DeviceViewerPreferences(PreferencesHelper):
     #### 'PreferencesHelper' interface ########################################
 
     # The path to the preference node that contains the preferences.
-    preferences_path = "microdrop.device_viewer"
+    preferences_path = PREFERENCES_PATH
 
     #### Preferences ##########################################################
     ### Side bar prefs ###
@@ -258,6 +263,48 @@ class DeviceViewerPreferences(PreferencesHelper):
 
     def _get__zoom_scale(self) -> float:
         return 1 + (self.ZOOM_SENSITIVITY / 100)
+
+
+def migrate_gamepad_preferences(preferences):
+    """Move the gamepad settings to the gamepad plugin's node, once (#783).
+
+    A key the plugin node already holds is kept, so nothing set there is
+    overwritten; ``gamepad_enabled`` is dropped, since loading the plugin's
+    group is now what turns the gamepad on. The marker stops a later run
+    from moving keys an older Microdrop wrote back.
+    """
+    marker = f"{PREFERENCES_PATH}.{GAMEPAD_PREFERENCES_MOVED_KEY}"
+
+    if preferences.get(marker) is not None:
+        return
+
+    stored = {}
+
+    for key in GAMEPAD_MOVED_PREFERENCE_KEYS + GAMEPAD_DROPPED_PREFERENCE_KEYS:
+        value = preferences.get(f"{PREFERENCES_PATH}.{key}")
+
+        if value is not None:
+            stored[key] = value
+
+    for key in GAMEPAD_MOVED_PREFERENCE_KEYS:
+        target = f"{GAMEPAD_PLUGIN_PREFERENCES_PATH}.{key}"
+
+        if key in stored and preferences.get(target) is None:
+            preferences.set(target, stored[key])
+
+    for key in stored:
+        preferences.remove(f"{PREFERENCES_PATH}.{key}")
+
+    preferences.set(marker, True)
+
+    # A fresh install changed nothing worth an immediate write; the marker
+    # is saved with the rest on exit.
+    if stored:
+        preferences.flush()
+        logger.info(
+            f"Moved gamepad preferences to {GAMEPAD_PLUGIN_PREFERENCES_PATH}: "
+            f"{', '.join(sorted(stored))}"
+        )
 
 
 device_viewer_tab = PreferencesCategory(

@@ -89,8 +89,13 @@ class DeviceViewerPlugin(Plugin):
     )
 
     def start(self):
-        """Follow layer contributions that change while the app runs."""
+        """Move legacy gamepad settings, then follow layer contributions."""
         super().start()
+
+        # Before any pane, or the gamepad plugin's layer, reads a node.
+        from .preferences import migrate_gamepad_preferences
+
+        migrate_gamepad_preferences(self.application.preferences)
 
         # Opt-in, and only possible once attached to the application: the
         # ``_items`` handler below fires only after this connects it.
