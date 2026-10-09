@@ -1,3 +1,27 @@
+## [v1.30.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.30.0) (2026-10-09)
+
+### Feat
+
+- **device-viewer**: move gamepad preferences to the plugin ([`8f7beae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f7beae712434ae36fecc946e9fcf702c0b2e573))
+- **device-viewer**: warn on a layer contract mismatch ([`f6849b5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f6849b54ae2b0b24a9045ea43e96439a22a3208f))
+- **device-viewer**: add the IElectrodeStepping contract ([`b33d880`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b33d880f3b8ee7b6f3d9ceb0d073e91a1e520e5d))
+
+### Fix
+
+- **device-viewer**: keep app start alive if the gamepad move can't save ([`bfa5329`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bfa5329c5769fe93cd8e2cb6086f1ec7be819a8e))
+- **message-router**: sweep listener queues of crashed sessions ([`517d5f6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/517d5f66328ceb142c58bc69594b293be8e5bcd3))
+- **broker**: tie spawned redis-server to the app's lifetime ([`91003be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91003be3385c4557bf14bad9001926745572ddad))
+- **image-viewer**: correct win tooltip and scale docstring ([`41dec03`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/41dec031233df012b895a3701b5110d3e79456b6))
+
+### Refactor
+
+- **device-viewer**: move gamepad support to its plugin ([`e92682f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e92682f1b8d97aca53b39641d2f3b61160624956))
+
+### Style
+
+- **device-viewer**: separate the status-bar early return ([`e5c96bd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5c96bd7c40021daaa21dffedda01ed4fce6f3ee))
+- **utils**: ruff-clean dramatiq_pub_sub_helpers ([`4297946`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4297946167f4dacca83d811bd3eb54a37f52dcc6))
+
 ## [v1.29.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.29.0) (2026-10-08)
 
 ### Feat
