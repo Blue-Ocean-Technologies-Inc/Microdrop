@@ -24,6 +24,9 @@ from device_viewer.interfaces.descriptors import SidebarSection as SidebarSectio
 from device_viewer.interfaces.i_device_viewer_layer import (
     IDeviceViewerLayer as IDeviceViewerLayer,
 )
+from device_viewer.interfaces.i_electrode_stepping import (
+    IElectrodeStepping as IElectrodeStepping,
+)
 from device_viewer.interfaces.i_interaction_handler import (
     IInteractionHandler as IInteractionHandler,
 )
@@ -114,15 +117,6 @@ PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"
 # device_viewer/models/step_params_commit.py.
 STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 
-# Live gamepad button-capture (remap) request: payload is the action name being
-# rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
-# the device-viewer listener to the live interaction service. Dispatches to
-# _on_gamepad_capture_request_triggered (topic.split("/")[-1] == unique segment).
-GAMEPAD_CAPTURE_REQUEST = "ui/device_viewer/gamepad_capture_request"
-# Manual gamepad reconnect request (payload unused). Lets the user re-attempt
-# controller acquisition from the UI after an unplug/replug. Dispatches to
-# _on_gamepad_reconnect_request_triggered.
-GAMEPAD_RECONNECT_REQUEST = "ui/device_viewer/gamepad_reconnect_request"
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
@@ -165,8 +159,6 @@ ACTOR_TOPIC_DICT = {
         DISABLED_CHANNELS_CHANGED,
         HALTED,
         PROTOCOL_TREE_DISPLAY_STATE,
-        GAMEPAD_CAPTURE_REQUEST,
-        GAMEPAD_RECONNECT_REQUEST,
         DEVICE_VIEWER_LOAD_SVG_REQUEST,
         PHASE_NAVIGATION_MODE,
         PHASE_NAVIGATION_REQUEST,
@@ -262,30 +254,38 @@ ZOOM_SENSITIVITY = 5
 # device view margin when auto fit
 AUTO_FIT_MARGIN_SCALE = 95
 
-# ---------------------------------------------------------------------------
-# Gamepad defaults (configurable in Device Viewer preferences). Env vars of the
-# form MICRODROP_GAMEPAD_* still override the stored preference at runtime.
-# Button indices are for the common NES/SNES-style USB pad:
-#   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
-# ---------------------------------------------------------------------------
-GAMEPAD_BTN_CLEAR = 1  # A      -> clear all electrodes
-GAMEPAD_BTN_FIND = 8  # Select -> find liquid
-GAMEPAD_BTN_SPLIT = 2  # B hold -> split
-GAMEPAD_BTN_ADD = 3  # Y hold -> add electrode
-GAMEPAD_BTN_REMOVE = 0  # X hold -> remove electrode
-GAMEPAD_BTN_REALTIME = 9  # Start  -> toggle realtime mode
+# The device viewer's preferences node (DeviceViewerPreferences).
+PREFERENCES_PATH = "microdrop.device_viewer"
 
-GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7  # D-pad move / split step debounce
-GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3  # D-pad add / remove debounce
-GAMEPAD_DEBOUNCE_FIND_S = 2.0  # find-liquid button debounce
-GAMEPAD_DEBOUNCE_REALTIME_S = 0.4  # realtime-toggle button debounce
-GAMEPAD_AXIS_THRESHOLD = 0.6  # analog-stick-as-D-pad activation threshold
+# ---------------------------------------------------------------------------
+# Gamepad support moved to gamepad-microdrop-plugin (#783). On start the
+# device viewer moves the gamepad_* keys its node used to hold onto the
+# plugin's node, once. The path is a literal: the plugin lives in its own
+# repo and core never imports it (it must equal the plugin's
+# gamepad_controls.consts.PREFERENCES_PATH).
+# ---------------------------------------------------------------------------
+GAMEPAD_PLUGIN_PREFERENCES_PATH = "microdrop.gamepad_controls"
 
-# Poll cadence: ~100 Hz only while a controller is attached; with none,
-# a slow tick suffices to catch JOYDEVICEADDED hot-plug events instead
-# of waking the GUI thread 100x a second for nothing.
-GAMEPAD_POLL_INTERVAL_MS = 10
-GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
+# Copied verbatim; the plugin keeps the key names.
+GAMEPAD_MOVED_PREFERENCE_KEYS = (
+    "gamepad_btn_clear",
+    "gamepad_btn_find",
+    "gamepad_btn_split",
+    "gamepad_btn_add",
+    "gamepad_btn_remove",
+    "gamepad_btn_realtime",
+    "gamepad_debounce_move_split",
+    "gamepad_debounce_add_remove",
+    "gamepad_debounce_find",
+    "gamepad_debounce_realtime",
+    "gamepad_axis_threshold",
+)
+
+# Removed without a copy: loading the plugin's group now turns it on.
+GAMEPAD_DROPPED_PREFERENCE_KEYS = ("gamepad_enabled",)
+
+# Set on this plugin's node once the move has run.
+GAMEPAD_PREFERENCES_MOVED_KEY = "gamepad_preferences_moved"
 
 # Sidecar written next to every recording by NativeVideoRecorder: the video
 # item's alignment geometry, letting viewers reproduce the device-aligned
@@ -472,9 +472,13 @@ CAMERA_SOURCES = "device_viewer.camera_sources"
 DEVICE_VIEWER_LAYERS = "device_viewer.layers"
 
 # Version of the layer contract re-exported above. Layer plugins shipped
-# from other repos pin against it: the major part changes only for a
-# breaking change, after a deprecation period; additions bump the minor.
-LAYER_CONTRACT_VERSION = "0.1.0"
+# from other repos declare the one they were built against
+# (``contract_version``); the base logs a warning and mounts them anyway
+# when it differs. The major part changes only for a breaking change, after
+# a deprecation period; additions bump the minor.
+# 0.2.0: IElectrodeStepping types LayerContext.stepping; layers declare
+# contract_version (#783).
+LAYER_CONTRACT_VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Electrode zones (#596): named, colored electrode regions drawn on the

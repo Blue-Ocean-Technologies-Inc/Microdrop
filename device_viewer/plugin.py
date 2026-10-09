@@ -63,7 +63,7 @@ class DeviceViewerPlugin(Plugin):
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     #: Status-bar widgets contributed at runtime: the device-viewer dock
-    #: pane extends this list (joystick + recording icons); the
+    #: pane extends this list (the recording icon); the
     #: microdrop_status_bar plugin places, spaces, and removes them.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
@@ -89,8 +89,13 @@ class DeviceViewerPlugin(Plugin):
     )
 
     def start(self):
-        """Follow layer contributions that change while the app runs."""
+        """Move legacy gamepad settings, then follow layer contributions."""
         super().start()
+
+        # Before any pane, or the gamepad plugin's layer, reads a node.
+        from .preferences import migrate_gamepad_preferences
+
+        migrate_gamepad_preferences(self.application.preferences)
 
         # Opt-in, and only possible once attached to the application: the
         # ``_items`` handler below fires only after this connects it.

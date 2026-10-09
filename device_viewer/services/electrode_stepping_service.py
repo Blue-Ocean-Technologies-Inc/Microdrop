@@ -9,19 +9,21 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import HasTraits, Instance, Str
+from traits.api import HasTraits, Instance, Str, provides
 
 # Microdrop package imports.
+from device_viewer.interfaces.i_electrode_stepping import IElectrodeStepping
 from device_viewer.models.main_model import DeviceViewMainModel
 
 
+@provides(IElectrodeStepping)
 class ElectrodeSteppingService(HasTraits):
     """Move, grow, shrink, and split the actuated electrodes by direction.
 
-    Qt-free: the keyboard arrows and the gamepad D-pad both drive it, and it
-    only reads and writes the shared device-view model. One instance is
-    shared per loaded device so the split session and the electrode cursor
-    are the same whichever input moved them last.
+    Qt-free: the keyboard arrows and layers such as the gamepad plugin's
+    drive it, and it only reads and writes the shared device-view model.
+    One instance is shared per loaded device so the split session and the
+    electrode cursor are the same whichever input moved them last.
     """
 
     #: Device view Model
