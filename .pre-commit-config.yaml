@@ -58,3 +58,13 @@ repos:
         language: python
         types: [python]
         pass_filenames: false
+      - id: file-length-ratchet
+        name: file-length-ratchet (god files may not grow, #615)
+        # Staged-files-only, unlike the two whole-repo checks above: growth
+        # is only detectable by comparing each staged file against its own
+        # baseline entry in tools/file_length_baseline.json. Warning-only
+        # for one release (see check_file_length_ratchet.py); flip to
+        # blocking once the team has seen a cycle of its messages.
+        entry: python tools/check_file_length_ratchet.py
+        language: python
+        types: [python]
