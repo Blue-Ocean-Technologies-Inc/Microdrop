@@ -8,17 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
-"""DockPaneAction factories for the pluggable protocol tree's
-``&Protocol`` file menu (New / Load / Import Legacy / Save / Save As).
+"""DockPaneAction factories for the pluggable protocol tree's File
+submenus: ``&Experiments`` (New Experiment) and ``&Protocol`` (New / Load /
+Import Legacy / Save / Save As).
 
 Each action targets a method on ``PluggableProtocolDockPane`` which
 delegates to the hosted ``ProtocolTreePane``.
 """
 
-from pyface.tasks.action.api import DockPaneAction, SMenu
+# Enthought library imports.
+from pyface.tasks.action.api import DockPaneAction, SGroup, SMenu
 
-from pluggable_protocol_tree.consts import PKG
-
+# Microdrop package imports.
+from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID, PKG
 
 _DOCK_PANE_ID = f"{PKG}.dock_pane"
 
@@ -38,6 +40,16 @@ def new_experiment_factory():
         dock_pane_id=_DOCK_PANE_ID,
         name="New &Experiment",
         method="setup_new_experiment",
+    )
+
+
+def experiments_menu_factory():
+    # A group of its own keeps New Experiment above the actions other
+    # plugins add; a bare action would sink into the trailing default group.
+    return SMenu(
+        SGroup(new_experiment_factory()),
+        id=EXPERIMENTS_MENU_ID,
+        name="&Experiments",
     )
 
 
