@@ -27,6 +27,13 @@ ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
+# File-menu skeleton: the shell fixes the section order, plugins contribute
+# into a section via SchemaAddition(path=f"MenuBar/File/{<group id>}").
+FILE_MENU_EXPERIMENTS_GROUP_ID = "ExperimentsGroup"
+FILE_MENU_PROTOCOL_GROUP_ID = "ProtocolGroup"
+FILE_MENU_DEVICE_GROUP_ID = "DeviceGroup"
+FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
+
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"

@@ -22,6 +22,7 @@ from traits.api import Callable, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import FILE_MENU_DEVICE_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
@@ -170,8 +171,7 @@ class DeviceViewerPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
-                        path="MenuBar/File",
-                        before="Exit",
+                        path=f"MenuBar/File/{FILE_MENU_DEVICE_GROUP_ID}",
                     ),
                 ],
             )
