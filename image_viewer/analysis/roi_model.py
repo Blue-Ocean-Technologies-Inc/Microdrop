@@ -209,6 +209,9 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+    #: Plot expected against actual instead of actual against expected,
+    #: so the trend reads expected = slope × actual + intercept.
+    flip_actual_expected = Bool(False)
 
     #: What the curves are plotted against: elapsed capture time, or
     #: the heater log's temperature at each capture. The swap happens

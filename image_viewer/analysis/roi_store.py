@@ -70,6 +70,7 @@ _FIGURE_FIELDS = (
     "second_derivative_hline",
     "second_derivative_coords",
     "view_mode",
+    "flip_actual_expected",
     "log_x",
     "log_y",
     "normalize",

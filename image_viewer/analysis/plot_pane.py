@@ -670,6 +670,13 @@ def _expected_tab():
                     tooltip="Reset every expected value to its actual",
                 ),
             ),
+            _toggle(
+                "figure.flip_actual_expected",
+                "Flip axes",
+                enabled_when="figure.view_mode == 'actual_vs_expected'",
+                tooltip="Swap the axes: expected on y against actual on x, "
+                "so the trend gives expected from actual",
+            ),
         ),
         UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),
         label="Expected",
@@ -728,6 +735,7 @@ _PLOT_STATE = (
     "session:figure:second_derivative_hline, "
     "session:figure:second_derivative_coords, "
     "session:figure:view_mode, "
+    "session:figure:flip_actual_expected, "
     "session:figure:log_x, session:figure:log_y, "
     "session:figure:normalize, "
     "session:figure:subtract_first, "
@@ -1330,10 +1338,15 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """Point per ROI: its fastest-change x value against the one the
         user expects (the Expected tab; unset reads as the actual),
         over the identity line, with a fitted trend line whose slope
-        and intercept go in the corner."""
+        and intercept go in the corner. Flipped, expected goes on y, so
+        the trend gives expected from actual."""
         quantity, unit = x_quantity(figure_settings)
         measured = f"{quantity.lower()} of fastest change ({unit})"
-        x_name, y_name = "expected", "actual"
+        x_name, y_name = (
+            ("actual", "expected")
+            if figure_settings.flip_actual_expected
+            else ("expected", "actual")
+        )
 
         self._axes.set_xlabel(f"{x_name.capitalize()} {measured}")
         self._axes.set_ylabel(f"{y_name.capitalize()} {measured}")

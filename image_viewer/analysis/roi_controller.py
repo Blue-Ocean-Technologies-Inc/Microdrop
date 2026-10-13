@@ -750,6 +750,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:second_derivative_hline, "
         "analysis_model:session:figure:second_derivative_coords, "
         "analysis_model:session:figure:view_mode, "
+        "analysis_model:session:figure:flip_actual_expected, "
         "analysis_model:session:figure:log_x, "
         "analysis_model:session:figure:log_y, "
         "analysis_model:session:figure:normalize, "
