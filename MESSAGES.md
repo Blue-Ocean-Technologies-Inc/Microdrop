@@ -140,6 +140,7 @@ The device viewer pushes its full UI state (routes, free-mode electrode state, c
 
 **Subscriber side (protocol_grid)**
 - `protocol_grid/services/message_listener.py:52-54` — `_on_device_viewer_message_received()` handles the topic, deserializes, and re-emits a Qt signal `device_viewer_message_received` for UI consumption.
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_dv_state` writes a step-scoped message's electrodes/routes back to the step; when that step is the current row of a multi-selection, the columns it changed are written to every selected step (`write_back_targets`, groups expanded one level), and an unchanged echo writes nothing.
 
 ### Device Viewer → protocol widgets: step execution params commit
 
@@ -164,6 +165,7 @@ live route sync so step cells only mutate on deliberate user action.
 
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_step_params_commit_qt` finds the row by uuid and writes the mapped columns (`repetitions` → `route_repetitions`, `soft_terminate` → `soft_end`, rest 1:1), firing `cell_changed` per column for dirty tracking. Of the Route Reps / Route Reps Dur pair only the row's controlling knob (per `repeat_duration_controls`) is written — the pane reconciliation derives the other. It then re-publishes `PROTOCOL_TREE_DISPLAY_STATE` for the selected row so the DV rebaselines on the post-reconciliation values.
+- Multi-selection: when the committed step is the current row of a multi-selection, the params the commit changed are written to every selected step (`write_back_targets`), still with one display publish at the end.
 
 **Companion addition (pull direction)**
 - The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
