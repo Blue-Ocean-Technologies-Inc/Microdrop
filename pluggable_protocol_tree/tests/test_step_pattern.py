@@ -20,6 +20,7 @@ from pyface.qt.QtCore import Qt
 
 # Microdrop package imports.
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
+from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
 from pluggable_protocol_tree.builtins.name_column import make_name_column
 from pluggable_protocol_tree.builtins.repetitions_column import (
@@ -42,7 +43,9 @@ from pluggable_protocol_tree.services.step_pattern import (
     discover_pattern_fields,
     fit_increment,
     fit_ramp_values,
+    format_channel_entries,
     insert_pattern_steps,
+    parse_channel_entries,
     parse_values,
     ramp_values,
     selected_steps_in_order,
@@ -349,3 +352,176 @@ def test_fit_mode_ignores_group_option(manager):
 
     assert len(manager.root.children) == 3
     assert [manager.get_row(p).duration_s for p in paths] == [1.0, 2.0, 3.0]
+
+
+# --- electrodes filled by channel ---
+
+#: Channel 1 drives two electrodes; channel 3 one.
+_ELECTRODE_CHANNELS = {"e1a": 1, "e1b": 1, "e2": 2, "e3": 3}
+
+
+@pytest.fixture
+def electrodes_manager():
+    return RowManager(
+        columns=[
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_duration_column(),
+            make_electrodes_column(),
+        ]
+    )
+
+
+def _channels_model(**traits):
+    fields = [
+        PatternField(col_id="temp", label="Temp (°C)", low=20, high=120),
+        PatternField(
+            col_id="electrodes", label="Electrodes (channels)", is_channels=True
+        ),
+    ]
+    traits.setdefault("electrode_channels", _ELECTRODE_CHANNELS)
+
+    return StepPatternModel(
+        fields=fields, field_label="Electrodes (channels)", **traits
+    )
+
+
+def test_parse_channel_entries_splits_entries_and_channels():
+    assert parse_channel_entries("1 2 3; 4, 5, 6\n7") == [[1, 2, 3], [4, 5, 6], [7]]
+
+
+def test_parse_channel_entries_sorts_dedupes_and_keeps_empty_entries():
+    assert parse_channel_entries("3 1 3;; 2;") == [[1, 3], [], [2], []]
+    assert parse_channel_entries("   ") == []
+
+
+def test_parse_channel_entries_names_bad_token():
+    with pytest.raises(ValueError, match="'x' is not a channel number."):
+        parse_channel_entries("1 2; x")
+
+    with pytest.raises(ValueError, match="'-1'"):
+        parse_channel_entries("-1")
+
+
+def test_format_channel_entries_round_trips():
+    entries = [[1, 2, 3], [], [7]]
+    text = format_channel_entries(entries)
+
+    assert text == "1 2 3; ; 7"
+    assert parse_channel_entries(text) == entries
+    assert format_channel_entries(entries, " | ", "none") == "1 2 3 | none | 7"
+
+
+def test_discovers_electrodes_field_by_channel(electrodes_manager):
+    fields = _fields_by_id(electrodes_manager)
+
+    assert set(fields) == {"duration_s", "electrodes"}
+    assert fields["electrodes"].is_channels
+    assert fields["electrodes"].label == "Electrodes (channels)"
+    assert not fields["duration_s"].is_channels
+
+
+def test_channel_field_offers_alternate_only():
+    model = _channels_model(alternate_text="1")
+
+    assert model.modes == [STEP_PATTERN_ALTERNATE]
+    assert model.mode == STEP_PATTERN_ALTERNATE
+
+    model.field_label = "Temp (°C)"
+
+    assert model.modes == [STEP_PATTERN_RAMP, STEP_PATTERN_ALTERNATE]
+
+
+def test_channel_model_resolves_every_electrode_of_a_channel():
+    model = _channels_model(alternate_text="1 2; 3", create_count=3)
+
+    assert model.is_valid
+    assert model.values == [["e1a", "e1b", "e2"], ["e3"], ["e1a", "e1b", "e2"]]
+    assert model.summary == "Will create 3 steps, cycling channels 1 2 | 3."
+
+
+def test_channel_model_allows_empty_entry():
+    model = _channels_model(alternate_text="1;", create_count=2)
+
+    assert model.values == [["e1a", "e1b"], []]
+    assert "cycling channels 1 | none" in model.summary
+
+
+def test_channel_model_refuses_unknown_channel():
+    model = _channels_model(alternate_text="1; 9")
+
+    assert not model.is_valid
+    assert model.summary == "Channel 9 is not on the loaded device."
+
+
+def test_channel_model_refuses_without_device():
+    model = _channels_model(alternate_text="1", electrode_channels={})
+
+    assert not model.is_valid
+    assert model.summary == "No device loaded; channel numbers cannot be resolved."
+
+
+def test_channel_model_prefills_channels_from_current_steps():
+    model = _channels_model(
+        current_values={
+            "electrodes": [["e1b", "e1a"], ["e3"], ["e1a"], [], ["e3"]],
+        },
+        fit_count=5,
+    )
+
+    assert model.alternate_text == "1; 3; "
+    assert model.values == [
+        ["e1a", "e1b"],
+        ["e3"],
+        [],
+        ["e1a", "e1b"],
+        ["e3"],
+    ]
+    assert model.summary.startswith("Will set 5 selected steps, cycling channels")
+
+
+def test_channel_model_default_group_name():
+    model = _channels_model(alternate_text="1", create_in_group=True)
+
+    assert model.group_name == "Electrodes pattern"
+
+
+def test_fit_writes_electrode_lists(electrodes_manager):
+    paths = [electrodes_manager.add_step() for _ in range(3)]
+    field = _fields_by_id(electrodes_manager)["electrodes"]
+
+    apply_pattern_to_steps(
+        electrodes_manager, paths, field, [["e1a", "e1b"], ["e3"], ["e1a", "e1b"]]
+    )
+
+    rows = [electrodes_manager.get_row(p) for p in paths]
+    assert [list(row.electrodes) for row in rows] == [
+        ["e1a", "e1b"],
+        ["e3"],
+        ["e1a", "e1b"],
+    ]
+    assert rows[0].electrodes is not rows[2].electrodes
+
+
+def test_create_gives_each_step_its_own_electrode_list(electrodes_manager):
+    anchor = electrodes_manager.add_step(values={"electrodes": ["e2"]})
+    field = _fields_by_id(electrodes_manager)["electrodes"]
+    pattern = ["e1a", "e1b"]
+
+    new_paths = insert_pattern_steps(
+        electrodes_manager, anchor, field, [pattern, ["e3"], pattern]
+    )
+
+    rows = [electrodes_manager.get_row(p) for p in new_paths]
+    assert [list(row.electrodes) for row in rows] == [
+        ["e1a", "e1b"],
+        ["e3"],
+        ["e1a", "e1b"],
+    ]
+    assert rows[0].electrodes is not rows[2].electrodes
+
+    rows[0].electrodes.append("e2")
+
+    assert list(rows[2].electrodes) == ["e1a", "e1b"]
+    assert pattern == ["e1a", "e1b"]

@@ -19,7 +19,10 @@ Three concerns, all independent of any widget:
   checkboxes are ticked (the heater's Set Temp, the magnet's Set Magnet)
   records those siblings as *enablers*, found by probing the view's own
   cross-cell ``get_flags(row)`` rule — no column is special-cased.
-* **Value generation** — ramps, fitted ramps, and alternating cycles.
+  The step's actuated electrodes are the one non-numeric field: they are
+  filled by channel number, alternating only.
+* **Value generation** — ramps, fitted ramps, and alternating cycles; for
+  the electrodes field, channel entries resolved to electrode ids.
 * **Applying** — writes through ``RowManager.set_values`` (the Bulk Set
   path: column handlers, lock checks, ``cell_changed``) and inserts new
   steps through ``RowManager.add_step`` seeded with a copy of the anchor
@@ -44,7 +47,7 @@ from traits.api import (
 from traits.api import List as ListTrait
 
 # Microdrop package imports.
-from pluggable_protocol_tree.consts import STEP_PATTERN_RAMP
+from pluggable_protocol_tree.consts import ELECTRODES_COL_ID, STEP_PATTERN_RAMP
 from pluggable_protocol_tree.models.row import GroupRow
 
 #: Trailing '(unit)' / '[col_id]' groups stripped from a default group name.
@@ -56,9 +59,12 @@ _RAMP_EPSILON = 1e-9
 #: Decimal places kept on generated float values, so 0.1 + 0.2 lands on 0.3.
 _VALUE_DECIMALS = 10
 
+#: Separators between channel entries (one entry per step) in pattern text.
+_CHANNEL_ENTRY_SEPARATORS = re.compile(r"[;\n]")
+
 
 class PatternField(HasTraits):
-    """One numeric step cell a pattern can target."""
+    """One step cell a pattern can target — numeric, or the electrodes."""
 
     #: Row attribute / cell col_id the pattern writes.
     col_id = Str()
@@ -78,6 +84,10 @@ class PatternField(HasTraits):
 
     #: Grid labels of ``enabler_ids``, for the dialog summary.
     enabler_labels = ListTrait(Str)
+
+    #: True for the electrodes column: values are electrode-id lists, typed
+    #: as channel numbers and only ever alternated.
+    is_channels = Bool(False)
 
 
 # --- field discovery ---------------------------------------------------------
@@ -163,7 +173,9 @@ def _required_enablers(column, checkbox_siblings, step_type, is_editable):
 
 
 def discover_pattern_fields(columns, step_type, is_editable):
-    """Return the ``PatternField`` for every numeric, user-editable step cell.
+    """Return the ``PatternField`` for every numeric, user-editable step cell,
+    plus the electrodes column when present (read-only in the grid, which
+    only shows its count, but fillable by channel number here).
 
     Parameters
     ----------
@@ -181,6 +193,17 @@ def discover_pattern_fields(columns, step_type, is_editable):
 
     for column in columns:
         col_id = column.model.col_id
+
+        if col_id == ELECTRODES_COL_ID:
+            label = column.model.col_name or col_id
+            fields.append(
+                PatternField(
+                    col_id=col_id, label=f"{label} (channels)", is_channels=True
+                )
+            )
+
+            continue
+
         numeric = _numeric_bounds(_row_trait_type(step_type, col_id))
 
         if numeric is None:
@@ -301,6 +324,96 @@ def parse_values(text):
     return values
 
 
+def parse_channel_entries(text):
+    """Parse channel entries, one per step: entries are separated by ``;`` or
+    newlines, the channels inside one by commas or spaces — ``1 2 3; 4, 5``.
+
+    Each entry comes back sorted and de-duplicated. An empty entry (``1;;2``,
+    or a trailing ``;``) is a step with no electrodes; blank text has no
+    entries at all. Raises ValueError naming the first non-channel token.
+    """
+    text = text.strip()
+
+    if not text:
+        return []
+
+    entries = []
+
+    for entry_text in _CHANNEL_ENTRY_SEPARATORS.split(text):
+        channels = set()
+
+        for token in entry_text.replace(",", " ").split():
+            if not token.isdigit():
+                raise ValueError(f"'{token}' is not a channel number.")
+
+            channels.add(int(token))
+
+        entries.append(sorted(channels))
+
+    return entries
+
+
+def format_channel_entries(entries, separator="; ", empty_label=""):
+    """Display ``entries`` as text ``parse_channel_entries`` reads back.
+
+    ``separator`` and ``empty_label`` (shown for an entry with no channels)
+    give a more readable form for summaries, e.g. ``"1 2 | none | 3"``.
+    """
+    return separator.join(
+        " ".join(str(channel) for channel in entry) or empty_label for entry in entries
+    )
+
+
+def channel_electrode_ids(electrode_channels):
+    """Invert an electrode-id -> channel map into {channel: [sorted ids]}.
+
+    One channel may drive several electrodes; selecting it means all of them.
+    """
+    electrode_ids = {}
+
+    for electrode_id, channel in electrode_channels.items():
+        electrode_ids.setdefault(channel, []).append(electrode_id)
+
+    return {channel: sorted(ids) for channel, ids in electrode_ids.items()}
+
+
+def resolve_channel_entries(entries, electrode_ids_by_channel):
+    """The sorted electrode ids of every channel in each entry.
+
+    Raises ValueError when no device is loaded (an empty map) or an entry
+    names a channel the device does not have.
+    """
+    if not electrode_ids_by_channel:
+        raise ValueError("No device loaded; channel numbers cannot be resolved.")
+
+    resolved = []
+
+    for entry in entries:
+        electrode_ids = []
+
+        for channel in entry:
+            if channel not in electrode_ids_by_channel:
+                raise ValueError(f"Channel {channel} is not on the loaded device.")
+
+            electrode_ids.extend(electrode_ids_by_channel[channel])
+
+        resolved.append(sorted(electrode_ids))
+
+    return resolved
+
+
+def electrode_channels_of(electrode_ids, electrode_channels):
+    """The sorted, distinct channels of ``electrode_ids``; ids missing from
+    the map are left out."""
+    return sorted(
+        {
+            electrode_channels[electrode_id]
+            for electrode_id in electrode_ids
+            if electrode_id in electrode_channels
+        }
+    )
+
+
 def coerce_values(values, is_int):
     """Round to whole numbers for Int cells; Float cells keep their decimals."""
     if is_int:
@@ -361,17 +474,19 @@ def apply_pattern_to_steps(manager, paths, field, values):
 
     Enabler checkboxes are ticked first so the pattern is not inert. Steps
     sharing a value are written in one ``set_values`` batch, so a column
-    handler that prompts does so once per distinct value, not per row.
+    handler that prompts does so once per distinct value, not per row. List
+    values (electrode ids) are unhashable, so they are grouped by tuple.
     """
     for enabler_id in field.enabler_ids:
         manager.set_values(paths, enabler_id, True)
 
-    paths_by_value = {}
+    batches = {}
 
     for path, value in zip(paths, values):
-        paths_by_value.setdefault(value, []).append(path)
+        key = tuple(value) if isinstance(value, list) else value
+        batches.setdefault(key, (value, []))[1].append(path)
 
-    for value, value_paths in paths_by_value.items():
+    for value, value_paths in batches.values():
         manager.set_values(value_paths, field.col_id, value)
 
 
@@ -417,6 +532,10 @@ def insert_pattern_steps(manager, anchor_path, field, values, group_name=""):
     new_paths = []
 
     for offset, value in enumerate(values):
+        # A cycled pattern repeats one list object; each step gets its own.
+        if isinstance(value, list):
+            value = list(value)
+
         new_path = manager.add_step(
             parent_path=parent_path,
             index=first_index + offset,
