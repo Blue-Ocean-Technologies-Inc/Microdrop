@@ -1811,7 +1811,13 @@ class _HoverScrollEnumEditor(QtEditor):
     ``format_func`` label never leaks back into the trait.
     """
 
+    #: (object, trait name) the factory's ``values_name`` resolves to.
+    _values_source = Any()
+
     def init(self, parent):
+        if self.factory.values_name:
+            self._values_source = self._resolve_values_source()
+
         self.control = MarqueeComboBox()
 
         self.control.setSizeAdjustPolicy(
@@ -1821,20 +1827,44 @@ class _HoverScrollEnumEditor(QtEditor):
         self.control.currentIndexChanged.connect(self.update_object)
 
         if self.factory.values_name:
-            self.object.observe(self._on_values_changed, self.factory.values_name)
+            source, name = self._values_source
+            source.observe(self._on_values_changed, name)
 
         self._repopulate()
 
     def dispose(self):
         if self.factory.values_name:
-            self.object.observe(
-                self._on_values_changed, self.factory.values_name, remove=True
-            )
+            source, name = self._values_source
+            source.observe(self._on_values_changed, name, remove=True)
 
         super().dispose()
 
+    def _resolve_values_source(self):
+        """The object and trait ``values_name`` names: a bare name lives on
+        the edited object, ``"context.trait"`` on that UI context object."""
+        context_name, _, trait_name = self.factory.values_name.partition(".")
+
+        if trait_name:
+            return self.ui.context[context_name], trait_name
+
+        return self.object, context_name
+
+    def _values(self):
+        """The current choices: the static list, or the named trait's value."""
+        if not self.factory.values_name:
+            return self.factory.values
+
+        source, name = self._values_source
+
+        return getattr(source, name)
+
     def _label(self, value):
         """The display text for a raw choice value."""
+        values = self._values()
+
+        if isinstance(values, dict):
+            return values.get(value, str(value))
+
         format_func = self.factory.format_func
 
         return str(value) if format_func is None else format_func(value)
@@ -1857,16 +1887,10 @@ class _HoverScrollEnumEditor(QtEditor):
         view.setMinimumWidth(label_width + chrome_width + 2 * view.frameWidth())
 
     def _repopulate(self):
-        values = (
-            getattr(self.object, self.factory.values_name)
-            if self.factory.values_name
-            else self.factory.values
-        )
-
         self.control.blockSignals(True)
         self.control.clear()
 
-        for value in values:
+        for value in self._values():
             self.control.addItem(self._label(value), value)
 
         self._select_value()
@@ -1903,17 +1927,19 @@ class _HoverScrollEnumEditor(QtEditor):
 class HoverScrollEnumEditor(BasicEditorFactory):
     """Factory for an Enum combo box that marquee-scrolls overflow text on
     hover. Choices come from the static ``values`` list, or live from the
-    edited object's List trait named by ``values_name`` (repopulated on
-    change)."""
+    trait named by ``values_name`` (repopulated when it is reassigned)."""
 
     klass = Property
 
     values = List(Str)
-    #: Name of a List(Str) trait on the edited object supplying the choices
-    #: dynamically (takes precedence over ``values``).
+    #: Name of a trait supplying the choices dynamically (takes precedence
+    #: over ``values``): a List(Str) of values, or a Dict(Str, Str) mapping
+    #: each value to its label, in display order. A bare name is a trait
+    #: of the edited object, ``"context.trait"`` one of that UI context
+    #: object — as TraitsUI's ``EnumEditor(name=...)`` resolves it.
     values_name = Str()
     #: Maps a raw value to its display text, as in TraitsUI's ``EnumEditor``;
-    #: None shows ``str(value)``.
+    #: None shows ``str(value)``. A Dict of choices carries its own labels.
     format_func = Callable()
 
     def _get_klass(self):
