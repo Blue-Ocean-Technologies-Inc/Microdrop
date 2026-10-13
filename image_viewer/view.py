@@ -830,6 +830,14 @@ experiments_group = VGroup(
             editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next experiment (newer)"),
             enabled_when="experiment_index < max_experiment_number - 1",
         ),
+        "8",
+        UItem(
+            "delete_experiment_button",
+            editor=IconButtonEditor(
+                glyph=ICON_DELETE, tooltip="Delete this experiment's folder from disk"
+            ),
+            enabled_when="experiments",
+        ),
         spring,
     ),
     visible_when="show_experiments",
