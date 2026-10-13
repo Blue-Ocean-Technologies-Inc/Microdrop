@@ -11,8 +11,8 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, that stat
 per ROI on the displayed image (bars) or across the series (violins),
-the fits' first- or second-derivative curves, or the per-ROI
-time-of-fastest-change bars.
+the fits' first- or second-derivative curves, the per-ROI
+time-of-fastest-change bars, or that time against the expected one.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
@@ -92,6 +92,7 @@ from .consts import (
 from .curve_fit import (
     fastest_change_time,
     fit_series,
+    linear_trend,
     second_derivative_extrema,
     trimmed_note,
 )
@@ -953,8 +954,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
                 trim_edges = self._draw_distribution(series, figure_settings)
-            else:
+            elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
+            else:
+                trim_edges = self._draw_actual_vs_expected(series, figure_settings)
 
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
@@ -1322,6 +1325,106 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._draw_roi_bars(entries)
 
         return []  # ROI names on x: no time span to shade
+
+    def _draw_actual_vs_expected(self, series, figure_settings):
+        """Point per ROI: its fastest-change x value against the one the
+        user expects (the Expected tab; unset reads as the actual),
+        over the identity line, with a fitted trend line whose slope
+        and intercept go in the corner."""
+        quantity, unit = x_quantity(figure_settings)
+        measured = f"{quantity.lower()} of fastest change ({unit})"
+        x_name, y_name = "expected", "actual"
+
+        self._axes.set_xlabel(f"{x_name.capitalize()} {measured}")
+        self._axes.set_ylabel(f"{y_name.capitalize()} {measured}")
+        self._apply_legend(False)
+
+        if figure_settings.fit_method == "none":
+            self._draw_hint("Select a fit method to view actual vs expected")
+
+            return []
+
+        points = self._fastest_change_points(series, figure_settings)
+
+        if not points:
+            self._draw_hint(
+                "No fastest-change points (fits failed or rate is constant)"
+            )
+
+            return []
+
+        values = {
+            "expected": [
+                roi.expected_fastest_change_or(actual) for roi, _name, actual in points
+            ],
+            "actual": [actual for _roi, _name, actual in points],
+        }
+        x_values, y_values = values[x_name], values[y_name]
+        span = [min(*x_values, *y_values), max(*x_values, *y_values)]
+
+        (identity_line,) = self._axes.plot(
+            span,
+            span,
+            linestyle="--",
+            linewidth=0.8,
+            color="gray",
+            alpha=0.6,
+            label="_nolegend_",
+        )
+        self._fit_artists.append(identity_line)
+        self._fit_artists.append(
+            self._axes.scatter(
+                x_values,
+                y_values,
+                color=[roi.style.color for roi, _name, _actual in points],
+                alpha=[roi.style.plot_alpha for roi, _name, _actual in points],
+                zorder=3,
+            )
+        )
+
+        for (_roi, name, _actual), x, y in zip(points, x_values, y_values):
+            self._fit_artists.append(
+                self._axes.annotate(
+                    name,
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(6, 4),
+                    fontsize="x-small",
+                )
+            )
+
+        trend = linear_trend(x_values, y_values)
+
+        if trend is not None:
+            slope, intercept, r_squared = trend
+            ends = np.array([min(x_values), max(x_values)])
+            # Unset expecteds solve to y = x up to rounding noise; say so.
+            noise = 1e-9 * (max(abs(value) for value in y_values) or 1.0)
+            intercept = 0.0 if abs(intercept) < noise else intercept
+            slope = 1.0 if abs(slope - 1.0) < 1e-9 else slope
+
+            (trend_line,) = self._axes.plot(
+                ends,
+                slope * ends + intercept,
+                linestyle="--",
+                color="black",
+                alpha=0.7,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(trend_line)
+            self._fit_artists.append(
+                self._axes.text(
+                    EQUATION_BOX_X,
+                    EQUATION_BOX_TOP_Y,
+                    f"{y_name} = {slope:.4g} × {x_name} {intercept:+.4g}  "
+                    f"(R² {r_squared:.3f})",
+                    transform=self._axes.transAxes,
+                    va="top",
+                    fontsize="x-small",
+                )
+            )
+
+        return []  # fastest-change values on both axes: no time span
 
     def _shade_trimmed_tails(self, trim_edges):
         """Grey band over the tail the poor-fit trim kept out of at
