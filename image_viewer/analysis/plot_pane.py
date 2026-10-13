@@ -1135,6 +1135,37 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
 
+    def _fitted_rois(self, series, figure_settings):
+        """Yield (roi, name, fit, finite_t) per ROI the chosen method
+        fits, finite_t being its x at the finite values — never empty,
+        as fit_series needs two finite points. ROIs that cannot be
+        fitted are skipped."""
+        method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+
+        for roi_id, (name, elapsed, values) in series.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            fit = fit_series(
+                elapsed,
+                values,
+                method,
+                figure_settings.trim_poor_fit,
+                expression,
+                figure_settings.initial_guesses,
+            )
+
+            if fit is None:
+                continue
+
+            finite_t = np.asarray(elapsed, dtype=float)[
+                np.isfinite(np.asarray(values, dtype=float))
+            ]
+
+            yield roi, name, fit, finite_t
+
     def _draw_second_derivative(self, series, figure_settings):
         """One curve per ROI: the fitted model's d²y/dt² over the ROI's
         time span; the d² max/min checkboxes mark its extrema here."""
@@ -1211,28 +1242,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return []
 
         entries = []
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
-            t_star = fastest_change_time(fit, finite_t.min(), finite_t.max())
-            if t_star is None:
-                continue
-            entries.append((name, t_star, roi.style))
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
+
+            if actual is not None:
+                entries.append((name, actual, roi.style))
 
         if not entries:
             self._draw_hint(
@@ -1387,25 +1402,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         equation_lines, trim_edges = [], []
         _quantity, x_unit = x_quantity(figure_settings)
 
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            # fit_series requires >= 2 finite points, so never empty.
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), FIT_CURVE_SAMPLES)
             (overlay,) = self._axes.plot(
