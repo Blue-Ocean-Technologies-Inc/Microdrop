@@ -248,6 +248,21 @@ class ImageViewerController(Controller):
     def _next(self, event):
         self.step(1)
 
+    @observe("model:previous_experiment_button")
+    def _previous_experiment(self, event):
+        self._step_experiment(-1)
+
+    @observe("model:next_experiment_button")
+    def _next_experiment(self, event):
+        self._step_experiment(1)
+
+    def _step_experiment(self, step):
+        """Move the experiment seek by ``step``, staying within the list."""
+        target = self.model.experiment_index + step
+
+        if 0 <= target < len(self.model.experiments):
+            self.model.experiment_index = target
+
     def step(self, step):
         """Show the adjacent image, traversing the WHOLE Image Group: within
         the current capture session normally, and across session boundaries
