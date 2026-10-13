@@ -143,6 +143,7 @@ def save_session(experiment_directory, session):
                 },
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
+                "expected_fastest_change": roi.expected_fastest_change,
             }
             for roi in session.rois
         ],
@@ -177,6 +178,8 @@ def _roi_from(entry):
         is_background_ref=bool(
             entry.get("is_background_ref", entry.get("is_standard", False))
         ),
+        # Absent in configs written before the actual-vs-expected view.
+        expected_fastest_change=float(entry.get("expected_fastest_change", math.nan)),
         style=style,
     )
 

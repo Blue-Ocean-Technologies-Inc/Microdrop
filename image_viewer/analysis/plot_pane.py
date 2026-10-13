@@ -51,6 +51,7 @@ from traitsui.api import (
     Item,
     Label,
     Tabbed,
+    TableEditor,
     UItem,
     VGrid,
     VGroup,
@@ -60,6 +61,7 @@ from traitsui.api import (
 from microdrop_style.icons.icons import (
     ICON_FOLDER_OPEN,
     ICON_FUNCTION,
+    ICON_RESTORE,
     ICON_SAVE,
 )
 
@@ -69,6 +71,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
+    ObjectColumn,
     toggle_editor_default_style_sheet_factory,
 )
 
@@ -626,6 +629,52 @@ def _cleanup_tab():
     )
 
 
+def _format_fastest_change(value):
+    """A fastest-change value for the Expected table, blank when unknown."""
+    return "" if value != value else f"{value:.4g}"
+
+
+#: The Expected tab's table: per ROI, its fitted fastest-change value
+#: beside the editable expected one.
+EXPECTED_TABLE_EDITOR = TableEditor(
+    columns=[
+        ObjectColumn(name="name", label="ROI", editable=False),
+        ObjectColumn(
+            name="actual",
+            label="Actual",
+            editable=False,
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+        ObjectColumn(
+            name="expected",
+            label="Expected",
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+    ],
+    sortable=False,
+)
+
+
+def _expected_tab():
+    """Per ROI, the x value its fastest change is expected at, for the
+    Actual vs expected view."""
+    return VGroup(
+        HGroup(
+            UItem(
+                "model.reset_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Reset every expected value to its actual",
+                ),
+            ),
+        ),
+        UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),
+        label="Expected",
+    )
+
+
 def _export_tab():
     """DPI and Format on their own rows; the save button lives on the
     top row, so saving never needs a tab switch."""
@@ -645,7 +694,7 @@ def _export_tab():
 _plot_controls_view = View(
     VGroup(
         _top_row(),
-        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _export_tab()),
+        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _expected_tab(), _export_tab()),
     ),
 )
 
@@ -698,7 +747,8 @@ _PLOT_STATE = (
     "session:figure:savgol_order, "
     "session:figure:butter_order, "
     "session:figure:butter_cutoff, "
-    "session:rois:items:is_background_ref"
+    "session:rois:items:is_background_ref, "
+    "session:rois:items:expected_fastest_change"
 )
 
 #: Changes that mean "show me everything again", releasing a view the
@@ -1220,6 +1270,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return trim_edges
 
+    def _fastest_change_points(self, series, figure_settings):
+        """(roi, name, actual) per ROI with a fastest-change point: the
+        x where its fitted curve changes fastest (max |dy/dx| — a
+        sigmoid's inflection point). A fit that fails or whose rate is
+        flat (linear) has none. The actuals are pushed to the model for
+        the Expected table, which has no fits of its own."""
+        points = []
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
+
+            if actual is not None:
+                points.append((roi, name, actual))
+
+        self._model.fastest_change_actual = {
+            roi.roi_id: actual for roi, _name, actual in points
+        }
+
+        return points
+
     def _draw_fastest_change(self, series, figure_settings):
         """Bar per ROI: seconds until the fitted curve changes fastest
         (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
@@ -1235,13 +1305,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        entries = []
-
-        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
-            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
-
-            if actual is not None:
-                entries.append((name, actual, roi.style))
+        entries = [
+            (name, actual, roi.style)
+            for roi, name, actual in self._fastest_change_points(
+                series, figure_settings
+            )
+        ]
 
         if not entries:
             self._draw_hint(
@@ -1600,6 +1669,10 @@ class RoiPlotDockPane(DockPane):
         session = roi_analysis_model.session
         return _plot_controls_view.ui(
             context={
+                # TableEditor cell editors copy the context's "object"
+                # and fail without one, leaving the Expected table
+                # uneditable; the model stands in for it.
+                "object": roi_analysis_model,
                 "session": session,
                 "figure": session.figure,
                 "model": roi_analysis_model,

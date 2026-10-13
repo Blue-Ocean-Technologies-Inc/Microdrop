@@ -415,6 +415,11 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.progress_text = ""
         self._save_config()
 
+    @observe("analysis_model:reset_expected_button")
+    def _reset_expected_values(self, event):
+        for roi in self.session.rois:
+            roi.expected_fastest_change = math.nan
+
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):
         result = confirm(
@@ -769,6 +774,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:show_metrics_group, "
         "analysis_model:session:rois:items:name, "
         "analysis_model:session:rois:items:is_background_ref, "
+        "analysis_model:session:rois:items:expected_fastest_change, "
         "analysis_model:session:rois:items:style:color, "
         "analysis_model:session:rois:items:style:line_style, "
         "analysis_model:session:rois:items:style:marker, "

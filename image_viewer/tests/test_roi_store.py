@@ -49,6 +49,7 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
             visible=False,
             alpha=40,
         ),
+        expected_fastest_change=95.0,
     )
     session = AnalysisSession(
         directory=str(tmp_path), rois=[roi], plot_stat="bg_corrected"
@@ -69,6 +70,7 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.style.line_style == "dashed"
     assert back.style.marker == "o" and back.style.marker_size == 7.0
     assert back.style.visible is False and back.style.alpha == 40
+    assert back.expected_fastest_change == 95.0
 
 
 def test_figure_fit_settings_round_trip(tmp_path):
