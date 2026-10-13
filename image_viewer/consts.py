@@ -83,6 +83,11 @@ DISCOVERY_FULL_WALK_INTERVAL_S = 30.0
 #: The folder the logger plugin writes into every experiment, the only
 #: content a pruned experiment may hold (discovery.prunable_experiments).
 EXPERIMENT_LOGS_DIR_NAME = "logs"
+#: What File › Prune Experiments does: its tooltip and status-bar text.
+PRUNE_EXPERIMENTS_DESCRIPTION = (
+    "Delete every experiment folder that holds only a logs directory and no "
+    "captures or other data"
+)
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 
