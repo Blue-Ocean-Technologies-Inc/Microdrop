@@ -388,6 +388,21 @@ class DeviceViewerDockPane(TraitsDockPane):
             # free-hand draw, wiping the in-progress route and selected
             # layer and kicking the user out of draw mode. Routes only ever
             # flow DV -> tree, never back, so there is nothing else to sync.
+            # Electrodes do: the tree can change a selected step's electrodes
+            # (e.g. Fill Pattern) without changing the step id.
+            channels_activated = set(message_model.channels_activated)
+
+            if self.model.electrodes.actuated_channels != channels_activated:
+                self.publish_controller._disable_state_messages = True
+                self.publish_controller._undoing = True
+
+                try:
+                    self.model.electrodes.electrode_editing = None
+                    self.model.electrodes.actuated_channels = channels_activated
+                finally:
+                    self.publish_controller._disable_state_messages = False
+                    self.publish_controller._undoing = False
+
             if self.model.routes.commit_enabled:
                 # The echo carries the step's stored params. While the
                 # sidebar holds uncommitted edits (say new lanes, then a
