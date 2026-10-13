@@ -215,7 +215,7 @@ def test_trimmed_note_reports_the_domain_actually_fitted():
     t, y = _bleached_series()
     fit = fit_series(t, y, "sigmoid", trim_tail=True)
     note = trimmed_note(fit, t[-1])
-    assert note.startswith(" (fit to t ≤ ")
+    assert note.startswith(" (fit to x ≤ ")
     assert f"{fit.fitted_end:.4g}" in note
 
 

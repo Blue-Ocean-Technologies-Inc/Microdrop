@@ -53,7 +53,7 @@ from .fit_presets import (
     method_for_expression,
     method_label,
 )
-from .plot_series import derive_series
+from .plot_series import derive_series, x_quantity
 
 #: Column widths as fractions of the viewport; the parameters share
 #: what the fixed columns leave, however many of them there are.
@@ -141,7 +141,9 @@ def fit_rows(session, filtered_paths, presets):
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))
             ]
-            row.fit_range_text = trimmed_note(fit, finite_t.max()).strip(" ()")
+            row.fit_range_text = trimmed_note(
+                fit, finite_t.max(), unit=x_quantity(session.figure)[1]
+            ).strip(" ()")
         rows.append(row)
     return parameters, rows
 

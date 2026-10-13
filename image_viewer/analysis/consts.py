@@ -198,6 +198,12 @@ VIEW_MODE_LABELS = {
     "fastest_change": "Fastest change",
 }
 
+#: The View labels per x axis: only the curves view names its axis.
+VIEW_MODE_LABELS_BY_X_AXIS = {
+    "time": VIEW_MODE_LABELS,
+    "temperature": {**VIEW_MODE_LABELS, "intensity": "Over temperature"},
+}
+
 #: What the curves are plotted against: elapsed capture time, or the
 #: heater log's temperature at each capture, joined on wall-clock time.
 X_AXIS_MODES = ("time", "temperature")
