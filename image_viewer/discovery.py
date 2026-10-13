@@ -34,6 +34,7 @@ from microdrop_application.helpers import get_current_experiment_directory
 from .consts import (
     CAPTURE_TIMESTAMP_FORMAT,
     DISCOVERY_FULL_WALK_INTERVAL_S,
+    EXPERIMENT_LOGS_DIR_NAME,
     IMAGE_PATTERNS,
 )
 
@@ -100,6 +101,42 @@ def delete_experiment(captures_path):
     return experiment
 
 
+def prunable_experiments():
+    """The experiment folders under the Experiments root that hold
+    nothing useful — at most a logs entry plus (recursively) empty
+    folders such as an unused captures folder — sorted by name. Never the
+    CURRENT experiment. [] when the root is unavailable (no Redis)."""
+    root = _experiments_root()
+
+    if root is None:
+        return []
+
+    prunable = []
+
+    for child in sorted(root.iterdir(), key=lambda child: child.name):
+        if not child.is_dir() or _is_current_experiment(child):
+            continue
+
+        if _holds_only_logs(child):
+            prunable.append(child)
+
+    return prunable
+
+
+def prune_experiments(directories):
+    """Remove each of ``directories`` (prunable_experiments folders) and
+    everything in it; return the removed folders. An OSError stops the
+    pruning and propagates, leaving the folders before it removed."""
+    removed = []
+
+    for directory in directories:
+        shutil.rmtree(directory)
+        logger.info(f"Pruned experiment folder {directory}")
+        removed.append(directory)
+
+    return removed
+
+
 def _experiments_root():
     """The Experiments root — the CURRENT experiment's parent — or None
     when it is unavailable (no Redis) or missing."""
@@ -122,6 +159,19 @@ def _is_current_experiment(experiment):
         return False
 
     return Path(experiment).resolve() == current
+
+
+def _holds_only_logs(experiment):
+    """Whether ``experiment`` holds nothing but a logs entry and folders
+    with no files anywhere under them."""
+    for entry in experiment.iterdir():
+        if entry.name == EXPERIMENT_LOGS_DIR_NAME:
+            continue
+
+        if not entry.is_dir() or not all(path.is_dir() for path in entry.rglob("*")):
+            return False
+
+    return True
 
 
 def discover_captures(directory) -> list:

@@ -80,6 +80,9 @@ DISCOVERY_POLL_INTERVAL_MS = 2_000
 #: no folder's mtime moved: some filesystems (FAT, some network shares)
 #: never update a folder's mtime when files land in it (s).
 DISCOVERY_FULL_WALK_INTERVAL_S = 30.0
+#: The folder the logger plugin writes into every experiment, the only
+#: content a pruned experiment may hold (discovery.prunable_experiments).
+EXPERIMENT_LOGS_DIR_NAME = "logs"
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 
