@@ -18,6 +18,7 @@ import calendar
 import fnmatch
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -78,6 +79,25 @@ def discover_experiments() -> list:
     return sorted(
         experiments, key=lambda item: (item[1].parent.stat().st_mtime, item[0])
     )
+
+
+def delete_experiment(captures_path):
+    """Remove the experiment folder holding ``captures_path`` (a
+    discover_experiments captures path) and everything in it; return the
+    removed folder. Raises ValueError for the CURRENT experiment, which
+    the app is still writing into, and OSError when the removal fails."""
+    experiment = Path(captures_path).parent
+
+    if _is_current_experiment(experiment):
+        raise ValueError(
+            f"'{experiment.name}' is the current experiment and cannot be "
+            "deleted while it is in use."
+        )
+
+    shutil.rmtree(experiment)
+    logger.info(f"Deleted experiment folder {experiment}")
+
+    return experiment
 
 
 def _experiments_root():
