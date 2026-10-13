@@ -219,6 +219,12 @@ class FigureSettings(HasTraits):
     #: the mean of every heater sample within ±window/2 of it. 0 means
     #: exact — linear interpolation at the capture instant.
     heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS, HEATER_WINDOW_MS, mode="spinner")
+    #: The linear calibration applied to the heater log's temperature
+    #: before plotting and fitting (T = slope * T_log + intercept), for
+    #: setpoints that were compensated against a reference instrument.
+    #: 1 and 0 leave the log's values as they are.
+    temperature_slope = Float(1.0)
+    temperature_intercept = Float(0.0)
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.

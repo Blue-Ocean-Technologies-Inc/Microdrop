@@ -45,7 +45,7 @@ from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_loader import HeaterSamplesLoader
 from .heater_log import describe_heater_coverage, sensors_in, temperature_at
-from .plot_series import analysed_series
+from .plot_series import analysed_series, calibrated_temperatures
 from .protocol_guard import proceed_despite_protocol
 from .roi_batch import (
     BATCH_FINISHED,
@@ -762,6 +762,8 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:x_axis, "
         "analysis_model:session:figure:heater_sensor, "
         "analysis_model:session:figure:heater_window_ms, "
+        "analysis_model:session:figure:temperature_slope, "
+        "analysis_model:session:figure:temperature_intercept, "
         "analysis_model:session:heater_log_dir, "
         "analysis_model:session:figure:show_method_group, "
         "analysis_model:session:figure:show_metrics_group, "
@@ -1011,11 +1013,14 @@ class RoiAnalysisController(HasTraits):
         start_time = times[0] if times else 0.0
         self._load_heater_samples_now()
         temperatures = (
-            temperature_at(
-                session.heater_samples,
-                session.figure.heater_sensor,
-                times,
-                session.figure.heater_window_ms / 1000.0,
+            calibrated_temperatures(
+                session.figure,
+                temperature_at(
+                    session.heater_samples,
+                    session.figure.heater_sensor,
+                    times,
+                    session.figure.heater_window_ms / 1000.0,
+                ),
             )
             if session.heater_samples
             else [math.nan] * len(times)

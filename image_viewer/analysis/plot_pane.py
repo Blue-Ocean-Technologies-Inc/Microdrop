@@ -221,6 +221,18 @@ DROPDOWN_W = -130
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
 
+#: Temperature-calibration spin boxes: wide enough for any straight
+#: line between two thermometers.
+TEMPERATURE_SLOPE_BOUNDS = (-1e3, 1e3)
+TEMPERATURE_INTERCEPT_BOUNDS = (-1e4, 1e4)
+TEMPERATURE_CALIBRATION_TOOLTIP = (
+    "Linear calibration applied to the log's temperature before "
+    "plotting and fitting: T = slope × T_log + intercept. Use it when "
+    "the heater setpoints were compensated against a reference "
+    "instrument (fit the two sequences with a straight line to get "
+    "slope and intercept). 1 and 0 leave the log's values unchanged."
+)
+
 
 def _section(flag, label, *content):
     """A collapsible group: the image viewer sidebar's chevron header
@@ -387,6 +399,32 @@ def _axes_tab():
                 "of it. 0 is exact — interpolation at "
                 "the capture instant. Frames with no "
                 "sample in the window become gaps.",
+            ),
+            HGroup(
+                Item(
+                    "figure.temperature_slope",
+                    label="Calibrate: slope",
+                    width=VALUE_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=TEMPERATURE_SLOPE_BOUNDS[0],
+                        high=TEMPERATURE_SLOPE_BOUNDS[1],
+                        decimals=4,
+                        step=0.01,
+                    ),
+                    tooltip=TEMPERATURE_CALIBRATION_TOOLTIP,
+                ),
+                Item(
+                    "figure.temperature_intercept",
+                    label="intercept",
+                    width=VALUE_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=TEMPERATURE_INTERCEPT_BOUNDS[0],
+                        high=TEMPERATURE_INTERCEPT_BOUNDS[1],
+                        decimals=4,
+                        step=0.1,
+                    ),
+                    tooltip=TEMPERATURE_CALIBRATION_TOOLTIP,
+                ),
             ),
             visible_when="figure.x_axis == 'temperature'",
             show_border=True,
@@ -650,6 +688,8 @@ _PLOT_STATE = (
     "session:figure:x_axis, "
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
+    "session:figure:temperature_slope, "
+    "session:figure:temperature_intercept, "
     "session:heater_samples, "
     "session:heater_log_coverage, "
     "session:figure:smooth_method, "
