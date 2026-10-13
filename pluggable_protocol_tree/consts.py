@@ -62,6 +62,9 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # sanctioned constants-only cross-import), not the category object.
 PROTOCOL_TREE_PREFERENCES_TAB_ID = "microdrop.protocol_tree.preferences"
 
+# File > Experiments submenu id; other plugins add experiment actions to it.
+EXPERIMENTS_MENU_ID = f"{PKG}.experiments_menu"
+
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 

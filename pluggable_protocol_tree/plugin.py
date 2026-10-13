@@ -24,6 +24,10 @@ from traits.api import Either, Instance, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import (
+    FILE_MENU_EXPERIMENTS_GROUP_ID,
+    FILE_MENU_PROTOCOL_GROUP_ID,
+)
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
@@ -155,7 +159,7 @@ class PluggableProtocolTreePlugin(Plugin):
 
     def _contributed_task_extensions_default(self):
         from pluggable_protocol_tree.menus import (
-            new_experiment_factory,
+            experiments_menu_factory,
             protocol_menu_factory,
         )
 
@@ -165,14 +169,12 @@ class PluggableProtocolTreePlugin(Plugin):
                 dock_pane_factories=[self._make_dock_pane],
                 actions=[
                     SchemaAddition(
-                        factory=new_experiment_factory,
-                        path="MenuBar/File",
-                        absolute_position="first",
+                        factory=experiments_menu_factory,
+                        path=f"MenuBar/File/{FILE_MENU_EXPERIMENTS_GROUP_ID}",
                     ),
                     SchemaAddition(
                         factory=protocol_menu_factory,
-                        path="MenuBar/File",
-                        before="Exit",
+                        path=f"MenuBar/File/{FILE_MENU_PROTOCOL_GROUP_ID}",
                     ),
                 ],
             ),
