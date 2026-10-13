@@ -124,6 +124,9 @@ DV_EXECUTION_PARAM_COL_IDS = frozenset(
 # by phase publishers).
 ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
 
+# Builtin step column holding the ids of the electrodes actuated for the step.
+ELECTRODES_COL_ID = "electrodes"
+
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1
 
