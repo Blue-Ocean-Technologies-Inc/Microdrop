@@ -104,7 +104,7 @@ def load_dialog_factory():
     return DockPaneAction(
         id=f"{PKG}.load_protocol_dialog",
         dock_pane_id=_DOCK_PANE_ID,
-        name="&Load",
+        name="&Load…",
         method="load_protocol_dialog",
     )
 
@@ -113,7 +113,7 @@ def import_legacy_dialog_factory():
     return DockPaneAction(
         id=f"{PKG}.import_legacy_protocol_dialog",
         dock_pane_id=_DOCK_PANE_ID,
-        name="&Import Legacy Protocol...",
+        name="&Import Legacy…",
         method="import_legacy_protocol_dialog",
     )
 
@@ -131,18 +131,19 @@ def save_as_dialog_factory():
     return DockPaneAction(
         id=f"{PKG}.save_as_protocol_dialog",
         dock_pane_id=_DOCK_PANE_ID,
-        name="Save &as",
+        name="Save &As…",
         method="save_as_protocol_dialog",
     )
 
 
 def protocol_menu_factory():
     return SMenu(
-        new_protocol_factory(),
-        load_dialog_factory(),
-        import_legacy_dialog_factory(),
-        save_dialog_factory(),
-        save_as_dialog_factory(),
+        SGroup(
+            new_protocol_factory(),
+            load_dialog_factory(),
+            import_legacy_dialog_factory(),
+        ),
+        SGroup(save_dialog_factory(), save_as_dialog_factory()),
         id=PROTOCOL_MENU_ID,
         name="&Protocol",
     )
