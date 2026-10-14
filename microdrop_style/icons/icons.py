@@ -79,6 +79,8 @@ ICON_LINK_OFF = "link_off"  # disconnect
 # Recording viewer (ligature names \u2014 the Material Symbols font resolves
 # them like "home"/"play_arrow" above)
 ICON_FIT_SCREEN = "fit_screen"  # refit content to the view
+ICON_ZOOM_IN = "zoom_in"  # zoom the view in a step
+ICON_ZOOM_OUT = "zoom_out"  # zoom the view out a step
 ICON_OPEN_IN_NEW = "open_in_new"  # show a folder in the system file browser
 ICON_TRANSFORM = "transform"  # device-aligned (warped) view
 ICON_CROP = "crop"  # region-of-interest edit mode
@@ -93,6 +95,8 @@ ICON_CONTOUR = "pentagon"  # trace a contour (polygon) ROI
 ICON_RULER = "straighten"  # calibrate the image scale
 ICON_SHOW_CHART = "show_chart"  # calculate & plot intensities
 ICON_DELETE_SWEEP = "delete_sweep"  # clear all ROIs
+ICON_ADD = "add"  # add an entry to a list
+ICON_PLAYLIST_REMOVE = "playlist_remove"  # remove the selected list entry
 ICON_CHEVRON_LEFT = "chevron_left"  # collapse a sidebar leftward
 ICON_CHEVRON_RIGHT = "chevron_right"  # reveal a collapsed sidebar
 ICON_FUNCTION = "function"  # fit equations table

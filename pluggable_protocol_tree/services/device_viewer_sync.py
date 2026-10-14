@@ -77,6 +77,7 @@ from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS,
     ELECTRODE_TO_CHANNEL_KEY,
+    ELECTRODES_COL_ID,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_STATE,
     PROTOCOL_TREE_ADD_STEP,
@@ -394,7 +395,9 @@ class DeviceViewerSyncController(HasTraits):
         execution-param cell additionally republish display state so the
         DV sidebar reloads + rebaselines - protocol values supersede
         whatever the sidebar holds. DV-originated writes (the commit
-        handler) suppress this and publish once at the end instead."""
+        handler) suppress this and publish once at the end instead.
+        Edits to the electrodes (e.g. Fill Pattern) re-actuate their
+        channels and republish display state too."""
         if self._suppress_publish or not self._last_selected_uuid:
             return
         try:
@@ -404,12 +407,29 @@ class DeviceViewerSyncController(HasTraits):
         if isinstance(row, GroupRow) or row.uuid != self._last_selected_uuid:
             return
         self._publish_row_selected(row)
-        if event.new.get("col_id") not in DV_EXECUTION_PARAM_COL_IDS:
+        col_id = event.new.get("col_id")
+
+        if col_id not in DV_EXECUTION_PARAM_COL_IDS and col_id != ELECTRODES_COL_ID:
             return
         if self._free_mode_stash is not None:
             # Never let a cell edit trigger the leave-free-mode prompt
             # inside _publish_for_row; the next selection change handles it.
             return
+
+        if col_id == ELECTRODES_COL_ID:
+            channels = {
+                self.electrode_ids_channels_map[electrode_id]
+                for electrode_id in row.electrodes
+                if electrode_id in self.electrode_ids_channels_map
+            }
+
+            # The viewer's own write-back (_on_dv_state) already set these
+            # channels; echoing display state back to it would be redundant.
+            if channels == self.actuated_channels:
+                return
+
+            self.actuated_channels = channels
+
         self._publish_for_row(row)
 
     def _get_channels_electrode_ids_map(self):
