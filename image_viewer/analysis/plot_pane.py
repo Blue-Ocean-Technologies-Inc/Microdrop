@@ -11,7 +11,7 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, that stat
 per ROI on the displayed image (bars) or across the series (violins),
-the fits' second-derivative curves, or the per-ROI
+the fits' first- or second-derivative curves, or the per-ROI
 time-of-fastest-change bars.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
@@ -194,7 +194,10 @@ NOTE_NO_TEMP_Y = 0.09
 
 #: The views drawn against the time (or temperature) axis; the rest
 #: put ROI names along x.
-TIME_VIEW_MODES = ("intensity", "second_derivative")
+TIME_VIEW_MODES = ("intensity", "first_derivative", "second_derivative")
+
+#: The derivative views' y-axis symbol, by derivative order.
+DERIVATIVE_SYMBOLS = {1: "dy/dx", 2: "d²"}
 
 #: The views a log value axis applies to. Not the bar charts: a bar
 #: grows from zero, which a log axis cannot show.
@@ -892,8 +895,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
 
-            if view_mode == "second_derivative":
-                trim_edges = self._draw_second_derivative(series, figure_settings)
+            if view_mode == "first_derivative":
+                trim_edges = self._draw_derivative(series, figure_settings, 1)
+            elif view_mode == "second_derivative":
+                trim_edges = self._draw_derivative(series, figure_settings, 2)
             elif view_mode == "per_image":
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
@@ -1135,20 +1140,19 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
 
-    def _draw_second_derivative(self, series, figure_settings):
-        """One curve per ROI: the fitted model's d²y/dt² over the ROI's
-        time span; the d² max/min checkboxes mark its extrema here."""
-        self._axes.set_ylabel("d² of fit")
-        if figure_settings.fit_method == "none":
-            self._apply_legend(False)
-            self._draw_hint("Select a fit method to view d²")
-            return []
-        drew, trim_edges = False, []
+    def _fitted_rois(self, series, figure_settings):
+        """Yield (roi, name, fit, finite_t) per ROI the chosen method
+        fits, finite_t being its x at the finite values — never empty,
+        as fit_series needs two finite points. ROIs that cannot be
+        fitted are skipped."""
+        method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
+
             if roi is None:
                 continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+
             fit = fit_series(
                 elapsed,
                 values,
@@ -1157,42 +1161,63 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 expression,
                 figure_settings.initial_guesses,
             )
+
             if fit is None:
                 continue
+
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))
             ]
+
+            yield roi, name, fit, finite_t
+
+    def _draw_derivative(self, series, figure_settings, order):
+        """One curve per ROI: the fitted model's first or second
+        derivative over the ROI's span. On the second, the d² max/min
+        checkboxes mark its extrema."""
+        symbol = DERIVATIVE_SYMBOLS[order]
+
+        self._axes.set_ylabel(f"{symbol} of fit")
+
+        if figure_settings.fit_method == "none":
+            self._apply_legend(False)
+            self._draw_hint(f"Select a fit method to view {symbol}")
+
+            return []
+
+        drew, trim_edges = False, []
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            derivative = fit.first_derivative if order == 1 else fit.second_derivative
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), FIT_CURVE_SAMPLES)
-            d2 = np.asarray(fit.second_derivative(dense), dtype=float)
-            if d2.shape != dense.shape:
-                d2 = np.full_like(dense, float(d2))
+            curve_values = np.asarray(derivative(dense), dtype=float)
+
+            if curve_values.shape != dense.shape:  # scalar-returning closure
+                curve_values = np.full_like(dense, float(curve_values))
+
             (curve,) = self._axes.plot(
-                dense, d2, color=roi.style.color, alpha=roi.style.plot_alpha, label=name
+                dense,
+                curve_values,
+                color=roi.style.color,
+                alpha=roi.style.plot_alpha,
+                label=name,
             )
             self._fit_artists.append(curve)
             drew = True
-            wanted = [
-                key
-                for key, enabled in (
-                    ("max", figure_settings.show_second_derivative_max),
-                    ("min", figure_settings.show_second_derivative_min),
+
+            if order == 2:
+                self._draw_extrema(
+                    fit,
+                    finite_t.min(),
+                    finite_t.max(),
+                    roi,
+                    figure_settings,
+                    marker_y=fit.second_derivative,
                 )
-                if enabled
-            ]
-            if wanted:
-                extrema = second_derivative_extrema(fit, finite_t.min(), finite_t.max())
-                for key in wanted:
-                    if key not in extrema:
-                        continue
-                    t_star = extrema[key][0]
-                    self._draw_extremum_marker(
-                        t_star,
-                        float(fit.second_derivative(t_star)),
-                        roi,
-                        figure_settings,
-                    )
+
         self._apply_legend(drew and figure_settings.show_legend)
+
         return trim_edges
 
     def _draw_fastest_change(self, series, figure_settings):
@@ -1211,28 +1236,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return []
 
         entries = []
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
-            t_star = fastest_change_time(fit, finite_t.min(), finite_t.max())
-            if t_star is None:
-                continue
-            entries.append((name, t_star, roi.style))
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
+
+            if actual is not None:
+                entries.append((name, actual, roi.style))
 
         if not entries:
             self._draw_hint(
@@ -1387,25 +1396,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         equation_lines, trim_edges = [], []
         _quantity, x_unit = x_quantity(figure_settings)
 
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            # fit_series requires >= 2 finite points, so never empty.
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), FIT_CURVE_SAMPLES)
             (overlay,) = self._axes.plot(
@@ -1444,9 +1435,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
         return trim_edges
 
-    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
-        """Point (plus optional v/h line and coordinates) on the fitted
-        curve where its second derivative peaks/troughs."""
+    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings, marker_y=None):
+        """Point (plus optional v/h line and coordinates) where the
+        fitted curve's second derivative peaks/troughs: on the curve
+        itself, or on ``marker_y`` (a function of t) when given."""
         wanted = [
             key
             for key, enabled in (
@@ -1462,6 +1454,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if key not in extrema:
                 continue
             t_star, y_star = extrema[key]
+
+            if marker_y is not None:
+                y_star = float(marker_y(t_star))
+
             self._draw_extremum_marker(t_star, y_star, roi, figure_settings)
 
     def _draw_extremum_marker(self, t_star, y_star, roi, figure_settings):
