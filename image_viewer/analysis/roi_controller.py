@@ -774,6 +774,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:show_fit_equations, "
         "analysis_model:session:figure:show_second_derivative_max, "
         "analysis_model:session:figure:show_second_derivative_min, "
+        "analysis_model:session:figure:show_second_derivative_zero, "
         "analysis_model:session:figure:second_derivative_vline, "
         "analysis_model:session:figure:second_derivative_hline, "
         "analysis_model:session:figure:second_derivative_coords, "
