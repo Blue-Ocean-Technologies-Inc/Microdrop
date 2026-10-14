@@ -27,11 +27,13 @@ ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
-# File-menu skeleton: the shell fixes the section order, plugins contribute
-# into a section via SchemaAddition(path=f"MenuBar/File/{<group id>}").
-FILE_MENU_EXPERIMENTS_GROUP_ID = "ExperimentsGroup"
-FILE_MENU_PROTOCOL_GROUP_ID = "ProtocolGroup"
-FILE_MENU_DEVICE_GROUP_ID = "DeviceGroup"
+# File-menu skeleton: the shell fixes two sections, the plugins' submenus
+# then Exit. Plugins add into the first via
+# SchemaAddition(path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}") and
+# declare their submenu's order within it with after= hints. Pyface matches
+# a hint against the other additions' id=, so an addition that others
+# order against sets id= to its menu id.
+FILE_MENU_SUBMENUS_GROUP_ID = "SubmenusGroup"
 FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
 
 

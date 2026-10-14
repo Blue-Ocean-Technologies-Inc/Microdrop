@@ -24,7 +24,7 @@ from traits.api import Str
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import warning
 from microdrop_application.helpers import get_current_experiment_directory
-from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID, PKG
+from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID, PKG, PROTOCOL_MENU_ID
 
 # Microdrop utils imports.
 from microdrop_utils.file_handler import open_file
@@ -143,6 +143,6 @@ def protocol_menu_factory():
         import_legacy_dialog_factory(),
         save_dialog_factory(),
         save_as_dialog_factory(),
-        id=f"{PKG}.protocol_menu",
+        id=PROTOCOL_MENU_ID,
         name="&Protocol",
     )

@@ -21,7 +21,7 @@ from traits.api import Instance, List
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from microdrop_application.consts import FILE_MENU_EXPERIMENTS_GROUP_ID
+from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 # Local imports.
@@ -64,7 +64,7 @@ class ImageViewerPlugin(Plugin):
                     SchemaAddition(
                         factory=prune_menu_factory,
                         path=(
-                            f"MenuBar/File/{FILE_MENU_EXPERIMENTS_GROUP_ID}"
+                            f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}"
                             f"/{EXPERIMENTS_MENU_ID}"
                         ),
                     ),
