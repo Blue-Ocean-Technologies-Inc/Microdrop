@@ -80,6 +80,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.fit_method = "exponential"
     session.figure.show_legend = False
     session.figure.show_second_derivative_max = True
+    session.figure.show_second_derivative_zero = True
     session.figure.view_mode = "fastest_change"
     session.figure.trim_poor_fit = True
     session.figure.log_x = True
@@ -93,6 +94,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.fit_method == "exponential"
     assert loaded.figure.show_legend is False
     assert loaded.figure.show_second_derivative_max is True
+    assert loaded.figure.show_second_derivative_zero is True
     assert loaded.figure.view_mode == "fastest_change"
     assert loaded.figure.trim_poor_fit is True
     assert loaded.figure.log_x is True and loaded.figure.log_y is False

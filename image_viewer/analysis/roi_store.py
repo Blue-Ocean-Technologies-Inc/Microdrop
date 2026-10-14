@@ -66,6 +66,7 @@ _FIGURE_FIELDS = (
     "show_fit_equations",
     "show_second_derivative_max",
     "show_second_derivative_min",
+    "show_second_derivative_zero",
     "second_derivative_vline",
     "second_derivative_hline",
     "second_derivative_coords",

@@ -447,6 +447,14 @@ def _axes_tab():
     )
 
 
+#: When the marker dressing (V-line, H-line, Coords) has a marker to dress.
+_ANY_MARKER_SHOWN = (
+    "figure.show_second_derivative_max "
+    "or figure.show_second_derivative_min "
+    "or figure.show_second_derivative_zero"
+)
+
+
 def _fit_tab():
     return VGroup(
         _section(
@@ -501,24 +509,30 @@ def _fit_tab():
                     tooltip="Mark where the fitted curve's second derivative troughs",
                 ),
                 _toggle(
+                    "figure.show_second_derivative_zero",
+                    "d² zero",
+                    enabled_when="figure.fit_method != 'none'",
+                    tooltip="Mark where the fitted curve's second derivative "
+                    "crosses zero, between the d² max and min: the peak of "
+                    "|dy/dx|, where the curve changes fastest — the value the "
+                    "Fastest change view and the Expected tab report",
+                ),
+                _toggle(
                     "figure.second_derivative_vline",
                     "V-line",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
+                    enabled_when=_ANY_MARKER_SHOWN,
                     tooltip="Drop a vertical line through each marker",
                 ),
                 _toggle(
                     "figure.second_derivative_hline",
                     "H-line",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
+                    enabled_when=_ANY_MARKER_SHOWN,
                     tooltip="Run a horizontal line through each marker",
                 ),
                 _toggle(
                     "figure.second_derivative_coords",
                     "Coords",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
+                    enabled_when=_ANY_MARKER_SHOWN,
                     tooltip="Write each marker's (x, y) beside it",
                 ),
             ),
@@ -766,6 +780,7 @@ _PLOT_STATE = (
     "session:figure:show_fit_equations, "
     "session:figure:show_second_derivative_max, "
     "session:figure:show_second_derivative_min, "
+    "session:figure:show_second_derivative_zero, "
     "session:figure:second_derivative_vline, "
     "session:figure:second_derivative_hline, "
     "session:figure:second_derivative_coords, "
@@ -1291,8 +1306,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _draw_derivative(self, series, figure_settings, order):
         """One curve per ROI: the fitted model's first or second
-        derivative over the ROI's span. On the second, the d² max/min
-        checkboxes mark its extrema."""
+        derivative over the ROI's span. The fastest-change marker sits
+        on either; the d² max/min ones on the second only."""
         symbol = DERIVATIVE_SYMBOLS[order]
 
         self._axes.set_ylabel(f"{symbol} of fit")
@@ -1324,15 +1339,15 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._fit_artists.append(curve)
             drew = True
 
-            if order == 2:
-                self._draw_extrema(
-                    fit,
-                    finite_t.min(),
-                    finite_t.max(),
-                    roi,
-                    figure_settings,
-                    marker_y=fit.second_derivative,
-                )
+            self._draw_extrema(
+                fit,
+                finite_t.min(),
+                finite_t.max(),
+                roi,
+                figure_settings,
+                marker_y=derivative,
+                with_second_derivative_extrema=order == 2,
+            )
 
         self._apply_legend(drew and figure_settings.show_legend)
 
@@ -1654,7 +1669,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
             self._draw_extrema(
-                fit, finite_t.min(), finite_t.max(), roi, figure_settings
+                fit,
+                finite_t.min(),
+                finite_t.max(),
+                roi,
+                figure_settings,
+                marker_y=fit.predict,
             )
         if figure_settings.show_fit_equations:
             for index, (color, alpha, text) in enumerate(equation_lines):
@@ -1672,34 +1692,50 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
         return trim_edges
 
-    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings, marker_y=None):
-        """Point (plus optional v/h line and coordinates) where the
-        fitted curve's second derivative peaks/troughs: on the curve
-        itself, or on ``marker_y`` (a function of t) when given."""
+    def _draw_extrema(
+        self,
+        fit,
+        t_start,
+        t_end,
+        roi,
+        figure_settings,
+        marker_y,
+        with_second_derivative_extrema=True,
+    ):
+        """Point (plus optional v/h line and coordinates) on
+        ``marker_y`` (a function of t: the curve or one of its
+        derivatives) at each enabled marker's t — where the fitted
+        curve's second derivative peaks/troughs, and where the curve
+        changes fastest. ``with_second_derivative_extrema`` False
+        leaves the d² ones out."""
         wanted = [
             key
             for key, enabled in (
                 ("max", figure_settings.show_second_derivative_max),
                 ("min", figure_settings.show_second_derivative_min),
             )
-            if enabled
+            if enabled and with_second_derivative_extrema
         ]
-        if not wanted:
-            return
-        extrema = second_derivative_extrema(fit, t_start, t_end)
-        for key in wanted:
-            if key not in extrema:
-                continue
-            t_star, y_star = extrema[key]
+        times = []
 
-            if marker_y is not None:
-                y_star = float(marker_y(t_star))
+        if wanted:
+            extrema = second_derivative_extrema(fit, t_start, t_end)
+            times.extend(extrema[key][0] for key in wanted if key in extrema)
 
-            self._draw_extremum_marker(t_star, y_star, roi, figure_settings)
+        if figure_settings.show_second_derivative_zero:
+            t_star = fastest_change_time(fit, t_start, t_end)
+
+            if t_star is not None:
+                times.append(t_star)
+
+        for t_star in times:
+            self._draw_extremum_marker(
+                t_star, float(marker_y(t_star)), roi, figure_settings
+            )
 
     def _draw_extremum_marker(self, t_star, y_star, roi, figure_settings):
-        """One d²-extremum marker at (t_star, y_star) — on the fitted
-        curve in the intensity view, on the d² curve in the d² view."""
+        """One marker at (t_star, y_star) — on the fitted curve in the
+        intensity view, on the derivative's curve in a derivative view."""
         alpha = roi.style.plot_alpha
         (point,) = self._axes.plot(
             [t_star],

@@ -203,7 +203,11 @@ class FigureSettings(HasTraits):
     #: Mark where the fitted curve's second derivative peaks/troughs.
     show_second_derivative_max = Bool(False)
     show_second_derivative_min = Bool(False)
-    #: Marker dressing for the enabled extrema.
+    #: Mark where the fitted curve's second derivative crosses zero — the
+    #: peak of |dy/dx|, the fastest change, which the Fastest change view
+    #: and the Expected tab report.
+    show_second_derivative_zero = Bool(False)
+    #: Marker dressing for the enabled markers.
     second_derivative_vline = Bool(True)
     second_derivative_hline = Bool(False)
     second_derivative_coords = Bool(True)
