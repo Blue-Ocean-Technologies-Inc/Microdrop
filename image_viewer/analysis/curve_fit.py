@@ -556,3 +556,24 @@ def fastest_change_time(fit, t_start, t_end):
     if fit.inflection is not None and float(t_start) <= fit.inflection <= float(t_end):
         return float(fit.inflection)
     return float(grid[int(np.argmax(speed))])
+
+
+def linear_trend(positions, values):
+    """(slope, intercept, r_squared) of the least-squares line through
+    the finite (position, value) pairs, or None when fewer than two
+    remain or they share one position — neither fixes a slope."""
+    positions = np.asarray(positions, dtype=float)
+    values = np.asarray(values, dtype=float)
+    finite = np.isfinite(positions) & np.isfinite(values)
+    positions, values = positions[finite], values[finite]
+
+    if len(positions) < 2 or float(np.ptp(positions)) == 0.0:
+        return None
+
+    slope, intercept = np.polyfit(positions, values, 1)
+
+    return (
+        float(slope),
+        float(intercept),
+        _r_squared(values, slope * positions + intercept),
+    )

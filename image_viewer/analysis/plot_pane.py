@@ -11,8 +11,8 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, that stat
 per ROI on the displayed image (bars) or across the series (violins),
-the fits' first- or second-derivative curves, or the per-ROI
-time-of-fastest-change bars.
+the fits' first- or second-derivative curves, the per-ROI
+time-of-fastest-change bars, or that time against the expected one.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
@@ -51,6 +51,7 @@ from traitsui.api import (
     Item,
     Label,
     Tabbed,
+    TableEditor,
     UItem,
     VGrid,
     VGroup,
@@ -60,6 +61,7 @@ from traitsui.api import (
 from microdrop_style.icons.icons import (
     ICON_FOLDER_OPEN,
     ICON_FUNCTION,
+    ICON_RESTORE,
     ICON_SAVE,
 )
 
@@ -69,6 +71,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
+    ObjectColumn,
     toggle_editor_default_style_sheet_factory,
 )
 
@@ -89,6 +92,7 @@ from .consts import (
 from .curve_fit import (
     fastest_change_time,
     fit_series,
+    linear_trend,
     second_derivative_extrema,
     trimmed_note,
 )
@@ -626,6 +630,68 @@ def _cleanup_tab():
     )
 
 
+def _format_fastest_change(value):
+    """A fastest-change value for the Expected table, blank when unknown."""
+    return "" if value != value else f"{value:.4g}"
+
+
+#: The Expected tab's table: per ROI, its fitted fastest-change value
+#: beside the editable expected one.
+EXPECTED_TABLE_EDITOR = TableEditor(
+    columns=[
+        ObjectColumn(name="name", label="ROI", editable=False),
+        ObjectColumn(
+            name="actual",
+            label="Actual",
+            editable=False,
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+        ObjectColumn(
+            name="expected",
+            label="Expected",
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+    ],
+    sortable=False,
+)
+
+
+def _expected_tab():
+    """Per ROI, the x value its fastest change is expected at, for the
+    Actual vs expected view."""
+    return VGroup(
+        HGroup(
+            UItem(
+                "model.reset_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Reset every expected value to its actual",
+                ),
+            ),
+            UItem(
+                "model.export_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SAVE,
+                    tooltip="Export the table to CSV in the experiment's "
+                    "analysis folder (Actual stays blank until a fastest-change "
+                    "or actual-vs-expected view has been drawn)",
+                ),
+            ),
+            _toggle(
+                "figure.flip_actual_expected",
+                "Flip axes",
+                enabled_when="figure.view_mode == 'actual_vs_expected'",
+                tooltip="Swap the axes: expected on y against actual on x, "
+                "so the trend gives expected from actual",
+            ),
+        ),
+        UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),
+        label="Expected",
+    )
+
+
 def _export_tab():
     """DPI and Format on their own rows; the save button lives on the
     top row, so saving never needs a tab switch."""
@@ -645,7 +711,7 @@ def _export_tab():
 _plot_controls_view = View(
     VGroup(
         _top_row(),
-        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _export_tab()),
+        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _expected_tab(), _export_tab()),
     ),
 )
 
@@ -678,6 +744,7 @@ _PLOT_STATE = (
     "session:figure:second_derivative_hline, "
     "session:figure:second_derivative_coords, "
     "session:figure:view_mode, "
+    "session:figure:flip_actual_expected, "
     "session:figure:log_x, session:figure:log_y, "
     "session:figure:normalize, "
     "session:figure:subtract_first, "
@@ -698,7 +765,8 @@ _PLOT_STATE = (
     "session:figure:savgol_order, "
     "session:figure:butter_order, "
     "session:figure:butter_cutoff, "
-    "session:rois:items:is_background_ref"
+    "session:rois:items:is_background_ref, "
+    "session:rois:items:expected_fastest_change"
 )
 
 #: Changes that mean "show me everything again", releasing a view the
@@ -903,8 +971,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
                 trim_edges = self._draw_distribution(series, figure_settings)
-            else:
+            elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
+            else:
+                trim_edges = self._draw_actual_vs_expected(series, figure_settings)
 
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
@@ -1220,6 +1290,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return trim_edges
 
+    def _fastest_change_points(self, series, figure_settings):
+        """(roi, name, actual) per ROI with a fastest-change point: the
+        x where its fitted curve changes fastest (max |dy/dx| — a
+        sigmoid's inflection point). A fit that fails or whose rate is
+        flat (linear) has none. The actuals are pushed to the model for
+        the Expected table, which has no fits of its own."""
+        points = []
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
+
+            if actual is not None:
+                points.append((roi, name, actual))
+
+        self._model.fastest_change_actual = {
+            roi.roi_id: actual for roi, _name, actual in points
+        }
+
+        return points
+
     def _draw_fastest_change(self, series, figure_settings):
         """Bar per ROI: seconds until the fitted curve changes fastest
         (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
@@ -1235,13 +1325,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        entries = []
-
-        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
-            actual = fastest_change_time(fit, finite_t.min(), finite_t.max())
-
-            if actual is not None:
-                entries.append((name, actual, roi.style))
+        entries = [
+            (name, actual, roi.style)
+            for roi, name, actual in self._fastest_change_points(
+                series, figure_settings
+            )
+        ]
 
         if not entries:
             self._draw_hint(
@@ -1253,6 +1342,111 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._draw_roi_bars(entries)
 
         return []  # ROI names on x: no time span to shade
+
+    def _draw_actual_vs_expected(self, series, figure_settings):
+        """Point per ROI: its fastest-change x value against the one the
+        user expects (the Expected tab; unset reads as the actual),
+        over the identity line, with a fitted trend line whose slope
+        and intercept go in the corner. Flipped, expected goes on y, so
+        the trend gives expected from actual."""
+        quantity, unit = x_quantity(figure_settings)
+        measured = f"{quantity.lower()} of fastest change ({unit})"
+        x_name, y_name = (
+            ("actual", "expected")
+            if figure_settings.flip_actual_expected
+            else ("expected", "actual")
+        )
+
+        self._axes.set_xlabel(f"{x_name.capitalize()} {measured}")
+        self._axes.set_ylabel(f"{y_name.capitalize()} {measured}")
+        self._apply_legend(False)
+
+        if figure_settings.fit_method == "none":
+            self._draw_hint("Select a fit method to view actual vs expected")
+
+            return []
+
+        points = self._fastest_change_points(series, figure_settings)
+
+        if not points:
+            self._draw_hint(
+                "No fastest-change points (fits failed or rate is constant)"
+            )
+
+            return []
+
+        values = {
+            "expected": [
+                roi.expected_fastest_change_or(actual) for roi, _name, actual in points
+            ],
+            "actual": [actual for _roi, _name, actual in points],
+        }
+        x_values, y_values = values[x_name], values[y_name]
+        span = [min(*x_values, *y_values), max(*x_values, *y_values)]
+
+        (identity_line,) = self._axes.plot(
+            span,
+            span,
+            linestyle="--",
+            linewidth=0.8,
+            color="gray",
+            alpha=0.6,
+            label="_nolegend_",
+        )
+        self._fit_artists.append(identity_line)
+        self._fit_artists.append(
+            self._axes.scatter(
+                x_values,
+                y_values,
+                color=[roi.style.color for roi, _name, _actual in points],
+                alpha=[roi.style.plot_alpha for roi, _name, _actual in points],
+                zorder=3,
+            )
+        )
+
+        for (_roi, name, _actual), x, y in zip(points, x_values, y_values):
+            self._fit_artists.append(
+                self._axes.annotate(
+                    name,
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(6, 4),
+                    fontsize="x-small",
+                )
+            )
+
+        trend = linear_trend(x_values, y_values)
+
+        if trend is not None:
+            slope, intercept, r_squared = trend
+            ends = np.array([min(x_values), max(x_values)])
+            # Unset expecteds solve to y = x up to rounding noise; say so.
+            noise = 1e-9 * (max(abs(value) for value in y_values) or 1.0)
+            intercept = 0.0 if abs(intercept) < noise else intercept
+            slope = 1.0 if abs(slope - 1.0) < 1e-9 else slope
+
+            (trend_line,) = self._axes.plot(
+                ends,
+                slope * ends + intercept,
+                linestyle="--",
+                color="black",
+                alpha=0.7,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(trend_line)
+            self._fit_artists.append(
+                self._axes.text(
+                    EQUATION_BOX_X,
+                    EQUATION_BOX_TOP_Y,
+                    f"{y_name} = {slope:.4g} × {x_name} {intercept:+.4g}  "
+                    f"(R² {r_squared:.3f})",
+                    transform=self._axes.transAxes,
+                    va="top",
+                    fontsize="x-small",
+                )
+            )
+
+        return []  # fastest-change values on both axes: no time span
 
     def _shade_trimmed_tails(self, trim_edges):
         """Grey band over the tail the poor-fit trim kept out of at
@@ -1600,6 +1794,10 @@ class RoiPlotDockPane(DockPane):
         session = roi_analysis_model.session
         return _plot_controls_view.ui(
             context={
+                # TableEditor cell editors copy the context's "object"
+                # and fail without one, leaving the Expected table
+                # uneditable; the model stands in for it.
+                "object": roi_analysis_model,
                 "session": session,
                 "figure": session.figure,
                 "model": roi_analysis_model,

@@ -70,6 +70,7 @@ _FIGURE_FIELDS = (
     "second_derivative_hline",
     "second_derivative_coords",
     "view_mode",
+    "flip_actual_expected",
     "log_x",
     "log_y",
     "normalize",
@@ -143,6 +144,7 @@ def save_session(experiment_directory, session):
                 },
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
+                "expected_fastest_change": roi.expected_fastest_change,
             }
             for roi in session.rois
         ],
@@ -177,6 +179,8 @@ def _roi_from(entry):
         is_background_ref=bool(
             entry.get("is_background_ref", entry.get("is_standard", False))
         ),
+        # Absent in configs written before the actual-vs-expected view.
+        expected_fastest_change=float(entry.get("expected_fastest_change", math.nan)),
         style=style,
     )
 
@@ -578,6 +582,33 @@ def write_intensity_csv(
                 flags = (outliers or {}).get(roi.roi_id) or []
                 record += [int(bool(flags[index])) if index < len(flags) else 0]
                 writer.writerow(record + settings)
+
+
+def write_expected_csv(csv_path, rows, unit):
+    """Write the Expected table, one row per ROI.
+
+    Parameters
+    ----------
+    csv_path : path-like
+        The file to write.
+    rows : iterable
+        Objects with ``name``, ``actual`` and ``expected`` — the
+        table's ``ExpectedRow``s. ``actual`` is the fitted curve's
+        fastest-change x value, NaN (a blank cell) until a view has
+        fitted it; ``expected`` is the user's value, equal to the
+        actual while none is set.
+    unit : str
+        The x axis's unit (``x_quantity``), repeated on every row so the
+        file stays self-describing.
+    """
+    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["roi", "actual", "expected", "unit"])
+
+        for row in rows:
+            writer.writerow(
+                [row.name] + _csv_cells([row.actual, row.expected]) + [unit]
+            )
 
 
 def load_fit_equations(experiment_directory) -> dict:

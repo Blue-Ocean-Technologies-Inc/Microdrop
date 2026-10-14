@@ -45,7 +45,7 @@ from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_loader import HeaterSamplesLoader
 from .heater_log import describe_heater_coverage, sensors_in, temperature_at
-from .plot_series import analysed_series, calibrated_temperatures
+from .plot_series import analysed_series, calibrated_temperatures, x_quantity
 from .protocol_guard import proceed_despite_protocol
 from .roi_batch import (
     BATCH_FINISHED,
@@ -64,6 +64,7 @@ from .roi_store import (
     save_fit_equations,
     save_roi_stats,
     save_session,
+    write_expected_csv,
     write_intensity_csv,
 )
 
@@ -415,6 +416,38 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.progress_text = ""
         self._save_config()
 
+    @observe("analysis_model:reset_expected_button")
+    def _reset_expected_values(self, event):
+        for roi in self.session.rois:
+            roi.expected_fastest_change = math.nan
+
+    @observe("analysis_model:export_expected_button")
+    def _export_expected(self, event):
+        directory = self._experiment_directory()
+
+        if directory is None:
+            self.analysis_model.progress_text = "No experiment folder"
+            return
+
+        name = (
+            f"roi_fastest_change_"
+            f"{sanitize_label(self.viewer_model.selected_burst)}_"
+            f"{sanitize_label(self.viewer_model.selected_filter)}_"
+            f"{utc_stamp()}.csv"
+        )
+        csv_path = analysis_directory(directory) / name
+        unit = x_quantity(self.session.figure)[1]
+
+        try:
+            write_expected_csv(csv_path, self.analysis_model.expected_rows, unit)
+        except Exception as error:
+            logger.warning(f"Expected-table export failed: {error}")
+            self.analysis_model.progress_text = f"Export failed: {error}"
+            return
+
+        self.analysis_model.progress_text = f"Exported {csv_path.name}"
+        logger.info(f"ROI fastest changes exported to {csv_path}")
+
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):
         result = confirm(
@@ -745,6 +778,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:second_derivative_hline, "
         "analysis_model:session:figure:second_derivative_coords, "
         "analysis_model:session:figure:view_mode, "
+        "analysis_model:session:figure:flip_actual_expected, "
         "analysis_model:session:figure:log_x, "
         "analysis_model:session:figure:log_y, "
         "analysis_model:session:figure:normalize, "
@@ -769,6 +803,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:show_metrics_group, "
         "analysis_model:session:rois:items:name, "
         "analysis_model:session:rois:items:is_background_ref, "
+        "analysis_model:session:rois:items:expected_fastest_change, "
         "analysis_model:session:rois:items:style:color, "
         "analysis_model:session:rois:items:style:line_style, "
         "analysis_model:session:rois:items:style:marker, "

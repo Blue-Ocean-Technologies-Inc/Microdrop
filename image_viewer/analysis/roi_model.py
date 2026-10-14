@@ -14,6 +14,7 @@ progress. Mutated only on the GUI thread (button events and the dock
 pane's drain timer), so no Qt bridging is needed."""
 
 # Standard library imports.
+import math
 import re
 import uuid
 from pathlib import Path
@@ -22,6 +23,7 @@ from pathlib import Path
 from traits.api import (
     Bool,
     Button,
+    DelegatesTo,
     Dict,
     Enum,
     Event,
@@ -207,6 +209,9 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+    #: Plot expected against actual instead of actual against expected,
+    #: so the trend reads expected = slope × actual + intercept.
+    flip_actual_expected = Bool(False)
 
     #: What the curves are plotted against: elapsed capture time, or
     #: the heater log's temperature at each capture. The swap happens
@@ -360,8 +365,20 @@ class Roi(HasTraits):
     #: background_ref_corrected_series).
     is_background_ref = Bool(False)
 
+    #: The x value the user expects this ROI's fastest change at, for
+    #: the actual-vs-expected view. NaN means not set — use the actual
+    #: value — so by default every point sits on the identity line.
+    expected_fastest_change = Float(math.nan)
+
     def _roi_id_default(self):
         return uuid.uuid4().hex[:8]
+
+    def expected_fastest_change_or(self, actual):
+        """The expected fastest-change value, or ``actual`` while unset."""
+        if math.isnan(self.expected_fastest_change):
+            return actual
+
+        return self.expected_fastest_change
 
     def effective_geometry(self, capture_time):
         """The geometry in force for an image captured at
@@ -383,6 +400,29 @@ class Roi(HasTraits):
 
     def clear_overrides(self):
         self.overrides = {}
+
+
+class ExpectedRow(HasTraits):
+    """One ROI's line in the Expected table: its fitted fastest-change
+    value beside the one the user expects."""
+
+    #: The ROI the row reads its name from and writes its expected to.
+    roi = Instance(Roi)
+
+    #: The ROI's display name.
+    name = DelegatesTo("roi")
+
+    #: The fitted curve's fastest-change x value; NaN when unknown.
+    actual = Float(math.nan)
+
+    #: The user's expected value — the actual while none is set.
+    expected = Property(Float, observe="roi.expected_fastest_change, actual")
+
+    def _get_expected(self):
+        return self.roi.expected_fastest_change_or(self.actual)
+
+    def _set_expected(self, value):
+        self.roi.expected_fastest_change = value
 
 
 class AnalysisSession(HasTraits):
@@ -618,6 +658,10 @@ class RoiAnalysisModel(HasTraits):
     #: Pick the heater-log folder (handled by the plot dock pane,
     #: which owns a window to parent the directory dialog on).
     heater_dir_button = Button()
+    #: Set every ROI's expected fastest change back to unset (its actual).
+    reset_expected_button = Button()
+    #: Write the Expected table to a CSV in the experiment's analysis folder.
+    export_expected_button = Button()
     #: What the sensor dropdown offers: "mean" plus every sensor the
     #: loaded heater logs actually carry.
     heater_sensor_choices = List(Str, [HEATER_SENSOR_MEAN])
@@ -742,6 +786,30 @@ class RoiAnalysisModel(HasTraits):
     #: pane and stats table never need the viewer model.
     filtered_paths = List(Str)
     current_image_path = Str()
+
+    #: Each ROI's fitted fastest-change x value by roi_id, pushed by
+    #: the plot canvas — the only place the fits are computed —
+    #: whenever it draws a fastest-change view.
+    fastest_change_actual = Dict(Str, Float)
+
+    #: The Expected table's rows, one per ROI.
+    expected_rows = Property(
+        List(Instance(ExpectedRow)), observe="session, session:rois.items"
+    )
+
+    @cached_property
+    def _get_expected_rows(self):
+        return [
+            ExpectedRow(
+                roi=roi, actual=self.fastest_change_actual.get(roi.roi_id, math.nan)
+            )
+            for roi in self.session.rois
+        ]
+
+    @observe("fastest_change_actual")
+    def _update_expected_actuals(self, event):
+        for row in self.expected_rows:
+            row.actual = self.fastest_change_actual.get(row.roi.roi_id, math.nan)
 
     #: Whether the DISPLAYED image is excluded from analysis — the
     #: sidebar checkbox edits this; RoiAnalysisController mirrors it

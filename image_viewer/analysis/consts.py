@@ -181,8 +181,9 @@ DEFAULT_ROI_COLORS = (
 #: Plot pane view modes: the plotted stat over time (the key predates
 #: the area stat and is persisted, so it stays "intensity"), its value
 #: per ROI on the displayed image, its distribution per ROI across the
-#: series, the fits' first- or second-derivative curves, or the per-ROI
-#: time-of-fastest-change bars.
+#: series, the fits' first- or second-derivative curves, the per-ROI
+#: time-of-fastest-change bars, or that time against the one the user
+#: expects.
 VIEW_MODES = (
     "intensity",
     "per_image",
@@ -190,6 +191,7 @@ VIEW_MODES = (
     "first_derivative",
     "second_derivative",
     "fastest_change",
+    "actual_vs_expected",
 )
 VIEW_MODE_LABELS = {
     "intensity": "Over time",
@@ -198,6 +200,7 @@ VIEW_MODE_LABELS = {
     "first_derivative": "1st derivative",
     "second_derivative": "2nd derivative",
     "fastest_change": "Fastest change",
+    "actual_vs_expected": "Actual vs expected",
 }
 
 #: The View labels per x axis: only the curves view names its axis.
