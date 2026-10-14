@@ -594,9 +594,9 @@ def write_expected_csv(csv_path, rows, unit):
     rows : iterable
         Objects with ``name``, ``actual`` and ``expected`` — the
         table's ``ExpectedRow``s. ``actual`` is the fitted curve's
-        fastest-change x value, NaN (a blank cell) until a view has
-        fitted it; ``expected`` is the user's value, equal to the
-        actual while none is set.
+        fastest-change x value, NaN (a blank cell) for a ROI with no
+        fit; ``expected`` is the user's value, equal to the actual
+        while none is set.
     unit : str
         The x axis's unit (``x_quantity``), repeated on every row so the
         file stays self-describing.

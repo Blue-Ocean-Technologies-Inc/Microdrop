@@ -702,8 +702,7 @@ def _expected_tab():
                 editor=IconButtonEditor(
                     glyph=ICON_SAVE,
                     tooltip="Export the table to CSV in the experiment's "
-                    "analysis folder (Actual stays blank until a fastest-change "
-                    "or actual-vs-expected view has been drawn)",
+                    "analysis folder (Actual is blank for a ROI with no fit)",
                 ),
             ),
             _toggle(
@@ -824,6 +823,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists = []
         #: Set per redraw: which points the outlier test dropped.
         self._outliers = {}
+        #: This redraw's fits, solved on first use (see _fitted_rois).
+        self._fits = None
         self._redraw_pending = False
         self._detached = False
         #: Set once the user zooms or pans: their view then survives
@@ -965,6 +966,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # drawn one cannot disagree about which points they saw.
         series, self._outliers = analysed_series(session, self._model.filtered_paths)
         figure_settings = session.figure
+        self._fits = None
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
@@ -1002,6 +1004,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_fastest_change(series, figure_settings)
             else:
                 trim_edges = self._draw_actual_vs_expected(series, figure_settings)
+
+        # The Expected tab and its CSV read these whatever is shown. The
+        # fitting views reuse their fits; the per-image and distribution
+        # views fit nothing, so they pay one fit pass here to keep the
+        # actuals current.
+        self._model.fastest_change_actual = {
+            roi.roi_id: actual
+            for roi, _name, actual in self._fastest_change_points(
+                series, figure_settings
+            )
+        }
 
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
@@ -1238,10 +1251,18 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             )
 
     def _fitted_rois(self, series, figure_settings):
-        """Yield (roi, name, fit, finite_t) per ROI the chosen method
-        fits, finite_t being its x at the finite values — never empty,
-        as fit_series needs two finite points. ROIs that cannot be
-        fitted are skipped."""
+        """(roi, name, fit, finite_t) per ROI the chosen method fits,
+        finite_t being its x at the finite values — never empty, as
+        fit_series needs two finite points. ROIs that cannot be fitted
+        are skipped. Solved once per redraw: every later call in the
+        same redraw gets the same list."""
+        if self._fits is None:
+            self._fits = list(self._solve_fits(series, figure_settings))
+
+        return self._fits
+
+    def _solve_fits(self, series, figure_settings):
+        """Yield the fits _fitted_rois holds for the redraw."""
         method, expression = fit_arguments(figure_settings, self._model.fit_presets)
 
         for roi_id, (name, elapsed, values) in series.items():
@@ -1321,8 +1342,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """(roi, name, actual) per ROI with a fastest-change point: the
         x where its fitted curve changes fastest (max |dy/dx| — a
         sigmoid's inflection point). A fit that fails or whose rate is
-        flat (linear) has none. The actuals are pushed to the model for
-        the Expected table, which has no fits of its own."""
+        flat (linear) has none."""
         points = []
 
         for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
@@ -1330,10 +1350,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             if actual is not None:
                 points.append((roi, name, actual))
-
-        self._model.fastest_change_actual = {
-            roi.roi_id: actual for roi, _name, actual in points
-        }
 
         return points
 

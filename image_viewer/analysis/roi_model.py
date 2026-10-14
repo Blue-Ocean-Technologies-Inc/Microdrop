@@ -788,8 +788,8 @@ class RoiAnalysisModel(HasTraits):
     current_image_path = Str()
 
     #: Each ROI's fitted fastest-change x value by roi_id, pushed by
-    #: the plot canvas — the only place the fits are computed —
-    #: whenever it draws a fastest-change view.
+    #: the plot canvas — the only place the fits are computed — after
+    #: every redraw, whatever view it shows. Empty while fitting is off.
     fastest_change_actual = Dict(Str, Float)
 
     #: The Expected table's rows, one per ROI.
