@@ -124,6 +124,28 @@ def calibrated_temperatures(figure, temperatures):
     return [slope * temperature + intercept for temperature in temperatures]
 
 
+def x_quantity(figure_settings):
+    """What the curves are plotted against, as (quantity, unit); the
+    unit is flagged once the linear calibration has moved the
+    temperature off the log's own reading."""
+    if figure_settings.x_axis != "temperature":
+        return "Time", "s"
+
+    calibrated = (
+        figure_settings.temperature_slope != 1.0
+        or figure_settings.temperature_intercept != 0.0
+    )
+
+    return "Temperature", "°C, calibrated" if calibrated else "°C"
+
+
+def x_axis_label(figure_settings):
+    """The x-axis text of the views drawn against time or temperature."""
+    quantity, unit = x_quantity(figure_settings)
+
+    return f"Elapsed time ({unit})" if quantity == "Time" else f"{quantity} ({unit})"
+
+
 def analysed_paths(session, filtered_paths):
     """The filtered images the analysis covers, user-excluded ones
     left out, in the order every derived series runs."""

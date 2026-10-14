@@ -71,6 +71,7 @@ from .consts import (
     SAVGOL_WINDOW_PTS,
     SHAPE_STATS,
     VIEW_HOLDING_MODES,
+    VIEW_MODE_LABELS_BY_X_AXIS,
     VIEW_MODES,
     X_AXIS_MODES,
 )
@@ -646,6 +647,17 @@ class RoiAnalysisModel(HasTraits):
 
     def _fit_method_choices_default(self):
         return choices_for(self.fit_presets, self.session.figure.fit_method)
+
+    #: What the View dropdown offers, mode -> label, worded for the
+    #: session's x axis.
+    view_mode_choices = Dict(Str, Str)
+
+    @observe("session, session:figure:x_axis")
+    def _update_view_mode_choices(self, event):
+        self.view_mode_choices = VIEW_MODE_LABELS_BY_X_AXIS[self.session.figure.x_axis]
+
+    def _view_mode_choices_default(self):
+        return VIEW_MODE_LABELS_BY_X_AXIS[self.session.figure.x_axis]
 
     # ---------------------------------------------------------------- #
     # AI (SAM) ROI detection: toolbar/options state and canvas<->

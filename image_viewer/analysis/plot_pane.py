@@ -83,8 +83,6 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
-    VIEW_MODE_LABELS,
-    VIEW_MODES,
     X_AXIS_LABELS,
     X_AXIS_MODES,
 )
@@ -106,6 +104,8 @@ from .plot_series import (
     image_values,
     interpolated_series,
     smoothed_series,
+    x_axis_label,
+    x_quantity,
 )
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -280,9 +280,7 @@ def _top_row():
             "figure.view_mode",
             label="View",
             width=DROPDOWN_W,
-            editor=HoverScrollEnumEditor(
-                values=list(VIEW_MODES), format_func=VIEW_MODE_LABELS.get
-            ),
+            editor=HoverScrollEnumEditor(values_name="model.view_mode_choices"),
         ),
         Item(
             "session.plot_stat",
@@ -320,7 +318,7 @@ def _axes_tab():
             _axis_spin("figure.x_max", "x_auto"),
             UItem(
                 "figure.log_x",
-                tooltip="Logarithmic time axis. Points at t = 0 "
+                tooltip="Logarithmic x axis. Points at or below 0 "
                 "cannot be drawn on it and are counted in "
                 "a note on the figure.",
             ),
@@ -505,7 +503,7 @@ def _fit_tab():
                     "Coords",
                     enabled_when="figure.show_second_derivative_max "
                     "or figure.show_second_derivative_min",
-                    tooltip="Write each marker's (t, y) beside it",
+                    tooltip="Write each marker's (x, y) beside it",
                 ),
             ),
         ),
@@ -720,7 +718,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         super().__init__(self._figure)
         self._model = model
         self._axes = self._figure.add_subplot(111)
-        self._axes.set_xlabel("Elapsed time (s)")
+        self._axes.set_xlabel(x_axis_label(model.session.figure))
         self._axes.set_ylabel("Mean intensity")
         self._axes.grid(True, alpha=0.3)
         self._figure.tight_layout()
@@ -875,11 +873,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # A previous fastest-change render left categorical ticks behind.
         self._axes.xaxis.set_major_locator(AutoLocator())
         self._axes.xaxis.set_major_formatter(ScalarFormatter())
-        self._axes.set_xlabel(
-            "Temperature (°C)"
-            if figure_settings.x_axis == "temperature"
-            else "Elapsed time (s)"
-        )
+        self._axes.set_xlabel(x_axis_label(figure_settings))
         # After the locator reset above (which would fight the log
         # locators), before relim, so autoscale sees the final scale,
         # and before drawing: setting a scale resets the axis locators,
@@ -1205,12 +1199,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """Bar per ROI: seconds until the fitted curve changes fastest
         (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
         fails or whose speed is flat (linear) get no bar."""
-        self._axes.set_ylabel("Time of fastest change (s)")
+        quantity, unit = x_quantity(figure_settings)
+
+        self._axes.set_ylabel(f"{quantity} of fastest change ({unit})")
         self._axes.set_xlabel("ROI")
         self._apply_legend(False)
+
         if figure_settings.fit_method == "none":
             self._draw_hint("Select a fit method to view fastest change")
+
             return []
+
         entries = []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
@@ -1234,8 +1233,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if t_star is None:
                 continue
             entries.append((name, t_star, roi.style))
+
         if not entries:
-            self._draw_hint("No fastest-change times (fits failed or rate is constant)")
+            self._draw_hint(
+                "No fastest-change points (fits failed or rate is constant)"
+            )
+
             return []
 
         self._draw_roi_bars(entries)
@@ -1382,6 +1385,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         table is where failures are reported). Returns the (fitted_end,
         series_end) pairs the trim shading is drawn from."""
         equation_lines, trim_edges = [], []
+        _quantity, x_unit = x_quantity(figure_settings)
+
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
@@ -1417,7 +1422,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     roi.style.color,
                     roi.style.plot_alpha,
                     f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
-                    f"{trimmed_note(fit, finite_t.max())}",
+                    f"{trimmed_note(fit, finite_t.max(), unit=x_unit)}",
                 )
             )
             self._draw_extrema(
