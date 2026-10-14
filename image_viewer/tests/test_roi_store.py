@@ -20,6 +20,7 @@ import shutil
 # Microdrop package imports.
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
+    ExpectedRow,
     Roi,
     RoiStyle,
 )
@@ -30,6 +31,7 @@ from image_viewer.analysis.roi_store import (
     save_fit_equations,
     save_roi_stats,
     save_session,
+    write_expected_csv,
     write_intensity_csv,
 )
 
@@ -621,6 +623,25 @@ def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
     with open(csv_path, newline="", encoding="utf-8") as handle:
         header = next(csv.reader(handle))
     assert not [name for name in header if name.endswith("_norm_pct")]
+
+
+def test_write_expected_csv_round_trips_the_table(tmp_path):
+    unfitted = ExpectedRow(roi=Roi(name="ROI 1", kind="box"))
+    fitted = ExpectedRow(roi=Roi(name="ROI 2", kind="box"), actual=41.5)
+    fitted.expected = 45.0
+    csv_path = tmp_path / "expected.csv"
+
+    write_expected_csv(csv_path, [unfitted, fitted], "°C")
+
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        table = list(csv.reader(handle))
+
+    # An unfitted ROI's actual (and so its expected) is a blank cell.
+    assert table == [
+        ["roi", "actual", "expected", "unit"],
+        ["ROI 1", "", "", "°C"],
+        ["ROI 2", "41.5", "45.0", "°C"],
+    ]
 
 
 def test_background_ring_round_trips(tmp_path):

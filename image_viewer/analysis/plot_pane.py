@@ -670,6 +670,15 @@ def _expected_tab():
                     tooltip="Reset every expected value to its actual",
                 ),
             ),
+            UItem(
+                "model.export_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SAVE,
+                    tooltip="Export the table to CSV in the experiment's "
+                    "analysis folder (Actual stays blank until a fastest-change "
+                    "or actual-vs-expected view has been drawn)",
+                ),
+            ),
             _toggle(
                 "figure.flip_actual_expected",
                 "Flip axes",

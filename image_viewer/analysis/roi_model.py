@@ -660,6 +660,8 @@ class RoiAnalysisModel(HasTraits):
     heater_dir_button = Button()
     #: Set every ROI's expected fastest change back to unset (its actual).
     reset_expected_button = Button()
+    #: Write the Expected table to a CSV in the experiment's analysis folder.
+    export_expected_button = Button()
     #: What the sensor dropdown offers: "mean" plus every sensor the
     #: loaded heater logs actually carry.
     heater_sensor_choices = List(Str, [HEATER_SENSOR_MEAN])

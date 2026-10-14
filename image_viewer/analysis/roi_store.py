@@ -584,6 +584,33 @@ def write_intensity_csv(
                 writer.writerow(record + settings)
 
 
+def write_expected_csv(csv_path, rows, unit):
+    """Write the Expected table, one row per ROI.
+
+    Parameters
+    ----------
+    csv_path : path-like
+        The file to write.
+    rows : iterable
+        Objects with ``name``, ``actual`` and ``expected`` — the
+        table's ``ExpectedRow``s. ``actual`` is the fitted curve's
+        fastest-change x value, NaN (a blank cell) until a view has
+        fitted it; ``expected`` is the user's value, equal to the
+        actual while none is set.
+    unit : str
+        The x axis's unit (``x_quantity``), repeated on every row so the
+        file stays self-describing.
+    """
+    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["roi", "actual", "expected", "unit"])
+
+        for row in rows:
+            writer.writerow(
+                [row.name] + _csv_cells([row.actual, row.expected]) + [unit]
+            )
+
+
 def load_fit_equations(experiment_directory) -> dict:
     """The saved fitted parameters, {} when absent or unreadable:
     {equation: {roi name: {parameter: value}}}."""
