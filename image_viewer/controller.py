@@ -59,6 +59,7 @@ from .discovery import (
 )
 from .display import load_image_array, render_display_frame
 from .latest_wins_worker import LatestWinsWorker
+from .metadata import NO_METADATA_TEXT, format_png_text, read_png_text
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
@@ -503,6 +504,18 @@ class ImageViewerController(Controller):
     def _load_current_path(self, event):
         self._failed_load = None
         self._render_current_path()
+
+    @observe("model:current_path")
+    def _read_current_metadata(self, event):
+        """Show the new image's text chunks. Header-only (no pixel
+        decode), so it stays on the GUI thread, off the loader."""
+        path = event.new
+
+        if not path:
+            self.model.metadata_text = NO_METADATA_TEXT
+            return
+
+        self.model.metadata_text = format_png_text(read_png_text(path))
 
     @observe(
         "model:auto_contrast, model:window_min, model:window_max, "

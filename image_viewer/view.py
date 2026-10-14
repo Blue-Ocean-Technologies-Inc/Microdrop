@@ -962,6 +962,15 @@ contrast_group = VGroup(
     show_border=True,
 )
 
+# The displayed image's PNG text chunks (a capture's settings, for one),
+# whatever keys the file carries. Resizable so the label word-wraps
+# rather than widening the sidebar.
+metadata_group = VGroup(
+    UItem("metadata_text", style="readonly", resizable=True),
+    visible_when="show_metadata",
+    show_border=True,
+)
+
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export
 # pipeline over the filtered images, as an always-visible vertical
 # toolbar on the image's right edge. Instant/live per-ROI stats show in
@@ -1149,7 +1158,7 @@ analysis_toolbar = VGroup(
     spring,
 )
 
-# Selector sidebar: the five collapsible sections stacked, hidden as one
+# Selector sidebar: the six collapsible sections stacked, hidden as one
 # unit by the chevron toggle (device-viewer sidebar parity).
 sidebar_group = VGroup(
     _collapse_header("show_experiments", "Experiments"),
@@ -1162,6 +1171,8 @@ sidebar_group = VGroup(
     exclusion_group,
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
+    _collapse_header("show_metadata", "Metadata"),
+    metadata_group,
     visible_when="show_sidebar",
 )
 
