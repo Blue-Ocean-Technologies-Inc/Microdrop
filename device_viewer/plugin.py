@@ -22,6 +22,7 @@ from traits.api import Callable, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
@@ -159,6 +160,8 @@ class DeviceViewerPlugin(Plugin):
         return [device_viewer_tab, video_settings_tab]
 
     def _contributed_task_extensions_default(self):
+        from pluggable_protocol_tree.consts import PROTOCOL_MENU_ID
+
         from .menus import tools_menu_factory
         from .views.device_view_dock_pane import DeviceViewerDockPane
         from .views.video_viewer.dock_pane import VideoViewerDockPane
@@ -170,8 +173,8 @@ class DeviceViewerPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
-                        path="MenuBar/File",
-                        before="Exit",
+                        path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}",
+                        after=PROTOCOL_MENU_ID,
                     ),
                 ],
             )

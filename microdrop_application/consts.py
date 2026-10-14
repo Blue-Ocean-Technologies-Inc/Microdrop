@@ -27,6 +27,15 @@ ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
+# File-menu skeleton: the shell fixes two sections, the plugins' submenus
+# then Exit. Plugins add into the first via
+# SchemaAddition(path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}") and
+# declare their submenu's order within it with after= hints. Pyface matches
+# a hint against the other additions' id=, so an addition that others
+# order against sets id= to its menu id.
+FILE_MENU_SUBMENUS_GROUP_ID = "SubmenusGroup"
+FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
+
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"

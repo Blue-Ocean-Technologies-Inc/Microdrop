@@ -21,6 +21,7 @@ from traits.api import Instance, List
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 # Local imports.
@@ -48,16 +49,25 @@ class ImageViewerPlugin(Plugin):
     def _contributed_task_extensions_default(self):
         from pyface.action.schema.api import SchemaAddition
 
+        from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID
+
         from .analysis.plot_pane import RoiPlotDockPane
         from .dock_pane import ImageViewerDockPane
-        from .menus import help_menu_factory
+        from .menus import help_menu_factory, prune_menu_factory
 
         return [
             TaskExtension(
                 task_id=f"{microdrop_application_PKG}.task",
                 dock_pane_factories=[ImageViewerDockPane, RoiPlotDockPane],
                 actions=[
-                    SchemaAddition(factory=help_menu_factory, path="MenuBar/Help")
+                    SchemaAddition(factory=help_menu_factory, path="MenuBar/Help"),
+                    SchemaAddition(
+                        factory=prune_menu_factory,
+                        path=(
+                            f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}"
+                            f"/{EXPERIMENTS_MENU_ID}"
+                        ),
+                    ),
                 ],
             )
         ]

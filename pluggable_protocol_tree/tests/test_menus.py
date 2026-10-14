@@ -14,8 +14,10 @@ Verifies the SMenu/DockPaneAction wiring without standing up the full
 Pyface task framework.
 """
 
-from pyface.tasks.action.api import DockPaneAction, SMenu
+# Enthought library imports.
+from pyface.tasks.action.api import DockPaneAction, SGroup, SMenu
 
+# Microdrop package imports.
 from pluggable_protocol_tree.consts import PKG
 from pluggable_protocol_tree.menus import (
     import_legacy_dialog_factory,
@@ -26,23 +28,35 @@ from pluggable_protocol_tree.menus import (
     save_dialog_factory,
 )
 
-
 _DOCK_PANE_ID = f"{PKG}.dock_pane"
 
 
-def test_protocol_menu_factory_returns_smenu_with_five_items():
+def _actions(menu):
+    """Flatten the menu's groups into its actions, in menu order."""
+    return [action for group in menu.items for action in group.items]
+
+
+def test_protocol_menu_factory_returns_two_groups_of_actions():
     menu = protocol_menu_factory()
+    actions = _actions(menu)
+
     assert isinstance(menu, SMenu)
     assert menu.name == "&Protocol"
-    items = list(menu.items)
-    assert len(items) == 5
-    assert all(isinstance(item, DockPaneAction) for item in items)
+    assert len(menu.items) == 2
+    assert all(isinstance(group, SGroup) for group in menu.items)
+    assert len(actions) == 5
+    assert all(isinstance(action, DockPaneAction) for action in actions)
+    assert [len(group.items) for group in menu.items] == [3, 2]
 
 
 def test_each_action_targets_pluggable_dock_pane():
-    for factory in (new_protocol_factory, load_dialog_factory,
-                    import_legacy_dialog_factory, save_dialog_factory,
-                    save_as_dialog_factory):
+    for factory in (
+        new_protocol_factory,
+        load_dialog_factory,
+        import_legacy_dialog_factory,
+        save_dialog_factory,
+        save_as_dialog_factory,
+    ):
         action = factory()
         assert action.dock_pane_id == _DOCK_PANE_ID
 
@@ -50,15 +64,16 @@ def test_each_action_targets_pluggable_dock_pane():
 def test_action_method_and_name_pairs():
     expected = {
         "new_protocol": "&Create New",
-        "load_protocol_dialog": "&Load",
-        "import_legacy_protocol_dialog": "&Import Legacy Protocol...",
+        "load_protocol_dialog": "&Load…",
+        "import_legacy_protocol_dialog": "&Import Legacy…",
         "save_protocol_dialog": "&Save",
-        "save_as_protocol_dialog": "Save &as",
+        "save_as_protocol_dialog": "Save &As…",
     }
-    for action in protocol_menu_factory().items:
+
+    for action in _actions(protocol_menu_factory()):
         assert action.name == expected[action.method]
 
 
 def test_action_ids_are_pkg_namespaced():
-    for action in protocol_menu_factory().items:
+    for action in _actions(protocol_menu_factory()):
         assert action.id.startswith(f"{PKG}.")

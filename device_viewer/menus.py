@@ -9,7 +9,6 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from pyface.action.api import Separator
 from pyface.tasks.action.api import DockPaneAction, SGroup, SMenu
 
 # Local imports.
@@ -22,7 +21,7 @@ def load_svg_dialog_menu_factory():
     return DockPaneAction(
         id=PKG + ".load_svg_file_dialog",
         dock_pane_id=PKG + ".dock_pane",
-        name="&Load",
+        name="&Load…",
         method="load_svg_dialog",
     )
 
@@ -44,7 +43,7 @@ def save_as_svg_dialogue_menu_factory():
     return DockPaneAction(
         id=PKG + ".save_as_svg_dialogue",
         dock_pane_id=PKG + ".dock_pane",
-        name="Save &As",
+        name="Save &As…",
         method="save_as_svg_dialog",
     )
 
@@ -80,9 +79,10 @@ def tools_menu_factory():
             save_svg_dialogue_menu_factory(),
             save_as_svg_dialogue_menu_factory(),
         ),
-        Separator(),
-        generate_svg_connections_menu_factory(),
-        edit_svg_connections_menu_factory(),
+        SGroup(
+            generate_svg_connections_menu_factory(),
+            edit_svg_connections_menu_factory(),
+        ),
         id="device_svg_tools",
         name="&Device",
     )
