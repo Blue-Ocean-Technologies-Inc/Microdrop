@@ -963,12 +963,33 @@ contrast_group = VGroup(
 )
 
 # The displayed image's PNG text chunks (a capture's settings, for one),
-# whatever keys the file carries. Resizable so the label word-wraps
-# rather than widening the sidebar.
+# whatever keys the file carries, rendered as a rich-text table.
+# Resizable so the label word-wraps rather than widening the sidebar.
 metadata_group = VGroup(
+    HGroup(
+        spring,
+        UItem(
+            "metadata_popout_button",
+            editor=IconButtonEditor(
+                glyph=ICON_OPEN_IN_NEW, tooltip="Open the metadata in its own window"
+            ),
+        ),
+    ),
     UItem("metadata_text", style="readonly", resizable=True),
     visible_when="show_metadata",
     show_border=True,
+)
+
+# The metadata pop-out: a non-modal live window on the same model, so it
+# keeps following the shown image while the user steps through them.
+metadata_window_view = View(
+    UItem("metadata_text", style="readonly", resizable=True),
+    title="Image metadata",
+    kind="live",
+    resizable=True,
+    scrollable=True,
+    width=420,
+    height=480,
 )
 
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export

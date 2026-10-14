@@ -178,7 +178,7 @@ class ImageViewerModel(HasTraits):
     info_text = Str()
 
     #: The displayed image's PNG text chunks (e.g. a capture's settings),
-    #: formatted for the sidebar's Metadata section.
+    #: as rich text for the Metadata section and its pop-out window.
     metadata_text = Str(NO_METADATA_TEXT)
 
     #: "(x, y) = value" readout under the cursor (true stored values).
@@ -247,6 +247,8 @@ class ImageViewerModel(HasTraits):
     next_experiment_button = Button()
     #: Delete the selected experiment's folder from disk.
     delete_experiment_button = Button()
+    #: Open the metadata in its own window (it follows the shown image).
+    metadata_popout_button = Button()
 
     #: Persistence backing for the display window (two-way: edits push to
     #: preferences, external preference changes pull back) — the same
