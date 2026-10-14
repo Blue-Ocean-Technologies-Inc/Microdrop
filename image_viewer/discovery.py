@@ -18,6 +18,7 @@ import calendar
 import fnmatch
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -65,13 +66,11 @@ def discover_experiments() -> list:
     with no captures yet are still listed (selecting one just shows nothing)
     so the seek can walk them all. [] when the root is unavailable (no
     Redis)."""
-    try:
-        root = get_current_experiment_directory().parent
-    except Exception as e:
-        logger.debug(f"Experiments root unavailable: {e}")
+    root = _experiments_root()
+
+    if root is None:
         return []
-    if not root.is_dir():
-        return []
+
     experiments = [
         (child.name, child / CAPTURES_DIR_NAME)
         for child in root.iterdir()
@@ -80,6 +79,49 @@ def discover_experiments() -> list:
     return sorted(
         experiments, key=lambda item: (item[1].parent.stat().st_mtime, item[0])
     )
+
+
+def delete_experiment(captures_path):
+    """Remove the experiment folder holding ``captures_path`` (a
+    discover_experiments captures path) and everything in it; return the
+    removed folder. Raises ValueError for the CURRENT experiment, which
+    the app is still writing into, and OSError when the removal fails."""
+    experiment = Path(captures_path).parent
+
+    if _is_current_experiment(experiment):
+        raise ValueError(
+            f"'{experiment.name}' is the current experiment and cannot be "
+            "deleted while it is in use."
+        )
+
+    shutil.rmtree(experiment)
+    logger.info(f"Deleted experiment folder {experiment}")
+
+    return experiment
+
+
+def _experiments_root():
+    """The Experiments root — the CURRENT experiment's parent — or None
+    when it is unavailable (no Redis) or missing."""
+    try:
+        root = get_current_experiment_directory().parent
+    except Exception as e:
+        logger.debug(f"Experiments root unavailable: {e}")
+        return None
+
+    return root if root.is_dir() else None
+
+
+def _is_current_experiment(experiment):
+    """Whether ``experiment`` is the folder the app is writing into
+    (False when the experiment directory is unavailable)."""
+    try:
+        current = get_current_experiment_directory().resolve()
+    except Exception as e:
+        logger.debug(f"Experiment directory unavailable: {e}")
+        return False
+
+    return Path(experiment).resolve() == current
 
 
 def discover_captures(directory) -> list:

@@ -64,6 +64,12 @@ class ImageViewerPreferences(PreferencesHelper):
     )
     ai_model = Str(DEFAULT_AI_MODEL, desc="SAM model for AI ROI detection")
 
+    # The Experiments section's delete button. Its warning dialog's "don't
+    # ask again" checkbox clears this; the preferences tab turns it back on.
+    confirm_experiment_delete = Bool(
+        True, desc="Ask before deleting an experiment folder"
+    )
+
     # Display window. Edited from the viewer pane's own toolbar —
     # deliberately NOT on the preferences tab.
     auto_contrast = Bool(True, desc="Auto-contrast the image viewer display window")
@@ -141,7 +147,18 @@ class ImageViewerPreferencesPane(PreferencesPane):
         style_sheet=preferences_group_style_sheet,
     )
 
+    experiments_group = VGroup(
+        create_item_label_group(
+            "confirm_experiment_delete",
+            label_text="Ask for confirmation before deleting an experiment folder",
+        ),
+        label="Experiments",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
+    )
+
     view = View(
+        experiments_group,
         ai_group,
         Item("_"),  # Separator to space this out from further contributions.
         resizable=True,
