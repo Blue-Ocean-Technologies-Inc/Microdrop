@@ -87,6 +87,8 @@ _FIGURE_FIELDS = (
     "x_axis",
     "heater_sensor",
     "heater_window_ms",
+    "temperature_slope",
+    "temperature_intercept",
     "show_method_group",
     "show_metrics_group",
 )

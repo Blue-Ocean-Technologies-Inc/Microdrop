@@ -114,6 +114,16 @@ def roi_stat_values(stats_run, stat, pixel_area=1.0):
     return [stat_value(stats, stat, pixel_area) for stats in stats_run]
 
 
+def calibrated_temperatures(figure, temperatures):
+    """``temperatures`` through the figure's linear calibration,
+    slope * T + intercept. NaN stays NaN, so an uncovered frame is
+    still a gap."""
+    slope = figure.temperature_slope
+    intercept = figure.temperature_intercept
+
+    return [slope * temperature + intercept for temperature in temperatures]
+
+
 def analysed_paths(session, filtered_paths):
     """The filtered images the analysis covers, user-excluded ones
     left out, in the order every derived series runs."""
@@ -125,7 +135,8 @@ def derive_series(session, filtered_paths):
     the filtered images. The x is elapsed seconds from the first
     filtered capture — or, when the figure's x_axis says so, the
     heater log's temperature at each capture (NaN where the log does
-    not cover it), so the fits downstream read against °C too.
+    not cover it) through the figure's calibration, so the fits
+    downstream read against °C too.
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
     part of the analysis)."""
@@ -139,11 +150,14 @@ def derive_series(session, filtered_paths):
     start_time = times[0]
     figure = session.figure
     x_values = (
-        temperature_at(
-            session.heater_samples,
-            figure.heater_sensor,
-            times,
-            figure.heater_window_ms / 1000.0,
+        calibrated_temperatures(
+            figure,
+            temperature_at(
+                session.heater_samples,
+                figure.heater_sensor,
+                times,
+                figure.heater_window_ms / 1000.0,
+            ),
         )
         if figure.x_axis == "temperature"
         else [capture_time - start_time for capture_time in times]

@@ -80,6 +80,8 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.trim_poor_fit = True
     session.figure.log_x = True
     session.figure.normalize = True
+    session.figure.temperature_slope = 0.98
+    session.figure.temperature_intercept = 1.5
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
@@ -90,6 +92,8 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.trim_poor_fit is True
     assert loaded.figure.log_x is True and loaded.figure.log_y is False
     assert loaded.figure.normalize is True
+    assert loaded.figure.temperature_slope == 0.98
+    assert loaded.figure.temperature_intercept == 1.5
 
 
 def test_load_session_accepts_v1_bare_list(tmp_path):
