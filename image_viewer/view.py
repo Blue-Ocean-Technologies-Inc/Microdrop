@@ -816,6 +816,22 @@ experiments_group = VGroup(
         ),
         tooltip="Drag through the experiments, oldest to newest",
     ),
+    HGroup(
+        spring,
+        UItem(
+            "previous_experiment_button",
+            editor=IconButtonEditor(
+                glyph=ICON_PREVIOUS, tooltip="Previous experiment (older)"
+            ),
+            enabled_when="experiment_index > 0",
+        ),
+        UItem(
+            "next_experiment_button",
+            editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next experiment (newer)"),
+            enabled_when="experiment_index < max_experiment_number - 1",
+        ),
+        spring,
+    ),
     visible_when="show_experiments",
     show_border=True,
 )

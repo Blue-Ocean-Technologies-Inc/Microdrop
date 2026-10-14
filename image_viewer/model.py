@@ -235,6 +235,9 @@ class ImageViewerModel(HasTraits):
     zoom_out_button = Button()
     previous_button = Button()
     next_button = Button()
+    #: Step the experiment seek one experiment back / forward.
+    previous_experiment_button = Button()
+    next_experiment_button = Button()
 
     #: Persistence backing for the display window (two-way: edits push to
     #: preferences, external preference changes pull back) — the same
