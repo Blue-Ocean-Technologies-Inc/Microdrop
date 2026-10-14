@@ -78,7 +78,9 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
+    BUTTER_CUTOFF_BOUNDS,
     HEATER_LOGS_DIR_NAME,
+    OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
     ROI_PLOT_CANVAS_MIN_HEIGHT,
@@ -219,10 +221,16 @@ TRIM_SHADE_ALPHA = 0.12
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 
 #: Fixed pixel widths, so nothing stretches to fill its row: a value
-#: spinner, a small parameter spinner, and a dropdown.
-VALUE_SPIN_W = -78
-PARAM_SPIN_W = -58
-DROPDOWN_W = -130
+#: spinner, a small parameter spinner, and a dropdown. Measured in the
+#: app's font (Inter 11pt) under the Windows 11 style, whose side-by-side
+#: arrows are the widest: a value box shows "-44.7649" or "123456.0" in
+#: full, a parameter box "0.25" or "101", a dropdown its longest
+#: built-in label ("Actual vs expected"). The plotted-stat dropdown has
+#: its own, far wider one for "Background-corrected mean".
+VALUE_SPIN_W = -138
+PARAM_SPIN_W = -102
+DROPDOWN_W = -176
+STAT_DROPDOWN_W = -245
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
@@ -292,7 +300,7 @@ def _top_row():
         Item(
             "session.plot_stat",
             label="Plot",
-            width=DROPDOWN_W,
+            width=STAT_DROPDOWN_W,
             editor=HoverScrollEnumEditor(
                 values=list(PLOT_STATS), format_func=PLOT_STAT_LABELS.get
             ),
@@ -398,6 +406,7 @@ def _axes_tab():
             Item(
                 "figure.heater_window_ms",
                 label="Window (ms)",
+                width=VALUE_SPIN_W,
                 tooltip="How generous the time join is: a "
                 "capture's temperature is the mean of "
                 "every heater sample within ±window/2 "
@@ -534,6 +543,13 @@ def _cleanup_tab():
             Item(
                 "figure.outlier_threshold",
                 label="MADs",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=OUTLIER_THRESHOLD_BOUNDS_MAD[0],
+                    high=OUTLIER_THRESHOLD_BOUNDS_MAD[1],
+                    decimals=1,
+                    step=0.5,
+                ),
                 enabled_when="figure.remove_outliers",
                 tooltip="How far from the local median counts "
                 "as an outlier, in scaled MADs — "
@@ -544,6 +560,7 @@ def _cleanup_tab():
             Item(
                 "figure.outlier_window",
                 label="win",
+                width=PARAM_SPIN_W,
                 enabled_when="figure.remove_outliers",
                 tooltip="Total points in the local window — 5 means "
                 "the point plus two each side — used for the "
@@ -578,12 +595,14 @@ def _cleanup_tab():
             Item(
                 "figure.savgol_window",
                 label="win",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'savgol'",
                 tooltip="Points per polynomial fit (forced odd).",
             ),
             Item(
                 "figure.savgol_order",
                 label="order",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'savgol'",
                 tooltip="Polynomial order. Higher follows "
                 "sharper features and smooths less.",
@@ -591,12 +610,20 @@ def _cleanup_tab():
             Item(
                 "figure.butter_order",
                 label="order",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'butterworth'",
                 tooltip="Filter order: higher cuts more sharply at the cutoff.",
             ),
             Item(
                 "figure.butter_cutoff",
                 label="cutoff",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=BUTTER_CUTOFF_BOUNDS[0],
+                    high=BUTTER_CUTOFF_BOUNDS[1],
+                    decimals=2,
+                    step=0.01,
+                ),
                 visible_when="figure.smooth_method == 'butterworth'",
                 tooltip="Cutoff as a fraction of the Nyquist "
                 "frequency: smaller keeps only the "
