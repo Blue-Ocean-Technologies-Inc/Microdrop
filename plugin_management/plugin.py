@@ -13,7 +13,8 @@
 Wires the reactive TASK_EXTENSIONS consumer (any plugin added to / removed
 from the running application gets its dock panes mounted/unmounted and the
 menu bar rebuilt automatically — the UI-side analogue of the message router's
-reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service,
+reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service
+and the IExternalPluginsProvider an environment update re-adds plugins with,
 contributes the Tools ▸ Manage Plugins action, and restores each group's
 persisted enabled state on launch.
 """
@@ -32,6 +33,7 @@ from traits.api import Any, Bool, List, Str, observe
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 # Microdrop utils imports.
+from microdrop_utils.environment_update import IExternalPluginsProvider
 from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
 # Local imports.
@@ -109,7 +111,11 @@ class PluginManagementPlugin(Plugin):
             ServiceOffer(
                 protocol=IPluginGroupManager,
                 factory=self._create_plugin_group_manager,
-            )
+            ),
+            ServiceOffer(
+                protocol=IExternalPluginsProvider,
+                factory=package_installer.ExternalPluginsProvider,
+            ),
         ]
 
     def _create_plugin_group_manager(self, *args, **kwargs):

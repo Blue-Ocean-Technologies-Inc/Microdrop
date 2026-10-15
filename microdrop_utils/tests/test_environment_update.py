@@ -8,8 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""environment_update: locating the launcher checkout, the update commands,
-their failure reporting, and the relaunch command line."""
+"""environment_update: locating the launcher checkout, the update commands
+(reset, pull, re-adding the installed plugins), their failure reporting, and
+the relaunch command line."""
 
 # Standard library imports.
 import sys
@@ -21,15 +22,53 @@ import pytest
 from microdrop_utils import environment_update
 from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
+    ExternalPlugin,
     find_git_repository,
     find_pixi_workspace,
-    locate_update_steps,
+    locate_update,
     manual_update_commands,
     pixi_environment_name,
     relaunch,
     relaunch_command,
     run_update_steps,
 )
+
+CHANNEL = "https://prefix.dev/microdrop-plugins"
+
+PLUGINS = [
+    ExternalPlugin(name="heater-microdrop-plugin", channel=CHANNEL),
+    ExternalPlugin(name="magnet-microdrop-plugin", version="1.2.0", channel=CHANNEL),
+    ExternalPlugin(name="gamepad-microdrop-plugin", channel=CHANNEL),
+]
+
+
+class FakePluginsProvider:
+    """An IExternalPluginsProvider reporting ``plugins`` (or raising
+    ``failure``), re-adding each the way package_installer does."""
+
+    def __init__(self, plugins=(), failure=None):
+        self.plugins = list(plugins)
+        self.failure = failure
+        self.asked = []
+
+    def installed_external_plugins(self, workspace):
+        self.asked.append(workspace)
+
+        if self.failure is not None:
+            raise self.failure
+
+        return self.plugins
+
+    def reinstall_arguments(self, plugin):
+        spec = f"{plugin.name}=={plugin.version}" if plugin.version else plugin.name
+
+        return [["workspace", "channel", "add", plugin.channel], ["add", spec]]
+
+
+@pytest.fixture(autouse=True)
+def pixi_on_path(monkeypatch):
+    """Locating the update checks pixi is installed; pretend it is."""
+    monkeypatch.setattr(environment_update.shutil, "which", lambda name: f"/bin/{name}")
 
 
 def _launcher(root, manifest="[tool.pixi.workspace]\n"):
@@ -46,14 +85,81 @@ def _launcher(root, manifest="[tool.pixi.workspace]\n"):
 
 def test_locates_the_launcher_checkout_and_environment(tmp_path):
     repository, workspace, prefix = _launcher(tmp_path)
+    provider = FakePluginsProvider()
 
     assert find_pixi_workspace(prefix) == workspace
     assert find_git_repository(workspace) == repository
     assert pixi_environment_name(prefix) == "prod"
-    assert locate_update_steps(prefix) == [
-        (["git", "pull", "--ff-only", "--autostash"], repository),
+    assert locate_update(prefix, provider) == (
+        [
+            (["git", "status", "--porcelain"], repository),
+            (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
+            (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
+            (["pixi", "install", "--environment", "prod"], workspace),
+        ],
+        [],
+    )
+    assert provider.asked == [workspace]
+
+
+def test_the_installed_plugins_are_re_added_between_the_pull_and_install(
+    tmp_path,
+):
+    repository, workspace, prefix = _launcher(tmp_path)
+
+    steps, plugins = locate_update(prefix, FakePluginsProvider(PLUGINS))
+
+    assert plugins == PLUGINS
+    assert steps == [
+        (["git", "status", "--porcelain"], repository),
+        (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
+        (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
+        # One channel registration covers every plugin from that channel.
+        (["pixi", "workspace", "channel", "add", CHANNEL], workspace),
+        (["pixi", "add", "heater-microdrop-plugin"], workspace),
+        (["pixi", "add", "magnet-microdrop-plugin==1.2.0"], workspace),
+        (["pixi", "add", "gamepad-microdrop-plugin"], workspace),
         (["pixi", "install", "--environment", "prod"], workspace),
     ]
+
+
+def test_the_reset_keeps_untracked_files_and_the_submodule(tmp_path):
+    _repository, _workspace, prefix = _launcher(tmp_path)
+
+    steps, _plugins = locate_update(prefix, FakePluginsProvider(PLUGINS))
+    git_commands = [argv for argv, _cwd in steps if argv[0] == "git"]
+
+    assert ["git", "reset", "--hard", "--no-recurse-submodules"] in git_commands
+    assert not any("clean" in argv for argv in git_commands)
+    assert not any("--recurse-submodules" in argv for argv in git_commands)
+
+
+def test_a_plugin_detection_failure_stops_before_anything_runs(tmp_path, monkeypatch):
+    _repository, _workspace, prefix = _launcher(tmp_path)
+
+    def must_not_run(*args, **kwargs):
+        pytest.fail("nothing may run when the installed plugins are unknown")
+
+    monkeypatch.setattr(environment_update.subprocess, "Popen", must_not_run)
+    failure = EnvironmentUpdateError("manifest unreadable")
+
+    with pytest.raises(EnvironmentUpdateError, match="manifest unreadable"):
+        locate_update(prefix, FakePluginsProvider(failure=failure))
+
+
+def test_without_a_plugins_provider_the_update_refuses_to_reset(tmp_path):
+    _repository, _workspace, prefix = _launcher(tmp_path)
+
+    with pytest.raises(EnvironmentUpdateError, match="would be lost"):
+        locate_update(prefix)
+
+
+def test_without_pixi_the_update_refuses_to_reset(tmp_path, monkeypatch):
+    _repository, _workspace, prefix = _launcher(tmp_path)
+    monkeypatch.setattr(environment_update.shutil, "which", lambda name: None)
+
+    with pytest.raises(EnvironmentUpdateError, match="pixi is not on the PATH"):
+        locate_update(prefix, FakePluginsProvider(PLUGINS))
 
 
 def test_a_pyproject_without_a_pixi_table_is_not_a_workspace(tmp_path):
@@ -62,7 +168,7 @@ def test_a_pyproject_without_a_pixi_table_is_not_a_workspace(tmp_path):
     assert find_pixi_workspace(prefix) is None
 
     with pytest.raises(EnvironmentUpdateError, match="No pixi workspace"):
-        locate_update_steps(prefix)
+        locate_update(prefix, FakePluginsProvider())
 
 
 def test_a_workspace_outside_a_git_checkout_cannot_update(tmp_path):
@@ -70,16 +176,22 @@ def test_a_workspace_outside_a_git_checkout_cannot_update(tmp_path):
     (repository / ".git").rmdir()
 
     with pytest.raises(EnvironmentUpdateError, match="not inside a git checkout"):
-        locate_update_steps(prefix)
+        locate_update(prefix, FakePluginsProvider())
 
 
 def test_manual_commands_name_every_step_and_folder(tmp_path):
     repository, workspace, prefix = _launcher(tmp_path)
+    steps, _plugins = locate_update(prefix, FakePluginsProvider(PLUGINS[:2]))
 
-    commands = manual_update_commands(locate_update_steps(prefix))
+    commands = manual_update_commands(steps)
 
     assert commands.splitlines() == [
-        f'cd "{repository}" && git pull --ff-only --autostash',
+        f'cd "{repository}" && git status --porcelain',
+        f'cd "{repository}" && git reset --hard --no-recurse-submodules',
+        f'cd "{repository}" && git pull --ff-only --no-recurse-submodules',
+        f'cd "{workspace}" && pixi workspace channel add {CHANNEL}',
+        f'cd "{workspace}" && pixi add heater-microdrop-plugin',
+        f'cd "{workspace}" && pixi add magnet-microdrop-plugin==1.2.0',
         f'cd "{workspace}" && pixi install --environment prod',
     ]
 

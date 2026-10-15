@@ -8,7 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""offer_environment_update: Not now does nothing, Update and relaunch runs
+"""offer_environment_update: the question names what the update discards
+and the plugins it re-adds, Not now does nothing, Update and relaunch runs
 the update then relaunches, and a failure hands over the manual commands."""
 
 # Standard library imports.
@@ -28,10 +29,34 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_utils import environment_update_dialog
 from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
+    ExternalPlugin,
+    IExternalPluginsProvider,
     manual_update_commands,
 )
 
-STEPS = [(["git", "pull"], Path("launcher")), (["pixi", "install"], Path("ws"))]
+STEPS = [
+    (["git", "reset", "--hard"], Path("launcher")),
+    (["git", "pull"], Path("launcher")),
+    (["pixi", "add", "heater-microdrop-plugin"], Path("ws")),
+    (["pixi", "install"], Path("ws")),
+]
+
+PLUGINS = [
+    ExternalPlugin(name="heater-microdrop-plugin"),
+    ExternalPlugin(name="magnet-microdrop-plugin"),
+    ExternalPlugin(name="fluorescence-microdrop-plugin"),
+]
+
+
+class Application:
+    """An Envisage application offering ``provider`` as its
+    IExternalPluginsProvider service."""
+
+    def __init__(self, provider=None):
+        self.provider = provider
+
+    def get_service(self, protocol):
+        return self.provider if protocol is IExternalPluginsProvider else None
 
 
 @pytest.fixture
@@ -40,6 +65,9 @@ def flow(monkeypatch):
     synchronously, and record what the flow did."""
     record = {
         "choice": OK,
+        "plugins": PLUGINS,
+        "providers": [],
+        "questions": [],
         "ran": [],
         "relaunched": [],
         "errors": [],
@@ -54,10 +82,18 @@ def flow(monkeypatch):
         else:
             on_success(result)
 
-    monkeypatch.setattr(
-        environment_update_dialog, "warning", lambda *a, **kw: record["choice"]
-    )
-    monkeypatch.setattr(environment_update_dialog, "locate_update_steps", lambda: STEPS)
+    def warning(parent, message, **kwargs):
+        record["questions"].append(message)
+
+        return record["choice"]
+
+    def locate_update(plugins_provider=None):
+        record["providers"].append(plugins_provider)
+
+        return STEPS, record["plugins"]
+
+    monkeypatch.setattr(environment_update_dialog, "warning", warning)
+    monkeypatch.setattr(environment_update_dialog, "locate_update", locate_update)
     monkeypatch.setattr(environment_update_dialog, "run_with_wait", run_with_wait)
     monkeypatch.setattr(
         environment_update_dialog, "run_update_steps", record["ran"].append
@@ -79,6 +115,41 @@ def flow(monkeypatch):
     return record
 
 
+def test_the_question_lists_the_plugins_the_update_re_adds(flow):
+    flow["choice"] = CANCEL
+
+    environment_update_dialog.offer_environment_update("X", "pkg")
+
+    [question] = flow["questions"]
+    assert "pyproject.toml, pixi.lock" in question
+    assert (
+        "re-added afterwards: heater-microdrop-plugin, magnet-microdrop-plugin, "
+        "fluorescence-microdrop-plugin." in question
+    )
+
+
+def test_the_question_says_when_no_plugins_need_re_adding(flow):
+    flow["choice"] = CANCEL
+    flow["plugins"] = []
+
+    environment_update_dialog.offer_environment_update("X", "pkg")
+
+    [question] = flow["questions"]
+    assert "no external plugins are installed" in question
+
+
+def test_the_plugins_come_from_the_application_provider_service(flow):
+    provider = object()
+    flow["choice"] = CANCEL
+
+    environment_update_dialog.offer_environment_update(
+        "X", "pkg", Application(provider)
+    )
+    environment_update_dialog.offer_environment_update("X", "pkg")
+
+    assert flow["providers"] == [provider, None]
+
+
 def test_not_now_runs_nothing(flow):
     flow["choice"] = CANCEL
 
@@ -88,7 +159,7 @@ def test_not_now_runs_nothing(flow):
 
 
 def test_update_runs_the_steps_then_relaunches_the_application(flow):
-    application = object()
+    application = Application()
 
     started = environment_update_dialog.offer_environment_update(
         "X", "pkg", application
@@ -112,7 +183,10 @@ def test_a_failed_update_shows_the_manual_commands_and_does_not_relaunch(
     environment_update_dialog.offer_environment_update("X", "pkg")
 
     [(message, kwargs)] = flow["errors"]
-    assert escape_html_multiline(manual_update_commands(STEPS)) in message
+    commands = escape_html_multiline(manual_update_commands(STEPS))
+    assert commands in message
+    assert "git reset --hard" in commands
+    assert "pixi add heater-microdrop-plugin" in commands
     assert kwargs["detail"] == "solve failed"
     assert flow["relaunched"] == []
 
@@ -120,14 +194,16 @@ def test_a_failed_update_shows_the_manual_commands_and_does_not_relaunch(
 def test_an_install_that_cannot_locate_its_checkout_gets_generic_commands(
     flow, monkeypatch
 ):
-    def unlocatable():
+    def unlocatable(plugins_provider=None):
         raise EnvironmentUpdateError("No pixi workspace found")
 
-    monkeypatch.setattr(environment_update_dialog, "locate_update_steps", unlocatable)
+    monkeypatch.setattr(environment_update_dialog, "locate_update", unlocatable)
 
     environment_update_dialog.offer_environment_update("X", "pkg")
 
+    [question] = flow["questions"]
     [(message, _kwargs)] = flow["errors"]
+    assert "will be discarded" not in question
     assert "pixi install" in message
     assert flow["ran"] == []
     assert flow["relaunched"] == []

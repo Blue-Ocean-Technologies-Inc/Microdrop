@@ -13,28 +13,48 @@
 A user who updates the source but not the pixi-microdrop launcher repository
 runs an environment that lacks packages newer features need. The fix is the
 launcher's own update path: ``git pull`` in the launcher checkout, then
-``pixi install`` in its pixi workspace. This module is the Qt-free core —
-locating the workspace and repository, building and running those commands,
-and relaunching the app; ``environment_update_dialog`` is the user-facing
-flow on top of it.
+``pixi install`` in its pixi workspace.
+
+Installing a plugin through Manage Plugins edits the launcher's
+``pyproject.toml`` and ``pixi.lock``, so the pull would refuse a dirty tree.
+The update therefore resets the launcher checkout, pulls, and re-adds the
+external plugins the user had installed. Which plugins those are, and how to
+re-add them, is plugin-management knowledge this shared module must not
+import: an ``IExternalPluginsProvider`` service supplies it.
+
+This module is the Qt-free core — locating the workspace and repository,
+building and running those commands, and relaunching the app;
+``environment_update_dialog`` is the user-facing flow on top of it.
 """
 
 # Standard library imports.
 import os
+import shutil
 import subprocess
 import sys
 from collections import deque
 from pathlib import Path
+
+# Enthought library imports.
+from traits.api import HasTraits, Interface, Str
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: Same semantics as the startup source self-update: never start a merge
-#: the user would have to resolve, and carry the legitimately-dirty manifest
-#: (installed-plugin pins) across the pull.
-GIT_PULL_COMMAND = ("git", "pull", "--ff-only", "--autostash")
+#: Logged before the reset, so the log records what it discarded.
+GIT_STATUS_COMMAND = ("git", "status", "--porcelain")
+
+#: Discards the tracked changes (installed-plugin edits to the manifest and
+#: lockfile) that would stop the pull. No ``git clean``: untracked files stay.
+#: Never recursed into submodules, whatever ``submodule.recurse`` says — the
+#: Microdrop source checkout under the launcher keeps its own work.
+GIT_RESET_COMMAND = ("git", "reset", "--hard", "--no-recurse-submodules")
+
+#: Never start a merge the user would have to resolve; leave the submodule
+#: checkout alone, like the reset.
+GIT_PULL_COMMAND = ("git", "pull", "--ff-only", "--no-recurse-submodules")
 
 #: Lines of a failed command's output an EnvironmentUpdateError keeps.
 OUTPUT_TAIL_LINES = 40
@@ -47,6 +67,37 @@ class EnvironmentUpdateError(RuntimeError):
     def __init__(self, message, output=""):
         super().__init__(message)
         self.output = output
+
+
+class ExternalPlugin(HasTraits):
+    """A plugin package the user installed into the launcher's workspace,
+    with what it takes to re-add it identically after the reset."""
+
+    #: Package name, as Manage Plugins lists it.
+    name = Str()
+
+    #: Pinned version, or "" when the install took the channel's latest.
+    version = Str()
+
+    #: Channel the package was installed from.
+    channel = Str()
+
+
+class IExternalPluginsProvider(Interface):
+    """Service telling the update which external plugins to re-add.
+
+    Offered by the plugin-management plugin, which owns how plugins are
+    installed; without it the update refuses to reset the launcher, since it
+    could not put the plugins back."""
+
+    def installed_external_plugins(self, workspace):
+        """The ``ExternalPlugin``s installed into the pixi ``workspace``, in
+        manifest order. Raises EnvironmentUpdateError when that cannot be
+        told."""
+
+    def reinstall_arguments(self, plugin):
+        """The pixi argument lists (without ``pixi``) that re-add
+        ``plugin``, in order."""
 
 
 def find_pixi_workspace(start=None):
@@ -102,26 +153,39 @@ def pixi_environment_name(prefix=None):
     return None
 
 
-def update_steps(workspace, repository, environment=None):
-    """The update as ``[(argv, cwd), ...]``: pull the launcher
-    ``repository``, then install ``environment`` (pixi's default when None)
-    from the ``workspace``'s freshly pulled lockfile."""
+def update_steps(workspace, repository, environment=None, reinstall_arguments=()):
+    """The update as ``[(argv, cwd), ...]``: log, reset and pull the launcher
+    ``repository``, run each of ``reinstall_arguments`` (pixi argument
+    lists, duplicates dropped) in the ``workspace``, then install
+    ``environment`` (pixi's default when None) from the result."""
+    repository = Path(repository)
+    workspace = Path(workspace)
     install = ["pixi", "install"]
 
     if environment:
         install += ["--environment", environment]
 
+    reinstall = dict.fromkeys(tuple(arguments) for arguments in reinstall_arguments)
+
     return [
-        (list(GIT_PULL_COMMAND), Path(repository)),
-        (install, Path(workspace)),
+        (list(GIT_STATUS_COMMAND), repository),
+        (list(GIT_RESET_COMMAND), repository),
+        (list(GIT_PULL_COMMAND), repository),
+        *((["pixi", *arguments], workspace) for arguments in reinstall),
+        (install, workspace),
     ]
 
 
-def locate_update_steps(prefix=None):
-    """``update_steps`` for the environment at ``prefix`` (default
-    ``sys.prefix``). Raises EnvironmentUpdateError when it does not live in
-    a pixi workspace inside a git checkout — such an install cannot update
-    itself this way."""
+def locate_update(prefix=None, plugins_provider=None):
+    """``(steps, plugins)`` for updating the environment at ``prefix``
+    (default ``sys.prefix``): the ``update_steps`` and the
+    ``ExternalPlugin``s they re-add, as told by ``plugins_provider`` (an
+    ``IExternalPluginsProvider``).
+
+    Raises EnvironmentUpdateError — before anything has run, so no plugin is
+    lost — when the environment does not live in a pixi workspace inside a
+    git checkout, pixi is not on the PATH, or the installed plugins cannot
+    be told."""
     prefix = Path(prefix or sys.prefix)
     workspace = find_pixi_workspace(prefix)
 
@@ -139,7 +203,30 @@ def locate_update_steps(prefix=None):
             "the pixi-microdrop repository."
         )
 
-    return update_steps(workspace, repository, pixi_environment_name(prefix))
+    if shutil.which("pixi") is None:
+        raise EnvironmentUpdateError(
+            "pixi is not on the PATH, so the plugins could not be re-added "
+            "after the update."
+        )
+
+    if plugins_provider is None:
+        raise EnvironmentUpdateError(
+            "Plugin management is not running, so the installed plugins "
+            "cannot be told and would be lost by the update."
+        )
+
+    plugins = list(plugins_provider.installed_external_plugins(workspace))
+    reinstall_arguments = [
+        arguments
+        for plugin in plugins
+        for arguments in plugins_provider.reinstall_arguments(plugin)
+    ]
+
+    steps = update_steps(
+        workspace, repository, pixi_environment_name(prefix), reinstall_arguments
+    )
+
+    return steps, plugins
 
 
 def manual_update_commands(steps):

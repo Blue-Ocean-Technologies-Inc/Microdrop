@@ -21,6 +21,9 @@ import pytest
 from plugin_management import package_installer, paths
 from plugin_management.consts import PLUGIN_CHANNEL_URL
 
+# Microdrop utils imports.
+from microdrop_utils.environment_update import EnvironmentUpdateError, ExternalPlugin
+
 SAMPLE_STDOUT = """ WARN some deprecation warning on stderr-ish text
 Using channels: https://prefix.dev/microdrop-plugins/
 {
@@ -306,3 +309,98 @@ def test_reinstall_failure_rolls_back_and_rematerializes(tmp_path, monkeypatch):
 
     assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "orig"
     assert ["install"] in calls
+
+
+# --- external plugins an environment update re-adds ---
+
+LAUNCHER_MANIFEST = """
+[tool.pixi.dependencies]
+numpy = ">=2,<3"
+heater-microdrop-plugin = ">=1.10.1,<2"
+magnet-microdrop-plugin = "==1.2.0"
+gamepad-microdrop-plugin = { version = "==0.3.1" }
+
+[tool.pixi.feature.prod-plugins.dependencies]
+fluorescence-microdrop-plugin = ">=3.0.0,<4"
+"""
+
+
+def _installed_plugins(monkeypatch, *names):
+    monkeypatch.setattr(
+        package_installer,
+        "installed_plugin_dists",
+        lambda: {name: "1.0" for name in names},
+    )
+
+
+def test_installed_external_plugins_reads_the_top_level_dependencies(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "pyproject.toml").write_text(LAUNCHER_MANIFEST)
+    # Dist names may use underscores; fluorescence is only a feature
+    # dependency the launcher ships, so it is not external.
+    _installed_plugins(
+        monkeypatch,
+        "heater_microdrop_plugin",
+        "magnet-microdrop-plugin",
+        "gamepad-microdrop-plugin",
+        "fluorescence-microdrop-plugin",
+    )
+
+    plugins = package_installer.installed_external_plugins(tmp_path)
+
+    assert [(p.name, p.version, p.channel) for p in plugins] == [
+        ("heater-microdrop-plugin", "", PLUGIN_CHANNEL_URL),
+        ("magnet-microdrop-plugin", "1.2.0", PLUGIN_CHANNEL_URL),
+        ("gamepad-microdrop-plugin", "0.3.1", PLUGIN_CHANNEL_URL),
+    ]
+
+
+def test_installed_external_plugins_skips_uninstalled_declarations(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "pyproject.toml").write_text(LAUNCHER_MANIFEST)
+    _installed_plugins(monkeypatch)
+
+    assert package_installer.installed_external_plugins(tmp_path) == []
+
+
+def test_installed_external_plugins_unreadable_manifest_raises(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text("[tool.pixi.dependencies")
+    _installed_plugins(monkeypatch, "heater-microdrop-plugin")
+
+    with pytest.raises(package_installer.InstallError, match="pixi manifest"):
+        package_installer.installed_external_plugins(tmp_path)
+
+    provider = package_installer.ExternalPluginsProvider()
+
+    with pytest.raises(EnvironmentUpdateError, match="Could not tell"):
+        provider.installed_external_plugins(tmp_path)
+
+
+def test_reinstall_arguments_match_an_install_from_the_channel(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        package_installer, "_run", lambda args, cwd=None: calls.append(args)
+    )
+    monkeypatch.setattr(package_installer, "_registered_channels", set())
+    monkeypatch.setattr(package_installer, "_try_snapshot", lambda cwd: None)
+    monkeypatch.setattr(package_installer, "_snapshot", lambda cwd: {})
+
+    package_installer.install_from_channel("magnet-microdrop-plugin", version="1.2.0")
+    plugin = ExternalPlugin(
+        name="magnet-microdrop-plugin", version="1.2.0", channel=PLUGIN_CHANNEL_URL
+    )
+    provider = package_installer.ExternalPluginsProvider()
+
+    assert (
+        provider.reinstall_arguments(plugin)
+        == calls[:2]
+        == [
+            ["workspace", "channel", "add", PLUGIN_CHANNEL_URL],
+            ["add", "magnet-microdrop-plugin==1.2.0"],
+        ]
+    )
+    assert provider.reinstall_arguments(
+        ExternalPlugin(name="heater-microdrop-plugin", channel=PLUGIN_CHANNEL_URL)
+    )[1] == ["add", "heater-microdrop-plugin"]

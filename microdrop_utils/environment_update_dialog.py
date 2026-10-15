@@ -10,7 +10,11 @@
 
 """The user-facing "this environment is out of date" flow: explain which
 package a feature is missing, offer to update the pixi-microdrop repository
-and relaunch, and hand over the exact commands when that fails."""
+(saying which local changes that discards and which plugins it re-adds) and
+relaunch, and hand over the exact commands when that fails."""
+
+# Standard library imports.
+import html
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import (
@@ -24,7 +28,8 @@ from microdrop_application.dialogs.pyface_wrapper import (
 # Microdrop utils imports.
 from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
-    locate_update_steps,
+    IExternalPluginsProvider,
+    locate_update,
     manual_update_commands,
     relaunch,
     run_update_steps,
@@ -39,10 +44,12 @@ logger = get_logger(__name__)
 UPDATE_AND_RELAUNCH_LABEL = "Update and relaunch"
 NOT_NOW_LABEL = "Not now"
 
-#: The update by hand when the install's own checkout cannot be located.
+#: The update by hand when it cannot be planned (checkout not located,
+#: installed plugins unknown).
 GENERIC_MANUAL_UPDATE = (
-    "In your pixi-microdrop folder: git pull\n"
-    "Then in its microdrop-py folder: pixi install"
+    "In your pixi-microdrop folder: git reset --hard, then git pull\n"
+    "Then in its microdrop-py folder: pixi install\n"
+    "Then reinstall your plugins from Tools > Manage Plugins"
 )
 
 
@@ -54,13 +61,48 @@ def missing_package_message(feature, package):
     )
 
 
+def reset_notice(plugins):
+    """What the update discards, and the external ``plugins`` it re-adds."""
+    if not plugins:
+        return (
+            "Local changes to the launcher's pyproject.toml, pixi.lock and "
+            "other tracked files will be discarded; no external plugins are "
+            "installed, so none need re-adding."
+        )
+
+    names = ", ".join(plugin.name for plugin in plugins)
+
+    return (
+        "Local changes to the launcher's pyproject.toml, pixi.lock and other "
+        "tracked files will be discarded and these plugins re-added "
+        f"afterwards: {names}."
+    )
+
+
 def offer_environment_update(feature, package, application=None):
     """Tell the user ``feature`` needs ``package`` and offer to update the
-    pixi-microdrop repository (``git pull`` + ``pixi install``) and relaunch
-    ``application``. Returns True when the user chose to update (the update
-    then runs behind a progress dialog), False on "Not now"."""
+    pixi-microdrop repository (reset, ``git pull``, re-add the installed
+    plugins, ``pixi install``) and relaunch ``application``, whose
+    ``IExternalPluginsProvider`` service tells the plugins. Returns True
+    when the user chose to update (the update then runs behind a progress
+    dialog), False on "Not now"."""
     message = missing_package_message(feature, package)
     logger.warning(message)
+
+    # Planned before asking, so the question can name what the update
+    # discards and re-adds; a plan that fails is reported once the user
+    # chooses to update.
+    steps = plugins = failure = None
+
+    try:
+        steps, plugins = locate_update(
+            plugins_provider=_external_plugins_provider(application)
+        )
+    except EnvironmentUpdateError as e:
+        failure = e
+
+    if failure is None:
+        message = f"{message}<br><br>{html.escape(reset_notice(plugins))}"
 
     choice = warning(
         None,
@@ -73,10 +115,8 @@ def offer_environment_update(feature, package, application=None):
     if choice != OK:
         return False
 
-    try:
-        steps = locate_update_steps()
-    except EnvironmentUpdateError as e:
-        _report_update_failure(e, GENERIC_MANUAL_UPDATE)
+    if failure is not None:
+        _report_update_failure(failure, GENERIC_MANUAL_UPDATE)
 
         return True
 
@@ -91,6 +131,14 @@ def offer_environment_update(feature, package, application=None):
     )
 
     return True
+
+
+def _external_plugins_provider(application):
+    """The ``application``'s IExternalPluginsProvider service, or None."""
+    if application is None:
+        return None
+
+    return application.get_service(IExternalPluginsProvider)
 
 
 def _relaunch_after_update(application):
