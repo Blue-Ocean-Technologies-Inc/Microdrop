@@ -164,6 +164,27 @@ confidence interval.
 The Data Summary table's `std` column is the same sample standard
 deviation taken over all rows of the run, not per step.
 
+**Why `Actuated Area` has an error bar.** The area is not a measurement.
+Each `ELECTRODES_STATE_CHANGE` message sets the current channel list and
+their summed area (`controller.py:on_actuation`), and every capacitance row
+after it copies that number. The chart treats the column like any other,
+so the std only says "the electrode set was not constant across this
+step's rows". Two things make it non-zero:
+
+- *Routes.* A step with routes publishes a new electrode set per phase, so
+  the area really changes inside the step. The mean is the phase areas
+  weighted by how many capacitance samples each phase received.
+- *Boundary lag.* `step_idx` is bumped directly from the executor's
+  `step_started` signal, but the actuation message takes two dramatiq hops
+  before the listener processes it. The first capacitance rows of a step
+  still carry the previous step's area, and a state change at the end of a
+  step can land its last rows with a different value. Even a static step
+  gets a few mismatched rows, enough for a visible bar.
+
+A long route shows a wide bar; a static step a thin one from the boundary
+rows only. The same lag affects `actuated_channels` and the per-channel
+attribution behind the heatmap.
+
 **How "Step N" maps to the tree.** `N` is the order in which steps were
 **executed** in this run, starting at 1. It is not the tree position:
 
