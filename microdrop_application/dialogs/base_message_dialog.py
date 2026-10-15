@@ -701,7 +701,8 @@ class BaseMessageDialog(QDialog):
         button_list.sort(key=self._button_sort_key)
 
         for i, (button_text, config) in enumerate(button_list):
-            button = QPushButton(button_text)
+            # Qt reads a lone "&" as a mnemonic marker; "&&" renders a literal "&".
+            button = QPushButton(button_text.replace("&", "&&"))
             # Set proper object name for styling - Exit buttons get special
             # styling
             is_secondary = self._button_sort_key((button_text, config)) == 0
@@ -1241,7 +1242,8 @@ class BaseMessageDialog(QDialog):
         """Change button text after creation."""
         if old_text in self.buttons:
             button = self.buttons[old_text]
-            button.setText(new_text)
+            # Qt reads a lone "&" as a mnemonic marker; "&&" renders a literal "&".
+            button.setText(new_text.replace("&", "&&"))
             # Update the dictionary key
             self.buttons[new_text] = self.buttons.pop(old_text)
             # Styling follows the button's stored role, not its label text, so

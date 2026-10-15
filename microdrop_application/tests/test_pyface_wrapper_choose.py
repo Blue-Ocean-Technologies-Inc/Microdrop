@@ -123,3 +123,12 @@ def test_choose_rejects_duplicate_choices(qapp):
 def test_choose_rejects_cancel_label_collision(qapp):
     with pytest.raises(ValueError):
         choose(None, "msg", choices=["A", "Cancel"])
+
+
+def test_ampersand_in_button_labels_is_escaped_for_qt(qapp):
+    """A literal "&" in a label must reach Qt as "&&", not as a mnemonic."""
+    dialog = BaseMessageDialog(buttons={"Save & Exit": {}, "OK": {}})
+    dialog.set_button_text("OK", "Update & Relaunch")
+
+    assert dialog.get_button("Save & Exit").text() == "Save && Exit"
+    assert dialog.get_button("Update & Relaunch").text() == "Update && Relaunch"
