@@ -75,12 +75,17 @@ class LoggingReport:
         device_context,
         notes: Optional[List[str]] = None,
         data_files: Optional[List] = None,
+        column_notes: Optional[Dict[str, str]] = None,
     ) -> str:
+        """Render the run report. ``column_notes`` maps a data column to a
+        footnote shown under that column's trend chart."""
         sections = [
             LoggingReport._metadata_section(metadata),
             LoggingReport._data_files_section(data_files or []),
             LoggingReport._summary_section(entries, columns),
-            LoggingReport._trends_section(entries, columns, device_context),
+            LoggingReport._trends_section(
+                entries, columns, device_context, column_notes
+            ),
             LoggingReport._media_section(media),
         ]
         if notes:
@@ -98,7 +103,8 @@ class LoggingReport:
             "<style>body{font-family:sans-serif;margin:24px;} "
             "table{border-collapse:collapse;} td,th{border:1px solid #ccc;"
             "padding:4px 8px;} "
-            "summary{cursor:pointer;font-weight:bold;margin:12px 0 4px}"
+            "summary{cursor:pointer;font-weight:bold;margin:12px 0 4px} "
+            ".footnote{color:#666;font-size:small;margin:4px 0 8px}"
             "</style></head><body>"
             f"<h1>Protocol Report</h1>{body}</body></html>"
         )
@@ -179,7 +185,12 @@ class LoggingReport:
         )
 
     @staticmethod
-    def _trends_section(entries: List[dict], columns: List[str], device_context) -> str:
+    def _trends_section(
+        entries: List[dict],
+        columns: List[str],
+        device_context,
+        column_notes: Optional[Dict[str, str]] = None,
+    ) -> str:
         if px is None:  # pragma: no cover
             return "<h2>Data Trends</h2><p>plotly unavailable.</p>"
         if not entries:
@@ -237,6 +248,12 @@ class LoggingReport:
                 full_html=False,
                 include_plotlyjs="cdn" if not plotly_js_emitted else False,
             )
+
+            note = (column_notes or {}).get(col)
+
+            if note:
+                chart += f'<p class="footnote">{_html.escape(note)}</p>'
+
             charts.append(LoggingReport._collapsible(col, chart))
             plotly_js_emitted = True
 

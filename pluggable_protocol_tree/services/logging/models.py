@@ -20,7 +20,11 @@ from pathlib import Path
 from traits.api import Any, Dict, Float, HasTraits, Instance, Int, Str
 
 # Microdrop package imports.
-from device_viewer.consts import CHANNEL_AREAS_KEY, DEVICE_SVG_PATH_KEY
+from device_viewer.consts import (
+    CHANNEL_AREAS_KEY,
+    DEVICE_SVG_PATH_KEY,
+    FILLER_CAPACITANCE_KEY,
+)
 from dropbot_status_and_controls.consts import (
     DIELECTRIC_MATERIAL_KEY,
     DIELECTRIC_MATERIALS,
@@ -44,6 +48,11 @@ class LoggingDeviceContext(HasTraits):
     # dropbot calibration snapshot; live updates flow through the controller.
     # None -> force is None (legacy parity). Any: tolerates float or None.
     capacitance_per_unit_area = Any
+
+    #: Filler (air or oil) calibration in pF/mm^2, from
+    #: app_globals[FILLER_CAPACITANCE_KEY]; subtracted from C/A for the
+    #: thickness column. None when the device viewer has not measured one.
+    filler_capacitance_per_unit_area = Any
 
     #: Dielectric picked in the DropBot status pane, from
     #: app_globals[DIELECTRIC_MATERIAL_KEY]. Empty when never published.
@@ -70,6 +79,17 @@ class LoggingDeviceContext(HasTraits):
         except Exception as e:
             logger.debug(f"could not read the dielectric material: {e}")
             return ""
+
+    def _filler_capacitance_per_unit_area_default(self):
+        # Optional report data, tolerant of an unreachable Redis like the
+        # dielectric material above.
+        try:
+            filler = app_globals.get(FILLER_CAPACITANCE_KEY)
+        except Exception as e:
+            logger.debug(f"could not read the filler calibration: {e}")
+            return None
+
+        return None if filler is None else float(filler)
 
     def _dielectric_constant_default(self):
         epsilon_r = DIELECTRIC_MATERIALS.get(self.dielectric_material)

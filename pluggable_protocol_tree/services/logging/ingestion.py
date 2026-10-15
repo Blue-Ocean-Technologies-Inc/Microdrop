@@ -18,10 +18,11 @@ import json
 import threading
 
 # Enthought library imports.
-from traits.api import Any, Dict, Float, HasTraits, Int, List, Str
+from traits.api import Any, Bool, Dict, Float, HasTraits, Int, List, Str
 
 # Microdrop package imports.
 from pluggable_protocol_tree.services.logging.consts import (
+    DIELECTRIC_THICKNESS_COLUMN,
     VACUUM_PERMITTIVITY_PF_UM_PER_MM2,
 )
 
@@ -38,6 +39,15 @@ class LoggingIngestion(HasTraits):
     columns = List()
     metadata = Dict()
     media = Dict()
+
+    #: Filler calibration (pF/mm^2) subtracted from C/A for the thickness
+    #: column; None keeps the raw C/A. Read at flush for the report footnote.
+    filler_capacitance_per_unit_area = Any()
+
+    #: True once the filler changed after a thickness row was logged, so
+    #: earlier rows used a different correction.
+    filler_changed_mid_run = Bool(False)
+
     # Current step + phase context stamped onto each capacitance row.
     _step_id = Str("")
     _step_idx = Int(0)
@@ -70,6 +80,17 @@ class LoggingIngestion(HasTraits):
 
     def update_dielectric_constant(self, value):
         self._dielectric_constant = None if value is None else float(value)
+
+    def update_filler_capacitance_per_unit_area(self, value):
+        filler = None if value is None else float(value)
+
+        if (
+            DIELECTRIC_THICKNESS_COLUMN in self.columns
+            and filler != self.filler_capacitance_per_unit_area
+        ):
+            self.filler_changed_mid_run = True
+
+        self.filler_capacitance_per_unit_area = filler
 
     # --- collection ---
     def log_data(self, entry: dict) -> None:
@@ -131,7 +152,8 @@ class LoggingIngestion(HasTraits):
         force = self._calculate_force(volt)
 
         # Raw C/A over the actuated electrodes, not the liquid-minus-filler
-        # calibration behind the force column.
+        # calibration behind the force column. The thickness subtracts the
+        # filler itself.
         capacitance_over_area = (
             cap / self._actuated_area if self._actuated_area > 0 else None
         )
@@ -147,7 +169,7 @@ class LoggingIngestion(HasTraits):
                 "Force Over Unit Area (mN/mm^2)": force,
                 "Actuated Area (mm^2)": self._actuated_area,
                 "Capacitance Over Area (pF/mm^2)": capacitance_over_area,
-                "Dielectric Thickness (um)": self._calculate_dielectric_thickness(
+                DIELECTRIC_THICKNESS_COLUMN: self._calculate_dielectric_thickness(
                     capacitance_over_area
                 ),
                 "actuated_channels": list(self._actuated_channels),
@@ -167,19 +189,24 @@ class LoggingIngestion(HasTraits):
 
     # --- dielectric ---
     def _calculate_dielectric_thickness(self, capacitance_over_area):
-        """Parallel-plate estimate d = eps_r * eps_0 / (C/A), in um. Valid
-        when the actuated electrodes are fully covered by liquid."""
-        if (
-            self._dielectric_constant is None
-            or capacitance_over_area is None
-            or capacitance_over_area <= 0
-        ):
+        """Parallel-plate estimate d = eps_r * eps_0 / (C/A - filler), in um,
+        or over the raw C/A when no filler calibration is known. Valid when
+        the actuated electrodes are fully covered by liquid."""
+        if self._dielectric_constant is None or capacitance_over_area is None:
+            return None
+
+        device_capacitance_over_area = capacitance_over_area
+
+        if self.filler_capacitance_per_unit_area is not None:
+            device_capacitance_over_area -= self.filler_capacitance_per_unit_area
+
+        if device_capacitance_over_area <= 0:
             return None
 
         return (
             self._dielectric_constant
             * VACUUM_PERMITTIVITY_PF_UM_PER_MM2
-            / capacitance_over_area
+            / device_capacitance_over_area
         )
 
 

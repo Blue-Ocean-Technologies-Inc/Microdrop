@@ -217,3 +217,59 @@ def test_log_capacitance_dielectric_thickness_none_without_dielectric_constant()
     e = ing.entries[-1]
     assert e["Capacitance Over Area (pF/mm^2)"] == 5.0
     assert e["Dielectric Thickness (um)"] is None
+
+
+def test_dielectric_thickness_subtracts_the_filler_calibration():
+    ing = LoggingIngestion()
+    ing.update_dielectric_constant(3.1)
+    ing.update_filler_capacitance_per_unit_area(1.0)
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=2.0)
+
+    assert ing.log_capacitance(_msg(cap="10pF")) is True
+
+    e = ing.entries[-1]
+    assert e["Capacitance Over Area (pF/mm^2)"] == 5.0  # stays raw
+    assert e["Dielectric Thickness (um)"] == pytest.approx(3.1 * 8.8541878128 / 4.0)
+
+
+def test_dielectric_thickness_none_when_filler_exceeds_capacitance_over_area():
+    ing = LoggingIngestion()
+    ing.update_dielectric_constant(3.1)
+    ing.update_filler_capacitance_per_unit_area(5.0)
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=2.0)
+
+    assert ing.log_capacitance(_msg(cap="10pF")) is True
+
+    assert ing.entries[-1]["Dielectric Thickness (um)"] is None
+
+
+def test_dielectric_thickness_raw_when_filler_is_none():
+    ing = LoggingIngestion()
+    ing.update_dielectric_constant(3.1)
+    ing.update_filler_capacitance_per_unit_area(None)
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=2.0)
+
+    assert ing.log_capacitance(_msg(cap="10pF")) is True
+
+    e = ing.entries[-1]
+    assert e["Dielectric Thickness (um)"] == pytest.approx(3.1 * 8.8541878128 / 5.0)
+
+
+def test_filler_change_flagged_only_after_a_thickness_row():
+    ing = LoggingIngestion()
+    ing.update_filler_capacitance_per_unit_area(1.0)
+    ing.update_filler_capacitance_per_unit_area(2.0)  # before any row
+    assert ing.filler_changed_mid_run is False
+
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=2.0)
+    ing.log_capacitance(_msg())
+    ing.update_filler_capacitance_per_unit_area(2.0)  # same value
+    assert ing.filler_changed_mid_run is False
+
+    ing.update_filler_capacitance_per_unit_area(3.0)
+    assert ing.filler_changed_mid_run is True
+    assert ing.filler_capacitance_per_unit_area == 3.0
