@@ -47,6 +47,7 @@ from .consts import (
     PERSISTED_VIEWER_TRAITS,
 )
 from .discovery import NO_IMAGE_GROUP, UNGROUPED_BURST, merge_image_groups
+from .metadata import NO_METADATA_TEXT
 from .preferences import ImageViewerPreferences
 
 #: The image filter's no-filter choice.
@@ -81,13 +82,15 @@ class ImageViewerModel(HasTraits):
     browsed_directory = Str()
 
     #: Section collapse toggles (controls-pane parity; not persisted).
-    #: Experiments, Analysis Exclusion and Contrast start collapsed — the
-    #: occasional affordances, not the everyday view.
+    #: Experiments, Analysis Exclusion, Contrast and Metadata start
+    #: collapsed — the occasional affordances, not the everyday view (and
+    #: the portable's 800 px panel can't spare the sidebar height).
     show_experiments = Bool(False)
     show_bursts = Bool(True)
     show_images = Bool(True)
     show_exclusion = Bool(False)
     show_contrast = Bool(False)
+    show_metadata = Bool(False)
 
     #: The advanced-settings rows under the image (background ring,
     #: rolling ball, and the AI detection options) collapse under one
@@ -174,6 +177,10 @@ class ImageViewerModel(HasTraits):
     #: the dock pane's title).
     info_text = Str()
 
+    #: The displayed image's PNG text chunks (e.g. a capture's settings),
+    #: as rich text for the Metadata section and its pop-out window.
+    metadata_text = Str(NO_METADATA_TEXT)
+
     #: "(x, y) = value" readout under the cursor (true stored values).
     pixel_text = Str()
 
@@ -240,6 +247,8 @@ class ImageViewerModel(HasTraits):
     next_experiment_button = Button()
     #: Delete the selected experiment's folder from disk.
     delete_experiment_button = Button()
+    #: Open the metadata in its own window (it follows the shown image).
+    metadata_popout_button = Button()
 
     #: Persistence backing for the display window (two-way: edits push to
     #: preferences, external preference changes pull back) — the same

@@ -93,6 +93,7 @@ from .analysis.consts import (
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
 from .display import frame_to_qimage
+from .rich_text_editor import RichTextEditor
 from .scale_bar import (
     DEFAULT_UNIT,
     UNITS,
@@ -962,6 +963,37 @@ contrast_group = VGroup(
     show_border=True,
 )
 
+# The displayed image's file facts and PNG text chunks (a capture's
+# settings, for one), whatever keys the file carries, rendered as rich
+# text whose field names show their stored key as a tooltip. Resizable so
+# the text word-wraps rather than widening the sidebar.
+metadata_group = VGroup(
+    HGroup(
+        spring,
+        UItem(
+            "metadata_popout_button",
+            editor=IconButtonEditor(
+                glyph=ICON_OPEN_IN_NEW, tooltip="Open the metadata in its own window"
+            ),
+        ),
+    ),
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
+    visible_when="show_metadata",
+    show_border=True,
+)
+
+# The metadata pop-out: a non-modal live window on the same model, so it
+# keeps following the shown image while the user steps through them.
+metadata_window_view = View(
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
+    title="Image metadata",
+    kind="live",
+    resizable=True,
+    scrollable=True,
+    width=420,
+    height=480,
+)
+
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export
 # pipeline over the filtered images, as an always-visible vertical
 # toolbar on the image's right edge. Instant/live per-ROI stats show in
@@ -1149,8 +1181,9 @@ analysis_toolbar = VGroup(
     spring,
 )
 
-# Selector sidebar: the five collapsible sections stacked, hidden as one
-# unit by the chevron toggle (device-viewer sidebar parity).
+# Selector sidebar: the six collapsible sections stacked, hidden as one
+# unit by the chevron toggle (device-viewer sidebar parity). It scrolls on
+# its own, so a tall section never scrolls the image beside it.
 sidebar_group = VGroup(
     _collapse_header("show_experiments", "Experiments"),
     experiments_group,
@@ -1162,7 +1195,10 @@ sidebar_group = VGroup(
     exclusion_group,
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
+    _collapse_header("show_metadata", "Metadata"),
+    metadata_group,
     visible_when="show_sidebar",
+    scrollable=True,
 )
 
 # The measurement settings, under the image they act on: the background
