@@ -8,15 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from traits.api import observe
 
-from dropbot_controller.consts import SET_VOLTAGE, SET_FREQUENCY
-from microdrop_utils.decorators import debounce
-from logger.logger_service import get_logger
-
+# Microdrop package imports.
+from dropbot_controller.consts import SET_FREQUENCY, SET_VOLTAGE
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from template_status_and_controls.base_controller import BaseStatusController
 
+# Microdrop utils imports.
+from microdrop_utils.decorators import debounce
+
+# Local imports.
+from .consts import DIELECTRIC_MATERIAL_KEY
+
+# Logger import.
+from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class ControlsController(BaseStatusController):
@@ -56,3 +66,10 @@ class ControlsController(BaseStatusController):
     def _on_frequency_changed(self, event):
         if self._publish_or_queue(topic=SET_FREQUENCY, message=str(event.new)):
             logger.debug(f"Frequency --> {event.new} Hz")
+
+    @observe("model:[preferences,dielectric_material]")
+    def _publish_dielectric_material(self, event):
+        """Share the picked dielectric with other plugins (the protocol run
+        report). The dock pane assigning ``model.preferences`` is the startup
+        write: the material's default is read from those preferences."""
+        app_globals[DIELECTRIC_MATERIAL_KEY] = self.model.dielectric_material
