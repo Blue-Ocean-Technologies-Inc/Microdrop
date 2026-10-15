@@ -73,6 +73,8 @@ from microdrop_style.icons.icons import (
     ICON_TONALITY,
     ICON_TRANSFORM,
     ICON_VIEW_3D,
+    ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
 )
 
 # Microdrop utils imports.
@@ -487,7 +489,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session:ball:show_reference, "
-            "roi_analysis:selected_roi_id",
+            "roi_analysis:selected_roi_id, "
+            "roi_analysis:show_rois",
         )
         self.object.observe(
             self._on_interaction_mode_changed, "roi_analysis:interaction_mode"
@@ -528,7 +531,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session:ball:show_reference, "
-            "roi_analysis:selected_roi_id",
+            "roi_analysis:selected_roi_id, "
+            "roi_analysis:show_rois",
             remove=True,
         )
         self.object.observe(
@@ -591,12 +595,16 @@ class _ImageCanvasEditor(QtEditor):
             ball.enabled and ball.show_reference, ball.radius_px
         )
         effective = session.effective_for(model.current_path)
-        # Only a mask is hidden on the canvas: it never plots, so its eye
-        # hides its outline (and takes it out of the stats), while a
-        # positive's eye is for the plot alone.
-        hidden_ids = {
-            roi.roi_id for roi in session.negative_rois if not roi.style.visible
-        }
+
+        if model.roi_analysis.show_rois:
+            # Only a mask is hidden on the canvas: it never plots, so its
+            # eye hides its outline (and takes it out of the stats),
+            # while a positive's eye is for the plot alone.
+            hidden_ids = {
+                roi.roi_id for roi in session.negative_rois if not roi.style.visible
+            }
+        else:
+            hidden_ids = {roi_id for roi_id, *_rest in effective}
 
         self._roi_layer.sync(
             effective,
@@ -1032,6 +1040,14 @@ analysis_toolbar = VGroup(
             off_glyph=ICON_NEGATIVE_MASK,
             tooltip="Negative mask mode: drawn shapes are subtracted "
             "from the ROIs they overlap",
+        ),
+    ),
+    UItem(
+        "object.roi_analysis.show_rois",
+        editor=IconToggleEditor(
+            on_glyph=ICON_VISIBILITY,
+            off_glyph=ICON_VISIBILITY_OFF,
+            tooltip="Show or hide the ROIs on the image",
         ),
     ),
     "12",  # measurement toggles

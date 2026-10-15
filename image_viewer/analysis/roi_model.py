@@ -758,6 +758,11 @@ class RoiAnalysisModel(HasTraits):
     #: masks instead of ROIs. Independent of interaction_mode.
     negative_mode = Bool(False)
 
+    #: Display-only toolbar toggle for the canvas overlay (ROI outlines,
+    #: their labels, negative masks and background rings). It never
+    #: changes what is measured, plotted or exported, and is not persisted.
+    show_rois = Bool(True)
+
     #: The user's saved fit equations [(name, expression), ...],
     #: mirrored from the app preferences that persist them so the plot
     #: and the equations table need not reach for preferences.

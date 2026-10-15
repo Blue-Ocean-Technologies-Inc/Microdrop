@@ -273,7 +273,8 @@ class RoiCanvasLayer:
         shape = (int(bounds.height()), int(bounds.width()))
         for roi_id, name, kind, geometry, is_negative in effective:
             item = self._items.get(roi_id)
-            if item is None or is_negative:
+            # A hidden ROI takes its ring with it.
+            if item is None or is_negative or not item.isVisible():
                 continue
             path = QPainterPath()
             for contour in ring_contours(
@@ -305,7 +306,10 @@ class RoiCanvasLayer:
         update, drop. Items whose id is in ``hidden_ids`` stay in the
         scene but are not drawn. The rings are cut by ``negatives``,
         which must be AnalysisSession.negatives_for() of the shown
-        image, so the drawn ring is the one that is averaged."""
+        image, so the drawn ring is the one that is averaged;
+        ``hidden_ids`` cannot stand in for it, as the toolbar's
+        show/hide-ROIs toggle hides every item without changing what is
+        measured."""
         wanted = {
             roi_id: (name, kind, geometry, is_negative)
             for roi_id, name, kind, geometry, is_negative in effective
