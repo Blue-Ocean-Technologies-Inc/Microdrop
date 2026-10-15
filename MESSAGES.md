@@ -301,6 +301,7 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 
 **app_globals (read at run start)**
 - `DIELECTRIC_MATERIAL_KEY = "dropbot.dielectric_material"` (`dropbot_status_and_controls/consts.py`) — written by `dropbot_status_and_controls/controller.py:_publish_dielectric_material` at startup and on every dielectric pick; read by `LoggingDeviceContext` (`services/logging/models.py`), which looks the name up in `DIELECTRIC_MATERIALS` for the report's Dielectric Material / Dielectric Constant metadata and the per-row `Dielectric Thickness (um)` column.
+- `FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area"` (`device_viewer/consts.py`, pF/mm^2) — written by `device_viewer/models/calibration.py`; read by `LoggingDeviceContext` as the run-start filler that `Dielectric Thickness (um)` subtracts, and shown as the Filler Capacitance Over Area metadata row. Live changes arrive through `CALIBRATION_DATA` (`controller.on_calibration`).
 
 **Contribution topics (any plugin → report)**
 - `PROTOCOL_LOGGING_METADATA_CONTRIBUTION = "microdrop/protocol_tree/logging/metadata"` and `PROTOCOL_LOGGING_DATA_CONTRIBUTION = "microdrop/protocol_tree/logging/data"` — defined in `pluggable_protocol_tree/consts.py`.
