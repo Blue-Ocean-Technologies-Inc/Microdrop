@@ -37,6 +37,7 @@ from traitsui.api import (
     UItem,
     VGroup,
     View,
+    VSplit,
     spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
@@ -477,6 +478,8 @@ class _ImageCanvasEditor(QtEditor):
         self.control.on_roi_shortcut = lambda action: analysis.trait_set(
             **{f"{action}_roi_button": True}
         )
+        # The pane is flat: no frame line around the image.
+        self.control.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.control.set_zoom_step(self.object.zoom_step)
         self.object.observe(self._on_zoom_step_changed, "zoom_step")
         self.object.observe(self._on_display_frame_changed, "display_frame")
@@ -831,6 +834,9 @@ buttons_group = HGroup(
     # their fixed 12 px (the numeric spacers are growable Minimum
     # spacer items). The image summary itself lives in the pane title.
     spring,
+    # Scrolls sideways on its own, so the row never sets the image
+    # column's minimum width; the dock pane pins its height.
+    scrollable=True,
 )
 
 
@@ -1211,10 +1217,14 @@ analysis_toolbar = VGroup(
     # their fixed 12 px instead of spreading down the pane (the fixed
     # spacers are growable Minimum spacer items).
     spring,
+    # Scrolls vertically on its own, so the toolbar never sets the
+    # pane's minimum height; the dock pane pins its width.
+    scrollable=True,
 )
 
 # Selector sidebar: the five collapsible sections stacked, hidden as one
-# unit by the chevron toggle (device-viewer sidebar parity).
+# unit by the chevron toggle (device-viewer sidebar parity). It scrolls on
+# its own, so a tall section never scrolls the image beside it.
 sidebar_group = VGroup(
     _collapse_header("show_experiments", "Experiments"),
     experiments_group,
@@ -1227,6 +1237,7 @@ sidebar_group = VGroup(
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
     visible_when="show_sidebar",
+    scrollable=True,
 )
 
 # The measurement settings, under the image they act on: the background
@@ -1377,11 +1388,15 @@ ai_group = Group(
 )
 
 # The measurement and AI grids as one collapsible block under the image.
+# The block scrolls on its own both ways, so its grids never set the image
+# column's minimum, and sits under a divider the user drags against the
+# canvas.
 advanced_settings_group = VGroup(
     HGroup(UItem("scale_text", style="readonly")),
     correction_group,
     ai_group,
     visible_when="show_advanced_settings",
+    scrollable=True,
 )
 
 ImageViewerView = View(
@@ -1398,15 +1413,28 @@ ImageViewerView = View(
         ),
         HSplit(
             sidebar_group,
+            # Not scrollable: the icon row and the Advanced block scroll
+            # on their own, so nothing here pins the column's minimum and
+            # the canvas fills whatever the splitter gives the column.
             VGroup(
                 buttons_group,
-                UItem(
-                    "array", editor=ImageCanvasEditor(), springy=True, resizable=True
+                # The user splits the height between the canvas and the
+                # Advanced block; the dock pane sizes the split and folds
+                # it to the header row while Advanced is collapsed.
+                VSplit(
+                    UItem(
+                        "array",
+                        editor=ImageCanvasEditor(),
+                        springy=True,
+                        resizable=True,
+                    ),
+                    # The measurement + AI option rows are advanced
+                    # settings: one chevron collapses them together.
+                    VGroup(
+                        _collapse_header("show_advanced_settings", "Advanced"),
+                        advanced_settings_group,
+                    ),
                 ),
-                # The measurement + AI option rows are advanced
-                # settings: one chevron collapses them together.
-                _collapse_header("show_advanced_settings", "Advanced"),
-                advanced_settings_group,
                 HGroup(
                     UItem(
                         "object.roi_analysis.progress_text",
@@ -1417,10 +1445,8 @@ ImageViewerView = View(
         ),
         analysis_toolbar,
     ),
-    # Scrollable so the dock can be dragged to any size: the toolbars and
-    # setting grids keep their natural size and scroll once the pane is
-    # smaller than them, while the canvas (minimum 1x1) still takes all
-    # the room the pane has to spare.
+    # Not scrollable: both splitter columns and the analysis toolbar
+    # scroll on their own, so the pane can be dragged down to a few
+    # icons' size without an outer scroll, and the canvas takes the rest.
     resizable=True,
-    scrollable=True,
 )
