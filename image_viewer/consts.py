@@ -90,7 +90,7 @@ PRUNE_EXPERIMENTS_DESCRIPTION = (
 )
 #: The feature and package named when an out-of-date environment lacks
 #: send2trash (microdrop_utils.environment_update_dialog).
-TRASH_FEATURE = "Sending experiments to the Recycle Bin"
+TRASH_FEATURE = "Sending experimental folders to the Trash"
 TRASH_PACKAGE = "send2trash"
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500

@@ -13,9 +13,6 @@ package a feature is missing, offer to update the pixi-microdrop repository
 (saying which local changes that discards and which plugins it re-adds) and
 relaunch, and hand over the exact commands when that fails."""
 
-# Standard library imports.
-import html
-
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import (
     OK,
@@ -56,8 +53,9 @@ GENERIC_MANUAL_UPDATE = (
 def missing_package_message(feature, package):
     """The standard explanation that ``feature`` needs ``package``."""
     return (
-        f"{feature} needs the {package} package, which this environment does "
-        "not have. Update the pixi-microdrop repository to install it."
+        f"<strong>{feature}</strong> needs the <strong>{package}</strong> "
+        "package, which this environment does not have. Update the "
+        "<strong>pixi-microdrop</strong> repository to install it."
     )
 
 
@@ -70,12 +68,12 @@ def reset_notice(plugins):
             "installed, so none need re-adding."
         )
 
-    names = ", ".join(plugin.name for plugin in plugins)
+    names = "<br>".join(f"- <strong>{plugin.name}</strong>" for plugin in plugins)
 
     return (
         "Local changes to the launcher's pyproject.toml, pixi.lock and other "
         "tracked files will be discarded and these plugins re-added "
-        f"afterwards: {names}."
+        f"afterwards:<br><br>{names}"
     )
 
 
@@ -102,7 +100,7 @@ def offer_environment_update(feature, package, application=None):
         failure = e
 
     if failure is None:
-        message = f"{message}<br><br>{html.escape(reset_notice(plugins))}"
+        message = f"{message}<br><br>{(reset_notice(plugins))}"
 
     choice = warning(
         None,
@@ -283,9 +281,12 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     style_app(app)
 
+    TRASH_FEATURE = "Sending experimental folders to the Trash"
+    TRASH_PACKAGE = "send2trash"
+
     started = offer_environment_update(
-        "Sending experiments to the Recycle Bin",
-        "send2trash",
+        TRASH_FEATURE,
+        TRASH_PACKAGE,
         application=DemoApplication(),
     )
     print(f"offer_environment_update returned {started}")
