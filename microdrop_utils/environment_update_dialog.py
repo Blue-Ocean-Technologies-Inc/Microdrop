@@ -41,7 +41,7 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-UPDATE_AND_RELAUNCH_LABEL = "Update and relaunch"
+UPDATE_AND_RELAUNCH_LABEL = "Update & Relaunch"
 NOT_NOW_LABEL = "Not now"
 
 #: The update by hand when it cannot be planned (checkout not located,
@@ -169,3 +169,126 @@ def _report_update_failure(exception, commands):
         title="Update failed",
         detail=getattr(exception, "output", "") or None,
     )
+
+
+if __name__ == "__main__":
+    # Manual demo of the dialogs, never touching the real launcher or
+    # environment: planning, the update steps and the relaunch are stand-ins.
+    #   python -m microdrop_utils.environment_update_dialog
+    #       [--fail | --no-plugins | --unplanned]
+
+    # Standard library imports.
+    import argparse
+    import sys
+    import time
+    from pathlib import Path
+
+    # Enthought library imports.
+    from pyface.qt import QtCore, QtWidgets
+
+    # Microdrop style imports.
+    from microdrop_style.helpers import style_app
+
+    # Microdrop utils imports.
+    from microdrop_utils.environment_update import ExternalPlugin, update_steps
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    outcome = parser.add_mutually_exclusive_group()
+    outcome.add_argument("--fail", action="store_true", help="the update fails")
+    outcome.add_argument(
+        "--no-plugins", action="store_true", help="no external plugins installed"
+    )
+    outcome.add_argument(
+        "--unplanned", action="store_true", help="the update cannot be planned"
+    )
+    args = parser.parse_args()
+
+    class DemoPluginsProvider:
+        """Two installed plugins (none with ``--no-plugins``)."""
+
+        def installed_external_plugins(self, workspace):
+            if args.no_plugins:
+                return []
+
+            return [
+                ExternalPlugin(name="heater-microdrop-plugin"),
+                ExternalPlugin(name="magnet-microdrop-plugin", version="1.2.0"),
+            ]
+
+        def reinstall_arguments(self, plugin):
+            spec = f"{plugin.name}=={plugin.version}" if plugin.version else plugin.name
+
+            return [["add", spec]]
+
+    class DemoApplication:
+        """Offers the provider (none with ``--unplanned``); exit only prints."""
+
+        def get_service(self, protocol):
+            if args.unplanned or protocol is not IExternalPluginsProvider:
+                return None
+
+            return DemoPluginsProvider()
+
+        def exit(self):
+            print("application.exit()")
+
+            return True
+
+    def locate_update(plugins_provider=None):
+        if plugins_provider is None:
+            raise EnvironmentUpdateError(
+                "Plugin management is not running, so the installed plugins "
+                "cannot be told and would be lost by the update."
+            )
+
+        workspace = Path("pixi-microdrop/microdrop-py")
+        plugins = plugins_provider.installed_external_plugins(workspace)
+        reinstall = [
+            arguments
+            for plugin in plugins
+            for arguments in plugins_provider.reinstall_arguments(plugin)
+        ]
+
+        return update_steps(workspace, workspace.parent, None, reinstall), plugins
+
+    def run_update_steps(steps):
+        print(f"Would run:\n{manual_update_commands(steps)}")
+        time.sleep(1.5)
+
+        if args.fail:
+            raise EnvironmentUpdateError(
+                "`pixi install` exited with code 1",
+                "Updating lock file\n"
+                "Error: failed to solve the environment\n"
+                "  heater-microdrop-plugin cannot be installed",
+            )
+
+    def relaunch(application=None):
+        print("relaunch()")
+        application.exit()
+
+    # The update finishes on the event loop; quit it once the last dialog
+    # closes (queued, so a synchronous failure report quits too).
+    finish_update = _relaunch_after_update
+    report_failure = _report_update_failure
+
+    def _relaunch_after_update(application):
+        finish_update(application)
+        QtCore.QTimer.singleShot(0, app.quit)
+
+    def _report_update_failure(exception, commands):
+        report_failure(exception, commands)
+        QtCore.QTimer.singleShot(0, app.quit)
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+    style_app(app)
+
+    started = offer_environment_update(
+        "Sending experiments to the Recycle Bin",
+        "send2trash",
+        application=DemoApplication(),
+    )
+    print(f"offer_environment_update returned {started}")
+
+    if started:
+        app.exec()
