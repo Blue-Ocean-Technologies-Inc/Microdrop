@@ -97,7 +97,9 @@ class LoggingReport:
             "<!DOCTYPE html><html><head><meta charset='utf-8'>"
             "<style>body{font-family:sans-serif;margin:24px;} "
             "table{border-collapse:collapse;} td,th{border:1px solid #ccc;"
-            "padding:4px 8px;}</style></head><body>"
+            "padding:4px 8px;} "
+            "summary{cursor:pointer;font-weight:bold;margin:12px 0 4px}"
+            "</style></head><body>"
             f"<h1>Protocol Report</h1>{body}</body></html>"
         )
 
@@ -213,13 +215,13 @@ class LoggingReport:
                 .sort_values("step_idx", ascending=False)
             )
             agg["step_label"] = agg["step_idx"].apply(lambda i: f"Step {int(i)}")
+            # No figure title: the collapsible section's summary names it.
             fig = px.bar(
                 agg,
                 x="mean",
                 y="step_label",
                 error_x="std",
                 orientation="h",
-                title=col,
                 labels={"mean": f"Mean {col}", "step_label": "Protocol Steps"},
                 template="plotly_white",
                 color_discrete_sequence=["#17a2b8"],
@@ -227,18 +229,27 @@ class LoggingReport:
             fig.update_layout(
                 yaxis=dict(type="category", title="Protocol Steps"),
                 xaxis=dict(title=f"Mean {col}"),
-                margin=dict(l=20, r=20, t=50, b=20),
+                margin=dict(l=20, r=20, t=20, b=20),
                 # Grow height with step count so labels don't overlap.
                 height=250 + (len(agg) * 35),
             )
-            charts.append(
-                fig.to_html(
-                    full_html=False,
-                    include_plotlyjs="cdn" if not plotly_js_emitted else False,
-                )
+            chart = fig.to_html(
+                full_html=False,
+                include_plotlyjs="cdn" if not plotly_js_emitted else False,
             )
+            charts.append(LoggingReport._collapsible(col, chart))
             plotly_js_emitted = True
+
         return "<h2>Data Trends</h2>" + heatmap + "".join(charts)
+
+    @staticmethod
+    def _collapsible(title: str, content: str) -> str:
+        """Wrap a chart in a section the reader can fold away. Rendered open:
+        plotly sizes a chart from its container, and one first drawn inside a
+        closed <details> gets zero width."""
+        return (
+            f"<details open><summary>{_html.escape(title)}</summary>{content}</details>"
+        )
 
     @staticmethod
     def _heatmap(
@@ -255,9 +266,11 @@ class LoggingReport:
             # format_time_tooltip auto-scaling (sec --> min --> hours). Passing
             # "s" instead of "seconds" disables it and shows raw floats.
             fig = create_plotly_svg_dropbot_device_heatmap(str(svg), durations)
-            return "<h3>Device actuation heatmap</h3>" + fig.to_html(
+            chart = fig.to_html(
                 full_html=False, include_plotlyjs="cdn" if include_plotlyjs else False
             )
+
+            return LoggingReport._collapsible("Device actuation heatmap", chart)
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"heatmap generation failed: {e}")
             return ""

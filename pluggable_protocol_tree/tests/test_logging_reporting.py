@@ -347,6 +347,7 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
     ctx = LoggingDeviceContext(experiment_directory=tmp_path, device_svg_path=str(svg))
     html = r.LoggingReport._heatmap(df, ctx, include_plotlyjs=False)
     assert "fake-heatmap" in html
+    assert html.startswith("<details open><summary>Device actuation heatmap</summary>")
     # No overrides — let the helper use its "seconds" default so
     # format_time_tooltip auto-scales (sec --> min --> hours) in the tooltip.
     assert "quant_title" not in captured["kw"]
@@ -419,3 +420,30 @@ def test_build_html_without_step_idx_does_not_crash():
     )
     assert "<html" in html.lower()
     assert "Data Trends" in html
+
+
+def test_trends_section_wraps_each_chart_in_an_open_details_section():
+    """Each per-column chart is collapsible and starts open (plotly sizes a
+    chart from its container, so one drawn inside a closed <details> gets
+    zero width). The summary names the chart, so the figure has no title."""
+    cols = [
+        "step_idx",
+        "step_id",
+        "Capacitance (pF)",
+        "Voltage (V)",
+        "Actuated Area (mm^2)",
+        "actuated_channels",
+    ]
+
+    html = LoggingReport._trends_section(
+        _entries(),
+        cols,
+        LoggingDeviceContext(experiment_directory=Path("."), device_svg_path=None),
+    )
+
+    for col in ("Capacitance (pF)", "Voltage (V)", "Actuated Area (mm^2)"):
+        assert f"<details open><summary>{col}</summary>" in html
+
+    assert html.count("<details open>") == 3
+    assert html.count("</details>") == 3
+    assert '"title":{"text":"Capacitance (pF)"' not in html
