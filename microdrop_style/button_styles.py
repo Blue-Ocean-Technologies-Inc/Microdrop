@@ -13,9 +13,8 @@ Centralized button styling for Microdrop application.
 Provides consistent button styles across all UI components.
 """
 
-from .colors import (
-    PRIMARY_SHADE, SECONDARY_SHADE, GREY, BLACK, WHITE
-)
+# Local imports.
+from .colors import BLACK, GREY, PRIMARY_SHADE, SECONDARY_SHADE, WHITE
 
 # Button dimensions and spacing
 BUTTON_MIN_WIDTH = 40
@@ -30,13 +29,13 @@ ICON_FONT_FAMILY = "Material Symbols Outlined"
 # Tooltip styles for consistency across all components
 TOOLTIP_STYLE = f"""
 QToolTip {{
-    background-color: {GREY['dark']};
+    background-color: {GREY["dark"]};
     color: {WHITE};
     padding: 6px 10px;
     font-size: 11pt;
     font-family: "Inter", sans-serif;
     border-radius: 6px;
-    border: 1px solid {GREY['lighter']};
+    border: 1px solid {GREY["lighter"]};
     max-width: 300px;
     text-align: center;
 }}
@@ -51,7 +50,7 @@ QToolTip {{
     font-size: 11pt;
     font-family: "Inter", sans-serif;
     border-radius: 6px;
-    border: 1px solid {GREY['light']};
+    border: 1px solid {GREY["light"]};
     max-width: 300px;
     text-align: center;
 }}
@@ -60,13 +59,13 @@ QToolTip {{
 # Dark mode tooltip styles
 DARK_MODE_TOOLTIP_STYLE = f"""
 QToolTip {{
-    background-color: {GREY['dark']};
+    background-color: {GREY["dark"]};
     color: {WHITE};
     padding: 6px 10px;
     font-size: 11pt;
     font-family: "Inter", sans-serif;
     border-radius: 6px;
-    border: 1px solid {GREY['lighter']};
+    border: 1px solid {GREY["lighter"]};
     max-width: 300px;
     text-align: center;
 }}
@@ -74,24 +73,24 @@ QToolTip {{
 
 # Base button style (common to all themes)
 BASE_BUTTON_STYLE = f"""
-QPushButton {{ 
-    font-family: {ICON_FONT_FAMILY}; 
-    font-size: 22px; 
+QPushButton {{
+    font-family: {ICON_FONT_FAMILY};
+    font-size: 22px;
     padding: {BUTTON_PADDING};
     border-radius: {BUTTON_BORDER_RADIUS}px;
     min-width: {BUTTON_MIN_WIDTH}px;
     min-height: {BUTTON_MIN_HEIGHT}px;
     border: 1px solid transparent;
-}} 
+}}
 
-QPushButton:hover {{ 
-    color: {SECONDARY_SHADE[700]}; 
-    background-color: {GREY['light']};
+QPushButton:hover {{
+    color: {SECONDARY_SHADE[700]};
+    background-color: {GREY["light"]};
     border-color: {SECONDARY_SHADE[300]};
 }}
 
 QPushButton:pressed {{
-    background-color: {GREY['dark']};
+    background-color: {GREY["dark"]};
 }}
 
 QPushButton:disabled {{
@@ -108,32 +107,32 @@ QPushButton:checked {{
 # Light mode button styles
 LIGHT_MODE_BUTTON_STYLE = f"""
 {BASE_BUTTON_STYLE}
-QPushButton {{ 
+QPushButton {{
     background-color: {WHITE};
     color: {BLACK};
-    border-color: {GREY['light']};
+    border-color: {GREY["light"]};
 }}
 
 QPushButton:disabled {{
-    color: {GREY['dark']};
-    background-color: {GREY['light']};
-    border-color: {GREY['lighter']};
+    color: {GREY["dark"]};
+    background-color: {GREY["light"]};
+    border-color: {GREY["lighter"]};
 }}
 """
 
 # Dark mode button styles
 DARK_MODE_BUTTON_STYLE = f"""
 {BASE_BUTTON_STYLE}
-QPushButton {{ 
-    background-color: {GREY['dark']};
+QPushButton {{
+    background-color: {GREY["dark"]};
     color: {WHITE};
-    border-color: {GREY['lighter']};
+    border-color: {GREY["lighter"]};
 }}
 
 QPushButton:disabled {{
-    color: {GREY['light']};
+    color: {GREY["light"]};
     background-color: {BLACK};
-    border-color: {GREY['dark']};
+    border-color: {GREY["dark"]};
 }}
 """
 
@@ -298,20 +297,21 @@ LIGHT_MODE_TOOLBUTTON_STYLE = f"""
                         }}
                     """
 
+
 # Function to get button style based on theme
 def get_button_style(theme="light", button_type="default"):
     """
     Get button style based on theme and button type.
-    
+
     Args:
         theme (str): 'light' or 'dark'
-        button_type (str): 'default', 'navigation', 'small', 'narrow', 'large', 
+        button_type (str): 'default', 'navigation', 'small', 'narrow', 'large',
                           'primary', 'secondary', 'danger', 'success'
-    
+
     Returns:
         str: CSS stylesheet for the button
     """
-    
+
     if button_type == "navigation":
         return NAVIGATION_BUTTON_STYLE
     elif button_type == "small":
@@ -347,10 +347,10 @@ def get_button_style(theme="light", button_type="default"):
 def get_tooltip_style(theme="light"):
     """
     Get tooltip style based on theme.
-    
+
     Args:
         theme (str): 'light' or 'dark'
-    
+
     Returns:
         str: CSS stylesheet for tooltips
     """
@@ -359,14 +359,15 @@ def get_tooltip_style(theme="light"):
     else:
         return LIGHT_MODE_TOOLTIP_STYLE
 
+
 # Function to get button dimensions
 def get_button_dimensions(button_type="default"):
     """
     Get button dimensions based on button type.
-    
+
     Args:
         button_type (str): 'default', 'navigation', 'small', 'narrow', 'large'
-    
+
     Returns:
         tuple: (min_width, min_height)
     """
