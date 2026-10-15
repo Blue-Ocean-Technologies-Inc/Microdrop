@@ -1,3 +1,69 @@
+## [v1.30.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.30.0) (2026-10-15)
+
+### Feat
+
+- **image_viewer**: standalone metadata panel demo ([`be7386b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/be7386b89d97680cfe45ce9af08408e576d429d9))
+- **image_viewer**: file details and described metadata fields ([`b363233`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b363233ccc8761970c0b98d1cdd9fef2c59b2b08))
+- **image_viewer**: rich-text metadata widget with tooltips ([`63830ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/63830ac1a071782bda8ee165b298c6733135b585))
+- **image_viewer**: metadata as a rich-text table with a pop-out ([`4c8918a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4c8918a6a20e61b16118d83e7f594664669abe66))
+- **image_viewer**: collapsible Metadata section for PNG text chunks ([`7d90bf0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7d90bf086eb9983ee257183d932dc36d1a062bbb))
+- **protocol-tree**: add Open Experiment Folder action ([`5fb6935`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5fb69352353e182d070906a87a3eb5160aecf3e8))
+- **image-viewer**: add a Prune Experiments action ([`5bb3315`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5bb33158b171dbc8d51d6016657b1ecf79ad6532))
+- **image-viewer**: add experiment pruning helpers ([`4e91265`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4e9126589e729feac25eb1e2cae64a5883f2e197))
+- **image-viewer**: add a d² zero marker to ROI plots ([`47b06ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/47b06aca9c95f514df96d990c5d2e13008187fdc))
+- **image-viewer**: export the Expected table as CSV ([`82e3ea5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/82e3ea575465b508b83ecf20983de7804800fe3b))
+- **image-viewer**: flip actual-vs-expected axes ([`6007a4d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6007a4d3f296aef31d57f71882fa8d8e281196e6))
+- **image-viewer**: plot actual vs expected ([`ed315f5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ed315f59f6d0b48f3ac779cf51e7f3cc079966c0))
+- **image-viewer**: set an expected fastest change ([`585436c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/585436c0a158d2adc81d0a766def4ff998cfda77))
+- **image-viewer**: add a 1st derivative ROI view ([`549e4bb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/549e4bb0fa6ef1d925bf091cb9c93c14f9e23db9))
+- **image-viewer**: word plot labels by the x axis ([`bc84568`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bc845684331db0abf1e0e29eba7d314b97452c57))
+- **ui-helpers**: hover combos take labelled dicts ([`60ae71a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/60ae71aeba999a7f9deafc5cef168b250dd4069c))
+- **image-viewer**: add a delete-experiment button ([`56fbce9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/56fbce9616ee3b1d621e09db350920bd73d2ef13))
+- **image-viewer**: add delete_experiment() ([`8e2e8e5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8e2e8e59645209d08abdceb89ff788a23a698862))
+- **image-viewer**: calibrate the temperature axis ([`4533177`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4533177e306f09ad49b4ea2893e269c6e4a2e32f))
+- **image-viewer**: add experiment seek arrows ([`5e7647b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5e7647bec85507bb48eff01770842e964bf4b662))
+- **protocol-tree**: write viewer edits to selection ([`0b7ba36`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0b7ba361f54df7e6226430013cca61cb664fe80b))
+- **protocol-tree**: fill electrodes by channel pattern ([`3ac8e83`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3ac8e83609c6d0d0e6769c2e49e589f50e98c1ac))
+- **protocol-tree**: add a device channel picker ([`5cd6504`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5cd65045681747f4c4c279d94bdc3bc71e5be2fe))
+- **device-viewer**: move gamepad preferences to the plugin ([`8f7beae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f7beae712434ae36fecc946e9fcf702c0b2e573))
+- **device-viewer**: warn on a layer contract mismatch ([`f6849b5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f6849b54ae2b0b24a9045ea43e96439a22a3208f))
+- **device-viewer**: add the IElectrodeStepping contract ([`b33d880`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b33d880f3b8ee7b6f3d9ceb0d073e91a1e520e5d))
+
+### Fix
+
+- **image_viewer**: scroll the sidebar on its own, wrap the metadata ([`364a65b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/364a65b3ed27945b9e10379ff688d71c8005a693))
+- **image-viewer**: keep fastest-change actuals current ([`ae91375`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ae91375864a7719f8b1ed929dcaf70a0cd2e1cb8))
+- **image-viewer**: size plot controls to values ([`e6315c9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e6315c9fb0530a11c95045029a465af92bcd24fa))
+- **protocol-tree**: sync viewer on electrode edits ([`c89620f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c89620f725af1a96fbbe04a239e57c3a927fe0a5))
+- **device-viewer**: keep app start alive if the gamepad move can't save ([`bfa5329`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bfa5329c5769fe93cd8e2cb6086f1ec7be819a8e))
+- **message-router**: sweep listener queues of crashed sessions ([`517d5f6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/517d5f66328ceb142c58bc69594b293be8e5bcd3))
+- **broker**: tie spawned redis-server to the app's lifetime ([`91003be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91003be3385c4557bf14bad9001926745572ddad))
+- **image-viewer**: correct win tooltip and scale docstring ([`41dec03`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/41dec031233df012b895a3701b5110d3e79456b6))
+
+### Refactor
+
+- **device-viewer**: declare the Device submenu groups ([`32190ab`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/32190ab6353e292acb8d62517df7c196b9be95d3))
+- **protocol-tree**: group the Protocol submenu ([`9f45fff`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9f45ffff4bf30e169b9974d4900b7633e8bfbf48))
+- **app**: one File group for the submenus ([`0434ab0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0434ab0f353cf0b52ef15a3943481daa5c4b3cb8))
+- **protocol-tree**: add an Experiments menu ([`88462f9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/88462f95167705648b4932c5f4e30613453db67a))
+- **app**: add fixed File menu sections ([`ad25d2b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ad25d2b54d1aa784e6514765d02e58c603ba489f))
+- **image-viewer**: share the plot's fit loop ([`9931d50`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9931d504ae8119d8b8c9e74fdabcf75e43029580))
+- **image-viewer**: share the experiments root ([`03ae17a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/03ae17a937ea7f9bd35a99e1474bf857f57821ac))
+- **device-viewer**: move gamepad support to its plugin ([`e92682f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e92682f1b8d97aca53b39641d2f3b61160624956))
+
+### Docs
+
+- **messages**: note multi-selection write-back ([`292f8bd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/292f8bde8231e22139c766229cda16d8df3e719d))
+
+### Test
+
+- **protocol-tree**: follow the grouped Protocol menu ([`cca4c56`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cca4c5664bf5ab8cc470829c0b0db554f1626fc5))
+
+### Style
+
+- **device-viewer**: separate the status-bar early return ([`e5c96bd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5c96bd7c40021daaa21dffedda01ed4fce6f3ee))
+- **utils**: ruff-clean dramatiq_pub_sub_helpers ([`4297946`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4297946167f4dacca83d811bd3eb54a37f52dcc6))
+
 ## [v1.29.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.29.0) (2026-10-08)
 
 ### Feat
