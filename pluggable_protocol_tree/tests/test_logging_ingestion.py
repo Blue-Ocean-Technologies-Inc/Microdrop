@@ -11,6 +11,9 @@
 # Standard library imports.
 import json
 
+# Third-party imports.
+import pytest
+
 # Microdrop package imports.
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 
@@ -174,3 +177,43 @@ def test_log_media_lists_a_path_once(tmp_path):
     ing.log_media(_M(png, "image"))
 
     assert ing.media["image"] == [str(png)]
+
+
+def test_log_capacitance_adds_capacitance_over_area_and_dielectric_thickness():
+    ing = LoggingIngestion()
+    ing.update_dielectric_constant(3.1)
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1, 2], actuated_area=2.0)
+
+    assert ing.log_capacitance(_msg(cap="10pF")) is True
+
+    e = ing.entries[-1]
+    assert e["Capacitance Over Area (pF/mm^2)"] == 5.0
+    assert e["Dielectric Thickness (um)"] == pytest.approx(3.1 * 8.8541878128 / 5.0)
+    assert ing.columns.index("Capacitance Over Area (pF/mm^2)") == (
+        ing.columns.index("Actuated Area (mm^2)") + 1
+    )
+
+
+def test_log_capacitance_over_area_none_without_actuated_area():
+    ing = LoggingIngestion()
+    ing.update_dielectric_constant(3.1)
+    ing.set_step(step_id="s", step_idx=1)
+
+    assert ing.log_capacitance(_msg()) is True
+
+    e = ing.entries[-1]
+    assert e["Capacitance Over Area (pF/mm^2)"] is None
+    assert e["Dielectric Thickness (um)"] is None
+
+
+def test_log_capacitance_dielectric_thickness_none_without_dielectric_constant():
+    ing = LoggingIngestion()
+    ing.set_step(step_id="s", step_idx=1)
+    ing.set_actuation(actuated_channels=[1], actuated_area=2.0)
+
+    assert ing.log_capacitance(_msg(cap="10pF")) is True
+
+    e = ing.entries[-1]
+    assert e["Capacitance Over Area (pF/mm^2)"] == 5.0
+    assert e["Dielectric Thickness (um)"] is None

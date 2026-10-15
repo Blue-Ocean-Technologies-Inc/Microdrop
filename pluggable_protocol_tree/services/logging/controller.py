@@ -165,6 +165,25 @@ class ProtocolLoggingController(HasTraits):
         self._ingestion.update_capacitance_per_unit_area(
             getattr(device_context, "capacitance_per_unit_area", None)
         )
+
+        # The "Pick a dielectric..." placeholder has no constant, so a
+        # material without one reads as not set rather than as the prompt.
+        dielectric_constant = getattr(device_context, "dielectric_constant", None)
+        self._ingestion.update_dielectric_constant(dielectric_constant)
+
+        if dielectric_constant is None:
+            dielectric_metadata = {
+                "Dielectric Material": "not set",
+                "Dielectric Constant": "not set",
+            }
+        else:
+            dielectric_metadata = {
+                "Dielectric Material": getattr(
+                    device_context, "dielectric_material", ""
+                ),
+                "Dielectric Constant": dielectric_constant,
+            }
+
         self._step_idx = 0
         self._n_steps = int(n_steps)
         self._start_time = datetime.now().strftime(RUN_TIMESTAMP_FMT)
@@ -173,6 +192,7 @@ class ProtocolLoggingController(HasTraits):
             {
                 "Experiment Directory": str(device_context.experiment_directory),
                 "Device SVG": str(getattr(device_context, "device_svg_path", "")),
+                **dielectric_metadata,
                 "Steps": f"0 / {self._n_steps}",
             }
         )
