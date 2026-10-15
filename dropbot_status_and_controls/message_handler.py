@@ -8,41 +8,53 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 import math
 
-from traits.api import Instance, List, Bool
+# Enthought library imports.
+from pyface.qt.QtCore import QObject, Signal
+from traits.api import Bool, Dict, Instance, List, Str
 
+# Microdrop package imports.
 from device_viewer.consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
-from logger.logger_service import get_logger
+from dropbot_controller.consts import RETRY_CONNECTION
+from dropbot_protocol_controls.consts import FREQUENCY_COLUMN_ID, VOLTAGE_COLUMN_ID
+from template_status_and_controls.base_message_handler import BaseMessageHandler
+from template_status_and_controls.step_setpoint_follow import (
+    StepSetpointFollowMixin,
+)
+
+# Microdrop utils imports.
 from microdrop_utils.datetime_helpers import TimestampedMessage
 from microdrop_utils.decorators import timestamped_value
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.ureg_helpers import ureg, get_ureg_magnitude
+from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
-from dropbot_controller.consts import RETRY_CONNECTION
-
-from PySide6.QtCore import QObject, Signal
-
-from template_status_and_controls.base_message_handler import BaseMessageHandler
-
+# Local imports.
 from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
 from .model import DropbotStatusAndControlsModel
 
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+
 
 class DialogSignals(QObject):
-    """Qt signals for dialog/popup events, bridging the Dramatiq → UI thread boundary."""
+    """Qt signals for dialog/popup events, bridging the Dramatiq → UI thread
+    boundary."""
+
     show_shorts_popup = Signal(dict)
     show_no_power_dialog = Signal()
     close_no_power_dialog = Signal()
     show_halted_popup = Signal(dict)
     voltage_frequency_range_changed = Signal(dict)
 
-logger = get_logger(__name__)
-
 
 def _change_is_significant(old_value, new_value, threshold, threshold_type) -> bool:
-    """Return True when the change between two pint.Quantity readings exceeds the threshold."""
+    """Return True when the change between two pint.Quantity readings exceeds
+    the threshold."""
     old_nan = math.isnan(old_value.magnitude)
     new_nan = math.isnan(new_value.magnitude)
 
@@ -59,7 +71,9 @@ def _change_is_significant(old_value, new_value, threshold, threshold_type) -> b
     return False
 
 
-class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
+class DropbotStatusAndControlsMessageHandler(
+    StepSetpointFollowMixin, BaseMessageHandler
+):
     """Dramatiq message handler for DropBot status and controls.
 
     Inherits common handlers from BaseMessageHandler:
@@ -67,6 +81,9 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
       - realtime_mode_updated
       - protocol_running
       - display_state
+
+    and from StepSetpointFollowMixin:
+      - row_selected → the selected step's voltage/frequency
 
     Adds DropBot-specific handlers for:
       - chip insertion
@@ -77,6 +94,13 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     # Narrow model type for IDE support.
     model = Instance(DropbotStatusAndControlsModel)
+
+    #: The step cells the pane's setpoints follow on step selection.
+    step_setpoint_columns = Dict(
+        Str,
+        Str,
+        value={"voltage": VOLTAGE_COLUMN_ID, "frequency": FREQUENCY_COLUMN_ID},
+    )
 
     # Carries dialog/popup signals across the Dramatiq → Qt thread boundary.
     dialog_signals = Instance(DialogSignals)
@@ -141,10 +165,17 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         new_voltage = ureg(new_voltage_str)
 
-        if _change_is_significant(self.model.capacitance, new_cap, threshold=3, threshold_type="absolute_diff"):
+        if _change_is_significant(
+            self.model.capacitance, new_cap, threshold=3, threshold_type="absolute_diff"
+        ):
             self.model.capacitance = new_cap
 
-        if _change_is_significant(self.model.voltage_readback, new_voltage, threshold=1, threshold_type="absolute_diff"):
+        if _change_is_significant(
+            self.model.voltage_readback,
+            new_voltage,
+            threshold=1,
+            threshold_type="absolute_diff",
+        ):
             self.model.voltage_readback = new_voltage
 
     def _on_calibration_data_triggered(self, body_str):
@@ -170,7 +201,8 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
     #     if shorts:
     #         title = "Shorts Detected"
     #         text = (
-    #             f"Shorts detected on channels: [{', '.join(str(s) for s in shorts)}]\n\n"
+    #             "Shorts detected on channels: "
+    #             f"[{', '.join(str(s) for s in shorts)}]\n\n"
     #             "You can disable the affected channels from the Device Viewer."
     #         )
     #     else:
@@ -187,15 +219,17 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_halted_triggered(self, message_str):
         data = json.loads(message_str)
-        if data.get('name') == 'output-current-exceeded':
+        if data.get("name") == "output-current-exceeded":
             self.model.halted = True
-        reason = data.get('reason', '')
-        message = data.get('message', '')
-        self.dialog_signals.show_halted_popup.emit({
-            'title': 'DropBot Halted',
-            'reason': reason,
-            'message': message,
-        })
+        reason = data.get("reason", "")
+        message = data.get("message", "")
+        self.dialog_signals.show_halted_popup.emit(
+            {
+                "title": "DropBot Halted",
+                "reason": reason,
+                "message": message,
+            }
+        )
 
     def _on_voltage_frequency_range_changed_triggered(self, message):
         """Update voltage/frequency spinner bounds live when range preferences change.

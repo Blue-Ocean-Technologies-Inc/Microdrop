@@ -13,12 +13,16 @@ import json
 from datetime import datetime
 
 # Enthought library imports.
-from traits.api import Instance
+from traits.api import Dict, Instance, Str
 
 # Microdrop package imports.
+from dropbot_protocol_controls.consts import FREQUENCY_COLUMN_ID, VOLTAGE_COLUMN_ID
 from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
+)
+from template_status_and_controls.step_setpoint_follow import (
+    StepSetpointFollowMixin,
 )
 
 # Local imports.
@@ -63,14 +67,25 @@ def summarize_chip_pad_contacts(contacts):
     return f"{summary} ({contacts})"
 
 
-class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
+class PortableDropbotStatusAndControlsMessageHandler(
+    StepSetpointFollowMixin, BaseMessageHandler
+):
     """Dramatiq message handler for the Portable Dropbot pane.
 
     Inherits connected/disconnected, realtime_mode_updated,
-    protocol_running and display_state from BaseMessageHandler; adds
-    the portable status stream, motor summary, and alarms."""
+    protocol_running and display_state from BaseMessageHandler and the
+    selected step's voltage/frequency follow (row_selected) from
+    StepSetpointFollowMixin; adds the portable status stream, motor
+    summary, and alarms."""
 
     model = Instance(PortableDropbotStatusAndControlsModel)
+
+    #: The step cells the pane's setpoints follow on step selection.
+    step_setpoint_columns = Dict(
+        Str,
+        Str,
+        value={"voltage": VOLTAGE_COLUMN_ID, "frequency": FREQUENCY_COLUMN_ID},
+    )
 
     def _on_advanced_mode_change_triggered(self, body):
         self.model.advanced_mode = str(body).lower() == "true"
