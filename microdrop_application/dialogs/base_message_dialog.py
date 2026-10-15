@@ -15,6 +15,7 @@ This module provides the core BaseMessageDialog class that serves as a template
 for all custom dialog types, ensuring consistent styling and behavior.
 """
 
+# Standard library imports.
 import os
 import re
 import subprocess
@@ -27,14 +28,14 @@ try:
 except ImportError:
     winreg = None
 
-from PySide6.QtCore import Qt, QPoint, QMimeData, QTimer, QSize, Signal
+from PySide6.QtCore import QMimeData, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
+    QDesktopServices,
     QFont,
     QPainter,
     QPainterPath,
     QPixmap,
-    QDesktopServices,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -53,14 +54,15 @@ from PySide6.QtWidgets import (
 )
 
 from microdrop_style.colors import (
-    PRIMARY_COLOR,
     ERROR_COLOR,
-    WARNING_COLOR,
-    SUCCESS_COLOR,
     INFO_COLOR,
+    PRIMARY_COLOR,
+    SUCCESS_COLOR,
+    WARNING_COLOR,
     WHITE,
 )
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+
 from microdrop_utils.font_helpers import load_font_family
 
 
@@ -278,7 +280,8 @@ class BaseMessageDialog(QDialog):
                            ``self.checkbox.isChecked()`` after the dialog
                            closes.
             checked_default: Optional flag for a checkbox added to the content
-                           area.  When true, checkbox added using checkbox_text, is checked in dialog.
+                           area.  When true, the checkbox added via
+                           checkbox_text starts checked.
         """
         super().__init__(parent)
 
@@ -309,11 +312,15 @@ class BaseMessageDialog(QDialog):
 
         if size:
             if has_images:
-                min_size = QSize(max(size[0], min_dialog_width), max(size[1], min_dialog_height))
+                min_size = QSize(
+                    max(size[0], min_dialog_width), max(size[1], min_dialog_height)
+                )
                 self.setMinimumSize(min_size)
                 self.setMaximumSize(QSize(900, 700))
             else:
-                min_size = QSize(max(size[0], min_dialog_width), max(size[1], min_dialog_height))
+                min_size = QSize(
+                    max(size[0], min_dialog_width), max(size[1], min_dialog_height)
+                )
                 self.setFixedSize(min_size)
         else:
             self.setMinimumSize(QSize(min_dialog_width, min_dialog_height))
@@ -330,7 +337,9 @@ class BaseMessageDialog(QDialog):
 
         # Add optional checkbox after UI is built so it appears in the content area
         if self._checkbox_text:
-            self.checkbox = self.add_checkbox(self._checkbox_text, checked=self._checked_default)
+            self.checkbox = self.add_checkbox(
+                self._checkbox_text, checked=self._checked_default
+            )
 
         self._apply_styling()
         self._connect_signals()
@@ -416,7 +425,12 @@ class BaseMessageDialog(QDialog):
         # Only load fonts once for all dialog instances
         if not self._fonts_loaded:
             # Load Inter font for text
-            inter_font_path = Path(__file__).parent.parent.parent / "microdrop_style" / "fonts" / "Inter-VariableFont_opsz,wght.ttf"
+            inter_font_path = (
+                Path(__file__).parent.parent.parent
+                / "microdrop_style"
+                / "fonts"
+                / "Inter-VariableFont_opsz,wght.ttf"
+            )
             self._text_font_family = load_font_family(inter_font_path) or "Inter"
 
             # Load Material Symbols for icons
@@ -427,7 +441,9 @@ class BaseMessageDialog(QDialog):
                 / "Material_Symbols_Outlined"
                 / "MaterialSymbolsOutlined-VariableFont_FILL,GRAD,opsz,wght.ttf"
             )
-            self._icon_font_family = load_font_family(icon_font_path) or ICON_FONT_FAMILY
+            self._icon_font_family = (
+                load_font_family(icon_font_path) or ICON_FONT_FAMILY
+            )
 
             self._fonts_loaded = True
 
@@ -483,7 +499,9 @@ class BaseMessageDialog(QDialog):
         # Icon - centered with custom shapes for different types
         if self.dialog_type == self.TYPE_WARNING:
             # Use custom triangle widget for warnings
-            icon_text = self.TYPE_ICONS.get(self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO])
+            icon_text = self.TYPE_ICONS.get(
+                self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO]
+            )
             icon_font = QFont(self.icon_font_family)
             icon_font.setPointSize(self.ICON_FONT_SIZE)
             dialog_color = QColor(self.TYPE_COLORS.get(self.dialog_type, WARNING_COLOR))
@@ -502,11 +520,15 @@ class BaseMessageDialog(QDialog):
             if self.icon_path and Path(self.icon_path).exists():
                 # Custom icon from file
                 pixmap = QPixmap(self.icon_path)
-                scaled_pixmap = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(
+                    32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
                 self.icon_label.setPixmap(scaled_pixmap)
             else:
                 # Material icon
-                icon_text = self.TYPE_ICONS.get(self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO])
+                icon_text = self.TYPE_ICONS.get(
+                    self.dialog_type, self.TYPE_ICONS[self.TYPE_INFO]
+                )
                 self.icon_label.setText(icon_text)
                 icon_font = QFont(self.icon_font_family)
                 icon_font.setPointSize(self.ICON_FONT_SIZE)
@@ -627,9 +649,13 @@ class BaseMessageDialog(QDialog):
         else:
             # Standard layout for shorter content - support HTML if needed
             if self._contains_html_image(self.message_text):
-                self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+                self.message_label.setSizePolicy(
+                    QSizePolicy.Expanding, QSizePolicy.Minimum
+                )
             else:
-                self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                self.message_label.setSizePolicy(
+                    QSizePolicy.Expanding, QSizePolicy.Expanding
+                )
 
             content_layout.addWidget(self.message_label)
 
@@ -700,10 +726,14 @@ class BaseMessageDialog(QDialog):
 
             # Connect button action
             if "action" in config and callable(config["action"]):
-                button.clicked.connect(lambda checked, action=config["action"]: action())
+                button.clicked.connect(
+                    lambda checked, action=config["action"]: action()
+                )
 
             # Emit signal when clicked
-            button.clicked.connect(lambda checked, text=button_text: self.button_clicked.emit(text))
+            button.clicked.connect(
+                lambda checked, text=button_text: self.button_clicked.emit(text)
+            )
 
             self.buttons[button_text] = button
             button_layout.addWidget(button)
@@ -800,16 +830,12 @@ class BaseMessageDialog(QDialog):
             }}
 
             QPushButton#exitButton:hover {{
-                background-color: {self._darken_color(
-                    self.EXIT_BUTTON_COLOR, 0.05
-                )};
+                background-color: {self._darken_color(self.EXIT_BUTTON_COLOR, 0.05)};
                 border-color: {self._darken_color(self.BORDER_COLOR, 0.1)};
             }}
 
             QPushButton#exitButton:pressed {{
-                background-color: {self._darken_color(
-                    self.EXIT_BUTTON_COLOR, 0.1
-                )};
+                background-color: {self._darken_color(self.EXIT_BUTTON_COLOR, 0.1)};
             }}
 
             QPushButton#copyButton {{
@@ -849,9 +875,15 @@ class BaseMessageDialog(QDialog):
     def _get_default_buttons(self) -> Dict[str, Any]:
         """Get default button configuration based on dialog type."""
         if self.dialog_type == self.TYPE_QUESTION:
-            return {"Exit": {"action": self.reject, "role": "exit"}, "Save": {"action": self.accept}}
+            return {
+                "Exit": {"action": self.reject, "role": "exit"},
+                "Save": {"action": self.accept},
+            }
         else:
-            return {"Exit": {"action": self.reject, "role": "exit"}, "OK": {"action": self.accept}}
+            return {
+                "Exit": {"action": self.reject, "role": "exit"},
+                "OK": {"action": self.accept},
+            }
 
     def _connect_signals(self):
         """Connect internal signals."""
@@ -886,7 +918,9 @@ class BaseMessageDialog(QDialog):
         """Detect system-level dark mode as fallback."""
         if sys.platform == "darwin":
             try:
-                mode = subprocess.check_output("defaults read -g AppleInterfaceStyle", shell=True).strip()
+                mode = subprocess.check_output(
+                    "defaults read -g AppleInterfaceStyle", shell=True
+                ).strip()
                 return mode == b"Dark"
             except Exception:
                 return False
@@ -895,7 +929,9 @@ class BaseMessageDialog(QDialog):
                 return False
             try:
                 reg = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
-                key = winreg.OpenKey(reg, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+                key = winreg.OpenKey(
+                    reg, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+                )
                 apps_use_light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 return apps_use_light_theme == 0
             except Exception:
@@ -994,7 +1030,9 @@ class BaseMessageDialog(QDialog):
         self.add_content_widget(checkbox)
         return checkbox
 
-    def _create_details_header(self, details_label: str, collapsible: bool) -> QHBoxLayout:
+    def _create_details_header(
+        self, details_label: str, collapsible: bool
+    ) -> QHBoxLayout:
         """Create the header for the details section."""
         header_layout = QHBoxLayout()
 
@@ -1018,7 +1056,8 @@ class BaseMessageDialog(QDialog):
             show_details_font.setPointSize(10)
             self.show_details_button.setFont(show_details_font)
             self.show_details_button.setStyleSheet(
-                f"QPushButton {{ color: {PRIMARY_COLOR}; border: none; " f"background: transparent; text-decoration: underline; }}"
+                f"QPushButton {{ color: {PRIMARY_COLOR}; border: none; "
+                f"background: transparent; text-decoration: underline; }}"
             )
             header_layout.addWidget(self.show_details_button)
 
@@ -1038,7 +1077,9 @@ class BaseMessageDialog(QDialog):
 
         return copy_button
 
-    def _create_details_browser(self, details_text: str, visible_lines: Optional[int]) -> QTextBrowser:
+    def _create_details_browser(
+        self, details_text: str, visible_lines: Optional[int]
+    ) -> QTextBrowser:
         """Create and configure the details text browser."""
         details_browser = QTextBrowser()
         details_browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -1098,7 +1139,11 @@ class BaseMessageDialog(QDialog):
         self.details_browser = details_browser
 
         # Connect copy button
-        copy_button.clicked.connect(lambda: self._copy_formatted_to_clipboard(self.details_formatted_html, details_text))
+        copy_button.clicked.connect(
+            lambda: self._copy_formatted_to_clipboard(
+                self.details_formatted_html, details_text
+            )
+        )
 
         # Add details browser to container
         container_layout.addWidget(details_browser)

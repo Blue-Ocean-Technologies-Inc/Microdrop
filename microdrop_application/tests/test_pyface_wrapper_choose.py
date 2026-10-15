@@ -16,8 +16,10 @@ close_with_result -> done(code), which sets the result without an event
 loop) and then returns dialog.result() exactly as a real exec() would.
 """
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from microdrop_application.dialogs.base_message_dialog import BaseMessageDialog
 from microdrop_application.dialogs.pyface_wrapper import _map_choice, choose
 
@@ -30,17 +32,20 @@ def _press(label, captured=None):
             captured["dialog"] = self
         self.get_button(label).click()
         return self.result()
+
     return fake_exec
 
 
 def _dismiss():
     def fake_exec(self):
-        self.reject()   # what Escape / the window-close X do
+        self.reject()  # what Escape / the window-close X do
         return self.result()
+
     return fake_exec
 
 
 # --- result mapping -------------------------------------------------------
+
 
 def test_map_choice_returns_label_for_custom_codes():
     assert _map_choice(BaseMessageDialog.RESULT_CUSTOM_1, FOUR) == "Append"
@@ -54,6 +59,7 @@ def test_map_choice_cancel_and_out_of_range_are_none():
 
 
 # --- interactive paths ----------------------------------------------------
+
 
 def test_choose_returns_clicked_label(qapp, monkeypatch):
     monkeypatch.setattr(BaseMessageDialog, "exec", _press("Replace"))
@@ -102,6 +108,7 @@ def test_choose_checkbox_convention(qapp, monkeypatch):
 
 
 # --- input validation -----------------------------------------------------
+
 
 def test_choose_rejects_empty_choices(qapp):
     with pytest.raises(ValueError):
