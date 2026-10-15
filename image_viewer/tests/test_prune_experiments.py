@@ -11,10 +11,18 @@
 """prunable_experiments / prune_experiments: only experiments holding
 nothing but logs go, never the current one."""
 
+# Third-party imports.
+import pytest
+from send2trash import TrashPermissionError
+
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
-from image_viewer import discovery
+from image_viewer import discovery, menus
 from image_viewer.consts import EXPERIMENT_LOGS_DIR_NAME
+from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
+
+# Microdrop utils imports.
+from microdrop_utils import environment_update_dialog
 
 
 def _logs_only_experiment(root, name):
@@ -26,7 +34,18 @@ def _logs_only_experiment(root, name):
     return experiment
 
 
-def test_prunes_only_experiments_holding_nothing_but_logs(tmp_path, monkeypatch):
+@pytest.fixture
+def trashed(monkeypatch):
+    """Record send2trash calls instead of trashing anything."""
+    calls = []
+    monkeypatch.setattr(discovery, "send2trash", calls.append)
+
+    return calls
+
+
+def test_prunes_only_experiments_holding_nothing_but_logs(
+    tmp_path, monkeypatch, trashed
+):
     current = _logs_only_experiment(tmp_path, "current")
     logs_only = _logs_only_experiment(tmp_path, "logs_only")
 
@@ -46,14 +65,31 @@ def test_prunes_only_experiments_holding_nothing_but_logs(tmp_path, monkeypatch)
 
     assert targets == [empty_captures, logs_only]
 
-    removed = discovery.prune_experiments(targets)
+    moved = discovery.prune_experiments(targets)
 
-    assert removed == targets
-    assert not logs_only.exists()
-    assert not empty_captures.exists()
+    assert moved == targets
+    assert trashed == [str(empty_captures), str(logs_only)]
 
-    for kept in (current, with_capture, stray_file):
-        assert kept.is_dir()
+
+def test_prune_stops_on_a_trash_failure(tmp_path, monkeypatch):
+    first = _logs_only_experiment(tmp_path, "first")
+    second = _logs_only_experiment(tmp_path, "second")
+    trashed = []
+
+    def refuse_second(path):
+        if path == str(second):
+            raise TrashPermissionError(path)
+
+        trashed.append(path)
+
+    monkeypatch.setattr(discovery, "send2trash", refuse_second)
+
+    with pytest.raises(TrashPermissionError):
+        discovery.prune_experiments([first, second])
+
+    # No permanent-delete fallback: the failing folder is still on disk.
+    assert trashed == [str(first)]
+    assert (second / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
 
 
 def test_nothing_prunable_without_an_experiments_root(monkeypatch):
@@ -63,3 +99,39 @@ def test_nothing_prunable_without_an_experiments_root(monkeypatch):
     monkeypatch.setattr(discovery, "get_current_experiment_directory", unavailable)
 
     assert discovery.prunable_experiments() == []
+
+
+def test_prune_without_send2trash_moves_nothing(tmp_path, monkeypatch):
+    first = _logs_only_experiment(tmp_path, "first")
+    monkeypatch.setattr(discovery, "send2trash", None)
+
+    with pytest.raises(discovery.TrashUnavailableError):
+        discovery.prune_experiments([first])
+
+    assert (first / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
+
+
+def test_prune_action_without_send2trash_offers_an_update(tmp_path, monkeypatch):
+    current = _logs_only_experiment(tmp_path, "current")
+    logs_only = _logs_only_experiment(tmp_path, "logs_only")
+    offers = []
+
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
+    monkeypatch.setattr(discovery, "send2trash", None)
+    monkeypatch.setattr(menus, "confirm", lambda **kwargs: YES)
+    monkeypatch.setattr(
+        environment_update_dialog,
+        "warning",
+        lambda parent, message, **kwargs: offers.append(message) or CANCEL,
+    )
+    monkeypatch.setattr(
+        menus,
+        "information",
+        lambda *args, **kwargs: pytest.fail("nothing was pruned"),
+    )
+
+    menus.PruneExperimentsAction().perform(None)
+
+    assert len(offers) == 1
+    assert "needs the send2trash package" in offers[0]
+    assert (logs_only / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()

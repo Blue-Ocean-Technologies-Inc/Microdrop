@@ -238,7 +238,7 @@ class ImageViewerModel(HasTraits):
     #: Step the experiment seek one experiment back / forward.
     previous_experiment_button = Button()
     next_experiment_button = Button()
-    #: Delete the selected experiment's folder from disk.
+    #: Move the selected experiment's folder to the Recycle Bin (Trash).
     delete_experiment_button = Button()
 
     #: Persistence backing for the display window (two-way: edits push to

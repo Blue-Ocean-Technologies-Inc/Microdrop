@@ -880,7 +880,8 @@ experiments_group = VGroup(
         UItem(
             "delete_experiment_button",
             editor=IconButtonEditor(
-                glyph=ICON_DELETE, tooltip="Delete this experiment's folder from disk"
+                glyph=ICON_DELETE,
+                tooltip="Send experiment folder to trash",
             ),
             enabled_when="experiments",
         ),

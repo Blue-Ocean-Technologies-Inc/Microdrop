@@ -159,6 +159,7 @@ class ImageViewerDockPane(TraitsDockPane):
 
         if self.task is not None:
             application = self.task.window.application
+            self.controller.application = application
             self.controller.image_filters_source = lambda: application.get_extensions(
                 IMAGE_FILTERS
             )
