@@ -37,6 +37,8 @@ from .consts import (
     DEFAULT_ROI_COLORS,
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
+    NEGATIVE_MASK_COLOR,
+    NEGATIVE_MASK_NAME_PREFIX,
     PASTE_OFFSET_PX,
     ROI_BATCH_PROTOCOL_WORKERS,
     STATS_SAVE_DEBOUNCE_S,
@@ -270,26 +272,42 @@ class RoiAnalysisController(HasTraits):
     def _on_canvas_draw_cancelled(self, event):
         self.analysis_model.interaction_mode = self._rest_mode()
 
-    def _create_roi(self, kind, geometry):
+    def _create_roi(self, kind, geometry, is_negative=None):
         """Add an ROI anchored at the displayed image and start
-        measuring it — the one path a drawn or pasted shape takes."""
+        measuring it — the one path a drawn or pasted shape takes.
+
+        ``is_negative`` (else the toolbar's negative_mode) makes it a
+        negative mask: named "Mask N", drawn in NEGATIVE_MASK_COLOR
+        without taking a slot in the ROI colour cycle, and re-measuring
+        every ROI it may cut."""
+        if is_negative is None:
+            is_negative = self.analysis_model.negative_mode
+
         current = self.viewer_model.current_path
         anchor = capture_timestamp(current) if current else 0.0
+        color = (
+            NEGATIVE_MASK_COLOR
+            if is_negative
+            else DEFAULT_ROI_COLORS[
+                len(self.session.positive_rois) % len(DEFAULT_ROI_COLORS)
+            ]
+        )
         roi = Roi(
-            name=self.session.next_roi_name(),
+            name=self.session.next_roi_name(
+                NEGATIVE_MASK_NAME_PREFIX if is_negative else "ROI"
+            ),
             kind=kind,
             geometry=[float(value) for value in geometry],
             base_anchor=anchor,
-            style=RoiStyle(
-                color=DEFAULT_ROI_COLORS[
-                    len(self.session.rois) % len(DEFAULT_ROI_COLORS)
-                ]
-            ),
+            is_negative=is_negative,
+            style=RoiStyle(color=color),
         )
+
         self.session.rois.append(roi)
         self._save_config()
         self._restart_batch_if_running()
-        self._instant_stats(roi)
+        self._instant_stats(self._rois_measured_with(roi))
+
         return roi
 
     @observe("analysis_model:ai_rois_accepted")
@@ -299,28 +317,36 @@ class RoiAnalysisController(HasTraits):
 
     def _create_rois(self, pairs, anchor):
         """Bulk sibling of _create_roi for accepted AI candidates: one
-        save and one batch restart for the whole set."""
+        save and one batch restart for the whole set. Names and colours
+        count the ROIs built so far, as none is in the session until the
+        set lands."""
+        session = self.session
         created = []
+
         for kind, geometry in pairs:
-            roi = Roi(
-                name=self.session.next_roi_name(),
-                kind=kind,
-                geometry=[float(value) for value in geometry],
-                base_anchor=anchor,
-                style=RoiStyle(
-                    color=DEFAULT_ROI_COLORS[
-                        len(self.session.rois) % len(DEFAULT_ROI_COLORS)
-                    ]
-                ),
+            created.append(
+                Roi(
+                    name=session.next_roi_name(pending=created),
+                    kind=kind,
+                    geometry=[float(value) for value in geometry],
+                    base_anchor=anchor,
+                    style=RoiStyle(
+                        color=DEFAULT_ROI_COLORS[
+                            (len(session.positive_rois) + len(created))
+                            % len(DEFAULT_ROI_COLORS)
+                        ]
+                    ),
+                )
             )
-            self.session.rois.append(roi)
-            created.append(roi)
+
         if not created:
             return created
+
+        session.rois.extend(created)
         self._save_config()
         self._restart_batch_if_running()
-        for roi in created:
-            self._instant_stats(roi)
+        self._instant_stats(created)
+
         return created
 
     @observe("analysis_model:ai_roi_tracked")
@@ -341,7 +367,32 @@ class RoiAnalysisController(HasTraits):
         roi.apply_edit(capture_timestamp(current), [float(value) for value in geometry])
         self._save_config()
         self._restart_batch_if_running()
-        self._instant_stats(roi)
+        self._instant_stats(self._rois_measured_with(roi))
+
+    def _rois_measured_with(self, roi):
+        """The positive ROIs whose stats change when ``roi`` is drawn,
+        edited or removed: ``roi`` itself, or — a negative mask cuts
+        whichever ROIs it overlaps — every positive ROI."""
+        return self.session.positive_rois if roi.is_negative else [roi]
+
+    @observe("analysis_model:session:rois:items:style:visible")
+    def _on_roi_visibility_changed(self, event):
+        """A mask's eye decides whether it subtracts (a positive's is
+        plot-only), so remeasure as for a mask edit. The toggle also
+        selects a different cache set, which toggling back finds
+        complete: bump the revision, as nothing else would redraw.
+        _on_plot_settings_changed saves the style."""
+        roi = next(
+            (roi for roi in self.session.negative_rois if roi.style is event.object),
+            None,
+        )
+
+        if roi is None:
+            return
+
+        self.session.stats_revision += 1
+        self._restart_batch_if_running()
+        self._instant_stats(self._rois_measured_with(roi))
 
     # ------------------------------------------------------------------ #
     # Copy / paste                                                         #
@@ -361,13 +412,15 @@ class RoiAnalysisController(HasTraits):
         model.clipboard_geometry = roi.effective_geometry(
             capture_timestamp(current) if current else 0.0
         )
+        model.clipboard_negative = roi.is_negative
         model.progress_text = f"Copied {roi.name}"
 
     @observe("analysis_model:paste_roi_button")
     def _paste_roi(self, event):
         """Place a copy, nudged clear of the original so it cannot hide
         under it. It gets its own name and the next colour in the
-        cycle: two curves in one colour cannot be told apart."""
+        cycle: two curves in one colour cannot be told apart. A copied
+        negative mask pastes as one, whatever negative_mode says."""
         model = self.analysis_model
         if not model.clipboard_kind:
             model.progress_text = "Nothing copied yet"
@@ -380,6 +433,7 @@ class RoiAnalysisController(HasTraits):
                 PASTE_OFFSET_PX,
                 PASTE_OFFSET_PX,
             ),
+            model.clipboard_negative,
         )
         model.selected_roi_id = roi.roi_id
         model.progress_text = f"Pasted {roi.name}"
@@ -400,6 +454,9 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.selected_roi_id = ""
         self._save_config()
         self._restart_batch_if_running()
+
+        if roi.is_negative:
+            self._instant_stats(session.positive_rois)
 
     @observe("analysis_model:clear_rois_button")
     def _clear_rois(self, event):
@@ -482,7 +539,7 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:export_csv_button")
     def _export(self, event):
-        if not self.session.rois or not self.viewer_model.paths:
+        if not self.session.positive_rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
 
@@ -514,28 +571,32 @@ class RoiAnalysisController(HasTraits):
         self._restart_batch_if_running()
 
     def _missing_work(self):
-        """[(path_str, {roi_id: (kind, geometry)}), ...] for every
-        filtered image with at least one uncached (image, ROI) pair —
-        only the missing ROIs are dispatched per image. A pair cached
-        before the shape stats existed counts as missing."""
+        """[(path_str, {roi_id: (kind, geometry)}, correction), ...] for
+        every filtered image with at least one uncached (image, ROI)
+        pair — only the missing positive ROIs are dispatched per image;
+        the image's negative masks travel in its correction. A pair
+        cached before the shape stats existed counts as missing."""
         session = self.session
+        rois = session.positive_rois
         stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
             if session.is_excluded(path):
                 continue
             missing = {}
-            for roi in session.rois:
+            for roi in rois:
                 key = session.cache_key(path, roi, stat_cache)
                 if not stats_are_current(session.stats.get(key)):
                     missing[roi.roi_id] = (roi.kind, tuple(key[4]))
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
             if missing:
-                work.append((str(path), missing, session.correction_key()))
+                work.append(
+                    (str(path), missing, session.correction_for(path, stat_cache))
+                )
         return work
 
     def _start_batch(self, work=None):
-        if not self.session.rois or not self.viewer_model.paths:
+        if not self.session.positive_rois or not self.viewer_model.paths:
             return
         if work is None:
             self._dispatched_keys = {}
@@ -552,8 +613,9 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.batch_running = True
         gap, width, ball, perspective = self.session.correction_key()
         logger.info(
-            f"ROI batch: {len(work)} images x {len(self.session.rois)} "
-            f"ROIs; ring gap={gap}px width={width}px; rolling ball="
+            f"ROI batch: {len(work)} images x {len(self.session.positive_rois)} "
+            f"ROIs, {len(self.session.negative_rois)} negative masks; ring "
+            f"gap={gap}px width={width}px; rolling ball="
             f"{f'r={ball}px' if ball else 'off'}; perspective "
             f"{'on' if perspective else 'off'}"
         )
@@ -647,22 +709,30 @@ class RoiAnalysisController(HasTraits):
             f"ROI stats {model.batch_done}/{model.batch_total} {state}{failed}"
         )
 
-    def _instant_stats(self, roi):
-        """Kick off the instant single-image compute for ``roi`` on the
-        shown image; already-cached stats need no compute — the table
-        reads the session cache directly."""
+    def _instant_stats(self, rois):
+        """Kick off one instant single-image compute for the positive
+        ``rois`` on the shown image; already-cached stats need no
+        compute — the table reads the session cache directly."""
+        session = self.session
         current = self.viewer_model.current_path
-        if not current or self.session.is_excluded(current):
+
+        if not current or session.is_excluded(current):
             return
-        key = self.session.cache_key(current, roi)
-        self._dispatched_keys[(current, roi.roi_id)] = key
-        if stats_are_current(self.session.stats.get(key)):
-            return
-        self.runner.compute_single(
-            current,
-            {roi.roi_id: (roi.kind, tuple(key[4]))},
-            self.session.correction_key(),
-        )
+
+        stat_cache = {}
+        missing = {}
+
+        for roi in rois:
+            key = session.cache_key(current, roi, stat_cache)
+            self._dispatched_keys[(current, roi.roi_id)] = key
+
+            if not stats_are_current(session.stats.get(key)):
+                missing[roi.roi_id] = (roi.kind, tuple(key[4]))
+
+        if missing:
+            self.runner.compute_single(
+                current, missing, session.correction_for(current, stat_cache)
+            )
 
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
@@ -1064,7 +1134,7 @@ class RoiAnalysisController(HasTraits):
         rows = []
         for path, capture_time, temperature in zip(paths, times, temperatures):
             stats_by_roi = {}
-            for roi in session.rois:
+            for roi in session.positive_rois:
                 stats = session.stats.get(session.cache_key(path, roi, stat_cache))
                 if stats is not None:
                     stats_by_roi[roi.roi_id] = stats
@@ -1095,7 +1165,7 @@ class RoiAnalysisController(HasTraits):
             write_intensity_csv(
                 csv_path,
                 rows,
-                session.rois,
+                session.positive_rois,
                 pixel_area(scale.metres_per_pixel, scale.unit),
                 area_unit(scale.metres_per_pixel, scale.unit),
                 session.plot_stat if session.figure.normalize else None,

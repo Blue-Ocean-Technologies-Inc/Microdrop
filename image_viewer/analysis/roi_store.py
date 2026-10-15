@@ -146,6 +146,7 @@ def save_session(experiment_directory, session):
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
+                "is_negative": roi.is_negative,
             }
             for roi in session.rois
         ],
@@ -182,6 +183,8 @@ def _roi_from(entry):
         ),
         # Absent in configs written before the actual-vs-expected view.
         expected_fastest_change=float(entry.get("expected_fastest_change", math.nan)),
+        # Absent in configs written before negative masks existed.
+        is_negative=bool(entry.get("is_negative", False)),
         style=style,
     )
 
@@ -366,9 +369,15 @@ def _stats_key(entry):
         # Written before the perspective correction existed: measured
         # unwarped, which is what a current key carries when it is off.
         ring = list(ring) + [()]
+    if ring is not None and len(ring) < 5:
+        # Written before negative masks existed: measured with none,
+        # which is what a current key carries for an image without one.
+        ring = list(ring) + [()]
     if ring is not None:
-        # The perspective matrix comes back from JSON as a list.
-        ring = list(ring[:3]) + [tuple(ring[3])]
+        # The perspective matrix and the negative masks come back from
+        # JSON as lists.
+        negatives = tuple((kind, tuple(geometry)) for kind, geometry in ring[4])
+        ring = list(ring[:3]) + [tuple(ring[3]), negatives]
     return (
         entry["path"],
         float(entry["mtime"]),

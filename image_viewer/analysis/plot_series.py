@@ -163,7 +163,8 @@ def derive_series(session, filtered_paths):
     User-excluded images are left out entirely (no gap: they are not
     part of the analysis)."""
     paths = analysed_paths(session, filtered_paths)
-    if not paths or not session.rois:
+    rois = session.positive_rois
+    if not paths or not rois:
         return {}
     stat_cache = {}
     # Named to leave the imported pixel_area() function reachable.
@@ -186,7 +187,7 @@ def derive_series(session, filtered_paths):
     )
     series = {}
 
-    for roi in session.rois:
+    for roi in rois:
         stats_run = [
             session.stats.get(session.cache_key(path, roi, stat_cache))
             for path in paths
@@ -613,10 +614,8 @@ def analysed_series(session, filtered_paths, visible_only=True):
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
         series = background_ref_corrected_series(session, series)
-        steps.append(
-            f"background-ref({sum(1 for roi in session.rois if roi.is_background_ref)} "
-            f"marked)"
-        )
+        marked = sum(1 for roi in session.positive_rois if roi.is_background_ref)
+        steps.append(f"background-ref({marked} marked)")
     if visible_only:
         series = visible_series(session, series)
     if figure.subtract_first:

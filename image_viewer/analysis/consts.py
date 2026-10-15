@@ -178,6 +178,16 @@ DEFAULT_ROI_COLORS = (
     "#17becf",
 )
 
+#: Outline colour of every negative mask — a vivid pink-red that none
+#: of DEFAULT_ROI_COLORS nor AI_CANDIDATE_COLOR uses, so a cut-out never
+#: reads as an ROI or a pending candidate. Masks do not take a slot in
+#: the ROI colour cycle.
+NEGATIVE_MASK_COLOR = "#ff2d55"
+
+#: Name prefix of negative masks ("Mask 1", "Mask 2", ...), numbered
+#: apart from the "ROI N" sequence.
+NEGATIVE_MASK_NAME_PREFIX = "Mask"
+
 #: Plot pane view modes: the plotted stat over time (the key predates
 #: the area stat and is persisted, so it stays "intensity"), its value
 #: per ROI on the displayed image, its distribution per ROI across the

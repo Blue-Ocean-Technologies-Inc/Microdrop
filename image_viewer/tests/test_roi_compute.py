@@ -22,11 +22,13 @@ from image_viewer.analysis.roi_compute import (
     _shrink_factor,
     compute_image_stats,
     masked_stats,
+    negative_union,
     ring_contours,
     roi_masks,
     stats_are_current,
     subtract_rolling_ball,
 )
+from image_viewer.analysis.shape_descriptors import ROI_SHAPE_STATS
 
 
 def test_box_interior_stats_on_uniform_patch():
@@ -310,3 +312,100 @@ def test_compute_image_stats_measures_the_corrected_frame(tmp_path):
     # The background sat under the ROI; flattening takes it away.
     assert raw["mean"] > flattened["mean"] + 300.0
     assert flattened["mean"] > 700.0
+
+
+def test_negative_union_of_nothing_is_all_zero():
+    union = negative_union((40, 60), ())
+    assert union.shape == (40, 60)
+    assert union.dtype == np.uint8
+    assert not union.any()
+
+
+def _reflection_frame(tmp_path):
+    """A 16-bit frame: background 100, droplet A (3000) with a bright
+    reflection (9000) inside it, and droplet B (3000) far away."""
+    array = np.full((200, 300), 100, dtype=np.uint16)
+    cv2.circle(array, (80, 100), 30, 3000, -1)
+    cv2.circle(array, (90, 100), 8, 9000, -1)
+    cv2.circle(array, (220, 100), 30, 3000, -1)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    return str(path)
+
+
+_DROPLETS = {
+    "a": ("ellipse", (80.0, 100.0, 30.0, 30.0, 0.0)),
+    "b": ("ellipse", (220.0, 100.0, 30.0, 30.0, 0.0)),
+}
+
+_REFLECTION_MASK = ("ellipse", (90.0, 100.0, 10.0, 10.0, 0.0))
+
+
+def test_a_negative_mask_cuts_only_the_roi_it_overlaps(tmp_path):
+    path = _reflection_frame(tmp_path)
+    plain = compute_image_stats(path, _DROPLETS)["stats"]
+    masked = compute_image_stats(path, _DROPLETS, negatives=(_REFLECTION_MASK,))
+    assert masked["error"] is None
+    cut = masked["stats"]
+
+    # The reflection is gone from A: fewer pixels, and the mean is the
+    # droplet's own.
+    assert cut["a"]["count"] < plain["a"]["count"]
+    assert plain["a"]["mean"] > 3300.0
+    assert cut["a"]["mean"] == 3000.0
+    # B is nowhere near the mask and measures exactly as before.
+    np.testing.assert_equal(cut["b"], plain["b"])
+
+
+def test_a_mask_overlapping_nothing_changes_nothing(tmp_path):
+    path = _reflection_frame(tmp_path)
+    far = ("box", (150.0, 170.0, 10.0, 10.0, 0.0))
+    plain = compute_image_stats(path, _DROPLETS)["stats"]
+    masked = compute_image_stats(path, _DROPLETS, negatives=(far,))["stats"]
+    np.testing.assert_equal(masked, plain)
+
+
+def test_the_ring_excludes_a_negative_mask(tmp_path):
+    array = np.full((200, 200), 100, dtype=np.uint16)
+    cv2.circle(array, (100, 100), 20, 3000, -1)
+    cv2.circle(array, (100, 126), 4, 9000, -1)  # dust in the ring
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    rois = {"a": ("ellipse", (100.0, 100.0, 20.0, 20.0, 0.0))}
+    dust = ("ellipse", (100.0, 126.0, 5.0, 5.0, 0.0))
+
+    plain = compute_image_stats(str(path), rois)["stats"]["a"]
+    masked = compute_image_stats(str(path), rois, negatives=(dust,))["stats"]["a"]
+
+    assert plain["outline_mean"] > 200.0
+    assert masked["outline_mean"] == 100.0
+    assert masked["outline_count"] < plain["outline_count"]
+    # The interior never reached the dust, so it is untouched.
+    assert masked["count"] == plain["count"]
+
+
+def test_ring_contours_follow_the_cut(tmp_path):
+    roi = ("ellipse", (150.0, 150.0, 40.0, 40.0, 0.0))
+    dust = ("ellipse", (150.0, 194.0, 6.0, 6.0, 0.0))
+    plain = ring_contours((300, 300), *roi, 2, 4)
+    cut = ring_contours((300, 300), *roi, 2, 4, negatives=(dust,))
+    # A bite through the whole annulus leaves one C-shaped boundary
+    # where there were an outer and an inner one.
+    assert len(plain) == 2
+    assert len(cut) == 1
+
+
+def test_a_fully_covered_roi_measures_nothing_without_raising(tmp_path):
+    path = _reflection_frame(tmp_path)
+    cover = ("ellipse", (80.0, 100.0, 34.0, 34.0, 0.0))
+    result = compute_image_stats(path, _DROPLETS, negatives=(cover,))
+    assert result["error"] is None
+    stats = result["stats"]["a"]
+
+    assert stats["count"] == 0.0
+    for name in ("mean", "std", "median", "min", "max"):
+        assert math.isnan(stats[name])
+    for name in ROI_SHAPE_STATS:
+        assert math.isnan(stats[name])
+    # The uncovered neighbour still measures.
+    assert result["stats"]["b"]["count"] > 0

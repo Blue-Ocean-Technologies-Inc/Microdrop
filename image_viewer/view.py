@@ -57,6 +57,7 @@ from microdrop_style.icons.icons import (
     ICON_EDIT,
     ICON_FOLDER_OPEN,
     ICON_HOME,
+    ICON_NEGATIVE_MASK,
     ICON_NEXT,
     ICON_OPEN_IN_NEW,
     ICON_PASTE,
@@ -478,6 +479,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
@@ -518,6 +520,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
@@ -579,15 +582,27 @@ class _ImageCanvasEditor(QtEditor):
         if not model.current_path or model.array is None:
             self._roi_layer.clear_items()
             return
-        ring = model.roi_analysis.session.ring
+
+        session = model.roi_analysis.session
+        ring = session.ring
         self._roi_layer.set_ring(ring.gap_px, ring.thickness_px, ring.show_on_canvas)
-        ball = model.roi_analysis.session.ball
+        ball = session.ball
         self._roi_layer.set_ball_reference(
             ball.enabled and ball.show_reference, ball.radius_px
         )
+        effective = session.effective_for(model.current_path)
+        # Only a mask is hidden on the canvas: it never plots, so its eye
+        # hides its outline (and takes it out of the stats), while a
+        # positive's eye is for the plot alone.
+        hidden_ids = {
+            roi.roi_id for roi in session.negative_rois if not roi.style.visible
+        }
+
         self._roi_layer.sync(
-            model.roi_analysis.session.effective_for(model.current_path),
+            effective,
             model.roi_analysis.selected_roi_id,
+            hidden_ids,
+            session.negatives_for(model.current_path),
         )
         self._push_scale()
 
@@ -1008,6 +1023,15 @@ analysis_toolbar = VGroup(
             "Enter — Esc cancels, Backspace undoes). Stays "
             "armed for the next one — a second Esc puts "
             "it away",
+        ),
+    ),
+    UItem(
+        "object.roi_analysis.negative_mode",
+        editor=IconToggleEditor(
+            on_glyph=ICON_NEGATIVE_MASK,
+            off_glyph=ICON_NEGATIVE_MASK,
+            tooltip="Negative mask mode: drawn shapes are subtracted "
+            "from the ROIs they overlap",
         ),
     ),
     "12",  # measurement toggles

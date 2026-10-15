@@ -170,7 +170,7 @@ def test_stats_store_round_trip_including_nan(tmp_path):
         "abcd1234",
         "ellipse",
         (10.0, 10.0, 5.0, 5.0, 0.0),
-        (2, 4, 0, ()),
+        (2, 4, 0, (), ()),
     )
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
@@ -685,7 +685,7 @@ def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, ()),
+        (2, 4, 0, (), ()),
     )
     store[fresh] = {"mean": 9.0}
     save_roi_stats(tmp_path, store)
@@ -700,7 +700,7 @@ def _stats_key_for(image, roi_id="abcd1234", geometry=(5.0, 5.0, 2.0, 2.0, 0.0))
         roi_id,
         "ellipse",
         geometry,
-        (2, 4, 60, ()),
+        (2, 4, 60, (), ()),
     )
 
 
@@ -875,3 +875,108 @@ def test_a_config_written_before_the_rename_keeps_its_references(tmp_path):
     (roi,) = session.rois
     assert roi.is_background_ref is True
     assert session.figure.subtract_background_ref is True
+
+
+def test_a_negative_mask_round_trips_as_one(tmp_path):
+    mask = Roi(
+        name="Mask 1",
+        kind="ellipse",
+        geometry=[5.0, 5.0, 2.0, 2.0, 0.0],
+        is_negative=True,
+    )
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    save_session(tmp_path, AnalysisSession(directory=str(tmp_path), rois=[roi, mask]))
+
+    back_roi, back_mask = load_session(tmp_path).rois
+    assert back_mask.is_negative is True
+    assert back_roi.is_negative is False
+
+
+def test_a_config_written_before_negative_masks_loads_positive(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "rois": [
+                    {
+                        "roi_id": "abcd1234",
+                        "name": "ROI 1",
+                        "kind": "ellipse",
+                        "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+                        "overrides": {},
+                        "base_anchor": 0.0,
+                    }
+                ],
+            }
+        )
+    )
+    (roi,) = load_session(tmp_path).rois
+    assert roi.is_negative is False
+
+
+def test_stats_from_before_negative_masks_still_match(tmp_path):
+    # Measured with no mask, which is what a current key carries for an
+    # image without one — the four-element correction is padded.
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "images": [
+                    {
+                        "file": "a_raw.png",
+                        "mtime": image.stat().st_mtime,
+                        "measurements": [
+                            {
+                                "roi_id": "abcd1234",
+                                "kind": "ellipse",
+                                "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+                                "correction": [2, 4, 0, []],
+                                "stats": {"mean": 7.0},
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    session = AnalysisSession(
+        rois=[
+            Roi(
+                roi_id="abcd1234",
+                name="ROI 1",
+                kind="ellipse",
+                geometry=[5.0, 5.0, 2.0, 2.0, 0.0],
+            )
+        ]
+    )
+    session.ring.trait_set(gap_px=2, thickness_px=4)
+    session.stats = load_roi_stats(tmp_path)
+
+    (roi,) = session.rois
+    assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
+
+
+def test_stats_measured_under_a_mask_round_trip(tmp_path):
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    negatives = (
+        ("box", (1.0, 2.0, 3.0, 4.0, 0.0, 0.0)),
+        ("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),
+    )
+    key = (
+        str(image),
+        image.stat().st_mtime,
+        "abcd1234",
+        "ellipse",
+        (5.0, 5.0, 2.0, 2.0, 0.0),
+        (2, 4, 0, (), negatives),
+    )
+    save_roi_stats(tmp_path, {key: {"mean": 7.0}})
+
+    assert load_roi_stats(tmp_path) == {key: {"mean": 7.0}}

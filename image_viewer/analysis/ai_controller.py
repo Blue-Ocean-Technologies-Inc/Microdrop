@@ -247,9 +247,12 @@ class AiRoiController(HasTraits):
             self.analysis_model.progress_text = "No later frames to track"
             return
         frames = [(str(path), capture_timestamp(path)) for path in later]
+        # Negative masks stay where they were drawn: only the measured
+        # ROIs follow the droplets.
+        start_time = capture_timestamp(current)
         start_geometries = {
-            roi_id: centre_of(kind, geometry)
-            for roi_id, _name, kind, geometry in self.session.effective_for(current)
+            roi.roi_id: centre_of(roi.kind, roi.effective_geometry(start_time))
+            for roi in self.session.positive_rois
         }
         if not start_geometries:
             self.analysis_model.progress_text = "No ROIs to track"

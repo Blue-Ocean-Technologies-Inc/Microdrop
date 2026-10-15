@@ -83,9 +83,9 @@ from .perspective import perspective_matrix
 from .plot_series import SMOOTH_METHODS
 from .sam_detect import Candidate
 
-#: Matches the "ROI N" names next_roi_name() itself produces, to find
-#: the next free number.
-ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
+#: Matches the "<prefix> N" names next_roi_name() itself produces, to
+#: find the next free number; formatted with the escaped prefix.
+ROI_NAME_PATTERN = r"^{prefix} (\d+)$"
 
 #: Stats the plot can show. "bg_corrected" is interior mean minus the
 #: outline-ring mean — the usual fluorescence background correction
@@ -120,7 +120,9 @@ class RoiStyle(HasTraits):
     #: Whether this ROI is drawn on the figure at all, and how opaque —
     #: the device viewer's eye/alpha pair, as a percentage. Both are
     #: display-only: a hidden ROI is still computed, still listed in the
-    #: stats table, and still exported to CSV. Range needs the explicit
+    #: stats table, and still exported to CSV. The one exception is a
+    #: negative mask's eye: a hidden mask is not subtracted (see
+    #: AnalysisSession.negatives_for). Range needs the explicit
     #: default, or it would start every ROI fully transparent.
     visible = Bool(True)
     alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
@@ -353,7 +355,9 @@ class Roi(HasTraits):
     geometry = List(Float)
 
     #: Capture time of the image the ROI was created on — edits at or
-    #: before it update the base instead of adding an override.
+    #: before it update the base instead of adding an override. For a
+    #: negative mask it is also where the mask starts (see applies_at);
+    #: 0.0 (no image shown at creation) means from the first image.
     base_anchor = Float(0.0)
 
     #: anchor capture time -> geometry; an override applies from its
@@ -374,6 +378,14 @@ class Roi(HasTraits):
     #: value — so by default every point sits on the identity line.
     expected_fastest_change = Float(math.nan)
 
+    #: A negative mask rather than a measured region: its interior is
+    #: subtracted from every positive ROI it overlaps (and from their
+    #: background rings). It has no stats of its own and is never a
+    #: background reference. Hiding it with its eye (``style.visible``)
+    #: leaves it out of the calculation as well as the canvas. It is in
+    #: force only from its base_anchor image onward (see applies_at).
+    is_negative = Bool(False)
+
     def _roi_id_default(self):
         return uuid.uuid4().hex[:8]
 
@@ -383,6 +395,15 @@ class Roi(HasTraits):
             return actual
 
         return self.expected_fastest_change
+
+    def applies_at(self, capture_time):
+        """Whether this ROI is in force on an image captured at
+        ``capture_time``. A positive ROI always applies; a negative mask
+        applies from the image it was drawn on (its base_anchor) onward,
+        and on earlier images is neither drawn nor subtracted. A mask
+        created with no image shown has a 0.0 anchor, so applies to
+        every image."""
+        return not self.is_negative or capture_time >= self.base_anchor
 
     def effective_geometry(self, capture_time):
         """The geometry in force for an image captured at
@@ -438,6 +459,13 @@ class AnalysisSession(HasTraits):
     directory = Str()
 
     rois = List(Instance(Roi))
+
+    #: The measured ROIs — every consumer that lists, plots or exports
+    #: ROIs reads this rather than ``rois``.
+    positive_rois = Property(List(Instance(Roi)), observe="rois.items.is_negative")
+
+    #: The negative masks, subtracted from the positives they overlap.
+    negative_rois = Property(List(Instance(Roi)), observe="rois.items.is_negative")
 
     #: Filenames the user excluded from analysis: skipped by the stats
     #: batch, plot series, CSV export, and the drift tracker, while
@@ -507,23 +535,34 @@ class AnalysisSession(HasTraits):
 
         return f"(found in {Path(self.heater_log_fallback_dir).parent.name})"
 
+    def _get_positive_rois(self):
+        return [roi for roi in self.rois if not roi.is_negative]
+
+    def _get_negative_rois(self):
+        return [roi for roi in self.rois if roi.is_negative]
+
     def roi_by_id(self, roi_id):
         for roi in self.rois:
             if roi.roi_id == roi_id:
                 return roi
         return None
 
-    def next_roi_name(self):
-        """'ROI N' with N one past the highest numbered existing ROI
-        name, so a deleted ROI's number isn't reissued to collide with
-        a surviving one (duplicate names would double up CSV columns
-        and plot legend labels)."""
+    def next_roi_name(self, prefix="ROI", pending=()):
+        """'<prefix> N' with N one past the highest numbered existing
+        name of that prefix, so a deleted ROI's number isn't reissued to
+        collide with a surviving one (duplicate names would double up
+        CSV columns and plot legend labels). Negative masks pass
+        "Mask"; ``pending`` ROIs, built but not yet added, count too."""
+        pattern = re.compile(ROI_NAME_PATTERN.format(prefix=re.escape(prefix)))
         highest = 0
-        for roi in self.rois:
-            match = ROI_NAME_PATTERN.match(roi.name)
+
+        for roi in [*self.rois, *pending]:
+            match = pattern.match(roi.name)
+
             if match:
                 highest = max(highest, int(match.group(1)))
-        return f"ROI {highest + 1}"
+
+        return f"{prefix} {highest + 1}"
 
     def stat_info(self, path, stat_cache=None):
         """(mtime, capture_time) for ``path``. Pass a dict as
@@ -545,17 +584,21 @@ class AnalysisSession(HasTraits):
 
     def cache_key(self, path, roi, stat_cache=None):
         """Cache key for one (image, ROI) pair: the file identity/mtime
-        plus the geometry in force at the image's capture time. Pass
-        ``stat_cache`` through from stat_info() to avoid re-stating the
-        same path for every ROI."""
+        plus the geometry in force at the image's capture time, and the
+        image's correction_for() — so moving, hiding or showing any
+        negative mask on an image invalidates every ROI measured on it.
+        Pass ``stat_cache`` through from stat_info() to avoid re-stating
+        the same path for every ROI."""
+        stat_cache = {} if stat_cache is None else stat_cache
         mtime, capture_time = self.stat_info(path, stat_cache)
+
         return (
             str(path),
             mtime,
             roi.roi_id,
             roi.kind,
             tuple(roi.effective_geometry(capture_time)),
-            self.correction_key(),
+            self.correction_for(path, stat_cache),
         )
 
     def correction_key(self):
@@ -570,13 +613,46 @@ class AnalysisSession(HasTraits):
             self.perspective.effective_matrix(),
         )
 
+    def negatives_for(self, path, stat_cache=None):
+        """Sorted ((kind, geometry tuple), ...) of every shown negative
+        mask in force for ``path``, drift overrides applied. A mask hidden
+        with its eye is left out, so toggling the eye compares the numbers
+        with and without it; so is a mask drawn on a later image than
+        ``path`` (Roi.applies_at). The result is part of every
+        cache_key() on ``path``, so both variants stay cached and
+        toggling back is instant."""
+        capture_time = self.stat_info(path, stat_cache)[1]
+
+        return tuple(
+            sorted(
+                (roi.kind, tuple(roi.effective_geometry(capture_time)))
+                for roi in self.negative_rois
+                if roi.style.visible and roi.applies_at(capture_time)
+            )
+        )
+
+    def correction_for(self, path, stat_cache=None):
+        """correction_key() plus the negative masks in force for
+        ``path`` — the work item's correction tuple, whose last element
+        compute_image_stats takes as ``negatives``."""
+        return self.correction_key() + (self.negatives_for(path, stat_cache),)
+
     def effective_for(self, path):
-        """[(roi_id, name, kind, geometry), ...] in force for ``path`` —
-        what the canvas draws and the batch computes for that image."""
+        """[(roi_id, name, kind, geometry, is_negative), ...] in force
+        for ``path`` — what the canvas draws for that image. A mask drawn
+        on a later image than ``path`` has no row (Roi.applies_at)."""
         capture_time = capture_timestamp(path)
+
         return [
-            (roi.roi_id, roi.name, roi.kind, roi.effective_geometry(capture_time))
+            (
+                roi.roi_id,
+                roi.name,
+                roi.kind,
+                roi.effective_geometry(capture_time),
+                roi.is_negative,
+            )
             for roi in self.rois
+            if roi.applies_at(capture_time)
         ]
 
 
@@ -677,6 +753,10 @@ class RoiAnalysisModel(HasTraits):
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).
     canvas_draw_cancelled = Event()
+
+    #: Sticky toolbar toggle: while on, every draw tool creates negative
+    #: masks instead of ROIs. Independent of interaction_mode.
+    negative_mode = Bool(False)
 
     #: The user's saved fit equations [(name, expression), ...],
     #: mirrored from the app preferences that persist them so the plot
@@ -782,6 +862,10 @@ class RoiAnalysisModel(HasTraits):
     clipboard_kind = Str()
     clipboard_geometry = List(Float)
 
+    #: Whether the copied shape was a negative mask, so a paste
+    #: reproduces it as one whatever negative_mode says.
+    clipboard_negative = Bool(False)
+
     #: The per-experiment analysis state (swapped on experiment change).
     session = Instance(AnalysisSession, ())
 
@@ -796,9 +880,10 @@ class RoiAnalysisModel(HasTraits):
     #: every redraw, whatever view it shows. Empty while fitting is off.
     fastest_change_actual = Dict(Str, Float)
 
-    #: The Expected table's rows, one per ROI.
+    #: The Expected table's rows, one per positive ROI.
     expected_rows = Property(
-        List(Instance(ExpectedRow)), observe="session, session:rois.items"
+        List(Instance(ExpectedRow)),
+        observe="session, session:rois.items, session:rois:items:is_negative",
     )
 
     @cached_property
@@ -807,7 +892,7 @@ class RoiAnalysisModel(HasTraits):
             ExpectedRow(
                 roi=roi, actual=self.fastest_change_actual.get(roi.roi_id, math.nan)
             )
-            for roi in self.session.rois
+            for roi in self.session.positive_rois
         ]
 
     @observe("fastest_change_actual")
