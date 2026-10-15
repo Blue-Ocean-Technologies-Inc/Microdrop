@@ -61,7 +61,7 @@ def test_lone_json_chunk_renders_bold_fields_in_order_without_heading():
     html_text = format_png_html({"MicrodropCapture": json.dumps(CAPTURE_SETTINGS)})
     names = [f"<b>{name}</b>" for name in CAPTURE_SETTINGS]
 
-    assert html_text.startswith("<table")
+    assert "<table" not in html_text
     assert "MicrodropCapture" not in html_text
     assert [html_text.index(name) for name in names] == sorted(
         html_text.index(name) for name in names
@@ -70,14 +70,14 @@ def test_lone_json_chunk_renders_bold_fields_in_order_without_heading():
     assert "{&quot;blue&quot;: 40, &quot;green&quot;: 0}" in html_text
 
 
-def test_several_chunks_get_headings_and_plain_text_rows():
+def test_several_chunks_get_headings_and_plain_text_paragraphs():
     texts = {"MicrodropCapture": json.dumps({"gain": 2}), "Note": "spot 3"}
     html_text = format_png_html(texts)
 
-    assert ">MicrodropCapture</th>" in html_text
-    assert "<b>gain</b>" in html_text
-    assert "<b>Note</b>" in html_text
-    assert "spot 3" in html_text
+    assert "<b>MicrodropCapture</b></p>" in html_text
+    assert html_text.index("<b>MicrodropCapture</b>") < html_text.index("<b>gain</b>")
+    assert "<b>Note</b>: spot 3" in html_text
+    assert "<table" not in html_text
 
 
 def test_keys_and_values_are_html_escaped():

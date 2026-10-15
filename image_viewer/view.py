@@ -963,7 +963,7 @@ contrast_group = VGroup(
 )
 
 # The displayed image's PNG text chunks (a capture's settings, for one),
-# whatever keys the file carries, rendered as a rich-text table.
+# whatever keys the file carries, rendered as rich text.
 # Resizable so the label word-wraps rather than widening the sidebar.
 metadata_group = VGroup(
     HGroup(
@@ -1180,7 +1180,8 @@ analysis_toolbar = VGroup(
 )
 
 # Selector sidebar: the six collapsible sections stacked, hidden as one
-# unit by the chevron toggle (device-viewer sidebar parity).
+# unit by the chevron toggle (device-viewer sidebar parity). It scrolls on
+# its own, so a tall section never scrolls the image beside it.
 sidebar_group = VGroup(
     _collapse_header("show_experiments", "Experiments"),
     experiments_group,
@@ -1195,6 +1196,7 @@ sidebar_group = VGroup(
     _collapse_header("show_metadata", "Metadata"),
     metadata_group,
     visible_when="show_sidebar",
+    scrollable=True,
 )
 
 # The measurement settings, under the image they act on: the background
