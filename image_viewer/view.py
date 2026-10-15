@@ -65,6 +65,7 @@ from microdrop_style.icons.icons import (
     ICON_PLAY,
     ICON_PREVIOUS,
     ICON_RECTANGLE,
+    ICON_REDO,
     ICON_REFRESH,
     ICON_RESET_WRENCH,
     ICON_RULER,
@@ -72,6 +73,7 @@ from microdrop_style.icons.icons import (
     ICON_SHOW_CHART,
     ICON_TONALITY,
     ICON_TRANSFORM,
+    ICON_UNDO,
     ICON_VIEW_3D,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
@@ -279,7 +281,13 @@ class _ImageView(QGraphicsView):
             event.accept()
             return
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            action = {Qt.Key.Key_C: "copy", Qt.Key.Key_V: "paste"}.get(event.key())
+            shifted = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            action = {
+                Qt.Key.Key_C: "copy",
+                Qt.Key.Key_V: "paste",
+                Qt.Key.Key_Z: "redo" if shifted else "undo",
+                Qt.Key.Key_Y: "redo",
+            }.get(event.key())
         else:
             # Delete only, not Backspace: that one takes back a contour
             # vertex while tracing.
@@ -772,7 +780,8 @@ buttons_group = HGroup(
         "next_button", editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next image")
     ),
     # The workhorse actions — run the plot, save the data, start the ROI
-    # set over — as their own cluster right of the folder buttons.
+    # set over, step back and forth through its shape history — as their
+    # own cluster right of the folder buttons.
     "12",
     UItem(
         "object.roi_analysis.calculate_button",
@@ -802,6 +811,20 @@ buttons_group = HGroup(
     UItem(
         "object.roi_analysis.clear_rois_button",
         editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
+    ),
+    UItem(
+        "object.roi_analysis.undo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_UNDO, tooltip="Undo the last ROI change (Ctrl+Z)"
+        ),
+        enabled_when="object.roi_analysis.can_undo",
+    ),
+    UItem(
+        "object.roi_analysis.redo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_REDO, tooltip="Redo the undone ROI change (Ctrl+Y)"
+        ),
+        enabled_when="object.roi_analysis.can_redo",
     ),
     UItem("position_text", style="readonly"),
     # Takes the row's leftover width so the cluster gaps above stay at

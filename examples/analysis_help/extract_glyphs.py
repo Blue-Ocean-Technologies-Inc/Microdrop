@@ -62,6 +62,7 @@ from microdrop_style.icons.icons import (
     ICON_PLAY,
     ICON_PREVIOUS,
     ICON_RECTANGLE,
+    ICON_REDO,
     ICON_REFRESH,
     ICON_RESET_WRENCH,
     ICON_RULER,
@@ -69,6 +70,7 @@ from microdrop_style.icons.icons import (
     ICON_SHOW_CHART,
     ICON_TONALITY,
     ICON_TRANSFORM,
+    ICON_UNDO,
     ICON_VIEW_3D,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
@@ -127,6 +129,8 @@ GLYPHS = {
     "reset_focus": "reset_focus",
     "rotate_90_degrees_cw": "rotate_90_degrees_cw",
     "fit_screen": ICON_FIT_SCREEN,
+    "undo": ICON_UNDO,
+    "redo": ICON_REDO,
 }
 
 

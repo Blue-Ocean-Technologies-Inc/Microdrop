@@ -20,6 +20,7 @@ import uuid
 from pathlib import Path
 
 # Enthought library imports.
+from pyface.undo.api import CommandStack, UndoManager
 from traits.api import (
     Bool,
     Button,
@@ -873,6 +874,39 @@ class RoiAnalysisModel(HasTraits):
 
     #: The per-experiment analysis state (swapped on experiment change).
     session = Instance(AnalysisSession, ())
+
+    #: History of changes to the session's drawn shapes (create, edit,
+    #: delete, clear) — see roi_commands. Style, visibility and settings
+    #: changes stay out of it. Emptied whenever the session is swapped.
+    undo_stack = Instance(CommandStack)
+
+    #: Step back / forward through ``undo_stack`` (toolbar, Ctrl+Z /
+    #: Ctrl+Y on the canvas); RoiAnalysisController reacts.
+    undo_roi_button = Button()
+    redo_roi_button = Button()
+
+    #: Whether there is a step to undo / redo — top-level mirrors of the
+    #: stack for the buttons' enabled_when.
+    can_undo = Bool(False)
+    can_redo = Bool(False)
+
+    def _undo_stack_default(self):
+        # A CommandStack cannot push without an undo manager to number
+        # its commands and announce stack_updated.
+        manager = UndoManager()
+        stack = CommandStack(undo_manager=manager)
+        manager.active_stack = stack
+
+        return stack
+
+    @observe("session")
+    def _forget_history(self, event):
+        self.undo_stack.clear()
+
+    @observe("undo_stack:undo_manager:stack_updated")
+    def _mirror_undo_state(self, event):
+        self.can_undo = self.undo_stack.undo_name != ""
+        self.can_redo = self.undo_stack.redo_name != ""
 
     #: Mirrors of the viewer's filtered image list and displayed image
     #: (str paths), maintained by RoiAnalysisController so the plot

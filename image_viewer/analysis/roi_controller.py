@@ -56,6 +56,7 @@ from .roi_batch import (
     RoiBatchRunner,
     pool_is_warm,
 )
+from .roi_commands import AddRoisCommand, EditRoiCommand, RemoveRoisCommand
 from .roi_compute import stats_are_current
 from .roi_geometry import translated
 from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
@@ -303,9 +304,7 @@ class RoiAnalysisController(HasTraits):
             style=RoiStyle(color=color),
         )
 
-        self.session.rois.append(roi)
-        self._save_config()
-        self._restart_batch_if_running()
+        self._push(AddRoisCommand(session=self.session, rois=[roi]))
         self._instant_stats(self._rois_measured_with(roi))
 
         return roi
@@ -317,9 +316,9 @@ class RoiAnalysisController(HasTraits):
 
     def _create_rois(self, pairs, anchor):
         """Bulk sibling of _create_roi for accepted AI candidates: one
-        save and one batch restart for the whole set. Names and colours
-        count the ROIs built so far, as none is in the session until the
-        set lands."""
+        undo step, one save and one batch restart for the whole set.
+        Names and colours count the ROIs built so far, as none is in the
+        session until the set lands."""
         session = self.session
         created = []
 
@@ -342,9 +341,7 @@ class RoiAnalysisController(HasTraits):
         if not created:
             return created
 
-        session.rois.extend(created)
-        self._save_config()
-        self._restart_batch_if_running()
+        self._push(AddRoisCommand(session=session, rois=created))
         self._instant_stats(created)
 
         return created
@@ -364,9 +361,14 @@ class RoiAnalysisController(HasTraits):
         current = self.viewer_model.current_path
         if roi is None or not current:
             return
-        roi.apply_edit(capture_timestamp(current), [float(value) for value in geometry])
-        self._save_config()
-        self._restart_batch_if_running()
+        self._push(
+            EditRoiCommand(
+                session=self.session,
+                roi=roi,
+                capture_time=capture_timestamp(current),
+                geometry=[float(value) for value in geometry],
+            )
+        )
         self._instant_stats(self._rois_measured_with(roi))
 
     def _rois_measured_with(self, roi):
@@ -439,6 +441,43 @@ class RoiAnalysisController(HasTraits):
         model.progress_text = f"Pasted {roi.name}"
 
     # ------------------------------------------------------------------ #
+    # Undo / redo                                                          #
+    # ------------------------------------------------------------------ #
+    def _push(self, command):
+        """Make a shape change through the undo stack, then persist it
+        and fold it into a running batch."""
+        self.analysis_model.undo_stack.push(command)
+        self._save_config()
+        self._restart_batch_if_running()
+
+    @observe("analysis_model:undo_roi_button")
+    def _undo_roi_change(self, event):
+        if self.analysis_model.can_undo:
+            self._step_history(self.analysis_model.undo_stack.undo)
+
+    @observe("analysis_model:redo_roi_button")
+    def _redo_roi_change(self, event):
+        if self.analysis_model.can_redo:
+            self._step_history(self.analysis_model.undo_stack.redo)
+
+    def _step_history(self, step):
+        """Undo or redo one shape change and catch everything up with it.
+        The step can land the ROIs back on geometry whose stats are
+        cached, which computes nothing, so bump the revision the plot and
+        table redraw on; remeasure every positive ROI on the shown image,
+        as a step may have moved a mask over any of them."""
+        model = self.analysis_model
+        step()
+
+        if self.session.roi_by_id(model.selected_roi_id) is None:
+            model.selected_roi_id = ""
+
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+        self._instant_stats(self.session.positive_rois)
+
+    # ------------------------------------------------------------------ #
     # Delete / clear / reset                                               #
     # ------------------------------------------------------------------ #
     @observe("analysis_model:delete_roi_button")
@@ -450,10 +489,8 @@ class RoiAnalysisController(HasTraits):
                 "Select an ROI first (edit mode) to delete it"
             )
             return
-        session.rois.remove(roi)
+        self._push(RemoveRoisCommand(session=session, rois=[roi]))
         self.analysis_model.selected_roi_id = ""
-        self._save_config()
-        self._restart_batch_if_running()
 
         if roi.is_negative:
             self._instant_stats(session.positive_rois)
@@ -467,7 +504,11 @@ class RoiAnalysisController(HasTraits):
             return
         self.runner.cancel()
         self._pending_export = False
-        session.rois = []
+        self.analysis_model.undo_stack.push(
+            RemoveRoisCommand(
+                session=session, rois=list(session.rois), name="Clear ROIs"
+            )
+        )
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
