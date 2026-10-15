@@ -59,7 +59,12 @@ from .discovery import (
 )
 from .display import load_image_array, render_display_frame
 from .latest_wins_worker import LatestWinsWorker
-from .metadata import NO_METADATA_TEXT, format_png_html, read_png_text
+from .metadata import (
+    NO_METADATA_TEXT,
+    format_metadata_html,
+    read_file_info,
+    read_png_text,
+)
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
@@ -512,15 +517,17 @@ class ImageViewerController(Controller):
 
     @observe("model:current_path")
     def _read_current_metadata(self, event):
-        """Show the new image's text chunks. Header-only (no pixel
-        decode), so it stays on the GUI thread, off the loader."""
+        """Show the new image's file facts and text chunks. Header-only
+        (no pixel decode), so it stays on the GUI thread, off the loader."""
         path = event.new
 
         if not path:
             self.model.metadata_text = NO_METADATA_TEXT
             return
 
-        self.model.metadata_text = format_png_html(read_png_text(path))
+        self.model.metadata_text = format_metadata_html(
+            read_file_info(path), read_png_text(path)
+        )
 
     @observe("model:metadata_popout_button")
     def _pop_out_metadata(self, event):
