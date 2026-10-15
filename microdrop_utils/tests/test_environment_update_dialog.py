@@ -123,8 +123,10 @@ def test_the_question_lists_the_plugins_the_update_re_adds(flow):
     [question] = flow["questions"]
     assert "pyproject.toml, pixi.lock" in question
     assert (
-        "re-added afterwards: heater-microdrop-plugin, magnet-microdrop-plugin, "
-        "fluorescence-microdrop-plugin." in question
+        "re-added afterwards:<br><br>"
+        "- <strong>heater-microdrop-plugin</strong><br>"
+        "- <strong>magnet-microdrop-plugin</strong><br>"
+        "- <strong>fluorescence-microdrop-plugin</strong>" in question
     )
 
 
