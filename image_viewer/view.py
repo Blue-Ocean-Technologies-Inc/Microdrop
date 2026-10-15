@@ -93,6 +93,7 @@ from .analysis.consts import (
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
 from .display import frame_to_qimage
+from .rich_text_editor import RichTextEditor
 from .scale_bar import (
     DEFAULT_UNIT,
     UNITS,
@@ -962,9 +963,10 @@ contrast_group = VGroup(
     show_border=True,
 )
 
-# The displayed image's PNG text chunks (a capture's settings, for one),
-# whatever keys the file carries, rendered as rich text.
-# Resizable so the label word-wraps rather than widening the sidebar.
+# The displayed image's file facts and PNG text chunks (a capture's
+# settings, for one), whatever keys the file carries, rendered as rich
+# text whose field names show their stored key as a tooltip. Resizable so
+# the text word-wraps rather than widening the sidebar.
 metadata_group = VGroup(
     HGroup(
         spring,
@@ -975,7 +977,7 @@ metadata_group = VGroup(
             ),
         ),
     ),
-    UItem("metadata_text", style="readonly", resizable=True),
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
     visible_when="show_metadata",
     show_border=True,
 )
@@ -983,7 +985,7 @@ metadata_group = VGroup(
 # The metadata pop-out: a non-modal live window on the same model, so it
 # keeps following the shown image while the user steps through them.
 metadata_window_view = View(
-    UItem("metadata_text", style="readonly", resizable=True),
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
     title="Image metadata",
     kind="live",
     resizable=True,
