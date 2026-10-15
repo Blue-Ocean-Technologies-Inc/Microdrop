@@ -110,6 +110,8 @@ still lands in the old experiment folder.
 |---|---|
 | Experiment Directory | Link to the experiment folder |
 | Device SVG | Link to the device file loaded at run start (`None` if no device was loaded) |
+| Dielectric Material | The dielectric picked in the DropBot status pane at run start. `not set` when none is picked (the "Pick a dielectric..." prompt) or the pane never published one |
+| Dielectric Constant | Relative permittivity of that material, from `DIELECTRIC_MATERIALS`. `not set` in the same cases |
 | Steps | `<steps executed> / <steps per repetition>`. With Repeat > 1 the left number can exceed the right one (for example `15 / 5` for 3 repetitions) |
 | *(contributed rows)* | Rows added by plugins, for example `PMT Captures Folder`, `Fluorescence Captures Folder` |
 | Protocol Path | Link to the protocol copy auto-saved in `protocols/` |
@@ -127,17 +129,22 @@ min and max over **all** rows of the run. Book-keeping columns
 (`step_idx`, `utc_time`, `instrument_time_us`, `step_id`,
 `actuated_channels`) are excluded. A column with no numeric value is
 skipped, so `Force Over Unit Area` disappears when no calibration was
-available. A column with a single value shows `nan` for std.
+available and `Dielectric Thickness` when no dielectric was picked. A
+column with a single value shows `nan` for std.
 
-**Data Trends.**
+**Data Trends.** Each chart sits in its own collapsible `<details>`
+section whose summary line names it. Click the name to fold the chart away.
+Every section starts open: plotly sizes a chart from its container, and a
+chart first drawn inside a closed section gets zero width.
 
 - *Device actuation heatmap* (only when a device SVG was loaded and
   capacitance samples exist): each electrode is coloured by its estimated
   total actuation time. The estimate is "number of capacitance samples
   taken while the channel was on" times "average sample interval". The
   tooltip auto-scales seconds to minutes or hours.
-- One horizontal bar chart per numeric column: the mean per step with a
-  standard-deviation error bar. Step 1 is at the top.
+- One horizontal bar chart per numeric column, titled with the column
+  name: the mean per step with a standard-deviation error bar. Step 1 is
+  at the top.
 
 **How the error bars are computed** (`reporting.py:_trends_section`). The
 rows are grouped by `step_idx` and pandas `agg(["mean", "std"])` runs on
@@ -183,7 +190,27 @@ step's rows". Two things make it non-zero:
 
 A long route shows a wide bar; a static step a thin one from the boundary
 rows only. The same lag affects `actuated_channels` and the per-channel
-attribution behind the heatmap.
+attribution behind the heatmap. `Capacitance Over Area` and `Dielectric
+Thickness` divide by this area, so they inherit both effects: a boundary
+row pairs a fresh capacitance with the previous step's area and gives an
+outlier.
+
+**How `Dielectric Thickness` is estimated.** Each capacitance row treats
+the actuated electrodes as a parallel-plate capacitor:
+`d = eps_r * eps_0 / (C/A)`, with `C/A` the row's `Capacitance Over Area`
+and `eps_r` the run's `Dielectric Constant`. In the column's units this is
+`d_um = eps_r * 8.8541878128 / cpa_pF_mm2`
+(`services/logging/consts.py:VACUUM_PERMITTIVITY_PF_UM_PER_MM2`).
+
+- It uses the raw `C/A`, so it needs no calibration. It is only valid
+  while the actuated electrodes are fully covered by liquid. A partly
+  covered or empty electrode lowers `C/A` and inflates the thickness.
+- The DropBot status pane shows a different number. Its thickness divides
+  by the liquid capacitance minus the filler calibration
+  (`dropbot_status_and_controls/model.py:_recalculate_dielectric_thickness`),
+  so the two disagree whenever the filler term is not negligible.
+- The material is read once, at run start. Changing it mid-run does not
+  change the run's rows.
 
 **How "Step N" maps to the tree.** `N` is the order in which steps were
 **executed** in this run, starting at 1. It is not the tree position:
@@ -220,6 +247,8 @@ Rows produced from DropBot capacitance samples carry:
 | `Voltage (V)` | Measured actuation voltage |
 | `Force Over Unit Area (mN/mm^2)` | `0.5 * c * V^2`, where `c` is liquid minus filler capacitance per area (pF/mm^2). Empty when no valid calibration was received during the run (see [Open questions](#open-questions)) |
 | `Actuated Area (mm^2)` | Sum of the electrode areas of the channels on at that moment |
+| `Capacitance Over Area (pF/mm^2)` | `Capacitance (pF)` divided by `Actuated Area (mm^2)`. Empty when nothing is actuated. The chart reads "Mean Capacitance Over Area"; each row is a single sample |
+| `Dielectric Thickness (um)` | Parallel-plate estimate from `Capacitance Over Area` and the run's `Dielectric Constant` (see above). Empty when either is missing |
 | `actuated_channels` | List of channel numbers on at that moment |
 
 Contributed rows (from plugins) carry `step_idx`, `step_id` and the
@@ -266,7 +295,7 @@ plus a lifecycle handler and the dock pane that owns it.
 | Listener + registry | `services/logging/listener.py` | One dramatiq actor for all logging topics. A module-level "active logger" slot, lock-guarded, decides whether a message is kept |
 | Controller | `services/logging/controller.py` | `ProtocolLoggingController`: run lifecycle, step counting, payload parsing, flush |
 | Ingestion | `services/logging/ingestion.py` | `LoggingIngestion`: per-run rows, column order, metadata, media buckets, force math. No Qt, no broker |
-| Device context | `services/logging/models.py` | `LoggingDeviceContext`: experiment dir, device SVG path, channel areas, calibration snapshot |
+| Device context | `services/logging/models.py` | `LoggingDeviceContext`: experiment dir, device SVG path, channel areas, calibration snapshot, dielectric material and constant |
 | Persistence | `services/logging/persistence.py` | `LoggingPersistence`: columnar JSON + CSV, rollover correction |
 | Reporting | `services/logging/reporting.py` | `LoggingReport`: HTML sections, plotly charts, heatmap, media |
 | Start trigger | `execution/lifecycle/logging.py` | `LoggingHandler.on_pre_protocol_start` calls `start_logging` |
@@ -276,7 +305,8 @@ plus a lifecycle handler and the dock pane that owns it.
 The logger never imports another plugin's classes. It receives everything
 through dramatiq topics and reads device data from Redis app_globals
 (`CHANNEL_AREAS_KEY`, `DEVICE_SVG_PATH_KEY`, `MEDIA_CAPTURES_KEY` from
-`device_viewer/consts.py`).
+`device_viewer/consts.py`, `DIELECTRIC_MATERIAL_KEY` from
+`dropbot_status_and_controls/consts.py`).
 
 ### Lifecycle
 
@@ -295,8 +325,9 @@ through dramatiq topics and reads device data from Redis app_globals
    `start_logging(device_ctx, n_steps, preview_mode)`. This runs on the
    executor worker thread.
    - `start_logging` (`controller.py:159`) returns early in preview mode.
-     Otherwise it creates a fresh `LoggingIngestion`, seeds metadata
-     (Experiment Directory, Device SVG, `Steps: 0 / n`), records the start
+     Otherwise it creates a fresh `LoggingIngestion`, hands it the
+     dielectric constant, seeds metadata (Experiment Directory, Device SVG,
+     Dielectric Material, Dielectric Constant, `Steps: 0 / n`), records the start
      time, **empties** `app_globals[MEDIA_CAPTURES_KEY]`, and registers
      itself with `listener.set_active_logger(self)`.
 3. **Steps.** Each `step_started` event (`execution/executor.py:_run_one_frame`)
@@ -390,8 +421,8 @@ All are subscribed through `ACTOR_TOPIC_DICT[LOGGING_LISTENER_NAME]` in
 
 | Topic | Producer | Handler | Lands in |
 |---|---|---|---|
-| `CAPACITANCE_UPDATED` (`dropbot/signals/capacitance_updated`) | `dropbot_controller/dropbot_controller_base.py:_capacitance_updated_wrapper`, `mock_dropbot_controller` | `on_capacitance` → `LoggingIngestion.log_capacitance` | One data row per sample: Data Summary, Data Trends, heatmap, data files. Dropped before the first step |
-| `ELECTRODES_STATE_CHANGE` (`hardware/requests/electrodes_state_change`) | `routes_column` per phase, seek display (`protocol_status_controller`), end-of-run clear (`dock_pane._on_protocol_terminated`), channel-refresh replay (`dropbot_controller_base.on_refresh_channels_request`) | `on_actuation` → `set_actuation` | No row of its own. Sets `actuated_channels` and `Actuated Area (mm^2)` stamped on following capacitance rows |
+| `CAPACITANCE_UPDATED` (`dropbot/signals/capacitance_updated`) | `dropbot_controller/dropbot_controller_base.py:_capacitance_updated_wrapper`, `mock_dropbot_controller` | `on_capacitance` → `LoggingIngestion.log_capacitance` | One data row per sample: Data Summary, Data Trends, heatmap, data files. The row also carries the derived `Capacitance Over Area` and `Dielectric Thickness`. Dropped before the first step |
+| `ELECTRODES_STATE_CHANGE` (`hardware/requests/electrodes_state_change`) | `routes_column` per phase, seek display (`protocol_status_controller`), end-of-run clear (`dock_pane._on_protocol_terminated`), channel-refresh replay (`dropbot_controller_base.on_refresh_channels_request`) | `on_actuation` → `set_actuation` | No row of its own. Sets `actuated_channels` and `Actuated Area (mm^2)` stamped on following capacitance rows, and the area that `Capacitance Over Area` divides by |
 | `CALIBRATION_DATA` (`ui/calibration_data`) | `device_viewer_publish_controller.publish_calibration_message`, on calibration change | `on_calibration` → `update_capacitance_per_unit_area` | Enables the Force column for following rows |
 | `DEVICE_VIEWER_MEDIA_CAPTURED` (`ui/device_viewer/camera/media_captured`) | `device_viewer/services/media_capture_cache.py:_cache_media_capture` (stills and videos) | `on_media` → `log_media` | Media Captures section |
 | `PROTOCOL_LOGGING_METADATA_CONTRIBUTION` | any plugin | `on_metadata_contribution` → `log_metadata` | Metadata table |
@@ -402,6 +433,12 @@ Non-message sources:
 - `LoggingDeviceContext` defaults read `app_globals[CHANNEL_AREAS_KEY]`
   (electrode area per channel) and `app_globals[DEVICE_SVG_PATH_KEY]`
   (heatmap and "Device SVG" row).
+- `LoggingDeviceContext` also reads `app_globals[DIELECTRIC_MATERIAL_KEY]`
+  and looks the name up in `DIELECTRIC_MATERIALS` for the dielectric
+  metadata rows and the thickness column. The DropBot status pane writes
+  the key at startup and on every change of its dielectric picker
+  (`dropbot_status_and_controls/controller.py:_publish_dielectric_material`).
+  An unreachable Redis reads as not set.
 - `app_globals[MEDIA_CAPTURES_KEY]` is drained in `_flush`
   (`controller.py:_drain_media_captures`). `_cache_media_capture` appends
   every capture there as well as publishing it live.
@@ -555,7 +592,9 @@ broker-free variant that calls the controller directly is
 Column-major. `columns` is the first-seen key order over all rows (core and
 contributed). A row missing a column gets `null`. `instrument_time_us` is
 rollover-corrected (`_correct_rollover` adds `2**32` each time the raw value
-decreases; `null` passes through).
+decreases; `null` passes through). The derived capacitance columns
+`Capacitance Over Area (pF/mm^2)` and `Dielectric Thickness (um)` are
+written like any other; a row where one cannot be computed has `null`.
 
 **`data/data_<run start>.csv`**: the same table through
 `pandas.DataFrame.to_csv(index=False)`, one row per entry. Lists become
@@ -565,7 +604,9 @@ their Python `repr`. A run with no rows writes an empty CSV.
 UTF-8, inline CSS, plotly figures embedded with
 `include_plotlyjs="cdn"` on the first figure only. Do not add a hardcoded
 `plotly-latest.min.js` script tag; that URL is plotly.js 1.x and renders
-every chart blank (comment in `LoggingReport.build_html`).
+every chart blank (comment in `LoggingReport.build_html`). The heatmap
+and each per-column chart are wrapped in `<details open><summary>`
+(`reporting.py:_collapsible`), styled by the inline `summary` rule.
 
 **Dedupe rules**
 
@@ -588,6 +629,11 @@ come from reading the code.
   is never set by `LoggingHandler`, and the context has no app_globals
   default for it. Force appears only if `CALIBRATION_DATA` is published
   during the run, which happens only when calibration values change.
+- **Dielectric thickness is a raw estimate.** It uses the row's
+  capacitance over the actuated area, not the status pane's
+  liquid-minus-filler value, so it is only right while the actuated
+  electrodes are fully wetted, and it inherits the `Actuated Area`
+  boundary lag (section 2).
 - **Elapsed time includes dialogs.** Start is before the pre-run settle
   wait; Stop is after the end-of-run prompt is answered.
 - **Step numbering is execution order**, not tree position (section 2).
@@ -620,6 +666,8 @@ come from reading the code.
 | Step counting | `controller.py:_on_step_started`, fired by `execution/executor.py:_run_one_frame` |
 | Payload handlers | `controller.py:on_capacitance`, `on_actuation`, `on_media`, `on_calibration`, `on_metadata_contribution`, `on_data_contribution` |
 | Capacitance row, force | `pluggable_protocol_tree/services/logging/ingestion.py:log_capacitance`, `_calculate_force`, `_parse_number` |
+| Capacitance over area, dielectric thickness | `ingestion.py:log_capacitance`, `_calculate_dielectric_thickness`, `update_dielectric_constant`; `services/logging/consts.py:VACUUM_PERMITTIVITY_PF_UM_PER_MM2` |
+| Dielectric material and constant | Written by `dropbot_status_and_controls/controller.py:_publish_dielectric_material` (`DIELECTRIC_MATERIAL_KEY`, `DIELECTRIC_MATERIALS` in `dropbot_status_and_controls/consts.py`); read by `services/logging/models.py:LoggingDeviceContext`; metadata rows seeded in `controller.py:start_logging` |
 | Contributed rows | `ingestion.py:log_contributed_data` |
 | Media buckets, dedupe | `ingestion.py:log_media`, `controller.py:_drain_media_captures` |
 | Flush | `controller.py:_flush` |
@@ -627,7 +675,7 @@ come from reading the code.
 | Progress dialog, flush thread | `views/protocol_tree_pane.py:_schedule_flush_with_progress` |
 | Success / failure dialogs | `protocol_tree_pane.py:_on_logging_complete`, `_on_report_failed` |
 | Data files | `pluggable_protocol_tree/services/logging/persistence.py:write_data_files`, `_correct_rollover` |
-| HTML sections | `pluggable_protocol_tree/services/logging/reporting.py:build_html`, `_metadata_section`, `_data_files_section`, `_summary_section`, `_trends_section`, `_media_section` |
+| HTML sections | `pluggable_protocol_tree/services/logging/reporting.py:build_html`, `_metadata_section`, `_data_files_section`, `_summary_section`, `_trends_section`, `_collapsible`, `_media_section` |
 | Heatmap | `reporting.py:_heatmap`, `_channel_durations_seconds`, `microdrop_utils/plotly_helpers.py:create_plotly_svg_dropbot_device_heatmap` |
 | Settling preference | `pluggable_protocol_tree/services/preferences.py:logs_settling_time_s` |
 | Experiment directory | `pluggable_protocol_tree/services/experiment_manager.py`, `microdrop_application/application.py:_get_current_experiment_directory` |
