@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
     BasicEditorFactory,
+    ButtonEditor,
     Group,
     HGroup,
     HSplit,
@@ -43,12 +44,11 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 
 # Microdrop style imports.
+from microdrop_style.button_styles import SLIM_NARROW_BUTTON_STYLE
 from microdrop_style.icons.icons import (
     ICON_ADJUST,
     ICON_CANCEL,
     ICON_CAPSULE,
-    ICON_CHEVRON_LEFT,
-    ICON_CHEVRON_RIGHT,
     ICON_CIRCLE,
     ICON_CONTOUR,
     ICON_COPY,
@@ -726,8 +726,8 @@ class ImageCanvasEditor(BasicEditorFactory):
     klass = _ImageCanvasEditor
 
 
-# Compact icon row above the image: browse/navigate/playback plus the
-# position and folder-info readouts.
+# Compact icon row above the image: folder, zoom, navigation, ROI edit
+# and calculation clusters, with the image index parked at the right end.
 buttons_group = HGroup(
     UItem(
         "directory_button",
@@ -782,9 +782,27 @@ buttons_group = HGroup(
     UItem(
         "next_button", editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next image")
     ),
-    # The workhorse actions — run the plot, save the data, start the ROI
-    # set over, step back and forth through its shape history — as their
-    # own cluster right of the folder buttons.
+    # ROI edits: shape history, then start the ROI set over
+    "12",
+    UItem(
+        "object.roi_analysis.undo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_UNDO, tooltip="Undo the last ROI change (Ctrl+Z)"
+        ),
+        enabled_when="object.roi_analysis.can_undo",
+    ),
+    UItem(
+        "object.roi_analysis.redo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_REDO, tooltip="Redo the undone ROI change (Ctrl+Y)"
+        ),
+        enabled_when="object.roi_analysis.can_redo",
+    ),
+    UItem(
+        "object.roi_analysis.clear_rois_button",
+        editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
+    ),
+    # calculation: run the plot, reset it, save the data
     "12",
     UItem(
         "object.roi_analysis.calculate_button",
@@ -811,29 +829,11 @@ buttons_group = HGroup(
             "needed)",
         ),
     ),
-    UItem(
-        "object.roi_analysis.clear_rois_button",
-        editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
-    ),
-    UItem(
-        "object.roi_analysis.undo_roi_button",
-        editor=IconButtonEditor(
-            glyph=ICON_UNDO, tooltip="Undo the last ROI change (Ctrl+Z)"
-        ),
-        enabled_when="object.roi_analysis.can_undo",
-    ),
-    UItem(
-        "object.roi_analysis.redo_roi_button",
-        editor=IconButtonEditor(
-            glyph=ICON_REDO, tooltip="Redo the undone ROI change (Ctrl+Y)"
-        ),
-        enabled_when="object.roi_analysis.can_redo",
-    ),
-    UItem("position_text", style="readonly"),
     # Takes the row's leftover width so the cluster gaps above stay at
     # their fixed 12 px (the numeric spacers are growable Minimum
-    # spacer items). The image summary itself lives in the pane title.
+    # spacer items) and the image index sits at the right end.
     spring,
+    UItem("position_text", style="readonly"),
     # Scrolls sideways on its own, so the row never sets the image
     # column's minimum width; the dock pane pins its height.
     scrollable=True,
@@ -1303,9 +1303,8 @@ correction_group = Group(
         "canvas (zooming out uses the reciprocal). 1.05 is "
         "barely perceptible; 2.0 doubles per notch.",
     ),
-    label="Measurement",
-    show_border=True,
     columns=3,
+    visible_when="show_measurement_settings",
 )
 
 # AI (SAM) detection options: significance/size filters over the last
@@ -1381,34 +1380,40 @@ ai_group = Group(
             visible_when="len(analysis.ai_candidates) > 0",
         ),
     ),
-    label="AI Detection",
-    show_border=True,
     columns=3,
-    visible_when="analysis.ai_available",
+    visible_when="show_ai_settings",
 )
 
-# The measurement and AI grids as one collapsible block under the image.
-# The block scrolls on its own both ways, so its grids never set the image
-# column's minimum, and sits under a divider the user drags against the
-# canvas.
+# The measurement and AI grids as one collapsible block under the image,
+# each also collapsing on its own chevron. The AI header and grid hide
+# together when the optional SAM stack is not installed. The block
+# scrolls on its own both ways, so its grids never set the image column's
+# minimum, and sits under a divider the user drags against the canvas.
 advanced_settings_group = VGroup(
     HGroup(UItem("scale_text", style="readonly")),
+    _collapse_header("show_measurement_settings", "Measurement"),
     correction_group,
-    ai_group,
+    VGroup(
+        _collapse_header("show_ai_settings", "AI Detection"),
+        ai_group,
+        visible_when="analysis.ai_available",
+    ),
     visible_when="show_advanced_settings",
     scrollable=True,
 )
 
 ImageViewerView = View(
     HGroup(
+        # A narrow full-height reveal column, like the Manage Plugins
+        # details collapse button.
         VGroup(
             UItem(
-                "show_sidebar",
-                editor=IconToggleEditor(
-                    on_glyph=ICON_CHEVRON_LEFT,
-                    off_glyph=ICON_CHEVRON_RIGHT,
-                    tooltip="Hide or show the selector sidebar",
-                ),
+                "toggle_sidebar_button",
+                style="custom",
+                springy=True,
+                editor=ButtonEditor(label_value="sidebar_glyph"),
+                style_sheet=SLIM_NARROW_BUTTON_STYLE,
+                tooltip="Hide or show the selector sidebar",
             )
         ),
         HSplit(

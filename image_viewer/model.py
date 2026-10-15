@@ -36,6 +36,9 @@ from traits.api import (
 )
 from traits.observation.api import parse
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT
+
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
@@ -94,6 +97,11 @@ class ImageViewerModel(HasTraits):
     #: "Advanced" chevron to reclaim vertical space.
     show_advanced_settings = Bool(True)
 
+    #: The Advanced block's two sub-sections each collapse on their own
+    #: chevron too; both start open, like the block itself.
+    show_measurement_settings = Bool(True)
+    show_ai_settings = Bool(True)
+
     #: One wheel notch's zoom factor on the image canvas (zooming out
     #: uses the reciprocal) — the Advanced group's sensitivity setting.
     zoom_step = Range(*IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT)
@@ -101,6 +109,12 @@ class ImageViewerModel(HasTraits):
     #: Master toggle: the whole selector sidebar collapses to the left
     #: edge (device-viewer chevron parity).
     show_sidebar = Bool(True)
+
+    #: The full-height chevron button that flips ``show_sidebar``.
+    toggle_sidebar_button = Button()
+
+    #: The chevron glyph, pointing the way the sidebar will move.
+    sidebar_glyph = Property(Str, observe="show_sidebar")
 
     #: Experiment folders that hold captures: ``[(name, captures_path), ...]``
     #: oldest first (discovery.discover_experiments). Selecting one repoints
@@ -378,6 +392,9 @@ class ImageViewerModel(HasTraits):
             if name == burst_name:
                 return list(paths)
         return []
+
+    def _get_sidebar_glyph(self):
+        return ICON_CHEVRON_LEFT if self.show_sidebar else ICON_CHEVRON_RIGHT
 
     def _get_filter_label(self):
         return self.image_filter.name if self.image_filter is not None else ""

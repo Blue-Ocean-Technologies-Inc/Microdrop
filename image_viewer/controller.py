@@ -167,6 +167,10 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     # Toolbar events                                                       #
     # ------------------------------------------------------------------ #
+    @observe("model:toggle_sidebar_button")
+    def _toggle_sidebar(self, event):
+        self.model.show_sidebar = not self.model.show_sidebar
+
     @observe("model:directory_button")
     def _pick_directory(self, event):
         # Start in the Experiments root (captures -> experiment -> root).

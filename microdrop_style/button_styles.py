@@ -184,6 +184,17 @@ QPushButton {{
 }}
 """
 
+# Slim narrow button: the content box hugs the chevron glyph's ink (~10 px)
+# with no horizontal padding, for reveal columns where width is scarce.
+SLIM_NARROW_BUTTON_STYLE = f"""
+{NARROW_BUTTON_STYLE}
+QPushButton {{
+    min-width: 16px;
+    max-width: 16px;
+    padding: 3px 0px;
+}}
+"""
+
 # Large button styles
 LARGE_BUTTON_STYLE = f"""
 {BASE_BUTTON_STYLE}

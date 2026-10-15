@@ -310,6 +310,16 @@ class ImageViewerDockPane(TraitsDockPane):
 
         self._advanced_split = _AdvancedSplit(advanced_splitter, advanced)
 
+        # The sidebar reveal column sits flush with the pane's left edge,
+        # 2 px from the splitter: the default 6 px item spacing would
+        # more than double the slim button's width. The other three edges
+        # keep a 9 px gap, so the analysis toolbar does not touch the dock
+        # border (the unscrolled View's panel has no margins of its own).
+        reveal_button = self.ui.get_editors("toggle_sidebar_button")[0].control
+        top_layout = reveal_button.parentWidget().layout()
+        top_layout.setContentsMargins(0, 9, 9, 9)
+        top_layout.setSpacing(2)
+
         # Qt schedulers are view-owned: the slideshow tick and the
         # experiment-folder-switch poll (new captures arrive event-driven
         # via media_capture_event_model above).
