@@ -17,10 +17,12 @@ launcher's own update path: ``git pull`` in the launcher checkout, then
 
 Installing a plugin through Manage Plugins edits the launcher's
 ``pyproject.toml`` and ``pixi.lock``, so the pull would refuse a dirty tree.
-The update therefore resets the launcher checkout, pulls, and re-adds the
-external plugins the user had installed. Which plugins those are, and how to
-re-add them, is plugin-management knowledge this shared module must not
-import: an ``IExternalPluginsProvider`` service supplies it.
+The update therefore resets the launcher checkout, checks out its default
+branch (a hand-off install cloned at a release tag sits on a detached HEAD,
+which cannot pull), pulls, and re-adds the external plugins the user had
+installed. Which plugins those are, and how to re-add them, is
+plugin-management knowledge this shared module must not import: an
+``IExternalPluginsProvider`` service supplies it.
 
 This module is the Qt-free core — locating the workspace and repository,
 building and running those commands, and relaunching the app;
@@ -51,6 +53,19 @@ GIT_STATUS_COMMAND = ("git", "status", "--porcelain")
 #: Never recursed into submodules, whatever ``submodule.recurse`` says — the
 #: Microdrop source checkout under the launcher keeps its own work.
 GIT_RESET_COMMAND = ("git", "reset", "--hard", "--no-recurse-submodules")
+
+#: Asks for the launcher's default branch, as ``origin/<branch>``; fails when
+#: the clone never recorded ``origin/HEAD``.
+GIT_DEFAULT_BRANCH_COMMAND = (
+    "git",
+    "symbolic-ref",
+    "-q",
+    "--short",
+    "refs/remotes/origin/HEAD",
+)
+
+#: The branch the update checks out when ``origin/HEAD`` is not recorded.
+FALLBACK_BRANCH = "master"
 
 #: Never start a merge the user would have to resolve; leave the submodule
 #: checkout alone, like the reset.
@@ -153,11 +168,47 @@ def pixi_environment_name(prefix=None):
     return None
 
 
-def update_steps(workspace, repository, environment=None, reinstall_arguments=()):
-    """The update as ``[(argv, cwd), ...]``: log, reset and pull the launcher
-    ``repository``, run each of ``reinstall_arguments`` (pixi argument
-    lists, duplicates dropped) in the ``workspace``, then install
-    ``environment`` (pixi's default when None) from the result."""
+def default_branch(repository):
+    """The default branch of the git checkout ``repository``, from its
+    ``origin/HEAD`` ref, or ``FALLBACK_BRANCH`` when that is not set (or git
+    cannot run)."""
+    try:
+        result = subprocess.run(
+            GIT_DEFAULT_BRANCH_COMMAND,
+            cwd=str(repository),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as e:
+        logger.warning(f"Could not ask git for the default branch: {e}")
+
+        return FALLBACK_BRANCH
+
+    branch = result.stdout.strip().removeprefix("origin/")
+
+    if result.returncode != 0 or not branch:
+        logger.info(
+            f"No origin/HEAD recorded in {repository}; updating {FALLBACK_BRANCH}"
+        )
+
+        return FALLBACK_BRANCH
+
+    return branch
+
+
+def update_steps(
+    workspace,
+    repository,
+    environment=None,
+    reinstall_arguments=(),
+    branch=FALLBACK_BRANCH,
+):
+    """The update as ``[(argv, cwd), ...]``: log and reset the launcher
+    ``repository``, check out ``branch`` (off a detached HEAD), pull it, run
+    each of ``reinstall_arguments`` (pixi argument lists, duplicates
+    dropped) in the ``workspace``, then install ``environment`` (pixi's
+    default when None) from the result."""
     repository = Path(repository)
     workspace = Path(workspace)
     install = ["pixi", "install"]
@@ -170,6 +221,8 @@ def update_steps(workspace, repository, environment=None, reinstall_arguments=()
     return [
         (list(GIT_STATUS_COMMAND), repository),
         (list(GIT_RESET_COMMAND), repository),
+        # No --force: the reset just left the tree clean.
+        (["git", "checkout", branch], repository),
         (list(GIT_PULL_COMMAND), repository),
         *((["pixi", *arguments], workspace) for arguments in reinstall),
         (install, workspace),
@@ -223,7 +276,11 @@ def locate_update(prefix=None, plugins_provider=None):
     ]
 
     steps = update_steps(
-        workspace, repository, pixi_environment_name(prefix), reinstall_arguments
+        workspace,
+        repository,
+        pixi_environment_name(prefix),
+        reinstall_arguments,
+        default_branch(repository),
     )
 
     return steps, plugins

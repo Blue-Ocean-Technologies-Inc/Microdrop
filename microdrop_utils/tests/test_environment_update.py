@@ -9,10 +9,11 @@
 # Thanks for using Microdrop open source!
 
 """environment_update: locating the launcher checkout, the update commands
-(reset, pull, re-adding the installed plugins), their failure reporting, and
-the relaunch command line."""
+(reset, default-branch checkout, pull, re-adding the installed plugins),
+their failure reporting, and the relaunch command line."""
 
 # Standard library imports.
+import subprocess
 import sys
 
 # Third-party imports.
@@ -23,6 +24,7 @@ from microdrop_utils import environment_update
 from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
     ExternalPlugin,
+    default_branch,
     find_git_repository,
     find_pixi_workspace,
     locate_update,
@@ -71,6 +73,27 @@ def pixi_on_path(monkeypatch):
     monkeypatch.setattr(environment_update.shutil, "which", lambda name: f"/bin/{name}")
 
 
+def _fake_git(monkeypatch, returncode, stdout=""):
+    """Answer every ``subprocess.run`` with ``returncode`` and ``stdout``,
+    recording the argv lists asked."""
+    asked = []
+
+    def run(argv, **kwargs):
+        asked.append(list(argv))
+
+        return subprocess.CompletedProcess(argv, returncode, stdout, "")
+
+    monkeypatch.setattr(environment_update.subprocess, "run", run)
+
+    return asked
+
+
+@pytest.fixture(autouse=True)
+def no_origin_head(monkeypatch):
+    """The fake launcher checkouts record no origin/HEAD."""
+    _fake_git(monkeypatch, returncode=1)
+
+
 def _launcher(root, manifest="[tool.pixi.workspace]\n"):
     """A pixi-microdrop-shaped tree; returns (repository, workspace, prefix)."""
     repository = root / "pixi-microdrop"
@@ -94,6 +117,7 @@ def test_locates_the_launcher_checkout_and_environment(tmp_path):
         [
             (["git", "status", "--porcelain"], repository),
             (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
+            (["git", "checkout", "master"], repository),
             (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
             (["pixi", "install", "--environment", "prod"], workspace),
         ],
@@ -113,6 +137,7 @@ def test_the_installed_plugins_are_re_added_between_the_pull_and_install(
     assert steps == [
         (["git", "status", "--porcelain"], repository),
         (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
+        (["git", "checkout", "master"], repository),
         (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
         # One channel registration covers every plugin from that channel.
         (["pixi", "workspace", "channel", "add", CHANNEL], workspace),
@@ -132,6 +157,40 @@ def test_the_reset_keeps_untracked_files_and_the_submodule(tmp_path):
     assert ["git", "reset", "--hard", "--no-recurse-submodules"] in git_commands
     assert not any("clean" in argv for argv in git_commands)
     assert not any("--recurse-submodules" in argv for argv in git_commands)
+
+
+def test_the_default_branch_is_checked_out_before_the_pull(tmp_path, monkeypatch):
+    repository, _workspace, prefix = _launcher(tmp_path)
+    asked = _fake_git(monkeypatch, returncode=0, stdout="origin/main\n")
+
+    steps, _plugins = locate_update(prefix, FakePluginsProvider())
+    git_commands = [argv for argv, _cwd in steps if argv[0] == "git"]
+
+    assert git_commands[1:4] == [
+        ["git", "reset", "--hard", "--no-recurse-submodules"],
+        ["git", "checkout", "main"],
+        ["git", "pull", "--ff-only", "--no-recurse-submodules"],
+    ]
+    assert asked == [list(environment_update.GIT_DEFAULT_BRANCH_COMMAND)]
+
+
+def test_default_branch_strips_the_remote_name(tmp_path, monkeypatch):
+    _fake_git(monkeypatch, returncode=0, stdout="origin/main\n")
+
+    assert default_branch(tmp_path) == "main"
+
+
+def test_default_branch_falls_back_to_master_without_origin_head(tmp_path):
+    assert default_branch(tmp_path) == "master"
+
+
+def test_default_branch_falls_back_to_master_without_git(tmp_path, monkeypatch):
+    def missing_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(environment_update.subprocess, "run", missing_git)
+
+    assert default_branch(tmp_path) == "master"
 
 
 def test_a_plugin_detection_failure_stops_before_anything_runs(tmp_path, monkeypatch):
@@ -188,6 +247,7 @@ def test_manual_commands_name_every_step_and_folder(tmp_path):
     assert commands.splitlines() == [
         f'cd "{repository}" && git status --porcelain',
         f'cd "{repository}" && git reset --hard --no-recurse-submodules',
+        f'cd "{repository}" && git checkout master',
         f'cd "{repository}" && git pull --ff-only --no-recurse-submodules',
         f'cd "{workspace}" && pixi workspace channel add {CHANNEL}',
         f'cd "{workspace}" && pixi add heater-microdrop-plugin',
