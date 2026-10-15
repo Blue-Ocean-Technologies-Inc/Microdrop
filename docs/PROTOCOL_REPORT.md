@@ -139,6 +139,31 @@ available. A column with a single value shows `nan` for std.
 - One horizontal bar chart per numeric column: the mean per step with a
   standard-deviation error bar. Step 1 is at the top.
 
+**How the error bars are computed** (`reporting.py:_trends_section`). The
+rows are grouped by `step_idx` and pandas `agg(["mean", "std"])` runs on
+the column. The bar is the group mean. The error bar is the group's
+**sample standard deviation** (pandas default `ddof=1`), passed to
+`plotly.express.bar` as `error_x`, so it is drawn symmetric: mean minus
+std to mean plus std. It is not a standard error of the mean and not a
+confidence interval.
+
+- "Group" means one executed step, so a step that ran three times gives
+  three bars, each with its own std.
+- For a capacitance column the samples are every `CAPACITANCE_UPDATED`
+  message received while that step ran. The sample count depends on the
+  step's duration and the DropBot's update rate, so a short step has a
+  less reliable std than a long one, and no bar shows how many samples
+  went in.
+- A step with a single sample has std `NaN`, so plotly draws no error bar
+  for it. The same happens for a contributed column that publishes one
+  row per step (for example the PMT means), where the chart carries no
+  error bars at all.
+- Values that do not parse as numbers are coerced to `NaN` and skipped by
+  both mean and std.
+
+The Data Summary table's `std` column is the same sample standard
+deviation taken over all rows of the run, not per step.
+
 **How "Step N" maps to the tree.** `N` is the order in which steps were
 **executed** in this run, starting at 1. It is not the tree position:
 
