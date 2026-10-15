@@ -32,6 +32,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
 
+# Microdrop utils imports.
+from microdrop_utils.environment_update import find_pixi_workspace
+
 # Local imports.
 from .analysis.sam_detect import gpu_encoder_available, sam_available
 
@@ -71,27 +74,19 @@ else:
 
 
 def _pixi_project_root():
-    """The pixi project root: walk up from the running interpreter's
-    ``sys.prefix`` looking for a directory with a ``pixi.toml``, or a
-    ``pyproject.toml`` whose text declares a ``[tool.pixi`` table. Falls
-    back to the current working directory (logged) if neither is found."""
-    start = Path(sys.prefix)
-    for directory in (start, *start.parents):
-        if (directory / "pixi.toml").exists():
-            return directory
-        pyproject = directory / "pyproject.toml"
-        if pyproject.exists():
-            try:
-                text = pyproject.read_text(encoding="utf-8")
-            except OSError as e:
-                logger.warning(f"Could not read {pyproject}: {e}")
-                text = ""
-            if "[tool.pixi" in text:
-                return directory
+    """The pixi project root holding the running interpreter
+    (``find_pixi_workspace``). Falls back to the current working directory
+    (logged) if there is none."""
+    workspace = find_pixi_workspace()
+
+    if workspace is not None:
+        return workspace
+
     logger.warning(
         f"No pixi.toml or pyproject.toml with [tool.pixi] found above "
-        f"{start}; falling back to cwd {Path.cwd()}"
+        f"{sys.prefix}; falling back to cwd {Path.cwd()}"
     )
+
     return Path.cwd()
 
 
