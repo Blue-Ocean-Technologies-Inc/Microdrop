@@ -15,18 +15,29 @@ runtime behaviour publishes PROTOCOL_SET_FREQUENCY and waits for
 FREQUENCY_APPLIED ack from dropbot_controller. Priority 20 — runs in
 parallel with VoltageHandler in the same bucket.
 """
+
+# Enthought library imports.
 from traits.api import Int
 
+# Microdrop package imports.
+from dropbot_controller.consts import (
+    FREQUENCY_APPLIED,
+    HARDWARE_MIN_FREQUENCY,
+    PROTOCOL_SET_FREQUENCY,
+)
+from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import (
-    HARDWARE_MIN_FREQUENCY, PROTOCOL_SET_FREQUENCY, FREQUENCY_APPLIED,
-)
-from dropbot_controller.preferences import DropbotPreferences
+
+# Local imports.
+from ..consts import FREQUENCY_COLUMN_ID
 
 # Static spinbox upper. Hardware-reported max isn't known at column
 # construction time. Backend validates against proxy.config.max_frequency.
@@ -50,6 +61,7 @@ class FrequencyHandler(BaseColumnHandler):
     and strictly before RoutesHandler at priority 30. The ack wait comes
     from the Protocol Settings grid (0 = fire-and-forget).
     """
+
     priority = 20
     wait_for_topics = [FREQUENCY_APPLIED]
     # Provider default for the Protocol Settings ack-wait grid — matches
@@ -90,12 +102,13 @@ def make_frequency_column():
     prefs = DropbotPreferences()
     return Column(
         model=FrequencyColumnModel(
-            col_id="frequency",
+            col_id=FREQUENCY_COLUMN_ID,
             col_name="Frequency (Hz)",
             default_value=int(prefs.last_frequency),
         ),
         view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_FREQUENCY, high=_DEFAULT_HARDWARE_MAX_HZ,
+            low=HARDWARE_MIN_FREQUENCY,
+            high=_DEFAULT_HARDWARE_MAX_HZ,
         ),
         handler=FrequencyHandler(),
     )

@@ -28,18 +28,25 @@ Design notes:
     device customises the specific step.
 """
 
-from traits.api import HasTraits, Bool, Str, observe, provides
+# Enthought library imports.
+from traits.api import Bool, HasTraits, Str, observe, provides
 
+# Microdrop package imports.
 from dropbot_controller.consts import REALTIME_MODE_KEY
-from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, WARNING_COLOR, GREY
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Microdrop style imports.
+from microdrop_style.colors import ERROR_COLOR, GREY, SUCCESS_COLOR, WARNING_COLOR
+
+# Local imports.
 from .interfaces import IStatusModel
 
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
 
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
 
 @provides(IStatusModel)
 class BaseStatusModel(HasTraits):
@@ -81,6 +88,10 @@ class BaseStatusModel(HasTraits):
     protocol_running = Bool(False, desc="A protocol is currently executing")
     free_mode = Bool(True, desc="Device is in free / manual mode")
 
+    #: True while a step-selection follow writes a setpoint; controllers may
+    #: skip user-edit-only side effects such as warnings.
+    following_step = Bool(False)
+
     # ------------------------------------------------------------------ #
     # Connection state (written by the message handler)                    #
     # ------------------------------------------------------------------ #
@@ -88,7 +99,12 @@ class BaseStatusModel(HasTraits):
     connected = Bool(False, desc="True when the device is connected")
     chip_inserted = Bool(False, desc="True when a chip or sample is present")
     halted = Bool(False, desc="True when the device has halted due to a fault")
-    searching = Bool(False, desc="True while the backend's monitor thread is actively scanning for the board")
+    searching = Bool(
+        False,
+        desc=(
+            "True while the backend's monitor thread is actively scanning for the board"
+        ),
+    )
 
     # ------------------------------------------------------------------ #
     # Derived display traits (updated automatically by observers below)   #
@@ -114,8 +130,8 @@ class BaseStatusModel(HasTraits):
             self._realtime_mode_updated()
         except Exception as e:
             logger.debug(
-                f"initial realtime-mode app_globals push skipped "
-                f"(no Redis?): {e}")
+                f"initial realtime-mode app_globals push skipped (no Redis?): {e}"
+            )
 
     # ------------------------------------------------------------------ #
     # Observers
@@ -123,7 +139,11 @@ class BaseStatusModel(HasTraits):
 
     @observe("realtime_mode")
     def _realtime_mode_updated(self, event=None):
-        logger.info(f"Realtime mode status has changed to {self.realtime_mode}; updated in the app globals")
+        logger.info(
+            f"Realtime mode status has changed to {self.realtime_mode}; "
+            "updated in the app globals"
+        )
+
         app_globals[REALTIME_MODE_KEY] = self.realtime_mode
 
     @observe("halted")
@@ -155,7 +175,9 @@ class BaseStatusModel(HasTraits):
         self._update_chip_display(event.new)
 
         if not self.halted and self.connected:
-            self.icon_color = self.CONNECTED_COLOR if event.new else self.CONNECTED_NO_DEVICE_COLOR
+            self.icon_color = (
+                self.CONNECTED_COLOR if event.new else self.CONNECTED_NO_DEVICE_COLOR
+            )
 
     # ------------------------------------------------------------------ #
     # Template-method hooks                                                 #

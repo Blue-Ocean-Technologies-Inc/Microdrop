@@ -15,18 +15,29 @@ PROTOCOL_SET_VOLTAGE and waits for VOLTAGE_APPLIED ack from
 dropbot_controller. Priority 20 — runs before RoutesHandler at
 priority 30 so the voltage is applied before any electrode actuation.
 """
+
+# Enthought library imports.
 from traits.api import Int
 
+# Microdrop package imports.
+from dropbot_controller.consts import (
+    HARDWARE_MIN_VOLTAGE,
+    PROTOCOL_SET_VOLTAGE,
+    VOLTAGE_APPLIED,
+)
+from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import (
-    HARDWARE_MIN_VOLTAGE, PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED,
-)
-from dropbot_controller.preferences import DropbotPreferences
+
+# Local imports.
+from ..consts import VOLTAGE_COLUMN_ID
 
 # Static spinbox upper. Hardware-reported max isn't known at column
 # construction time (DropBot reports via app_globals only after connect),
@@ -49,6 +60,7 @@ class VoltageHandler(BaseColumnHandler):
     bucket, and strictly before RoutesHandler at priority 30. The ack
     wait comes from the Protocol Settings grid (0 = fire-and-forget).
     """
+
     priority = 20
     wait_for_topics = [VOLTAGE_APPLIED]
     # Provider default for the Protocol Settings ack-wait grid — matches
@@ -98,12 +110,13 @@ def make_voltage_column():
     prefs = DropbotPreferences()
     return Column(
         model=VoltageColumnModel(
-            col_id="voltage",
+            col_id=VOLTAGE_COLUMN_ID,
             col_name="Voltage (V)",
             default_value=int(prefs.last_voltage),
         ),
         view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_VOLTAGE, high=_DEFAULT_HARDWARE_MAX_V,
+            low=HARDWARE_MIN_VOLTAGE,
+            high=_DEFAULT_HARDWARE_MAX_V,
         ),
         handler=VoltageHandler(),
     )
