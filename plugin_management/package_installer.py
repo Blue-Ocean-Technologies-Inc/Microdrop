@@ -14,14 +14,19 @@ Uses `pixi add <name>` (channel registered on demand) so the conda solver
 resolves the package + its run-dependencies. Qt-free; snapshots pyproject.toml
 + pixi.lock for rollback.
 """
+
+# Standard library imports.
 import importlib.metadata
 import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+# Microdrop package imports.
 from plugin_management import paths
 from plugin_management.consts import ENTRY_POINT_GROUP, PLUGIN_CHANNEL_URL
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -72,12 +77,14 @@ class EnvDiff:
 
 
 def _run(args, *, cwd=None):
-    proc = subprocess.run(["pixi", *args], cwd=str(cwd or WORKSPACE_DIR),
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        ["pixi", *args], cwd=str(cwd or WORKSPACE_DIR), capture_output=True, text=True
+    )
     if proc.returncode != 0:
         raise InstallError(
             f"`pixi {' '.join(args)}` failed (exit {proc.returncode}): "
-            f"{proc.stderr.strip() or proc.stdout.strip()}")
+            f"{proc.stderr.strip() or proc.stdout.strip()}"
+        )
     return proc
 
 
@@ -116,8 +123,9 @@ def _ensure_channel_registered(channel_url, cwd):
     _registered_channels.add(key)
 
 
-def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                         version=None) -> EnvChangeResult:
+def install_from_channel(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None, version=None
+) -> EnvChangeResult:
     """Register the channel and `pixi add <name>` so the solver resolves the
     package + its deps. When ``version`` is given, pin it (`pixi add
     <name>==<version>`) to install that specific version (down/upgrade).
@@ -140,18 +148,23 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"installed plugin '{spec}' from {channel_url}")
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_addition)
+        name=name,
+        diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition,
+    )
 
 
-def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> EnvChangeResult:
+def upgrade_package(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None
+) -> EnvChangeResult:
     """Upgrade a plugin to the latest channel version via a full
     remove + add cycle. Thin wrapper over :func:`reinstall_from_channel`."""
     return reinstall_from_channel(name, channel_url, cwd=cwd)
 
 
-def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                           version=None) -> EnvChangeResult:
+def reinstall_from_channel(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None, version=None
+) -> EnvChangeResult:
     """Replace an installed package: `pixi remove <name>` then `pixi add`
     (pinned when ``version`` is given) then `pixi install`.
 
@@ -183,13 +196,16 @@ def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
         except InstallError as e:
             logger.warning(
                 f"could not re-materialize the env after a failed reinstall "
-                f"of '{name}': {e}")
+                f"of '{name}': {e}"
+            )
         raise
     diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"reinstalled plugin '{spec}' from {channel_url}")
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_addition)
+        name=name,
+        diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition,
+    )
 
 
 def _parse_search_json(stdout: str) -> list[dict]:
@@ -227,8 +243,10 @@ def env_snapshot(*, cwd=None) -> dict:
     `pixi list` defaults to the platform best matching this machine — the
     same platform, and the same prefix, the running interpreter uses."""
     proc = _run(["list", "--json"], cwd=cwd)
-    return {r["name"]: (r["version"], r["build"], r["kind"])
-            for r in _parse_list_json(proc.stdout)}
+    return {
+        r["name"]: (r["version"], r["build"], r["kind"])
+        for r in _parse_list_json(proc.stdout)
+    }
 
 
 def diff_snapshots(before, after) -> EnvDiff:
@@ -239,9 +257,11 @@ def diff_snapshots(before, after) -> EnvDiff:
     whatever is already imported."""
     added = {n: rec[0] for n, rec in after.items() if n not in before}
     removed = {n: rec[0] for n, rec in before.items() if n not in after}
-    changed = {n: (before[n][0], after[n][0])
-               for n in before.keys() & after.keys()
-               if before[n] != after[n]}
+    changed = {
+        n: (before[n][0], after[n][0])
+        for n in before.keys() & after.keys()
+        if before[n] != after[n]
+    }
     return EnvDiff(added=added, changed=changed, removed=removed)
 
 
@@ -340,5 +360,5 @@ def uninstall_package(name, *, cwd=None) -> EnvChangeResult:
     _run(["install"], cwd=cwd)
     diff = _diff_or_none(before, _try_snapshot(cwd))
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_removal)
+        name=name, diff=diff, requires_relaunch=diff is None or not diff.is_pure_removal
+    )
