@@ -113,16 +113,17 @@ def test_locates_the_launcher_checkout_and_environment(tmp_path):
     assert find_pixi_workspace(prefix) == workspace
     assert find_git_repository(workspace) == repository
     assert pixi_environment_name(prefix) == "prod"
-    assert locate_update(prefix, provider) == (
-        [
-            (["git", "status", "--porcelain"], repository),
-            (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
-            (["git", "checkout", "master"], repository),
-            (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
-            (["pixi", "install", "--environment", "prod"], workspace),
-        ],
-        [],
-    )
+    plan = locate_update(prefix, provider)
+
+    assert plan.steps == [
+        (["git", "status", "--porcelain"], repository),
+        (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
+        (["git", "checkout", "master"], repository),
+        (["git", "pull", "--ff-only", "--no-recurse-submodules"], repository),
+        (["pixi", "install", "--environment", "prod"], workspace),
+    ]
+    assert plan.plugins == []
+    assert plan.branch == "master"
     assert provider.asked == [workspace]
 
 
@@ -131,10 +132,10 @@ def test_the_installed_plugins_are_re_added_between_the_pull_and_install(
 ):
     repository, workspace, prefix = _launcher(tmp_path)
 
-    steps, plugins = locate_update(prefix, FakePluginsProvider(PLUGINS))
+    plan = locate_update(prefix, FakePluginsProvider(PLUGINS))
 
-    assert plugins == PLUGINS
-    assert steps == [
+    assert plan.plugins == PLUGINS
+    assert plan.steps == [
         (["git", "status", "--porcelain"], repository),
         (["git", "reset", "--hard", "--no-recurse-submodules"], repository),
         (["git", "checkout", "master"], repository),
@@ -151,7 +152,7 @@ def test_the_installed_plugins_are_re_added_between_the_pull_and_install(
 def test_the_reset_keeps_untracked_files_and_the_submodule(tmp_path):
     _repository, _workspace, prefix = _launcher(tmp_path)
 
-    steps, _plugins = locate_update(prefix, FakePluginsProvider(PLUGINS))
+    steps = locate_update(prefix, FakePluginsProvider(PLUGINS)).steps
     git_commands = [argv for argv, _cwd in steps if argv[0] == "git"]
 
     assert ["git", "reset", "--hard", "--no-recurse-submodules"] in git_commands
@@ -163,9 +164,10 @@ def test_the_default_branch_is_checked_out_before_the_pull(tmp_path, monkeypatch
     repository, _workspace, prefix = _launcher(tmp_path)
     asked = _fake_git(monkeypatch, returncode=0, stdout="origin/main\n")
 
-    steps, _plugins = locate_update(prefix, FakePluginsProvider())
-    git_commands = [argv for argv, _cwd in steps if argv[0] == "git"]
+    plan = locate_update(prefix, FakePluginsProvider())
+    git_commands = [argv for argv, _cwd in plan.steps if argv[0] == "git"]
 
+    assert plan.branch == "main"
     assert git_commands[1:4] == [
         ["git", "reset", "--hard", "--no-recurse-submodules"],
         ["git", "checkout", "main"],
@@ -240,7 +242,7 @@ def test_a_workspace_outside_a_git_checkout_cannot_update(tmp_path):
 
 def test_manual_commands_name_every_step_and_folder(tmp_path):
     repository, workspace, prefix = _launcher(tmp_path)
-    steps, _plugins = locate_update(prefix, FakePluginsProvider(PLUGINS[:2]))
+    steps = locate_update(prefix, FakePluginsProvider(PLUGINS[:2])).steps
 
     commands = manual_update_commands(steps)
 

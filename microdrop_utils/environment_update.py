@@ -38,7 +38,7 @@ from collections import deque
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import HasTraits, Interface, Str
+from traits.api import HasTraits, Instance, Interface, List, Str, Tuple
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -96,6 +96,20 @@ class ExternalPlugin(HasTraits):
 
     #: Channel the package was installed from.
     channel = Str()
+
+
+class UpdatePlan(HasTraits):
+    """A planned update: the commands to run and what the user is told
+    about them before it starts."""
+
+    #: The ``update_steps``, as ``(argv, cwd)`` pairs.
+    steps = List(Tuple())
+
+    #: The external plugins the steps re-add after the reset.
+    plugins = List(Instance(ExternalPlugin))
+
+    #: The launcher branch the steps check out and pull.
+    branch = Str()
 
 
 class IExternalPluginsProvider(Interface):
@@ -230,10 +244,10 @@ def update_steps(
 
 
 def locate_update(prefix=None, plugins_provider=None):
-    """``(steps, plugins)`` for updating the environment at ``prefix``
-    (default ``sys.prefix``): the ``update_steps`` and the
-    ``ExternalPlugin``s they re-add, as told by ``plugins_provider`` (an
-    ``IExternalPluginsProvider``).
+    """The ``UpdatePlan`` for the environment at ``prefix`` (default
+    ``sys.prefix``): the ``update_steps``, the launcher's default branch
+    they check out, and the ``ExternalPlugin``s they re-add, as told by
+    ``plugins_provider`` (an ``IExternalPluginsProvider``).
 
     Raises EnvironmentUpdateError — before anything has run, so no plugin is
     lost — when the environment does not live in a pixi workspace inside a
@@ -275,15 +289,16 @@ def locate_update(prefix=None, plugins_provider=None):
         for arguments in plugins_provider.reinstall_arguments(plugin)
     ]
 
+    branch = default_branch(repository)
     steps = update_steps(
         workspace,
         repository,
         pixi_environment_name(prefix),
         reinstall_arguments,
-        default_branch(repository),
+        branch,
     )
 
-    return steps, plugins
+    return UpdatePlan(steps=steps, plugins=plugins, branch=branch)
 
 
 def manual_update_commands(steps):

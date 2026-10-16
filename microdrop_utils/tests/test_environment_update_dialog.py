@@ -31,6 +31,7 @@ from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
     ExternalPlugin,
     IExternalPluginsProvider,
+    UpdatePlan,
     manual_update_commands,
 )
 
@@ -90,7 +91,7 @@ def flow(monkeypatch):
     def locate_update(plugins_provider=None):
         record["providers"].append(plugins_provider)
 
-        return STEPS, record["plugins"]
+        return UpdatePlan(steps=STEPS, plugins=record["plugins"], branch="main")
 
     monkeypatch.setattr(environment_update_dialog, "warning", warning)
     monkeypatch.setattr(environment_update_dialog, "locate_update", locate_update)
@@ -130,6 +131,18 @@ def test_the_question_lists_the_plugins_the_update_re_adds(flow):
     )
 
 
+def test_the_question_names_the_branch_the_launcher_is_switched_to(flow):
+    flow["choice"] = CANCEL
+
+    environment_update_dialog.offer_environment_update("X", "pkg")
+
+    [question] = flow["questions"]
+    assert (
+        "The <strong>pixi-microdrop</strong> repository will be switched to its "
+        "<strong>main</strong> branch and updated." in question
+    )
+
+
 def test_the_question_says_when_no_plugins_need_re_adding(flow):
     flow["choice"] = CANCEL
     flow["plugins"] = []
@@ -138,6 +151,7 @@ def test_the_question_says_when_no_plugins_need_re_adding(flow):
 
     [question] = flow["questions"]
     assert "no external plugins are installed" in question
+    assert "<strong>main</strong> branch" in question
 
 
 def test_the_plugins_come_from_the_application_provider_service(flow):

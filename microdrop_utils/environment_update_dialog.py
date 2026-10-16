@@ -59,20 +59,27 @@ def missing_package_message(feature, package):
     )
 
 
-def reset_notice(plugins):
-    """What the update discards, and the external ``plugins`` it re-adds."""
-    if not plugins:
+def reset_notice(plan):
+    """What the update ``plan`` does to the launcher checkout: the branch it
+    switches to, the local changes it discards, and the external plugins it
+    re-adds."""
+    switch = (
+        "The <strong>pixi-microdrop</strong> repository will be switched to "
+        f"its <strong>{plan.branch}</strong> branch and updated."
+    )
+
+    if not plan.plugins:
         return (
-            "Local changes to the launcher's pyproject.toml, pixi.lock and "
-            "other tracked files will be discarded; no external plugins are "
-            "installed, so none need re-adding."
+            f"{switch} Local changes to the launcher's pyproject.toml, "
+            "pixi.lock and other tracked files will be discarded; no external "
+            "plugins are installed, so none need re-adding."
         )
 
-    names = "<br>".join(f"- <strong>{plugin.name}</strong>" for plugin in plugins)
+    names = "<br>".join(f"- <strong>{plugin.name}</strong>" for plugin in plan.plugins)
 
     return (
-        "Local changes to the launcher's pyproject.toml, pixi.lock and other "
-        "tracked files will be discarded and these plugins re-added "
+        f"{switch} Local changes to the launcher's pyproject.toml, pixi.lock "
+        "and other tracked files will be discarded and these plugins re-added "
         f"afterwards:<br><br>{names}"
     )
 
@@ -90,17 +97,15 @@ def offer_environment_update(feature, package, application=None):
     # Planned before asking, so the question can name what the update
     # discards and re-adds; a plan that fails is reported once the user
     # chooses to update.
-    steps = plugins = failure = None
+    plan = failure = None
 
     try:
-        steps, plugins = locate_update(
-            plugins_provider=_external_plugins_provider(application)
-        )
+        plan = locate_update(plugins_provider=_external_plugins_provider(application))
     except EnvironmentUpdateError as e:
         failure = e
 
     if failure is None:
-        message = f"{message}<br><br>{(reset_notice(plugins))}"
+        message = f"{message}<br><br>{reset_notice(plan)}"
 
     choice = warning(
         None,
@@ -118,10 +123,10 @@ def offer_environment_update(feature, package, application=None):
 
         return True
 
-    commands = manual_update_commands(steps)
+    commands = manual_update_commands(plan.steps)
 
     run_with_wait(
-        lambda: run_update_steps(steps),
+        lambda: run_update_steps(plan.steps),
         title="Updating MicroDrop",
         message="Updating the pixi-microdrop repository and environment…",
         on_success=lambda _result: _relaunch_after_update(application),
@@ -188,7 +193,11 @@ if __name__ == "__main__":
     from microdrop_style.helpers import style_app
 
     # Microdrop utils imports.
-    from microdrop_utils.environment_update import ExternalPlugin, update_steps
+    from microdrop_utils.environment_update import (
+        ExternalPlugin,
+        UpdatePlan,
+        update_steps,
+    )
 
     parser = argparse.ArgumentParser(description=__doc__)
     outcome = parser.add_mutually_exclusive_group()
@@ -247,7 +256,13 @@ if __name__ == "__main__":
             for arguments in plugins_provider.reinstall_arguments(plugin)
         ]
 
-        return update_steps(workspace, workspace.parent, None, reinstall), plugins
+        branch = "master"
+
+        return UpdatePlan(
+            steps=update_steps(workspace, workspace.parent, None, reinstall, branch),
+            plugins=plugins,
+            branch=branch,
+        )
 
     def run_update_steps(steps):
         print(f"Would run:\n{manual_update_commands(steps)}")
