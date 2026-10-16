@@ -1,3 +1,17 @@
+## [v1.32.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.32.0) (2026-10-16)
+
+### Feat
+
+- **protocol-tree**: insert step/group above a row ([`364188d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/364188d39ca42c0d3f2664e834817256e6bd69be))
+- **image_viewer**: extend actual-vs-expected view ([`cac195b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cac195b244e7e701697642537e970e757fa2dfa4))
+- **microdrop_utils**: multi-cell table copy and paste ([`f3650d3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3650d3d6f8201566b5b5e859bc6a8829210afc6))
+- **report**: outlier filter and section folds ([`1139620`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/11396205a28378fab59550413743af9c125673ec))
+
+### Test
+
+- **protocol-tree**: cover insert-above placement ([`cc0cdba`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc0cdba42c9e709d41a7d51c0d8d998bd5705607))
+- **image_viewer**: cover expected-view extensions ([`b5a7f9e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b5a7f9eac1fd2fd717b9f07cc788952c76881a99))
+
 ## [v1.31.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.31.0) (2026-10-16)
 
 ### Feat
