@@ -487,6 +487,20 @@ idiom (chunking, comment density, method order) that rules alone can't:
   `app_globals.get(...)` defaults — import the owner's constant, never a
   literal string; a cross-plugin reader imports it from the owner's `consts`
   module (allowed by `.importlinter`).
+- **New runtime dependency behind a UI feature**: when a feature needs a
+  package the launcher environment does not have yet, never import it at
+  module level unguarded. Import it lazily at the call site, catch
+  `ImportError`, and call `offer_environment_update(feature, package,
+  application)` from `microdrop_utils.environment_update_dialog`; when it
+  returns True, retry the action once (exemplar: `image_viewer/discovery.py`
+  with `_trash_experiment` in `image_viewer/controller.py`). The helper
+  explains what is missing and, once the user agrees, resets the
+  pixi-microdrop launcher checkout onto its default branch, pulls, re-adds
+  plugins installed through Manage Plugins, runs `pixi install` for the
+  running environment, and imports the package into the running app — no
+  restart. Pair every such feature with a pixi-microdrop PR that pins the
+  package in `[tool.pixi.dependencies]` and relocks; the guarded import
+  makes merge order irrelevant.
 - Styling goes through `microdrop_style/` helpers (colors, button styles,
   icon fonts)
 
