@@ -8,12 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Roi override resolution and AnalysisSession cache keys."""
+"""Roi override resolution, AnalysisSession cache keys, and the
+Expected table's rows."""
+
+# Standard library imports.
+import math
 
 # Microdrop package imports.
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
     Roi,
+    RoiAnalysisModel,
 )
 
 
@@ -93,6 +98,35 @@ def test_a_mask_applies_from_its_base_anchor_and_a_positive_everywhere():
     assert mask.applies_at(500.0)
     assert positive.applies_at(0.0)
     assert positive.applies_at(500.0)
+
+
+def test_expected_rows_are_one_per_positive_roi_per_compared_metric():
+    first, second = Roi(name="ROI 1"), Roi(name="ROI 2")
+    model = RoiAnalysisModel(
+        session=AnalysisSession(rois=[first, Roi(is_negative=True), second])
+    )
+    model.session.figure.compare_second_derivative_min = True
+    model.expected_actuals = {first.roi_id: {"zero": 10.0, "min": 20.0}}
+
+    rows = model.expected_rows
+
+    assert [(row.roi, row.metric) for row in rows] == [
+        (first, "zero"),
+        (first, "min"),
+        (second, "zero"),
+        (second, "min"),
+    ]
+    assert [row.label for row in rows[:2]] == ["d² zero", "d² min"]
+
+    # Unset reads as the actual; a write lands on the metric's own trait.
+    assert rows[1].expected == 20.0
+    assert math.isnan(rows[2].actual)
+
+    rows[1].expected = 25.0
+
+    assert first.expected_second_derivative_min == 25.0
+    assert math.isnan(first.expected_fastest_change)
+    assert rows[0].expected == 10.0
 
 
 def test_a_mask_drawn_with_no_image_shown_applies_everywhere():

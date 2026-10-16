@@ -20,6 +20,7 @@ import shutil
 # Microdrop package imports.
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
+    CustomPoint,
     ExpectedRow,
     Roi,
     RoiStyle,
@@ -52,6 +53,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
             alpha=40,
         ),
         expected_fastest_change=95.0,
+        expected_second_derivative_max=80.0,
+        expected_second_derivative_min=110.0,
     )
     session = AnalysisSession(
         directory=str(tmp_path), rois=[roi], plot_stat="bg_corrected"
@@ -73,6 +76,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.style.marker == "o" and back.style.marker_size == 7.0
     assert back.style.visible is False and back.style.alpha == 40
     assert back.expected_fastest_change == 95.0
+    assert back.expected_second_derivative_max == 80.0
+    assert back.expected_second_derivative_min == 110.0
 
 
 def test_figure_fit_settings_round_trip(tmp_path):
@@ -88,6 +93,8 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.temperature_slope = 0.98
     session.figure.temperature_intercept = 1.5
     session.figure.flip_actual_expected = True
+    session.figure.compare_second_derivative_max = True
+    session.figure.trend_method = "sigmoid"
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
@@ -102,6 +109,28 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.temperature_slope == 0.98
     assert loaded.figure.temperature_intercept == 1.5
     assert loaded.figure.flip_actual_expected is True
+    assert loaded.figure.compare_second_derivative_max is True
+    assert loaded.figure.compare_second_derivative_min is False
+    assert loaded.figure.trend_method == "sigmoid"
+
+
+def test_custom_points_round_trip(tmp_path):
+    session = AnalysisSession()
+    session.custom_points = [
+        CustomPoint(name="Standard", actual=41.5, expected=42.0),
+        CustomPoint(name="Blank"),
+    ]
+    save_session(tmp_path, session)
+
+    standard, blank = load_session(tmp_path).custom_points
+
+    assert (standard.name, standard.actual, standard.expected) == (
+        "Standard",
+        41.5,
+        42.0,
+    )
+    assert blank.name == "Blank"
+    assert math.isnan(blank.actual) and math.isnan(blank.expected)
 
 
 def test_load_session_accepts_v1_bare_list(tmp_path):
@@ -631,18 +660,24 @@ def test_write_expected_csv_round_trips_the_table(tmp_path):
     unfitted = ExpectedRow(roi=Roi(name="ROI 1", kind="box"))
     fitted = ExpectedRow(roi=Roi(name="ROI 2", kind="box"), actual=41.5)
     fitted.expected = 45.0
+    peak = ExpectedRow(roi=fitted.roi, metric="max", actual=30.0)
+    standard = CustomPoint(name="Standard", actual=50.0, expected=52.5)
     csv_path = tmp_path / "expected.csv"
 
-    write_expected_csv(csv_path, [unfitted, fitted], "°C")
+    write_expected_csv(
+        csv_path, [unfitted, fitted, peak], "°C", custom_points=[standard]
+    )
 
     with open(csv_path, newline="", encoding="utf-8") as handle:
         table = list(csv.reader(handle))
 
     # An unfitted ROI's actual (and so its expected) is a blank cell.
     assert table == [
-        ["roi", "actual", "expected", "unit"],
-        ["ROI 1", "", "", "°C"],
-        ["ROI 2", "41.5", "45.0", "°C"],
+        ["roi", "metric", "actual", "expected", "unit"],
+        ["ROI 1", "d² zero", "", "", "°C"],
+        ["ROI 2", "d² zero", "41.5", "45.0", "°C"],
+        ["ROI 2", "d² max", "30.0", "30.0", "°C"],
+        ["Standard", "custom", "50.0", "52.5", "°C"],
     ]
 
 

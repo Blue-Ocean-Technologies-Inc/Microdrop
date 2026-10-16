@@ -66,6 +66,7 @@ from traits.api import (
     Property,
     Range,
     Str,
+    TraitError,
     observe,
 )
 from traitsui.api import (
@@ -1001,6 +1002,147 @@ def ensure_min_column_width(editor, width):
     — harmless for the table's other, already content-sized columns, which
     keep their own computed width whenever it is already above the floor."""
     editor.table_view.horizontalHeader().setMinimumSectionSize(width)
+
+
+def table_cells_text(cells):
+    """Tab-separated text of ``cells``, (row, column, text) each: a line
+    per row, each row's cells in column order — the layout spreadsheets
+    copy and paste."""
+    rows = {}
+
+    for row, _column, text in sorted(cells):
+        rows.setdefault(row, []).append(text)
+
+    return "\n".join("\t".join(texts) for texts in rows.values())
+
+
+def parse_table_text(text):
+    """Split tab-separated clipboard text into rows of cell texts; the
+    newline a spreadsheet ends a copied block with adds no empty row."""
+    return [line.split("\t") for line in text.splitlines()]
+
+
+def _paste_table_cell(editor, index, text):
+    """Write pasted ``text`` into the TableEditor cell at the view
+    ``index`` when that cell is editable.
+
+    TraitsUI's TableModel has no setData — its delegates edit through
+    the columns — so this sets the value through the column as well,
+    which hands it to the trait raw: text bound for a float cell is
+    converted first, a blank one to NaN (shown blank, as copied)."""
+    if not index.isValid() or not index.flags() & Qt.ItemIsEditable:
+        return
+
+    source_index = editor.model.mapToSource(index)
+    obj = editor.items()[source_index.row()]
+    column = editor.columns[source_index.column()]
+
+    try:
+        if isinstance(column.get_raw_value(obj), float):
+            column.set_value(obj, float(text) if text.strip() else math.nan)
+        else:
+            column.set_value(obj, text)
+
+    except (ValueError, TraitError) as error:
+        logger.warning(f"Skipped pasting {text!r} into {column.get_label()}: {error}")
+
+
+class _TableClipboardFilter(QObject):
+    """Event filter giving a TraitsUI TableEditor's view spreadsheet-style
+    Ctrl+C / Ctrl+V of a block of cells.
+
+    A filter rather than QShortcuts: it claims the keys' ShortcutOverride,
+    so no application-wide Copy / Paste shortcut beats it, and it sees the
+    KeyPress before QAbstractItemView's own Copy, which copies only the
+    current cell."""
+
+    def __init__(self, editor):
+        super().__init__(editor.table_view)
+        self._editor = editor
+        self._table_view = editor.table_view
+
+    def eventFilter(self, watched, event):
+        event_type = event.type()
+
+        if event_type not in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
+            return False
+
+        # An open cell editor keeps its own line-edit copy / paste.
+        if self._table_view.state() == QtWidgets.QAbstractItemView.State.EditingState:
+            return False
+
+        if event.matches(QKeySequence.StandardKey.Copy):
+            action = self.copy
+        elif event.matches(QKeySequence.StandardKey.Paste):
+            action = self.paste
+        else:
+            return False
+
+        # Accepting the override delivers the key to the view as a
+        # KeyPress instead of to a shortcut elsewhere.
+        if event_type == QEvent.Type.ShortcutOverride:
+            event.accept()
+        else:
+            action()
+
+        return True
+
+    def copy(self):
+        """Put the selected cells' displayed text on the clipboard as
+        tab-separated rows."""
+        indexes = self._table_view.selectionModel().selectedIndexes()
+
+        if not indexes:
+            return
+
+        cells = [
+            (index.row(), index.column(), index.data(Qt.DisplayRole) or "")
+            for index in indexes
+        ]
+
+        QtWidgets.QApplication.clipboard().setText(table_cells_text(cells))
+
+    def paste(self):
+        """Write the clipboard's rows into the table from the top-left
+        selected cell, the current cell when none is selected."""
+        rows = parse_table_text(QtWidgets.QApplication.clipboard().text())
+        indexes = self._table_view.selectionModel().selectedIndexes()
+        anchor = (
+            min(indexes, key=lambda index: (index.row(), index.column()))
+            if indexes
+            else self._table_view.currentIndex()
+        )
+
+        if not rows or not anchor.isValid():
+            return
+
+        view_model = self._table_view.model()
+
+        for row_offset, texts in enumerate(rows):
+            for column_offset, text in enumerate(texts):
+                index = view_model.index(
+                    anchor.row() + row_offset, anchor.column() + column_offset
+                )
+
+                _paste_table_cell(self._editor, index, text)
+
+
+def install_table_clipboard(editor):
+    """Give a TraitsUI TableEditor spreadsheet-style Ctrl+C / Ctrl+V of a
+    block of cells, which TraitsUI's tables lack — so, say, a column of
+    expected values can be copied out to a spreadsheet and pasted back.
+
+    Copy puts the selected cells' displayed text on the clipboard as
+    tab-separated rows. Paste writes the clipboard's rows into the
+    table from the top-left selected cell (the current cell when none
+    is selected), skipping cells past the table's edge and read-only
+    ones. Neither runs while a cell editor is open. Returns the event
+    filter installed on the editor's view, for the caller to keep a
+    reference to."""
+    clipboard_filter = _TableClipboardFilter(editor)
+    editor.table_view.installEventFilter(clipboard_filter)
+
+    return clipboard_filter
 
 
 class SafeCancelTableHandler(Handler):

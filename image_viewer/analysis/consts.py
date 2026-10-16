@@ -213,6 +213,22 @@ VIEW_MODE_LABELS = {
     "actual_vs_expected": "Actual vs expected",
 }
 
+#: The fitted-curve landmarks the Expected tab can compare against the
+#: user's expected values: where the second derivative crosses zero
+#: (the fastest change, always compared), peaks, and troughs. Their
+#: table labels, and the Actual vs expected view's scatter markers.
+EXPECTED_METRICS = ("zero", "max", "min")
+EXPECTED_METRIC_LABELS = {"zero": "d² zero", "max": "d² max", "min": "d² min"}
+EXPECTED_METRIC_MARKERS = {"zero": "o", "max": "^", "min": "v"}
+
+#: How the Expected tab's custom (user-typed) points are drawn in the
+#: Actual vs expected view — black squares, apart from every ROI's
+#: coloured landmarks — and their legend label.
+CUSTOM_POINT_MARKER = "s"
+CUSTOM_POINT_COLOR = "black"
+CUSTOM_POINT_ALPHA = 0.8
+CUSTOM_POINT_LABEL = "Custom"
+
 #: The View labels per x axis: only the curves view names its axis.
 VIEW_MODE_LABELS_BY_X_AXIS = {
     "time": VIEW_MODE_LABELS,
