@@ -59,6 +59,10 @@ VIEW_ONLY_ACTIONS = frozenset(
 # helper on the service taking the device-frame direction.
 ARROW_VERBS = ("step", "extend", "shrink", "split", "draw_route")
 
+# Modes in which Alt+arrows draw routes. Leaving merge, channel-edit,
+# camera or zone modes for them would discard their in-progress state.
+ROUTE_DRAWING_MODES = ("edit", "draw", "edit-draw")
+
 # Suffixes of the second-key rows that run their primary action.
 _ALTERNATE_ACTION_SUFFIXES = ("_alt", "_equal")
 
@@ -156,8 +160,10 @@ class KeyboardShortcutService(HasTraits):
     #: The AutoFitGraphicsView showing the device.
     device_view = Any()
 
-    #: Called by Ctrl+Z / Ctrl+Y; None leaves the keys unhandled.
+    #: Called by Ctrl+Z; None leaves the key unhandled.
     undo_handler = Callable()
+
+    #: Called by Ctrl+Y and Ctrl+Shift+Z; None leaves the keys unhandled.
     redo_handler = Callable()
 
     #: Opens the keyboard shortcut cheat sheet.
@@ -227,17 +233,98 @@ class KeyboardShortcutService(HasTraits):
         self._split_session_active = True
 
     def _draw_route(self, direction):
-        """Extend the route one electrode in ``direction``."""
+        """Grow a route one electrode in ``direction`` from the route cursor.
+
+        With no route being edited this starts one, the same way a mouse
+        drag in Draw mode does.
+        """
+        if self.model.mode not in ROUTE_DRAWING_MODES:
+            return False
+
+        cursor = self._route_cursor()
+
+        if cursor is None:
+            return False
+
+        target = self.stepping.neighbor_in_direction(cursor, direction)
+
+        if target is None:
+            return False
+
+        if self.model.routes.get_selected_route() is None:
+            self.model.mode = "draw"
+
+        self.interaction.handle_route_draw(cursor, target)
+
+        route = self.model.routes.get_selected_route()
+
+        if route is None or route.get_endpoints()[1] != target:
+            return False
+
+        self.stepping.last_electrode_id_visited = target
+
+        return True
+
+    def _route_cursor(self):
+        """Return the electrode a keyboard-drawn route grows from, or None.
+
+        The selected route's tail while editing it, else the stepping
+        cursor, else the one actuated electrode; None when several are
+        actuated and nothing else says which.
+        """
+        route = self.model.routes.get_selected_route()
+
+        if self.model.mode in ("edit", "edit-draw") and route is not None:
+            endpoints = route.get_endpoints()
+
+            if endpoints:
+                return endpoints[1]
+
+        if self.stepping.last_electrode_id_visited:
+            return self.stepping.last_electrode_id_visited
+
+        active_ids = self.stepping.get_active_electrode_ids()
+
+        if len(active_ids) == 1:
+            return next(iter(active_ids))
+
+        return None
 
     # ------------------ Routes ----------------------------------------
 
     def action_erase_route_tail(self):
-        """Erase the selected route's last segment."""
-        return False
+        """Drop the selected route's last electrode, undoing one Alt+arrow.
+
+        Truncated in place rather than through the segment erase, which
+        removes every pass over a segment and so would wipe a shuttle
+        route like A-B-A-B whole.
+        """
+        route = self.model.routes.get_selected_route()
+
+        if route is None:
+            return False
+
+        if len(route.route) <= 2:
+            # Nothing of two electrodes would remain; drop the route rather
+            # than let the layer manager select another one.
+            return self.action_delete_route()
+
+        route.route.pop()
+        self.stepping.last_electrode_id_visited = route.route[-1]
 
     def action_delete_route(self):
-        """Delete the selected route."""
-        return False
+        """Delete the selected route and leave none selected.
+
+        The layer manager selects the last remaining route when one is
+        removed; the keyboard must not move on to a route nobody picked.
+        """
+        routes = self.model.routes
+
+        if routes.selected_layer is None:
+            return False
+
+        routes.delete_layer(routes.selected_layer)
+        routes.selected_layer = None
 
     # ------------------ Modes -----------------------------------------
 
