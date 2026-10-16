@@ -54,6 +54,8 @@ from .consts import (
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER,
     BUTTER_ORDER_BOUNDS,
+    EXPECTED_METRIC_LABELS,
+    EXPECTED_METRICS,
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
@@ -78,11 +80,20 @@ from .consts import (
     VIEW_MODES,
     X_AXIS_MODES,
 )
-from .curve_fit import FIT_METHODS
+from .curve_fit import FIT_METHODS, TREND_METHODS
 from .fit_presets import choices_for
 from .perspective import perspective_matrix
 from .plot_series import SMOOTH_METHODS
 from .sam_detect import Candidate
+
+#: The Roi trait holding the user's expected value of each
+#: EXPECTED_METRICS landmark. The zero crossing's keeps its original
+#: name: it is persisted under it.
+EXPECTED_TRAITS = {
+    "zero": "expected_fastest_change",
+    "max": "expected_second_derivative_max",
+    "min": "expected_second_derivative_min",
+}
 
 #: Matches the "<prefix> N" names next_roi_name() itself produces, to
 #: find the next free number; formatted with the escaped prefix.
@@ -220,6 +231,22 @@ class FigureSettings(HasTraits):
     #: so the trend reads expected = slope × actual + intercept.
     flip_actual_expected = Bool(False)
 
+    #: Also compare where the fitted curve's second derivative peaks /
+    #: troughs against the user's expected value: a row per ROI in the
+    #: Expected table, a point per ROI in the Actual vs expected view.
+    compare_second_derivative_max = Bool(False)
+    compare_second_derivative_min = Bool(False)
+
+    #: The EXPECTED_METRICS landmarks compared: the zero crossing
+    #: always, plus the extrema switched on above, in that order.
+    compared_metrics = Property(
+        List(Str),
+        observe="compare_second_derivative_max, compare_second_derivative_min",
+    )
+
+    #: Which fit the Actual vs expected view's trend line uses.
+    trend_method = Enum(*TREND_METHODS)
+
     #: What the curves are plotted against: elapsed capture time, or
     #: the heater log's temperature at each capture. The swap happens
     #: in derive_series, so the fits follow it — a melt curve's
@@ -243,6 +270,18 @@ class FigureSettings(HasTraits):
     #: persisted so the panel reopens the way it was left.
     show_method_group = Bool(True)
     show_metrics_group = Bool(True)
+    #: Whether the Expected tab's Custom points group is open, persisted
+    #: the same way.
+    show_custom_points_group = Bool(True)
+
+    def _get_compared_metrics(self):
+        enabled = {
+            "zero": True,
+            "max": self.compare_second_derivative_max,
+            "min": self.compare_second_derivative_min,
+        }
+
+        return [metric for metric in EXPECTED_METRICS if enabled[metric]]
 
 
 class ScaleCalibration(HasTraits):
@@ -379,6 +418,11 @@ class Roi(HasTraits):
     #: value — so by default every point sits on the identity line.
     expected_fastest_change = Float(math.nan)
 
+    #: The same for where the fitted curve's second derivative peaks /
+    #: troughs, compared when the Expected tab's d² max / min are on.
+    expected_second_derivative_max = Float(math.nan)
+    expected_second_derivative_min = Float(math.nan)
+
     #: A negative mask rather than a measured region: its interior is
     #: subtracted from every positive ROI it overlaps (and from their
     #: background rings). It has no stats of its own and is never a
@@ -390,12 +434,16 @@ class Roi(HasTraits):
     def _roi_id_default(self):
         return uuid.uuid4().hex[:8]
 
-    def expected_fastest_change_or(self, actual):
-        """The expected fastest-change value, or ``actual`` while unset."""
-        if math.isnan(self.expected_fastest_change):
-            return actual
+    def expected_or(self, metric, actual):
+        """The expected value of the ``metric`` landmark (an
+        EXPECTED_METRICS key), or ``actual`` while unset."""
+        expected = getattr(self, EXPECTED_TRAITS[metric])
 
-        return self.expected_fastest_change
+        return actual if math.isnan(expected) else expected
+
+    def set_expected(self, metric, value):
+        """Set the expected value of the ``metric`` landmark."""
+        setattr(self, EXPECTED_TRAITS[metric], value)
 
     def applies_at(self, capture_time):
         """Whether this ROI is in force on an image captured at
@@ -429,8 +477,8 @@ class Roi(HasTraits):
 
 
 class ExpectedRow(HasTraits):
-    """One ROI's line in the Expected table: its fitted fastest-change
-    value beside the one the user expects."""
+    """One ROI landmark's line in the Expected table: the x value the
+    fitted curve puts it at beside the one the user expects."""
 
     #: The ROI the row reads its name from and writes its expected to.
     roi = Instance(Roi)
@@ -438,17 +486,45 @@ class ExpectedRow(HasTraits):
     #: The ROI's display name.
     name = DelegatesTo("roi")
 
-    #: The fitted curve's fastest-change x value; NaN when unknown.
+    #: Which fitted-curve landmark the row compares.
+    metric = Enum(*EXPECTED_METRICS)
+
+    #: The landmark's table label.
+    label = Property(Str, observe="metric")
+
+    #: The landmark's x value on the fitted curve; NaN when unknown.
     actual = Float(math.nan)
 
     #: The user's expected value — the actual while none is set.
-    expected = Property(Float, observe="roi.expected_fastest_change, actual")
+    expected = Property(
+        Float,
+        observe="roi.expected_fastest_change, "
+        "roi.expected_second_derivative_max, "
+        "roi.expected_second_derivative_min, actual",
+    )
+
+    def _get_label(self):
+        return EXPECTED_METRIC_LABELS[self.metric]
 
     def _get_expected(self):
-        return self.roi.expected_fastest_change_or(self.actual)
+        return self.roi.expected_or(self.metric, self.actual)
 
     def _set_expected(self, value):
-        self.roi.expected_fastest_change = value
+        self.roi.set_expected(self.metric, value)
+
+
+class CustomPoint(HasTraits):
+    """An (actual, expected) pair the user types in rather than one a
+    ROI's fit produced — a standard of known value measured elsewhere,
+    say — plotted and fitted with the ROI points in the Actual vs
+    expected view."""
+
+    #: The point's label on the plot and in the CSV.
+    name = Str()
+
+    #: The measured and the expected x value; NaN until typed.
+    actual = Float(math.nan)
+    expected = Float(math.nan)
 
 
 class AnalysisSession(HasTraits):
@@ -529,6 +605,10 @@ class AnalysisSession(HasTraits):
 
     #: Perspective warp applied before everything else (cache key too).
     perspective = Instance(PerspectiveCorrection, ())
+
+    #: User-typed points the Actual vs expected view plots and fits
+    #: beside the ROIs' own.
+    custom_points = List(Instance(CustomPoint))
 
     def _get_heater_log_hint(self):
         if not self.heater_log_fallback_dir:
@@ -743,6 +823,13 @@ class RoiAnalysisModel(HasTraits):
     reset_expected_button = Button()
     #: Write the Expected table to a CSV in the experiment's analysis folder.
     export_expected_button = Button()
+    #: Append a blank custom point to the Expected tab's table of them.
+    add_custom_point_button = Button()
+    #: Drop the custom points of the cells selected in their table.
+    remove_custom_point_button = Button()
+    #: The custom-points table's selected cells, (point, column name)
+    #: each, so the trash button knows which rows to drop.
+    selected_custom_cells = List(Tuple)
     #: What the sensor dropdown offers: "mean" plus every sensor the
     #: loaded heater logs actually carry.
     heater_sensor_choices = List(Str, [HEATER_SENSOR_MEAN])
@@ -914,30 +1001,38 @@ class RoiAnalysisModel(HasTraits):
     filtered_paths = List(Str)
     current_image_path = Str()
 
-    #: Each ROI's fitted fastest-change x value by roi_id, pushed by
-    #: the plot canvas — the only place the fits are computed — after
-    #: every redraw, whatever view it shows. Empty while fitting is off.
-    fastest_change_actual = Dict(Str, Float)
+    #: Each ROI's fitted landmark x values, {roi_id: {metric: x}}, pushed
+    #: by the plot canvas — the only place the fits are computed — after
+    #: every redraw, whatever view it shows. A landmark the fit lacks is
+    #: left out; empty while fitting is off.
+    expected_actuals = Dict(Str, Dict(Str, Float))
 
-    #: The Expected table's rows, one per positive ROI.
+    #: The Expected table's rows, one per positive ROI per compared
+    #: landmark, grouped by ROI.
     expected_rows = Property(
         List(Instance(ExpectedRow)),
-        observe="session, session:rois.items, session:rois:items:is_negative",
+        observe="session, session:rois.items, session:rois:items:is_negative, "
+        "session:figure:compare_second_derivative_max, "
+        "session:figure:compare_second_derivative_min",
     )
 
     @cached_property
     def _get_expected_rows(self):
         return [
             ExpectedRow(
-                roi=roi, actual=self.fastest_change_actual.get(roi.roi_id, math.nan)
+                roi=roi,
+                metric=metric,
+                actual=self.expected_actuals.get(roi.roi_id, {}).get(metric, math.nan),
             )
             for roi in self.session.positive_rois
+            for metric in self.session.figure.compared_metrics
         ]
 
-    @observe("fastest_change_actual")
+    @observe("expected_actuals")
     def _update_expected_actuals(self, event):
         for row in self.expected_rows:
-            row.actual = self.fastest_change_actual.get(row.roi.roi_id, math.nan)
+            actuals = self.expected_actuals.get(row.roi.roi_id, {})
+            row.actual = actuals.get(row.metric, math.nan)
 
     #: Whether the DISPLAYED image is excluded from analysis — the
     #: sidebar checkbox edits this; RoiAnalysisController mirrors it

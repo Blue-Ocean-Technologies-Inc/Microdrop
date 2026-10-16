@@ -59,7 +59,14 @@ from .roi_batch import (
 from .roi_commands import AddRoisCommand, EditRoiCommand, RemoveRoisCommand
 from .roi_compute import stats_are_current
 from .roi_geometry import translated
-from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
+from .roi_model import (
+    EXPECTED_TRAITS,
+    AnalysisSession,
+    CustomPoint,
+    Roi,
+    RoiAnalysisModel,
+    RoiStyle,
+)
 from .roi_store import (
     analysis_directory,
     load_roi_stats,
@@ -517,7 +524,24 @@ class RoiAnalysisController(HasTraits):
     @observe("analysis_model:reset_expected_button")
     def _reset_expected_values(self, event):
         for roi in self.session.rois:
-            roi.expected_fastest_change = math.nan
+            roi.trait_set(**{name: math.nan for name in EXPECTED_TRAITS.values()})
+
+    @observe("analysis_model:add_custom_point_button")
+    def _add_custom_point(self, event):
+        points = self.session.custom_points
+
+        points.append(CustomPoint(name=f"Point {len(points) + 1}"))
+
+    @observe("analysis_model:remove_custom_point_button")
+    def _remove_custom_points(self, event):
+        selected = {
+            point for point, _column in self.analysis_model.selected_custom_cells
+        }
+        points = self.session.custom_points
+
+        # In place, so the session keeps its list object.
+        points[:] = [point for point in points if point not in selected]
+        self.analysis_model.selected_custom_cells = []
 
     @observe("analysis_model:export_expected_button")
     def _export_expected(self, event):
@@ -537,7 +561,12 @@ class RoiAnalysisController(HasTraits):
         unit = x_quantity(self.session.figure)[1]
 
         try:
-            write_expected_csv(csv_path, self.analysis_model.expected_rows, unit)
+            write_expected_csv(
+                csv_path,
+                self.analysis_model.expected_rows,
+                unit,
+                custom_points=self.session.custom_points,
+            )
         except Exception as error:
             logger.warning(f"Expected-table export failed: {error}")
             self.analysis_model.progress_text = f"Export failed: {error}"
@@ -891,6 +920,9 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:second_derivative_coords, "
         "analysis_model:session:figure:view_mode, "
         "analysis_model:session:figure:flip_actual_expected, "
+        "analysis_model:session:figure:compare_second_derivative_max, "
+        "analysis_model:session:figure:compare_second_derivative_min, "
+        "analysis_model:session:figure:trend_method, "
         "analysis_model:session:figure:log_x, "
         "analysis_model:session:figure:log_y, "
         "analysis_model:session:figure:normalize, "
@@ -913,9 +945,16 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:heater_log_dir, "
         "analysis_model:session:figure:show_method_group, "
         "analysis_model:session:figure:show_metrics_group, "
+        "analysis_model:session:figure:show_custom_points_group, "
         "analysis_model:session:rois:items:name, "
         "analysis_model:session:rois:items:is_background_ref, "
         "analysis_model:session:rois:items:expected_fastest_change, "
+        "analysis_model:session:rois:items:expected_second_derivative_max, "
+        "analysis_model:session:rois:items:expected_second_derivative_min, "
+        "analysis_model:session:custom_points.items, "
+        "analysis_model:session:custom_points:items:name, "
+        "analysis_model:session:custom_points:items:actual, "
+        "analysis_model:session:custom_points:items:expected, "
         "analysis_model:session:rois:items:style:color, "
         "analysis_model:session:rois:items:style:line_style, "
         "analysis_model:session:rois:items:style:marker, "

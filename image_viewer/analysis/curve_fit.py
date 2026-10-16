@@ -35,6 +35,10 @@ from .fit_expression import FitExpressionError, parse_expression
 CUSTOM_METHOD = "custom"
 FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential", "sigmoid")
 
+#: The fits the Actual vs expected view's trend can use — every
+#: built-in but "none".
+TREND_METHODS = FIT_METHODS[1:]
+
 #: Human labels (fit dropdown + equations table).
 FIT_LABELS = {
     "none": "No fit",

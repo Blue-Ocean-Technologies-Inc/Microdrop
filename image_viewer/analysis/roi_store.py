@@ -34,6 +34,7 @@ from .roi_geometry import normalize
 from .roi_model import (
     AnalysisSession,
     BackgroundRing,
+    CustomPoint,
     FigureSettings,
     PerspectiveCorrection,
     Roi,
@@ -72,6 +73,9 @@ _FIGURE_FIELDS = (
     "second_derivative_coords",
     "view_mode",
     "flip_actual_expected",
+    "compare_second_derivative_max",
+    "compare_second_derivative_min",
+    "trend_method",
     "log_x",
     "log_y",
     "normalize",
@@ -93,6 +97,7 @@ _FIGURE_FIELDS = (
     "temperature_intercept",
     "show_method_group",
     "show_metrics_group",
+    "show_custom_points_group",
 )
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size", "visible", "alpha")
 
@@ -146,9 +151,15 @@ def save_session(experiment_directory, session):
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
+                "expected_second_derivative_max": roi.expected_second_derivative_max,
+                "expected_second_derivative_min": roi.expected_second_derivative_min,
                 "is_negative": roi.is_negative,
             }
             for roi in session.rois
+        ],
+        "custom_points": [
+            {"name": point.name, "actual": point.actual, "expected": point.expected}
+            for point in session.custom_points
         ],
     }
     path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
@@ -183,6 +194,13 @@ def _roi_from(entry):
         ),
         # Absent in configs written before the actual-vs-expected view.
         expected_fastest_change=float(entry.get("expected_fastest_change", math.nan)),
+        # Absent in configs written before the d² max/min comparison.
+        expected_second_derivative_max=float(
+            entry.get("expected_second_derivative_max", math.nan)
+        ),
+        expected_second_derivative_min=float(
+            entry.get("expected_second_derivative_min", math.nan)
+        ),
         # Absent in configs written before negative masks existed.
         is_negative=bool(entry.get("is_negative", False)),
         style=style,
@@ -215,6 +233,23 @@ def load_session(experiment_directory) -> AnalysisSession:
     session.rois = rois
 
     if isinstance(payload, dict):
+        # Absent in configs written before custom points existed.
+        custom_points = []
+
+        for entry in payload.get("custom_points", []):
+            try:
+                custom_points.append(
+                    CustomPoint(
+                        name=str(entry["name"]),
+                        actual=float(entry["actual"]),
+                        expected=float(entry["expected"]),
+                    )
+                )
+            except Exception as error:
+                logger.warning(f"Skipping unreadable custom point in {path}: {error}")
+
+        session.custom_points = custom_points
+
         try:
             session.excluded_images = [
                 str(name) for name in payload.get("excluded_images", [])
@@ -594,30 +629,41 @@ def write_intensity_csv(
                 writer.writerow(record + settings)
 
 
-def write_expected_csv(csv_path, rows, unit):
-    """Write the Expected table, one row per ROI.
+def write_expected_csv(csv_path, rows, unit, custom_points=()):
+    """Write the Expected table, one row per ROI per compared landmark,
+    then one per custom point.
 
     Parameters
     ----------
     csv_path : path-like
         The file to write.
     rows : iterable
-        Objects with ``name``, ``actual`` and ``expected`` — the
-        table's ``ExpectedRow``s. ``actual`` is the fitted curve's
-        fastest-change x value, NaN (a blank cell) for a ROI with no
-        fit; ``expected`` is the user's value, equal to the actual
-        while none is set.
+        Objects with ``name``, ``label``, ``actual`` and ``expected`` —
+        the table's ``ExpectedRow``s. ``label`` names the landmark
+        (d² zero, max or min); ``actual`` is its x value on the fitted
+        curve, NaN (a blank cell) for a ROI with no fit; ``expected`` is
+        the user's value, equal to the actual while none is set.
     unit : str
         The x axis's unit (``x_quantity``), repeated on every row so the
         file stays self-describing.
+    custom_points : iterable
+        Objects with ``name``, ``actual`` and ``expected`` — the
+        session's ``CustomPoint``s, written with "custom" as the metric.
     """
     with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["roi", "actual", "expected", "unit"])
+        writer.writerow(["roi", "metric", "actual", "expected", "unit"])
 
         for row in rows:
             writer.writerow(
-                [row.name] + _csv_cells([row.actual, row.expected]) + [unit]
+                [row.name, row.label] + _csv_cells([row.actual, row.expected]) + [unit]
+            )
+
+        for point in custom_points:
+            writer.writerow(
+                [point.name, "custom"]
+                + _csv_cells([point.actual, point.expected])
+                + [unit]
             )
 
 
