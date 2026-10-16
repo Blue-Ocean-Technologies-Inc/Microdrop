@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 """Bring an out-of-date MicroDrop environment up to date, then make the new
-packages importable in the running app or relaunch it.
+packages importable in the running app.
 
 A user who updates the source but not the pixi-microdrop launcher repository
 runs an environment that lacks packages newer features need. The fix is the
@@ -26,12 +26,10 @@ plugin-management knowledge this shared module must not import: an
 ``IExternalPluginsProvider`` service supplies it.
 
 A package the environment lacked entirely can be imported straight after the
-install (``make_importable``), as the plugin hot-loader does; an update that
-replaces code the app already loaded needs the relaunch.
+install (``make_importable``), as the plugin hot-loader does.
 
 This module is the Qt-free core — locating the workspace and repository,
-building and running those commands, importing a newly installed package,
-and relaunching the app;
+building and running those commands, and importing a newly installed package;
 ``environment_update_dialog`` is the user-facing flow on top of it.
 """
 
@@ -367,7 +365,7 @@ def make_importable(package):
     Raises EnvironmentUpdateError when it still cannot be imported.
 
     Only for a package the app has not imported before: one already in
-    ``sys.modules`` keeps its old code, which takes a relaunch to replace."""
+    ``sys.modules`` keeps its old code, which takes a restart to replace."""
     known = {os.path.normcase(os.path.abspath(entry)) for entry in sys.path}
 
     # The install writes into this interpreter's own site-packages, normally
@@ -393,34 +391,3 @@ def make_importable(package):
     logger.info(f"Imported {package} from {getattr(module, '__file__', None)}")
 
     return module
-
-
-def relaunch_command():
-    """The command line that started this process: the same interpreter with
-    the same flags and arguments (``sys.orig_argv`` keeps a ``-m module``
-    launch intact, where ``sys.argv`` would not)."""
-    return [sys.executable, *sys.orig_argv[1:]]
-
-
-def relaunch(application=None):
-    """Exit ``application`` (an Envisage application, if given — saves the
-    window layout and stops the plugins) and start this process's command
-    line again in the current working directory. Returns False when the
-    exit was vetoed; otherwise does not return. Raises OSError when the new
-    process cannot start."""
-    argv = relaunch_command()
-
-    if application is not None and not application.exit():
-        logger.info("Relaunch cancelled: the application did not exit")
-
-        return False
-
-    logger.info(f"Relaunching: {' '.join(argv)} in {Path.cwd()}")
-
-    if sys.platform == "win32":
-        # os.execv on Windows spawns and exits anyway, but without quoting
-        # its arguments, so an interpreter path with spaces would break.
-        subprocess.Popen(argv)
-        os._exit(0)
-
-    os.execv(sys.executable, argv)

@@ -10,8 +10,7 @@
 
 """environment_update: locating the launcher checkout, the update commands
 (reset, default-branch checkout, pull, re-adding the installed plugins),
-their failure reporting, importing a newly installed package, and the
-relaunch command line."""
+their failure reporting, and importing a newly installed package."""
 
 # Standard library imports.
 import importlib
@@ -33,8 +32,6 @@ from microdrop_utils.environment_update import (
     make_importable,
     manual_update_commands,
     pixi_environment_name,
-    relaunch,
-    relaunch_command,
     run_update_steps,
 )
 
@@ -281,32 +278,6 @@ def test_a_missing_program_is_an_update_error(tmp_path):
 
     with pytest.raises(EnvironmentUpdateError, match="could not start"):
         run_update_steps(steps)
-
-
-def test_relaunch_reuses_the_interpreter_and_original_arguments(monkeypatch):
-    monkeypatch.setattr(
-        sys, "orig_argv", ["python", "-m", "examples.run_device_viewer_pluggable"]
-    )
-
-    assert relaunch_command() == [
-        sys.executable,
-        "-m",
-        "examples.run_device_viewer_pluggable",
-    ]
-
-
-def test_a_vetoed_exit_cancels_the_relaunch(monkeypatch):
-    class VetoingApplication:
-        def exit(self):
-            return False
-
-    def must_not_spawn(*args, **kwargs):
-        pytest.fail("a vetoed exit must not start a new process")
-
-    monkeypatch.setattr(environment_update.subprocess, "Popen", must_not_spawn)
-    monkeypatch.setattr(environment_update.os, "execv", must_not_spawn)
-
-    assert relaunch(VetoingApplication()) is False
 
 
 def test_a_package_installed_after_startup_is_imported(tmp_path, monkeypatch):
