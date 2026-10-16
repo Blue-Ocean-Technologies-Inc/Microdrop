@@ -499,7 +499,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
     def handle_endpoint_erase(self, electrode_id):
         """Handle the erase being triggered by hovering an endpoint"""
-        current_route = self.model.get_selected_route()
+        current_route = self.model.routes.get_selected_route()
         if current_route is None:
             return
 
