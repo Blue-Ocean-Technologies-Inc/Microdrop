@@ -37,6 +37,7 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.consts import DEFAULT_LOGS_SETTLING_SECONDS
 from pluggable_protocol_tree.services.logging import listener as _listener
 from pluggable_protocol_tree.services.logging.consts import (
+    DIELECTRIC_THICKNESS_COLUMN,
     RUN_TIMESTAMP_FMT,
     TIME_FMT,
 )
@@ -104,6 +105,32 @@ def _capacitance_per_unit_area(liquid, filler):
     return liquid - filler
 
 
+def _dielectric_thickness_note(ingestion):
+    """Report footnote saying whether the run's thickness column was
+    corrected by the filler calibration, and with which value."""
+    filler = ingestion.filler_capacitance_per_unit_area
+
+    if filler is None:
+        return (
+            "No filler calibration was available for this run. Thickness uses "
+            "the raw capacitance over area and overestimates when the filler "
+            "term is not negligible."
+        )
+
+    note = (
+        "Thickness uses capacitance over area minus the filler calibration "
+        f"({filler:.4g} pF/mm^2)."
+    )
+
+    if ingestion.filler_changed_mid_run:
+        note += (
+            " It changed during the run; this is the latest value, and rows "
+            "logged before it may differ."
+        )
+
+    return note
+
+
 class ProtocolLoggingController(HasTraits):
     # Injected collaborators (constructor kwargs). settling_provider returns
     # the settling delay (s); flush_scheduler defers _flush; completion_callback
@@ -165,6 +192,28 @@ class ProtocolLoggingController(HasTraits):
         self._ingestion.update_capacitance_per_unit_area(
             getattr(device_context, "capacitance_per_unit_area", None)
         )
+
+        # The "Pick a dielectric..." placeholder has no constant, so a
+        # material without one reads as not set rather than as the prompt.
+        dielectric_constant = getattr(device_context, "dielectric_constant", None)
+        self._ingestion.update_dielectric_constant(dielectric_constant)
+
+        filler = getattr(device_context, "filler_capacitance_per_unit_area", None)
+        self._ingestion.update_filler_capacitance_per_unit_area(filler)
+
+        if dielectric_constant is None:
+            dielectric_metadata = {
+                "Dielectric Material": "not set",
+                "Dielectric Constant": "not set",
+            }
+        else:
+            dielectric_metadata = {
+                "Dielectric Material": getattr(
+                    device_context, "dielectric_material", ""
+                ),
+                "Dielectric Constant": dielectric_constant,
+            }
+
         self._step_idx = 0
         self._n_steps = int(n_steps)
         self._start_time = datetime.now().strftime(RUN_TIMESTAMP_FMT)
@@ -173,6 +222,10 @@ class ProtocolLoggingController(HasTraits):
             {
                 "Experiment Directory": str(device_context.experiment_directory),
                 "Device SVG": str(getattr(device_context, "device_svg_path", "")),
+                **dielectric_metadata,
+                "Filler Capacitance Over Area (pF/mm^2)": (
+                    "not set" if filler is None else filler
+                ),
                 "Steps": f"0 / {self._n_steps}",
             }
         )
@@ -265,6 +318,9 @@ class ProtocolLoggingController(HasTraits):
                     device_context=self._device_context,
                     notes=None,
                     data_files=[json_path, csv_path],
+                    column_notes={
+                        DIELECTRIC_THICKNESS_COLUMN: _dielectric_thickness_note(ing)
+                    },
                 )
                 report_path = LoggingReport.write_report(
                     self._device_context.experiment_directory, html
@@ -325,10 +381,11 @@ class ProtocolLoggingController(HasTraits):
             logger.warning(f"media log failed: {e}")
 
     def on_calibration(self, message) -> None:
-        """CALIBRATION_DATA payload --> capacitance-per-unit-area. Lets the
-        Force column populate on a live run (legacy parity); ignored
-        until calibration data arrives, and invalid data leaves the
-        previous value untouched."""
+        """CALIBRATION_DATA payload --> capacitance-per-unit-area and the
+        filler calibration. Lets the Force column populate and the
+        thickness column pick up the filler on a live run (legacy parity);
+        ignored until calibration data arrives, and invalid data leaves the
+        previous values untouched."""
         ing = self._ingestion
         if ing is None:
             return
@@ -340,6 +397,14 @@ class ProtocolLoggingController(HasTraits):
         )
         if cpa is not None:
             ing.update_capacitance_per_unit_area(cpa)
+
+        try:
+            filler = float(data[FILLER_CAPACITANCE_KEY])
+        except (KeyError, ValueError, TypeError):
+            return
+
+        if filler >= 0:
+            ing.update_filler_capacitance_per_unit_area(filler)
 
     def on_metadata_contribution(self, message) -> None:
         """PROTOCOL_LOGGING_METADATA_CONTRIBUTION payload --> report

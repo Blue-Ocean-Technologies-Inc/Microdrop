@@ -347,6 +347,7 @@ def test_heatmap_passes_duration_units_to_helper(monkeypatch, tmp_path):
     ctx = LoggingDeviceContext(experiment_directory=tmp_path, device_svg_path=str(svg))
     html = r.LoggingReport._heatmap(df, ctx, include_plotlyjs=False)
     assert "fake-heatmap" in html
+    assert html.startswith("<details open><summary>Device actuation heatmap</summary>")
     # No overrides — let the helper use its "seconds" default so
     # format_time_tooltip auto-scales (sec --> min --> hours) in the tooltip.
     assert "quant_title" not in captured["kw"]
@@ -419,3 +420,74 @@ def test_build_html_without_step_idx_does_not_crash():
     )
     assert "<html" in html.lower()
     assert "Data Trends" in html
+
+
+def test_trends_section_wraps_each_chart_in_an_open_details_section():
+    """Each per-column chart is collapsible and starts open (plotly sizes a
+    chart from its container, so one drawn inside a closed <details> gets
+    zero width). The summary names the chart, so the figure has no title."""
+    cols = [
+        "step_idx",
+        "step_id",
+        "Capacitance (pF)",
+        "Voltage (V)",
+        "Actuated Area (mm^2)",
+        "actuated_channels",
+    ]
+
+    html = LoggingReport._trends_section(
+        _entries(),
+        cols,
+        LoggingDeviceContext(experiment_directory=Path("."), device_svg_path=None),
+    )
+
+    for col in ("Capacitance (pF)", "Voltage (V)", "Actuated Area (mm^2)"):
+        assert f"<details open><summary>{col}</summary>" in html
+
+    assert html.count("<details open>") == 3
+    assert html.count("</details>") == 3
+    assert '"title":{"text":"Capacitance (pF)"' not in html
+
+
+def _thickness_entries():
+    return [
+        {"step_idx": 1, "Capacitance (pF)": 1.0, "Dielectric Thickness (um)": 2.0},
+        {"step_idx": 2, "Capacitance (pF)": 3.0, "Dielectric Thickness (um)": 4.0},
+    ]
+
+
+def _details_body(html, title):
+    """The HTML between a collapsible section's summary and its close."""
+    return html.split(f"<details open><summary>{title}</summary>")[1].split(
+        "</details>"
+    )[0]
+
+
+def test_trends_section_renders_a_column_note_inside_its_details():
+    cols = ["step_idx", "Capacitance (pF)", "Dielectric Thickness (um)"]
+    note = "Thickness uses capacitance over area minus the filler calibration."
+
+    html = LoggingReport._trends_section(
+        _thickness_entries(),
+        cols,
+        LoggingDeviceContext(experiment_directory=Path("."), device_svg_path=None),
+        {"Dielectric Thickness (um)": note},
+    )
+
+    footnote = f'<p class="footnote">{note}</p>'
+
+    assert html.count(footnote) == 1
+    assert _details_body(html, "Dielectric Thickness (um)").endswith(footnote)
+    assert footnote not in _details_body(html, "Capacitance (pF)")
+
+
+def test_trends_section_has_no_footnote_without_column_notes():
+    cols = ["step_idx", "Capacitance (pF)", "Dielectric Thickness (um)"]
+
+    html = LoggingReport._trends_section(
+        _thickness_entries(),
+        cols,
+        LoggingDeviceContext(experiment_directory=Path("."), device_svg_path=None),
+    )
+
+    assert 'class="footnote"' not in html

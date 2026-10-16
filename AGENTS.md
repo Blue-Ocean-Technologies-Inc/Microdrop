@@ -563,6 +563,8 @@ rather than trusting the ids above. Quote label names containing spaces
   overview, plugin links, developer workflow)
 - `MESSAGES.md` — complete pub/sub topic map (who sends/receives what)
 - `DRAMATIQ_DOCS.md` — Dramatiq broker/encoder/actor API notes
+- `docs/PROTOCOL_REPORT.md` — protocol run report: user guide, logging
+  pipeline architecture, how plugins contribute report content
 - `docs/ENVISAGE_TRAITS_GUIDE.md` — Envisage/Traits/TraitsUI framework guide
   + how this repo uses them
 - `docs/DESIGN_HISTORY.md` — archived pre-development research &
