@@ -257,6 +257,7 @@ class ImageViewerDockPane(TraitsDockPane):
         media_capture_event_model.observe(
             self._on_media_captured, "captured", remove=True
         )
+        self.controller.close_metadata_window()
         super().destroy()
 
     def _on_media_captured(self, event):

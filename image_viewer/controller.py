@@ -69,12 +69,19 @@ from .discovery import (
 )
 from .display import load_image_array, render_display_frame
 from .latest_wins_worker import LatestWinsWorker
+from .metadata import (
+    NO_METADATA_TEXT,
+    format_metadata_html,
+    read_file_info,
+    read_png_text,
+)
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
     IMAGE_GROUP_ALL,
     ImageViewerModel,
 )
+from .view import metadata_window_view
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -157,6 +164,10 @@ class ImageViewerController(Controller):
     #: New captures landed while the analysis model held the view: follow
     #: them once the hold ends.
     _follow_deferred = Bool(False)
+
+    #: The metadata pop-out window's UI (None until first opened; its
+    #: ``control`` goes None once the user closes it).
+    _metadata_window = Any(None)
 
     def __pending_load_lock_default(self):
         return threading.Lock()
@@ -537,6 +548,41 @@ class ImageViewerController(Controller):
     def _load_current_path(self, event):
         self._failed_load = None
         self._render_current_path()
+
+    @observe("model:current_path")
+    def _read_current_metadata(self, event):
+        """Show the new image's file facts and text chunks. Header-only
+        (no pixel decode), so it stays on the GUI thread, off the loader."""
+        path = event.new
+
+        if not path:
+            self.model.metadata_text = NO_METADATA_TEXT
+            return
+
+        self.model.metadata_text = format_metadata_html(
+            read_file_info(path), read_png_text(path)
+        )
+
+    @observe("model:metadata_popout_button")
+    def _pop_out_metadata(self, event):
+        """Open the metadata in its own live window, or raise the one
+        already open rather than stacking a second."""
+        window = self._metadata_window
+
+        if window is not None and window.control is not None:
+            window.control.raise_()
+            window.control.activateWindow()
+            return
+
+        self._metadata_window = self.model.edit_traits(view=metadata_window_view)
+
+    def close_metadata_window(self):
+        """Close the metadata pop-out if it is open (the pane is going
+        away, and the window is not parented to it)."""
+        window = self._metadata_window
+
+        if window is not None and window.control is not None:
+            window.dispose()
 
     @observe(
         "model:auto_contrast, model:window_min, model:window_max, "
