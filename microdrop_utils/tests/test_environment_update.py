@@ -10,9 +10,11 @@
 
 """environment_update: locating the launcher checkout, the update commands
 (reset, default-branch checkout, pull, re-adding the installed plugins),
-their failure reporting, and the relaunch command line."""
+their failure reporting, importing a newly installed package, and the
+relaunch command line."""
 
 # Standard library imports.
+import importlib
 import subprocess
 import sys
 
@@ -28,6 +30,7 @@ from microdrop_utils.environment_update import (
     find_git_repository,
     find_pixi_workspace,
     locate_update,
+    make_importable,
     manual_update_commands,
     pixi_environment_name,
     relaunch,
@@ -304,3 +307,29 @@ def test_a_vetoed_exit_cancels_the_relaunch(monkeypatch):
     monkeypatch.setattr(environment_update.os, "execv", must_not_spawn)
 
     assert relaunch(VetoingApplication()) is False
+
+
+def test_a_package_installed_after_startup_is_imported(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "late_installed_probe", raising=False)
+
+    # Looked for (and cached as missing) before the install, like the
+    # startup import the update repairs.
+    with pytest.raises(ImportError):
+        importlib.import_module("late_installed_probe")
+
+    package = tmp_path / "late_installed_probe"
+    package.mkdir()
+    (package / "__init__.py").write_text("ANSWER = 42\n")
+
+    try:
+        module = make_importable("late_installed_probe")
+    finally:
+        sys.modules.pop("late_installed_probe", None)
+
+    assert module.ANSWER == 42
+
+
+def test_a_package_still_missing_after_the_update_is_an_update_error():
+    with pytest.raises(EnvironmentUpdateError, match="never_installed_probe"):
+        make_importable("never_installed_probe")

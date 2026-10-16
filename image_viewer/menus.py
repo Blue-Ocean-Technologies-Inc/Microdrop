@@ -22,7 +22,10 @@ from microdrop_application.dialogs.pyface_wrapper import (
 )
 
 # Microdrop utils imports.
-from microdrop_utils.environment_update_dialog import offer_environment_update
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
 
 # Local imports.
 from .ai_install import install_ai_support
@@ -87,12 +90,24 @@ class PruneExperimentsAction(Action):
         if result != YES:
             return
 
+        self._prune(targets, event)
+
+    def _prune(self, targets, event, retry=True):
+        """Move the confirmed ``targets`` to the trash and say how many went.
+        Without send2trash, offer the environment update and, when it makes
+        the package available, try once more."""
         try:
             removed = prune_experiments(targets)
         except TrashUnavailableError:
             window = getattr(getattr(event, "task", None), "window", None)
             application = getattr(window, "application", None)
-            offer_environment_update(TRASH_FEATURE, TRASH_PACKAGE, application)
+
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=application
+            ):
+                self._prune(targets, event, retry=False)
 
             return
         except OSError as e:

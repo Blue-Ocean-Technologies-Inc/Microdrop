@@ -8,7 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Bring an out-of-date MicroDrop environment up to date, then relaunch.
+"""Bring an out-of-date MicroDrop environment up to date, then make the new
+packages importable in the running app or relaunch it.
 
 A user who updates the source but not the pixi-microdrop launcher repository
 runs an environment that lacks packages newer features need. The fix is the
@@ -24,16 +25,24 @@ installed. Which plugins those are, and how to re-add them, is
 plugin-management knowledge this shared module must not import: an
 ``IExternalPluginsProvider`` service supplies it.
 
+A package the environment lacked entirely can be imported straight after the
+install (``make_importable``), as the plugin hot-loader does; an update that
+replaces code the app already loaded needs the relaunch.
+
 This module is the Qt-free core — locating the workspace and repository,
-building and running those commands, and relaunching the app;
+building and running those commands, importing a newly installed package,
+and relaunching the app;
 ``environment_update_dialog`` is the user-facing flow on top of it.
 """
 
 # Standard library imports.
+import importlib
 import os
 import shutil
+import site
 import subprocess
 import sys
+import sysconfig
 from collections import deque
 from pathlib import Path
 
@@ -350,6 +359,40 @@ def run_update_steps(steps):
             )
 
     logger.info("Environment update finished")
+
+
+def make_importable(package):
+    """Import ``package``, which an update has just installed into this
+    interpreter's environment, into the running app and return the module.
+    Raises EnvironmentUpdateError when it still cannot be imported.
+
+    Only for a package the app has not imported before: one already in
+    ``sys.modules`` keeps its old code, which takes a relaunch to replace."""
+    known = {os.path.normcase(os.path.abspath(entry)) for entry in sys.path}
+
+    # The install writes into this interpreter's own site-packages, normally
+    # on sys.path since startup; one that did not exist then is added with
+    # its .pth files. Never re-added when present, which would re-run them.
+    for directory in {sysconfig.get_path("purelib"), sysconfig.get_path("platlib")}:
+        if os.path.isdir(directory) and os.path.normcase(directory) not in known:
+            logger.info(f"Adding {directory} to sys.path")
+            site.addsitedir(directory)
+
+    # The path finders cache directory listings (and the missing directories
+    # they gave up on), so a package installed after startup stays invisible
+    # to import until they are dropped — the plugin hot-loader does the same.
+    importlib.invalidate_caches()
+
+    try:
+        module = importlib.import_module(package)
+    except ImportError as e:
+        raise EnvironmentUpdateError(
+            f"{package} could not be imported after the update: {e}"
+        ) from e
+
+    logger.info(f"Imported {package} from {getattr(module, '__file__', None)}")
+
+    return module
 
 
 def relaunch_command():

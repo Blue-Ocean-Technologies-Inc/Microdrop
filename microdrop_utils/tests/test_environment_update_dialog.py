@@ -9,8 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """offer_environment_update: the question names what the update discards
-and the plugins it re-adds, Not now does nothing, Update and relaunch runs
-the update then relaunches, and a failure hands over the manual commands."""
+and the plugins it re-adds, Not now does nothing, Update runs the update then
+imports the package so the feature carries on (or relaunches, when asked),
+and a failure hands over the manual commands."""
 
 # Standard library imports.
 from pathlib import Path
@@ -69,7 +70,9 @@ def flow(monkeypatch):
         "plugins": PLUGINS,
         "providers": [],
         "questions": [],
+        "labels": [],
         "ran": [],
+        "imported": [],
         "relaunched": [],
         "errors": [],
         "informed": [],
@@ -85,6 +88,7 @@ def flow(monkeypatch):
 
     def warning(parent, message, **kwargs):
         record["questions"].append(message)
+        record["labels"].append(kwargs["ok_label"])
 
         return record["choice"]
 
@@ -98,6 +102,9 @@ def flow(monkeypatch):
     monkeypatch.setattr(environment_update_dialog, "run_with_wait", run_with_wait)
     monkeypatch.setattr(
         environment_update_dialog, "run_update_steps", record["ran"].append
+    )
+    monkeypatch.setattr(
+        environment_update_dialog, "make_importable", record["imported"].append
     )
     monkeypatch.setattr(
         environment_update_dialog, "relaunch", record["relaunched"].append
@@ -174,16 +181,65 @@ def test_not_now_runs_nothing(flow):
     assert flow["relaunched"] == []
 
 
-def test_update_runs_the_steps_then_relaunches_the_application(flow):
+def test_update_runs_the_steps_then_imports_the_package_without_relaunching(flow):
+    ready = environment_update_dialog.offer_environment_update(
+        "X", "pkg", Application()
+    )
+
+    assert ready is True
+    assert flow["labels"] == [environment_update_dialog.UPDATE_LABEL]
+    assert flow["ran"] == [STEPS]
+    assert flow["imported"] == ["pkg"]
+    assert flow["relaunched"] == []
+
+    [(_parent, message)] = flow["informed"]
+    assert message == "Update complete. <strong>X</strong> can continue."
+
+
+def test_a_package_that_will_not_import_asks_for_a_restart(flow, monkeypatch):
+    def unimportable(package):
+        raise EnvironmentUpdateError(f"{package} could not be imported")
+
+    monkeypatch.setattr(environment_update_dialog, "make_importable", unimportable)
+
+    assert environment_update_dialog.offer_environment_update("X", "pkg") is False
+
+    [(_parent, message)] = flow["informed"]
+    assert "Restart MicroDrop" in message
+    assert flow["relaunched"] == []
+
+
+def test_a_failed_update_is_not_ready_and_imports_nothing(flow, monkeypatch):
+    def fail(steps):
+        raise EnvironmentUpdateError("`git pull` exited with code 1")
+
+    monkeypatch.setattr(environment_update_dialog, "run_update_steps", fail)
+
+    assert environment_update_dialog.offer_environment_update("X", "pkg") is False
+    assert len(flow["errors"]) == 1
+    assert flow["imported"] == []
+
+
+def test_update_and_relaunch_runs_the_steps_then_relaunches_the_application(flow):
     application = Application()
 
     started = environment_update_dialog.offer_environment_update(
-        "X", "pkg", application
+        "X", "pkg", application, relaunch=True
     )
 
     assert started is True
+    assert flow["labels"] == [environment_update_dialog.UPDATE_AND_RELAUNCH_LABEL]
     assert flow["ran"] == [STEPS]
+    assert flow["imported"] == []
     assert flow["relaunched"] == [application]
+
+
+def test_a_package_still_missing_gets_the_manual_commands(flow):
+    environment_update_dialog.report_package_still_missing("pkg")
+
+    [(message, _kwargs)] = flow["errors"]
+    assert "pkg is still not available" in message
+    assert "pixi install" in message
 
 
 def test_a_failed_update_shows_the_manual_commands_and_does_not_relaunch(

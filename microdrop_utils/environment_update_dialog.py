@@ -10,8 +10,13 @@
 
 """The user-facing "this environment is out of date" flow: explain which
 package a feature is missing, offer to update the pixi-microdrop repository
-(saying which local changes that discards and which plugins it re-adds) and
-relaunch, and hand over the exact commands when that fails."""
+(saying which local changes that discards and which plugins it re-adds), then
+import the package into the running app so the feature can carry on — or
+relaunch, for updates that replace already-loaded code — and hand over the
+exact commands when that fails."""
+
+# Enthought library imports.
+from pyface.qt import QtCore
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import (
@@ -27,6 +32,7 @@ from microdrop_utils.environment_update import (
     EnvironmentUpdateError,
     IExternalPluginsProvider,
     locate_update,
+    make_importable,
     manual_update_commands,
     relaunch,
     run_update_steps,
@@ -38,8 +44,15 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+#: The warning's accept button: the update carries on in the running app, or
+#: relaunches it.
+UPDATE_LABEL = "Update"
 UPDATE_AND_RELAUNCH_LABEL = "Update & Relaunch"
 NOT_NOW_LABEL = "Not now"
+
+#: The progress dialog the update runs behind.
+UPDATE_TITLE = "Updating MicroDrop"
+UPDATE_MESSAGE = "Updating the pixi-microdrop repository and environment…"
 
 #: The update by hand when it cannot be planned (checkout not located,
 #: installed plugins unknown).
@@ -84,13 +97,21 @@ def reset_notice(plan):
     )
 
 
-def offer_environment_update(feature, package, application=None):
+def offer_environment_update(feature, package, application=None, relaunch=False):
     """Tell the user ``feature`` needs ``package`` and offer to update the
     pixi-microdrop repository (reset, ``git pull``, re-add the installed
-    plugins, ``pixi install``) and relaunch ``application``, whose
-    ``IExternalPluginsProvider`` service tells the plugins. Returns True
-    when the user chose to update (the update then runs behind a progress
-    dialog), False on "Not now"."""
+    plugins, ``pixi install``); ``application``'s
+    ``IExternalPluginsProvider`` service tells the plugins. The update runs
+    behind a progress dialog.
+
+    By default this waits for the update, then imports ``package`` into the
+    running app and returns True when the caller can retry ``feature`` right
+    away — False on "Not now" or when the update or import failed (already
+    reported to the user).
+
+    With ``relaunch``, for updates that replace code the app has already
+    loaded, ``application`` relaunches once the update finishes instead;
+    returns True as soon as the user chose to update, False on "Not now"."""
     message = missing_package_message(feature, package)
     logger.warning(message)
 
@@ -111,7 +132,7 @@ def offer_environment_update(feature, package, application=None):
         None,
         message,
         title="Update required",
-        ok_label=UPDATE_AND_RELAUNCH_LABEL,
+        ok_label=UPDATE_AND_RELAUNCH_LABEL if relaunch else UPDATE_LABEL,
         cancel_label=NOT_NOW_LABEL,
     )
 
@@ -121,19 +142,31 @@ def offer_environment_update(feature, package, application=None):
     if failure is not None:
         _report_update_failure(failure, GENERIC_MANUAL_UPDATE)
 
-        return True
+        return relaunch
 
     commands = manual_update_commands(plan.steps)
 
+    if not relaunch:
+        return _update_in_place(feature, package, plan, commands)
+
     run_with_wait(
         lambda: run_update_steps(plan.steps),
-        title="Updating MicroDrop",
-        message="Updating the pixi-microdrop repository and environment…",
+        title=UPDATE_TITLE,
+        message=UPDATE_MESSAGE,
         on_success=lambda _result: _relaunch_after_update(application),
         on_error=lambda e: _report_update_failure(e, commands),
     )
 
     return True
+
+
+def report_package_still_missing(package):
+    """Show that ``package`` is still missing after an update that reported
+    success, with the commands to update by hand."""
+    _report_update_failure(
+        EnvironmentUpdateError(f"{package} is still not available after it."),
+        GENERIC_MANUAL_UPDATE,
+    )
 
 
 def _external_plugins_provider(application):
@@ -142,6 +175,62 @@ def _external_plugins_provider(application):
         return None
 
     return application.get_service(IExternalPluginsProvider)
+
+
+def _update_in_place(feature, package, plan, commands):
+    """Run the ``plan`` behind the progress dialog and wait for it, then
+    import ``package`` into the running app. Returns whether ``feature`` can
+    carry on; a failure is reported to the user."""
+    finished = []
+    waiting = QtCore.QEventLoop()
+
+    def finish(succeeded):
+        finished.append(succeeded)
+        waiting.quit()
+
+    def fail(exception):
+        _report_update_failure(exception, commands)
+        finish(False)
+
+    run_with_wait(
+        lambda: run_update_steps(plan.steps),
+        title=UPDATE_TITLE,
+        message=UPDATE_MESSAGE,
+        on_success=lambda _result: finish(True),
+        on_error=fail,
+    )
+
+    # The update finishes on the event loop after run_with_wait returns; the
+    # progress dialog is application-modal meanwhile, like any dialog.
+    if not finished:
+        waiting.exec()
+
+    if not finished[0]:
+        return False
+
+    try:
+        make_importable(package)
+    except EnvironmentUpdateError as e:
+        logger.error(f"Environment update finished, but {e}")
+        information(
+            None,
+            f"The environment is up to date, but <strong>{package}</strong> "
+            "could not be loaded into the running MicroDrop. Restart MicroDrop "
+            "to use it.",
+            title="Update complete",
+            cancel=False,
+        )
+
+        return False
+
+    information(
+        None,
+        f"Update complete. <strong>{feature}</strong> can continue.",
+        title="Update complete",
+        cancel=False,
+    )
+
+    return True
 
 
 def _relaunch_after_update(application):
@@ -177,8 +266,10 @@ def _report_update_failure(exception, commands):
 if __name__ == "__main__":
     # Manual demo of the dialogs, never touching the real launcher or
     # environment: planning, the update steps and the relaunch are stand-ins.
-    #   python -m microdrop_utils.environment_update_dialog
+    #   python -m microdrop_utils.environment_update_dialog [--relaunch]
     #       [--fail | --no-plugins | --unplanned]
+    # Without --relaunch it shows the default flow: the package is imported
+    # into the running app (a stand-in too) and the feature carries on.
 
     # Standard library imports.
     import argparse
@@ -187,7 +278,7 @@ if __name__ == "__main__":
     from pathlib import Path
 
     # Enthought library imports.
-    from pyface.qt import QtCore, QtWidgets
+    from pyface.qt import QtWidgets
 
     # Microdrop style imports.
     from microdrop_style.helpers import style_app
@@ -207,6 +298,9 @@ if __name__ == "__main__":
     )
     outcome.add_argument(
         "--unplanned", action="store_true", help="the update cannot be planned"
+    )
+    parser.add_argument(
+        "--relaunch", action="store_true", help="relaunch after the update"
     )
     args = parser.parse_args()
 
@@ -276,22 +370,26 @@ if __name__ == "__main__":
                 "  heater-microdrop-plugin cannot be installed",
             )
 
+    def make_importable(package):
+        print(f"make_importable({package!r})")
+
     def relaunch(application=None):
         print("relaunch()")
         application.exit()
 
-    # The update finishes on the event loop; quit it once the last dialog
-    # closes (queued, so a synchronous failure report quits too).
-    finish_update = _relaunch_after_update
-    report_failure = _report_update_failure
+    if args.relaunch:
+        # The update finishes on the event loop; quit it once the last
+        # dialog closes (queued, so a synchronous failure report quits too).
+        finish_update = _relaunch_after_update
+        report_failure = _report_update_failure
 
-    def _relaunch_after_update(application):
-        finish_update(application)
-        QtCore.QTimer.singleShot(0, app.quit)
+        def _relaunch_after_update(application):
+            finish_update(application)
+            QtCore.QTimer.singleShot(0, app.quit)
 
-    def _report_update_failure(exception, commands):
-        report_failure(exception, commands)
-        QtCore.QTimer.singleShot(0, app.quit)
+        def _report_update_failure(exception, commands):
+            report_failure(exception, commands)
+            QtCore.QTimer.singleShot(0, app.quit)
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     style_app(app)
@@ -303,8 +401,10 @@ if __name__ == "__main__":
         TRASH_FEATURE,
         TRASH_PACKAGE,
         application=DemoApplication(),
+        relaunch=args.relaunch,
     )
     print(f"offer_environment_update returned {started}")
 
-    if started:
+    # Without --relaunch the call above has already waited for the update.
+    if started and args.relaunch:
         app.exec()

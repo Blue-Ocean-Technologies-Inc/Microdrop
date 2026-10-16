@@ -45,7 +45,10 @@ from traitsui.api import Controller
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error, warning
 
 # Microdrop utils imports.
-from microdrop_utils.environment_update_dialog import offer_environment_update
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
 from microdrop_utils.file_handler import open_file
 
 # Local imports.
@@ -318,6 +321,12 @@ class ImageViewerController(Controller):
             if dont_ask_again:
                 preferences.confirm_experiment_delete = False
 
+        self._trash_experiment(name, captures)
+
+    def _trash_experiment(self, name, captures, retry=True):
+        """Move the confirmed experiment's folder to the trash, then select
+        its neighbour. Without send2trash, offer the environment update and,
+        when it makes the package available, try once more."""
         try:
             removed = delete_experiment(captures)
         except ValueError as e:
@@ -325,7 +334,12 @@ class ImageViewerController(Controller):
 
             return
         except TrashUnavailableError:
-            offer_environment_update(TRASH_FEATURE, TRASH_PACKAGE, self.application)
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=self.application
+            ):
+                self._trash_experiment(name, captures, retry=False)
 
             return
         except OSError as e:

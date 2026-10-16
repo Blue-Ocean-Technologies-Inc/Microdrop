@@ -22,14 +22,6 @@ import threading
 import time
 from pathlib import Path
 
-# Third-party imports.
-try:
-    from send2trash import send2trash
-except ImportError:
-    # An environment older than the send2trash dependency must still start;
-    # deleting then raises TrashUnavailableError instead.
-    send2trash = None
-
 # Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Set, Str
 
@@ -110,7 +102,7 @@ def delete_experiment(captures_path):
             "deleted while it is in use."
         )
 
-    _require_trash()
+    send2trash = _send2trash()
     send2trash(str(experiment))
     logger.info(f"Moved experiment folder {experiment} to the trash")
 
@@ -145,7 +137,7 @@ def prune_experiments(directories):
     TrashUnavailableError, before moving any, without send2trash. An
     OSError stops the pruning and propagates, leaving the folders before it
     trashed — never falls back to a permanent delete."""
-    _require_trash()
+    send2trash = _send2trash()
     removed = []
 
     for directory in directories:
@@ -156,10 +148,19 @@ def prune_experiments(directories):
     return removed
 
 
-def _require_trash():
-    """Raise TrashUnavailableError when send2trash did not import."""
-    if send2trash is None:
-        raise TrashUnavailableError("send2trash is not installed in this environment")
+def _send2trash():
+    """The ``send2trash`` function, imported on use rather than at startup,
+    so a package an environment update installs into the running app is
+    picked up. Raises TrashUnavailableError when it is not installed — an
+    environment older than the send2trash dependency must still start."""
+    try:
+        from send2trash import send2trash
+    except ImportError as e:
+        raise TrashUnavailableError(
+            "send2trash is not installed in this environment"
+        ) from e
+
+    return send2trash
 
 
 def _experiments_root():

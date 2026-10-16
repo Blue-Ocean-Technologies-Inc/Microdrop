@@ -10,6 +10,9 @@
 
 """delete_experiment: trashes a browsed experiment, never the current one."""
 
+# Standard library imports.
+import sys
+
 # Third-party imports.
 import pytest
 from send2trash import TrashPermissionError
@@ -18,6 +21,7 @@ from send2trash import TrashPermissionError
 from device_viewer.consts import CAPTURES_DIR_NAME
 from image_viewer import controller as viewer_controller
 from image_viewer import discovery
+from image_viewer.consts import TRASH_FEATURE, TRASH_PACKAGE
 from image_viewer.controller import ImageViewerController
 from image_viewer.model import ImageViewerModel
 from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
@@ -38,7 +42,7 @@ def _experiment(root, name):
 def trashed(monkeypatch):
     """Record send2trash calls instead of trashing anything."""
     calls = []
-    monkeypatch.setattr(discovery, "send2trash", calls.append)
+    monkeypatch.setattr(discovery, "_send2trash", lambda: calls.append)
 
     return calls
 
@@ -80,7 +84,7 @@ def test_delete_experiment_propagates_a_trash_failure(tmp_path, monkeypatch):
         raise failure
 
     monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
-    monkeypatch.setattr(discovery, "send2trash", refuse)
+    monkeypatch.setattr(discovery, "_send2trash", lambda: refuse)
 
     with pytest.raises(TrashPermissionError) as raised:
         discovery.delete_experiment(old)
@@ -94,7 +98,7 @@ def test_delete_experiment_without_send2trash_deletes_nothing(tmp_path, monkeypa
     current = _experiment(tmp_path, "current").parent
     old = _experiment(tmp_path, "old")
     monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
-    monkeypatch.setattr(discovery, "send2trash", None)
+    monkeypatch.setitem(sys.modules, "send2trash", None)
 
     with pytest.raises(discovery.TrashUnavailableError):
         discovery.delete_experiment(old)
@@ -113,7 +117,7 @@ def test_delete_button_without_send2trash_offers_an_update(tmp_path, monkeypatch
         return CANCEL
 
     monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
-    monkeypatch.setattr(discovery, "send2trash", None)
+    monkeypatch.setitem(sys.modules, "send2trash", None)
     monkeypatch.setattr(viewer_controller, "confirm", lambda **kwargs: (YES, False))
     monkeypatch.setattr(environment_update_dialog, "warning", decline)
     monkeypatch.setattr(
@@ -126,11 +130,86 @@ def test_delete_button_without_send2trash_offers_an_update(tmp_path, monkeypatch
     ImageViewerController(model=model)._delete_experiment(None)
 
     [(message, kwargs)] = warnings
-    assert message == (
-        "Sending experiments to the Recycle Bin needs the send2trash package, "
-        "which this environment does not have. Update the pixi-microdrop "
-        "repository to install it."
+    assert message == environment_update_dialog.missing_package_message(
+        TRASH_FEATURE, TRASH_PACKAGE
     )
-    assert kwargs["ok_label"] == "Update and relaunch"
-    assert kwargs["cancel_label"] == "Not now"
+    assert kwargs["ok_label"] == environment_update_dialog.UPDATE_LABEL
+    assert kwargs["cancel_label"] == environment_update_dialog.NOT_NOW_LABEL
+    assert (old / "frame.png").is_file()
+
+
+def _delete_button(monkeypatch, tmp_path, ready):
+    """Press Delete on an old experiment, confirming once, with an
+    environment update that answers ``ready``; return the old experiment's
+    captures and what the flow did."""
+    current = _experiment(tmp_path, "current").parent
+    old = _experiment(tmp_path, "old")
+    record = {"confirms": 0, "offers": [], "selected": [], "errors": []}
+
+    def confirm(**kwargs):
+        record["confirms"] += 1
+
+        return YES, False
+
+    def offer(*args, **kwargs):
+        record["offers"].append(args)
+
+        return ready
+
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
+    monkeypatch.setattr(viewer_controller, "confirm", confirm)
+    monkeypatch.setattr(viewer_controller, "offer_environment_update", offer)
+    monkeypatch.setattr(
+        environment_update_dialog,
+        "error",
+        lambda parent, message, **kwargs: record["errors"].append(message),
+    )
+    monkeypatch.setattr(
+        ImageViewerController,
+        "_select_neighbour_of_deleted",
+        lambda self, removed: record["selected"].append(removed),
+    )
+
+    model = ImageViewerModel(experiments=[("old", old)], selected_experiment="old")
+    ImageViewerController(model=model)._delete_experiment(None)
+
+    return old, record
+
+
+def test_delete_button_retries_once_the_update_makes_send2trash_available(
+    tmp_path, monkeypatch
+):
+    trashed = []
+    lookups = []
+
+    def send2trash_after_the_update():
+        lookups.append(None)
+
+        if len(lookups) == 1:
+            raise discovery.TrashUnavailableError("not installed yet")
+
+        return trashed.append
+
+    monkeypatch.setattr(discovery, "_send2trash", send2trash_after_the_update)
+
+    old, record = _delete_button(monkeypatch, tmp_path, ready=True)
+
+    assert record["confirms"] == 1
+    assert record["offers"] == [(TRASH_FEATURE, TRASH_PACKAGE)]
+    assert trashed == [str(old.parent)]
+    assert record["selected"] == [old.parent]
+    assert record["errors"] == []
+
+
+def test_delete_button_does_not_loop_when_send2trash_stays_missing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setitem(sys.modules, "send2trash", None)
+
+    old, record = _delete_button(monkeypatch, tmp_path, ready=True)
+
+    assert len(record["offers"]) == 1
+    [message] = record["errors"]
+    assert "pixi install" in message
+    assert record["selected"] == []
     assert (old / "frame.png").is_file()
