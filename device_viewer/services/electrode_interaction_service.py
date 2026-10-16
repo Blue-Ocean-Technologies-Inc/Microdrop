@@ -490,7 +490,7 @@ class ElectrodeInteractionControllerService(HasTraits):
 
         if current_route.can_remove(from_id, to_id):
             new_routes = [
-                Route(route_list)
+                Route(route=route_list)
                 for route_list in current_route.remove_segment(from_id, to_id)
             ]
             self.model.routes.replace_layer(
