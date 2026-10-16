@@ -58,7 +58,10 @@ def test_build_html_has_expected_sections():
     )
     assert "<html" in html.lower()
     for section in ("Metadata", "Data Summary", "Data Trends"):
-        assert section in html
+        assert (
+            f'<details open class="section"><summary><h2>{section}</h2></summary>'
+            in html
+        )
     assert "exp-1" in html
 
 
@@ -444,9 +447,155 @@ def test_trends_section_wraps_each_chart_in_an_open_details_section():
     for col in ("Capacitance (pF)", "Voltage (V)", "Actuated Area (mm^2)"):
         assert f"<details open><summary>{col}</summary>" in html
 
+    # Three chart folds nested inside the one Data Trends section fold.
+    assert html.startswith(
+        '<details open class="section"><summary><h2>Data Trends</h2></summary>'
+    )
     assert html.count("<details open>") == 3
-    assert html.count("</details>") == 3
+    assert html.count("</details>") == 4
     assert '"title":{"text":"Capacitance (pF)"' not in html
+
+
+def test_without_step_outliers_drops_tukey_outliers_per_step():
+    """Each step gets its own 1.5 x IQR fence; a step with fewer than four
+    samples has no meaningful quartiles and is kept whole."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "step_idx": [1, 1, 1, 1, 1, 2, 2, 2],
+            "v": [10, 10, 11, 9, 100, 1, 50, 1000],
+        }
+    )
+
+    kept = LoggingReport._without_step_outliers(df, ["v"])
+
+    assert sorted(kept[kept.step_idx == 1].v) == [9, 10, 10, 11]
+    assert sorted(kept[kept.step_idx == 2].v) == [1, 50, 1000]
+
+
+def test_without_step_outliers_drops_the_whole_row_for_every_column():
+    """A row that is an outlier in one column leaves every column's
+    survivors; a NaN never marks a row."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "step_idx": [1] * 6,
+            "a": [10, 11, 10, 11, 10, 11],
+            "b": [5, 5, 6, 5, 6, 500],
+            "c": [None, None, None, None, None, 1000],
+        }
+    )
+
+    kept = LoggingReport._without_step_outliers(df, ["a", "b", "c"])
+
+    assert list(kept.index) == [0, 1, 2, 3, 4]
+    assert sorted(kept.a) == [10, 10, 10, 11, 11]
+
+
+def test_without_step_outliers_fence_never_narrower_than_median_fraction():
+    """Quantisation noise on a steady signal sits inside the 1% median floor;
+    a genuinely off reading in the same column is still dropped."""
+    import pandas as pd
+
+    steady = [243.0, 243.1, 243.0, 243.1, 242.8, 243.1]
+    df = pd.DataFrame({"step_idx": [1] * 7, "a": steady + [3.0]})
+
+    kept = LoggingReport._without_step_outliers(df, ["a"])
+
+    assert 242.8 in list(kept.a)
+    assert 3.0 not in list(kept.a)
+    assert len(kept) == 6
+
+
+def test_trends_section_adds_hidden_filtered_traces_outside_the_heatmap(
+    monkeypatch,
+):
+    """Every trend chart carries a hidden filtered trace for the page-level
+    toggle; the heatmap stays outside .trend-chart so the toggle skips it."""
+    monkeypatch.setattr(
+        LoggingReport,
+        "_heatmap",
+        staticmethod(lambda *_a, **_k: "<div>fake-heatmap</div>"),
+    )
+    cols = ["step_idx", "Capacitance (pF)", "Voltage (V)"]
+
+    html = LoggingReport._trends_section(
+        _entries(),
+        cols,
+        LoggingDeviceContext(experiment_directory=Path("."), device_svg_path=None),
+    )
+
+    assert 'id="outlier-filter"' not in html
+    assert html.index("fake-heatmap") < html.index('<div class="trend-chart">')
+    assert html.count('<div class="trend-chart">') == 2
+
+    for col in ("Capacitance (pF)", "Voltage (V)"):
+        body = _details_body(html, col)
+
+        assert body.count('"orientation":"h"') == 2
+        assert body.count('"visible":false') == 1
+
+
+def test_build_html_outlier_toggle_governs_summary_and_trends():
+    """One checkbox, closing the Metadata section, swaps the raw summary body
+    for a hidden filtered one; a column whose samples were all outlier rows shows
+    dashes there instead of vanishing."""
+    entries = [
+        {"step_idx": 1, "Capacitance (pF)": v, "Thickness (um)": t}
+        for v, t in [(10, None), (11, None), (10, None), (11, None), (500, 7.0)]
+    ]
+    cols = ["step_idx", "Capacitance (pF)", "Thickness (um)"]
+
+    html = LoggingReport.build_html(
+        entries=entries,
+        columns=cols,
+        metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
+    )
+
+    assert html.count('id="outlier-filter"') == 1
+    # metadata={} still renders the Metadata section, so the toggle shows.
+    assert (
+        html.index("<h2>Metadata</h2>")
+        < html.index('id="outlier-filter"')
+        < html.index("<h2>Data Summary</h2>")
+    )
+    assert '<tbody class="outlier-raw">' in html
+
+    filtered_body = html.split('<tbody class="outlier-filtered" hidden>')[1]
+    filtered_body = filtered_body.split("</tbody>")[0]
+
+    assert "<th>Thickness (um)</th><td>–</td>" in filtered_body
+    assert "<td>500</td>" not in filtered_body
+
+
+def test_empty_sections_keep_their_fold_around_the_placeholder():
+    """A "No data" placeholder still sits inside its section's fold."""
+    html = LoggingReport._summary_section([], ["step_idx"])
+
+    assert html == (
+        '<details open class="section"><summary><h2>Data Summary</h2></summary>'
+        "<p>No data.</p></details>"
+    )
+
+
+def test_build_html_without_data_has_no_outlier_toggle():
+    html = LoggingReport.build_html(
+        entries=[],
+        columns=["step_idx", "Capacitance (pF)"],
+        metadata={},
+        media={"video": [], "image": [], "other": []},
+        device_context=LoggingDeviceContext(
+            experiment_directory=Path("."), device_svg_path=None
+        ),
+    )
+
+    assert 'id="outlier-filter"' not in html
 
 
 def _thickness_entries():

@@ -32,8 +32,10 @@ from logger.logger_service import get_logger
 # the corresponding report section to a placeholder instead of failing import.
 try:
     import plotly.express as px
+    import plotly.graph_objects as go
 except Exception:  # pragma: no cover
     px = None
+    go = None
 try:
     from microdrop_utils.plotly_helpers import (
         create_plotly_svg_dropbot_device_heatmap,
@@ -50,6 +52,40 @@ _NUMERIC_EXCLUDE = {
     "step_id",
     "actuated_channels",
 }
+
+#: Tukey fence multiplier: a sample is a per-step outlier when it lies more
+#: than this many interquartile ranges outside its step's Q1..Q3.
+_OUTLIER_IQR_FENCE = 1.5
+#: Steps with fewer samples than this have no meaningful quartiles and are
+#: kept whole by the outlier filter.
+_OUTLIER_MIN_STEP_SAMPLES = 4
+#: The fence half-width is never narrower than this fraction of the step's
+#: median magnitude, so quantisation noise on a steady signal is not an
+#: outlier.
+_OUTLIER_MIN_FENCE_FRACTION = 0.01
+
+# The report is static HTML with both the raw and the outlier-filtered views
+# baked in (summary rows and chart traces), so the toggle swaps them
+# client-side.
+_OUTLIER_TOGGLE_HTML = (
+    '<label class="outlier-toggle">'
+    '<input type="checkbox" id="outlier-filter" autocomplete="off">'
+    f" Exclude per-step outliers ({_OUTLIER_IQR_FENCE:g} × IQR)</label>"
+    "<script>"
+    "document.getElementById('outlier-filter')"
+    ".addEventListener('change', function (e) {"
+    "var on = e.target.checked;"
+    "document.querySelectorAll('.outlier-raw')"
+    ".forEach(function (el) { el.hidden = on; });"
+    "document.querySelectorAll('.outlier-filtered')"
+    ".forEach(function (el) { el.hidden = !on; });"
+    "document.querySelectorAll('.trend-chart .js-plotly-plot')"
+    ".forEach(function (div) {"
+    "Plotly.restyle(div, {visible: [!on, on]}, [0, 1]);"
+    "});"
+    "});"
+    "</script>"
+)
 
 # Metadata keys whose values are filesystem paths and should render as
 # clickable file:// anchors instead of raw strings. Legacy parity with
@@ -79,12 +115,19 @@ class LoggingReport:
     ) -> str:
         """Render the run report. ``column_notes`` maps a data column to a
         footnote shown under that column's trend chart."""
+        # One outlier-filtered frame feeds both the summary and the trends,
+        # so the single toggle (under the metadata) swaps them to the same set
+        # of samples.
+        df = pd.DataFrame(entries)
+        filtered = LoggingReport._outlier_filtered(df, columns)
+        has_steps = bool(entries) and "step_idx" in df
+
         sections = [
-            LoggingReport._metadata_section(metadata),
+            LoggingReport._metadata_section(metadata, has_steps),
             LoggingReport._data_files_section(data_files or []),
-            LoggingReport._summary_section(entries, columns),
+            LoggingReport._summary_section(entries, columns, filtered),
             LoggingReport._trends_section(
-                entries, columns, device_context, column_notes
+                entries, columns, device_context, column_notes, filtered
             ),
             LoggingReport._media_section(media),
         ]
@@ -104,19 +147,26 @@ class LoggingReport:
             "table{border-collapse:collapse;} td,th{border:1px solid #ccc;"
             "padding:4px 8px;} "
             "summary{cursor:pointer;font-weight:bold;margin:12px 0 4px} "
-            ".footnote{color:#666;font-size:small;margin:4px 0 8px}"
+            "details.section>summary{margin:20px 0 8px} "
+            "summary>h2{display:inline;margin:0} "
+            ".footnote{color:#666;font-size:small;margin:4px 0 8px} "
+            ".outlier-toggle{display:block;font-size:small;margin:8px 0 0}"
             "</style></head><body>"
             f"<h1>Protocol Report</h1>{body}</body></html>"
         )
 
     @staticmethod
-    def _metadata_section(metadata: Dict) -> str:
+    def _metadata_section(metadata: Dict, has_steps: bool = False) -> str:
+        """Render the metadata table; with step-indexed data, the page's
+        single outlier toggle follows it as the section's last item."""
         rows = "".join(
             f"<tr><th>{_html.escape(str(k))}</th>"
             f"<td>{LoggingReport._format_metadata_value(k, v)}</td></tr>"
             for k, v in (metadata or {}).items()
         )
-        return f"<h2>Metadata</h2><table>{rows}</table>"
+        toggle = _OUTLIER_TOGGLE_HTML if has_steps else ""
+
+        return LoggingReport._section("Metadata", f"<table>{rows}</table>{toggle}")
 
     @staticmethod
     def _data_files_section(data_files: List) -> str:
@@ -135,7 +185,7 @@ class LoggingReport:
                 )
             except (ValueError, OSError):
                 items.append(f"<li>{_html.escape(str(f))}</li>")
-        return f"<h2>Data Files</h2><ul>{''.join(items)}</ul>"
+        return LoggingReport._section("Data Files", f"<ul>{''.join(items)}</ul>")
 
     @staticmethod
     def _format_metadata_value(key, value) -> str:
@@ -160,28 +210,52 @@ class LoggingReport:
         return [c for c in columns if c not in _NUMERIC_EXCLUDE]
 
     @staticmethod
-    def _summary_section(entries: List[dict], columns: List[str]) -> str:
+    def _summary_section(
+        entries: List[dict],
+        columns: List[str],
+        filtered: Optional[pd.DataFrame] = None,
+    ) -> str:
+        """Render mean/std/min/max per numeric column, raw and outlier-filtered.
+
+        Both bodies list the same columns so they line up; a column with no
+        surviving samples in ``filtered`` gets a row of dashes.
+        """
         if not entries:
-            return "<h2>Data Summary</h2><p>No data.</p>"
+            return LoggingReport._section("Data Summary", "<p>No data.</p>")
+
         df = pd.DataFrame(entries)
-        rows = ""
-        for col in LoggingReport._numeric_columns(columns):
-            if col not in df:
-                continue
-            s = pd.to_numeric(df[col], errors="coerce").dropna()
-            if s.empty:
-                continue
-            rows += (
-                f"<tr><th>{_html.escape(col)}</th>"
-                f"<td>{s.mean():.4g}</td><td>{s.std():.4g}</td>"
-                f"<td>{s.min():.4g}</td><td>{s.max():.4g}</td></tr>"
-            )
-        if not rows:
-            return "<h2>Data Summary</h2><p>No numeric data.</p>"
-        return (
-            "<h2>Data Summary</h2><table>"
-            "<tr><th>Column</th><th>mean</th><th>std</th>"
-            f"<th>min</th><th>max</th></tr>{rows}</table>"
+
+        if filtered is None:
+            filtered = LoggingReport._outlier_filtered(df, columns)
+
+        summary_cols = [
+            c
+            for c in LoggingReport._numeric_columns(columns)
+            if c in df and pd.to_numeric(df[c], errors="coerce").notna().any()
+        ]
+
+        if not summary_cols:
+            return LoggingReport._section("Data Summary", "<p>No numeric data.</p>")
+
+        def rows(frame):
+            html = ""
+
+            for col in summary_cols:
+                s = pd.to_numeric(frame[col], errors="coerce").dropna()
+                stats = (s.mean(), s.std(), s.min(), s.max())
+                cells = ["–"] * 4 if s.empty else [f"{v:.4g}" for v in stats]
+                html += f"<tr><th>{_html.escape(col)}</th>"
+                html += "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+
+            return html
+
+        return LoggingReport._section(
+            "Data Summary",
+            "<table><thead><tr><th>Column</th><th>mean</th><th>std</th>"
+            "<th>min</th><th>max</th></tr></thead>"
+            f'<tbody class="outlier-raw">{rows(df)}</tbody>'
+            f'<tbody class="outlier-filtered" hidden>{rows(filtered)}</tbody>'
+            "</table>",
         )
 
     @staticmethod
@@ -190,14 +264,20 @@ class LoggingReport:
         columns: List[str],
         device_context,
         column_notes: Optional[Dict[str, str]] = None,
+        filtered: Optional[pd.DataFrame] = None,
     ) -> str:
         if px is None:  # pragma: no cover
-            return "<h2>Data Trends</h2><p>plotly unavailable.</p>"
+            return LoggingReport._section("Data Trends", "<p>plotly unavailable.</p>")
         if not entries:
-            return "<h2>Data Trends</h2><p>No data.</p>"
+            return LoggingReport._section("Data Trends", "<p>No data.</p>")
         df = pd.DataFrame(entries)
         if "step_idx" not in df.columns:
-            return "<h2>Data Trends</h2><p>No step index in data.</p>"
+            return LoggingReport._section(
+                "Data Trends", "<p>No step index in data.</p>"
+            )
+
+        if filtered is None:
+            filtered = LoggingReport._outlier_filtered(df, columns)
 
         # Legacy parity: heatmap first (it represents the whole run), then a
         # per-quantity horizontal bar chart per step_id. First plotly figure
@@ -210,22 +290,45 @@ class LoggingReport:
         # Steps are categorical along the y-axis: just the 1-indexed step
         # number ("Step 1", "Step 2", ...) — not the row uuid (step_id),
         # which is unreadable. Sort by step_idx descending so step 1
-        # appears at the top of each chart, like the legacy report.
+        # appears at the top of each chart, like the legacy report. Each bar
+        # chart also carries a hidden outlier-filtered trace that the
+        # page-level toggle swaps in; the heatmap sits outside .trend-chart,
+        # so the toggle leaves it alone.
+        trend_cols = [c for c in LoggingReport._numeric_columns(columns) if c in df]
+        values = LoggingReport._numeric_frame(df, trend_cols)
+        kept = LoggingReport._numeric_frame(filtered, trend_cols)
+
+        # Outliers are whole rows, so every chart's filtered view drops the
+        # same samples and the excluded count per step is shared.
+        excluded_per_step = (
+            values.groupby("step_idx")
+            .size()
+            .sub(kept.groupby("step_idx").size(), fill_value=0)
+            .astype(int)
+        )
+
         charts = []
-        for col in LoggingReport._numeric_columns(columns):
-            if col not in df:
+        for col in trend_cols:
+            if values[col].dropna().empty:
                 continue
-            s = pd.to_numeric(df[col], errors="coerce")
-            if s.dropna().empty:
-                continue
+
             agg = (
-                df.assign(_v=s)
-                .groupby("step_idx")["_v"]
+                values.groupby("step_idx")[col]
                 .agg(["mean", "std"])
                 .reset_index()
                 .sort_values("step_idx", ascending=False)
             )
             agg["step_label"] = agg["step_idx"].apply(lambda i: f"Step {int(i)}")
+
+            # Reindex onto the raw steps so both traces share categories; a
+            # step that lost every sample stays in place as NaN.
+            filtered_agg = (
+                kept.groupby("step_idx")[col]
+                .agg(["mean", "std"])
+                .reindex(agg["step_idx"])
+            )
+            excluded = excluded_per_step.reindex(agg["step_idx"], fill_value=0)
+
             # No figure title: the collapsible section's summary names it.
             fig = px.bar(
                 agg,
@@ -237,7 +340,25 @@ class LoggingReport:
                 template="plotly_white",
                 color_discrete_sequence=["#17a2b8"],
             )
+            fig.add_trace(
+                go.Bar(
+                    x=filtered_agg["mean"].to_numpy(),
+                    y=agg["step_label"].to_numpy(),
+                    error_x=dict(type="data", array=filtered_agg["std"].to_numpy()),
+                    orientation="h",
+                    marker_color="#17a2b8",
+                    customdata=list(zip(filtered_agg["std"], excluded)),
+                    hovertemplate=(
+                        "Mean %{x:.4g} ± %{customdata[0]:.4g}<br>"
+                        "%{customdata[1]} sample(s) excluded<extra></extra>"
+                    ),
+                    visible=False,
+                    showlegend=False,
+                )
+            )
             fig.update_layout(
+                # Overlay so the hidden filtered trace reserves no bar width.
+                barmode="overlay",
                 yaxis=dict(type="category", title="Protocol Steps"),
                 xaxis=dict(title=f"Mean {col}"),
                 margin=dict(l=20, r=20, t=20, b=20),
@@ -248,6 +369,7 @@ class LoggingReport:
                 full_html=False,
                 include_plotlyjs="cdn" if not plotly_js_emitted else False,
             )
+            chart = f'<div class="trend-chart">{chart}</div>'
 
             note = (column_notes or {}).get(col)
 
@@ -257,7 +379,68 @@ class LoggingReport:
             charts.append(LoggingReport._collapsible(col, chart))
             plotly_js_emitted = True
 
-        return "<h2>Data Trends</h2>" + heatmap + "".join(charts)
+        return LoggingReport._section("Data Trends", heatmap + "".join(charts))
+
+    @staticmethod
+    def _numeric_frame(frame: pd.DataFrame, value_cols: List[str]) -> pd.DataFrame:
+        """``step_idx`` plus ``value_cols`` coerced to numbers (junk -> NaN)."""
+        return frame[["step_idx"]].assign(
+            **{c: pd.to_numeric(frame[c], errors="coerce") for c in value_cols}
+        )
+
+    @staticmethod
+    def _outlier_filtered(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+        """The rows of ``df`` that survive the per-step outlier filter over
+        every numeric column present; ``df`` unchanged without a step index."""
+        if "step_idx" not in df:
+            return df
+
+        value_cols = [c for c in LoggingReport._numeric_columns(columns) if c in df]
+        kept = LoggingReport._without_step_outliers(
+            LoggingReport._numeric_frame(df, value_cols), value_cols
+        )
+
+        return df.loc[kept.index]
+
+    @staticmethod
+    def _without_step_outliers(df: pd.DataFrame, value_cols: List[str]) -> pd.DataFrame:
+        """Drop every row that is a per-step outlier in any of ``value_cols``.
+
+        An outlier sample is excluded from every trend, not only the column
+        where it was spotted, so derived columns stay consistent with their
+        inputs. Each column's fence comes from that step's own quartiles,
+        ``Q1 - reach <= v <= Q3 + reach`` with ``reach = k*IQR`` but never
+        below ``_OUTLIER_MIN_FENCE_FRACTION`` of the step's median magnitude.
+        A NaN never marks a row, and a column with fewer than
+        ``_OUTLIER_MIN_STEP_SAMPLES`` values in a step marks nothing there;
+        identical values (IQR 0) sit on the fence and are all kept.
+        """
+        outlier = pd.Series(False, index=df.index)
+
+        for col in value_cols:
+            values = df[col]
+            by_step = values.groupby(df["step_idx"])
+
+            q1 = by_step.transform("quantile", 0.25)
+            q3 = by_step.transform("quantile", 0.75)
+            floor = _OUTLIER_MIN_FENCE_FRACTION * by_step.transform("median").abs()
+            reach = (_OUTLIER_IQR_FENCE * (q3 - q1)).clip(lower=floor)
+
+            outside = ~values.between(q1 - reach, q3 + reach)
+            judged = values.notna() & (
+                by_step.transform("count") >= _OUTLIER_MIN_STEP_SAMPLES
+            )
+            outlier |= outside & judged
+
+        return df[~outlier]
+
+    @staticmethod
+    def _section(title: str, content: str) -> str:
+        """Wrap a top-level report section in an open fold headed by an h2."""
+        return (
+            '<details open class="section">'
+            f"<summary><h2>{_html.escape(title)}</h2></summary>{content}</details>"
+        )
 
     @staticmethod
     def _collapsible(title: str, content: str) -> str:
@@ -341,7 +524,7 @@ class LoggingReport:
         others = media.get("other", []) or []
         if not (videos or images or others):
             return ""
-        out = ["<h2>Media Captures</h2>"]
+        out = []
         if videos:
             out.append("<h3>Video Captures</h3>")
             out.append(LoggingReport._media_items(videos, kind="video"))
@@ -351,7 +534,7 @@ class LoggingReport:
         if others:
             out.append("<h3>Other Captures</h3>")
             out.append(LoggingReport._media_items(others, kind="other"))
-        return "".join(out)
+        return LoggingReport._section("Media Captures", "".join(out))
 
     @staticmethod
     def _media_items(paths: List[str], *, kind: str) -> str:
@@ -403,7 +586,7 @@ class LoggingReport:
     @staticmethod
     def _notes_section(notes: List[str]) -> str:
         items = "".join(f"<li>{_html.escape(str(n))}</li>" for n in notes)
-        return f"<h2>Notes</h2><ul>{items}</ul>"
+        return LoggingReport._section("Notes", f"<ul>{items}</ul>")
 
     @staticmethod
     def write_report(experiment_dir, html: str) -> Path:
