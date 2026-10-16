@@ -1,3 +1,57 @@
+## [v1.31.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.31.0) (2026-10-16)
+
+### Feat
+
+- **protocol-tree**: subtract the filler calibration from dielectric thickness ([`caf1bd7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/caf1bd77e9dc3a71a0f2bcf3b28f59d15b66e49d))
+- **protocol-tree**: collapsible trend charts in the run report ([`2e9adec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2e9adec1d4083311e5c9cfb2666f80825cfc500e))
+- **protocol-tree**: log capacitance over area and dielectric thickness ([`5d97a1d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5d97a1d751eca95075defdf8c8cf63f902b7423a))
+- **status-pane**: publish the dielectric material to app_globals ([`fa4b907`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fa4b90723dc5037715a931488bb29cd301303bb1))
+- **microdrop_utils**: import the package after update ([`b4607ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b4607ac0556d570099222426feddc7faa6d49233))
+- **microdrop_utils**: warn about the branch switch on update ([`8e8bba5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8e8bba5d4a06c5d7b91dcc55d308cf206110f5d1))
+- **microdrop_utils**: demo the update dialog standalone ([`ab55047`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ab55047f2a932bd46d249c63c3eaba3246336cca))
+- **microdrop_utils**: reinstall plugins on env update ([`b223478`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b22347855062909197f88097955e053bc8618c0f))
+- **image_viewer**: tidy the viewer pane layout ([`d1b4794`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d1b47941267fea49e59fd5a39f9e998640145b9d))
+- **image_viewer**: send deleted experiments to the trash ([`86a5646`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/86a5646bb7162c2b6cc735f4f9dd918ed2f3613e))
+- **microdrop_utils**: shared environment update and relaunch ([`2193d85`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2193d85d1ae2775de86ef5b560c88fd3383ac0e5))
+- **image_viewer**: undo and redo for ROI shape changes ([`e929a8b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e929a8ba53c82432b163bfa36dd4d6b52c9fb5da))
+- **image_viewer**: toggle to show or hide ROIs ([`7837ab2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7837ab28297c41653e5919151be83b9086b33e55))
+- **image_viewer**: add negative ROI masks ([`658cb82`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/658cb8236e539b2713ce1ddf1fedf5121721652b))
+
+### Fix
+
+- **microdrop_utils**: rich-text wording in update dialog ([`8cea964`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8cea964832b89cbcf2dd36afa5118df72c1d9827))
+- **microdrop_utils**: check out default branch on update ([`0b67ffd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0b67ffd74e36e6d02f8f31f548370ab33953f8a4))
+- **microdrop_application**: escape ampersands in dialog buttons ([`0dd2db4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0dd2db473830142a1fd3dd26e4f860820e437d22))
+- **image_viewer**: resize the viewer pane continuously ([`c46bd5d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c46bd5d4c0660ba9e9c6c8e6a08b12ae12368025))
+
+### Refactor
+
+- **microdrop_utils**: drop relaunch from env update ([`6ed4a0a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6ed4a0ae1c010198fe99c6242181fc1306ed079c))
+
+### Docs
+
+- introduce new UI dependencies via env update ([`97a438e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97a438eb685c1d650e3fc6d03d8a1ee45ff39ea8))
+- **report**: filler-corrected thickness and its footnote ([`32f6679`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/32f6679f6289b12d1c156b150f1e8b8c61b2d965))
+- **report**: document the dielectric columns and folding ([`8889acf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8889acf92b7b15625aa4ee779a5a1215518ccd3a))
+- **report**: explain the Actuated Area error bar ([`959084c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/959084cc20dc69ac367044552c06deb4f3ee705a))
+- **report**: spell out how the trend error bars are computed ([`8539c2b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8539c2b4c9cfc3e4f1a09641bd0eb87ebdd7793d))
+- document the protocol run report pipeline ([`fab14b0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fab14b0f8d10afe16ed21c819b9d3c17a86eb60b))
+- **image_viewer**: align the analysis tutorial with the pane ([`ffb4712`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ffb4712f5d12cce7347244dcb866b0b8f3449535))
+
+### Test
+
+- **microdrop_utils**: expect rich-text plugin list ([`e8a74de`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e8a74de3154b7848d7ca999ca1e428bc7861306f))
+
+### Style
+
+- **microdrop_application**: format dialog base with ruff ([`63db236`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/63db236f1c067737b4a304dbcce5bbec73d05120))
+- **plugin_management**: format package installer with ruff ([`aa47f4a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aa47f4aa30c43338b6f043a8cddc4c3aae0aa500))
+- **microdrop_style**: format button_styles with ruff ([`97b8ebf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97b8ebf64ddc7770e70e2e5f986b489432a07453))
+
+### Chore
+
+- untrack superpowers specs and guard the dir ([`6b1f239`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6b1f239cf4d80b8e49b58a62cb84cbb0d9057a9f))
+
 ## [v1.30.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.30.0) (2026-10-15)
 
 ### Feat
