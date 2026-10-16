@@ -19,7 +19,7 @@ from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem
 
 # Local imports.
-from .consts import ROTATE_SNAP_DEGREES
+from .consts import NEGATIVE_MASK_COLOR, ROTATE_SNAP_DEGREES
 
 #: Cosmetic (zoom-independent 1px) pens; cyan reads on dark raws.
 ROI_PEN = QPen(QColor(0, 229, 255), 0)
@@ -27,6 +27,30 @@ ROI_SELECTED_PEN = QPen(QColor(255, 214, 0), 0)
 #: The rolling-ball size guide: violet, so it reads as neither an ROI
 #: (cyan), a selected one (amber), nor a background ring.
 BALL_REFERENCE_PEN = QPen(QColor(179, 136, 255), 0)
+#: A negative mask: dashed in its own colour, so it reads as a cut-out
+#: rather than one more measured region.
+NEGATIVE_ROI_PEN = QPen(QColor(NEGATIVE_MASK_COLOR), 0, Qt.PenStyle.DashLine)
+#: Opacity (0-255) of the mask's interior hatch: translucent enough
+#: that the image under the hole stays readable, opaque enough that the
+#: hole reads as one.
+NEGATIVE_MASK_HATCH_ALPHA = 150
+
+
+def _negative_mask_brush():
+    """The hatch inside a negative mask, so the cut-out reads as a hole.
+
+    Qt 6.4+ draws predefined patterns cosmetically (unless a painter sets
+    NonCosmeticBrushPatterns, which this canvas does not), so the hatch
+    keeps its 8 px on-screen pitch at every zoom, as the pens keep their
+    width — it needs no inverse-zoom brush transform."""
+    colour = QColor(NEGATIVE_MASK_COLOR)
+    colour.setAlpha(NEGATIVE_MASK_HATCH_ALPHA)
+
+    return QBrush(colour, Qt.BrushStyle.BDiagPattern)
+
+
+NEGATIVE_ROI_BRUSH = _negative_mask_brush()
+
 HANDLE_BRUSH = QBrush(QColor(255, 214, 0))
 #: The corner-radius grip is a second grip on the same edge as resize
 #: and rotate, so it is coloured apart from them rather than left to be

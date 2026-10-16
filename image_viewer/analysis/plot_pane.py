@@ -1106,10 +1106,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
-        if not series and self._model.session.rois:
+        if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
-            roi.is_background_ref for roi in session.rois
+            roi.is_background_ref for roi in session.positive_rois
         ):
             # Asked of the session, not the drawn series: a reference
             # that is merely hidden still corrects, and saying it does

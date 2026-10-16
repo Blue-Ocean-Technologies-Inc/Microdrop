@@ -13,31 +13,39 @@
 Wires the reactive TASK_EXTENSIONS consumer (any plugin added to / removed
 from the running application gets its dock panes mounted/unmounted and the
 menu bar rebuilt automatically — the UI-side analogue of the message router's
-reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service,
+reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service
+and the IExternalPluginsProvider an environment update re-adds plugins with,
 contributes the Tools ▸ Manage Plugins action, and restores each group's
 persisted enabled state on launch.
 """
 
+# Third-party imports.
 import dramatiq
 
-from envisage.api import Plugin, SERVICE_OFFERS, ServiceOffer, TASK_EXTENSIONS
+# Enthought library imports.
+from envisage.api import SERVICE_OFFERS, TASK_EXTENSIONS, Plugin, ServiceOffer
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
-
 from traits.api import Any, Bool, List, Str, observe
 
+# Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
+
+# Microdrop utils imports.
+from microdrop_utils.environment_update import IExternalPluginsProvider
 from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
+# Local imports.
+from . import package_installer
 from .consts import PKG, PKG_name
 from .i_plugin_group_manager import IPluginGroupManager
-
-from . import package_installer
 from .update_controller import show_update_dialog
 from .update_model import compute_update_report
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -72,16 +80,20 @@ class PluginManagementPlugin(Plugin):
         # would fire two reconciles per delta).
         if self._live_task_exts is None:
             from .live_task_extensions import LiveTaskExtensionsController
+
             self._live_task_exts = LiveTaskExtensionsController(
-                application=self.application)
+                application=self.application
+            )
             self.application.add_extension_point_listener(
-                self._on_task_extensions_changed, TASK_EXTENSIONS)
+                self._on_task_extensions_changed, TASK_EXTENSIONS
+            )
 
     def stop(self):
         super().stop()
         try:
             self.application.remove_extension_point_listener(
-                self._on_task_extensions_changed, TASK_EXTENSIONS)
+                self._on_task_extensions_changed, TASK_EXTENSIONS
+            )
         except Exception as e:
             logger.debug(f"TASK_EXTENSIONS listener already removed: {e}")
 
@@ -90,8 +102,7 @@ class PluginManagementPlugin(Plugin):
         ``event`` is an ExtensionPointChangedEvent carrying added/removed
         TaskExtensions. Forward the delta to the debounced controller."""
         if self._live_task_exts is not None:
-            self._live_task_exts.on_changed(
-                list(event.added), list(event.removed))
+            self._live_task_exts.on_changed(list(event.added), list(event.removed))
 
     # --- group-manager service -----------------------------------------
 
@@ -100,7 +111,11 @@ class PluginManagementPlugin(Plugin):
             ServiceOffer(
                 protocol=IPluginGroupManager,
                 factory=self._create_plugin_group_manager,
-            )
+            ),
+            ServiceOffer(
+                protocol=IExternalPluginsProvider,
+                factory=package_installer.ExternalPluginsProvider,
+            ),
         ]
 
     def _create_plugin_group_manager(self, *args, **kwargs):
@@ -108,6 +123,7 @@ class PluginManagementPlugin(Plugin):
         shares one manager (and thus the loaded-group state)."""
         if self._manager is None:
             from .group_manager import PluginGroupManager
+
             self._manager = PluginGroupManager()
         return self._manager
 
@@ -130,7 +146,9 @@ class PluginManagementPlugin(Plugin):
     def _tools_actions_group(self):
         """Single Manage Plugins action in Tools."""
         from pyface.tasks.action.api import SGroup
+
         from .menus import ManagePluginsAction
+
         return SGroup(ManagePluginsAction(), id="plugin_management_actions")
 
     # --- launch restore ---------------------------------------------------
@@ -207,6 +225,7 @@ class PluginManagementPlugin(Plugin):
         fetches, duplicate dialogs) — a failed check just waits for the
         next launch.
         """
+
         @dramatiq.actor(max_retries=0)
         def plugin_update_check():
             try:

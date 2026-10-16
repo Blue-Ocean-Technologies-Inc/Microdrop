@@ -45,13 +45,23 @@ from traitsui.api import Controller
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error, warning
 
 # Microdrop utils imports.
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
 from microdrop_utils.file_handler import open_file
 
 # Local imports.
-from .consts import DISCOVERY_POLL_INTERVAL_MS, IMAGE_CACHE_FRAMES
+from .consts import (
+    DISCOVERY_POLL_INTERVAL_MS,
+    IMAGE_CACHE_FRAMES,
+    TRASH_FEATURE,
+    TRASH_PACKAGE,
+)
 from .discovery import (
     CaptureFolderWatch,
     CaptureReadiness,
+    TrashUnavailableError,
     current_captures_directory,
     delete_experiment,
     discover_experiments,
@@ -90,6 +100,10 @@ class ImageViewerController(Controller):
     #: Zero-arg callable returning the contributed IMAGE_FILTERS; resolved
     #: on every rescan so a hot-loaded plugin's filter shows up live.
     image_filters_source = Callable(lambda: [])
+
+    #: The running Envisage application, exited cleanly when an environment
+    #: update relaunches the app; None outside a running app.
+    application = Any(None)
 
     #: One-shot "what to show" hint consumed by the burst-selection
     #: observer ("first"/"last"/"keep"); set by rescan / home / folder
@@ -167,6 +181,10 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     # Toolbar events                                                       #
     # ------------------------------------------------------------------ #
+    @observe("model:toggle_sidebar_button")
+    def _toggle_sidebar(self, event):
+        self.model.show_sidebar = not self.model.show_sidebar
+
     @observe("model:directory_button")
     def _pick_directory(self, event):
         # Start in the Experiments root (captures -> experiment -> root).
@@ -302,7 +320,8 @@ class ImageViewerController(Controller):
                 parent=None,
                 message=f"Delete experiment '{name}' and everything in its folder?",
                 title="Delete experiment",
-                informative="This removes the folder from disk and cannot be undone.",
+                informative="The folder is moved to the Recycle Bin (Trash on "
+                "macOS/Linux), where it can be restored.",
                 checkbox_text="Don't ask again (you can turn this warning back on "
                 "under Preferences › Image Viewer)",
             )
@@ -313,10 +332,25 @@ class ImageViewerController(Controller):
             if dont_ask_again:
                 preferences.confirm_experiment_delete = False
 
+        self._trash_experiment(name, captures)
+
+    def _trash_experiment(self, name, captures, retry=True):
+        """Move the confirmed experiment's folder to the trash, then select
+        its neighbour. Without send2trash, offer the environment update and,
+        when it makes the package available, try once more."""
         try:
             removed = delete_experiment(captures)
         except ValueError as e:
             warning(None, str(e), title="Delete experiment", cancel=False)
+
+            return
+        except TrashUnavailableError:
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=self.application
+            ):
+                self._trash_experiment(name, captures, retry=False)
 
             return
         except OSError as e:

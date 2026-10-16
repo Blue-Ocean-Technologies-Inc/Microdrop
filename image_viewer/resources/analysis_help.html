@@ -36,6 +36,7 @@
   --down: #c62828;
   --roi: #0b9bb0;
   --ring: #d99a00;
+  --mask: #ff2d55;
   --ball: #7a4fe0;
   --glow: #3ccf6a;
   --plot-bg: #fbfcfc;
@@ -64,6 +65,7 @@
     --down: #ff6b6b;
     --roi: #3fd0e3;
     --ring: #f2c14e;
+    --mask: #ff2d55;
     --ball: #a98bff;
     --glow: #4fe07f;
     --plot-bg: #141b21;
@@ -89,6 +91,7 @@
   --down: #ff6b6b;
   --roi: #3fd0e3;
   --ring: #f2c14e;
+  --mask: #ff2d55;
   --ball: #a98bff;
   --glow: #4fe07f;
   --plot-bg: #141b21;
@@ -313,6 +316,8 @@ svg.ic { width: 22px; height: 22px; display: block; fill: currentColor; }
 table.icons-table td { vertical-align: middle; }
 table.icons-table td.icons { white-space: nowrap; width: 76px; }
 table.icons-table td.lbl { font-weight: 600; width: 14em; }
+table.icons-table tr.group-start td { border-top: 2px solid var(--line); }
+.tbtn.tbtn-slim { width: 16px; height: 48px; }
 @media (max-width: 560px) {
   table.icons-table td.lbl { width: auto; }
 }
@@ -427,6 +432,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
     <li><a href="#part-regions">Regions and images</a>
       <ol>
         <li><a href="#roi">ROI and its shapes</a></li>
+        <li><a href="#negative-mask">Negative masks</a></li>
         <li><a href="#drift">Moving an ROI later (drift)</a></li>
         <li><a href="#ai">AI detection options</a></li>
         <li><a href="#exclude">Excluding images</a></li>
@@ -439,7 +445,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
         <li><a href="#tb-viewer">Image viewer</a></li>
         <li><a href="#tb-sidebar">Sidebar and sections</a></li>
         <li><a href="#tb-roi">ROI tools</a></li>
-        <li><a href="#tb-ai">AI Detection box</a></li>
+        <li><a href="#tb-ai">AI Detection section</a></li>
         <li><a href="#tb-plot">Analysis plot pane</a></li>
         <li><a href="#tb-perspective">Perspective window</a></li>
       </ol>
@@ -531,10 +537,10 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
 <article class="term" id="pipeline">
   <h3 id="pipeline-h">How a number is made</h3>
   <p>Every point on the plot is one number, for one region, in one image. It is made in a fixed order.
-  The first three steps change the picture itself, so they change what is measured.
+  The first three steps change the picture itself and the fourth decides which pixels count, so they all change what is measured.
   Everything after the measurement only changes how the numbers are shown or compared.</p>
   <figure class="demo" aria-label="Analysis pipeline diagram">
-    <svg viewBox="0 0 640 170" role="img">
+    <svg viewBox="0 0 748 170" role="img">
       <title>The analysis pipeline, step by step</title>
       <g font-size="12">
         <g transform="translate(10,30)">
@@ -553,25 +559,30 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
           <text x="48" y="46" text-anchor="middle">flatten (opt.)</text>
         </g>
         <g transform="translate(334,30)">
+          <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--mask)" stroke-dasharray="5 3"/>
+          <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Cut masks</text>
+          <text x="48" y="46" text-anchor="middle">ROI − masks</text>
+        </g>
+        <g transform="translate(442,30)">
           <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--roi)"/>
           <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Measure</text>
           <text x="48" y="46" text-anchor="middle">ROI + ring</text>
         </g>
-        <g transform="translate(442,30)">
+        <g transform="translate(550,30)">
           <rect width="96" height="64" rx="8" fill="var(--surface)" stroke="var(--line)"/>
           <text x="48" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Cleanup</text>
           <text x="48" y="46" text-anchor="middle">outliers, shifts</text>
         </g>
-        <g transform="translate(550,30)">
+        <g transform="translate(658,30)">
           <rect width="80" height="64" rx="8" fill="var(--surface)" stroke="var(--accent)"/>
           <text x="40" y="28" text-anchor="middle" style="fill:var(--ink);font-weight:600">Plot + fit</text>
           <text x="40" y="46" text-anchor="middle">curves</text>
         </g>
-        <line x1="10" y1="118" x2="430" y2="118" stroke="var(--ball)" stroke-width="2"/>
-        <text x="220" y="136" text-anchor="middle">changes the measured pixels (stored with the results)</text>
-        <line x1="442" y1="118" x2="630" y2="118" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4"/>
-        <text x="536" y="136" text-anchor="middle">changes the display only</text>
-        <path d="M108 57l6 5-6 5M216 57l6 5-6 5M324 57l6 5-6 5M432 57l6 5-6 5M540 57l6 5-6 5" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+        <line x1="10" y1="118" x2="538" y2="118" stroke="var(--ball)" stroke-width="2"/>
+        <text x="274" y="136" text-anchor="middle">changes the measured pixels (stored with the results)</text>
+        <line x1="550" y1="118" x2="738" y2="118" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="644" y="136" text-anchor="middle">changes the display only</text>
+        <path d="M108 57l6 5-6 5M216 57l6 5-6 5M324 57l6 5-6 5M432 57l6 5-6 5M540 57l6 5-6 5M648 57l6 5-6 5" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
       </g>
     </svg>
     <figcaption>Left of the measurement, settings change the actual numbers, so MicroDrop recalculates when you change
@@ -592,7 +603,7 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
   <div class="step-text">
     <h4><span class="step-n">1</span>Load an image folder</h4>
     <p>In the <span class="ui">Image Viewer</span>, the folder button <span class="ui">Choose the image folder</span> opens the experiment's raw captures by default; pick another experiment under <span class="ui">Experiments</span> in the sidebar.</p>
-    <p>You should see the first image and its position next to the buttons (for example 7/30). Step with the arrow buttons, or press play to flick through them and check the droplets stay in view.</p>
+    <p>You should see the first image and its position at the right end of the button row (for example 7/30). Step with the arrow buttons, or press play to flick through them and check the droplets stay in view.</p>
   </div>
 </li>
 <li class="step">
@@ -607,7 +618,7 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
   <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="An ROI with its background ring, and the Ring Gap and Ring Width settings"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><path d="M0.5 18H299.5" stroke="var(--line)"/><text x="8" y="13" style="fill:var(--muted);font-size:10px;font-weight:600">Image Viewer</text><rect x="8" y="24" width="170" height="140" rx="3" fill="#1b2228"/><circle cx="93" cy="94" r="26" fill="var(--glow)" opacity="0.85"/><circle cx="93" cy="94" r="44" fill="none" stroke="var(--ring)" stroke-width="12" opacity="0.55"/><circle cx="93" cy="94" r="30" fill="none" stroke="var(--roi)" stroke-width="2"/><path d="M123 94H138" stroke="#fff" stroke-width="1"/><text x="140" y="80" style="fill:#fff;font-size:8px">gap</text><text x="120" y="154" style="fill:var(--ring);font-size:8px">ring</text><rect x="154" y="28" width="20" height="20" rx="3" fill="var(--icon-on)" stroke="var(--icon-on)"/><use href="#ic-crop" x="157" y="31" width="14" height="14" style="fill:#fff"/><rect x="186" y="24" width="106" height="140" rx="3" fill="var(--surface-2)"/><text x="192" y="38" style="fill:var(--muted);font-size:8px;font-weight:600">&#8964; Advanced</text><text x="192" y="54" style="fill:var(--ink);font-size:8px;font-weight:600">Measurement</text><text x="192" y="72" style="font-size:8px">Ring Gap</text><rect x="244" y="62" width="40" height="14" rx="2" fill="var(--surface)" stroke="var(--accent)"/><text x="250" y="72" style="fill:var(--ink);font-size:9px">2</text><text x="192" y="92" style="font-size:8px">Ring Width</text><rect x="244" y="82" width="40" height="14" rx="2" fill="var(--surface)" stroke="var(--accent)"/><text x="250" y="92" style="fill:var(--ink);font-size:9px">4</text><text x="192" y="112" style="font-size:8px">Ball Radius</text><rect x="244" y="102" width="40" height="14" rx="2" fill="var(--surface)" stroke="var(--line)"/><text x="250" y="112" style="fill:var(--muted);font-size:9px">50</text></svg></figure>
   <div class="step-text">
     <h4><span class="step-n">3</span>Set the background ring</h4>
-    <p>Open <span class="ui">Advanced</span> under the image. In the <span class="ui">Measurement</span> box, <span class="ui">Ring Gap</span> (start: 2 px) and <span class="ui">Ring Width</span> (start: 4 px) place the ring that reads the "nothing" level next to each droplet.</p>
+    <p>Open <span class="ui">Advanced</span> under the image. In its <span class="ui">Measurement</span> section, <span class="ui">Ring Gap</span> (start: 2 px) and <span class="ui">Ring Width</span> (start: 4 px) place the ring that reads the "nothing" level next to each droplet.</p>
     <p>Turn on <span class="ui">Show the background rings</span> (crop icon) to see them. The ring should sit on empty chip, clear of the droplet's glow and of its neighbours.</p>
   </div>
 </li>
@@ -663,6 +674,61 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
   </dl>
 </article>
 
+<article class="term" id="negative-mask">
+  <h3>Negative mask <span class="where">Image Viewer, right-hand toolbar</span></h3>
+  <p>A shape you draw to <em>remove</em> pixels. It is subtracted from every ROI it overlaps, so MicroDrop measures the
+  <strong>effective region</strong>: the ROI minus all the masks on it.</p>
+  <dl class="facts">
+    <dt>What it is</dt>
+    <dd><p>Any draw tool's shape, drawn while negative mask mode is on, named <strong>Mask 1</strong>, <strong>Mask 2</strong>, …
+    It has no numbers of its own and is never a background reference.</p></dd>
+    <dt>When to use it</dt>
+    <dd><p>When something inside an ROI is not droplet: a reflection, an electrode edge, dust, a neighbour poking in.</p></dd>
+    <dt>What changing it does</dt>
+    <dd><p>Count, Area, Mean, Median, Min, Max, Integrated, the background-corrected values and the
+    <a href="#part-shape">shape quantities</a> of every ROI it overlaps are recalculated on the effective region. The
+    <a href="#ring">ring</a> is still grown from the whole ROI as drawn, so its outer edge never follows a hole, and mask pixels are left out of it too.
+    Masks move, resize, rotate and take drift corrections like ROIs, but AI tracking leaves them where they were drawn.
+    Hiding one with its eye takes it off the image and out of the calculation; both results are kept, so switching back and forth is instant.
+    A mask starts at the image you draw it on and applies to every later image; earlier images are untouched.
+    To cover earlier images, draw it on the earliest image it should apply to.
+    A mask covering a whole ROI leaves Count 0 and every other value blank (a gap in the plot).</p></dd>
+    <dt>Typical use</dt>
+    <dd><p>None until needed; keep it tight, as every pixel removed makes the mean noisier.</p></dd>
+  </dl>
+  <p>In the app:</p>
+  <ul class="uses">
+    <li>The toggle <span class="tbtn on tbtn-inline"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-remove_selection"/></svg></span>
+    under the draw tools stays lit until clicked again; while lit, every draw tool (ellipse, box, capsule, contour) makes masks.
+    The AI tools always make ROIs. A copied mask pastes as a mask.</li>
+    <li>On the image a mask is hatched with a dashed red outline, so it reads as a hole.</li>
+    <li>The ROI Intensities table lists <strong>Mask N</strong> after the ROIs, with blank stats. Masks get no plot line or CSV rows.</li>
+    <li>The eye on a Mask row hides it on the image and removes it from the calculation: toggle it to compare the numbers with and without the mask.
+    The toolbar's <a href="#tb-roi">show / hide ROIs</a> eye only hides masks from view; they are still subtracted.</li>
+    <li>On images captured before the one a mask was drawn on, it is not shown and its name in the table turns grey.</li>
+  </ul>
+  <figure class="demo" id="neg" aria-label="Interactive negative mask demo">
+    <div class="controls">
+      <label>Mask position <input type="range" id="neg-x" min="4" max="92" value="68"><output id="neg-x-o">68 px</output></label>
+      <label>Mask radius <input type="range" id="neg-r" min="2" max="36" value="8"><output id="neg-r-o">8 px</output></label>
+    </div>
+    <div class="shape-demo"><svg id="neg-svg" viewBox="0 0 260 260" role="img"><title>A negative mask cutting a reflection out of an ROI</title>
+      <defs>
+        <pattern id="neg-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--mask)" fill-opacity=".15"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--mask)" stroke-width="2"/></pattern>
+        <mask id="neg-cut"><rect x="10" y="10" width="240" height="240" fill="#fff"/><ellipse cx="130" cy="130" rx="75" ry="65" fill="#000"/><circle id="neg-cut-c" cy="120" r="0" fill="#fff"/></mask>
+      </defs>
+      <image id="neg-img" x="10" y="10" width="240" height="240" style="image-rendering:pixelated"/>
+      <rect x="10" y="10" width="240" height="240" fill="#000" opacity=".6" mask="url(#neg-cut)"/>
+      <ellipse cx="130" cy="130" rx="75" ry="65" fill="none" stroke="var(--roi)" stroke-width="2"/>
+      <circle id="neg-c" cy="120" r="0" fill="url(#neg-hatch)" stroke="var(--mask)" stroke-width="2" stroke-dasharray="5 3"/>
+      <text x="130" y="224" text-anchor="middle" style="fill:#fff;font-weight:700">ROI 1</text>
+      <text id="neg-label" text-anchor="middle" style="fill:var(--mask);font-weight:700;stroke:#000;stroke-width:3px;paint-order:stroke">Mask 1</text>
+    </svg><table class="small shape-read" id="neg-read"></table></div>
+    <div class="status" id="neg-status" aria-live="polite"></div>
+    <figcaption>96 × 96 px, 1 px = 20 µm. Only the undimmed pixels are measured. The bright spot is a reflection, not droplet.</figcaption>
+  </figure>
+</article>
+
 <article class="term" id="drift">
   <h3>Moving an ROI on a later image (drift override) <span class="where">Edit mode</span></h3>
   <dl class="facts">
@@ -681,7 +747,7 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
 </article>
 
 <article class="term" id="ai">
-  <h3>AI detection options <span class="where">AI Detection box (when AI support is installed)</span></h3>
+  <h3>AI detection options <span class="where">AI Detection section (when AI support is installed)</span></h3>
   <p>The AI tools find droplets for you. <span class="ui">Pick</span> outlines the droplet you click,
   <span class="ui">Detect all</span> searches the whole image, and <span class="ui">Track</span> follows your ROIs through later images.
   What it finds appears as dashed <em>candidates</em>: click one to discard it, then press Accept.</p>
@@ -756,7 +822,9 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
 <h2>Toolbar icons</h2>
 <p class="intro">What each small button in the Image Viewer and the analysis panes does. Hover over a button in MicroDrop
 to see a short description as a tooltip. Where a row shows a second, highlighted copy <span class="tbtn on tbtn-inline"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-edit"/></svg></span> of the icon, that is how
-the button looks while its tool or switch is on (on Windows the highlight takes your system accent colour).</p>
+the button looks while its tool or switch is on (on Windows the highlight takes your system accent colour).
+A heavier line in a table marks where the buttons form a new group. When the pane is too small, the button row above the image
+scrolls sideways, and the toolbar on its right edge and the sidebar scroll down, each on its own; the image keeps the rest of the room.</p>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
 <!-- Material Symbols Outlined glyphs (Apache-2.0), traced from the font the app draws its buttons with. -->
 <defs>
@@ -781,6 +849,7 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
   <symbol id="ic-rectangle" viewBox="0 5 48 48"><path d="M4 45L4 13L44 13L44 45L4 45M8 41L40 41L40 17L8 17L8 41M8 41L8 17L8 41"/></symbol>
   <symbol id="ic-pill" viewBox="0 5 48 48"><path d="M17.2 47C14.1 47 11.5 45.9 9.3 43.7C7.1 41.5 6 38.9 6 35.8C6 34.2 6.3 32.8 6.8 31.4C7.4 30.1 8.2 28.9 9.3 27.8L22.8 14.3C23.9 13.2 25.1 12.4 26.4 11.8C27.8 11.3 29.2 11 30.8 11C33.9 11 36.5 12.1 38.7 14.3C40.9 16.5 42 19.1 42 22.2C42 23.8 41.7 25.2 41.1 26.6C40.6 27.9 39.8 29.1 38.7 30.2L25.2 43.7C24.1 44.8 22.9 45.6 21.6 46.1C20.2 46.7 18.8 47 17.2 47M30.6 32.7L35.9 27.4C36.6 26.7 37.1 25.9 37.5 25.1C37.8 24.1 38 23.2 38 22.2C38 20.2 37.3 18.5 35.9 17.1C34.5 15.7 32.8 15 30.8 15C29.8 15 28.9 15.2 27.9 15.6C27.1 15.9 26.3 16.4 25.6 17.1L20.3 22.4L30.6 32.7M17.2 43C18.2 43 19.1 42.8 20.1 42.5C21 42.1 21.7 41.6 22.4 40.9L27.7 35.5L17.4 25.3L12.1 30.6C11.4 31.3 10.9 32 10.6 33C10.2 33.9 10 34.8 10 35.8C10 37.8 10.7 39.5 12.1 40.9C13.5 42.3 15.2 43 17.2 43"/></symbol>
   <symbol id="ic-pentagon" viewBox="0 5 48 48"><path d="M14.9 43L33.1 43L39.2 24.6L24 13.9L8.8 24.6L14.9 43M12 47L4 23L24 9L44 23L36 47L12 47M24 28.4"/></symbol>
+  <symbol id="ic-remove_selection" viewBox="0 5 48 48"><path d="M25 47L22.2 44.2L29.3 37.1L22.2 30L25 27.2L32.1 34.3L39.2 27.2L42 30L34.9 37.1L42 44.2L39.2 47L32.1 39.9L25 47M14 47L14 43L18 43L18 47L14 47M10 15L6 15C6 13.9 6.4 12.9 7.2 12.2C8 11.4 8.9 11 10 11L10 15M14 15L14 11L18 11L18 15L14 15M22 15L22 11L26 11L26 15L22 15M30 15L30 11L34 11L34 15L30 15M38 15L38 11C39.1 11 40 11.4 40.8 12.2C41.6 12.9 42 13.9 42 15L38 15M10 43L10 47C8.9 47 8 46.6 7.2 45.8C6.4 45 6 44.1 6 43L10 43M6 39L6 35L10 35L10 39L6 39M6 31L6 27L10 27L10 31L6 31M6 23L6 19L10 19L10 23L6 23M38 23L38 19L42 19L42 23L38 23"/></symbol>
   <symbol id="ic-straighten" viewBox="0 5 48 48"><path d="M8 41C6.9 41 6 40.6 5.2 39.8C4.4 39 4 38.1 4 37L4 21C4 19.9 4.4 18.9 5.2 18.2C6 17.4 6.9 17 8 17L40 17C41.1 17 42 17.4 42.8 18.2C43.6 18.9 44 19.9 44 21L44 37C44 38.1 43.6 39 42.8 39.8C42 40.6 41.1 41 40 41L8 41M8 37L40 37L40 21L34 21L34 29L30 29L30 21L26 21L26 29L22 29L22 21L18 21L18 29L14 29L14 21L8 21L8 37M14 29L18 29L14 29M22 29L26 29L22 29M30 29L34 29L30 29M24 29"/></symbol>
   <symbol id="ic-tonality" viewBox="0 5 48 48"><path d="M24 49C21.2 49 18.6 48.5 16.2 47.4C13.8 46.4 11.7 45 9.8 43.1C8.1 41.4 6.6 39.2 5.6 36.8C4.5 34.4 4 31.8 4 29C4 26.2 4.5 23.6 5.6 21.2C6.6 18.8 8.1 16.6 9.8 14.8C11.7 13 13.8 11.6 16.2 10.6C18.6 9.5 21.2 9 24 9C26.8 9 29.4 9.5 31.8 10.6C34.2 11.6 36.4 13 38.2 14.8C40 16.6 41.4 18.8 42.4 21.2C43.5 23.6 44 26.2 44 29C44 31.8 43.5 34.4 42.4 36.8C41.4 39.2 40 41.4 38.2 43.1C36.4 45 34.2 46.4 31.8 47.4C29.4 48.5 26.8 49 24 49M22 44.9L22 13.1C18 13.6 14.6 15.4 12 18.4C9.3 21.4 8 25 8 29C8 33 9.3 36.6 12 39.6C14.6 42.6 18 44.4 22 44.9M26 44.9C27 44.7 28 44.5 28.9 44.2C29.9 43.9 30.8 43.5 31.7 43L26 43L26 44.9M26 39L36.5 39C36.8 38.7 37 38.4 37.2 38C37.4 37.7 37.6 37.4 37.8 37L26 37L26 39M26 33L39.5 33C39.6 32.7 39.6 32.3 39.7 32C39.8 31.7 39.8 31.3 39.9 31L26 31L26 33M26 27L39.9 27C39.8 26.7 39.8 26.3 39.7 26C39.6 25.7 39.6 25.3 39.5 25L26 25L26 27M26 21L37.8 21C37.6 20.6 37.4 20.3 37.2 19.9C37 19.6 36.8 19.3 36.5 19L26 19L26 21M26 15L31.7 15C30.8 14.5 29.9 14.1 28.9 13.8C28 13.5 27 13.3 26 13.1L26 15M22 29"/></symbol>
   <symbol id="ic-adjust" viewBox="0 5 48 48"><path d="M24 35C25.7 35 27.1 34.4 28.2 33.2C29.4 32.1 30 30.7 30 29C30 27.3 29.4 25.9 28.2 24.8C27.1 23.6 25.7 23 24 23C22.3 23 20.9 23.6 19.8 24.8C18.6 25.9 18 27.3 18 29C18 30.7 18.6 32.1 19.8 33.2C20.9 34.4 22.3 35 24 35M24 49C21.2 49 18.6 48.5 16.2 47.4C13.8 46.4 11.7 45 9.8 43.1C8.1 41.4 6.6 39.2 5.6 36.8C4.5 34.4 4 31.8 4 29C4 26.2 4.5 23.6 5.6 21.2C6.6 18.8 8.1 16.6 9.8 14.8C11.7 13 13.8 11.6 16.2 10.6C18.6 9.5 21.2 9 24 9C26.8 9 29.4 9.5 31.8 10.6C34.2 11.6 36.4 13 38.2 14.8C40 16.6 41.4 18.8 42.4 21.2C43.5 23.6 44 26.2 44 29C44 31.8 43.5 34.4 42.4 36.8C41.4 39.2 40 41.4 38.2 43.1C36.4 45 34.2 46.4 31.8 47.4C29.4 48.5 26.8 49 24 49M24 45C28.5 45 32.2 43.5 35.4 40.4C38.5 37.2 40 33.5 40 29C40 24.5 38.5 20.8 35.4 17.6C32.2 14.6 28.5 13 24 13C19.5 13 15.8 14.6 12.7 17.6C9.6 20.8 8 24.5 8 29C8 33.5 9.6 37.2 12.7 40.4C15.8 43.5 19.5 45 24 45M24 29"/></symbol>
@@ -801,40 +870,49 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
   <symbol id="ic-reset_focus" viewBox="0 5 48 48"><path d="M24 37L24 32C24 31.2 24.3 30.5 24.9 29.9C25.5 29.3 26.2 29 27 29L32 29L32 32L27 32L27 37L24 37M27 49C26.2 49 25.5 48.7 24.9 48.1C24.3 47.5 24 46.8 24 46L24 41L27 41L27 46L32 46L32 49L27 49M41 37L41 32L36 32L36 29L41 29C41.8 29 42.5 29.3 43.1 29.9C43.7 30.5 44 31.2 44 32L44 37L41 37M36 49L36 46L41 46L41 41L44 41L44 46C44 46.8 43.7 47.5 43.1 48.1C42.5 48.7 41.8 49 41 49L36 49M41.5 25L37.4 25C36.5 22.1 34.9 19.7 32.5 17.8C30 15.9 27.2 15 24 15C20.1 15 16.8 16.4 14.1 19.1C11.4 21.8 10 25.1 10 29C10 31.4 10.5 33.6 11.6 35.6C12.7 37.6 14.2 39.2 16 40.5L16 35L20 35L20 47L8 47L8 43L12.7 43C10.6 41.3 9 39.3 7.8 36.9C6.6 34.5 6 31.8 6 29C6 26.5 6.5 24.2 7.4 22C8.4 19.8 9.7 17.9 11.3 16.3C12.9 14.7 14.8 13.4 17 12.4C19.2 11.5 21.5 11 24 11C28.3 11 32.1 12.3 35.3 15C38.6 17.6 40.6 21 41.5 25"/></symbol>
   <symbol id="ic-rotate_90_degrees_cw" viewBox="0 5 48 48"><path d="M22 49C19.5 49 17.2 48.5 15 47.6C12.8 46.6 10.9 45.4 9.3 43.7C7.7 42.1 6.4 40.2 5.4 38C4.5 35.8 4 33.5 4 31C4 26 5.8 21.8 9.2 18.2C12.8 14.8 17 13 22 13L22.3 13L19.2 9.9L22 7L30 15L22 23L19.2 20.1L22.3 17L22 17C18.1 17 14.8 18.4 12.1 21.1C9.4 23.8 8 27.1 8 31C8 34.9 9.4 38.2 12.1 40.9C14.8 43.6 18.1 45 22 45C23.2 45 24.3 44.9 25.4 44.6C26.6 44.3 27.7 43.9 28.7 43.3L31.6 46.2C30.2 47.1 28.6 47.8 27 48.3C25.4 48.8 23.7 49 22 49M34 43L22 31L34 19L46 31L34 43M34 37.3L40.3 31L34 24.7L27.7 31L34 37.3M34 31"/></symbol>
   <symbol id="ic-fit_screen" viewBox="0 5 48 48"><path d="M40 23L40 17L34 17L34 13L40 13C41.1 13 42 13.4 42.8 14.2C43.6 14.9 44 15.9 44 17L44 23L40 23M4 23L4 17C4 15.9 4.4 14.9 5.2 14.2C6 13.4 6.9 13 8 13L14 13L14 17L8 17L8 23L4 23M34 45L34 41L40 41L40 35L44 35L44 41C44 42.1 43.6 43 42.8 43.8C42 44.6 41.1 45 40 45L34 45M8 45C6.9 45 6 44.6 5.2 43.8C4.4 43 4 42.1 4 41L4 35L8 35L8 41L14 41L14 45L8 45M12 37L12 21L36 21L36 37L12 37M16 33L32 33L32 25L16 25L16 33M16 33L16 25L16 33"/></symbol>
+  <symbol id="ic-undo" viewBox="0 5 48 48"><path d="M14 43L14 39L28.2 39C30.3 39 32.1 38.3 33.7 37C35.2 35.7 36 34 36 32C36 30 35.2 28.3 33.7 27C32.1 25.7 30.3 25 28.2 25L15.6 25L20.8 30.2L18 33L8 23L18 13L20.8 15.8L15.6 21L28.2 21C31.4 21 34.2 22.1 36.5 24.1C38.8 26.2 40 28.9 40 32C40 35.1 38.8 37.8 36.5 39.9C34.2 42 31.4 43 28.2 43L14 43"/></symbol>
+  <symbol id="ic-redo" viewBox="0 5 48 48"><path d="M19.8 43C16.6 43 13.8 42 11.5 39.9C9.2 37.8 8 35.1 8 32C8 28.9 9.2 26.2 11.5 24.1C13.8 22.1 16.6 21 19.8 21L32.4 21L27.2 15.8L30 13L40 23L30 33L27.2 30.2L32.4 25L19.8 25C17.7 25 15.9 25.7 14.3 27C12.8 28.3 12 30 12 32C12 34 12.8 35.7 14.3 37C15.9 38.3 17.7 39 19.8 39L34 39L34 43L19.8 43"/></symbol>
 </defs>
 </svg>
 
 <article class="term" id="tb-viewer">
   <h3>Image viewer <span class="where">row above the image</span></h3>
-  <p>Left to right along the top of the Image Viewer: where the pictures come from, how they are framed, which one you see, and the main analysis actions.</p>
+  <p>Left to right along the top of the Image Viewer, in five groups: where the pictures come from, how they are framed, which one you see,
+  undoing ROI changes, and the main analysis actions. The image's position in the series (for example 7/30) sits at the right end of the row.</p>
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-folder_open"/></svg></span></td><td class="lbl">Choose the image folder</td><td>Pick a different folder of images to look at; it starts on the current experiment's raw captures.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-home"/></svg></span></td><td class="lbl">Back to the experiment's captures</td><td>Jump back to the experiment you are running and show its newest image.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-open_in_new"/></svg></span></td><td class="lbl">Open the folder in the file browser</td><td>Opens the folder these images live in, so you can copy or inspect the files yourself.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-refresh"/></svg></span></td><td class="lbl">Fit image to the pane</td><td>Resets the zoom so the whole image fits the viewer again.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-refresh"/></svg></span></td><td class="lbl">Fit image to the pane</td><td>Resets the zoom so the whole image fits the viewer again.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-zoom_in"/></svg></span></td><td class="lbl">Zoom in one step</td><td>Magnifies the image a step, for placing ROIs precisely on small droplets.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-zoom_out"/></svg></span></td><td class="lbl">Zoom out one step</td><td>Shrinks the image a step, to see more of the chip.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-previous"/></svg></span></td><td class="lbl">Previous image</td><td>Steps back one image in the series.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-previous"/></svg></span></td><td class="lbl">Previous image</td><td>Steps back one image in the series.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-play_arrow"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-pause"/></svg></span></td><td class="lbl">Cycle through the images</td><td>Plays the folder like a slideshow; while playing the icon turns into a pause sign, so press it again to stop.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-next"/></svg></span></td><td class="lbl">Next image</td><td>Steps forward one image in the series.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-show_chart"/></svg></span></td><td class="lbl">Calculate and plot</td><td>Measures every ROI in every image that is not excluded and draws the result in the plot pane. Use it after drawing or changing ROIs.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-undo"/></svg></span></td><td class="lbl">Undo the last ROI change</td><td>Steps back one change to the drawn ROIs and masks: drawing, pasting, accepting AI candidates (one step for the whole accepted set), moving, resizing, rotating or reshaping, deleting, and Remove all ROIs. <kbd>Ctrl+Z</kbd> on the image does the same. Colour, eye and other style changes and the settings are not part of it, and the history starts afresh when you open another experiment or folder.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-redo"/></svg></span></td><td class="lbl">Redo the undone ROI change</td><td>Puts back the change you last undid (<kbd>Ctrl+Y</kbd> or <kbd>Ctrl+Shift+Z</kbd> on the image).</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-delete_sweep"/></svg></span></td><td class="lbl">Remove all ROIs</td><td>Deletes every ROI and mask, with their drift corrections, so you can start the layout over. It asks first, and Undo brings them back.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-show_chart"/></svg></span></td><td class="lbl">Calculate and plot</td><td>Measures every ROI in every image that is not excluded and draws the result in the plot pane. Use it after drawing or changing ROIs.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-reset_wrench"/></svg></span></td><td class="lbl">Reset calculated intensities</td><td>Throws away the measured numbers so the next Calculate starts fresh; it can also clear the drift corrections you made by moving ROIs on later images.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-save"/></svg></span></td><td class="lbl">Export the intensities</td><td>Writes the measurements as a CSV file into the experiment's analysis folder, calculating first if needed.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-delete_sweep"/></svg></span></td><td class="lbl">Remove all ROIs</td><td>Deletes every ROI so you can start the layout over.</td></tr>
     </tbody>
   </table>
 </article>
 
 <article class="term" id="tb-sidebar">
   <h3>Sidebar and section headers <span class="where">Image Viewer</span></h3>
-  <p>Small arrows that fold parts of the viewer away to give the image more room.</p>
+  <p>The arrows that fold parts of the viewer away to give the image more room, and the Experiments section's bin.</p>
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_left"/></svg></span><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_right"/></svg></span></td><td class="lbl">Hide or show the selector sidebar</td><td>The left-pointing arrow tucks the sidebar (experiments, groups, filters) away; the right-pointing arrow brings it back.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-expand_more"/></svg></span><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_right"/></svg></span></td><td class="lbl">Open or fold a section</td><td>Next to a section title such as Experiments or Advanced: pointing down means the section is open, pointing right means it is folded shut.</td></tr>
+      <tr><td class="icons"><span class="tbtn tbtn-slim"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_left"/></svg></span><span class="tbtn tbtn-slim"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_right"/></svg></span></td><td class="lbl">Hide or show the selector sidebar</td><td>The tall, narrow bar down the pane's left edge. Its left-pointing arrow tucks the sidebar (Experiments, Image Groups, Images,
+      Analysis Exclusion, Contrast) away; while the sidebar is hidden the arrow points right and brings it back.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-expand_more"/></svg></span><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-chevron_right"/></svg></span></td><td class="lbl">Open or fold a section</td><td>Next to a section title such as Experiments, Advanced, Measurement or AI Detection: pointing down means the section is open, pointing right means it is folded shut.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-delete"/></svg></span></td><td class="lbl">Send experiment folder to trash</td><td>In the Experiments section: moves the shown experiment's folder to the Recycle Bin (Trash on macOS and Linux), where it can be restored.
+      The experiment MicroDrop is recording into cannot be sent there. <span class="ui">File &gt; Experiments &gt; Prune Experiments…</span> does the same
+      for every experiment folder that holds only logs.</td></tr>
     </tbody>
   </table>
 </article>
@@ -849,17 +927,19 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-rectangle"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-rectangle"/></svg></span></td><td class="lbl">Draw a rectangular ROI</td><td>Click-drag a box over the region. Good for square wells or channels.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-pill"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-pill"/></svg></span></td><td class="lbl">Draw a capsule ROI</td><td>Drag along the droplet's long axis, then use the grip to set its width. Fits stretched or elongated droplets.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-pentagon"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-pentagon"/></svg></span></td><td class="lbl">Draw a contour ROI</td><td>Click point by point around an odd-shaped droplet; finish on the first point, by double-clicking, or with Enter.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-straighten"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-straighten"/></svg></span></td><td class="lbl">Set the image scale</td><td>Drag a line over something whose real length you know, then type that length. Areas are then reported in mm² or µm² instead of pixels.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-remove_selection"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-remove_selection"/></svg></span></td><td class="lbl">Negative mask mode</td><td>While lit, the draw tools make <a href="#negative-mask">negative masks</a> instead of ROIs: shapes subtracted from every ROI they overlap. Stays on until clicked again.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility_off"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility"/></svg></span></td><td class="lbl">Show / hide ROIs</td><td>Hides every ROI outline, mask and ring on the image so you can see the picture; nothing is measured differently.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-straighten"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-straighten"/></svg></span></td><td class="lbl">Set the image scale</td><td>Drag a line over something whose real length you know, then type that length. Areas are then reported in mm² or µm² instead of pixels.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-tonality"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-tonality"/></svg></span></td><td class="lbl">Rolling-ball background correction</td><td>Flattens uneven lighting out of every image before it is measured. While on, the image shows the corrected picture, so what you see is what is measured.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-adjust"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-adjust"/></svg></span></td><td class="lbl">Show the rolling ball</td><td>Draws the ball at its real size on the image, so you can check it is bigger than your droplets. Only available while the correction above is on.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-view_in_ar"/></svg></span></td><td class="lbl">Define a perspective correction</td><td>Opens a window where you click four points on the image and drag them to where they belong, to undo a tilted camera view.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-transform"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-transform"/></svg></span></td><td class="lbl">Apply the perspective correction</td><td>Straightens every image with the correction you defined before it is shown or measured. Available once a correction has been defined.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-crop"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-crop"/></svg></span></td><td class="lbl">Show the background rings</td><td>Draws the ring around each ROI that its background level is read from, so you can check the ring sits on empty chip.</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-edit"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-edit"/></svg></span></td><td class="lbl">Edit ROIs</td><td>While lit, click an ROI to select it and drag it or its grips to move, resize, rotate or reshape it. Moving an ROI on a later image records drift from there on.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-edit"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-edit"/></svg></span></td><td class="lbl">Edit ROIs</td><td>While lit, click an ROI to select it and drag it or its grips to move, resize, rotate or reshape it. Moving an ROI on a later image records drift from there on.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-delete"/></svg></span></td><td class="lbl">Delete the selected ROI</td><td>Removes the ROI you selected (same as the Del key).</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-content_copy"/></svg></span></td><td class="lbl">Copy the ROI's shape</td><td>Remembers the selected ROI's shape and size (Ctrl+C).</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-content_paste"/></svg></span></td><td class="lbl">Paste a copied shape</td><td>Adds a new ROI with the copied shape, slightly offset, so identical droplets get identical outlines (Ctrl+V).</td></tr>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span></td><td class="lbl">AI picker</td><td>Click a droplet and the AI outlines it for you as a new ROI. Stays armed until Esc. Needs Help &gt; Install AI ROI Support.</td></tr>
+      <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span></td><td class="lbl">AI picker</td><td>Click a droplet and the AI outlines it for you as a new ROI. Stays armed until Esc. Needs Help &gt; Install AI ROI Support.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-eye_tracking"/></svg></span></td><td class="lbl">Detect all droplets</td><td>Lets the AI find every droplet on the current image. They appear as dashed candidates: click any you do not want, then Accept.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-ink_highlighter_move"/></svg></span></td><td class="lbl">Track ROIs across images</td><td>Lets the AI follow each ROI through the later images and record how the droplets drift. Press again to stop; finished images are kept.</td></tr>
     </tbody>
@@ -867,7 +947,7 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
 </article>
 
 <article class="term" id="tb-ai">
-  <h3>AI Detection box <span class="where">under the image</span></h3>
+  <h3>AI Detection section <span class="where">Advanced, under the image</span></h3>
   <p>These two appear only while AI candidates are waiting for a decision.</p>
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
@@ -884,7 +964,7 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility"/></svg></span><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility_off"/></svg></span></td><td class="lbl">Show or hide an ROI (eye column)</td><td>The open eye means the ROI's curve is drawn; click it to hide that curve (closed eye) without deleting the ROI.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility"/></svg></span><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-visibility_off"/></svg></span></td><td class="lbl">Show or hide an ROI (eye column)</td><td>The open eye means the ROI's curve is drawn; click it to hide that curve (closed eye) without deleting the ROI. On a Mask row it hides the <a href="#negative-mask">mask</a> on the image and takes it out of the calculation.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-save"/></svg></span></td><td class="lbl">Save the plot</td><td>Saves the figure into the experiment's analysis folder, at the DPI and file format set on the Export tab.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-folder_open"/></svg></span></td><td class="lbl">Choose the heater-log folder</td><td>On the Axes tab, when the X axis is temperature: pick the folder of heater logs to read temperatures from.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-function"/></svg></span></td><td class="lbl">Show the fitted equations</td><td>On the Fit tab: opens a table listing the fitted equation for every ROI.</td></tr>
@@ -909,11 +989,15 @@ the button looks while its tool or switch is on (on Windows the highlight takes 
 <!-- ============================================================ -->
 <section class="part" id="part-measure">
 <h2>Measurement settings</h2>
-<p class="intro">These live in the <span class="ui">Measurement</span> box under the image. They change what is measured,
-so changing one makes MicroDrop recalculate. The settings used are written into every row of the CSV export.</p>
+<p class="intro">These live in the <span class="ui">Measurement</span> section of <span class="ui">Advanced</span>, under the image. They change what is measured,
+so changing one makes MicroDrop recalculate. The settings used are written into every row of the CSV export.
+<span class="ui">Advanced</span>, <span class="ui">Measurement</span> and <span class="ui">AI Detection</span> each fold away on their own arrow.
+Drag the divider between the image and <span class="ui">Advanced</span> to share the height; the settings scroll when they do not fit,
+and the divider goes back to where you left it when you fold and reopen <span class="ui">Advanced</span> (until MicroDrop is closed).
+<span class="ui">Zoom Step</span>, in the same section, only sets how far one mouse-wheel notch zooms the image.</p>
 
 <article class="term" id="ring">
-  <h3>Background ring (Ring Gap, Ring Width) <span class="where">Measurement box; crop button shows it</span></h3>
+  <h3>Background ring (Ring Gap, Ring Width) <span class="where">Measurement section; crop button shows it</span></h3>
   <p>A droplet's brightness is partly the droplet and partly the chip, light leaking around, and camera offset.
   To tell them apart, MicroDrop measures a thin ring of chip <em>just outside</em> each ROI. The ring tells you how
   bright "nothing" is right next to that droplet.</p>
@@ -967,6 +1051,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
       <p><strong>Gap too small:</strong> the ring catches the droplet's glow, so "background" reads too bright and the corrected value too low.</p>
       <p><strong>Gap too large:</strong> the ring drifts away from the droplet and may reach a different-looking part of the chip.</p>
       <p><strong>Width too thin:</strong> few pixels, so the background value is noisy. <strong>Too wide:</strong> it reaches further away and into neighbours (other ROIs are always cut out of it).</p>
+      <p>Pixels under a <a href="#negative-mask">negative mask</a> are left out of the ring as well.</p>
       <p>Changing either value recalculates every number.</p>
     </dd>
     <dt>Typical value</dt>
@@ -975,7 +1060,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
 </article>
 
 <article class="term" id="ball">
-  <h3>Rolling-ball background correction (Ball Radius) <span class="where">Measurement box; tonality button turns it on</span></h3>
+  <h3>Rolling-ball background correction (Ball Radius) <span class="where">Measurement section; tonality button turns it on</span></h3>
   <p>Microscope and camera light is rarely even: often the middle of the picture is brighter than the corners.
   A droplet in the bright middle would then look brighter than an identical one in a corner.
   The rolling ball removes that slow, gentle unevenness from the <em>whole image</em> before anything is measured.</p>
@@ -1062,7 +1147,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
 <article class="term" id="stat-mean">
   <h3>Mean intensity</h3>
   <dl class="facts">
-    <dt>What it is</dt><dd><p>The average brightness of all pixels inside the ROI.</p></dd>
+    <dt>What it is</dt><dd><p>The average brightness of all pixels inside the ROI, minus any <a href="#negative-mask">negative masks</a> on it (the effective region).</p></dd>
     <dt>When to use it</dt><dd><p>The everyday choice: "how bright is this droplet?" It does not depend on how big you drew the ROI, as long as it sits inside the droplet.</p></dd>
     <dt>How to read it</dt><dd><p>Includes the background glow of the chip underneath, so two droplets on differently lit parts of the chip are not directly comparable. For that, use the background-corrected mean.</p></dd>
     <dt>Typical value</dt><dd><p>This is the default plot.</p></dd>
@@ -1141,7 +1226,7 @@ so changing one makes MicroDrop recalculate. The settings used are written into 
   <h3>Table and CSV-only columns (Count, Area, std, outline_*)</h3>
   <dl class="facts">
     <dt>What it is</dt><dd>
-      <p><strong>Count</strong>: how many pixels are inside the ROI. <strong>Area</strong>: count × the area of one pixel, in your calibrated unit (px² if not calibrated).</p>
+      <p><strong>Count</strong>: how many pixels are inside the ROI's effective region (the ROI minus any <a href="#negative-mask">negative masks</a>). <strong>Area</strong>: count × the area of one pixel, in your calibrated unit (px² if not calibrated). All other values use the same region.</p>
       <p>The CSV export also has <strong>std</strong> (standard deviation: how much the pixels vary around their mean) and the same stats for the ring, prefixed <code>outline_</code>.</p>
     </dd>
     <dt>When to use it</dt><dd><p>Count and Area confirm the ROI size; std tells you how even the droplet is. The table under the plot shows these for the image currently displayed.</p></dd>
@@ -1161,7 +1246,8 @@ says which one to pick for what.</p>
 <article class="term" id="stat-shape">
   <h3>How a shape number is made</h3>
   <p>"Shape" here is the shape of the <strong>bright droplet inside the ROI</strong>, not the outline you drew. The ROI only
-  says where to look: draw it a little larger than the droplet, and MicroDrop finds the droplet inside it by itself, in every image.</p>
+  says where to look: draw it a little larger than the droplet, and MicroDrop finds the droplet inside it by itself, in every image.
+  Pixels under a <a href="#negative-mask">negative mask</a> are left out of that search.</p>
   <figure class="demo" aria-label="How a shape number is made, in three steps">
     <svg viewBox="0 0 600 150" role="img">
       <title>Threshold, outline, moments</title>
@@ -1728,7 +1814,7 @@ midpoint of a melt curve or the speed of a decay.</p>
   <dl class="facts">
     <dt>What it is</dt><dd><p>Each row of the table is one ROI. You can rename it, and set its <strong>eye</strong> (shown or hidden), <strong>Alpha</strong> (opacity, 0 to 100%), <strong>Color</strong>, <strong>Line</strong> style, <strong>Marker</strong> shape and marker <strong>Size</strong>. <strong>Bkg Ref</strong> marks it as a <a href="#bkgref">background reference</a>.</p></dd>
     <dt>When to use it</dt><dd><p>To make a figure readable, or to hide reference ROIs once they have done their job.</p></dd>
-    <dt>What changing it does</dt><dd><p>Display only. A hidden ROI is still measured, listed in the table and exported to the CSV.</p></dd>
+    <dt>What changing it does</dt><dd><p>Display only. A hidden ROI is still measured, listed in the table and exported to the CSV. The exception is a Mask row's eye: a hidden <a href="#negative-mask">mask</a> is neither drawn on the image nor subtracted.</p></dd>
     <dt>Typical value</dt><dd><p>Visible, fully opaque, solid line, no markers, colours assigned in turn.</p></dd>
   </dl>
 </article>
@@ -2716,6 +2802,88 @@ midpoint of a melt curve or the speed of a decay.</p>
         if (+cursor.value >= N - 1) { play.click(); }
       }, reduceMotion ? 400 : 120);
     });
+  })();
+
+  /* ---------------- negative mask ---------------- */
+  (function negativeMask() {
+    var N = 96, K = 2.5, MASK_Y = 44, base = [], glare = [], inRoi = [];
+    for (var i = 0; i < N * N; i++) {
+      var x = i % N + 0.5, y = Math.floor(i / N) + 0.5;
+      base.push(20 + 90 / (1 + Math.exp((Math.hypot((x - 48) / 33, (y - 48) / 29) - 1) * 20)) + noise(6));
+      glare.push(140 * Math.exp(-(Math.pow(x - 68, 2) + Math.pow(y - MASK_Y, 2)) / 24.5));
+      inRoi.push(Math.pow((x - 48) / 30, 2) + Math.pow((y - 48) / 26, 2) <= 1);
+    }
+    function value(i) { return Math.min(255, base[i] + glare[i]); }
+
+    var canvas = document.createElement("canvas"), ctx = canvas.getContext && canvas.getContext("2d");
+    if (ctx) {
+      canvas.width = canvas.height = N;
+      var img = ctx.createImageData(N, N);
+      for (i = 0; i < N * N; i++) {
+        var v = value(i), hot = Math.max(0, v - 150) * 2;
+        img.data.set([0.25 * v + 14 + hot, 1.6 * v, 0.45 * v + 14 + hot, 255], 4 * i);
+      }
+      ctx.putImageData(img, 0, 0);
+      document.getElementById("neg-img").setAttribute("href", canvas.toDataURL());
+    }
+
+    var pos = document.getElementById("neg-x"), rad = document.getElementById("neg-r"), label = document.getElementById("neg-label");
+    var table = document.getElementById("neg-read"), status = document.getElementById("neg-status");
+
+    function cell(v, digits) { return v === v ? v.toFixed(digits) : '<span class="na">blank</span>'; }
+
+    function draw() {
+      var mx = +pos.value, r = +rad.value, sx = 10 + mx * K, sr = r * K;
+      ["neg-c", "neg-cut-c"].forEach(function (id) {
+        var shape = document.getElementById(id);
+        shape.setAttribute("cx", sx);
+        shape.setAttribute("r", sr);
+      });
+      label.setAttribute("x", Math.min(225, Math.max(35, sx)));
+      label.setAttribute("y", Math.max(24, 10 + MASK_Y * K - sr - 6));
+
+      var n = 0, sum = 0, kept = 0, keptSum = 0, own = 0, glareIn = 0, glareCut = 0;
+      for (var i = 0; i < N * N; i++) {
+        if (!inRoi[i]) { continue; }
+        n++; sum += value(i); own += base[i]; glareIn += glare[i];
+        if (Math.hypot(i % N + 0.5 - mx, Math.floor(i / N) + 0.5 - MASK_Y) <= r) { glareCut += glare[i]; } else { kept++; keptSum += value(i); }
+      }
+
+      var mean = sum / n, keptMean = kept ? keptSum / kept : NaN, removed = 1 - kept / n, caught = glareCut / glareIn;
+      /* colour the changed cells by the verdict, not the direction: a lower mean is the point */
+      var verdict = !kept || caught < 0.9 || removed > 0.3 ? "down" : "up";
+      var html = '<thead><tr><th>Quantity</th><th style="text-align:right">ROI alone</th><th style="text-align:right">ROI − mask</th></tr></thead><tbody>';
+      [["Count (px)", n, kept, 0], ["Area (mm²)", n * 4e-4, kept ? kept * 4e-4 : NaN, 3], ["Mean", mean, keptMean, 1]].forEach(function (row) {
+        var moved = row[2] === row[2] && row[2].toFixed(row[3]) !== row[1].toFixed(row[3]);
+        html += '<tr class="' + (moved ? verdict : "") + '"><td>' + row[0] + '</td><td class="num">' + cell(row[1], row[3]) +
+          '</td><td class="num now">' + cell(row[2], row[3]) + "</td></tr>";
+      });
+      table.innerHTML = html + "</tbody>";
+
+      if (!kept) {
+        status.innerHTML = '<span class="bad">The mask covers the whole ROI:</span> Count is 0 and every other value is blank, so the plot shows a gap.';
+        return;
+      }
+      if (!removed) {
+        status.innerHTML = "No overlap: the ROI's numbers are unchanged.";
+        return;
+      }
+
+      var shift = keptMean - mean, note = "Removes " + (100 * removed).toFixed(1) + "% of the ROI's pixels; the mean moves " +
+        (shift < 0 ? "−" : "+") + Math.abs(shift).toFixed(1) + ". ";
+      if (caught >= 0.9) {
+        note += '<span class="good">Reflection excluded:</span> the mean is back near the droplet\'s own ' + (own / n).toFixed(1) + ".";
+      } else if (caught > 0.1) {
+        note += '<span class="bad">Reflection only partly covered:</span> its glare still lifts the mean.';
+      } else {
+        note += '<span class="bad">Wrong spot:</span> the reflection is still in; only droplet was removed.';
+      }
+      if (removed > 0.3) { note += ' <span class="bad">That is a lot of droplet:</span> fewer pixels give a noisier mean.'; }
+      status.innerHTML = note;
+    }
+    bind("neg-x", draw, function (v) { return v + " px"; });
+    bind("neg-r", draw, function (v) { return v + " px"; });
+    draw();
   })();
 })();
 </script>

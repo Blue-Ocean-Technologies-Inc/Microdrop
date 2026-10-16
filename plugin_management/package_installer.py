@@ -14,14 +14,31 @@ Uses `pixi add <name>` (channel registered on demand) so the conda solver
 resolves the package + its run-dependencies. Qt-free; snapshots pyproject.toml
 + pixi.lock for rollback.
 """
+
+# Standard library imports.
 import importlib.metadata
 import json
+import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+# Enthought library imports.
+from traits.api import HasTraits, provides
+
+# Microdrop package imports.
 from plugin_management import paths
 from plugin_management.consts import ENTRY_POINT_GROUP, PLUGIN_CHANNEL_URL
+
+# Microdrop utils imports.
+from microdrop_utils.environment_update import (
+    EnvironmentUpdateError,
+    ExternalPlugin,
+    IExternalPluginsProvider,
+)
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -72,12 +89,14 @@ class EnvDiff:
 
 
 def _run(args, *, cwd=None):
-    proc = subprocess.run(["pixi", *args], cwd=str(cwd or WORKSPACE_DIR),
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        ["pixi", *args], cwd=str(cwd or WORKSPACE_DIR), capture_output=True, text=True
+    )
     if proc.returncode != 0:
         raise InstallError(
             f"`pixi {' '.join(args)}` failed (exit {proc.returncode}): "
-            f"{proc.stderr.strip() or proc.stdout.strip()}")
+            f"{proc.stderr.strip() or proc.stdout.strip()}"
+        )
     return proc
 
 
@@ -101,6 +120,16 @@ def _restore(cwd, snapshot):
 _registered_channels = set()
 
 
+def channel_add_arguments(channel_url):
+    """The pixi arguments registering ``channel_url`` with the workspace."""
+    return ["workspace", "channel", "add", channel_url]
+
+
+def add_arguments(name, version=None):
+    """The pixi arguments adding ``name``, pinned to ``version`` when given."""
+    return ["add", f"{name}=={version}" if version else name]
+
+
 def _ensure_channel_registered(channel_url, cwd):
     """`pixi workspace channel add <url>`; tolerate an already-registered
     channel, and skip the subprocess entirely once this process has
@@ -109,15 +138,16 @@ def _ensure_channel_registered(channel_url, cwd):
     if key in _registered_channels:
         return
     try:
-        _run(["workspace", "channel", "add", channel_url], cwd=cwd)
+        _run(channel_add_arguments(channel_url), cwd=cwd)
     except InstallError as e:
         if "already" not in str(e).lower():
             raise
     _registered_channels.add(key)
 
 
-def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                         version=None) -> EnvChangeResult:
+def install_from_channel(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None, version=None
+) -> EnvChangeResult:
     """Register the channel and `pixi add <name>` so the solver resolves the
     package + its deps. When ``version`` is given, pin it (`pixi add
     <name>==<version>`) to install that specific version (down/upgrade).
@@ -132,7 +162,7 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     spec = f"{name}=={version}" if version else name
     try:
         _ensure_channel_registered(channel_url, cwd)
-        _run(["add", spec], cwd=cwd)
+        _run(add_arguments(name, version), cwd=cwd)
         _run(["install"], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
@@ -140,18 +170,23 @@ def install_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"installed plugin '{spec}' from {channel_url}")
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_addition)
+        name=name,
+        diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition,
+    )
 
 
-def upgrade_package(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None) -> EnvChangeResult:
+def upgrade_package(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None
+) -> EnvChangeResult:
     """Upgrade a plugin to the latest channel version via a full
     remove + add cycle. Thin wrapper over :func:`reinstall_from_channel`."""
     return reinstall_from_channel(name, channel_url, cwd=cwd)
 
 
-def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
-                           version=None) -> EnvChangeResult:
+def reinstall_from_channel(
+    name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None, version=None
+) -> EnvChangeResult:
     """Replace an installed package: `pixi remove <name>` then `pixi add`
     (pinned when ``version`` is given) then `pixi install`.
 
@@ -174,7 +209,7 @@ def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
     try:
         _run(["remove", name], cwd=cwd)
         _ensure_channel_registered(channel_url, cwd)
-        _run(["add", spec], cwd=cwd)
+        _run(add_arguments(name, version), cwd=cwd)
         _run(["install"], cwd=cwd)
     except Exception:
         _restore(cwd, snapshot)
@@ -183,13 +218,16 @@ def reinstall_from_channel(name, channel_url=PLUGIN_CHANNEL_URL, *, cwd=None,
         except InstallError as e:
             logger.warning(
                 f"could not re-materialize the env after a failed reinstall "
-                f"of '{name}': {e}")
+                f"of '{name}': {e}"
+            )
         raise
     diff = _diff_or_none(before, _try_snapshot(cwd))
     logger.info(f"reinstalled plugin '{spec}' from {channel_url}")
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_addition)
+        name=name,
+        diff=diff,
+        requires_relaunch=diff is None or not diff.is_pure_addition,
+    )
 
 
 def _parse_search_json(stdout: str) -> list[dict]:
@@ -227,8 +265,10 @@ def env_snapshot(*, cwd=None) -> dict:
     `pixi list` defaults to the platform best matching this machine — the
     same platform, and the same prefix, the running interpreter uses."""
     proc = _run(["list", "--json"], cwd=cwd)
-    return {r["name"]: (r["version"], r["build"], r["kind"])
-            for r in _parse_list_json(proc.stdout)}
+    return {
+        r["name"]: (r["version"], r["build"], r["kind"])
+        for r in _parse_list_json(proc.stdout)
+    }
 
 
 def diff_snapshots(before, after) -> EnvDiff:
@@ -239,9 +279,11 @@ def diff_snapshots(before, after) -> EnvDiff:
     whatever is already imported."""
     added = {n: rec[0] for n, rec in after.items() if n not in before}
     removed = {n: rec[0] for n, rec in before.items() if n not in after}
-    changed = {n: (before[n][0], after[n][0])
-               for n in before.keys() & after.keys()
-               if before[n] != after[n]}
+    changed = {
+        n: (before[n][0], after[n][0])
+        for n in before.keys() & after.keys()
+        if before[n] != after[n]
+    }
     return EnvDiff(added=added, changed=changed, removed=removed)
 
 
@@ -340,5 +382,96 @@ def uninstall_package(name, *, cwd=None) -> EnvChangeResult:
     _run(["install"], cwd=cwd)
     diff = _diff_or_none(before, _try_snapshot(cwd))
     return EnvChangeResult(
-        name=name, diff=diff,
-        requires_relaunch=diff is None or not diff.is_pure_removal)
+        name=name, diff=diff, requires_relaunch=diff is None or not diff.is_pure_removal
+    )
+
+
+def _normalized_name(name):
+    """``name`` in PEP 503 normal form, so a conda package name matches its
+    Python distribution name (``heater-microdrop-plugin`` and
+    ``heater_microdrop_plugin`` are one package)."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def declared_dependencies(workspace=WORKSPACE_DIR):
+    """{name: spec} of the workspace manifest's top-level conda dependencies
+    — the table a plain `pixi add` writes to, so the record of every plugin
+    installed from the channel. Raises InstallError when the manifest
+    cannot be read."""
+    workspace = Path(workspace)
+    pixi_toml = workspace / "pixi.toml"
+
+    try:
+        if pixi_toml.exists():
+            return tomllib.loads(pixi_toml.read_text(encoding="utf-8")).get(
+                "dependencies", {}
+            )
+
+        pyproject = tomllib.loads(
+            (workspace / "pyproject.toml").read_text(encoding="utf-8")
+        )
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise InstallError(
+            f"could not read the pixi manifest in {workspace}: {e}"
+        ) from e
+
+    return pyproject.get("tool", {}).get("pixi", {}).get("dependencies", {})
+
+
+def _pinned_version(spec):
+    """The version an install pinned (``==<version>``, as
+    ``install_from_channel`` records it), or "" for a range."""
+    if isinstance(spec, dict):
+        spec = spec.get("version", "")
+
+    spec = str(spec).strip()
+
+    if spec.startswith("==") and "," not in spec:
+        return spec[2:].strip()
+
+    return ""
+
+
+def installed_external_plugins(workspace=WORKSPACE_DIR):
+    """The ExternalPlugins installed into ``workspace`` from the channel, in
+    manifest order: installed plugin distributions
+    (``installed_plugin_dists``) that the manifest's top-level dependencies
+    declare. Plugins the launcher ships in its own features are not
+    external, so they are left out. Raises InstallError when the manifest
+    cannot be read."""
+    installed = {_normalized_name(name) for name in installed_plugin_dists()}
+    plugins = []
+
+    for name, spec in declared_dependencies(workspace).items():
+        if _normalized_name(name) not in installed:
+            continue
+
+        plugins.append(
+            ExternalPlugin(
+                name=name, version=_pinned_version(spec), channel=PLUGIN_CHANNEL_URL
+            )
+        )
+
+    return plugins
+
+
+@provides(IExternalPluginsProvider)
+class ExternalPluginsProvider(HasTraits):
+    """The plugins an environment update must re-add, and how — the same
+    channel registration and ``pixi add`` an install from the channel runs."""
+
+    def installed_external_plugins(self, workspace):
+        """``installed_external_plugins``, failing as the interface says."""
+        try:
+            return installed_external_plugins(workspace)
+        except InstallError as e:
+            raise EnvironmentUpdateError(
+                f"Could not tell which plugins are installed: {e}"
+            ) from e
+
+    def reinstall_arguments(self, plugin):
+        """Register the plugin's channel, then add it as it was installed."""
+        return [
+            channel_add_arguments(plugin.channel),
+            add_arguments(plugin.name, plugin.version or None),
+        ]

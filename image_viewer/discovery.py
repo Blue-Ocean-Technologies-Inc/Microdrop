@@ -18,7 +18,6 @@ import calendar
 import fnmatch
 import os
 import re
-import shutil
 import threading
 import time
 from pathlib import Path
@@ -42,6 +41,11 @@ from .consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+class TrashUnavailableError(RuntimeError):
+    """The environment lacks send2trash, so nothing can be moved to the
+    Recycle Bin / Trash — and nothing is ever permanently deleted instead."""
 
 
 def current_captures_directory():
@@ -83,10 +87,13 @@ def discover_experiments() -> list:
 
 
 def delete_experiment(captures_path):
-    """Remove the experiment folder holding ``captures_path`` (a
-    discover_experiments captures path) and everything in it; return the
-    removed folder. Raises ValueError for the CURRENT experiment, which
-    the app is still writing into, and OSError when the removal fails."""
+    """Move the experiment folder holding ``captures_path`` (a
+    discover_experiments captures path) to the platform's Recycle Bin /
+    Trash, where it can be restored; return the moved folder. Raises
+    ValueError for the CURRENT experiment, which the app is still writing
+    into, TrashUnavailableError without send2trash, and OSError
+    (send2trash's TrashPermissionError included) when it cannot be trashed
+    — never falls back to a permanent delete."""
     experiment = Path(captures_path).parent
 
     if _is_current_experiment(experiment):
@@ -95,8 +102,9 @@ def delete_experiment(captures_path):
             "deleted while it is in use."
         )
 
-    shutil.rmtree(experiment)
-    logger.info(f"Deleted experiment folder {experiment}")
+    send2trash = _send2trash()
+    send2trash(str(experiment))
+    logger.info(f"Moved experiment folder {experiment} to the trash")
 
     return experiment
 
@@ -124,17 +132,35 @@ def prunable_experiments():
 
 
 def prune_experiments(directories):
-    """Remove each of ``directories`` (prunable_experiments folders) and
-    everything in it; return the removed folders. An OSError stops the
-    pruning and propagates, leaving the folders before it removed."""
+    """Move each of ``directories`` (prunable_experiments folders) to the
+    platform's Recycle Bin / Trash; return the moved folders. Raises
+    TrashUnavailableError, before moving any, without send2trash. An
+    OSError stops the pruning and propagates, leaving the folders before it
+    trashed — never falls back to a permanent delete."""
+    send2trash = _send2trash()
     removed = []
 
     for directory in directories:
-        shutil.rmtree(directory)
-        logger.info(f"Pruned experiment folder {directory}")
+        send2trash(str(directory))
+        logger.info(f"Moved experiment folder {directory} to the trash")
         removed.append(directory)
 
     return removed
+
+
+def _send2trash():
+    """The ``send2trash`` function, imported on use rather than at startup,
+    so a package an environment update installs into the running app is
+    picked up. Raises TrashUnavailableError when it is not installed — an
+    environment older than the send2trash dependency must still start."""
+    try:
+        from send2trash import send2trash
+    except ImportError as e:
+        raise TrashUnavailableError(
+            "send2trash is not installed in this environment"
+        ) from e
+
+    return send2trash
 
 
 def _experiments_root():

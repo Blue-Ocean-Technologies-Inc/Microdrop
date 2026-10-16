@@ -21,12 +21,22 @@ from microdrop_application.dialogs.pyface_wrapper import (
     information,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
+
 # Local imports.
 from .ai_install import install_ai_support
 from .analysis.roi_model import roi_analysis_model
 from .analysis.sam_detect import sam_available
-from .consts import PRUNE_EXPERIMENTS_DESCRIPTION
-from .discovery import prunable_experiments, prune_experiments
+from .consts import PRUNE_EXPERIMENTS_DESCRIPTION, TRASH_FEATURE, TRASH_PACKAGE
+from .discovery import (
+    TrashUnavailableError,
+    prunable_experiments,
+    prune_experiments,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -72,20 +82,40 @@ class PruneExperimentsAction(Action):
             parent=None,
             message=f"Delete {len(targets)} experiment folder(s) that hold only logs?",
             title="Prune Experiments",
-            informative="This removes the folders from disk and cannot be undone.",
+            informative="The folders are moved to the Recycle Bin (Trash on "
+            "macOS/Linux), where they can be restored.",
             detail="\n".join(path.name for path in targets),
         )
 
         if result != YES:
             return
 
+        self._prune(targets, event)
+
+    def _prune(self, targets, event, retry=True):
+        """Move the confirmed ``targets`` to the trash and say how many went.
+        Without send2trash, offer the environment update and, when it makes
+        the package available, try once more."""
         try:
             removed = prune_experiments(targets)
+        except TrashUnavailableError:
+            window = getattr(getattr(event, "task", None), "window", None)
+            application = getattr(window, "application", None)
+
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=application
+            ):
+                self._prune(targets, event, retry=False)
+
+            return
         except OSError as e:
             logger.exception(f"Failed to prune experiments: {e}")
             error(
                 None,
-                f"Pruning stopped, could not delete an experiment folder: {e}",
+                f"Pruning stopped, could not move an experiment folder to the "
+                f"trash: {e}",
                 title="Prune Experiments",
             )
 
@@ -93,7 +123,7 @@ class PruneExperimentsAction(Action):
 
         information(
             None,
-            f"Deleted {len(removed)} experiment folder(s).",
+            f"Moved {len(removed)} experiment folder(s) to the trash.",
             title="Prune Experiments",
             cancel=False,
         )

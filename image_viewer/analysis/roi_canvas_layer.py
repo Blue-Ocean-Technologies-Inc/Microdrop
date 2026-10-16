@@ -78,6 +78,9 @@ CAPSULE_DRAFT_RADIUS_FRACTION = 0.25
 #: invisible — it has to sit above the image and below the shapes.
 RING_Z = 0.5
 ROI_Z = 1.0
+#: Negative masks stack above the ROI outlines they cut into, so the
+#: hatch is never hidden under (and wins the click over) an ROI edge.
+NEGATIVE_Z = 1.2
 #: Above the ROI shapes, so a candidate outline is never hidden under
 #: (and always wins the click on) one it happens to overlap.
 CANDIDATE_Z = 1.5
@@ -258,7 +261,7 @@ class RoiCanvasLayer:
             self._scene.removeItem(item)
         self._ring_items = []
 
-    def _draw_rings(self, effective):
+    def _draw_rings(self, effective, negatives):
         """One dashed outline per ROI, traced from the very mask the
         background is averaged over — drawn on sync, not on every
         repaint, and never interactive."""
@@ -268,12 +271,15 @@ class RoiCanvasLayer:
         if not visible or bounds.isEmpty():
             return
         shape = (int(bounds.height()), int(bounds.width()))
-        for roi_id, name, kind, geometry in effective:
+        for roi_id, name, kind, geometry, is_negative in effective:
             item = self._items.get(roi_id)
-            if item is None:
+            # A hidden ROI takes its ring with it.
+            if item is None or is_negative or not item.isVisible():
                 continue
             path = QPainterPath()
-            for contour in ring_contours(shape, kind, geometry, gap_px, thickness_px):
+            for contour in ring_contours(
+                shape, kind, geometry, gap_px, thickness_px, negatives
+            ):
                 path.moveTo(contour[0][0], contour[0][1])
                 for x, y in contour[1:]:
                     path.lineTo(x, y)
@@ -294,16 +300,24 @@ class RoiCanvasLayer:
             self._scene.addItem(ring_item)
             self._ring_items.append(ring_item)
 
-    def sync(self, effective, selected_roi_id):
+    def sync(self, effective, selected_roi_id, hidden_ids=(), negatives=()):
         """Match the items to ``effective`` ([(roi_id, name, kind,
-        geometry), ...] for the SHOWN image) — create, update, drop."""
+        geometry, is_negative), ...] for the SHOWN image) — create,
+        update, drop. Items whose id is in ``hidden_ids`` stay in the
+        scene but are not drawn. The rings are cut by ``negatives``,
+        which must be AnalysisSession.negatives_for() of the shown
+        image, so the drawn ring is the one that is averaged;
+        ``hidden_ids`` cannot stand in for it, as the toolbar's
+        show/hide-ROIs toggle hides every item without changing what is
+        measured."""
         wanted = {
-            roi_id: (name, kind, geometry) for roi_id, name, kind, geometry in effective
+            roi_id: (name, kind, geometry, is_negative)
+            for roi_id, name, kind, geometry, is_negative in effective
         }
         for roi_id in list(self._items):
             if roi_id not in wanted:
                 self._scene.removeItem(self._items.pop(roi_id))
-        for roi_id, (name, kind, geometry) in wanted.items():
+        for roi_id, (name, kind, geometry, is_negative) in wanted.items():
             item = self._items.get(roi_id)
             item_class = ITEM_CLASSES[kind]
             if item is not None and not isinstance(item, item_class):
@@ -312,7 +326,6 @@ class RoiCanvasLayer:
             if item is None:
                 item = item_class(roi_id, name, geometry, self.on_roi_edited)
                 item.set_editable(self.mode == "edit")
-                item.setZValue(ROI_Z)
                 self._scene.addItem(item)
                 self._items[roi_id] = item
             elif not item.is_dragging():
@@ -322,8 +335,13 @@ class RoiCanvasLayer:
                 # rect as a new drift override.
                 item.set_geometry(geometry)
                 item.set_name(name)
+
+            item.set_negative(is_negative)
+            item.setZValue(NEGATIVE_Z if is_negative else ROI_Z)
+            item.setVisible(roi_id not in hidden_ids)
             item.set_selected_style(roi_id == selected_roi_id)
-        self._draw_rings(effective)
+
+        self._draw_rings(effective, negatives)
 
     def clear_items(self):
         self._discard_contour()

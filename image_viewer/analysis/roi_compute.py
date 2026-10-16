@@ -78,6 +78,18 @@ def interior_mask(shape, kind, geometry):
     return interior
 
 
+def negative_union(shape, negatives):
+    """The uint8 mask (MASK_ON inside) covering every negative mask in
+    ``negatives`` ((kind, geometry), ...) on an image of ``shape`` —
+    all-zero when there are none."""
+    union = np.zeros(shape, dtype=np.uint8)
+
+    for kind, geometry in negatives:
+        cv2.bitwise_or(union, interior_mask(shape, kind, geometry), union)
+
+    return union
+
+
 def _disk(radius):
     """A disk-shaped structuring element of ``radius``. Odd-sized —
     diameter plus the centre pixel — so it has a centre to sit on."""
@@ -122,12 +134,22 @@ def roi_masks(
 
 
 def ring_contours(
-    shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
+    shape,
+    kind,
+    geometry,
+    gap_px=RING_GAP_PX,
+    thickness_px=RING_THICKNESS_PX,
+    negatives=(),
 ):
     """The annulus's boundaries as (N, 2) image-pixel arrays — the
     canvas draws these, taken from the very mask that is averaged, so
-    the two cannot disagree."""
+    the two cannot disagree. ``negatives`` are cut out of it, as
+    compute_image_stats cuts them."""
     _interior, ring = roi_masks(shape, kind, geometry, gap_px, thickness_px)
+
+    if negatives:
+        ring = cv2.subtract(ring, negative_union(shape, negatives))
+
     found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     return [
         points.reshape(-1, 2).astype(float)
@@ -220,6 +242,7 @@ def compute_image_stats(
     thickness_px=RING_THICKNESS_PX,
     ball_radius_px=0,
     perspective=(),
+    negatives=(),
 ):
     """Stats for every ROI on one image — the process-pool work unit.
 
@@ -239,7 +262,14 @@ def compute_image_stats(
     drawn.
 
     The droplet's shape (``roi_shape_stats``) is read off the same
-    corrected frame, inside the interior mask."""
+    corrected frame, inside the interior mask.
+
+    ``negatives`` ((kind, geometry), ...) are negative masks: their
+    union is cut out of every ROI's interior before anything is
+    measured, and out of every ring — excluded pixels are not
+    background either. The ring is still grown from the ROI's whole
+    interior, so its outer edge never follows a hole. An ROI covered
+    entirely measures count 0 and NaN everywhere else."""
     result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
@@ -257,13 +287,16 @@ def compute_image_stats(
         union = np.zeros(array.shape[:2], dtype=np.uint8)
         for interior in interiors.values():
             cv2.bitwise_or(union, interior, union)
+        excluded = negative_union(array.shape[:2], negatives)
         for roi_id, ring in rings.items():
             others = cv2.subtract(union, interiors[roi_id])
             ring[others == MASK_ON] = 0
-            stats = masked_stats(array, interiors[roi_id])
+            ring[excluded == MASK_ON] = 0
+            effective = cv2.subtract(interiors[roi_id], excluded)
+            stats = masked_stats(array, effective)
             for name, value in masked_stats(array, ring).items():
                 stats[OUTLINE_STATS_PREFIX + name] = value
-            stats.update(roi_shape_stats(array, interiors[roi_id]))
+            stats.update(roi_shape_stats(array, effective))
             result["stats"][roi_id] = stats
     except Exception as error:
         result["error"] = str(error)

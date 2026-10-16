@@ -128,7 +128,9 @@ class RoiBatchRunner(HasTraits):
         """``work_items``: [(path, effective_rois, correction), ...] with
         ``effective_rois`` = roi_id -> (kind, geometry tuple) and
         ``correction`` = (gap_px, thickness_px, ball_radius_px,
-        perspective_matrix) — RoiAnalysisSession.correction_key().
+        perspective_matrix, negatives) — AnalysisSession.correction_for(),
+        spread into compute_image_stats so its last element arrives as
+        ``negatives``. The work dict holds positive ROIs only.
         ``max_in_flight`` bounds how many images compute at once (0:
         the pool's width)."""
         self.cancel()

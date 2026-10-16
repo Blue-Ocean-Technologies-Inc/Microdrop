@@ -21,7 +21,7 @@ traits notification."""
 
 # Enthought library imports.
 from pyface.qt.QtCore import Qt, QTimer
-from pyface.qt.QtGui import QColor, QFont
+from pyface.qt.QtGui import QColor, QFont, QPalette
 from pyface.qt.QtWidgets import (
     QColorDialog,
     QComboBox,
@@ -41,7 +41,7 @@ from microdrop_style.icons.icons import (
 
 # Local imports.
 from ..scale_bar import area_unit, pixel_area
-from .consts import ROI_ALPHA_BOUNDS_PCT, SHAPE_STATS
+from .consts import NEGATIVE_MASK_COLOR, ROI_ALPHA_BOUNDS_PCT, SHAPE_STATS
 from .plot_series import analysed_paths, shape_reference, stat_value
 from .shape_descriptors import shape_deviation
 
@@ -88,6 +88,17 @@ _HEADERS = (
     "Marker",
     "Size",
 ) + _STAT_COLUMNS
+#: Every cell of a negative mask's row but the eye says what it is.
+_NEGATIVE_MASK_TOOLTIP = (
+    "Negative mask: subtracted from the ROIs it overlaps while shown; hide "
+    "it with the eye to see the numbers without it"
+)
+#: A mask's name cell on an image captured before the one it was drawn
+#: on, where it is neither drawn nor subtracted (Roi.applies_at).
+_MASK_NOT_IN_FORCE_TOOLTIP = (
+    "Not in force on this image: a mask starts at the image it was drawn on"
+)
+
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 
@@ -95,6 +106,7 @@ _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 _TABLE_STRUCTURE = (
     "session, session:rois.items, "
     "session:rois:items:name, "
+    "session:rois:items:is_negative, "
     "session:rois:items:is_background_ref, "
     "session:rois:items:style:color, "
     "session:scale:metres_per_pixel, "
@@ -110,8 +122,15 @@ _TABLE_VALUES = (
 )
 
 
+def _listed_rois(session):
+    """The table's row order: the measured ROIs, then the masks cut out
+    of them. Rows map back to ROIs by the roi_id their items carry."""
+    return session.positive_rois + session.negative_rois
+
+
 class RoiStatsTable(QTableWidget):
-    """One row per ROI; editors write straight into the session."""
+    """One row per ROI, then one per negative mask; editors write
+    straight into the session."""
 
     def __init__(self, model, parent=None):
         super().__init__(0, len(_HEADERS), parent)
@@ -162,7 +181,7 @@ class RoiStatsTable(QTableWidget):
     def _rebuild(self):
         self._rebuilding = True
         session = self._model.session
-        rois = list(session.rois)
+        rois = _listed_rois(session)
         self.setRowCount(len(rois))
         current = self._model.current_image_path
         stat_cache = {}
@@ -181,6 +200,11 @@ class RoiStatsTable(QTableWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
             self.setItem(row, 0, name_item)
             self.setItem(row, _VISIBLE_COLUMN, self._visible_item(roi))
+
+            if roi.is_negative:
+                self._fill_mask_row(row, roi, current, stat_cache)
+                continue
+
             self.setItem(row, _BACKGROUND_REF_COLUMN, self._background_ref_item(roi))
             self.setCellWidget(row, 3, self._alpha_spin(roi))
             self.setCellWidget(row, 4, self._color_button(roi))
@@ -212,6 +236,40 @@ class RoiStatsTable(QTableWidget):
                 value_item.setFlags(value_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
         self._rebuilding = False
+
+    def _fill_mask_row(self, row, roi, current, stat_cache):
+        """A mask has no stats, no plot style and is never a background
+        reference: past its name and eye, every cell is an empty,
+        read-only blank. Widgets a positive left in this row go."""
+        self._mark_mask_in_force(row, roi, current, stat_cache)
+
+        for column in range(_BACKGROUND_REF_COLUMN, len(_HEADERS)):
+            self.removeCellWidget(row, column)
+            blank = QTableWidgetItem()
+            blank.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            blank.setToolTip(_NEGATIVE_MASK_TOOLTIP)
+            self.setItem(row, column, blank)
+
+    def _mark_mask_in_force(self, row, roi, current, stat_cache):
+        """Name a mask in its own colour where it is in force on the
+        ``current`` image, and in the palette's disabled grey, with a
+        tooltip saying why, on an image before the one it was drawn on.
+        With no image shown every mask counts as in force."""
+        name_item = self.item(row, 0)
+        in_force = not current or roi.applies_at(
+            self._model.session.stat_info(current, stat_cache)[1]
+        )
+
+        if in_force:
+            name_item.setForeground(QColor(NEGATIVE_MASK_COLOR))
+            name_item.setToolTip(_NEGATIVE_MASK_TOOLTIP)
+        else:
+            name_item.setForeground(
+                self.palette().color(
+                    QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text
+                )
+            )
+            name_item.setToolTip(_MASK_NOT_IN_FORCE_TOOLTIP)
 
     def _stat_texts(self, roi, current, paths, stat_cache, area_per_pixel):
         """The ``_STAT_COLUMNS`` cell texts of ``roi`` on the ``current``
@@ -269,12 +327,13 @@ class RoiStatsTable(QTableWidget):
         return area_unit(scale.metres_per_pixel, scale.unit)
 
     def _refresh_values(self):
-        """Rewrite the read-only stat cells in place — no editors or
-        row identities touched, so this never deletes a widget the user
-        is mid-interaction with."""
+        """Rewrite the read-only stat cells, and whether each mask is in
+        force on the current image, in place — no editors or row
+        identities touched, so this never deletes a widget the user is
+        mid-interaction with."""
         self._rebuilding = True
         session = self._model.session
-        rois = list(session.rois)
+        rois = _listed_rois(session)
         current = self._model.current_image_path
         paths = analysed_paths(session, self._model.filtered_paths)
         stat_cache = {}
@@ -282,6 +341,11 @@ class RoiStatsTable(QTableWidget):
         for row, roi in enumerate(rois):
             if row >= self.rowCount():
                 break
+
+            if roi.is_negative:
+                self._mark_mask_in_force(row, roi, current, stat_cache)
+                continue
+
             texts = self._stat_texts(roi, current, paths, stat_cache, area_per_pixel)
 
             for column, text in enumerate(
@@ -308,7 +372,8 @@ class RoiStatsTable(QTableWidget):
 
     def _visible_item(self, roi):
         """Eye toggle over roi.style.visible — the plot skips a hidden
-        ROI entirely, while its stats and CSV columns stay.
+        ROI entirely, while its stats and CSV columns stay; a hidden
+        mask is left out of the calculation.
 
         A cell of glyph text rather than a button inside the cell, the
         way the device viewer's own visibility column works: the font
@@ -322,7 +387,11 @@ class RoiStatsTable(QTableWidget):
         # the glyph.
         item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
-        item.setToolTip("Show or hide this ROI on the plot")
+        item.setToolTip(
+            "Show or hide this mask — a hidden mask is not subtracted"
+            if roi.is_negative
+            else "Show or hide this ROI on the plot"
+        )
         return item
 
     def _background_ref_item(self, roi):

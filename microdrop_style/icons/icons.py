@@ -106,3 +106,4 @@ ICON_TONALITY = "tonality"  # rolling-ball flattening
 ICON_PHOTO_CAMERA = "photo_camera"  # capture a camera frame
 ICON_ROTATE_90_CW = "rotate_90_degrees_cw"  # rotate a quarter turn clockwise
 ICON_ADJUST = "adjust"  # show the ball at its size
+ICON_NEGATIVE_MASK = "remove_selection"  # draw negative masks cut out of ROIs

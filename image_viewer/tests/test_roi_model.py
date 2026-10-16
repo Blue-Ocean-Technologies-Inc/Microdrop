@@ -82,3 +82,22 @@ def test_roi_ids_are_unique_and_names_sequence():
     first.name = "ROI 1"
     session.rois = [first]
     assert session.next_roi_name() == "ROI 2"
+
+
+def test_a_mask_applies_from_its_base_anchor_and_a_positive_everywhere():
+    mask = Roi(is_negative=True, base_anchor=100.0)
+    positive = Roi(base_anchor=100.0)
+
+    assert not mask.applies_at(99.0)
+    assert mask.applies_at(100.0)
+    assert mask.applies_at(500.0)
+    assert positive.applies_at(0.0)
+    assert positive.applies_at(500.0)
+
+
+def test_a_mask_drawn_with_no_image_shown_applies_everywhere():
+    mask = Roi(is_negative=True)
+
+    assert mask.base_anchor == 0.0
+    assert mask.applies_at(0.0)
+    assert mask.applies_at(1e9)
