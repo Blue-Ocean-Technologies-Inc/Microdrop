@@ -57,9 +57,11 @@ class ElectrodeScene(QGraphicsScene):
         # mousePressEvent from the ElectrodeView) has some strange behaviour,
         # so this approach is used instead.
         items = self.items(coordinates, deviceTransform=self.views()[0].transform())
+
         for item in items:
             if isinstance(item, object_type):
                 return item
+
         return None
 
     def _is_editing_channel_label(self):
@@ -97,9 +99,11 @@ class ElectrodeScene(QGraphicsScene):
         # the field already being edited fall through to Qt for caret/drag.
         started_edit = self.interaction_service.handle_channel_label_press(event)
         self.interaction_service.handle_mouse_press_event(event)
+
         if started_edit:
             event.accept()
             return
+
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
