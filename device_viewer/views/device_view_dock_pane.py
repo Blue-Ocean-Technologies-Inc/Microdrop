@@ -101,6 +101,7 @@ from ..services.electrode_interaction_service import (
     ElectrodeInteractionControllerService,
 )
 from ..services.electrode_stepping_service import ElectrodeSteppingService
+from ..services.keyboard_shortcut_service import KeyboardShortcutService
 from ..services.svg_persistence_service import SvgPersistenceService
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
@@ -609,6 +610,14 @@ class DeviceViewerDockPane(TraitsDockPane):
             device_view=self.device_view,
             device_viewer_preferences=self.device_viewer_preferences,
             stepping=stepping,
+        )
+        interaction_service.keyboard = KeyboardShortcutService(
+            model=new_model,
+            stepping=stepping,
+            interaction=interaction_service,
+            device_view=self.device_view,
+            undo_handler=self.undo,
+            redo_handler=self.redo,
         )
 
         # Update the scene with the interaction service

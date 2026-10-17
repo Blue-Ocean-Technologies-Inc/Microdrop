@@ -77,6 +77,7 @@ from ..views.electrode_view.electrode_view_helpers import find_path_item
 from ..views.electrode_view.scale_edit_view import ScaleEditViewController
 from ..views.zone_view.zone_canvas_actions import ZoneCanvasActions
 from .electrode_stepping_service import ElectrodeSteppingService
+from .keyboard_shortcut_service import KeyboardShortcutService
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -116,6 +117,10 @@ class ElectrodeInteractionControllerService(HasTraits):
     #: Electrode cursor actions (arrow stepping, split); shared with the
     #: layers through LayerContext.stepping so every input moves one cursor
     stepping = Instance(ElectrodeSteppingService)
+
+    #: Keyboard shortcuts from KEYBOARD_SHORTCUTS; the scene's key events
+    #: reach it through handle_key_press_event / handle_key_release_event
+    keyboard = Instance(KeyboardShortcutService)
 
     autoroute_paths = Dict({})
 
@@ -561,20 +566,6 @@ class ElectrodeInteractionControllerService(HasTraits):
     # Key handlers
     #######################################################################################################
 
-    def handle_ctrl_key_left(self):
-        self.model.camera_perspective.rotate_output(-90)
-
-    def handle_ctrl_key_right(self):
-        self.model.camera_perspective.rotate_output(90)
-
-    def handle_alt_key_left(self):
-        angle_step = -90
-        self._rotate_device_view(angle_step)
-
-    def handle_alt_key_right(self):
-        angle_step = 90
-        self._rotate_device_view(angle_step)
-
     def handle_ctrl_mouse_wheel_event(self, angle):
 
         if angle > 0:
@@ -582,87 +573,25 @@ class ElectrodeInteractionControllerService(HasTraits):
         else:
             self.model.zoom_out_event = True
 
-    def handle_ctrl_plus(self):
-        self.model.zoom_in_event = True  # Observer routine will call zoom in
-
-    def handle_ctrl_minus(self):
-        self.model.zoom_out_event = True  # Observer routine will call zoom out
-
-    def handle_space(self):
-        self.model.flip_mode_activation(mode="pan")
-        # Observer routine will call apply pan mode #
-
     ##########################################################################################
     # Electrode Scene global input delegations
     ##########################################################################################
 
     def handle_key_press_event(self, event: QKeyEvent):
+        """Cancel the zone interaction on Escape, else run the key's shortcut."""
         key = event.key()
 
         if key == Qt.Key.Key_Escape and self.model.mode in ZONE_MODES:
             if self.model.zones.cancel_current_interaction():
                 return
 
-        # Arrow-key stepping (keyboard).
-        # Only when Ctrl/Alt are NOT held to avoid conflicts with existing shortcuts.
-        if not (event.modifiers() & (Qt.ControlModifier | Qt.AltModifier)):
-            # We accept either Qt6 enum style (Qt.Key.Key_Left) or legacy aliases.
-            key_left = {
-                getattr(Qt, "Key_Left", None),
-                getattr(getattr(Qt, "Key", None), "Key_Left", None),
-            }
-            key_right = {
-                getattr(Qt, "Key_Right", None),
-                getattr(getattr(Qt, "Key", None), "Key_Right", None),
-            }
-            key_up = {
-                getattr(Qt, "Key_Up", None),
-                getattr(getattr(Qt, "Key", None), "Key_Up", None),
-            }
-            key_down = {
-                getattr(Qt, "Key_Down", None),
-                getattr(getattr(Qt, "Key", None), "Key_Down", None),
-            }
-            if key in key_left:
-                self.stepping.step_active_electrodes(
-                    self.stepping.map_direction_for_device_rotation("left")
-                )
-            elif key in key_right:
-                self.stepping.step_active_electrodes(
-                    self.stepping.map_direction_for_device_rotation("right")
-                )
-            elif key in key_up:
-                self.stepping.step_active_electrodes(
-                    self.stepping.map_direction_for_device_rotation("up")
-                )
-            elif key in key_down:
-                self.stepping.step_active_electrodes(
-                    self.stepping.map_direction_for_device_rotation("down")
-                )
+        if self.keyboard is not None:
+            self.keyboard.handle_key_press_event(event)
 
-        if event.modifiers() & Qt.ControlModifier:
-            if event.key() == Qt.Key_Right:
-                self.handle_ctrl_key_right()
-
-            if event.key() == Qt.Key_Left:
-                self.handle_ctrl_key_left()
-
-            # Check for Plus (Key_Plus is Numpad, Key_Equal is standard keyboard '+')
-            if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
-                self.handle_ctrl_plus()
-
-            if event.key() == Qt.Key.Key_Minus:
-                self.handle_ctrl_minus()
-
-        if event.modifiers() & Qt.AltModifier:
-            if event.key() == Qt.Key_Right:
-                self.handle_alt_key_right()
-
-            elif event.key() == Qt.Key_Left:
-                self.handle_alt_key_left()
-
-        if event.key() == Qt.Key.Key_Space:
-            self.handle_space()
+    def handle_key_release_event(self, event):
+        """Pass key releases on; releasing Ctrl or Shift ends a split."""
+        if self.keyboard is not None:
+            self.keyboard.handle_key_release_event(event)
 
     def cleanup(self) -> None:
         """Tear down the zone canvas overlays when the service is replaced.
