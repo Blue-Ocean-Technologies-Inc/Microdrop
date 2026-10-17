@@ -105,6 +105,7 @@ Receiving: (Via handlers)
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
 - START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring"
+- SET_REALTIME_MODE "hardware/requests/set_realtime_mode" (T shortcut, via keyboard_shortcut_service)
 - DEVICE_VIEWER_STATE_CHANGED "ui/device_viewer/state_changed"
 - STEP_PARAMS_COMMIT "ui/device_viewer/step_params_commit"
 - ** PHASE_NAVIGATION_MODE "ui/phase_navigation_mode"

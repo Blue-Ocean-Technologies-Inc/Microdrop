@@ -173,6 +173,46 @@ python examples/run_device_viewer_pluggable.py --plugins backend services --devi
 `--device` selects the hardware target (`dropbot`, `portable`, `opendrop`, or
 `mock`; default `dropbot`) and pulls in the matching device-specific plugins.
 
+### Keyboard shortcuts
+
+Shortcuts act while the device view has keyboard focus (click it first); F1 shows the same list inside the app.
+
+| Keys | Action |
+| --- | --- |
+| **Selection** | |
+| Arrows | Step the selection in that direction |
+| Shift + Arrows | Grow the selection in that direction |
+| Ctrl + Arrows | Shrink the selection from that direction |
+| Ctrl + Shift + Arrows | Split step in that direction |
+| **Routes** | |
+| Alt + Arrows | Draw the route one electrode in that direction |
+| Backspace | Erase the selected route's tail |
+| Del | Delete the selected route |
+| **Modes** | |
+| Esc | Leave Pan mode or route drawing |
+| D | Toggle Draw mode |
+| E | Toggle Edit mode |
+| A | Toggle Auto mode |
+| N | Toggle Channel Edit mode |
+| Space | Toggle Pan mode |
+| **View** | |
+| Ctrl++ / Ctrl+= | Zoom in |
+| Ctrl+- | Zoom out |
+| Ctrl+0 | Fit the device to the view |
+| R | Rotate the device |
+| Shift+R | Rotate the camera |
+| **Actions** | |
+| X | Clear electrode states |
+| Shift+X | Clear all routes |
+| F | Find liquid |
+| T | Toggle realtime mode |
+| Ctrl+Z | Undo |
+| Ctrl+Y / Ctrl+Shift+Z | Redo |
+| **Help** | |
+| F1 / Ctrl+/ | Show keyboard shortcuts |
+
+Alt + Arrows draw a route from the selected route's end, else from the last clicked or stepped electrode; Backspace drops the route's last electrode.
+
 ## Remote / Distributed Operation
 
 Because all communication flows through Redis, the GUI and the hardware
