@@ -949,6 +949,12 @@ class ElectrodeInteractionControllerService(HasTraits):
                 context_menu.addAction("Find Liquid", self.detect_droplet)
                 context_menu.addSeparator()
 
+                if self.keyboard is not None:
+                    context_menu.addAction(
+                        "Keyboard Shortcuts…", self.keyboard.action_show_shortcuts
+                    )
+                    context_menu.addSeparator()
+
                 # Bulk enable/disable all electrodes
                 has_disabled = len(self.model.electrodes.disabled_channels) > 0
 

@@ -107,6 +107,7 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
+from .keyboard_shortcuts_view import show_keyboard_shortcuts
 from .sidebar.calibration import build_calibration
 from .sidebar.camera_controls import build_camera_controls
 from .sidebar.host import build_reveal_button, build_sidebar
@@ -618,6 +619,7 @@ class DeviceViewerDockPane(TraitsDockPane):
             device_view=self.device_view,
             undo_handler=self.undo,
             redo_handler=self.redo,
+            show_shortcuts_handler=show_keyboard_shortcuts,
         )
 
         # Update the scene with the interaction service
