@@ -578,15 +578,20 @@ class ElectrodeInteractionControllerService(HasTraits):
     ##########################################################################################
 
     def handle_key_press_event(self, event: QKeyEvent):
-        """Cancel the zone interaction on Escape, else run the key's shortcut."""
+        """Cancel the zone interaction on Escape, else run the key's shortcut.
+
+        Return True when the key was handled, so the caller accepts it.
+        """
         key = event.key()
 
         if key == Qt.Key.Key_Escape and self.model.mode in ZONE_MODES:
             if self.model.zones.cancel_current_interaction():
-                return
+                return True
 
-        if self.keyboard is not None:
-            self.keyboard.handle_key_press_event(event)
+        if self.keyboard is None:
+            return False
+
+        return self.keyboard.handle_key_press_event(event)
 
     def handle_key_release_event(self, event):
         """Pass key releases on; releasing Ctrl or Shift ends a split."""

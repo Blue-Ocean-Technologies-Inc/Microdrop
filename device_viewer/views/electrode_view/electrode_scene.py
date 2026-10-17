@@ -75,7 +75,10 @@ class ElectrodeScene(QGraphicsScene):
             super().keyPressEvent(event)
             return
 
-        self.interaction_service.handle_key_press_event(event)
+        if self.interaction_service.handle_key_press_event(event):
+            event.accept()
+            return
+
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
