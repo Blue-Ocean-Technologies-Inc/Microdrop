@@ -209,8 +209,10 @@ def test_editing_shortcuts_are_inert_in_display_mode(service, model):
 
     assert service.handle_key_press_event(key_event(Qt.Key.Key_X)) is False
     assert service.handle_key_press_event(key_event(Qt.Key.Key_D)) is False
+    assert service.handle_key_press_event(key_event(Qt.Key.Key_F)) is False
     assert model.electrodes.actuated_channels == {1}
     assert model.mode == "display"
+    service.interaction.detect_droplet.assert_not_called()
 
 
 def test_mode_keys_flip_modes(service, model):

@@ -39,7 +39,8 @@ Qt = QtCore.Qt
 
 # Actions that run in every mode, Display included: they change the view
 # or talk to the hardware, never the electrode or route state being edited.
-# The two hardware actions mirror the gamepad, which never checks editable.
+# Only toggle_realtime mirrors the gamepad's ungated hardware action; find
+# liquid clears the actuation first, so a stray F during a run must not fire.
 VIEW_ONLY_ACTIONS = frozenset(
     {
         "zoom_in",
@@ -51,7 +52,6 @@ VIEW_ONLY_ACTIONS = frozenset(
         "escape",
         "show_shortcuts",
         "toggle_realtime",
-        "find_liquid",
     }
 )
 
