@@ -27,8 +27,8 @@ from scipy.special import expit
 # Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Str
 
-# Local imports.
-from .fit_expression import FitExpressionError, parse_expression
+# Microdrop utils imports.
+from microdrop_utils.expression import FitExpressionError, parse_expression
 
 #: Selectable fit models, in dropdown order ("none" = fitting off,
 #: CUSTOM_METHOD = whatever equation the user typed).

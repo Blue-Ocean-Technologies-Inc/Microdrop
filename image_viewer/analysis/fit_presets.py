@@ -16,9 +16,11 @@ preset. Qt-free."""
 # Standard library imports.
 import json
 
+# Microdrop utils imports.
+from microdrop_utils.expression import FitExpressionError, parse_expression
+
 # Local imports.
 from .curve_fit import CUSTOM_METHOD, FIT_LABELS, FIT_METHODS, FIT_TEMPLATES
-from .fit_expression import FitExpressionError, parse_expression
 
 #: Prefix marking a method key as one of the user's saved equations,
 #: keeping them in a namespace the built-ins can never collide with.
