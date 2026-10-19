@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 # Enthought library imports.
-from pyface.api import NO, YES
+from pyface.api import NO, YES, clipboard
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
@@ -574,6 +574,14 @@ class RoiAnalysisController(HasTraits):
 
         self.analysis_model.progress_text = f"Exported {csv_path.name}"
         logger.info(f"ROI fastest changes exported to {csv_path}")
+
+    @observe("analysis_model:copy_trend_expression_button")
+    def _copy_trend_expression(self, event):
+        if self.analysis_model.copy_trend_blocker:
+            return
+
+        clipboard.text_data = self.session.trend.expression
+        self.analysis_model.progress_text = "Copied the trend expression"
 
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):

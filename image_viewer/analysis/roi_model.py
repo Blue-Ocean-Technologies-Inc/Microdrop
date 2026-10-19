@@ -57,6 +57,11 @@ from .consts import (
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER,
     BUTTER_ORDER_BOUNDS,
+    COPY_TREND_CALIBRATED,
+    COPY_TREND_FLIPPED,
+    COPY_TREND_NO_TREND,
+    COPY_TREND_NOT_TEMPERATURE,
+    COPY_TREND_TOOLTIP,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRICS,
     HEATER_SENSOR_MEAN,
@@ -86,7 +91,7 @@ from .consts import (
 from .curve_fit import FIT_METHODS, TREND_METHODS, FitResult
 from .fit_presets import choices_for
 from .perspective import perspective_matrix
-from .plot_series import SMOOTH_METHODS, trend_fit, trend_points
+from .plot_series import SMOOTH_METHODS, is_calibrated, trend_fit, trend_points
 from .sam_detect import Candidate
 
 #: The Roi trait holding the user's expected value of each
@@ -860,6 +865,47 @@ class RoiAnalysisModel(HasTraits):
     reset_expected_button = Button()
     #: Write the Expected table to a CSV in the experiment's analysis folder.
     export_expected_button = Button()
+
+    #: Put the trend's full-precision expression on the clipboard, for
+    #: the heater's compensation and the temperature-axis calibration.
+    copy_trend_expression_button = Button()
+
+    #: Why Copy cannot run, the first failing condition; '' when it can.
+    copy_trend_blocker = Property(
+        Str,
+        observe=(
+            "session.trend, session.figure.x_axis, "
+            "session.figure.flip_actual_expected, "
+            "session.figure.temperature_expression"
+        ),
+    )
+
+    #: Copy's tooltip: what it does, or why it is off.
+    copy_trend_tooltip = Property(Str, observe="copy_trend_blocker")
+
+    def _get_copy_trend_blocker(self):
+        figure = self.session.figure
+
+        if self.session.trend is None:
+            return COPY_TREND_NO_TREND
+
+        if figure.x_axis != "temperature":
+            return COPY_TREND_NOT_TEMPERATURE
+
+        # A flipped trend reads expected = f(actual), and one fitted on
+        # a calibrated axis is relative to that calibration: neither is
+        # the actual = f(expected) the compensation needs.
+        if figure.flip_actual_expected:
+            return COPY_TREND_FLIPPED
+
+        if is_calibrated(figure):
+            return COPY_TREND_CALIBRATED
+
+        return ""
+
+    def _get_copy_trend_tooltip(self):
+        return self.copy_trend_blocker or COPY_TREND_TOOLTIP
+
     #: Append a blank custom point to the Expected tab's table of them.
     add_custom_point_button = Button()
     #: Drop the custom points of the cells selected in their table.

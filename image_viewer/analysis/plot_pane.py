@@ -63,6 +63,7 @@ from traitsui.api import (
 
 from microdrop_style.icons.icons import (
     ICON_ADD,
+    ICON_COPY,
     ICON_DELETE,
     ICON_FOLDER_OPEN,
     ICON_FUNCTION,
@@ -790,6 +791,14 @@ def _expected_tab():
                 enabled_when="figure.view_mode == 'actual_vs_expected'",
                 tooltip="The fit drawn through the Actual vs expected "
                 "points, its equation written in the corner",
+            ),
+            UItem(
+                "model.copy_trend_expression_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_COPY,
+                    tooltip_name="model.copy_trend_tooltip",
+                ),
+                enabled_when="not model.copy_trend_blocker",
             ),
         ),
         UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),

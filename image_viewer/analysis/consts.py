@@ -229,6 +229,25 @@ CUSTOM_POINT_COLOR = "black"
 CUSTOM_POINT_ALPHA = 0.8
 CUSTOM_POINT_LABEL = "Custom"
 
+#: Why the Expected tab's Copy (the trend as actual = f(expected)) is
+#: off, in the order they are checked, and its tooltip when it is on.
+COPY_TREND_NO_TREND = (
+    "No trend fitted yet: pick a fit method so the Actual vs expected view has points"
+)
+COPY_TREND_NOT_TEMPERATURE = (
+    "Plot against temperature: a time-axis trend is no temperature compensation"
+)
+COPY_TREND_FLIPPED = (
+    "Unflip the axes: flipped, the trend reads expected = f(actual), "
+    "the wrong direction"
+)
+COPY_TREND_CALIBRATED = "Clear the axis calibration to copy a fresh one"
+COPY_TREND_TOOLTIP = (
+    "Copy the trend as actual = f(expected) at full precision, for the "
+    "heater's compensation and this plot's temperature calibration (the "
+    "corner equation is rounded to 3 significant figures)"
+)
+
 #: The View labels per x axis: only the curves view names its axis.
 VIEW_MODE_LABELS_BY_X_AXIS = {
     "time": VIEW_MODE_LABELS,
