@@ -49,6 +49,9 @@ from image_viewer.analysis.roi_model import (
     RoiStyle,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.expression import is_identity
+
 
 def _image(tmp_path, name):
     path = tmp_path / name
@@ -658,6 +661,12 @@ def test_points_on_the_identity_read_as_the_identity():
     assert (linear.params["c1"], linear.params["c0"]) == (1.0, 0.0)
     assert linear.equation == "y = 1·t + 0"
     assert trend_fit(x, list(x), "poly2").params["c2"] == 0.0
+
+
+def test_the_identity_trend_copies_as_the_identity():
+    x = [40.0, 55.5, 71.25, 90.0]
+    assert trend_fit(x, list(x), "linear").expression == "x"
+    assert is_identity(trend_fit(x, list(x), "poly2").expression)
 
 
 @pytest.mark.parametrize("method", TREND_METHODS)

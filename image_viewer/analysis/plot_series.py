@@ -8,9 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Series derivation for the ROI plot: a pure function of the session
-and the viewer's filtered paths, so the plot pane owns its own picture
-(observer pattern — nothing pushes series at it). Qt-free."""
+"""Series derivation for the ROI plot from the session and the viewer's
+filtered paths, so the plot pane owns its own picture (observer
+pattern). Its one write back is ``session.temperature_uninvertible``.
+Qt-free."""
 
 # Standard library imports.
 import math
@@ -45,6 +46,10 @@ from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: Relative rounding noise a polynomial trend's coefficients are
+#: snapped across: below it a term is 0, within it of 1 a slope is 1.
+_TREND_SNAP_TOLERANCE = 1e-9
 
 
 def _signal(stats, background):
@@ -197,11 +202,6 @@ def trend_points(session, expected_actuals):
         pairs = [(actual, expected) for expected, actual in pairs]
 
     return [x for x, _y in pairs], [y for _x, y in pairs]
-
-
-#: Relative rounding noise a polynomial trend's coefficients are
-#: snapped across: below it a term is 0, within it of 1 a slope is 1.
-_TREND_SNAP_TOLERANCE = 1e-9
 
 
 def trend_fit(x_values, y_values, method):

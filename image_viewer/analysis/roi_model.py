@@ -884,10 +884,10 @@ class RoiAnalysisModel(HasTraits):
     copy_trend_tooltip = Property(Str, observe="copy_trend_blocker")
 
     def _get_copy_trend_blocker(self):
-        figure = self.session.figure
-
         if self.session.trend is None:
             return COPY_TREND_NO_TREND
+
+        figure = self.session.figure
 
         if figure.x_axis != "temperature":
             return COPY_TREND_NOT_TEMPERATURE

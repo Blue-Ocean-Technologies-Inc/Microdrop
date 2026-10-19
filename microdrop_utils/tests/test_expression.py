@@ -156,6 +156,7 @@ def test_an_expression_that_cannot_evaluate_is_invalid():
         ("F(x) = x²", 3.0, 9.0),
         ("x³", 2.0, 8.0),
         ("actual = 1.2·e^(0.5·expected) + 3", 0.0, 4.2),
+        ("1.04·x − 1.2", 10.0, 9.2),
     ],
 )
 def test_pasted_corner_text_parses_as_is(text, x, value):

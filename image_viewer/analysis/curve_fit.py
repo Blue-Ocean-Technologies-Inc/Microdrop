@@ -162,14 +162,24 @@ def _number_text(value):
 
 
 def _poly_expression(coeffs):
+    """The polynomial in parser notation, leaving out zero terms and
+    writing a unit coefficient as the bare power, so the identity reads
+    ``x``."""
     terms = []
 
     for power, coeff in zip(range(len(coeffs) - 1, -1, -1), coeffs):
-        number = _number_text(coeff)
-        variable = "" if power == 0 else "*x" if power == 1 else f"*x**{power}"
-        terms.append(f"{number}{variable}")
+        if coeff == 0.0:
+            continue
 
-    return " + ".join(terms)
+        variable = "" if power == 0 else "x" if power == 1 else f"x**{power}"
+
+        if coeff == 1.0 and variable:
+            terms.append(variable)
+        else:
+            number = _number_text(coeff)
+            terms.append(f"{number}*{variable}" if variable else number)
+
+    return " + ".join(terms) or "0.0"
 
 
 def _poly_equation(coeffs):

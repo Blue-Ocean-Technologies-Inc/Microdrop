@@ -21,6 +21,7 @@ import pytest
 from image_viewer.analysis.curve_fit import (
     fastest_change_time,
     fit_series,
+    polynomial_result,
     second_derivative_extrema,
     trimmed_note,
 )
@@ -254,3 +255,8 @@ def test_every_fit_expression_reparses_and_reproduces_the_fit(
 def test_a_negative_coefficient_is_parenthesised():
     fit = fit_series(_GRID, -2.0 * _GRID + 3.0, "linear")
     assert fit.expression.startswith("(-2.0")
+
+
+def test_zero_terms_drop_and_a_unit_coefficient_is_the_bare_power():
+    assert polynomial_result([1.0, 0.0]).expression == "x"
+    assert polynomial_result([2.0, 0.0, -3.0]).expression == "2.0*x**2 + (-3.0)"
