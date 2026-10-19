@@ -106,14 +106,12 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
     # model); only a click CONTRADICTING the reported state is a user
     # request. Mechanisms are not actuation, so nothing queues behind
     # realtime mode.
-    @observe("model:mcu_fan_state")
-    def _on_mcu_fan_changed(self, event):
-        publish_message(
-            topic=SET_FAN,
-            message=json.dumps({"board": "signal", "on": bool(event.new)}),
-        )
+    @observe("model:fan_state")
+    def _on_fan_changed(self, event):
+        # No board: the backend drives the one its fan-board preference names.
+        publish_message(topic=SET_FAN, message=json.dumps({"on": bool(event.new)}))
         logger.debug(
-            f"MCU fan state change to {event.new} requested: published to {SET_FAN}"
+            f"Fan state change to {event.new} requested: published to {SET_FAN}"
         )
 
     @observe("model:chip_locked")
