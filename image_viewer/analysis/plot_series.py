@@ -18,6 +18,14 @@ import math
 # Third-party imports.
 import numpy as np
 
+# Microdrop utils imports.
+from microdrop_utils.expression import (
+    invert_function,
+    is_identity,
+    is_valid_function,
+    parse_function,
+)
+
 # Local imports.
 from ..scale_bar import pixel_area
 from .consts import (
@@ -118,29 +126,39 @@ def roi_stat_values(stats_run, stat, pixel_area=1.0):
     return [stat_value(stats, stat, pixel_area) for stats in stats_run]
 
 
-def calibrated_temperatures(figure, temperatures):
-    """``temperatures`` through the figure's linear calibration,
-    slope * T + intercept. NaN stays NaN, so an uncovered frame is
-    still a gap."""
-    slope = figure.temperature_slope
-    intercept = figure.temperature_intercept
+def is_calibrated(figure_settings):
+    """Whether the figure's temperature_expression moves the log's
+    reading: a valid expression other than the identity. An unparsable
+    one leaves the log as it is rather than blanking the axis."""
+    text = figure_settings.temperature_expression
 
-    return [slope * temperature + intercept for temperature in temperatures]
+    return not is_identity(text) and is_valid_function(text)
+
+
+def calibrated_temperatures(figure, temperatures):
+    """``temperatures`` (the log's actual readings) mapped back to the
+    expected ones through the inverse of the figure's
+    temperature_expression, as (values, uninvertible count). NaN stays
+    NaN, so an uncovered frame is still a gap; a reading with no root
+    becomes one too, and is counted."""
+    if not is_calibrated(figure):
+        return temperatures, 0
+
+    expected, missing = invert_function(
+        parse_function(figure.temperature_expression), temperatures
+    )
+
+    return expected.tolist(), missing
 
 
 def x_quantity(figure_settings):
     """What the curves are plotted against, as (quantity, unit); the
-    unit is flagged once the linear calibration has moved the
-    temperature off the log's own reading."""
+    unit is flagged once a calibration has moved the temperature off
+    the log's own reading."""
     if figure_settings.x_axis != "temperature":
         return "Time", "s"
 
-    calibrated = (
-        figure_settings.temperature_slope != 1.0
-        or figure_settings.temperature_intercept != 0.0
-    )
-
-    return "Temperature", "°C, calibrated" if calibrated else "°C"
+    return "Temperature", "°C, calibrated" if is_calibrated(figure_settings) else "°C"
 
 
 def x_axis_label(figure_settings):
@@ -253,19 +271,28 @@ def derive_series(session, filtered_paths):
     downstream read against °C too.
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
-    part of the analysis)."""
+    part of the analysis).
+
+    Sets ``session.temperature_uninvertible`` to the captures the
+    calibration found no root for — 0 on the time axis — so every
+    caller refreshes the Axes tab's gap note."""
     paths = analysed_paths(session, filtered_paths)
     rois = session.positive_rois
+
     if not paths or not rois:
+        session.temperature_uninvertible = 0
+
         return {}
+
     stat_cache = {}
     # Named to leave the imported pixel_area() function reachable.
     area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
     times = [session.stat_info(path, stat_cache)[1] for path in paths]
     start_time = times[0]
     figure = session.figure
-    x_values = (
-        calibrated_temperatures(
+
+    if figure.x_axis == "temperature":
+        x_values, uninvertible = calibrated_temperatures(
             figure,
             temperature_at(
                 session.heater_samples,
@@ -274,9 +301,11 @@ def derive_series(session, filtered_paths):
                 figure.heater_window_ms / 1000.0,
             ),
         )
-        if figure.x_axis == "temperature"
-        else [capture_time - start_time for capture_time in times]
-    )
+    else:
+        x_values = [capture_time - start_time for capture_time in times]
+        uninvertible = 0
+
+    session.temperature_uninvertible = uninvertible
     series = {}
 
     for roi in rois:

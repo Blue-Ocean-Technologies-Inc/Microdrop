@@ -940,8 +940,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:x_axis, "
         "analysis_model:session:figure:heater_sensor, "
         "analysis_model:session:figure:heater_window_ms, "
-        "analysis_model:session:figure:temperature_slope, "
-        "analysis_model:session:figure:temperature_intercept, "
+        "analysis_model:session:figure:temperature_expression, "
         "analysis_model:session:heater_log_dir, "
         "analysis_model:session:figure:show_method_group, "
         "analysis_model:session:figure:show_metrics_group, "
@@ -1198,8 +1197,9 @@ class RoiAnalysisController(HasTraits):
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
         self._load_heater_samples_now()
-        temperatures = (
-            calibrated_temperatures(
+
+        if session.heater_samples:
+            temperatures, _uninvertible = calibrated_temperatures(
                 session.figure,
                 temperature_at(
                     session.heater_samples,
@@ -1208,9 +1208,9 @@ class RoiAnalysisController(HasTraits):
                     session.figure.heater_window_ms / 1000.0,
                 ),
             )
-            if session.heater_samples
-            else [math.nan] * len(times)
-        )
+        else:
+            temperatures = [math.nan] * len(times)
+
         rows = []
         for path, capture_time, temperature in zip(paths, times, temperatures):
             stats_by_roi = {}

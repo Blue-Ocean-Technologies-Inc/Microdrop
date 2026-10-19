@@ -23,6 +23,7 @@ from image_viewer.analysis.plot_series import (
     analysed_paths,
     background_ref_baseline,
     background_ref_corrected_series,
+    calibrated_temperatures,
     derive_series,
     finite_values,
     image_values,
@@ -37,11 +38,13 @@ from image_viewer.analysis.plot_series import (
     trend_points,
     visible_series,
     without_outliers,
+    x_quantity,
 )
 from image_viewer.analysis.roi_model import (
     PLOT_STATS,
     AnalysisSession,
     CustomPoint,
+    FigureSettings,
     Roi,
     RoiStyle,
 )
@@ -77,30 +80,74 @@ def test_derive_series_honors_plot_stat(tmp_path):
     assert values == [6.0]
 
 
-def test_derive_series_calibrates_the_temperature_axis_only(tmp_path):
+def _heater_session(tmp_path, logged):
+    """Two captures 30 s apart; the log covers only the first, at
+    ``logged`` °C (samples at logged ± 1 straddling it, window 0)."""
     first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
     second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
     roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi])
     start = session.stat_info(first)[1]
 
-    # The log covers only the first capture, so the second is a NaN gap.
-    session.heater_samples = [(start - 1.0, {"t1": 40.0}), (start + 1.0, {"t1": 42.0})]
+    session.heater_samples = [
+        (start - 1.0, {"t1": logged - 1.0}),
+        (start + 1.0, {"t1": logged + 1.0}),
+    ]
     session.figure.heater_sensor = "t1"
     session.figure.heater_window_ms = 0
-    session.figure.temperature_slope = 2.0
-    session.figure.temperature_intercept = -5.0
-
     session.figure.x_axis = "temperature"
-    ((_, temperatures, _),) = derive_series(session, [first, second]).values()
 
-    assert temperatures[0] == 2.0 * 41.0 - 5.0
+    return session, [first, second]
+
+
+def test_the_temperature_axis_reads_through_the_inverse(tmp_path):
+    session, paths = _heater_session(tmp_path, 41.0)
+    session.figure.temperature_expression = "2*x - 5"
+    ((_, temperatures, _),) = derive_series(session, paths).values()
+
+    assert temperatures[0] == pytest.approx(23.0, abs=1e-6)
     assert math.isnan(temperatures[1])
+    assert session.temperature_uninvertible == 0
 
     session.figure.x_axis = "time"
-    ((_, elapsed, _),) = derive_series(session, [first, second]).values()
+    ((_, elapsed, _),) = derive_series(session, paths).values()
 
     assert elapsed == [0.0, 30.0]
+
+
+def test_a_quadratic_calibration_inverts_per_sample():
+    figure = FigureSettings(temperature_expression="x^2/100 + 0.5*x")
+    (value,), missing = calibrated_temperatures(figure, [41.0])
+
+    assert value > 0 and missing == 0
+    assert value**2 / 100 + 0.5 * value == pytest.approx(41.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("text", ["x", "", "actual = expected", "2*a*x"])
+def test_identity_or_unparsable_text_passes_the_log_through(text):
+    figure = FigureSettings(x_axis="temperature", temperature_expression=text)
+
+    assert calibrated_temperatures(figure, [41.0])[0] == [41.0]
+    assert x_quantity(figure) == ("Temperature", "°C")
+
+
+def test_a_calibration_flags_the_unit():
+    figure = FigureSettings(x_axis="temperature", temperature_expression="2*x - 5")
+
+    assert x_quantity(figure) == ("Temperature", "°C, calibrated")
+
+
+def test_samples_with_no_root_are_counted_gaps(tmp_path):
+    session, paths = _heater_session(tmp_path, -5.0)
+    session.figure.temperature_expression = "x^2/100"
+    ((_, temperatures, _),) = derive_series(session, paths).values()
+
+    assert math.isnan(temperatures[0])
+    assert session.temperature_uninvertible == 1
+    assert session.temperature_uninvertible_hint == (
+        "1 heater sample has no expected temperature under this "
+        "expression and is drawn as a gap"
+    )
 
 
 def test_derive_series_empty_inputs():

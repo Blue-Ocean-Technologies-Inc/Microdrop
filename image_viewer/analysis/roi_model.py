@@ -41,6 +41,9 @@ from traits.api import (
     observe,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.expression import function_error
+
 # Local imports.
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
@@ -259,12 +262,13 @@ class FigureSettings(HasTraits):
     #: the mean of every heater sample within ±window/2 of it. 0 means
     #: exact — linear interpolation at the capture instant.
     heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS, HEATER_WINDOW_MS, mode="spinner")
-    #: The linear calibration applied to the heater log's temperature
-    #: before plotting and fitting (T = slope * T_log + intercept), for
-    #: setpoints that were compensated against a reference instrument.
-    #: 1 and 0 leave the log's values as they are.
-    temperature_slope = Float(1.0)
-    temperature_intercept = Float(0.0)
+    #: actual = f(expected) — the same expression as the heater's
+    #: compensation; the log's temperature is mapped back to expected
+    #: by inverting it numerically.
+    temperature_expression = Str("x")
+    #: Why temperature_expression does not parse, "" when it does (or
+    #: is the identity). Never persisted.
+    temperature_expression_error = Property(Str, observe="temperature_expression")
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.
@@ -282,6 +286,9 @@ class FigureSettings(HasTraits):
         }
 
         return [metric for metric in EXPECTED_METRICS if enabled[metric]]
+
+    def _get_temperature_expression_error(self):
+        return function_error(self.temperature_expression)
 
 
 class ScaleCalibration(HasTraits):
@@ -582,6 +589,14 @@ class AnalysisSession(HasTraits):
     #: fallback folder is in use, else "".
     heater_log_hint = Property(Str, observe="heater_log_fallback_dir")
 
+    #: How many capture temperatures found no root under the figure's
+    #: temperature_expression on the last derivation. Set by
+    #: derive_series, never persisted.
+    temperature_uninvertible = Int(0)
+
+    #: The Axes tab's note on those gaps, "" when there are none.
+    temperature_uninvertible_hint = Property(Str, observe="temperature_uninvertible")
+
     #: Where the heater join looked and what it found (folder, log
     #: span, capture span, any sibling stand-in) — the plot's coverage
     #: note. Set by the controller, never persisted.
@@ -620,6 +635,23 @@ class AnalysisSession(HasTraits):
             return ""
 
         return f"(found in {Path(self.heater_log_fallback_dir).parent.name})"
+
+    def _get_temperature_uninvertible_hint(self):
+        count = self.temperature_uninvertible
+
+        if not count:
+            return ""
+
+        if count == 1:
+            return (
+                "1 heater sample has no expected temperature under this "
+                "expression and is drawn as a gap"
+            )
+
+        return (
+            f"{count} heater samples have no expected temperature under this "
+            "expression and are drawn as gaps"
+        )
 
     def _get_positive_rois(self):
         return [roi for roi in self.rois if not roi.is_negative]
