@@ -27,6 +27,7 @@ import re
 
 # Third-party imports.
 import numpy as np
+from scipy.optimize import brentq
 from scipy.special import erf, expit
 
 #: Names that stand for the independent variable rather than a
@@ -66,6 +67,15 @@ _UNARY_OPS = (ast.UAdd, ast.USub)
 #: Longest equation accepted, a guard against pasting a file into the
 #: field rather than a limit anyone types up against.
 MAX_EXPRESSION_LENGTH = 500
+
+#: Expected temperatures (°C) searched when inverting a compensation:
+#: wider than any setpoint a heater is given, so a logged temperature
+#: outside it has no plausible expected value to map back to.
+INVERSION_DOMAIN = (-100.0, 500.0)
+
+#: Grid spacing (°C) of that search. A sign change between neighbours
+#: brackets a root, so two roots closer than this are seen as none.
+INVERSION_STEP = 0.05
 
 #: How an equation is written rather than how Python spells it, as the
 #: plot corner prints it: ^ is exclusive-or to the parser.
@@ -329,3 +339,76 @@ def function_error(text):
         return str(error)
 
     return ""
+
+
+def _bracketed_root(function, actual, left, right, bound):
+    """Refine the root of ``function(x) - actual`` between ``left`` and
+    ``right``, or None when there is none to trust.
+
+    brentq only sees the ends, so a NaN inside the bracket stops it and
+    a pole across it looks like a sign change; it converges onto the
+    pole, whose residual is far above ``bound``, the larger end
+    residual."""
+    try:
+        root = brentq(lambda x: function(x) - actual, left, right)
+    except (ValueError, RuntimeError):
+        return None
+
+    # Written so a NaN residual fails it too.
+    if abs(function(root) - actual) <= bound:
+        return root
+
+    return None
+
+
+def invert_function(function, actual_values, domain=INVERSION_DOMAIN):
+    """Map each actual value back to the expected value ``function``
+    sends to it, searching ``domain`` on an ``INVERSION_STEP`` grid.
+
+    Where several expected values reach the same actual one, the root
+    nearest the identity wins: a compensation is a correction, not a
+    remapping. Non-finite stretches of ``function`` (log below zero, an
+    overflowing exp) and poles are skipped rather than taken as roots.
+
+    Returns
+    -------
+    expected : numpy.ndarray
+        Float array as long as ``actual_values``; NaN where there is no
+        root, or where the actual value itself is not finite.
+    missing : int
+        How many finite actual values found no root in ``domain``.
+    """
+    low, high = domain
+    # linspace rather than arange: arange accumulates the step and stops
+    # short of ``high``, leaving the upper edge unsearched.
+    grid = np.linspace(low, high, round((high - low) / INVERSION_STEP) + 1)
+    values = function(grid)
+    finite = np.isfinite(values)
+
+    actual_values = np.asarray(actual_values, dtype=float)
+    expected = np.full(actual_values.shape, np.nan)
+    missing = 0
+
+    for index in np.flatnonzero(np.isfinite(actual_values)):
+        actual = actual_values[index]
+        residuals = values - actual
+        # Non-finite grid values become NaN signs, which fail both tests
+        # below: an inf end would otherwise pass the sign test while
+        # saying nothing about a root between its neighbours.
+        signs = np.sign(np.where(finite, residuals, np.nan))
+        roots = list(grid[signs == 0])
+
+        for left in np.flatnonzero(signs[:-1] * signs[1:] < 0):
+            bound = max(abs(residuals[left]), abs(residuals[left + 1]))
+            root = _bracketed_root(function, actual, grid[left], grid[left + 1], bound)
+
+            if root is not None:
+                roots.append(root)
+
+        if not roots:
+            missing += 1
+            continue
+
+        expected[index] = min(roots, key=lambda root: abs(root - actual))
+
+    return expected, missing

@@ -11,6 +11,7 @@
 """Unit tests for the typed-equation parser."""
 
 # Standard library imports.
+import math
 import warnings
 
 # Third-party imports.
@@ -21,6 +22,7 @@ import pytest
 from microdrop_utils.expression import (
     FitExpressionError,
     function_error,
+    invert_function,
     is_identity,
     is_valid,
     is_valid_function,
@@ -195,3 +197,66 @@ def test_a_function_takes_exactly_one_argument(text):
 
 def test_function_error_reports_a_wrong_argument_count():
     assert function_error("exp()") == "exp() takes one argument"
+
+
+def test_inverting_a_line():
+    expected, missing = invert_function(parse_function("2*x + 1"), [21.0, 41.0])
+    assert np.allclose(expected, [10.0, 20.0], atol=1e-6) and missing == 0
+
+
+def test_a_quadratic_inverts_on_the_branch_nearest_identity():
+    expected, _missing = invert_function(parse_function("x^2/100"), [25.0])  # ±50
+    assert expected[0] == pytest.approx(50.0, abs=1e-6)
+
+
+def test_the_spec_quadratic_round_trips():
+    f = parse_function("1.04*x^2/100 + 0.9*x + 1.2")
+    expected, _missing = invert_function(f, [f(60.0)])
+    assert expected[0] == pytest.approx(60.0, abs=1e-6)
+
+
+def test_inverting_an_exponential():
+    f = parse_function("exp(x/50)")
+    expected, _missing = invert_function(f, [math.exp(2.0)])
+    assert expected[0] == pytest.approx(100.0, abs=1e-6)
+
+
+def test_a_value_out_of_range_is_a_counted_gap():
+    expected, missing = invert_function(parse_function("x^2/100"), [-5.0, 25.0])
+    assert math.isnan(expected[0]) and missing == 1
+
+
+def test_nan_in_stays_nan_and_is_not_counted():
+    expected, missing = invert_function(parse_function("2*x"), [math.nan])
+    assert math.isnan(expected[0]) and missing == 0
+
+
+def test_non_finite_regions_of_f_are_skipped():
+    f = parse_function("log(x)")
+    expected, missing = invert_function(f, [0.0, math.log(1000.0)])
+    assert expected[0] == pytest.approx(1.0, abs=1e-6)
+    assert math.isnan(expected[1]) and missing == 1  # 1000 °C: outside the domain
+
+
+def test_a_wider_domain_can_be_asked_for():
+    f = parse_function("x")
+    expected, _missing = invert_function(f, [600.0], domain=(0.0, 1000.0))
+    assert expected[0] == pytest.approx(600.0)
+
+
+def test_a_bracket_with_a_non_finite_interior_is_a_gap():
+    # Finite at the grid points either side of the root, NaN between
+    # them, where brentq refuses to continue.
+    f = parse_function("x - 0.025 + 0*sqrt((x - 0.01)*(x - 0.04))")
+    expected, missing = invert_function(f, [0.0])
+    assert math.isnan(expected[0]) and missing == 1
+
+
+def test_a_pole_is_not_a_root():
+    expected, missing = invert_function(parse_function("1/(x - 0.025)"), [0.0])
+    assert math.isnan(expected[0]) and missing == 1
+
+
+def test_roots_on_the_domain_edges_are_found():
+    expected, missing = invert_function(parse_function("x"), [-100.0, 500.0])
+    assert expected.tolist() == [-100.0, 500.0] and missing == 0
