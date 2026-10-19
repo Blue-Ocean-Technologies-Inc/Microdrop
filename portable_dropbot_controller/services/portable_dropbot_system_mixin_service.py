@@ -27,6 +27,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
+    FAN_BOARDS,
     MOTOR_PARAM_FIELDS,
     MOTOR_PARAM_NAMES,
     MOTOR_PARAMS_UPDATED,
@@ -60,10 +61,12 @@ class PortableDropbotSystemMixinService(HasTraits):
 
     def on_set_fan_request(self, message):
         data = json.loads(str(message))
-        board = str(data["board"])
-        if board not in ("signal", "motor"):
+        board = str(data.get("board") or self.preferences.fan_board)
+
+        if board not in FAN_BOARDS:
             logger.warning(f"Unknown fan board: {board!r}")
             return
+
         on = bool(data["on"])
         ok, result = self._proxy_call(
             f"{board} fan", lambda: self.proxy.uart.setFan(on, board=board)

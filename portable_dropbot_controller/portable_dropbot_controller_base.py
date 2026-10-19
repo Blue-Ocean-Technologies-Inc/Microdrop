@@ -30,6 +30,9 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 # Local imports.
 from .consts import (
     ALARM_RAISED,
+    CHIP_DETECT_RULE_ANY_POGO,
+    CHIP_ON_PAD_POGO_BITS,
+    CHIP_ON_PAD_PRESENCE_BIT,
     CHIP_ON_PAD_SEATED_MASK,
     CONNECT_TO_PORT,
     ERROR_RAISED,
@@ -53,6 +56,20 @@ from .preferences import PortableDropbotPreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__, level="INFO")
+
+
+def chip_seated(contacts, rule):
+    """Whether a chip_on_pad contact mask counts as a chip on the pad.
+
+    Every rule needs the debounced presence bit; the both-pogos rule also
+    needs both pogo pads touching the chip, the any-pogo rule at least one.
+    """
+    if rule == CHIP_DETECT_RULE_ANY_POGO:
+        return bool(contacts & CHIP_ON_PAD_PRESENCE_BIT) and bool(
+            contacts & CHIP_ON_PAD_POGO_BITS
+        )
+
+    return (contacts & CHIP_ON_PAD_SEATED_MASK) == CHIP_ON_PAD_SEATED_MASK
 
 
 @provides(IPortableDropbotControllerBase)
@@ -262,13 +279,13 @@ class PortableDropbotControllerBase(HasTraits):
             if field in signal:
                 signal[field] = signal[field] / 100.0
         if "chip_on_pad" in signal:
-            # A contact mask, not a flag: partial pogo contact (3 or 5) is
-            # deliberately reported as no chip. The raw mask rides along
-            # so the pane can say which pogo pads touch the chip.
+            # A contact mask, not a flag: the chip-detect preference decides
+            # whether partial pogo contact (3 or 5) counts as a chip. The raw
+            # mask rides along so the pane can say which pogo pads touch it.
             signal["chip_pad_contacts"] = int(signal["chip_on_pad"])
-            signal["chip_on_pad"] = (
-                signal["chip_on_pad"] & CHIP_ON_PAD_SEATED_MASK
-            ) == CHIP_ON_PAD_SEATED_MASK
+            signal["chip_on_pad"] = chip_seated(
+                signal["chip_pad_contacts"], self.preferences.chip_detect_rule
+            )
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
         self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
 

@@ -9,21 +9,23 @@
 # Thanks for using Microdrop open source!
 
 """The signal board reports chip_on_pad as a 3-bit contact mask (debounced
-presence, left pogo, right pogo); the status snapshot publishes a chip only
-when all three are set, and the raw mask rides along as chip_pad_contacts.
-Hardware-free, no Redis."""
+presence, left pogo, right pogo); under the default both-pogos rule the
+status snapshot publishes a chip only when all three are set, and the raw
+mask rides along as chip_pad_contacts. Hardware-free, no Redis."""
 
 # Standard library imports.
 import json
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
 
 # Enthought library imports.
-from traits.api import Dict
+from traits.api import Any, Dict
 
 # Microdrop package imports.
 from portable_dropbot_controller import portable_dropbot_controller_base
+from portable_dropbot_controller.consts import DEFAULT_CHIP_DETECT_RULE
 from portable_dropbot_controller.portable_dropbot_controller_base import (
     PortableDropbotControllerBase,
 )
@@ -32,6 +34,8 @@ from portable_dropbot_controller.portable_dropbot_controller_base import (
 class _Harness(PortableDropbotControllerBase):
     #: What the driver's status read answers.
     status = Dict()
+    #: Stands in for PortableDropbotPreferences, whose defaults read Redis.
+    preferences = Any(SimpleNamespace(chip_detect_rule=DEFAULT_CHIP_DETECT_RULE))
 
     def traits_init(self):
         pass
