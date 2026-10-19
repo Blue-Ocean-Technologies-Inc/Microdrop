@@ -8,21 +8,37 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import observe
 
-from logger.logger_service import get_logger
-from microdrop_utils.decorators import debounce
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+# Microdrop package imports.
 from portable_dropbot_controller.consts import (
-    CONNECT_TO_PORT, DISCONNECT, LOCK_CHIP, MOVE_MAGNET, MOVE_TRAY,
-    REFRESH_PORTS, SET_FAN, SET_FREQUENCY, SET_LIGHT_INTENSITY,
-    SET_LIGHT_ON, SET_RGB_LIGHT, SET_VOLTAGE,
+    CONNECT_TO_PORT,
+    DISCONNECT,
+    LOCK_CHIP,
+    MOVE_MAGNET,
+    MOVE_TRAY,
+    REFRESH_PORTS,
+    SET_FAN,
+    SET_FREQUENCY,
+    SET_LIGHT_INTENSITY,
+    SET_LIGHT_ON,
+    SET_RGB_LIGHT,
+    SET_VOLTAGE,
 )
 from template_status_and_controls.base_controller import (
     BaseStatusController,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.decorators import debounce
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,10 +67,8 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
         if event.new:
             port_name = self.model.selected_port.strip()
             if port_name:
-                publish_message(topic=CONNECT_TO_PORT,
-                                message=port_name)
-                logger.info(f"Requested Portable Dropbot connect on "
-                            f"{port_name}")
+                publish_message(topic=CONNECT_TO_PORT, message=port_name)
+                logger.info(f"Requested Portable Dropbot connect on {port_name}")
         else:
             publish_message(topic=DISCONNECT, message="")
             logger.info("Requested Portable Dropbot disconnect")
@@ -94,11 +108,13 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
     # realtime mode.
     @observe("model:mcu_fan_state")
     def _on_mcu_fan_changed(self, event):
-        publish_message(topic=SET_FAN,
-                        message=json.dumps({"board": "signal",
-                                            "on": bool(event.new)}))
-        logger.debug(f"MCU fan state change to {event.new} requested: "
-                     f"published to {SET_FAN}")
+        publish_message(
+            topic=SET_FAN,
+            message=json.dumps({"board": "signal", "on": bool(event.new)}),
+        )
+        logger.debug(
+            f"MCU fan state change to {event.new} requested: published to {SET_FAN}"
+        )
 
     @observe("model:chip_locked")
     def _on_chip_locked_changed(self, event):
@@ -111,18 +127,17 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
     def _on_tray_out_changed(self, event):
         if bool(event.new) == self.model.tray_out_reported:
             return
-        publish_message(topic=MOVE_TRAY,
-                        message="out" if event.new else "in")
+        publish_message(topic=MOVE_TRAY, message="out" if event.new else "in")
         logger.info(f"Tray {'out' if event.new else 'in'} requested")
 
     @observe("model:magnet_engaged")
     def _on_magnet_engaged_changed(self, event):
         if bool(event.new) == self.model.magnet_engaged_reported:
             return
-        publish_message(topic=MOVE_MAGNET,
-                        message="engage" if event.new else "disengage")
-        logger.info(f"Magnet {'engage' if event.new else 'disengage'} "
-                    f"requested")
+        publish_message(
+            topic=MOVE_MAGNET, message="engage" if event.new else "disengage"
+        )
+        logger.info(f"Magnet {'engage' if event.new else 'disengage'} requested")
 
     @debounce(wait_seconds=0.3)
     def voltage_setattr(self, info, obj, traitname, value):
@@ -134,14 +149,12 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
 
     @observe("model:voltage")
     def _on_voltage_changed(self, event):
-        if self._publish_or_queue(topic=SET_VOLTAGE,
-                                  message=str(int(event.new))):
+        if self._publish_or_queue(topic=SET_VOLTAGE, message=str(int(event.new))):
             logger.debug(f"Voltage --> {event.new} V")
 
     @observe("model:frequency")
     def _on_frequency_changed(self, event):
-        if self._publish_or_queue(topic=SET_FREQUENCY,
-                                  message=str(int(event.new))):
+        if self._publish_or_queue(topic=SET_FREQUENCY, message=str(int(event.new))):
             logger.debug(f"Frequency --> {event.new} Hz")
 
     @debounce(wait_seconds=0.3)
@@ -152,8 +165,7 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
     # mode — every change publishes straight to the hardware.
     @observe("model:light_intensity")
     def _on_light_intensity_changed(self, event):
-        publish_message(topic=SET_LIGHT_INTENSITY,
-                        message=str(int(event.new)))
+        publish_message(topic=SET_LIGHT_INTENSITY, message=str(int(event.new)))
         logger.debug(f"Light intensity --> {event.new} %")
 
     @observe("model:light_on")
