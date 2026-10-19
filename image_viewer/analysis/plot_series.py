@@ -15,6 +15,9 @@ and the viewer's filtered paths, so the plot pane owns its own picture
 # Standard library imports.
 import math
 
+# Third-party imports.
+import numpy as np
+
 # Local imports.
 from ..scale_bar import pixel_area
 from .consts import (
@@ -26,6 +29,7 @@ from .consts import (
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
 )
+from .curve_fit import POLYNOMIAL_DEGREES, fit_series, polynomial_result
 from .heater_log import temperature_at
 from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 
@@ -144,6 +148,94 @@ def x_axis_label(figure_settings):
     quantity, unit = x_quantity(figure_settings)
 
     return f"Elapsed time ({unit})" if quantity == "Time" else f"{quantity} ({unit})"
+
+
+def trend_points(session, expected_actuals):
+    """The Actual vs expected view's points as (x_values, y_values):
+    each ``expected_actuals`` landmark ({roi_id: {metric: actual}}) of
+    a ROI the session still has, then each custom point with both
+    values typed. Every pair is (expected, actual), or (actual,
+    expected) while the figure is flipped."""
+    pairs = []
+
+    for roi_id, landmarks in expected_actuals.items():
+        roi = session.roi_by_id(roi_id)
+
+        if roi is None:
+            continue
+
+        pairs.extend(
+            (roi.expected_or(metric, actual), actual)
+            for metric, actual in landmarks.items()
+        )
+
+    pairs.extend(
+        (point.expected, point.actual)
+        for point in session.custom_points
+        if math.isfinite(point.actual) and math.isfinite(point.expected)
+    )
+
+    if session.figure.flip_actual_expected:
+        pairs = [(actual, expected) for expected, actual in pairs]
+
+    return [x for x, _y in pairs], [y for _x, y in pairs]
+
+
+#: Relative rounding noise a polynomial trend's coefficients are
+#: snapped across: below it a term is 0, within it of 1 a slope is 1.
+_TREND_SNAP_TOLERANCE = 1e-9
+
+
+def trend_fit(x_values, y_values, method):
+    """The ``method`` fit (a TREND_METHODS key) of y on x through the
+    finite pairs, or None when they share one x or the fit fails.
+
+    A polynomial's coefficients snap to the 0 or 1 they sit within
+    rounding noise of, so points on the identity — every expected
+    unset — read as exactly y = x. A term's noise is judged at its
+    size over the data (``c_p * max|x|**p``), not its bare
+    coefficient."""
+    x = np.asarray(x_values, dtype=float)
+    y = np.asarray(y_values, dtype=float)
+    finite = np.isfinite(x) & np.isfinite(y)
+    x, y = x[finite], y[finite]
+
+    if not len(x) or float(np.ptp(x)) == 0.0:
+        return None
+
+    # The fits seed from the series' ends, so it goes in x order.
+    order = np.argsort(x)
+    fit = fit_series(x[order], y[order], method)
+
+    if fit is None or method not in POLYNOMIAL_DEGREES:
+        return fit
+
+    powers = range(POLYNOMIAL_DEGREES[method], -1, -1)
+    coeffs = [fit.params[f"c{power}"] for power in powers]
+    noise = _TREND_SNAP_TOLERANCE * (float(np.max(np.abs(y))) or 1.0)
+    scale = max(float(np.max(np.abs(x))), 1.0)
+    snapped = []
+
+    for power, coeff in zip(powers, coeffs):
+        if abs(coeff) * scale**power < noise:
+            coeff = 0.0
+        elif power == 1 and abs(coeff - 1.0) < _TREND_SNAP_TOLERANCE:
+            coeff = 1.0
+
+        snapped.append(coeff)
+
+    if snapped == coeffs:
+        return fit
+
+    result = polynomial_result(snapped)
+    result.trait_set(
+        method=fit.method,
+        r_squared=fit.r_squared,
+        fitted_start=fit.fitted_start,
+        fitted_end=fit.fitted_end,
+    )
+
+    return result
 
 
 def analysed_paths(session, filtered_paths):

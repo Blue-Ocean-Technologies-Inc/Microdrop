@@ -13,7 +13,12 @@
 # Standard library imports.
 import math
 
+# Third-party imports.
+import numpy as np
+import pytest
+
 # Microdrop package imports.
+from image_viewer.analysis.curve_fit import TREND_METHODS
 from image_viewer.analysis.plot_series import (
     analysed_paths,
     background_ref_baseline,
@@ -28,12 +33,15 @@ from image_viewer.analysis.plot_series import (
     smoothed_values,
     stat_value,
     subtracted_series,
+    trend_fit,
+    trend_points,
     visible_series,
     without_outliers,
 )
 from image_viewer.analysis.roi_model import (
     PLOT_STATS,
     AnalysisSession,
+    CustomPoint,
     Roi,
     RoiStyle,
 )
@@ -575,3 +583,54 @@ def test_per_image_shape_stats_plot_as_stored(tmp_path):
     _name, _x, values = derive_series(session, [image])[roi.roi_id]
 
     assert values == [2.0]
+
+
+def test_trend_fit_recovers_an_exact_line():
+    fit = trend_fit([1, 2, 3, 4], [12.5, 15.0, 17.5, 20.0], "linear")
+    assert fit.params["c1"] == pytest.approx(2.5)
+    assert fit.params["c0"] == pytest.approx(10.0)
+    assert fit.r_squared == pytest.approx(1.0)
+
+
+def test_trend_fit_needs_points_with_spread():
+    assert trend_fit([1], [42.0], "linear") is None
+    assert trend_fit([1, 2], [42.0, math.nan], "linear") is None
+    assert trend_fit([3, 3], [1.0, 5.0], "linear") is None
+    assert trend_fit([3, 3, 3], [1.0, 5.0, 7.0], "poly2") is None
+
+
+def test_trend_fit_ignores_nan_points():
+    fit = trend_fit([1, 2, 3, 4], [3.0, math.nan, 7.0, 9.0], "linear")
+    assert fit.params["c1"] == pytest.approx(2.0)
+    assert fit.params["c0"] == pytest.approx(1.0)
+
+
+def test_points_on_the_identity_read_as_the_identity():
+    x = [40.0, 55.5, 71.25, 90.0]
+    linear = trend_fit(x, list(x), "linear")
+    assert (linear.params["c1"], linear.params["c0"]) == (1.0, 0.0)
+    assert linear.equation == "y = 1·t + 0"
+    assert trend_fit(x, list(x), "poly2").params["c2"] == 0.0
+
+
+@pytest.mark.parametrize("method", TREND_METHODS)
+def test_trend_fit_answers_for_every_trend_method(method):
+    x = np.linspace(30.0, 90.0, 12)
+    y = 100.0 + 800.0 / (1.0 + np.exp(-0.2 * (x - 60.0)))
+    fit = trend_fit(list(x), list(y), method)
+    assert fit is not None and fit.method == method
+
+
+def test_trend_points_pair_expected_with_actual_and_follow_the_flip():
+    roi = Roi(roi_id="a", name="ROI 1", expected_fastest_change=50.0)
+    session = AnalysisSession(
+        rois=[roi],
+        custom_points=[
+            CustomPoint(name="Std", actual=41.0, expected=40.0),
+            CustomPoint(name="Blank"),
+        ],
+    )
+    actuals = {"a": {"zero": 52.0}, "gone": {"zero": 1.0}}
+    assert trend_points(session, actuals) == ([50.0, 40.0], [52.0, 41.0])
+    session.figure.flip_actual_expected = True
+    assert trend_points(session, actuals) == ([52.0, 41.0], [50.0, 40.0])

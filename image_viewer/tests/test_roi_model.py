@@ -135,3 +135,18 @@ def test_a_mask_drawn_with_no_image_shown_applies_everywhere():
     assert mask.base_anchor == 0.0
     assert mask.applies_at(0.0)
     assert mask.applies_at(1e9)
+
+
+def test_the_trend_follows_the_fitted_landmarks():
+    model = RoiAnalysisModel()
+    model.session = AnalysisSession(
+        rois=[Roi(roi_id="a", name="A"), Roi(roi_id="b", name="B")]
+    )
+    model.session.figure.fit_method = "sigmoid"
+    model.expected_actuals = {"a": {"zero": 50.0}, "b": {"zero": 60.0}}
+    assert model.session.trend.method == "linear"
+    model.session.figure.trend_method = "poly2"
+    assert model.session.trend is None  # two points cannot fix a quadratic
+    model.session.figure.trend_method = "linear"
+    model.session.figure.fit_method = "none"
+    assert model.session.trend is None

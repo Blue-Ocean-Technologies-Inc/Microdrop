@@ -80,10 +80,10 @@ from .consts import (
     VIEW_MODES,
     X_AXIS_MODES,
 )
-from .curve_fit import FIT_METHODS, TREND_METHODS
+from .curve_fit import FIT_METHODS, TREND_METHODS, FitResult
 from .fit_presets import choices_for
 from .perspective import perspective_matrix
-from .plot_series import SMOOTH_METHODS
+from .plot_series import SMOOTH_METHODS, trend_fit, trend_points
 from .sam_detect import Candidate
 
 #: The Roi trait holding the user's expected value of each
@@ -610,6 +610,11 @@ class AnalysisSession(HasTraits):
     #: beside the ROIs' own.
     custom_points = List(Instance(CustomPoint))
 
+    #: The Actual vs expected trend — actual = f(expected) unless flipped —
+    #: None when there is nothing to fit. Set by RoiAnalysisModel; never
+    #: persisted.
+    trend = Instance(FitResult)
+
     def _get_heater_log_hint(self):
         if not self.heater_log_fallback_dir:
             return ""
@@ -1033,6 +1038,28 @@ class RoiAnalysisModel(HasTraits):
         for row in self.expected_rows:
             actuals = self.expected_actuals.get(row.roi.roi_id, {})
             row.actual = actuals.get(row.metric, math.nan)
+
+    @observe(
+        "expected_actuals, session, session:figure:fit_method, "
+        "session:figure:trend_method, session:figure:flip_actual_expected, "
+        "session:custom_points.items, session:custom_points:items:actual, "
+        "session:custom_points:items:expected, "
+        "session:rois:items:expected_fastest_change, "
+        "session:rois:items:expected_second_derivative_max, "
+        "session:rois:items:expected_second_derivative_min"
+    )
+    def _update_trend(self, event):
+        figure = self.session.figure
+
+        # The view draws no points with fitting off, so no trend either.
+        if figure.fit_method == "none":
+            self.session.trend = None
+
+            return
+
+        self.session.trend = trend_fit(
+            *trend_points(self.session, self.expected_actuals), figure.trend_method
+        )
 
     #: Whether the DISPLAYED image is excluded from analysis — the
     #: sidebar checkbox edits this; RoiAnalysisController mirrors it

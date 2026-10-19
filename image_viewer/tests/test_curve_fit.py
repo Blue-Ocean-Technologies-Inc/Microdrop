@@ -21,7 +21,6 @@ import pytest
 from image_viewer.analysis.curve_fit import (
     fastest_change_time,
     fit_series,
-    linear_trend,
     second_derivative_extrema,
     trimmed_note,
 )
@@ -230,27 +229,6 @@ def test_fastest_change_exponential_decay_at_start():
     t = np.arange(0.0, 200.0, 10.0)
     fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0, "exponential")
     assert abs(fastest_change_time(fit, 0.0, 190.0)) < 1.0
-
-
-def test_linear_trend_recovers_an_exact_line():
-    slope, intercept, r_squared = linear_trend([1, 2, 3, 4], [12.5, 15.0, 17.5, 20.0])
-
-    assert abs(slope - 2.5) < 1e-9
-    assert abs(intercept - 10.0) < 1e-9
-    assert abs(r_squared - 1.0) < 1e-9
-
-
-def test_linear_trend_needs_two_points():
-    assert linear_trend([1], [42.0]) is None
-    assert linear_trend([1, 2], [42.0, math.nan]) is None
-    assert linear_trend([3, 3], [1.0, 5.0]) is None  # no spread in x
-
-
-def test_linear_trend_ignores_nan_points():
-    slope, intercept, _r_squared = linear_trend([1, 2, 3, 4], [3.0, math.nan, 7.0, 9.0])
-
-    assert abs(slope - 2.0) < 1e-9
-    assert abs(intercept - 1.0) < 1e-9
 
 
 @pytest.mark.parametrize(
