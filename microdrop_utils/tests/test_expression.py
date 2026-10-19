@@ -20,8 +20,12 @@ import pytest
 # Microdrop utils imports.
 from microdrop_utils.expression import (
     FitExpressionError,
+    function_error,
+    is_identity,
     is_valid,
+    is_valid_function,
     parse_expression,
+    parse_function,
 )
 
 
@@ -98,3 +102,96 @@ def test_an_overflowing_expression_survives_warnings_as_errors():
         warnings.simplefilter("error")
         result = expression(np.array([0.0, 1e6]), 1.0, 1e6)
     assert not np.all(np.isfinite(result))
+
+
+def test_a_function_of_x_has_no_parameters():
+    f = parse_function("1.04*x^2/100 + 0.9*x + 1.2")
+    assert f.parameters == []
+    assert isinstance(f(10.0), float)
+    assert f(10.0) == pytest.approx(1.04 + 9.0 + 1.2)
+    assert f(np.array([0.0, 10.0])).shape == (2,)
+
+
+def test_expected_and_t_are_the_variable_too():
+    assert parse_function("2*expected")(3.0) == 6.0
+    assert parse_function("2*t")(3.0) == 6.0
+
+
+def test_a_constant_expression_is_rejected():
+    for text in ("5", "1.2"):
+        with pytest.raises(FitExpressionError, match="does not use x"):
+            parse_function(text)
+
+    assert function_error("1.2") == "the expression does not use x"
+
+
+def test_an_unknown_name_is_named():
+    with pytest.raises(FitExpressionError, match="unknown name 'a'"):
+        parse_function("a*x")
+    assert not is_valid_function("a*x")
+
+
+def test_a_flipped_trend_names_the_direction():
+    with pytest.raises(FitExpressionError) as raised:
+        parse_function("expected = 0.96*actual - 1.1")
+    assert "unknown name 'actual' — the compensation wants actual = f(expected)" in str(
+        raised.value
+    )
+
+
+def test_an_expression_that_cannot_evaluate_is_invalid():
+    for text in ("1/0 + x", "2**10000*x"):
+        with pytest.raises(FitExpressionError, match="cannot evaluate"):
+            parse_function(text)
+        assert function_error(text).startswith("cannot evaluate")
+
+
+@pytest.mark.parametrize(
+    "text, x, value",
+    [
+        ("actual = 1.04·expected^2 + 0.9·expected + 1.2", 10.0, 104.0 + 9.0 + 1.2),
+        ("y = 2×x", 3.0, 6.0),
+        ("F(x) = x²", 3.0, 9.0),
+        ("x³", 2.0, 8.0),
+        ("actual = 1.2·e^(0.5·expected) + 3", 0.0, 4.2),
+    ],
+)
+def test_pasted_corner_text_parses_as_is(text, x, value):
+    assert parse_function(text)(x) == pytest.approx(value)
+
+
+def test_identity_is_empty_or_a_bare_variable():
+    for text in ("", "  ", "x", "t", "expected", "actual = expected", "y = x"):
+        assert is_identity(text)
+    for text in ("x + 0", "2*x", "a"):
+        assert not is_identity(text)
+
+
+def test_function_error_is_empty_for_identity_and_valid_text():
+    assert function_error("") == "" and function_error("x") == ""
+    assert function_error("2*x + 1") == ""
+    assert function_error("a*x") == "unknown name 'a'"
+    with pytest.raises(FitExpressionError, match="type an expression of x"):
+        parse_function("")
+
+
+def test_the_fit_parser_still_collects_parameters():
+    assert parse_expression("actual*x").parameters == ["actual"]
+    assert parse_expression("y = a*x").parameters == ["a"]
+    assert parse_expression("F(x) = a*x + b").parameters == ["a", "b"]
+    with pytest.raises(FitExpressionError, match="no parameters"):
+        parse_expression("2*x + 1")
+
+
+@pytest.mark.parametrize("text", ["exp()", "exp(x, 1)", "exp(x, x)"])
+def test_a_function_takes_exactly_one_argument(text):
+    # A second positional argument is numpy's out=, which would write
+    # the result into the caller's array.
+    with pytest.raises(FitExpressionError, match=r"exp\(\) takes one argument"):
+        parse_function(text)
+    with pytest.raises(FitExpressionError, match=r"exp\(\) takes one argument"):
+        parse_expression(f"a*{text}")
+
+
+def test_function_error_reports_a_wrong_argument_count():
+    assert function_error("exp()") == "exp() takes one argument"
