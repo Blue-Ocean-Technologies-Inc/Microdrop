@@ -17,9 +17,20 @@ from traits.api import Callable, HasTraits, Instance, Property, observe
 
 # Microdrop package imports.
 from device_viewer.models.main_model import DeviceViewMainModel
+from device_viewer.services.keyboard_shortcut_service import shortcut_label
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT
+
+
+def _tooltip_with_shortcut(tooltip, action):
+    """Append the key bound to ``action``, as "Draw (D)"."""
+    label = shortcut_label(action)
+
+    if not label:
+        return tooltip
+
+    return f"{tooltip} ({label})"
 
 
 def if_editable(func):
@@ -143,33 +154,41 @@ class ModePicker(QtWidgets.QWidget):
     def _init_ui_elements(self):
         # Mode Buttons
         self.button_draw = QtWidgets.QPushButton(ICON_DRAW)
-        self.button_draw.setToolTip("Draw")
+        self.button_draw.setToolTip(_tooltip_with_shortcut("Draw", "mode_draw"))
         self.button_draw.setCheckable(True)
 
         self.button_edit = QtWidgets.QPushButton(ICON_EDIT)
-        self.button_edit.setToolTip("Edit")
+        self.button_edit.setToolTip(_tooltip_with_shortcut("Edit", "mode_edit"))
         self.button_edit.setCheckable(True)
 
         self.button_autoroute = QtWidgets.QPushButton(ICON_AUTOMATION)
-        self.button_autoroute.setToolTip("Autoroute")
+        self.button_autoroute.setToolTip(
+            _tooltip_with_shortcut("Autoroute", "mode_auto")
+        )
         self.button_autoroute.setCheckable(True)
 
         self.button_channel_edit = QtWidgets.QPushButton("Numbers")
-        self.button_channel_edit.setToolTip("Edit Electrode Channels")
+        self.button_channel_edit.setToolTip(
+            _tooltip_with_shortcut("Edit Electrode Channels", "mode_channel_edit")
+        )
         self.button_channel_edit.setCheckable(True)
 
         # Action Buttons
         self.button_reset_routes = QtWidgets.QPushButton("remove_road")
-        self.button_reset_routes.setToolTip("Clear Routes")
+        self.button_reset_routes.setToolTip(
+            _tooltip_with_shortcut("Clear Routes", "clear_routes")
+        )
 
         self.button_reset_electrodes = QtWidgets.QPushButton("layers_clear")
-        self.button_reset_electrodes.setToolTip("Clear Electrode States")
+        self.button_reset_electrodes.setToolTip(
+            _tooltip_with_shortcut("Clear Electrode States", "clear_electrodes")
+        )
 
         self.button_undo = QtWidgets.QPushButton("Undo")
-        self.button_undo.setToolTip("Undo")
+        self.button_undo.setToolTip(_tooltip_with_shortcut("Undo", "undo"))
 
         self.button_redo = QtWidgets.QPushButton("Redo")
-        self.button_redo.setToolTip("Redo")
+        self.button_redo.setToolTip(_tooltip_with_shortcut("Redo", "redo"))
 
         self.mode_label = QtWidgets.QLabel()
 
