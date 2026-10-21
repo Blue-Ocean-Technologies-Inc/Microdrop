@@ -512,10 +512,14 @@ def fit_series(
 def trimmed_note(fit, t_end, unit="s"):
     """' (fit to x ≤ 150 s)' when the trim dropped the tail, '' when
     the whole series was used — so every readout of an equation says
-    what it was solved on. ``unit`` is the x axis's."""
+    what it was solved on. ``unit`` is the x axis's ("" for the
+    unitless step and frame axes)."""
     if fit.fitted_end >= float(t_end):
         return ""
-    return f" (fit to x ≤ {fit.fitted_end:.4g} {unit})"
+
+    bound = f"{fit.fitted_end:.4g} {unit}".rstrip()
+
+    return f" (fit to x ≤ {bound})"
 
 
 def second_derivative_extrema(fit, t_start, t_end):

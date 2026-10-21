@@ -241,12 +241,21 @@ CUSTOM_POINT_LABEL = "Custom"
 VIEW_MODE_LABELS_BY_X_AXIS = {
     "time": VIEW_MODE_LABELS,
     "temperature": {**VIEW_MODE_LABELS, "intensity": "Over temperature"},
+    "step": {**VIEW_MODE_LABELS, "intensity": "Over steps"},
+    "frame": {**VIEW_MODE_LABELS, "intensity": "Over frames"},
 }
 
-#: What the curves are plotted against: elapsed capture time, or the
-#: heater log's temperature at each capture, joined on wall-clock time.
-X_AXIS_MODES = ("time", "temperature")
-X_AXIS_LABELS = {"time": "Time (s)", "temperature": "Temperature (°C)"}
+#: What the curves are plotted against: elapsed capture time, the
+#: heater log's temperature at each capture (joined on wall-clock
+#: time), the protocol step each capture was taken in, or the image's
+#: position in the filtered series.
+X_AXIS_MODES = ("time", "temperature", "step", "frame")
+X_AXIS_LABELS = {
+    "time": "Time (s)",
+    "temperature": "Temperature (°C)",
+    "step": "Protocol step",
+    "frame": "Frame",
+}
 
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"

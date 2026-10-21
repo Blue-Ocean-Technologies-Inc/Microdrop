@@ -27,6 +27,7 @@ from image_viewer.metadata import (
     NO_EMBEDDED_METADATA_TEXT,
     NO_METADATA_TEXT,
     TEXT_CHUNKS_HEADING,
+    capture_step_id,
     format_metadata_html,
     format_png_html,
     presentable_name,
@@ -283,3 +284,24 @@ def test_without_file_info_only_the_chunks_show():
 
     assert format_metadata_html({}, texts) == format_png_html(texts)
     assert format_metadata_html({}, {}) == NO_METADATA_TEXT
+
+
+def test_capture_step_id_reads_the_step_from_the_capture_details(tmp_path):
+    details = {"label": "FAM", "step_dotted_id": "1.10"}
+    path = _write_png(tmp_path / "a.png", {"CaptureDetails": json.dumps(details)})
+
+    assert capture_step_id(path) == "1.10"
+
+
+def test_capture_step_id_is_blank_without_a_step(tmp_path):
+    free_mode = _write_png(
+        tmp_path / "free.png",
+        {"CaptureDetails": json.dumps({"step_dotted_id": None})},
+    )
+    plain = _write_png(tmp_path / "plain.png", {"Note": "spot 3"})
+    garbled = _write_png(tmp_path / "garbled.png", {"CaptureDetails": "{not json"})
+
+    assert capture_step_id(free_mode) == ""
+    assert capture_step_id(plain) == ""
+    assert capture_step_id(garbled) == ""
+    assert capture_step_id(tmp_path / "missing.png") == ""

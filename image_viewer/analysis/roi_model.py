@@ -257,10 +257,11 @@ class FigureSettings(HasTraits):
     #: Which fit the Actual vs expected view's trend line uses.
     trend_method = Enum(*TREND_METHODS)
 
-    #: What the curves are plotted against: elapsed capture time, or
-    #: the heater log's temperature at each capture. The swap happens
-    #: in derive_series, so the fits follow it — a melt curve's
-    #: midpoint comes out as a °C rather than a second.
+    #: What the curves are plotted against: elapsed capture time, the
+    #: heater log's temperature at each capture, the protocol step it
+    #: was taken in, or its frame number. The swap happens in
+    #: derive_series, so the fits follow it — a melt curve's midpoint
+    #: comes out as a °C rather than a second.
     x_axis = Enum(*X_AXIS_MODES)
     #: Which thermistor the temperature axis reads; "mean" averages
     #: every sensor on each log line.

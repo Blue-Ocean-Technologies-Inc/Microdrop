@@ -12,6 +12,7 @@
 
 # Standard library imports.
 import math
+from pathlib import Path
 
 # Microdrop package imports.
 from image_viewer.analysis.plot_series import (
@@ -29,9 +30,13 @@ from image_viewer.analysis.plot_series import (
     shape_change_values,
     smoothed_values,
     stat_value,
+    step_ordinals,
+    step_tick_label,
     subtracted_series,
     visible_series,
     without_outliers,
+    x_axis_label,
+    x_quantity,
 )
 from image_viewer.analysis.roi_model import (
     PLOT_STATS,
@@ -654,3 +659,100 @@ def test_the_area_normalised_mean_rebaselines_when_the_first_image_is_excluded(
     _name, _x, values = derive_series(session, [first, second])[roi.roi_id]
 
     assert values == [20.0]
+
+
+# --------------------------------------------------------------------------- #
+# Step and frame x axes                                                        #
+# --------------------------------------------------------------------------- #
+def _three_images(tmp_path):
+    """Three captures 30 s apart, one ROI with a mean on each."""
+    paths = [
+        _image(tmp_path, "a_2026_07_20-10_00_00_raw.png"),
+        _image(tmp_path, "b_2026_07_20-10_00_30_raw.png"),
+        _image(tmp_path, "c_2026_07_20-10_01_00_raw.png"),
+    ]
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+
+    for value, path in enumerate(paths, start=1):
+        session.stats[session.cache_key(path, roi)] = {"mean": float(value)}
+
+    return session, roi, paths
+
+
+def test_the_frame_axis_numbers_the_filtered_series_exclusions_included(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.x_axis = "frame"
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    _name, x_values, values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [1.0, 3.0]
+    assert values == [1.0, 3.0]
+
+
+def test_step_ordinals_number_the_distinct_steps_in_order_of_appearance():
+    ordinals, labels = step_ordinals(["1.2", "1.10", "", "1.2", "1.9"])
+
+    # "1.10" is not after "1.9" here: the series order decides.
+    assert labels == ["1.2", "1.10", "1.9"]
+    assert ordinals[:2] == [1.0, 2.0]
+    assert math.isnan(ordinals[2])
+    assert ordinals[3:] == [1.0, 3.0]
+
+
+def test_step_tick_labels_name_whole_ordinals_only():
+    labels = ["1.2", "1.10"]
+
+    assert step_tick_label(labels, 1.0) == "1.2"
+    assert step_tick_label(labels, 2) == "1.10"
+    assert step_tick_label(labels, 1.5) == ""
+    assert step_tick_label(labels, 0.0) == ""
+    assert step_tick_label(labels, 3.0) == ""
+
+
+def test_the_step_axis_is_stable_when_an_image_is_excluded(tmp_path, monkeypatch):
+    session, roi, paths = _three_images(tmp_path)
+    fourth = _image(tmp_path, "d_2026_07_20-10_01_30_raw.png")
+    session.stats[session.cache_key(fourth, roi)] = {"mean": 4.0}
+    paths.append(fourth)
+    steps = {"a": "1.2", "b": "", "c": "1.10", "d": "1.2"}
+    monkeypatch.setattr(
+        "image_viewer.metadata.capture_step_id",
+        lambda path, mtime=None: steps[Path(path).name[0]],
+    )
+    session.figure.x_axis = "step"
+
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    # The step-less capture is a gap, and a repeated step plots at its
+    # first ordinal.
+    assert x_values[0] == 1.0
+    assert math.isnan(x_values[1])
+    assert x_values[2:] == [2.0, 1.0]
+
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert math.isnan(x_values[0])
+    assert x_values[1:] == [2.0, 1.0]
+
+
+def test_the_x_axis_names_its_quantity_and_unit():
+    session = AnalysisSession()
+    figure = session.figure
+
+    assert x_axis_label(figure) == "Elapsed time (s)"
+
+    figure.x_axis = "step"
+
+    assert x_quantity(figure) == ("Protocol step", "")
+    assert x_axis_label(figure) == "Protocol step"
+
+    figure.x_axis = "frame"
+
+    assert x_axis_label(figure) == "Frame"
+
+    figure.x_axis = "temperature"
+
+    assert x_axis_label(figure) == "Temperature (°C)"

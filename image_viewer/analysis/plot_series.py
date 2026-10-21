@@ -26,6 +26,7 @@ from .consts import (
     OUTLIER_WINDOW_PTS,
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
+    X_AXIS_LABELS,
 )
 from .heater_log import temperature_at
 from .shape_descriptors import HU_ROOT_KEY, shape_deviation
@@ -168,11 +169,17 @@ def calibrated_temperatures(figure, temperatures):
 
 
 def x_quantity(figure_settings):
-    """What the curves are plotted against, as (quantity, unit); the
-    unit is flagged once the linear calibration has moved the
-    temperature off the log's own reading."""
-    if figure_settings.x_axis != "temperature":
+    """What the curves are plotted against, as (quantity, unit): the
+    time axis in seconds, the step and frame axes unitless
+    (""), and the temperature flagged once the linear calibration has
+    moved it off the log's own reading."""
+    x_axis = figure_settings.x_axis
+
+    if x_axis == "time":
         return "Time", "s"
+
+    if x_axis != "temperature":
+        return X_AXIS_LABELS[x_axis], ""
 
     calibrated = (
         figure_settings.temperature_slope != 1.0
@@ -182,11 +189,19 @@ def x_quantity(figure_settings):
     return "Temperature", "°C, calibrated" if calibrated else "°C"
 
 
+def quantity_label(text, unit):
+    """``text`` with ``unit`` in brackets, or bare when it has none."""
+    return f"{text} ({unit})" if unit else text
+
+
 def x_axis_label(figure_settings):
-    """The x-axis text of the views drawn against time or temperature."""
+    """The x-axis text of the views drawn against the curves' x."""
     quantity, unit = x_quantity(figure_settings)
 
-    return f"Elapsed time ({unit})" if quantity == "Time" else f"{quantity} ({unit})"
+    if figure_settings.x_axis == "time":
+        return f"Elapsed time ({unit})"
+
+    return quantity_label(quantity, unit)
 
 
 def analysed_paths(session, filtered_paths):
@@ -195,28 +210,79 @@ def analysed_paths(session, filtered_paths):
     return [path for path in filtered_paths if not session.is_excluded(path)]
 
 
-def derive_series(session, filtered_paths):
-    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
-    the filtered images. The x is elapsed seconds from the first
-    filtered capture — or, when the figure's x_axis says so, the
-    heater log's temperature at each capture (NaN where the log does
-    not cover it) through the figure's calibration, so the fits
-    downstream read against °C too.
-    NaN where an (image, ROI) pair has no computed stats (line gaps).
-    User-excluded images are left out entirely (no gap: they are not
-    part of the analysis)."""
-    paths = analysed_paths(session, filtered_paths)
-    rois = session.positive_rois
-    if not paths or not rois:
-        return {}
-    stat_cache = {}
-    # Named to leave the imported pixel_area() function reachable.
-    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
-    times = [session.stat_info(path, stat_cache)[1] for path in paths]
-    start_time = times[0]
+def step_ordinals(step_ids):
+    """(ordinals, labels) for a run of protocol step ids ("" for an
+    image without one): each id's 1-based position among the distinct
+    ids in order of first appearance (NaN for ""), and those distinct
+    ids in ordinal order — the step axis's tick labels.
+
+    Ordinals rather than the ids themselves, which are not numbers:
+    "1.10" follows "1.9"."""
+    positions = {}
+    ordinals = []
+
+    for step_id in step_ids:
+        if not step_id:
+            ordinals.append(math.nan)
+            continue
+
+        positions.setdefault(step_id, len(positions) + 1)
+        ordinals.append(float(positions[step_id]))
+
+    return ordinals, list(positions)
+
+
+def step_ids(session, filtered_paths, stat_cache=None):
+    """Each filtered image's protocol step id, "" where its capture
+    names none."""
+    # Imported here: the capture details are read through Qt, which
+    # only the step axis needs — the rest of the module stays Qt-free.
+    from ..metadata import capture_step_id
+
+    return [
+        capture_step_id(path, session.stat_info(path, stat_cache)[0])
+        for path in filtered_paths
+    ]
+
+
+def step_tick_label(labels, x):
+    """The step axis's tick text at ``x``: the id of the step whose
+    ordinal it is, "" between steps or beyond them."""
+    index = round(x)
+
+    if index != x or not 1 <= index <= len(labels):
+        return ""
+
+    return labels[index - 1]
+
+
+def _x_values(session, filtered_paths, paths, stat_cache):
+    """The x of each of ``paths`` (drawn from ``filtered_paths``) on the
+    figure's axis.
+
+    Steps and frames number the filtered series, exclusions included,
+    so excluding an image renumbers nothing. Elapsed time runs from the
+    first analysed capture, in seconds. Temperature is the heater
+    log's at each capture (NaN where the log does not cover it),
+    through the figure's calibration."""
     figure = session.figure
-    x_values = (
-        calibrated_temperatures(
+
+    if figure.x_axis == "frame":
+        frames = {path: index for index, path in enumerate(filtered_paths, start=1)}
+
+        return [float(frames[path]) for path in paths]
+
+    if figure.x_axis == "step":
+        ordinals, _labels = step_ordinals(step_ids(session, filtered_paths, stat_cache))
+        ordinal_of = dict(zip(filtered_paths, ordinals))
+
+        return [ordinal_of[path] for path in paths]
+
+    times = [session.stat_info(path, stat_cache)[1] for path in paths]
+
+    if figure.x_axis == "temperature":
+        # The heater join runs on raw epoch seconds whatever the unit.
+        return calibrated_temperatures(
             figure,
             temperature_at(
                 session.heater_samples,
@@ -225,20 +291,57 @@ def derive_series(session, filtered_paths):
                 figure.heater_window_ms / 1000.0,
             ),
         )
-        if figure.x_axis == "temperature"
-        else [capture_time - start_time for capture_time in times]
-    )
+
+    origin = analysed_paths(session, filtered_paths)[0]
+    start_time = session.stat_info(origin, stat_cache)[1]
+
+    return [capture_time - start_time for capture_time in times]
+
+
+def _roi_stats_run(session, roi, paths, stat_cache):
+    """``roi``'s stats dict on each of ``paths``, None where uncomputed."""
+    return [
+        session.stats.get(session.cache_key(path, roi, stat_cache)) for path in paths
+    ]
+
+
+def _series_over(session, filtered_paths, paths):
+    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
+    ``paths``, drawn from ``filtered_paths``. NaN where an (image, ROI)
+    pair has no computed stats."""
+    rois = session.positive_rois
+
+    if not paths or not rois:
+        return {}
+
+    stat_cache = {}
+    # Named to leave the imported pixel_area() function reachable.
+    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
+    x_values = _x_values(session, filtered_paths, paths, stat_cache)
     series = {}
 
     for roi in rois:
-        stats_run = [
-            session.stats.get(session.cache_key(path, roi, stat_cache))
-            for path in paths
-        ]
-        values = roi_stat_values(stats_run, session.plot_stat, area_per_pixel)
+        values = roi_stat_values(
+            _roi_stats_run(session, roi, paths, stat_cache),
+            session.plot_stat,
+            area_per_pixel,
+        )
         series[roi.roi_id] = (roi.name, list(x_values), values)
 
     return series
+
+
+def derive_series(session, filtered_paths):
+    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
+    the analysed images, against the figure's x axis (see _x_values) —
+    so the fits downstream read in the axis's own terms (°C, a step,
+    minutes).
+    NaN where an (image, ROI) pair has no computed stats (line gaps).
+    User-excluded images are left out entirely (no gap: they are not
+    part of the analysis)."""
+    return _series_over(
+        session, filtered_paths, analysed_paths(session, filtered_paths)
+    )
 
 
 def image_values(series, paths, image_path):

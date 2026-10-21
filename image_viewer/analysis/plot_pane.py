@@ -36,7 +36,12 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.ticker import AutoLocator, ScalarFormatter
+from matplotlib.ticker import (
+    AutoLocator,
+    FuncFormatter,
+    MaxNLocator,
+    ScalarFormatter,
+)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QScrollArea,
@@ -123,7 +128,11 @@ from .plot_series import (
     finite_values,
     image_values,
     interpolated_series,
+    quantity_label,
     smoothed_series,
+    step_ids,
+    step_ordinals,
+    step_tick_label,
     x_axis_label,
     x_quantity,
 )
@@ -208,8 +217,8 @@ EQUATION_LINE_STEP_Y = 0.06
 
 #: Footnotes along the bottom edge, in axes fractions: the
 #: log-axis hidden-point count at the bottom, the dropped-outlier
-#: count one line above it, the no-temperature count above that, so
-#: none of the three ever overprint.
+#: count one line above it, the no-temperature (or, on the step axis,
+#: no-step) count above that, so none of the three ever overprint.
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
 NOTE_NO_TEMP_Y = 0.09
@@ -377,10 +386,12 @@ def _axes_tab():
                     values=list(X_AXIS_MODES), format_func=X_AXIS_LABELS.get
                 ),
                 tooltip="What the curves are plotted against: "
-                "elapsed capture time, or the heater log's "
+                "elapsed capture time, the heater log's "
                 "temperature at each capture (joined on "
-                "wall-clock time). The fits follow it — a "
-                "melt midpoint reads in °C.",
+                "wall-clock time), the protocol step each "
+                "capture was taken in, or the image's frame "
+                "number in the filtered series. The fits "
+                "follow it — a melt midpoint reads in °C.",
             ),
             _toggle(
                 "figure.show_legend",
@@ -1117,6 +1128,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.set_xscale("log" if log_x else "linear")
         self._axes.set_yscale("log" if log_y else "linear")
 
+        # After the scales, which reset the tick locators and formatters.
+        if time_axis and figure_settings.x_axis in ("step", "frame"):
+            self._apply_ordinal_ticks(figure_settings, log_x)
+
         if view_mode == "intensity":
             trim_edges = self._refresh_intensity(series, figure_settings)
         else:
@@ -1181,8 +1196,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # temperature, so frames the log misses are not missing there.
         if view_mode not in ("per_image", "distribution"):
             self._note_missing_temperatures(series, figure_settings)
+            self._note_missing_steps(series, figure_settings)
 
         self.draw_idle()
+
+    def _apply_ordinal_ticks(self, figure_settings, log_x):
+        """Whole-number ticks on the step and frame axes, the step
+        axis's labelled with the step ids — its x is only where a step
+        falls in the series (see step_ordinals)."""
+        if not log_x:
+            self._axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+        if figure_settings.x_axis != "step":
+            return
+
+        _ordinals, labels = step_ordinals(
+            step_ids(self._model.session, self._model.filtered_paths)
+        )
+        self._axes.xaxis.set_major_formatter(
+            FuncFormatter(lambda x, _position: step_tick_label(labels, x))
+        )
 
     def _refresh_intensity(self, series, figure_settings):
         session = self._model.session
@@ -1518,7 +1551,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         fails or whose speed is flat (linear) get no bar."""
         quantity, unit = x_quantity(figure_settings)
 
-        self._axes.set_ylabel(f"{quantity} of fastest change ({unit})")
+        self._axes.set_ylabel(quantity_label(f"{quantity} of fastest change", unit))
         self._axes.set_xlabel("ROI")
         self._apply_legend(False)
 
@@ -1555,12 +1588,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         trend gives expected from actual."""
         quantity, unit = x_quantity(figure_settings)
         metrics = figure_settings.compared_metrics
-        measured = (
-            f"{quantity.lower()} of fastest change ({unit})"
+        measured = quantity_label(
+            f"{quantity.lower()} of fastest change"
             if metrics == ["zero"]
             else f"{quantity.lower()} at "
-            + " / ".join(EXPECTED_METRIC_LABELS[metric] for metric in metrics)
-            + f" ({unit})"
+            + " / ".join(EXPECTED_METRIC_LABELS[metric] for metric in metrics),
+            unit,
         )
         x_name, y_name = (
             ("actual", "expected")
@@ -1885,6 +1918,35 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 0.5,
                 NOTE_NO_TEMP_Y,
                 note,
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize="x-small",
+            )
+        )
+
+    def _note_missing_steps(self, series, figure_settings):
+        """Count the images whose capture names no protocol step (NaN x
+        on the step axis) — like the frames a heater log misses, they
+        cannot be drawn anywhere honest, so they are counted instead of
+        silently vanishing."""
+        if figure_settings.x_axis != "step":
+            return
+
+        frames = next((x_values for _name, x_values, _values in series.values()), [])
+        missing = sum(1 for x in frames if x != x)
+
+        if not missing:
+            return
+
+        noun = "image" if missing == 1 else "images"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                NOTE_NO_TEMP_Y,
+                f"{missing} {noun} without a protocol step",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
