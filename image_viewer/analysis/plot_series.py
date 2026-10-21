@@ -26,6 +26,7 @@ from .consts import (
     OUTLIER_WINDOW_PTS,
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
+    TIME_UNIT_PER_SECOND,
     X_AXIS_LABELS,
 )
 from .heater_log import temperature_at
@@ -170,13 +171,13 @@ def calibrated_temperatures(figure, temperatures):
 
 def x_quantity(figure_settings):
     """What the curves are plotted against, as (quantity, unit): the
-    time axis in seconds, the step and frame axes unitless
+    time axis in its chosen unit, the step and frame axes unitless
     (""), and the temperature flagged once the linear calibration has
     moved it off the log's own reading."""
     x_axis = figure_settings.x_axis
 
     if x_axis == "time":
-        return "Time", "s"
+        return "Time", figure_settings.time_unit
 
     if x_axis != "temperature":
         return X_AXIS_LABELS[x_axis], ""
@@ -262,7 +263,7 @@ def _x_values(session, filtered_paths, paths, stat_cache):
 
     Steps and frames number the filtered series, exclusions included,
     so excluding an image renumbers nothing. Elapsed time runs from the
-    first analysed capture, in seconds. Temperature is the heater
+    first analysed capture, in the figure's time unit. Temperature is the heater
     log's at each capture (NaN where the log does not cover it),
     through the figure's calibration."""
     figure = session.figure
@@ -294,8 +295,9 @@ def _x_values(session, filtered_paths, paths, stat_cache):
 
     origin = analysed_paths(session, filtered_paths)[0]
     start_time = session.stat_info(origin, stat_cache)[1]
+    per_second = TIME_UNIT_PER_SECOND[figure.time_unit]
 
-    return [capture_time - start_time for capture_time in times]
+    return [(capture_time - start_time) * per_second for capture_time in times]
 
 
 def _roi_stats_run(session, roi, paths, stat_cache):

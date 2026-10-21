@@ -92,6 +92,7 @@ _FIGURE_FIELDS = (
     "butter_order",
     "butter_cutoff",
     "x_axis",
+    "time_unit",
     "heater_sensor",
     "heater_window_ms",
     "temperature_slope",

@@ -105,6 +105,7 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
+    TIME_UNITS,
     X_AXIS_LABELS,
     X_AXIS_MODES,
 )
@@ -392,6 +393,15 @@ def _axes_tab():
                 "capture was taken in, or the image's frame "
                 "number in the filtered series. The fits "
                 "follow it — a melt midpoint reads in °C.",
+            ),
+            Item(
+                "figure.time_unit",
+                label="Unit",
+                width=PARAM_SPIN_W,
+                editor=HoverScrollEnumEditor(values=list(TIME_UNITS)),
+                visible_when="figure.x_axis == 'time'",
+                tooltip="The time axis's unit; the fits and their "
+                "landmarks read in it too",
             ),
             _toggle(
                 "figure.show_legend",
@@ -916,6 +926,7 @@ _PLOT_STATE = (
     "session:figure:outlier_window, "
     "session:figure:interpolate_gaps, "
     "session:figure:x_axis, "
+    "session:figure:time_unit, "
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
     "session:figure:temperature_slope, "

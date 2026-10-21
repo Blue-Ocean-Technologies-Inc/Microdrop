@@ -938,6 +938,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:butter_cutoff, "
         "analysis_model:session:figure:interpolate_gaps, "
         "analysis_model:session:figure:x_axis, "
+        "analysis_model:session:figure:time_unit, "
         "analysis_model:session:figure:heater_sensor, "
         "analysis_model:session:figure:heater_window_ms, "
         "analysis_model:session:figure:temperature_slope, "

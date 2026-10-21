@@ -662,7 +662,7 @@ def test_the_area_normalised_mean_rebaselines_when_the_first_image_is_excluded(
 
 
 # --------------------------------------------------------------------------- #
-# Step and frame x axes                                                        #
+# Step, frame and time-unit x axes                                             #
 # --------------------------------------------------------------------------- #
 def _three_images(tmp_path):
     """Three captures 30 s apart, one ROI with a mean on each."""
@@ -678,6 +678,20 @@ def _three_images(tmp_path):
         session.stats[session.cache_key(path, roi)] = {"mean": float(value)}
 
     return session, roi, paths
+
+
+def test_the_time_axis_reads_in_the_chosen_unit(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+
+    session.figure.time_unit = "min"
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 0.5, 1.0]
+
+    session.figure.time_unit = "ms"
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 30_000.0, 60_000.0]
 
 
 def test_the_frame_axis_numbers_the_filtered_series_exclusions_included(tmp_path):
@@ -743,6 +757,11 @@ def test_the_x_axis_names_its_quantity_and_unit():
     figure = session.figure
 
     assert x_axis_label(figure) == "Elapsed time (s)"
+
+    figure.time_unit = "min"
+
+    assert x_quantity(figure) == ("Time", "min")
+    assert x_axis_label(figure) == "Elapsed time (min)"
 
     figure.x_axis = "step"
 

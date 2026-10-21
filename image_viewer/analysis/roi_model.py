@@ -75,6 +75,7 @@ from .consts import (
     SAVGOL_WINDOW_BOUNDS_PTS,
     SAVGOL_WINDOW_PTS,
     SHAPE_STATS,
+    TIME_UNITS,
     VIEW_HOLDING_MODES,
     VIEW_MODE_LABELS_BY_X_AXIS,
     VIEW_MODES,
@@ -263,6 +264,10 @@ class FigureSettings(HasTraits):
     #: derive_series, so the fits follow it — a melt curve's midpoint
     #: comes out as a °C rather than a second.
     x_axis = Enum(*X_AXIS_MODES)
+    #: The time axis's unit, applied in derive_series so the fits and
+    #: their landmarks read in it too. The heater join and the CSV's
+    #: elapsed_sec stay in seconds.
+    time_unit = Enum(*TIME_UNITS)
     #: Which thermistor the temperature axis reads; "mean" averages
     #: every sensor on each log line.
     heater_sensor = Str(HEATER_SENSOR_MEAN)

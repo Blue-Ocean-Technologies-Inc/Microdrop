@@ -248,14 +248,20 @@ VIEW_MODE_LABELS_BY_X_AXIS = {
 #: What the curves are plotted against: elapsed capture time, the
 #: heater log's temperature at each capture (joined on wall-clock
 #: time), the protocol step each capture was taken in, or the image's
-#: position in the filtered series.
+#: position in the filtered series. The time label carries no unit:
+#: the unit picker beside it says which.
 X_AXIS_MODES = ("time", "temperature", "step", "frame")
 X_AXIS_LABELS = {
-    "time": "Time (s)",
+    "time": "Time",
     "temperature": "Temperature (°C)",
     "step": "Protocol step",
     "frame": "Frame",
 }
+
+#: Units the time axis offers (the first is the default), and each
+#: one's count per second of elapsed capture time.
+TIME_UNITS = ("s", "min", "ms")
+TIME_UNIT_PER_SECOND = {"s": 1.0, "min": 1.0 / 60.0, "ms": 1000.0}
 
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"
