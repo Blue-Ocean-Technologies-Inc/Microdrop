@@ -63,6 +63,7 @@ from traitsui.api import (
 
 from microdrop_style.icons.icons import (
     ICON_ADD,
+    ICON_COPY,
     ICON_DELETE,
     ICON_FOLDER_OPEN,
     ICON_FUNCTION,
@@ -108,7 +109,6 @@ from .curve_fit import (
     TREND_METHODS,
     fastest_change_time,
     fit_series,
-    linear_trend,
     second_derivative_extrema,
     trimmed_note,
 )
@@ -250,16 +250,13 @@ STAT_DROPDOWN_W = -245
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
 
-#: Temperature-calibration spin boxes: wide enough for any straight
-#: line between two thermometers.
-TEMPERATURE_SLOPE_BOUNDS = (-1e3, 1e3)
-TEMPERATURE_INTERCEPT_BOUNDS = (-1e4, 1e4)
-TEMPERATURE_CALIBRATION_TOOLTIP = (
-    "Linear calibration applied to the log's temperature before "
-    "plotting and fitting: T = slope × T_log + intercept. Use it when "
-    "the heater setpoints were compensated against a reference "
-    "instrument (fit the two sequences with a straight line to get "
-    "slope and intercept). 1 and 0 leave the log's values unchanged."
+#: The Axes tab's temperature-calibration field.
+TEMPERATURE_EXPRESSION_TOOLTIP = (
+    "Calibration written as actual = f(expected) — the same expression "
+    "as the heater's compensation, e.g. the Actual vs expected trend you "
+    "copied. x (or expected) is the expected temperature; the plot "
+    "inverts f numerically so this axis reads in expected degrees. x "
+    "leaves the log's values unchanged."
 )
 
 
@@ -428,31 +425,21 @@ def _axes_tab():
                 "the capture instant. Frames with no "
                 "sample in the window become gaps.",
             ),
-            HGroup(
-                Item(
-                    "figure.temperature_slope",
-                    label="Calibrate: slope",
-                    width=VALUE_SPIN_W,
-                    editor=DoubleSpinBoxEditor(
-                        low=TEMPERATURE_SLOPE_BOUNDS[0],
-                        high=TEMPERATURE_SLOPE_BOUNDS[1],
-                        decimals=4,
-                        step=0.01,
-                    ),
-                    tooltip=TEMPERATURE_CALIBRATION_TOOLTIP,
-                ),
-                Item(
-                    "figure.temperature_intercept",
-                    label="intercept",
-                    width=VALUE_SPIN_W,
-                    editor=DoubleSpinBoxEditor(
-                        low=TEMPERATURE_INTERCEPT_BOUNDS[0],
-                        high=TEMPERATURE_INTERCEPT_BOUNDS[1],
-                        decimals=4,
-                        step=0.1,
-                    ),
-                    tooltip=TEMPERATURE_CALIBRATION_TOOLTIP,
-                ),
+            Item(
+                "figure.temperature_expression",
+                label="Calibrate: actual = f(expected)",
+                springy=True,
+                tooltip=TEMPERATURE_EXPRESSION_TOOLTIP,
+            ),
+            UItem(
+                "figure.temperature_expression_error",
+                style="readonly",
+                visible_when="figure.temperature_expression_error",
+            ),
+            UItem(
+                "session.temperature_uninvertible_hint",
+                style="readonly",
+                visible_when="session.temperature_uninvertible_hint",
             ),
             visible_when="figure.x_axis == 'temperature'",
             show_border=True,
@@ -805,6 +792,14 @@ def _expected_tab():
                 tooltip="The fit drawn through the Actual vs expected "
                 "points, its equation written in the corner",
             ),
+            UItem(
+                "model.copy_trend_expression_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_COPY,
+                    tooltip_name="model.copy_trend_tooltip",
+                ),
+                enabled_when="not model.copy_trend_blocker",
+            ),
         ),
         UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),
         _section(
@@ -903,8 +898,7 @@ _PLOT_STATE = (
     "session:figure:x_axis, "
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
-    "session:figure:temperature_slope, "
-    "session:figure:temperature_intercept, "
+    "session:figure:temperature_expression, "
     "session:heater_samples, "
     "session:heater_log_coverage, "
     "session:figure:smooth_method, "
@@ -1094,6 +1088,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         series, self._outliers = analysed_series(session, self._model.filtered_paths)
         figure_settings = session.figure
         self._fits = None
+        # The Expected tab and its CSV read these whatever is shown, and
+        # the model fits the Actual vs expected trend from them, so they
+        # go before any view draws. The fitting views reuse these fits;
+        # the per-image and distribution views fit nothing, so they pay
+        # this one fit pass to keep the actuals current.
+        self._model.expected_actuals = {
+            roi.roi_id: landmarks
+            for roi, _name, landmarks in self._fit_landmarks(series, figure_settings)
+        }
+
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
@@ -1131,15 +1135,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_fastest_change(series, figure_settings)
             else:
                 trim_edges = self._draw_actual_vs_expected(series, figure_settings)
-
-        # The Expected tab and its CSV read these whatever is shown. The
-        # fitting views reuse their fits; the per-image and distribution
-        # views fit nothing, so they pay one fit pass here to keep the
-        # actuals current.
-        self._model.expected_actuals = {
-            roi.roi_id: landmarks
-            for roi, _name, landmarks in self._fit_landmarks(series, figure_settings)
-        }
 
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
@@ -1693,60 +1688,40 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             )
 
         self._draw_trend(
-            x_values, y_values, x_name, y_name, figure_settings.trend_method
+            self._model.session.trend,
+            x_values,
+            x_name,
+            y_name,
+            figure_settings.trend_method,
         )
 
         return []  # landmark x values on both axes: no time span
 
-    def _draw_trend(self, x_values, y_values, x_name, y_name, method):
-        """The Actual vs expected trend: a ``method`` fit (a
-        TREND_METHODS key) through the points, dashed over their x
-        range, with its equation and R² in the corner — or a corner
-        note when the points are too few for it."""
-        if method == "linear":
-            trend = linear_trend(x_values, y_values)
-
-            if trend is None:
-                return
-
-            slope, intercept, r_squared = trend
-            trend_x = np.array([min(x_values), max(x_values)])
-            # Unset expecteds solve to y = x up to rounding noise; say so.
-            noise = 1e-9 * (max(abs(value) for value in y_values) or 1.0)
-            intercept = 0.0 if abs(intercept) < noise else intercept
-            slope = 1.0 if abs(slope - 1.0) < 1e-9 else slope
-            trend_y = slope * trend_x + intercept
-            text = (
-                f"{y_name} = {slope:.4g} × {x_name} {intercept:+.4g}  "
-                f"(R² {r_squared:.3f})"
-            )
-        else:
-            # The fits seed from the series' ends, so it goes in x order.
-            order = np.argsort(x_values)
-            fit = fit_series(
-                np.asarray(x_values)[order], np.asarray(y_values)[order], method
-            )
-
-            if fit is None:
-                self._fit_artists.append(
-                    self._axes.text(
-                        EQUATION_BOX_X,
-                        EQUATION_BOX_TOP_Y,
-                        f"Too few points for a {FIT_LABELS[method].lower()} trend",
-                        transform=self._axes.transAxes,
-                        va="top",
-                        fontsize="x-small",
-                        color="gray",
-                    )
+    def _draw_trend(self, trend, x_values, x_name, y_name, method):
+        """The Actual vs expected ``trend`` (the model's ``method`` fit,
+        a TREND_METHODS key), dashed over the points' x range, with its
+        equation and R² in the corner — or a corner note when it is None
+        because the points are too few for it."""
+        if trend is None:
+            self._fit_artists.append(
+                self._axes.text(
+                    EQUATION_BOX_X,
+                    EQUATION_BOX_TOP_Y,
+                    f"Too few points for a {FIT_LABELS[method].lower()} trend",
+                    transform=self._axes.transAxes,
+                    va="top",
+                    fontsize="x-small",
+                    color="gray",
                 )
+            )
 
-                return
+            return
 
-            trend_x = np.linspace(min(x_values), max(x_values), FIT_CURVE_SAMPLES)
-            trend_y = fit.predict(trend_x)
-            # The fit's own text reads "y = f(t)"; name the axes instead.
-            equation = re.sub(r"\bt\b", x_name, fit.equation.removeprefix("y = "))
-            text = f"{y_name} = {equation}  (R² {fit.r_squared:.3f})"
+        trend_x = np.linspace(min(x_values), max(x_values), FIT_CURVE_SAMPLES)
+        trend_y = trend.predict(trend_x)
+        # The fit's own text reads "y = f(t)"; name the axes instead.
+        equation = re.sub(r"\bt\b", x_name, trend.equation.removeprefix("y = "))
+        text = f"{y_name} = {equation}  (R² {trend.r_squared:.3f})"
 
         (trend_line,) = self._axes.plot(
             trend_x,

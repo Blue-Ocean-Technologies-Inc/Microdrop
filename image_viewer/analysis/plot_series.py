@@ -8,12 +8,24 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Series derivation for the ROI plot: a pure function of the session
-and the viewer's filtered paths, so the plot pane owns its own picture
-(observer pattern — nothing pushes series at it). Qt-free."""
+"""Series derivation for the ROI plot from the session and the viewer's
+filtered paths, so the plot pane owns its own picture (observer
+pattern). Its one write back is ``session.temperature_uninvertible``.
+Qt-free."""
 
 # Standard library imports.
 import math
+
+# Third-party imports.
+import numpy as np
+
+# Microdrop utils imports.
+from microdrop_utils.expression import (
+    invert_function,
+    is_identity,
+    is_valid_function,
+    parse_function,
+)
 
 # Local imports.
 from ..scale_bar import pixel_area
@@ -26,6 +38,7 @@ from .consts import (
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
 )
+from .curve_fit import POLYNOMIAL_DEGREES, fit_series, polynomial_result
 from .heater_log import temperature_at
 from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 
@@ -33,6 +46,10 @@ from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: Relative rounding noise a polynomial trend's coefficients are
+#: snapped across: below it a term is 0, within it of 1 a slope is 1.
+_TREND_SNAP_TOLERANCE = 1e-9
 
 
 def _signal(stats, background):
@@ -114,29 +131,39 @@ def roi_stat_values(stats_run, stat, pixel_area=1.0):
     return [stat_value(stats, stat, pixel_area) for stats in stats_run]
 
 
-def calibrated_temperatures(figure, temperatures):
-    """``temperatures`` through the figure's linear calibration,
-    slope * T + intercept. NaN stays NaN, so an uncovered frame is
-    still a gap."""
-    slope = figure.temperature_slope
-    intercept = figure.temperature_intercept
+def is_calibrated(figure_settings):
+    """Whether the figure's temperature_expression moves the log's
+    reading: a valid expression other than the identity. An unparsable
+    one leaves the log as it is rather than blanking the axis."""
+    text = figure_settings.temperature_expression
 
-    return [slope * temperature + intercept for temperature in temperatures]
+    return not is_identity(text) and is_valid_function(text)
+
+
+def calibrated_temperatures(figure, temperatures):
+    """``temperatures`` (the log's actual readings) mapped back to the
+    expected ones through the inverse of the figure's
+    temperature_expression, as (values, uninvertible count). NaN stays
+    NaN, so an uncovered frame is still a gap; a reading with no root
+    becomes one too, and is counted."""
+    if not is_calibrated(figure):
+        return temperatures, 0
+
+    expected, missing = invert_function(
+        parse_function(figure.temperature_expression), temperatures
+    )
+
+    return expected.tolist(), missing
 
 
 def x_quantity(figure_settings):
     """What the curves are plotted against, as (quantity, unit); the
-    unit is flagged once the linear calibration has moved the
-    temperature off the log's own reading."""
+    unit is flagged once a calibration has moved the temperature off
+    the log's own reading."""
     if figure_settings.x_axis != "temperature":
         return "Time", "s"
 
-    calibrated = (
-        figure_settings.temperature_slope != 1.0
-        or figure_settings.temperature_intercept != 0.0
-    )
-
-    return "Temperature", "°C, calibrated" if calibrated else "°C"
+    return "Temperature", "°C, calibrated" if is_calibrated(figure_settings) else "°C"
 
 
 def x_axis_label(figure_settings):
@@ -144,6 +171,89 @@ def x_axis_label(figure_settings):
     quantity, unit = x_quantity(figure_settings)
 
     return f"Elapsed time ({unit})" if quantity == "Time" else f"{quantity} ({unit})"
+
+
+def trend_points(session, expected_actuals):
+    """The Actual vs expected view's points as (x_values, y_values):
+    each ``expected_actuals`` landmark ({roi_id: {metric: actual}}) of
+    a ROI the session still has, then each custom point with both
+    values typed. Every pair is (expected, actual), or (actual,
+    expected) while the figure is flipped."""
+    pairs = []
+
+    for roi_id, landmarks in expected_actuals.items():
+        roi = session.roi_by_id(roi_id)
+
+        if roi is None:
+            continue
+
+        pairs.extend(
+            (roi.expected_or(metric, actual), actual)
+            for metric, actual in landmarks.items()
+        )
+
+    pairs.extend(
+        (point.expected, point.actual)
+        for point in session.custom_points
+        if math.isfinite(point.actual) and math.isfinite(point.expected)
+    )
+
+    if session.figure.flip_actual_expected:
+        pairs = [(actual, expected) for expected, actual in pairs]
+
+    return [x for x, _y in pairs], [y for _x, y in pairs]
+
+
+def trend_fit(x_values, y_values, method):
+    """The ``method`` fit (a TREND_METHODS key) of y on x through the
+    finite pairs, or None when they share one x or the fit fails.
+
+    A polynomial's coefficients snap to the 0 or 1 they sit within
+    rounding noise of, so points on the identity — every expected
+    unset — read as exactly y = x. A term's noise is judged at its
+    size over the data (``c_p * max|x|**p``), not its bare
+    coefficient."""
+    x = np.asarray(x_values, dtype=float)
+    y = np.asarray(y_values, dtype=float)
+    finite = np.isfinite(x) & np.isfinite(y)
+    x, y = x[finite], y[finite]
+
+    if not len(x) or float(np.ptp(x)) == 0.0:
+        return None
+
+    # The fits seed from the series' ends, so it goes in x order.
+    order = np.argsort(x)
+    fit = fit_series(x[order], y[order], method)
+
+    if fit is None or method not in POLYNOMIAL_DEGREES:
+        return fit
+
+    powers = range(POLYNOMIAL_DEGREES[method], -1, -1)
+    coeffs = [fit.params[f"c{power}"] for power in powers]
+    noise = _TREND_SNAP_TOLERANCE * (float(np.max(np.abs(y))) or 1.0)
+    scale = max(float(np.max(np.abs(x))), 1.0)
+    snapped = []
+
+    for power, coeff in zip(powers, coeffs):
+        if abs(coeff) * scale**power < noise:
+            coeff = 0.0
+        elif power == 1 and abs(coeff - 1.0) < _TREND_SNAP_TOLERANCE:
+            coeff = 1.0
+
+        snapped.append(coeff)
+
+    if snapped == coeffs:
+        return fit
+
+    result = polynomial_result(snapped)
+    result.trait_set(
+        method=fit.method,
+        r_squared=fit.r_squared,
+        fitted_start=fit.fitted_start,
+        fitted_end=fit.fitted_end,
+    )
+
+    return result
 
 
 def analysed_paths(session, filtered_paths):
@@ -161,19 +271,28 @@ def derive_series(session, filtered_paths):
     downstream read against °C too.
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
-    part of the analysis)."""
+    part of the analysis).
+
+    Sets ``session.temperature_uninvertible`` to the captures the
+    calibration found no root for — 0 on the time axis — so every
+    caller refreshes the Axes tab's gap note."""
     paths = analysed_paths(session, filtered_paths)
     rois = session.positive_rois
+
     if not paths or not rois:
+        session.temperature_uninvertible = 0
+
         return {}
+
     stat_cache = {}
     # Named to leave the imported pixel_area() function reachable.
     area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
     times = [session.stat_info(path, stat_cache)[1] for path in paths]
     start_time = times[0]
     figure = session.figure
-    x_values = (
-        calibrated_temperatures(
+
+    if figure.x_axis == "temperature":
+        x_values, uninvertible = calibrated_temperatures(
             figure,
             temperature_at(
                 session.heater_samples,
@@ -182,9 +301,11 @@ def derive_series(session, filtered_paths):
                 figure.heater_window_ms / 1000.0,
             ),
         )
-        if figure.x_axis == "temperature"
-        else [capture_time - start_time for capture_time in times]
-    )
+    else:
+        x_values = [capture_time - start_time for capture_time in times]
+        uninvertible = 0
+
+    session.temperature_uninvertible = uninvertible
     series = {}
 
     for roi in rois:

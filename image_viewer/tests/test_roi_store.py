@@ -17,6 +17,9 @@ import json
 import math
 import shutil
 
+# Third-party imports.
+import pytest
+
 # Microdrop package imports.
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
@@ -90,8 +93,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.trim_poor_fit = True
     session.figure.log_x = True
     session.figure.normalize = True
-    session.figure.temperature_slope = 0.98
-    session.figure.temperature_intercept = 1.5
+    session.figure.temperature_expression = "1.04*x^2/100 + 0.9*x + 1.2"
     session.figure.flip_actual_expected = True
     session.figure.compare_second_derivative_max = True
     session.figure.trend_method = "sigmoid"
@@ -106,12 +108,45 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.trim_poor_fit is True
     assert loaded.figure.log_x is True and loaded.figure.log_y is False
     assert loaded.figure.normalize is True
-    assert loaded.figure.temperature_slope == 0.98
-    assert loaded.figure.temperature_intercept == 1.5
+    assert loaded.figure.temperature_expression == "1.04*x^2/100 + 0.9*x + 1.2"
     assert loaded.figure.flip_actual_expected is True
     assert loaded.figure.compare_second_derivative_max is True
     assert loaded.figure.compare_second_derivative_min is False
     assert loaded.figure.trend_method == "sigmoid"
+
+
+def _write_figure(tmp_path, figure):
+    """tmp_path/analysis/roi_config.json holding a v2 config whose only
+    content is ``figure``."""
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(
+        json.dumps({"version": 2, "rois": [], "figure": figure})
+    )
+
+
+@pytest.mark.parametrize(
+    "slope, intercept, expression",
+    [(0.98, 1.5, "(x - 1.5)/0.98"), (1.0, 0.0, "x"), (0.0, 5.0, "x")],
+)
+def test_an_old_linear_calibration_loads_as_its_inverse(
+    tmp_path, slope, intercept, expression
+):
+    _write_figure(
+        tmp_path, {"temperature_slope": slope, "temperature_intercept": intercept}
+    )
+
+    assert load_session(tmp_path).figure.temperature_expression == expression
+
+
+def test_the_old_keys_are_dropped_on_the_next_save(tmp_path):
+    _write_figure(tmp_path, {"temperature_slope": 0.98, "temperature_intercept": 1.5})
+    save_session(tmp_path, load_session(tmp_path))
+    config = tmp_path / "analysis" / "roi_config.json"
+    stored = json.loads(config.read_text())["figure"]
+
+    assert "temperature_slope" not in stored
+    assert stored["temperature_expression"] == "(x - 1.5)/0.98"
 
 
 def test_custom_points_round_trip(tmp_path):

@@ -1780,6 +1780,9 @@ class _IconButtonEditor(QtEditor):
     default push-button minimum width would otherwise inflate toolbars)
     that fires a Button/Event trait on click."""
 
+    #: The tooltip synced from the factory's ``tooltip_name``, if any.
+    tooltip_text = Str()
+
     def init(self, parent):
         self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
@@ -1788,9 +1791,21 @@ class _IconButtonEditor(QtEditor):
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         self.control.setText(self.factory.glyph)
+
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
+
         self.control.clicked.connect(self._on_click)
+
+        if self.factory.tooltip_name:
+            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+
+    @observe("tooltip_text")
+    def _tooltip_text_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setToolTip(event.new)
 
     def _on_click(self):
         self.value = True
@@ -1811,6 +1826,10 @@ class IconButtonEditor(BasicEditorFactory):
     #: Material Symbols ligature (or codepoint) shown on the button.
     glyph = Str()
     tooltip = Str()
+
+    #: Extended name of a context Str trait whose value replaces
+    #: ``tooltip`` live, for a tooltip that explains the button's state.
+    tooltip_name = Str()
 
     #: Icon-font family the glyph comes from. Material Design Icons
     #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.

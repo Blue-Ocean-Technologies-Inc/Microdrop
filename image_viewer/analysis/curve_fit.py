@@ -27,8 +27,12 @@ from scipy.special import expit
 # Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Str
 
-# Local imports.
-from .fit_expression import FitExpressionError, parse_expression
+# Microdrop utils imports.
+from microdrop_utils.expression import (
+    VARIABLE_NAMES,
+    FitExpressionError,
+    parse_expression,
+)
 
 #: Selectable fit models, in dropdown order ("none" = fitting off,
 #: CUSTOM_METHOD = whatever equation the user typed).
@@ -63,6 +67,9 @@ FIT_TEMPLATES = {
     "exponential": "amplitude*exp(rate*x) + offset",
     "sigmoid": "initial + (final - initial)/(1 + exp(-rate*(x - midpoint)))",
 }
+
+#: The polynomial methods and their degrees.
+POLYNOMIAL_DEGREES = {"linear": 1, "poly2": 2, "poly3": 3}
 
 #: Fewest finite points each model can be solved on.
 _MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4, "sigmoid": 5}
@@ -118,6 +125,10 @@ class FitResult(HasTraits):
     method = Str()
     params = Dict()
     equation = Str()
+    #: The fitted equation in parser notation — x the variable, numbers
+    #: at full precision — what Copy puts on the clipboard; equation is
+    #: the rounded display text.
+    expression = Str()
     r_squared = Float()
     #: Vectorized t -> fitted y.
     predict = Any()
@@ -142,6 +153,35 @@ def _signed(value):
     return f" + {value:.3g}" if value >= 0 else f" - {abs(value):.3g}"
 
 
+def _number_text(value):
+    """``value`` at full precision in parser notation, parenthesised
+    when negative so it can stand as any operand."""
+    text = repr(float(value))
+
+    return f"({text})" if text.startswith("-") else text
+
+
+def _poly_expression(coeffs):
+    """The polynomial in parser notation, leaving out zero terms and
+    writing a unit coefficient as the bare power, so the identity reads
+    ``x``."""
+    terms = []
+
+    for power, coeff in zip(range(len(coeffs) - 1, -1, -1), coeffs):
+        if coeff == 0.0:
+            continue
+
+        variable = "" if power == 0 else "x" if power == 1 else f"x**{power}"
+
+        if coeff == 1.0 and variable:
+            terms.append(variable)
+        else:
+            number = _number_text(coeff)
+            terms.append(f"{number}*{variable}" if variable else number)
+
+    return " + ".join(terms) or "0.0"
+
+
 def _poly_equation(coeffs):
     parts = []
     for power, coeff in zip(range(len(coeffs) - 1, -1, -1), coeffs):
@@ -162,7 +202,17 @@ def _r_squared(values, fitted):
 
 
 def _fit_polynomial(elapsed, values, degree):
-    coeffs = np.polyfit(elapsed, values, degree)
+    return polynomial_result(np.polyfit(elapsed, values, degree))
+
+
+def polynomial_result(coeffs):
+    """The polynomial FitResult for highest-power-first ``coeffs``.
+
+    Only what the coefficients fix is filled in: ``method``,
+    ``r_squared`` and the fitted domain depend on the data, so the
+    caller sets them."""
+    coeffs = np.asarray(coeffs, dtype=float)
+    degree = len(coeffs) - 1
     d1_coeffs = np.polyder(coeffs, 1)
     if not len(d1_coeffs):
         d1_coeffs = np.array([0.0])
@@ -175,6 +225,7 @@ def _fit_polynomial(elapsed, values, degree):
             for power, coeff in zip(range(degree, -1, -1), coeffs)
         },
         equation=_poly_equation(coeffs),
+        expression=_poly_expression(coeffs),
         predict=lambda t, coeffs=coeffs: np.polyval(coeffs, t),
         first_derivative=lambda t, d1_coeffs=d1_coeffs: np.polyval(
             d1_coeffs, np.asarray(t, dtype=float)
@@ -208,6 +259,10 @@ def _fit_exponential(elapsed, values):
     return FitResult(
         params={"amplitude": amplitude, "rate": rate, "offset": offset},
         equation=f"y = {amplitude:.3g}·e^({rate:.3g}·t){_signed(offset)}",
+        expression=(
+            f"{_number_text(amplitude)}*exp({_number_text(rate)}*x)"
+            f" + {_number_text(offset)}"
+        ),
         predict=lambda t: _exponential(t, amplitude, rate, offset),
         first_derivative=lambda t: (
             amplitude * rate * np.exp(rate * np.asarray(t, dtype=float))
@@ -276,6 +331,11 @@ def _fit_sigmoid(elapsed, values):
             f"y = {initial:.3g} + ({final:.3g} - {initial:.3g})"
             f"/(1+e^(-{rate:.3g}·(t{_signed(-midpoint)})))"
         ),
+        expression=(
+            f"{_number_text(initial)} + ({_number_text(final)}"
+            f" - {_number_text(initial)})/(1 + exp(-{_number_text(rate)}"
+            f"*(x - {_number_text(midpoint)})))"
+        ),
         predict=lambda t: _logistic_4p(t, initial, final, midpoint, rate),
         first_derivative=lambda t: amplitude * rate * sig(t) * (1.0 - sig(t)),
         second_derivative=lambda t: (
@@ -313,6 +373,22 @@ def _custom_equation_text(expression, params):
         # Whole words only: a parameter 'a' must not rewrite 'atan'.
         text = re.sub(rf"\b{re.escape(name)}\b", f"{value:.4g}", text)
     return f"y = {text}"
+
+
+def _custom_expression_text(expression, params):
+    """The typed equation in parser notation with each parameter
+    replaced by its full-precision value and every variable spelled x.
+
+    One pass over whole identifiers: a parameter 'a' must not rewrite
+    'atan', and a value already written in (1e-05) must not be
+    rewritten by a later replacement."""
+    replacements = {name: "x" for name in VARIABLE_NAMES}
+    replacements.update({name: _number_text(value) for name, value in params.items()})
+
+    def replace(match):
+        return replacements.get(match.group(0), match.group(0))
+
+    return re.sub(r"(?<![\w.])[A-Za-z_]\w*", replace, expression.text)
 
 
 def _custom_seeds(elapsed, values, count):
@@ -412,6 +488,7 @@ def _fit_custom(elapsed, values, expression, initial_guesses=None):
     return FitResult(
         params=params,
         equation=_custom_equation_text(expression, params),
+        expression=_custom_expression_text(expression, params),
         predict=predict,
         first_derivative=first,
         second_derivative=second,
@@ -441,9 +518,7 @@ def _solve(elapsed, values, method, expression=None, initial_guesses=None):
             elif method == "sigmoid":
                 result = _fit_sigmoid(elapsed, values)
             else:
-                result = _fit_polynomial(
-                    elapsed, values, {"linear": 1, "poly2": 2, "poly3": 3}[method]
-                )
+                result = _fit_polynomial(elapsed, values, POLYNOMIAL_DEGREES[method])
     except Exception:
         return None
     if result is None:
@@ -560,24 +635,3 @@ def fastest_change_time(fit, t_start, t_end):
     if fit.inflection is not None and float(t_start) <= fit.inflection <= float(t_end):
         return float(fit.inflection)
     return float(grid[int(np.argmax(speed))])
-
-
-def linear_trend(positions, values):
-    """(slope, intercept, r_squared) of the least-squares line through
-    the finite (position, value) pairs, or None when fewer than two
-    remain or they share one position — neither fixes a slope."""
-    positions = np.asarray(positions, dtype=float)
-    values = np.asarray(values, dtype=float)
-    finite = np.isfinite(positions) & np.isfinite(values)
-    positions, values = positions[finite], values[finite]
-
-    if len(positions) < 2 or float(np.ptp(positions)) == 0.0:
-        return None
-
-    slope, intercept = np.polyfit(positions, values, 1)
-
-    return (
-        float(slope),
-        float(intercept),
-        _r_squared(values, slope * positions + intercept),
-    )
