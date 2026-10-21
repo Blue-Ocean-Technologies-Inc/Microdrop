@@ -19,7 +19,6 @@ coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 
 # Standard library imports.
-import itertools
 import math
 import os
 import re
@@ -47,6 +46,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -96,13 +96,11 @@ from .consts import (
     CUSTOM_POINT_COLOR,
     CUSTOM_POINT_LABEL,
     CUSTOM_POINT_MARKER,
-    DEFAULT_ROI_COLORS,
     EXCLUDED_POINT_ALPHA,
     EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
     HEATER_LOGS_DIR_NAME,
-    HEATER_SENSOR_MEAN,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
     PLOT_PICK_RADIUS_PX,
@@ -113,11 +111,6 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
-    TEMPERATURE_CAPTURE_MARKER,
-    TEMPERATURE_LINE_COLOR,
-    TEMPERATURE_LINE_WIDTH,
-    TEMPERATURE_SENSOR_LINE_ALPHA,
-    TEMPERATURE_SENSOR_LINE_WIDTH,
     TIME_UNITS,
     X_AXIS_LABELS,
     X_AXIS_MODES,
@@ -156,6 +149,7 @@ from .plot_series import (
 from .roi_model import PLOT_STATS, CustomPoint, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
+from .temperature_style_view import temperature_style_view
 
 #: Human labels for the plotted stat (dropdown + y-axis).
 PLOT_STAT_LABELS = {
@@ -962,6 +956,21 @@ _PLOT_STATE = (
     "session:figure:outlier_window, "
     "session:figure:interpolate_gaps, "
     "session:figure:show_excluded_points, "
+    "session:temperature_style:line_color, "
+    "session:temperature_style:line_style, "
+    "session:temperature_style:line_width, "
+    "session:temperature_style:capture_marker, "
+    "session:temperature_style:capture_size, "
+    "session:temperature_style:capture_color_follows_line, "
+    "session:temperature_style:capture_color, "
+    "session:temperature_style:excluded_size, "
+    "session:temperature_style:show_legend, "
+    "session:temperature_style:shown_sensors.items, "
+    "session:temperature_style:sensors:items:visible, "
+    "session:temperature_style:sensors:items:color, "
+    "session:temperature_style:sensors:items:line_style, "
+    "session:temperature_style:sensors:items:line_width, "
+    "session:temperature_style:sensors:items:alpha, "
     "session:figure:x_axis, "
     "session:figure:time_unit, "
     "session:figure:heater_sensor, "
@@ -983,6 +992,11 @@ _PLOT_STATE = (
     "session:custom_points:items:actual, "
     "session:custom_points:items:expected"
 )
+
+#: What decides whether the plot pane shows the ROI table or the
+#: temperature view's style panel beneath the chart (a session swap
+#: re-decides it in _on_session_swapped).
+_TABLE_OR_STYLE_STATE = "session:figure:view_mode"
 
 #: Changes that mean "show me everything again", releasing a view the
 #: user zoomed or panned into.
@@ -1611,20 +1625,23 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return []
 
         traces, analysed, excluded = temperature_over_time(session, filtered_paths)
+        style = session.temperature_style
         selected = figure_settings.heater_sensor
-        faint = [
-            sensor for sensor in traces if sensor not in (selected, HEATER_SENSOR_MEAN)
-        ]
 
-        for color, sensor in zip(itertools.cycle(DEFAULT_ROI_COLORS), faint):
-            x_values, temperatures = traces[sensor]
+        # The chosen sensor is the bold line, so not a faint one too.
+        for row in style.shown_sensors:
+            if not row.visible or row.sensor == selected or row.sensor not in traces:
+                continue
+
+            x_values, temperatures = traces[row.sensor]
             (line,) = self._axes.plot(
                 x_values,
                 temperatures,
-                color=color,
-                alpha=TEMPERATURE_SENSOR_LINE_ALPHA,
-                linewidth=TEMPERATURE_SENSOR_LINE_WIDTH,
-                label=sensor,
+                color=row.color,
+                alpha=row.plot_alpha,
+                linestyle=LINE_STYLES[row.line_style],
+                linewidth=row.line_width,
+                label=row.sensor,
             )
             self._fit_artists.append(line)
 
@@ -1632,8 +1649,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         (line,) = self._axes.plot(
             x_values,
             temperatures,
-            color=TEMPERATURE_LINE_COLOR,
-            linewidth=TEMPERATURE_LINE_WIDTH,
+            color=style.line_color,
+            linestyle=LINE_STYLES[style.line_style],
+            linewidth=style.line_width,
             label=selected,
         )
         self._fit_artists.append(line)
@@ -1643,8 +1661,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             x_values,
             temperatures,
             linestyle="",
-            marker=TEMPERATURE_CAPTURE_MARKER,
-            color=TEMPERATURE_LINE_COLOR,
+            marker="" if style.capture_marker == "none" else style.capture_marker,
+            markersize=style.capture_size,
+            color=style.capture_plot_color,
             label="Captures",
         )
         self._fit_artists.append(dots)
@@ -1659,8 +1678,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 temperatures,
                 linestyle="",
                 marker=EXCLUDED_POINT_MARKER,
+                markersize=style.excluded_size,
                 markerfacecolor="none",
-                markeredgecolor=TEMPERATURE_LINE_COLOR,
+                markeredgecolor=style.capture_plot_color,
                 alpha=EXCLUDED_POINT_ALPHA,
                 label="_nolegend_",
                 scalex=False,
@@ -1669,7 +1689,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._fit_artists.append(points)
             self._pick_targets.extend(zip(paths, x_values, temperatures))
 
-        self._apply_legend(figure_settings.show_legend)
+        self._apply_legend(style.show_legend)
 
         return []  # nothing fitted: no trimmed tail to shade
 
@@ -2409,13 +2429,19 @@ class RoiPlotDockPane(DockPane):
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self._controls_scroll)
         splitter.addWidget(self.canvas)
-        self.table = RoiStatsTable(roi_analysis_model, splitter)
-        splitter.addWidget(self.table)
+        # The ROI table, or — while the Temperature over time view is
+        # up, where it has nothing to say — that view's style panel.
+        self._table_stack = QStackedWidget(splitter)
+        self.table = RoiStatsTable(roi_analysis_model, self._table_stack)
+        self._table_stack.addWidget(self.table)
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.addWidget(self._style_ui.control)
+        splitter.addWidget(self._table_stack)
         # Nothing collapses to nothing by dragging: a section dragged
         # shut is hard to find again.
         splitter.setChildrenCollapsible(False)
         self._controls_scroll.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
-        self.table.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
+        self._table_stack.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
         splitter.setStretchFactor(0, 0)  # controls keep their size
         splitter.setStretchFactor(1, 3)  # the chart takes the room
         splitter.setStretchFactor(2, 1)
@@ -2431,6 +2457,8 @@ class RoiPlotDockPane(DockPane):
         # roi_analysis.progress_text, and one status belongs in one
         # place.
         roi_analysis_model.observe(self._on_session_swapped, "session")
+        roi_analysis_model.observe(self._show_table_or_style, _TABLE_OR_STYLE_STATE)
+        self._show_table_or_style()
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations, "fit_equations_button")
         roi_analysis_model.observe(self._on_heater_dir, "heater_dir_button")
@@ -2478,6 +2506,32 @@ class RoiPlotDockPane(DockPane):
         self._controls_scroll.setWidget(self._controls_ui.control)
         old_ui.dispose()
 
+        # The style panel edits the old session's style: rebuild it on
+        # the new one's, in the same stack slot.
+        old_style_ui = self._style_ui
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.removeWidget(old_style_ui.control)
+        self._table_stack.addWidget(self._style_ui.control)
+        old_style_ui.dispose()
+        self._show_table_or_style()
+
+    def _build_style_panel(self, parent):
+        """The temperature view's style panel on the session's style."""
+        return temperature_style_view.ui(
+            # TableEditor cell editors copy the context's "object".
+            context={"object": roi_analysis_model.session.temperature_style},
+            kind="subpanel",
+            parent=parent,
+        )
+
+    def _show_table_or_style(self, event=None):
+        """The style panel while the Temperature over time view is up,
+        the ROI table under every other view."""
+        temperature = roi_analysis_model.session.figure.view_mode == "temperature"
+        page = self._style_ui.control if temperature else self.table
+
+        self._table_stack.setCurrentWidget(page)
+
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
 
@@ -2515,6 +2569,10 @@ class RoiPlotDockPane(DockPane):
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()
+            self._style_ui.dispose()
+            roi_analysis_model.observe(
+                self._show_table_or_style, _TABLE_OR_STYLE_STATE, remove=True
+            )
             if (
                 self._equations_ui is not None
                 and self._equations_ui.control is not None

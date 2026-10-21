@@ -43,6 +43,7 @@ from .roi_model import (
     RollingBall,
     ScaleCalibration,
 )
+from .temperature_style import SensorStyle, TemperaturePlotStyle
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -103,6 +104,30 @@ _FIGURE_FIELDS = (
 )
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size", "visible", "alpha")
 
+#: Persisted TemperaturePlotStyle fields and, per sensor row,
+#: SensorStyle fields (both tolerated-missing on load, and the whole
+#: block too, so a config written before the style opens with its
+#: defaults).
+_TEMPERATURE_STYLE_FIELDS = (
+    "line_color",
+    "line_style",
+    "line_width",
+    "capture_marker",
+    "capture_size",
+    "capture_color_follows_line",
+    "capture_color",
+    "excluded_size",
+    "show_legend",
+)
+_SENSOR_STYLE_FIELDS = (
+    "sensor",
+    "visible",
+    "color",
+    "line_style",
+    "line_width",
+    "alpha",
+)
+
 #: Persisted ScaleCalibration fields (tolerated-missing on load, so a
 #: config written before the scale bar opens uncalibrated).
 _SCALE_FIELDS = ("metres_per_pixel", "value", "unit")
@@ -138,6 +163,43 @@ def _temperature_expression_from_linear(slope, intercept):
     return f"(x - {intercept})/{slope}"
 
 
+def _temperature_style_payload(style):
+    """The temperature view's style as JSON-ready data — every sensor
+    row, the ones the loaded log lacks included."""
+    payload = {name: getattr(style, name) for name in _TEMPERATURE_STYLE_FIELDS}
+    payload["sensors"] = [
+        {name: getattr(row, name) for name in _SENSOR_STYLE_FIELDS}
+        for row in style.sensors
+    ]
+
+    return payload
+
+
+def _temperature_style_from(stored, path):
+    """A TemperaturePlotStyle from its saved block (absent: defaults).
+    An unreadable sensor row is skipped, not the whole style."""
+    style = TemperaturePlotStyle()
+    style.trait_set(
+        **{name: stored[name] for name in _TEMPERATURE_STYLE_FIELDS if name in stored}
+    )
+
+    for entry in stored.get("sensors", []):
+        try:
+            style.sensors.append(
+                SensorStyle(
+                    **{
+                        name: entry[name]
+                        for name in _SENSOR_STYLE_FIELDS
+                        if name in entry
+                    }
+                )
+            )
+        except Exception as error:
+            logger.warning(f"Skipping unreadable sensor style in {path}: {error}")
+
+    return style
+
+
 def analysis_directory(experiment_directory) -> Path:
     """The experiment's analysis output folder, created on demand."""
     directory = Path(experiment_directory) / ANALYSIS_DIR_NAME
@@ -158,6 +220,7 @@ def save_session(experiment_directory, session):
             name: getattr(session.perspective, name) for name in _PERSPECTIVE_FIELDS
         },
         "excluded_images": list(session.excluded_images),
+        "temperature_style": _temperature_style_payload(session.temperature_style),
         "rois": [
             {
                 "roi_id": roi.roi_id,
@@ -270,6 +333,13 @@ def load_session(experiment_directory) -> AnalysisSession:
                 logger.warning(f"Skipping unreadable custom point in {path}: {error}")
 
         session.custom_points = custom_points
+
+        try:
+            session.temperature_style = _temperature_style_from(
+                dict(payload.get("temperature_style", {})), path
+            )
+        except Exception as error:
+            logger.warning(f"Ignoring invalid temperature style in {path}: {error}")
 
         try:
             session.excluded_images = [

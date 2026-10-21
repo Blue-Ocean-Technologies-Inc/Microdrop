@@ -1052,3 +1052,51 @@ def test_stats_measured_under_a_mask_round_trip(tmp_path):
     save_roi_stats(tmp_path, {key: {"mean": 7.0}})
 
     assert load_roi_stats(tmp_path) == {key: {"mean": 7.0}}
+
+
+def test_the_temperature_style_round_trips_with_every_sensor_row(tmp_path):
+    session = AnalysisSession()
+    style = session.temperature_style
+    style.show_sensors(["t1", "t2"])
+    style.show_sensors(["t2"])  # t1 is no longer in the log, but kept
+    t1, t2 = style.sensors
+    t1.trait_set(color="#123456", visible=False)
+    t2.trait_set(line_style="dashed", line_width=1.5, alpha=60)
+    style.trait_set(
+        line_color="#ff0000",
+        line_width=3.0,
+        capture_marker="s",
+        capture_size=8.0,
+        capture_color_follows_line=False,
+        capture_color="#00ff00",
+        excluded_size=4.0,
+        show_legend=False,
+    )
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path).temperature_style
+
+    assert [row.sensor for row in loaded.sensors] == ["t1", "t2"]
+    assert loaded.sensors[0].color == "#123456"
+    assert loaded.sensors[0].visible is False
+    assert loaded.sensors[1].line_style == "dashed"
+    assert loaded.sensors[1].line_width == 1.5
+    assert loaded.sensors[1].alpha == 60
+    assert loaded.line_color == "#ff0000" and loaded.line_width == 3.0
+    assert loaded.capture_marker == "s" and loaded.capture_size == 8.0
+    assert loaded.capture_color_follows_line is False
+    assert loaded.capture_plot_color == "#00ff00"
+    assert loaded.excluded_size == 4.0
+    assert loaded.show_legend is False
+    # Which rows show is the loaded log's business, not the file's.
+    assert loaded.shown_sensors == []
+
+
+def test_a_config_without_a_temperature_style_loads_the_defaults(tmp_path):
+    _write_figure(tmp_path, {})
+
+    style = load_session(tmp_path).temperature_style
+
+    assert style.sensors == []
+    assert style.line_color == "#000000" and style.line_width == 2.0
+    assert style.capture_marker == "o" and style.show_legend is True

@@ -67,6 +67,8 @@ from .consts import (
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
+    LINE_STYLE_NAMES,
+    MARKER_NAMES,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_BOUNDS_PTS,
@@ -94,6 +96,7 @@ from .fit_presets import choices_for
 from .perspective import perspective_matrix
 from .plot_series import SMOOTH_METHODS, is_calibrated, trend_fit, trend_points
 from .sam_detect import Candidate
+from .temperature_style import TemperaturePlotStyle
 
 #: The Roi trait holding the user's expected value of each
 #: EXPECTED_METRICS landmark. The zero crossing's keeps its original
@@ -144,8 +147,8 @@ class RoiStyle(HasTraits):
     """Plot styling for one ROI's line (persisted per experiment)."""
 
     color = Str("#1f77b4")
-    line_style = Enum("solid", "dashed", "dotted", "dashdot")
-    marker = Enum("none", ".", "o", "s", "^", "x")
+    line_style = Enum(*LINE_STYLE_NAMES)
+    marker = Enum(*MARKER_NAMES)
     marker_size = Float(4.0)
 
     #: Whether this ROI is drawn on the figure at all, and how opaque —
@@ -649,6 +652,9 @@ class AnalysisSession(HasTraits):
     #: User-typed points the Actual vs expected view plots and fits
     #: beside the ROIs' own.
     custom_points = List(Instance(CustomPoint))
+
+    #: How the Temperature over time view draws the heater log.
+    temperature_style = Instance(TemperaturePlotStyle, ())
 
     #: The Actual vs expected trend — actual = f(expected) unless flipped —
     #: None when there is nothing to fit. Set by RoiAnalysisModel; never

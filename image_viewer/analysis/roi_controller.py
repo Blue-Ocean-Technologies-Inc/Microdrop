@@ -946,6 +946,22 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:butter_cutoff, "
         "analysis_model:session:figure:interpolate_gaps, "
         "analysis_model:session:figure:show_excluded_points, "
+        "analysis_model:session:temperature_style:line_color, "
+        "analysis_model:session:temperature_style:line_style, "
+        "analysis_model:session:temperature_style:line_width, "
+        "analysis_model:session:temperature_style:capture_marker, "
+        "analysis_model:session:temperature_style:capture_size, "
+        "analysis_model:session:temperature_style:capture_color_follows_line, "
+        "analysis_model:session:temperature_style:capture_color, "
+        "analysis_model:session:temperature_style:excluded_size, "
+        "analysis_model:session:temperature_style:show_legend, "
+        "analysis_model:session:temperature_style:shown_sensors.items, "
+        "analysis_model:session:temperature_style:sensors:items:visible, "
+        "analysis_model:session:temperature_style:sensors:items:color, "
+        "analysis_model:session:temperature_style:sensors:items:line_style, "
+        "analysis_model:session:temperature_style:sensors:items:line_width, "
+        "analysis_model:session:temperature_style:sensors:items:alpha, "
+        "analysis_model:session:temperature_style:sensors.items, "
         "analysis_model:session:figure:x_axis, "
         "analysis_model:session:figure:time_unit, "
         "analysis_model:session:figure:heater_sensor, "
@@ -1090,9 +1106,10 @@ class RoiAnalysisController(HasTraits):
             result.match_count,
         )
         session.heater_samples = result.samples
-        self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors_in(
-            result.samples
-        )
+        sensors = sensors_in(result.samples)
+        self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors
+        # A row per sensor the log carries, new ones styled by default.
+        session.temperature_style.show_sensors(sensors)
         logger.info(
             f"Heater log: {len(result.samples)} samples from "
             f"{result.fallback or result.folder}"

@@ -83,6 +83,7 @@ from traitsui.api import (
 from traitsui.api import (
     TableColumn as TableColumn_,
 )
+from traitsui.qt.color_editor import ToolkitEditorFactory as QtColorEditor
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
@@ -229,6 +230,22 @@ class ColorColumn(ObjectColumn):
         # Color/QColor trait (whose str() QColor cannot parse) becomes one.
         if self.format_func is None:
             self.format_func = lambda value: QColor(value).name()
+
+
+class HexColorEditor(QtColorEditor):
+    """Color editor for a Str trait holding a hex colour ("#1f77b4"), the
+    way the analysis styles store theirs: the picker opens on that colour
+    and writes the chosen one back as hex rather than as a QColor. As a
+    ColorColumn's ``editor``, double-clicking a swatch cell opens it."""
+
+    def to_qt_color(self, editor):
+        return QColor(getattr(editor.object, editor.name))
+
+    def from_qt_color(self, color):
+        return color.name()
+
+    def str_color(self, color):
+        return color if isinstance(color, str) else QColor(color).name()
 
 
 class CustomCheckboxColumn(ObjectColumn):

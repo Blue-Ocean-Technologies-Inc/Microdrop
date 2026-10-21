@@ -34,6 +34,10 @@ RING_THICKNESS_BOUNDS_PX = (1, 50)
 #: Rolling-ball radius (px): below 5 the ball is smaller than the
 #: features it must clear; 500 exceeds any unevenness a frame carries.
 ROLLING_BALL_RADIUS_BOUNDS_PX = (5, 500)
+#: The line styles and markers a plotted line can take (RoiStyle,
+#: the temperature view's styles); the first is each one's default.
+LINE_STYLE_NAMES = ("solid", "dashed", "dotted", "dashdot")
+MARKER_NAMES = ("none", ".", "o", "s", "^", "x")
 #: Per-ROI plot opacity, as a percentage.
 ROI_ALPHA_BOUNDS_PCT = (0, 100)
 #: Hampel outlier test: how far from the local median counts (in
@@ -301,16 +305,10 @@ EXCLUDED_POINT_MARKER = "o"
 
 #: The Temperature over time view: how far past the filtered captures'
 #: span the log is drawn each side, as a fraction of that span with a
-#: floor (s) for a run of one capture; every sensor as a thin faint
-#: line, the chosen one (or their mean) bold, with a dot at each
-#: analysed capture.
+#: floor (s) for a run of one capture. How it is drawn is the
+#: experiment's TemperaturePlotStyle.
 TEMPERATURE_VIEW_MARGIN_FRACTION = 0.05
 TEMPERATURE_VIEW_MARGIN_MIN_S = 10.0
-TEMPERATURE_SENSOR_LINE_ALPHA = 0.35
-TEMPERATURE_SENSOR_LINE_WIDTH = 0.8
-TEMPERATURE_LINE_WIDTH = 2.0
-TEMPERATURE_LINE_COLOR = "black"
-TEMPERATURE_CAPTURE_MARKER = "o"
 
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"
