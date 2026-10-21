@@ -1055,6 +1055,10 @@ class RoiAnalysisModel(HasTraits):
     #: against session.excluded_images in both directions.
     current_image_excluded = Bool(False)
 
+    #: A click on a curves-view point: toggle that image's exclusion
+    #: and show it. RoiAnalysisController reacts. # image path (str)
+    toggle_exclusion_request = Event()
+
     #: Bulk exclusion: mark (exclude) or unmark (include) every image
     #: before / after the displayed one (exclusive) with the checkbox
     #: above's exclusion.

@@ -16,11 +16,13 @@ from pathlib import Path
 
 # Microdrop package imports.
 from image_viewer.analysis.plot_series import (
+    analysed_and_excluded_series,
     analysed_paths,
     area_normalized_values,
     background_ref_baseline,
     background_ref_corrected_series,
     derive_series,
+    excluded_series,
     finite_values,
     image_values,
     interpolated_series,
@@ -660,6 +662,11 @@ def test_the_area_normalised_mean_rebaselines_when_the_first_image_is_excluded(
 
     assert values == [20.0]
 
+    # The excluded image still reads against the analysed baseline.
+    _name, _x, values = excluded_series(session, [first, second])[roi.roi_id]
+
+    assert values == [25.0]
+
 
 # --------------------------------------------------------------------------- #
 # Step, frame and time-unit x axes                                             #
@@ -703,6 +710,19 @@ def test_the_frame_axis_numbers_the_filtered_series_exclusions_included(tmp_path
 
     assert x_values == [1.0, 3.0]
     assert values == [1.0, 3.0]
+
+    _name, x_values, values = excluded_series(session, paths)[roi.roi_id]
+
+    assert x_values == [2.0]
+    assert values == [2.0]
+
+
+def test_excluded_points_share_the_time_mapping(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    assert derive_series(session, paths)[roi.roi_id][1] == [0.0, 60.0]
+    assert excluded_series(session, paths)[roi.roi_id][1] == [30.0]
 
 
 def test_step_ordinals_number_the_distinct_steps_in_order_of_appearance():
@@ -750,6 +770,7 @@ def test_the_step_axis_is_stable_when_an_image_is_excluded(tmp_path, monkeypatch
 
     assert math.isnan(x_values[0])
     assert x_values[1:] == [2.0, 1.0]
+    assert excluded_series(session, paths)[roi.roi_id][1] == [1.0]
 
 
 def test_the_x_axis_names_its_quantity_and_unit():
@@ -775,3 +796,37 @@ def test_the_x_axis_names_its_quantity_and_unit():
     figure.x_axis = "temperature"
 
     assert x_axis_label(figure) == "Temperature (°C)"
+
+
+# --------------------------------------------------------------------------- #
+# Excluded points through the corrections                                      #
+# --------------------------------------------------------------------------- #
+def test_excluded_points_follow_the_curves_corrections(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+    session.figure.subtract_first = True
+
+    series, _flags, excluded = analysed_and_excluded_series(session, paths)
+
+    # The analysed curve is 1, 3 less its first value; the excluded
+    # point (2) shifts by that same 1, not by its own value.
+    assert series[roi.roi_id][2] == [0.0, 2.0]
+    assert excluded[roi.roi_id][2] == [1.0]
+
+    session.figure.normalize = True
+    series, _flags, excluded = analysed_and_excluded_series(session, paths)
+
+    assert series[roi.roi_id][2] == [0.0, 100.0]
+    assert excluded[roi.roi_id][2] == [50.0]
+
+
+def test_excluded_points_are_not_tested_for_outliers(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+    session.stats[session.cache_key(paths[1], roi)] = {"mean": 1e6}
+    session.figure.remove_outliers = True
+
+    _series, flags, excluded = analysed_and_excluded_series(session, paths)
+
+    assert flags[roi.roi_id] == [False, False]
+    assert excluded[roi.roi_id][2] == [1e6]

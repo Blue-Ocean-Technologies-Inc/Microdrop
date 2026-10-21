@@ -94,10 +94,14 @@ from .consts import (
     CUSTOM_POINT_COLOR,
     CUSTOM_POINT_LABEL,
     CUSTOM_POINT_MARKER,
+    EXCLUDED_POINT_ALPHA,
+    EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
     HEATER_LOGS_DIR_NAME,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
+    PLOT_CLICK_SLOP_PX,
+    PLOT_PICK_RADIUS_PX,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
     ROI_PLOT_CANVAS_MIN_HEIGHT,
@@ -121,11 +125,13 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .heater_log import heater_coverage_note
+from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
+    analysed_and_excluded_series,
     analysed_paths,
-    analysed_series,
+    excluded_paths,
     finite_values,
     image_values,
     interpolated_series,
@@ -974,6 +980,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
+        #: Set per curves-view redraw: (image path, x, y) of every point
+        #: a click can toggle the exclusion of, in data coordinates.
+        self._pick_targets = []
         #: Set per redraw: which points the outlier test dropped.
         self._outliers = {}
         #: This redraw's fits, solved on first use (see _fitted_rois).
@@ -984,6 +993,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         #: every redraw until they ask for a fit.
         self._user_view = False
         self._panning = False
+        #: Where the current press landed, and whether the pointer has
+        #: moved since: a press released without moving is a click.
+        self._press_position = None
+        self._panned = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
         model.observe(self._on_displayed_image_changed, "current_image_path")
@@ -1056,10 +1069,24 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # axis scale moves.
         self._axes.start_pan(event.x, event.y, event.button)
         self._panning = True
+        self._press_position = (event.x, event.y)
+        self._panned = False
 
     def _on_motion(self, event):
         if not self._panning:
             return
+
+        # Drift within the slop is still a click; the pan starts once
+        # the pointer leaves it. Matplotlib counts physical pixels.
+        self._panned = self._panned or left_press_point(
+            self._press_position,
+            (event.x, event.y),
+            PLOT_CLICK_SLOP_PX * self.device_pixel_ratio,
+        )
+
+        if not self._panned:
+            return
+
         self._axes.drag_pan(1, event.key, event.x, event.y)
         self._user_view = True
         self.draw_idle()
@@ -1069,6 +1096,38 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return
         self._axes.end_pan()
         self._panning = False
+
+        # A press that never left the click slop is a click, not a pan.
+        if not self._panned:
+            self._toggle_exclusion_at(event)
+
+    def _toggle_exclusion_at(self, event):
+        """Ask for the exclusion of the image whose drawn point the
+        click landed on — on the curves view, the only one drawing a
+        point per image — to be toggled. Nothing near: nothing asked."""
+        if self._model.session.figure.view_mode != "intensity":
+            return
+
+        if not self._pick_targets:
+            return
+
+        positions = self._axes.transData.transform(
+            [(x, y) for _path, x, y in self._pick_targets]
+        )
+        path = nearest_point(
+            [
+                (path, display_x, display_y)
+                for (path, _x, _y), (display_x, display_y) in zip(
+                    self._pick_targets, positions
+                )
+            ],
+            (event.x, event.y),
+            # Matplotlib events and transforms count physical pixels.
+            PLOT_PICK_RADIUS_PX * self.device_pixel_ratio,
+        )
+
+        if path is not None:
+            self._model.toggle_exclusion_request = path
 
     def detach(self):
         # An in-flight coalesced singleShot may fire after the widget's
@@ -1117,9 +1176,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         session = self._model.session
         # One pipeline, shared with the export, so a saved fit and the
         # drawn one cannot disagree about which points they saw.
-        series, self._outliers = analysed_series(session, self._model.filtered_paths)
+        series, self._outliers, excluded = analysed_and_excluded_series(
+            session, self._model.filtered_paths
+        )
         figure_settings = session.figure
         self._fits = None
+        self._pick_targets = []
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
@@ -1144,7 +1206,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._apply_ordinal_ticks(figure_settings, log_x)
 
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings)
+            trim_edges = self._refresh_intensity(series, figure_settings, excluded)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
@@ -1228,7 +1290,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             FuncFormatter(lambda x, _position: step_tick_label(labels, x))
         )
 
-    def _refresh_intensity(self, series, figure_settings):
+    def _refresh_intensity(self, series, figure_settings, excluded):
         session = self._model.session
         # Smoothing is a display aid, so it goes no further than the
         # lines: `series` — unsmoothed — is what the fits below see.
@@ -1264,6 +1326,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
+        self._draw_excluded_points(excluded)
+        self._collect_pick_targets(series, drawn, excluded)
         if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
@@ -1281,6 +1345,51 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             trim_edges = self._draw_fits(series, figure_settings)
         self._apply_legend(bool(self._lines) and figure_settings.show_legend)
         return trim_edges
+
+    def _draw_excluded_points(self, excluded):
+        """Each excluded image's point as a faint hollow marker in its
+        ROI's colour, with no line — still visible and clickable, but
+        plainly not part of the curve, the fits or anything else."""
+        for roi_id, (_name, x_values, values) in excluded.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                x_values,
+                values,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=EXCLUDED_POINT_ALPHA * roi.style.plot_alpha,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(points)
+
+    def _collect_pick_targets(self, series, drawn, excluded):
+        """Remember every point a click can land on, with its image: the
+        curves' points where they are drawn (smoothed, say) but only
+        where there is a value — a bridged gap is no image's point — and
+        the excluded images' points."""
+        session = self._model.session
+        filtered_paths = self._model.filtered_paths
+        analysed = analysed_paths(session, filtered_paths)
+        excluded_images = excluded_paths(session, filtered_paths)
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            measured = series[roi_id][2]
+
+            self._pick_targets.extend(
+                (path, x, y)
+                for path, x, y, value in zip(analysed, x_values, values, measured)
+                if value == value
+            )
+
+        for _name, x_values, values in excluded.values():
+            self._pick_targets.extend(zip(excluded_images, x_values, values))
 
     def _stat_axis_label(self, figure_settings):
         """The plotted stat's y-axis text with its transforms noted —

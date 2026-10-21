@@ -211,6 +211,12 @@ def analysed_paths(session, filtered_paths):
     return [path for path in filtered_paths if not session.is_excluded(path)]
 
 
+def excluded_paths(session, filtered_paths):
+    """The filtered images the user excluded, in filtered order — the
+    points excluded_series runs over."""
+    return [path for path in filtered_paths if session.is_excluded(path)]
+
+
 def step_ordinals(step_ids):
     """(ordinals, labels) for a run of protocol step ids ("" for an
     image without one): each id's 1-based position among the distinct
@@ -259,11 +265,13 @@ def step_tick_label(labels, x):
 
 def _x_values(session, filtered_paths, paths, stat_cache):
     """The x of each of ``paths`` (drawn from ``filtered_paths``) on the
-    figure's axis.
+    figure's axis — one mapping for analysed and excluded images alike,
+    so an excluded image's point sits where it would plot.
 
     Steps and frames number the filtered series, exclusions included,
     so excluding an image renumbers nothing. Elapsed time runs from the
-    first analysed capture, in the figure's time unit. Temperature is the heater
+    first analysed capture (the first filtered one when every image is
+    excluded), in the figure's time unit. Temperature is the heater
     log's at each capture (NaN where the log does not cover it),
     through the figure's calibration."""
     figure = session.figure
@@ -293,7 +301,7 @@ def _x_values(session, filtered_paths, paths, stat_cache):
             ),
         )
 
-    origin = analysed_paths(session, filtered_paths)[0]
+    origin = (analysed_paths(session, filtered_paths) or filtered_paths)[0]
     start_time = session.stat_info(origin, stat_cache)[1]
     per_second = TIME_UNIT_PER_SECOND[figure.time_unit]
 
@@ -309,8 +317,13 @@ def _roi_stats_run(session, roi, paths, stat_cache):
 
 def _series_over(session, filtered_paths, paths):
     """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
-    ``paths``, drawn from ``filtered_paths``. NaN where an (image, ROI)
-    pair has no computed stats."""
+    ``paths``, drawn from ``filtered_paths`` — the body derive_series
+    and excluded_series share. NaN where an (image, ROI) pair has no
+    computed stats.
+
+    The SERIES_STATS take their reference from the analysed images
+    either way, so an excluded image's point reads against the same
+    baseline as the curve it left."""
     rois = session.positive_rois
 
     if not paths or not rois:
@@ -319,14 +332,20 @@ def _series_over(session, filtered_paths, paths):
     stat_cache = {}
     # Named to leave the imported pixel_area() function reachable.
     area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
+    analysed = analysed_paths(session, filtered_paths)
+    referenced = session.plot_stat in SERIES_STATS and paths != analysed
     x_values = _x_values(session, filtered_paths, paths, stat_cache)
     series = {}
 
     for roi in rois:
+        reference_run = (
+            _roi_stats_run(session, roi, analysed, stat_cache) if referenced else None
+        )
         values = roi_stat_values(
             _roi_stats_run(session, roi, paths, stat_cache),
             session.plot_stat,
             area_per_pixel,
+            reference_run,
         )
         series[roi.roi_id] = (roi.name, list(x_values), values)
 
@@ -340,9 +359,20 @@ def derive_series(session, filtered_paths):
     minutes).
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
-    part of the analysis)."""
+    part of the analysis; excluded_series has them)."""
     return _series_over(
         session, filtered_paths, analysed_paths(session, filtered_paths)
+    )
+
+
+def excluded_series(session, filtered_paths):
+    """derive_series over the user-excluded images instead — the points
+    the curves view draws faintly so they can be clicked back in. Its
+    x come from the same mapping, and its values follow
+    ``excluded_paths``; never fitted, smoothed or tested for
+    outliers."""
+    return _series_over(
+        session, filtered_paths, excluded_paths(session, filtered_paths)
     )
 
 
@@ -377,13 +407,28 @@ def finite_values(series):
     return samples
 
 
-def subtracted_series(series):
+def _reference_values(reference, roi_id):
+    """The values of ``roi_id``'s curve in ``reference``, [] when it has
+    none."""
+    entry = reference.get(roi_id)
+
+    return [] if entry is None else entry[2]
+
+
+def subtracted_series(series, reference=None):
     """``series`` with each curve less its own first finite value, so
-    every ROI starts at zero and shows change from baseline. NaN stays
-    NaN; a curve with no finite value passes through untouched."""
+    every ROI starts at zero and shows change from baseline — or less
+    the first finite value of its curve in ``reference``, which lets
+    excluded points follow the curve they left. NaN stays NaN; a curve
+    with no finite value to subtract passes through untouched."""
+    reference = series if reference is None else reference
     shifted = {}
+
     for roi_id, (name, elapsed, values) in series.items():
-        first = next((value for value in values if value == value), None)
+        first = next(
+            (value for value in _reference_values(reference, roi_id) if value == value),
+            None,
+        )
         shifted[roi_id] = (
             name,
             elapsed,
@@ -391,6 +436,7 @@ def subtracted_series(series):
             if first is None
             else [value if value != value else value - first for value in values],
         )
+
     return shifted
 
 
@@ -562,15 +608,21 @@ def background_ref_corrected_series(session, series):
     return corrected
 
 
-def normalized_series(series):
+def normalized_series(series, reference=None):
     """``series`` with each ROI stretched to 0-100% of its own finite
-    range, so curves of wildly different brightness can be compared for
-    shape and timing. NaN stays NaN, so a gap stays a gap; a curve with
-    no range (min == max) sits flat at 0%, there being nothing to
-    stretch and no span to divide by."""
+    range — or of its curve's range in ``reference``, which lets
+    excluded points follow the curve they left — so curves of wildly
+    different brightness can be compared for shape and timing. NaN
+    stays NaN, so a gap stays a gap; a curve with no range (min == max)
+    sits flat at 0%, there being nothing to stretch and no span to
+    divide by."""
+    reference = series if reference is None else reference
     scaled = {}
+
     for roi_id, (name, elapsed, values) in series.items():
-        finite = [value for value in values if value == value]
+        finite = [
+            value for value in _reference_values(reference, roi_id) if value == value
+        ]
         low = min(finite) if finite else 0.0
         span = (max(finite) - low) if finite else 0.0
         scaled[roi_id] = (
@@ -583,6 +635,7 @@ def normalized_series(series):
                 for value in values
             ],
         )
+
     return scaled
 
 
@@ -740,10 +793,34 @@ def analysed_series(session, filtered_paths, visible_only=True):
     Smoothing is NOT here: it is a display aid, and a fit of a smoothed
     curve reports a goodness it did not earn.
     """
+    series, flags, _excluded = _corrected_series(
+        session, filtered_paths, visible_only, with_excluded=False
+    )
+
+    return series, flags
+
+
+def analysed_and_excluded_series(session, filtered_paths):
+    """analysed_series()'s (series, outlier flags) for the visible ROIs,
+    plus excluded_series() through the same corrections — the
+    background references per image, the baseline shift and the
+    normalisation each taking its parameters from the analysed curve,
+    so an excluded point lands where it would sit were it included
+    without moving anything it is not part of. The outlier test passes
+    them by: they are not part of the analysis it tests."""
+    return _corrected_series(session, filtered_paths, True, with_excluded=True)
+
+
+def _corrected_series(session, filtered_paths, visible_only, with_excluded):
+    """(series, outlier flags, excluded): analysed_series()'s pipeline,
+    carrying excluded_series() along when ``with_excluded`` ({}
+    otherwise)."""
     figure = session.figure
     series = derive_series(session, filtered_paths)
+    excluded = excluded_series(session, filtered_paths) if with_excluded else {}
     flags = {}
     steps = []
+
     if figure.remove_outliers:
         series, flags = without_outliers(
             series, figure.outlier_threshold, figure.outlier_window
@@ -756,25 +833,38 @@ def analysed_series(session, filtered_paths, visible_only=True):
             f"window {figure.outlier_window}) dropped "
             f"{dropped}"
         )
+
     if figure.subtract_background_ref:
         # After the outliers, before the visibility filter: the
         # references are the very curves a user hides once they are
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
         series = background_ref_corrected_series(session, series)
+        # Per image, so the excluded points read their own references.
+        excluded = background_ref_corrected_series(session, excluded)
         marked = sum(1 for roi in session.positive_rois if roi.is_background_ref)
         steps.append(f"background-ref({marked} marked)")
+
     if visible_only:
         series = visible_series(session, series)
+        excluded = visible_series(session, excluded)
+
+    # The excluded points go first in each step: their parameters are
+    # the curve's as it stood before that step.
     if figure.subtract_first:
+        excluded = subtracted_series(excluded, reference=series)
         series = subtracted_series(series)
         steps.append("subtract-first")
+
     if figure.normalize:
+        excluded = normalized_series(excluded, reference=series)
         series = normalized_series(series)
         steps.append("normalise")
+
     logger.debug(
         f"Series for {len(series)} ROIs over {len(filtered_paths)} "
         f"images, stat={session.plot_stat}"
         + (f"; {'; '.join(steps)}" if steps else "; no corrections")
     )
-    return series, flags
+
+    return series, flags, excluded

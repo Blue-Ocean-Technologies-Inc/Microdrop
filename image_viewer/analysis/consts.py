@@ -263,6 +263,21 @@ X_AXIS_LABELS = {
 TIME_UNITS = ("s", "min", "ms")
 TIME_UNIT_PER_SECOND = {"s": 1.0, "min": 1.0 / 60.0, "ms": 1000.0}
 
+#: How near (display px) a click on the curves view must land to a
+#: drawn point to toggle its image's exclusion.
+PLOT_PICK_RADIUS_PX = 8
+
+#: How far (display px) the pointer may drift between press and
+#: release and still count as a click rather than a pan — a hand
+#: rarely holds a mouse dead still.
+PLOT_CLICK_SLOP_PX = 3
+
+#: Excluded images' points on the curves view: hollow markers in each
+#: ROI's colour, this opaque, so they stay visible and clickable
+#: without reading as part of the analysis.
+EXCLUDED_POINT_ALPHA = 0.35
+EXCLUDED_POINT_MARKER = "o"
+
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"
 

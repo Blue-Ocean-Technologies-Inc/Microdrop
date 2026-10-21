@@ -1144,6 +1144,24 @@ class RoiAnalysisController(HasTraits):
         self._save_config()
         self._restart_batch_if_running()
 
+    @observe("analysis_model:toggle_exclusion_request")
+    def _toggle_requested_exclusion(self, event):
+        """A plot point was clicked: show its image, then flip that
+        image's exclusion through the checkbox — the one path that
+        marks, saves and re-runs — so the sidebar shows what changed."""
+        path = event.new
+        self.viewer_model.current_path = path
+
+        # The mirrors above point the checkbox at the shown image; one
+        # that is not the clicked one must not be toggled instead.
+        if self.analysis_model.current_image_path != path:
+            logger.warning(f"Cannot show {path} to toggle its exclusion")
+            return
+
+        self.analysis_model.current_image_excluded = (
+            not self.analysis_model.current_image_excluded
+        )
+
     @observe("analysis_model:exclude_before_button")
     def _exclude_all_before(self, event):
         self._set_excluded_relative(before=True, excluded=True)
