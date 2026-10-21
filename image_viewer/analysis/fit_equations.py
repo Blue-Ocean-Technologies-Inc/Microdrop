@@ -43,9 +43,11 @@ from traitsui.api import (
 )
 from traitsui.tabular_adapter import TabularAdapter
 
+# Microdrop utils imports.
+from microdrop_utils.expression import FitExpressionError, parse_expression
+
 # Local imports.
 from .curve_fit import CUSTOM_METHOD, fit_series, trimmed_note
-from .fit_expression import FitExpressionError, parse_expression
 from .fit_presets import (
     add_preset,
     expression_for,

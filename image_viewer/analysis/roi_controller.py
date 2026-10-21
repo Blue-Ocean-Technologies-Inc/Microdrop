@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 # Enthought library imports.
-from pyface.api import NO, YES
+from pyface.api import NO, YES, clipboard
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
@@ -575,6 +575,14 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.progress_text = f"Exported {csv_path.name}"
         logger.info(f"ROI fastest changes exported to {csv_path}")
 
+    @observe("analysis_model:copy_trend_expression_button")
+    def _copy_trend_expression(self, event):
+        if self.analysis_model.copy_trend_blocker:
+            return
+
+        clipboard.text_data = self.session.trend.expression
+        self.analysis_model.progress_text = "Copied the trend expression"
+
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):
         result = confirm(
@@ -942,8 +950,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:time_unit, "
         "analysis_model:session:figure:heater_sensor, "
         "analysis_model:session:figure:heater_window_ms, "
-        "analysis_model:session:figure:temperature_slope, "
-        "analysis_model:session:figure:temperature_intercept, "
+        "analysis_model:session:figure:temperature_expression, "
         "analysis_model:session:heater_log_dir, "
         "analysis_model:session:figure:show_method_group, "
         "analysis_model:session:figure:show_metrics_group, "
@@ -1236,8 +1243,9 @@ class RoiAnalysisController(HasTraits):
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
         self._load_heater_samples_now()
-        temperatures = (
-            calibrated_temperatures(
+
+        if session.heater_samples:
+            temperatures, _uninvertible = calibrated_temperatures(
                 session.figure,
                 temperature_at(
                     session.heater_samples,
@@ -1246,9 +1254,9 @@ class RoiAnalysisController(HasTraits):
                     session.figure.heater_window_ms / 1000.0,
                 ),
             )
-            if session.heater_samples
-            else [math.nan] * len(times)
-        )
+        else:
+            temperatures = [math.nan] * len(times)
+
         rows = []
         for path, capture_time, temperature in zip(paths, times, temperatures):
             stats_by_roi = {}

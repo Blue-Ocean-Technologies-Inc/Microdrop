@@ -41,6 +41,9 @@ from traits.api import (
     observe,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.expression import function_error
+
 # Local imports.
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
@@ -54,6 +57,11 @@ from .consts import (
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER,
     BUTTER_ORDER_BOUNDS,
+    COPY_TREND_CALIBRATED,
+    COPY_TREND_FLIPPED,
+    COPY_TREND_NO_TREND,
+    COPY_TREND_NOT_TEMPERATURE,
+    COPY_TREND_TOOLTIP,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRICS,
     HEATER_SENSOR_MEAN,
@@ -81,10 +89,10 @@ from .consts import (
     VIEW_MODES,
     X_AXIS_MODES,
 )
-from .curve_fit import FIT_METHODS, TREND_METHODS
+from .curve_fit import FIT_METHODS, TREND_METHODS, FitResult
 from .fit_presets import choices_for
 from .perspective import perspective_matrix
-from .plot_series import SMOOTH_METHODS
+from .plot_series import SMOOTH_METHODS, is_calibrated, trend_fit, trend_points
 from .sam_detect import Candidate
 
 #: The Roi trait holding the user's expected value of each
@@ -279,12 +287,13 @@ class FigureSettings(HasTraits):
     #: the mean of every heater sample within ±window/2 of it. 0 means
     #: exact — linear interpolation at the capture instant.
     heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS, HEATER_WINDOW_MS, mode="spinner")
-    #: The linear calibration applied to the heater log's temperature
-    #: before plotting and fitting (T = slope * T_log + intercept), for
-    #: setpoints that were compensated against a reference instrument.
-    #: 1 and 0 leave the log's values as they are.
-    temperature_slope = Float(1.0)
-    temperature_intercept = Float(0.0)
+    #: actual = f(expected) — the same expression as the heater's
+    #: compensation; the log's temperature is mapped back to expected
+    #: by inverting it numerically.
+    temperature_expression = Str("x")
+    #: Why temperature_expression does not parse, "" when it does (or
+    #: is the identity). Never persisted.
+    temperature_expression_error = Property(Str, observe="temperature_expression")
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.
@@ -302,6 +311,9 @@ class FigureSettings(HasTraits):
         }
 
         return [metric for metric in EXPECTED_METRICS if enabled[metric]]
+
+    def _get_temperature_expression_error(self):
+        return function_error(self.temperature_expression)
 
 
 class ScaleCalibration(HasTraits):
@@ -602,6 +614,14 @@ class AnalysisSession(HasTraits):
     #: fallback folder is in use, else "".
     heater_log_hint = Property(Str, observe="heater_log_fallback_dir")
 
+    #: How many capture temperatures found no root under the figure's
+    #: temperature_expression on the last derivation. Set by
+    #: derive_series, never persisted.
+    temperature_uninvertible = Int(0)
+
+    #: The Axes tab's note on those gaps, "" when there are none.
+    temperature_uninvertible_hint = Property(Str, observe="temperature_uninvertible")
+
     #: Where the heater join looked and what it found (folder, log
     #: span, capture span, any sibling stand-in) — the plot's coverage
     #: note. Set by the controller, never persisted.
@@ -630,11 +650,33 @@ class AnalysisSession(HasTraits):
     #: beside the ROIs' own.
     custom_points = List(Instance(CustomPoint))
 
+    #: The Actual vs expected trend — actual = f(expected) unless flipped —
+    #: None when there is nothing to fit. Set by RoiAnalysisModel; never
+    #: persisted.
+    trend = Instance(FitResult)
+
     def _get_heater_log_hint(self):
         if not self.heater_log_fallback_dir:
             return ""
 
         return f"(found in {Path(self.heater_log_fallback_dir).parent.name})"
+
+    def _get_temperature_uninvertible_hint(self):
+        count = self.temperature_uninvertible
+
+        if not count:
+            return ""
+
+        if count == 1:
+            return (
+                "1 heater sample has no expected temperature under this "
+                "expression and is drawn as a gap"
+            )
+
+        return (
+            f"{count} heater samples have no expected temperature under this "
+            "expression and are drawn as gaps"
+        )
 
     def _get_positive_rois(self):
         return [roi for roi in self.rois if not roi.is_negative]
@@ -843,6 +885,47 @@ class RoiAnalysisModel(HasTraits):
     reset_expected_button = Button()
     #: Write the Expected table to a CSV in the experiment's analysis folder.
     export_expected_button = Button()
+
+    #: Put the trend's full-precision expression on the clipboard, for
+    #: the heater's compensation and the temperature-axis calibration.
+    copy_trend_expression_button = Button()
+
+    #: Why Copy cannot run, the first failing condition; '' when it can.
+    copy_trend_blocker = Property(
+        Str,
+        observe=(
+            "session.trend, session.figure.x_axis, "
+            "session.figure.flip_actual_expected, "
+            "session.figure.temperature_expression"
+        ),
+    )
+
+    #: Copy's tooltip: what it does, or why it is off.
+    copy_trend_tooltip = Property(Str, observe="copy_trend_blocker")
+
+    def _get_copy_trend_blocker(self):
+        if self.session.trend is None:
+            return COPY_TREND_NO_TREND
+
+        figure = self.session.figure
+
+        if figure.x_axis != "temperature":
+            return COPY_TREND_NOT_TEMPERATURE
+
+        # A flipped trend reads expected = f(actual), and one fitted on
+        # a calibrated axis is relative to that calibration: neither is
+        # the actual = f(expected) the compensation needs.
+        if figure.flip_actual_expected:
+            return COPY_TREND_FLIPPED
+
+        if is_calibrated(figure):
+            return COPY_TREND_CALIBRATED
+
+        return ""
+
+    def _get_copy_trend_tooltip(self):
+        return self.copy_trend_blocker or COPY_TREND_TOOLTIP
+
     #: Append a blank custom point to the Expected tab's table of them.
     add_custom_point_button = Button()
     #: Drop the custom points of the cells selected in their table.
@@ -1053,6 +1136,28 @@ class RoiAnalysisModel(HasTraits):
         for row in self.expected_rows:
             actuals = self.expected_actuals.get(row.roi.roi_id, {})
             row.actual = actuals.get(row.metric, math.nan)
+
+    @observe(
+        "expected_actuals, session, session:figure:fit_method, "
+        "session:figure:trend_method, session:figure:flip_actual_expected, "
+        "session:custom_points.items, session:custom_points:items:actual, "
+        "session:custom_points:items:expected, "
+        "session:rois:items:expected_fastest_change, "
+        "session:rois:items:expected_second_derivative_max, "
+        "session:rois:items:expected_second_derivative_min"
+    )
+    def _update_trend(self, event):
+        figure = self.session.figure
+
+        # The view draws no points with fitting off, so no trend either.
+        if figure.fit_method == "none":
+            self.session.trend = None
+
+            return
+
+        self.session.trend = trend_fit(
+            *trend_points(self.session, self.expected_actuals), figure.trend_method
+        )
 
     #: Whether the DISPLAYED image is excluded from analysis — the
     #: sidebar checkbox edits this; RoiAnalysisController mirrors it

@@ -15,15 +15,21 @@ import math
 
 # Third-party imports.
 import numpy as np
+import pytest
 
 # Microdrop package imports.
 from image_viewer.analysis.curve_fit import (
     fastest_change_time,
     fit_series,
-    linear_trend,
+    polynomial_result,
     second_derivative_extrema,
     trimmed_note,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.expression import parse_function
+
+_GRID = np.linspace(30.0, 90.0, 13)
 
 
 def test_linear_fit_recovers_slope_and_intercept():
@@ -226,22 +232,31 @@ def test_fastest_change_exponential_decay_at_start():
     assert abs(fastest_change_time(fit, 0.0, 190.0)) < 1.0
 
 
-def test_linear_trend_recovers_an_exact_line():
-    slope, intercept, r_squared = linear_trend([1, 2, 3, 4], [12.5, 15.0, 17.5, 20.0])
+@pytest.mark.parametrize(
+    "method, values, expression",
+    [
+        ("linear", 3.0 * _GRID + 5.0, ""),
+        ("poly2", 1.04 * _GRID**2 / 100 + 0.9 * _GRID + 1.2, ""),
+        ("poly3", 1e-4 * _GRID**3 - 0.02 * _GRID**2 + _GRID, ""),
+        ("exponential", 5.0 * np.exp(-0.02 * _GRID) + 2.0, ""),
+        ("sigmoid", 100.0 + 800.0 / (1.0 + np.exp(-0.2 * (_GRID - 60.0))), ""),
+        ("custom", 2.0 + 0.5 * _GRID, "a + b*t"),
+    ],
+)
+def test_every_fit_expression_reparses_and_reproduces_the_fit(
+    method, values, expression
+):
+    fit = fit_series(_GRID, values, method, expression=expression)
+    function = parse_function(fit.expression)
+    assert "np." not in fit.expression
+    assert np.allclose(function(_GRID), fit.predict(_GRID), rtol=1e-9, atol=1e-9)
 
-    assert abs(slope - 2.5) < 1e-9
-    assert abs(intercept - 10.0) < 1e-9
-    assert abs(r_squared - 1.0) < 1e-9
+
+def test_a_negative_coefficient_is_parenthesised():
+    fit = fit_series(_GRID, -2.0 * _GRID + 3.0, "linear")
+    assert fit.expression.startswith("(-2.0")
 
 
-def test_linear_trend_needs_two_points():
-    assert linear_trend([1], [42.0]) is None
-    assert linear_trend([1, 2], [42.0, math.nan]) is None
-    assert linear_trend([3, 3], [1.0, 5.0]) is None  # no spread in x
-
-
-def test_linear_trend_ignores_nan_points():
-    slope, intercept, _r_squared = linear_trend([1, 2, 3, 4], [3.0, math.nan, 7.0, 9.0])
-
-    assert abs(slope - 2.0) < 1e-9
-    assert abs(intercept - 1.0) < 1e-9
+def test_zero_terms_drop_and_a_unit_coefficient_is_the_bare_power():
+    assert polynomial_result([1.0, 0.0]).expression == "x"
+    assert polynomial_result([2.0, 0.0, -3.0]).expression == "2.0*x**2 + (-3.0)"

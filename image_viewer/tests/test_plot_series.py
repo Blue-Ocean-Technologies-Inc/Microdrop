@@ -14,13 +14,19 @@
 import math
 from pathlib import Path
 
+# Third-party imports.
+import numpy as np
+import pytest
+
 # Microdrop package imports.
+from image_viewer.analysis.curve_fit import TREND_METHODS
 from image_viewer.analysis.plot_series import (
     analysed_and_excluded_series,
     analysed_paths,
     area_normalized_values,
     background_ref_baseline,
     background_ref_corrected_series,
+    calibrated_temperatures,
     derive_series,
     excluded_series,
     finite_values,
@@ -36,6 +42,8 @@ from image_viewer.analysis.plot_series import (
     step_tick_label,
     subtracted_series,
     temperature_over_time,
+    trend_fit,
+    trend_points,
     visible_series,
     without_outliers,
     x_axis_label,
@@ -44,9 +52,14 @@ from image_viewer.analysis.plot_series import (
 from image_viewer.analysis.roi_model import (
     PLOT_STATS,
     AnalysisSession,
+    CustomPoint,
+    FigureSettings,
     Roi,
     RoiStyle,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.expression import is_identity
 
 
 def _image(tmp_path, name):
@@ -79,30 +92,74 @@ def test_derive_series_honors_plot_stat(tmp_path):
     assert values == [6.0]
 
 
-def test_derive_series_calibrates_the_temperature_axis_only(tmp_path):
+def _heater_session(tmp_path, logged):
+    """Two captures 30 s apart; the log covers only the first, at
+    ``logged`` °C (samples at logged ± 1 straddling it, window 0)."""
     first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
     second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
     roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi])
     start = session.stat_info(first)[1]
 
-    # The log covers only the first capture, so the second is a NaN gap.
-    session.heater_samples = [(start - 1.0, {"t1": 40.0}), (start + 1.0, {"t1": 42.0})]
+    session.heater_samples = [
+        (start - 1.0, {"t1": logged - 1.0}),
+        (start + 1.0, {"t1": logged + 1.0}),
+    ]
     session.figure.heater_sensor = "t1"
     session.figure.heater_window_ms = 0
-    session.figure.temperature_slope = 2.0
-    session.figure.temperature_intercept = -5.0
-
     session.figure.x_axis = "temperature"
-    ((_, temperatures, _),) = derive_series(session, [first, second]).values()
 
-    assert temperatures[0] == 2.0 * 41.0 - 5.0
+    return session, [first, second]
+
+
+def test_the_temperature_axis_reads_through_the_inverse(tmp_path):
+    session, paths = _heater_session(tmp_path, 41.0)
+    session.figure.temperature_expression = "2*x - 5"
+    ((_, temperatures, _),) = derive_series(session, paths).values()
+
+    assert temperatures[0] == pytest.approx(23.0, abs=1e-6)
     assert math.isnan(temperatures[1])
+    assert session.temperature_uninvertible == 0
 
     session.figure.x_axis = "time"
-    ((_, elapsed, _),) = derive_series(session, [first, second]).values()
+    ((_, elapsed, _),) = derive_series(session, paths).values()
 
     assert elapsed == [0.0, 30.0]
+
+
+def test_a_quadratic_calibration_inverts_per_sample():
+    figure = FigureSettings(temperature_expression="x^2/100 + 0.5*x")
+    (value,), missing = calibrated_temperatures(figure, [41.0])
+
+    assert value > 0 and missing == 0
+    assert value**2 / 100 + 0.5 * value == pytest.approx(41.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("text", ["x", "", "actual = expected", "2*a*x"])
+def test_identity_or_unparsable_text_passes_the_log_through(text):
+    figure = FigureSettings(x_axis="temperature", temperature_expression=text)
+
+    assert calibrated_temperatures(figure, [41.0])[0] == [41.0]
+    assert x_quantity(figure) == ("Temperature", "°C")
+
+
+def test_a_calibration_flags_the_unit():
+    figure = FigureSettings(x_axis="temperature", temperature_expression="2*x - 5")
+
+    assert x_quantity(figure) == ("Temperature", "°C, calibrated")
+
+
+def test_samples_with_no_root_are_counted_gaps(tmp_path):
+    session, paths = _heater_session(tmp_path, -5.0)
+    session.figure.temperature_expression = "x^2/100"
+    ((_, temperatures, _),) = derive_series(session, paths).values()
+
+    assert math.isnan(temperatures[0])
+    assert session.temperature_uninvertible == 1
+    assert session.temperature_uninvertible_hint == (
+        "1 heater sample has no expected temperature under this "
+        "expression and is drawn as a gap"
+    )
 
 
 def test_derive_series_empty_inputs():
@@ -831,6 +888,63 @@ def test_excluded_points_are_not_tested_for_outliers(tmp_path):
 
     assert flags[roi.roi_id] == [False, False]
     assert excluded[roi.roi_id][2] == [1e6]
+
+
+def test_trend_fit_recovers_an_exact_line():
+    fit = trend_fit([1, 2, 3, 4], [12.5, 15.0, 17.5, 20.0], "linear")
+    assert fit.params["c1"] == pytest.approx(2.5)
+    assert fit.params["c0"] == pytest.approx(10.0)
+    assert fit.r_squared == pytest.approx(1.0)
+
+
+def test_trend_fit_needs_points_with_spread():
+    assert trend_fit([1], [42.0], "linear") is None
+    assert trend_fit([1, 2], [42.0, math.nan], "linear") is None
+    assert trend_fit([3, 3], [1.0, 5.0], "linear") is None
+    assert trend_fit([3, 3, 3], [1.0, 5.0, 7.0], "poly2") is None
+
+
+def test_trend_fit_ignores_nan_points():
+    fit = trend_fit([1, 2, 3, 4], [3.0, math.nan, 7.0, 9.0], "linear")
+    assert fit.params["c1"] == pytest.approx(2.0)
+    assert fit.params["c0"] == pytest.approx(1.0)
+
+
+def test_points_on_the_identity_read_as_the_identity():
+    x = [40.0, 55.5, 71.25, 90.0]
+    linear = trend_fit(x, list(x), "linear")
+    assert (linear.params["c1"], linear.params["c0"]) == (1.0, 0.0)
+    assert linear.equation == "y = 1·t + 0"
+    assert trend_fit(x, list(x), "poly2").params["c2"] == 0.0
+
+
+def test_the_identity_trend_copies_as_the_identity():
+    x = [40.0, 55.5, 71.25, 90.0]
+    assert trend_fit(x, list(x), "linear").expression == "x"
+    assert is_identity(trend_fit(x, list(x), "poly2").expression)
+
+
+@pytest.mark.parametrize("method", TREND_METHODS)
+def test_trend_fit_answers_for_every_trend_method(method):
+    x = np.linspace(30.0, 90.0, 12)
+    y = 100.0 + 800.0 / (1.0 + np.exp(-0.2 * (x - 60.0)))
+    fit = trend_fit(list(x), list(y), method)
+    assert fit is not None and fit.method == method
+
+
+def test_trend_points_pair_expected_with_actual_and_follow_the_flip():
+    roi = Roi(roi_id="a", name="ROI 1", expected_fastest_change=50.0)
+    session = AnalysisSession(
+        rois=[roi],
+        custom_points=[
+            CustomPoint(name="Std", actual=41.0, expected=40.0),
+            CustomPoint(name="Blank"),
+        ],
+    )
+    actuals = {"a": {"zero": 52.0}, "gone": {"zero": 1.0}}
+    assert trend_points(session, actuals) == ([50.0, 40.0], [52.0, 41.0])
+    session.figure.flip_actual_expected = True
+    assert trend_points(session, actuals) == ([52.0, 41.0], [50.0, 40.0])
 
 
 # --------------------------------------------------------------------------- #

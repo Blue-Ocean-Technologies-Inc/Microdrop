@@ -15,6 +15,13 @@ Expected table's rows."""
 import math
 
 # Microdrop package imports.
+from image_viewer.analysis.consts import (
+    COPY_TREND_CALIBRATED,
+    COPY_TREND_FLIPPED,
+    COPY_TREND_NO_TREND,
+    COPY_TREND_NOT_TEMPERATURE,
+    COPY_TREND_TOOLTIP,
+)
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
     Roi,
@@ -135,3 +142,40 @@ def test_a_mask_drawn_with_no_image_shown_applies_everywhere():
     assert mask.base_anchor == 0.0
     assert mask.applies_at(0.0)
     assert mask.applies_at(1e9)
+
+
+def test_the_trend_follows_the_fitted_landmarks():
+    model = RoiAnalysisModel()
+    model.session = AnalysisSession(
+        rois=[Roi(roi_id="a", name="A"), Roi(roi_id="b", name="B")]
+    )
+    model.session.figure.fit_method = "sigmoid"
+    model.expected_actuals = {"a": {"zero": 50.0}, "b": {"zero": 60.0}}
+    assert model.session.trend.method == "linear"
+    model.session.figure.trend_method = "poly2"
+    assert model.session.trend is None  # two points cannot fix a quadratic
+    model.session.figure.trend_method = "linear"
+    model.session.figure.fit_method = "none"
+    assert model.session.trend is None
+
+
+def test_copy_needs_a_trend_on_an_unflipped_uncalibrated_temperature_axis():
+    model = RoiAnalysisModel()
+    model.session = AnalysisSession(
+        rois=[Roi(roi_id="a", name="A"), Roi(roi_id="b", name="B")]
+    )
+    figure = model.session.figure
+    assert model.copy_trend_blocker == COPY_TREND_NO_TREND
+    figure.fit_method = "sigmoid"
+    model.expected_actuals = {"a": {"zero": 50.0}, "b": {"zero": 60.0}}
+    assert model.copy_trend_blocker == COPY_TREND_NOT_TEMPERATURE
+    figure.x_axis = "temperature"
+    figure.flip_actual_expected = True
+    assert model.copy_trend_blocker == COPY_TREND_FLIPPED
+    figure.flip_actual_expected = False
+    figure.temperature_expression = "2*x - 5"
+    assert model.copy_trend_blocker == COPY_TREND_CALIBRATED
+    assert model.copy_trend_tooltip == COPY_TREND_CALIBRATED
+    figure.temperature_expression = "x"
+    assert model.copy_trend_blocker == ""
+    assert model.copy_trend_tooltip == COPY_TREND_TOOLTIP

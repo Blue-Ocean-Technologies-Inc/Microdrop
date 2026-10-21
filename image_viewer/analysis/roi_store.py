@@ -96,8 +96,7 @@ _FIGURE_FIELDS = (
     "time_unit",
     "heater_sensor",
     "heater_window_ms",
-    "temperature_slope",
-    "temperature_intercept",
+    "temperature_expression",
     "show_method_group",
     "show_metrics_group",
     "show_custom_points_group",
@@ -118,6 +117,25 @@ _BALL_FIELDS = ("enabled", "radius_px", "show_reference")
 #: Persisted PerspectiveCorrection fields (tolerated-missing on load, so a
 #: config written before the correction existed opens without one).
 _PERSPECTIVE_FIELDS = ("enabled", "source_quad", "target_quad")
+
+
+def _temperature_expression_from_linear(slope, intercept):
+    """The temperature_expression equivalent to an old config's linear
+    calibration, which mapped the other way (expected = slope * actual
+    + intercept), so its inverse. A zero slope would collapse the axis
+    to gaps, so it falls back to the identity instead."""
+    if slope == 1.0 and intercept == 0.0:
+        return "x"
+
+    if slope == 0.0:
+        logger.warning(
+            f"Ignoring a temperature calibration with slope {slope} and "
+            f"intercept {intercept}: it has no inverse"
+        )
+
+        return "x"
+
+    return f"(x - {intercept})/{slope}"
 
 
 def analysis_directory(experiment_directory) -> Path:
@@ -277,6 +295,15 @@ def load_session(experiment_directory) -> AnalysisSession:
                 and "subtract_standard" in stored
             ):
                 stored["subtract_background_ref"] = stored["subtract_standard"]
+            # A config written before the expression stored a linear
+            # calibration; it still means the same mapping.
+            if "temperature_expression" not in stored and (
+                "temperature_slope" in stored or "temperature_intercept" in stored
+            ):
+                stored["temperature_expression"] = _temperature_expression_from_linear(
+                    stored.get("temperature_slope", 1.0),
+                    stored.get("temperature_intercept", 0.0),
+                )
             figure.trait_set(
                 **{name: stored[name] for name in _FIGURE_FIELDS if name in stored}
             )
