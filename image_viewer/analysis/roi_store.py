@@ -22,6 +22,7 @@ from pathlib import Path
 # Local imports.
 from .consts import (
     ANALYSIS_DIR_NAME,
+    AREA_NORMALIZED_STATS,
     FIT_EQUATIONS_FILENAME,
     OUTLINE_STATS_PREFIX,
     ROI_CONFIG_FILENAME,
@@ -476,12 +477,21 @@ def load_roi_stats(experiment_directory) -> dict:
 
 
 #: Per-ROI CSV columns, in order: interior stats, outline stats, then
-#: the values derived from the pixel count and the scale, then the
-#: droplet-shape quantities (SHAPE_STATS).
+#: the values derived from the pixel count and the scale (the
+#: area-normalised means measured from the file's first row with a
+#: pixel count, as the plot measures them from its first analysed
+#: image), then the droplet-shape quantities (SHAPE_STATS).
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
     OUTLINE_STATS_PREFIX + name for name in STAT_NAMES
 )
-CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated", "per_area", "bg_per_area")
+CSV_DERIVED_COLUMNS = (
+    "area",
+    "integrated",
+    "bg_integrated",
+    "per_area",
+    "bg_per_area",
+    *AREA_NORMALIZED_STATS,
+)
 
 
 def _csv_cells(values):

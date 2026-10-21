@@ -16,6 +16,7 @@ import math
 # Microdrop package imports.
 from image_viewer.analysis.plot_series import (
     analysed_paths,
+    area_normalized_values,
     background_ref_baseline,
     background_ref_corrected_series,
     derive_series,
@@ -24,6 +25,7 @@ from image_viewer.analysis.plot_series import (
     interpolated_series,
     normalized_series,
     outlier_mask,
+    roi_stat_values,
     shape_change_values,
     smoothed_values,
     stat_value,
@@ -575,3 +577,80 @@ def test_per_image_shape_stats_plot_as_stored(tmp_path):
     _name, _x, values = derive_series(session, [image])[roi.roi_id]
 
     assert values == [2.0]
+
+
+# --------------------------------------------------------------------------- #
+# Area-normalised mean                                                         #
+# --------------------------------------------------------------------------- #
+def test_area_normalised_means_are_plot_stats_after_the_per_area_pair():
+    position = PLOT_STATS.index("bg_per_area")
+
+    assert PLOT_STATS[position + 1 : position + 3] == (
+        "area_normalized",
+        "bg_area_normalized",
+    )
+
+
+def test_the_area_normalised_mean_is_flat_under_pure_concentration():
+    # Evaporation: the same fluorophore in half the area reads twice the
+    # mean (and, in a ring of the same medium, twice the background).
+    stats_run = [
+        {"mean": 10.0, "outline_mean": 4.0, "count": 100.0},
+        {"mean": 20.0, "outline_mean": 8.0, "count": 50.0},
+    ]
+
+    assert roi_stat_values(stats_run, "area_normalized") == [10.0, 10.0]
+    assert roi_stat_values(stats_run, "bg_area_normalized") == [6.0, 6.0]
+
+
+def test_the_area_normalised_mean_equals_the_mean_on_the_first_image():
+    stats_run = [
+        None,
+        {"mean": 10.0, "count": 0.0},
+        {"mean": 12.0, "count": 40.0},
+        {"mean": 30.0, "count": 20.0},
+    ]
+
+    # The reference is the first image with a pixel count; a calibration
+    # cancels in the area ratio.
+    values = roi_stat_values(stats_run, "area_normalized", pixel_area=1e-4)
+
+    assert math.isnan(values[0])
+    assert values[1:] == [0.0, 12.0, 15.0]
+
+
+def test_the_area_normalised_mean_reads_against_a_given_reference_run():
+    reference_run = [{"mean": 10.0, "count": 100.0}]
+    excluded_run = [{"mean": 40.0, "count": 25.0}]
+
+    assert area_normalized_values(excluded_run, "area_normalized", reference_run) == [
+        10.0
+    ]
+
+
+def test_the_area_normalised_mean_is_nan_without_any_pixel_count():
+    values = roi_stat_values([{"mean": 10.0}, None], "area_normalized")
+
+    assert all(math.isnan(value) for value in values)
+    # Per image it has no reference to read against.
+    assert math.isnan(stat_value({"mean": 10.0, "count": 5.0}, "area_normalized"))
+
+
+def test_the_area_normalised_mean_rebaselines_when_the_first_image_is_excluded(
+    tmp_path,
+):
+    first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi], plot_stat="area_normalized")
+    session.stats[session.cache_key(first, roi)] = {"mean": 10.0, "count": 100.0}
+    session.stats[session.cache_key(second, roi)] = {"mean": 20.0, "count": 40.0}
+
+    _name, _x, values = derive_series(session, [first, second])[roi.roi_id]
+
+    assert values == [10.0, 8.0]
+
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+    _name, _x, values = derive_series(session, [first, second])[roi.roi_id]
+
+    assert values == [20.0]

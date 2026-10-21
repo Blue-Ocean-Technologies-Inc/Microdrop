@@ -18,6 +18,7 @@ import math
 # Local imports.
 from ..scale_bar import pixel_area
 from .consts import (
+    AREA_NORMALIZED_STATS,
     BUTTER_CUTOFF,
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER_BOUNDS,
@@ -33,6 +34,10 @@ from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: The stats read against a reference image of the ROI's run rather
+#: than per image alone.
+SERIES_STATS = ("shape_change", *AREA_NORMALIZED_STATS)
 
 
 def _signal(stats, background):
@@ -59,7 +64,8 @@ def stat_value(stats, stat, pixel_area=1.0):
     stats are missing entirely or lack the pieces a stat needs.
     ``bg_corrected`` is interior mean minus outline-ring mean.
     ``pixel_area`` is one pixel's area in the display unit (1.0 = px²),
-    which the size-aware stats scale by."""
+    which the size-aware stats scale by. The SERIES_STATS need the
+    ROI's whole run and read NaN here (see roi_stat_values)."""
     if not stats:
         return math.nan
     if stat == "bg_corrected":
@@ -88,15 +94,16 @@ def shape_reference(stats_run):
     )
 
 
-def shape_change_values(stats_run):
+def shape_change_values(stats_run, reference_run=None):
     """Shape change along one ROI's ``stats_run`` (stats dicts or None,
     image order): each image's root-normalised Hu distance from
-    ``shape_reference``. NaN where an image has no droplet or no stats,
-    and everywhere when no image has a droplet.
+    ``shape_reference`` of ``reference_run`` (the run itself by
+    default). NaN where an image has no droplet or no stats, and
+    everywhere when no image has a droplet.
 
     The run is the analysed images, so excluding the first one moves
     the reference to the next — the series re-baselines itself."""
-    reference = shape_reference(stats_run)
+    reference = shape_reference(stats_run if reference_run is None else reference_run)
 
     if reference is None:
         return [math.nan] * len(stats_run)
@@ -104,12 +111,48 @@ def shape_change_values(stats_run):
     return [shape_deviation(stats or {}, reference) for stats in stats_run]
 
 
-def roi_stat_values(stats_run, stat, pixel_area=1.0):
+def area_reference_count(stats_run):
+    """The ROI's pixel count on the first image of ``stats_run`` with
+    one — the reference area the area-normalised means divide by, by
+    the same first-analysed-image rule as ``shape_reference``. None
+    when no image has one."""
+    return next(
+        (stats["count"] for stats in stats_run if stats and stats.get("count")),
+        None,
+    )
+
+
+def area_normalized_values(stats_run, stat, reference_run=None):
+    """``stat``, one of AREA_NORMALIZED_STATS, along one ROI's
+    ``stats_run``: its integrated signal over the reference area of
+    ``reference_run`` (the run itself by default).
+
+    The area is taken as a pixel count: A / A_ref is a ratio, so the
+    calibration cancels and the value equals the mean on the reference
+    image whatever unit the experiment is calibrated in. NaN
+    everywhere when no image has a pixel count."""
+    reference = area_reference_count(
+        stats_run if reference_run is None else reference_run
+    )
+
+    if reference is None:
+        return [math.nan] * len(stats_run)
+
+    integrated = AREA_NORMALIZED_STATS[stat]
+
+    return [stat_value(stats, integrated) / reference for stats in stats_run]
+
+
+def roi_stat_values(stats_run, stat, pixel_area=1.0, reference_run=None):
     """``stat`` along one ROI's ``stats_run`` (stats dicts or None, image
-    order). Every stat but shape change is per image; shape change needs
-    the whole run for its reference."""
+    order). Every stat but the SERIES_STATS is per image; those need a
+    run for their reference — ``reference_run`` when given (the
+    analysed images, for a run of excluded ones), else ``stats_run``."""
     if stat == "shape_change":
-        return shape_change_values(stats_run)
+        return shape_change_values(stats_run, reference_run)
+
+    if stat in AREA_NORMALIZED_STATS:
+        return area_normalized_values(stats_run, stat, reference_run)
 
     return [stat_value(stats, stat, pixel_area) for stats in stats_run]
 

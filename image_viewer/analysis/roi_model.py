@@ -105,7 +105,15 @@ ROI_NAME_PATTERN = r"^{prefix} (\d+)$"
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
 #: area-statistics design note). "area" is the ROI's own size, in
-#: the calibrated unit. The droplet-shape quantities close the list.
+#: the calibrated unit.
+#: The area-normalised pair takes out what a shrinking droplet does to
+#: the mean: evaporation keeps the fluorophore count N while the area
+#: A shrinks, so the mean (∝ N/A) rises though the integrated signal
+#: (mean × A ∝ N) stays flat — and per area (∝ N/A²) would only make
+#: it worse. Dividing the integrated signal by the ROI's area on the
+#: first analysed image instead, integrated / A_ref, keeps intensity
+#: units, equals the mean on that first image, and plots flat under
+#: pure concentration. The droplet-shape quantities close the list.
 PLOT_STATS = (
     "mean",
     "bg_corrected",
@@ -117,6 +125,8 @@ PLOT_STATS = (
     "bg_integrated",
     "per_area",
     "bg_per_area",
+    "area_normalized",
+    "bg_area_normalized",
     "area",
 ) + SHAPE_STATS
 

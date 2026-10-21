@@ -78,6 +78,14 @@ SHAPE_STATS = (
     "orientation_deg",
 )
 
+#: The area-normalised means, each with the integrated stat it divides
+#: by the ROI's reference area (its pixel count on the first analysed
+#: image with stats) — a series quantity like "shape_change".
+AREA_NORMALIZED_STATS = {
+    "area_normalized": "integrated",
+    "bg_area_normalized": "bg_integrated",
+}
+
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
 
