@@ -516,8 +516,9 @@ BASE_INTERACTION_MODES = (
 # Arrow actions are named "<verb>_<direction>"; the dispatch parses them.
 ARROW_DIRECTIONS = ("left", "right", "up", "down")
 
-# Cheat sheet sections, in display order.
+# Cheat sheet sections, in display order, and its window title.
 KEYBOARD_SHORTCUT_GROUPS = ("Selection", "Routes", "Modes", "View", "Actions", "Help")
+KEYBOARD_SHORTCUTS_TITLE = "Keyboard Shortcuts"
 
 # One (modifier prefix, verb, description template, group) per arrow verb.
 _ARROW_SHORTCUT_TEMPLATES = (

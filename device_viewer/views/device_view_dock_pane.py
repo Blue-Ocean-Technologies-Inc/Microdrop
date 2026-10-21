@@ -10,6 +10,7 @@
 
 # Standard library imports.
 import traceback
+from functools import partial
 from pathlib import Path
 
 # Enthought library imports.
@@ -56,6 +57,7 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
+from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     PulsingLabel,
@@ -65,6 +67,9 @@ from microdrop_utils.pyside_helpers import (
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     DEVICE_VIEWER_LAYERS,
+    KEYBOARD_SHORTCUT_GROUPS,
+    KEYBOARD_SHORTCUTS,
+    KEYBOARD_SHORTCUTS_TITLE,
     PKG,
     STEP_PARAMS_COMMIT,
     ZONE_STATUS_MESSAGE_MS,
@@ -107,7 +112,6 @@ from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
-from .keyboard_shortcuts_view import show_keyboard_shortcuts
 from .sidebar.calibration import build_calibration
 from .sidebar.camera_controls import build_camera_controls
 from .sidebar.host import build_reveal_button, build_sidebar
@@ -619,7 +623,12 @@ class DeviceViewerDockPane(TraitsDockPane):
             device_view=self.device_view,
             undo_handler=self.undo,
             redo_handler=self.redo,
-            show_shortcuts_handler=show_keyboard_shortcuts,
+            show_shortcuts_handler=partial(
+                show_keyboard_shortcuts,
+                KEYBOARD_SHORTCUTS,
+                KEYBOARD_SHORTCUT_GROUPS,
+                KEYBOARD_SHORTCUTS_TITLE,
+            ),
         )
 
         # Update the scene with the interaction service
