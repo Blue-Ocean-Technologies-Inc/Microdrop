@@ -112,11 +112,14 @@ _TEMPERATURE_STYLE_FIELDS = (
     "line_color",
     "line_style",
     "line_width",
+    "line_alpha",
     "capture_marker",
     "capture_size",
     "capture_color_follows_line",
     "capture_color",
+    "capture_alpha",
     "excluded_size",
+    "excluded_alpha",
     "show_legend",
 )
 _SENSOR_STYLE_FIELDS = (

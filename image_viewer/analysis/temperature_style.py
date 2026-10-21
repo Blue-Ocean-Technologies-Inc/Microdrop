@@ -19,6 +19,7 @@ from traits.api import Bool, Enum, Float, HasTraits, Instance, List, Range, Str
 # Local imports.
 from .consts import (
     DEFAULT_ROI_COLORS,
+    EXCLUDED_POINT_ALPHA,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
     ROI_ALPHA_BOUNDS_PCT,
@@ -66,6 +67,8 @@ class TemperaturePlotStyle(HasTraits):
     line_color = Str("#000000")
     line_style = Enum(*LINE_STYLE_NAMES)
     line_width = Float(2.0)
+    #: Opacities as percentages, as SensorStyle.alpha.
+    line_alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
 
     #: A marker at each analysed capture, in the bold line's colour
     #: unless capture_color_follows_line is switched off.
@@ -73,10 +76,16 @@ class TemperaturePlotStyle(HasTraits):
     capture_size = Float(6.0)
     capture_color_follows_line = Bool(True)
     capture_color = Str("#000000")
+    capture_alpha = Range(
+        *ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner"
+    )
 
-    #: Size of the faint hollow markers at excluded captures; their
-    #: opacity is the curves view's EXCLUDED_POINT_ALPHA.
+    #: Size and opacity of the faint hollow markers at excluded
+    #: captures, faint by default as the curves view's.
     excluded_size = Float(6.0)
+    excluded_alpha = Range(
+        *ROI_ALPHA_BOUNDS_PCT, round(EXCLUDED_POINT_ALPHA * 100), mode="spinner"
+    )
 
     show_legend = Bool(True)
 
@@ -87,6 +96,11 @@ class TemperaturePlotStyle(HasTraits):
             return self.line_color
 
         return self.capture_color
+
+    def plot_alpha(self, name):
+        """The opacity trait ``name`` as the 0-1 fraction matplotlib
+        wants."""
+        return getattr(self, name) / 100.0
 
     def show_sensors(self, names):
         """Point shown_sensors at the rows of ``names`` (the loaded

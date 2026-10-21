@@ -964,6 +964,9 @@ _PLOT_STATE = (
     "session:temperature_style:capture_color_follows_line, "
     "session:temperature_style:capture_color, "
     "session:temperature_style:excluded_size, "
+    "session:temperature_style:line_alpha, "
+    "session:temperature_style:capture_alpha, "
+    "session:temperature_style:excluded_alpha, "
     "session:temperature_style:show_legend, "
     "session:temperature_style:shown_sensors.items, "
     "session:temperature_style:sensors:items:visible, "
@@ -1652,6 +1655,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             color=style.line_color,
             linestyle=LINE_STYLES[style.line_style],
             linewidth=style.line_width,
+            alpha=style.plot_alpha("line_alpha"),
             label=selected,
         )
         self._fit_artists.append(line)
@@ -1664,6 +1668,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             marker="" if style.capture_marker == "none" else style.capture_marker,
             markersize=style.capture_size,
             color=style.capture_plot_color,
+            alpha=style.plot_alpha("capture_alpha"),
             label="Captures",
         )
         self._fit_artists.append(dots)
@@ -1681,7 +1686,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 markersize=style.excluded_size,
                 markerfacecolor="none",
                 markeredgecolor=style.capture_plot_color,
-                alpha=EXCLUDED_POINT_ALPHA,
+                alpha=style.plot_alpha("excluded_alpha"),
                 label="_nolegend_",
                 scalex=False,
                 scaley=False,

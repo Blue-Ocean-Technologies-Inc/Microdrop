@@ -1071,6 +1071,9 @@ def test_the_temperature_style_round_trips_with_every_sensor_row(tmp_path):
         capture_color="#00ff00",
         excluded_size=4.0,
         show_legend=False,
+        line_alpha=80,
+        capture_alpha=70,
+        excluded_alpha=20,
     )
     save_session(tmp_path, session)
 
@@ -1087,6 +1090,11 @@ def test_the_temperature_style_round_trips_with_every_sensor_row(tmp_path):
     assert loaded.capture_color_follows_line is False
     assert loaded.capture_plot_color == "#00ff00"
     assert loaded.excluded_size == 4.0
+    assert (loaded.line_alpha, loaded.capture_alpha, loaded.excluded_alpha) == (
+        80,
+        70,
+        20,
+    )
     assert loaded.show_legend is False
     # Which rows show is the loaded log's business, not the file's.
     assert loaded.shown_sensors == []
@@ -1100,3 +1108,8 @@ def test_a_config_without_a_temperature_style_loads_the_defaults(tmp_path):
     assert style.sensors == []
     assert style.line_color == "#000000" and style.line_width == 2.0
     assert style.capture_marker == "o" and style.show_legend is True
+    assert (style.line_alpha, style.capture_alpha, style.excluded_alpha) == (
+        100,
+        100,
+        35,
+    )

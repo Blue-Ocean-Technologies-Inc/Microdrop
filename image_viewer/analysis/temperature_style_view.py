@@ -55,6 +55,7 @@ temperature_style_view = View(
             UItem("line_color", editor=HexColorEditor(), tooltip="Colour"),
             UItem("line_style", tooltip="Line style"),
             Item("line_width", label="width", width=STYLE_NUMBER_W),
+            Item("line_alpha", label="alpha", tooltip="Opacity (%)"),
             Item(
                 "show_legend",
                 label="Legend",
@@ -65,6 +66,7 @@ temperature_style_view = View(
             Label("Captures"),
             UItem("capture_marker", tooltip="Marker at each analysed capture"),
             Item("capture_size", label="size", width=STYLE_NUMBER_W),
+            Item("capture_alpha", label="alpha", tooltip="Opacity (%)"),
             Item(
                 "capture_color_follows_line",
                 label="Line colour",
@@ -81,6 +83,11 @@ temperature_style_view = View(
                 label="Excluded size",
                 width=STYLE_NUMBER_W,
                 tooltip="Size of the hollow markers at excluded captures",
+            ),
+            Item(
+                "excluded_alpha",
+                label="alpha",
+                tooltip="Opacity (%) of the hollow markers at excluded captures",
             ),
         ),
     ),
