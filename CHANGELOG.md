@@ -1,3 +1,47 @@
+## [v1.32.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.32.0) (2026-10-21)
+
+### Feat
+
+- **roi-plot**: copy the trend expression for the compensation ([`91db18a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91db18ae27f7c2380c1b6d4999543bb6ccddd36a))
+- **traitsui-helpers**: live tooltip for IconButtonEditor ([`efe081a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/efe081a729b524c5b8776ef937a2e772e291f247))
+- **roi-plot**: calibrate the temperature axis with actual = f(expected) ([`aad3e8c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aad3e8c3a2e599d38f7e45f26a5429ada60c5b18))
+- **curve-fit**: give every fit a full-precision expression ([`5838a75`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5838a75e8444968131ad7be485630d63aac0aa69))
+- **expression**: invert a function numerically ([`eed39e9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eed39e94575d0ccdf2f7cf6f0479e7547c09067f))
+- **expression**: parse parameterless functions of x ([`fb065e3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fb065e3b83f704000aa987efcc0ed34b5cddc114))
+- **device_viewer**: keyboard shortcut cheat sheet and tooltips ([`ab041eb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ab041ebe2826111aa337a83a3b9c0496fb769458))
+- **device_viewer**: draw routes with Alt+arrows ([`6957b0b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6957b0bdd67862ec1d099edd7c59eabcff620792))
+- **device_viewer**: keyboard shortcut service ([`260351a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/260351afe08f210da22f1be741d1608eafcc6b77))
+- **device_viewer**: declare the keyboard shortcut table ([`e42b6f3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e42b6f3f52d43dbdc62684d49a9267de36a4f4bd))
+- **protocol-tree**: insert step/group above a row ([`364188d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/364188d39ca42c0d3f2664e834817256e6bd69be))
+- **image_viewer**: extend actual-vs-expected view ([`cac195b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cac195b244e7e701697642537e970e757fa2dfa4))
+- **microdrop_utils**: multi-cell table copy and paste ([`f3650d3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3650d3d6f8201566b5b5e859bc6a8829210afc6))
+- **report**: outlier filter and section folds ([`1139620`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/11396205a28378fab59550413743af9c125673ec))
+
+### Fix
+
+- **roi-plot**: copy the identity trend as x ([`02e2f74`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/02e2f74338b6ecd70a9b09408c5cf19c8fdcfc8c))
+- **device_viewer**: keep Find Liquid out of display mode ([`f133d70`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f133d70d1a1b685608569d843931ab4cb77ae6d3))
+- **device_viewer**: accept keys the shortcut service handled ([`723ef1c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/723ef1c80f19c65f422fb52834307a9c4a890762))
+- **device_viewer**: route erase built routes positionally ([`e53b4b5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e53b4b563dbed437a227f9ef7fd1d8b4223307f5))
+- **device_viewer**: endpoint erase looked up the route on the main model ([`e473ca5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e473ca5199a1ba3818f16cf095b5adcd2da0a6b0))
+
+### Refactor
+
+- **roi-plot**: fit the Actual vs expected trend in the model ([`c91ba28`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c91ba28a71f21d388d45784f522e03790f4ab8f2))
+- **expression**: move the equation parser to microdrop_utils ([`e5c092b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5c092b638fce5f0846f2aec2fdaddbc3a2a90f3))
+- **device_viewer**: chunk the electrode scene handlers ([`4f1ffcd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4f1ffcde8cfb7be887525ad5b30ffe2c47f2179d))
+- **device_viewer**: route key events through the shortcut service ([`c52bada`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c52badabf34607d497a4f559c2d4b413d26a49a6))
+- **device_viewer**: make neighbor_in_direction public ([`9505fe6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9505fe640034f27f1aad34e09718a4ba60d921ca))
+
+### Docs
+
+- document the device viewer keyboard shortcuts ([`0706d1b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0706d1b71ff494ed644288ad0e0e45ef3c18da04))
+
+### Test
+
+- **protocol-tree**: cover insert-above placement ([`cc0cdba`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc0cdba42c9e709d41a7d51c0d8d998bd5705607))
+- **image_viewer**: cover expected-view extensions ([`b5a7f9e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b5a7f9eac1fd2fd717b9f07cc788952c76881a99))
+
 ## [v1.31.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.31.0) (2026-10-16)
 
 ### Feat
