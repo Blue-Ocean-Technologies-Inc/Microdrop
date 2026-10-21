@@ -37,6 +37,7 @@ from .discovery import (
     prunable_experiments,
     prune_experiments,
 )
+from .view import show_image_viewer_shortcuts
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -55,6 +56,14 @@ class InstallAiSupportAction(Action):
             # a failed/partial install (returns False) still leaves the
             # toolbar disabled instead of lying about availability.
             roi_analysis_model.ai_available = sam_available()
+
+
+class KeyboardShortcutsAction(Action):
+    name = Str("Image Viewer &Keyboard Shortcuts…")
+    tooltip = "List the keys the image view answers to while it has focus"
+
+    def perform(self, event):
+        show_image_viewer_shortcuts()
 
 
 class PruneExperimentsAction(Action):
@@ -130,8 +139,13 @@ class PruneExperimentsAction(Action):
 
 
 def help_menu_factory():
-    """Help-menu group: the optional AI ROI support installer."""
-    return SGroup(InstallAiSupportAction(), id="image_viewer_help_actions")
+    """Help-menu group: the keyboard shortcut sheet and the optional AI ROI
+    support installer."""
+    return SGroup(
+        KeyboardShortcutsAction(),
+        InstallAiSupportAction(),
+        id="image_viewer_help_actions",
+    )
 
 
 def prune_menu_factory():

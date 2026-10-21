@@ -139,3 +139,65 @@ PERSISTED_DEVICE_OUTLINE_TRAITS = {
     "alpha": "device_outline_alpha",
     "color": "device_outline_color",
 }
+
+# ---------------------------------------------------------------------------
+# Keyboard shortcuts: the one table the image view's key dispatch, the
+# toolbar tooltips and the cheat sheet all read. They act while the image
+# view has keyboard focus.
+# ---------------------------------------------------------------------------
+
+#: Cheat sheet sections, in display order, and its window title.
+KEYBOARD_SHORTCUT_GROUPS = ("Draw", "Modes", "Images", "Actions", "View", "Help")
+KEYBOARD_SHORTCUTS_TITLE = "Image Viewer Keyboard Shortcuts"
+
+#: (key sequence, action, description, group) rows; sequences are unique,
+#: so a second key for one action gets an "_alt" / "_equal" action of its
+#: own. Esc is the canvas layer's (it puts an armed draw tool away) and is
+#: listed for the cheat sheet only.
+KEYBOARD_SHORTCUTS = (
+    ("O", "draw_ellipse", "Draw ellipse tool (O for oval)", "Draw"),
+    ("B", "draw_box", "Draw box tool", "Draw"),
+    ("C", "draw_capsule", "Draw capsule tool", "Draw"),
+    ("P", "draw_polygon", "Draw polygon (contour) tool", "Draw"),
+    ("M", "toggle_negative_mode", "Toggle negative-mask mode", "Draw"),
+    ("E", "toggle_edit_mode", "Toggle Edit mode", "Modes"),
+    ("V", "toggle_show_rois", "Show / hide the ROI overlay", "Modes"),
+    ("Esc", "escape", "Put the draw tool away", "Modes"),
+    ("Right", "next_image", "Next image", "Images"),
+    ("Left", "previous_image", "Previous image", "Images"),
+    ("Shift+Right", "next_experiment", "Next experiment", "Images"),
+    ("Shift+Left", "previous_experiment", "Previous experiment", "Images"),
+    (
+        "X",
+        "toggle_exclude_image",
+        "Toggle excluding the shown image from analysis",
+        "Images",
+    ),
+    ("Ctrl+C", "copy_roi", "Copy the selected ROI", "Actions"),
+    ("Ctrl+V", "paste_roi", "Paste the copied ROI", "Actions"),
+    ("Del", "delete_roi", "Delete the selected ROI", "Actions"),
+    ("Ctrl+Z", "undo", "Undo", "Actions"),
+    ("Ctrl+Y", "redo", "Redo", "Actions"),
+    ("Ctrl+Shift+Z", "redo_alt", "Redo", "Actions"),
+    ("Ctrl+Return", "calculate", "Calculate (run the batch)", "Actions"),
+    ("Ctrl++", "zoom_in", "Zoom in", "View"),
+    ("Ctrl+=", "zoom_in_equal", "Zoom in", "View"),
+    ("Ctrl+-", "zoom_out", "Zoom out", "View"),
+    ("Ctrl+0", "fit_view", "Fit the image to the pane", "View"),
+    ("F1", "show_shortcuts", "Show keyboard shortcuts", "Help"),
+    ("Ctrl+/", "show_shortcuts_alt", "Show keyboard shortcuts", "Help"),
+)
+
+#: The draw and mode keys, which do nothing while a contour is being
+#: traced: switching tool or mode there would abandon or recolour it.
+SHORTCUTS_INERT_WHILE_TRACING = frozenset(
+    {
+        "draw_ellipse",
+        "draw_box",
+        "draw_capsule",
+        "draw_polygon",
+        "toggle_negative_mode",
+        "toggle_edit_mode",
+        "toggle_show_rois",
+    }
+)

@@ -13,6 +13,9 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 ``array`` through the display window, reporting the hovered pixel back).
 """
 
+# Standard library imports.
+from functools import partial
+
 # Third-party imports.
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
@@ -84,6 +87,8 @@ from microdrop_style.icons.icons import (
 )
 
 # Microdrop utils imports.
+from microdrop_utils.keyboard_shortcuts import tooltip_with_shortcut
+from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HoverScrollEnumEditor,
@@ -103,7 +108,14 @@ from .analysis.consts import (
     ROLLING_BALL_RADIUS_BOUNDS_PX,
 )
 from .analysis.roi_canvas_layer import RoiCanvasLayer
-from .consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
+from .analysis.roi_shortcut_service import RoiShortcutService
+from .consts import (
+    IMAGE_ZOOM_STEP_BOUNDS,
+    IMAGE_ZOOM_STEP_DEFAULT,
+    KEYBOARD_SHORTCUT_GROUPS,
+    KEYBOARD_SHORTCUTS,
+    KEYBOARD_SHORTCUTS_TITLE,
+)
 from .display import frame_to_qimage
 from .rich_text_editor import RichTextEditor
 from .scale_bar import (
@@ -132,6 +144,17 @@ PIXEL_READOUT_INTERVAL_MS = 33
 
 #: Keeps the status row's progress bar from bulking up the row.
 PROGRESS_BAR_HEIGHT_PX = 16
+
+#: Opens the image viewer's keyboard shortcut cheat sheet (F1, Help menu).
+show_image_viewer_shortcuts = partial(
+    show_keyboard_shortcuts,
+    KEYBOARD_SHORTCUTS,
+    KEYBOARD_SHORTCUT_GROUPS,
+    KEYBOARD_SHORTCUTS_TITLE,
+)
+
+#: Append the key bound to an action to a tooltip, as "Next image (Right)".
+_tooltip_with_shortcut = partial(tooltip_with_shortcut, KEYBOARD_SHORTCUTS)
 
 
 class _ProgressReadoutEditor(QtEditor):
@@ -194,16 +217,16 @@ class _ImageView(QGraphicsView):
     """Zoom (wheel, anchored under the cursor) + pan (drag) image view that
     reports the hovered pixel to a callback. Shrinks/grows freely with the
     dock pane (a full-resolution scene would otherwise dictate a huge size
-    hint) and keeps the image fitted on resize until the user zooms."""
+    hint) and keeps the image fitted on resize until the user zooms.
+    Keys go to the ROI layer first (a contour being traced), then to the
+    keyboard shortcuts."""
 
-    def __init__(self, scene, on_hover, roi_layer, scale_layer):
+    def __init__(self, scene, on_hover, roi_layer, scale_layer, shortcuts):
         super().__init__(scene)
         self._on_hover = on_hover
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
-        #: Set by the editor: fires the copy/paste/delete toolbar
-        #: buttons, so the shortcuts and the buttons are one code path.
-        self.on_roi_shortcut = lambda action: None
+        self._shortcuts = shortcuts
         self._metres_per_pixel = 0.0
         self._pixel_text = ""
         #: The newest readout, shown when the coalescing timer fires.
@@ -217,8 +240,8 @@ class _ImageView(QGraphicsView):
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
         self.setMouseTracking(True)
-        # Keys only reach a focused widget, and contour drawing needs
-        # Enter/Escape/Backspace once the canvas is clicked.
+        # Keys only reach a focused widget, and contour drawing and the
+        # shortcuts need them once the canvas is clicked.
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(1, 1)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -283,27 +306,16 @@ class _ImageView(QGraphicsView):
 
     def keyPressEvent(self, event):
         # Contour drawing finishes on Enter and unwinds on Escape /
-        # Backspace, and Escape also puts an armed draw tool away;
-        # everything else falls through to the view.
+        # Backspace, and Escape also puts an armed draw tool away; the
+        # shortcut table comes next, and anything left goes to the view.
         if self._roi_layer.key_press(event.key()):
             event.accept()
             return
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            shifted = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-            action = {
-                Qt.Key.Key_C: "copy",
-                Qt.Key.Key_V: "paste",
-                Qt.Key.Key_Z: "redo" if shifted else "undo",
-                Qt.Key.Key_Y: "redo",
-            }.get(event.key())
-        else:
-            # Delete only, not Backspace: that one takes back a contour
-            # vertex while tracing.
-            action = "delete" if event.key() == Qt.Key.Key_Delete else None
-        if action is not None:
-            self.on_roi_shortcut(action)
+
+        if self._shortcuts.handle_key_press_event(event):
             event.accept()
             return
+
         super().keyPressEvent(event)
 
     def resizeEvent(self, event):
@@ -479,11 +491,18 @@ class _ImageCanvasEditor(QtEditor):
         )
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
-        self.control = _ImageView(
-            self._scene, self._on_hover, self._roi_layer, self._scale_layer
+        shortcuts = RoiShortcutService(
+            analysis_model=analysis,
+            viewer_model=self.object,
+            is_tracing_contour=self._roi_layer.is_tracing_contour,
+            show_shortcuts_handler=show_image_viewer_shortcuts,
         )
-        self.control.on_roi_shortcut = lambda action: analysis.trait_set(
-            **{f"{action}_roi_button": True}
+        self.control = _ImageView(
+            self._scene,
+            self._on_hover,
+            self._roi_layer,
+            self._scale_layer,
+            shortcuts,
         )
         # The pane is flat: no frame line around the image.
         self.control.setFrameShape(QGraphicsView.Shape.NoFrame)
@@ -785,21 +804,33 @@ buttons_group = HGroup(
     "12",
     UItem(
         "fit_button",
-        editor=IconButtonEditor(glyph=ICON_REFRESH, tooltip="Fit image to the pane"),
+        editor=IconButtonEditor(
+            glyph=ICON_REFRESH,
+            tooltip=_tooltip_with_shortcut("Fit image to the pane", "fit_view"),
+        ),
     ),
     UItem(
         "zoom_in_button",
-        editor=IconButtonEditor(glyph="zoom_in", tooltip="Zoom in one step"),
+        editor=IconButtonEditor(
+            glyph="zoom_in",
+            tooltip=_tooltip_with_shortcut("Zoom in one step", "zoom_in"),
+        ),
     ),
     UItem(
         "zoom_out_button",
-        editor=IconButtonEditor(glyph="zoom_out", tooltip="Zoom out one step"),
+        editor=IconButtonEditor(
+            glyph="zoom_out",
+            tooltip=_tooltip_with_shortcut("Zoom out one step", "zoom_out"),
+        ),
     ),
     # image navigation
     "12",
     UItem(
         "previous_button",
-        editor=IconButtonEditor(glyph=ICON_PREVIOUS, tooltip="Previous image"),
+        editor=IconButtonEditor(
+            glyph=ICON_PREVIOUS,
+            tooltip=_tooltip_with_shortcut("Previous image", "previous_image"),
+        ),
     ),
     UItem(
         "playing",
@@ -810,21 +841,26 @@ buttons_group = HGroup(
         ),
     ),
     UItem(
-        "next_button", editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next image")
+        "next_button",
+        editor=IconButtonEditor(
+            glyph=ICON_NEXT, tooltip=_tooltip_with_shortcut("Next image", "next_image")
+        ),
     ),
     # ROI edits: shape history, then start the ROI set over
     "12",
     UItem(
         "object.roi_analysis.undo_roi_button",
         editor=IconButtonEditor(
-            glyph=ICON_UNDO, tooltip="Undo the last ROI change (Ctrl+Z)"
+            glyph=ICON_UNDO,
+            tooltip=_tooltip_with_shortcut("Undo the last ROI change", "undo"),
         ),
         enabled_when="object.roi_analysis.can_undo",
     ),
     UItem(
         "object.roi_analysis.redo_roi_button",
         editor=IconButtonEditor(
-            glyph=ICON_REDO, tooltip="Redo the undone ROI change (Ctrl+Y)"
+            glyph=ICON_REDO,
+            tooltip=_tooltip_with_shortcut("Redo the undone ROI change", "redo"),
         ),
         enabled_when="object.roi_analysis.can_redo",
     ),
@@ -838,8 +874,10 @@ buttons_group = HGroup(
         "object.roi_analysis.calculate_button",
         editor=IconButtonEditor(
             glyph=ICON_SHOW_CHART,
-            tooltip="Calculate ROI intensities across the "
-            "filtered images and plot them",
+            tooltip=_tooltip_with_shortcut(
+                "Calculate ROI intensities across the filtered images and plot them",
+                "calculate",
+            ),
         ),
     ),
     UItem(
@@ -903,13 +941,21 @@ experiments_group = VGroup(
         UItem(
             "previous_experiment_button",
             editor=IconButtonEditor(
-                glyph=ICON_PREVIOUS, tooltip="Previous experiment (older)"
+                glyph=ICON_PREVIOUS,
+                tooltip=_tooltip_with_shortcut(
+                    "Previous experiment (older)", "previous_experiment"
+                ),
             ),
             enabled_when="experiment_index > 0",
         ),
         UItem(
             "next_experiment_button",
-            editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next experiment (newer)"),
+            editor=IconButtonEditor(
+                glyph=ICON_NEXT,
+                tooltip=_tooltip_with_shortcut(
+                    "Next experiment (newer)", "next_experiment"
+                ),
+            ),
             enabled_when="experiment_index < max_experiment_number - 1",
         ),
         "8",
@@ -990,10 +1036,13 @@ exclusion_group = VGroup(
     Item(
         "object.roi_analysis.current_image_excluded",
         label="Exclude current image from analysis",
-        tooltip="Ignore the shown image in the ROI calculations "
-        "(stats batch, plot, export, drift tracking). Viewing "
-        "and ROI drawing on it still work; the mark is saved "
-        "with the experiment.",
+        tooltip=_tooltip_with_shortcut(
+            "Ignore the shown image in the ROI calculations "
+            "(stats batch, plot, export, drift tracking). Viewing "
+            "and ROI drawing on it still work; the mark is saved "
+            "with the experiment.",
+            "toggle_exclude_image",
+        ),
     ),
     HGroup(
         Item(
@@ -1115,9 +1164,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CIRCLE,
             mode="draw_ellipse",
-            tooltip="Draw an elliptical ROI (click-drag from its "
-            "centre; the grip makes it an ellipse). Stays "
-            "armed for the next one — Esc puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw an elliptical ROI (click-drag from its "
+                "centre; the grip makes it an ellipse). Stays "
+                "armed for the next one — Esc puts it away",
+                "draw_ellipse",
+            ),
         ),
     ),
     UItem(
@@ -1125,9 +1177,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_RECTANGLE,
             mode="draw_box",
-            tooltip="Draw a rectangular ROI (click-drag on the "
-            "image). Stays armed for the next one — Esc "
-            "puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a rectangular ROI (click-drag on the "
+                "image). Stays armed for the next one — Esc "
+                "puts it away",
+                "draw_box",
+            ),
         ),
     ),
     UItem(
@@ -1135,9 +1190,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CAPSULE,
             mode="draw_capsule",
-            tooltip="Draw a capsule ROI (click-drag its axis, then "
-            "use the grip for its radius). Stays armed "
-            "for the next one — Esc puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a capsule ROI (click-drag its axis, then "
+                "use the grip for its radius). Stays armed "
+                "for the next one — Esc puts it away",
+                "draw_capsule",
+            ),
         ),
     ),
     UItem(
@@ -1145,11 +1203,14 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CONTOUR,
             mode="draw_polygon",
-            tooltip="Draw a contour ROI (click to place nodes; "
-            "close on the first node, double-click, or "
-            "Enter — Esc cancels, Backspace undoes). Stays "
-            "armed for the next one — a second Esc puts "
-            "it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a contour ROI (click to place nodes; "
+                "close on the first node, double-click, or "
+                "Enter — Esc cancels, Backspace undoes). Stays "
+                "armed for the next one — a second Esc puts "
+                "it away",
+                "draw_polygon",
+            ),
         ),
     ),
     UItem(
@@ -1157,8 +1218,11 @@ analysis_toolbar = VGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_NEGATIVE_MASK,
             off_glyph=ICON_NEGATIVE_MASK,
-            tooltip="Negative mask mode: drawn shapes are subtracted "
-            "from the ROIs they overlap",
+            tooltip=_tooltip_with_shortcut(
+                "Negative mask mode: drawn shapes are subtracted "
+                "from the ROIs they overlap",
+                "toggle_negative_mode",
+            ),
         ),
     ),
     UItem(
@@ -1166,7 +1230,9 @@ analysis_toolbar = VGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_VISIBILITY,
             off_glyph=ICON_VISIBILITY_OFF,
-            tooltip="Show or hide the ROIs on the image",
+            tooltip=_tooltip_with_shortcut(
+                "Show or hide the ROIs on the image", "toggle_show_rois"
+            ),
         ),
     ),
     "12",  # measurement toggles
@@ -1236,27 +1302,33 @@ analysis_toolbar = VGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_EDIT,
             off_glyph=ICON_EDIT,
-            tooltip="Edit ROIs: drag to move, bottom-right grip to "
-            "resize (Shift keeps an ellipse circular), "
-            "top-left grip to rotate (Shift snaps to 15°), "
-            "pink top-right grip to round a box's corners, "
-            "drag a node to reshape a contour, click to "
-            "select. Editing on a later image adds a drift "
-            "override from there on",
+            tooltip=_tooltip_with_shortcut(
+                "Edit ROIs: drag to move, bottom-right grip to "
+                "resize (Shift keeps an ellipse circular), "
+                "top-left grip to rotate (Shift snaps to 15°), "
+                "pink top-right grip to round a box's corners, "
+                "drag a node to reshape a contour, click to "
+                "select. Editing on a later image adds a drift "
+                "override from there on",
+                "toggle_edit_mode",
+            ),
         ),
     ),
     UItem(
         "object.roi_analysis.copy_roi_button",
         editor=IconButtonEditor(
-            glyph=ICON_COPY, tooltip="Copy the selected ROI's shape (Ctrl+C)"
+            glyph=ICON_COPY,
+            tooltip=_tooltip_with_shortcut("Copy the selected ROI's shape", "copy_roi"),
         ),
     ),
     UItem(
         "object.roi_analysis.paste_roi_button",
         editor=IconButtonEditor(
             glyph=ICON_PASTE,
-            tooltip="Paste the copied shape as a new ROI, offset "
-            "from the original (Ctrl+V)",
+            tooltip=_tooltip_with_shortcut(
+                "Paste the copied shape as a new ROI, offset from the original",
+                "paste_roi",
+            ),
         ),
     ),
     # Left Del / Del / Right Del: the selected ROI off every image before
@@ -1277,7 +1349,9 @@ analysis_toolbar = VGroup(
         "object.roi_analysis.delete_roi_button",
         editor=IconButtonEditor(
             glyph=ICON_DELETE,
-            tooltip="Delete the selected ROI from the shown image (Del)",
+            tooltip=_tooltip_with_shortcut(
+                "Delete the selected ROI from the shown image", "delete_roi"
+            ),
         ),
         enabled_when="analysis.selected_roi_id",
     ),

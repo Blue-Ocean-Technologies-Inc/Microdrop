@@ -213,6 +213,41 @@ Shortcuts act while the device view has keyboard focus (click it first); F1 show
 
 Alt + Arrows draw a route from the selected route's end, else from the last clicked or stepped electrode; Backspace drops the route's last electrode.
 
+#### Image viewer
+
+Keys act while the image view has keyboard focus (click the image first); F1 or Help › Image Viewer Keyboard Shortcuts shows the same list inside the app.
+
+| Keys | Action |
+| --- | --- |
+| **Draw** | |
+| O | Draw ellipse tool (O for oval) |
+| B | Draw box tool |
+| C | Draw capsule tool |
+| P | Draw polygon (contour) tool |
+| M | Toggle negative-mask mode |
+| **Modes** | |
+| E | Toggle Edit mode |
+| V | Show / hide the ROI overlay |
+| Esc | Put the draw tool away |
+| **Images** | |
+| Right / Left | Next / previous image |
+| Shift+Right / Shift+Left | Next / previous experiment |
+| X | Toggle excluding the shown image from analysis |
+| **Actions** | |
+| Ctrl+C / Ctrl+V | Copy / paste the selected ROI |
+| Del | Delete the selected ROI |
+| Ctrl+Z | Undo |
+| Ctrl+Y / Ctrl+Shift+Z | Redo |
+| Ctrl+Return | Calculate (run the batch) |
+| **View** | |
+| Ctrl++ / Ctrl+= | Zoom in |
+| Ctrl+- | Zoom out |
+| Ctrl+0 | Fit the image to the pane |
+| **Help** | |
+| F1 / Ctrl+/ | Show keyboard shortcuts |
+
+The draw keys toggle a tool like its toolbar button does; the draw and mode keys do nothing while a contour is half-traced (Enter closes it, Esc discards it).
+
 ## Remote / Distributed Operation
 
 Because all communication flows through Redis, the GUI and the hardware
