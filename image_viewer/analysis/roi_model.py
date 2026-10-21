@@ -1071,6 +1071,10 @@ class RoiAnalysisModel(HasTraits):
     include_before_button = Button("Before")
     include_after_button = Button("After")
 
+    #: Unmark every image of the experiment at once: the include
+    #: buttons above with no shown image to count from.
+    include_all_button = Button("All")
+
 
 #: The single analysis state shared by the viewer pane and the plot pane
 #: (both owned by this plugin) — the media_capture_event_model pattern.

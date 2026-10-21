@@ -976,6 +976,7 @@ exclusion_group = VGroup(
             "object.roi_analysis.exclude_after_button",
             tooltip="Exclude every image after the shown one from the analysis",
         ),
+        Label(""),
         Label("Include all images:"),
         UItem(
             "object.roi_analysis.include_before_button",
@@ -985,7 +986,11 @@ exclusion_group = VGroup(
             "object.roi_analysis.include_after_button",
             tooltip="Clear the exclusion mark from every image after the shown one",
         ),
-        columns=3,
+        UItem(
+            "object.roi_analysis.include_all_button",
+            tooltip="Clear the exclusion mark from every image",
+        ),
+        columns=4,
     ),
     visible_when="show_exclusion",
     show_border=True,

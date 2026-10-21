@@ -644,6 +644,14 @@ def _cleanup_tab():
                 "bring back. Off hides them, so the axes "
                 "scale to the analysed curves alone.",
             ),
+            UItem(
+                "model.include_all_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Clear the exclusion mark from every image",
+                ),
+                enabled_when="session.excluded_images",
+            ),
         ),
         HGroup(
             Item(

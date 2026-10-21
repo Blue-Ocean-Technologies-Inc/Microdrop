@@ -1107,10 +1107,14 @@ class RoiAnalysisController(HasTraits):
     #: Guards the checkbox observer while the mirror below writes it.
     _syncing_excluded = Bool(False)
 
-    @observe("analysis_model:current_image_path, analysis_model:session")
+    @observe(
+        "analysis_model:current_image_path, analysis_model:session, "
+        "analysis_model:session:excluded_images"
+    )
     def _mirror_current_image_excluded(self, event):
         """Point the checkbox at the displayed image's exclusion state
-        (image navigation and session swaps both land here)."""
+        (image navigation, session swaps and bulk changes to the
+        marks all land here)."""
         current = self.analysis_model.current_image_path
         self._syncing_excluded = True
         try:
@@ -1179,6 +1183,11 @@ class RoiAnalysisController(HasTraits):
     def _include_all_after(self, event):
         self._set_excluded_relative(before=False, excluded=False)
 
+    @observe("analysis_model:include_all_button")
+    def _include_every_image(self, event):
+        if self.session.excluded_images:
+            self._set_excluded_images([])
+
     def _set_excluded_relative(self, before, excluded):
         """Mark or unmark every image before/after the displayed one
         (exclusive) as excluded — the checkbox applied in bulk."""
@@ -1194,12 +1203,19 @@ class RoiAnalysisController(HasTraits):
             added = [name for name in names if name not in current_marks]
             if not added:
                 return
-            self.session.excluded_images = current_marks + added
+            self._set_excluded_images(current_marks + added)
         else:
             kept = [name for name in current_marks if name not in names]
             if len(kept) == len(current_marks):
                 return
-            self.session.excluded_images = kept
+            self._set_excluded_images(kept)
+
+    def _set_excluded_images(self, names):
+        """Replace the exclusion marks with ``names`` and re-run what
+        consumes the series — the bulk buttons' one write path."""
+        self.session.excluded_images = names
+        # The plot derives its series from the (now different)
+        # included set; stats_revision is what it redraws on.
         self.session.stats_revision += 1
         self._save_config()
         self._restart_batch_if_running()
