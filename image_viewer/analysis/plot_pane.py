@@ -163,8 +163,8 @@ PLOT_STAT_LABELS = {
     "bg_integrated": "Integrated (bg-corrected)",
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
-    "area_normalized": "Mean, area-normalised",
-    "bg_area_normalized": "Bg-corrected mean, area-normalised",
+    "area_normalized": "Mean intensity (area normalized, a.u.)",
+    "bg_area_normalized": "Bg-corrected mean intensity (area normalized, a.u.)",
     "area": "Area",
     "circularity": "Circularity",
     "shape_change": "Shape change",
@@ -270,13 +270,14 @@ LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 #: arrows are the widest: a value box shows "-44.7649" or "123456.0" in
 #: full, a parameter box "0.25" or "101", a dropdown its longest
 #: built-in label ("Actual vs expected"). The plotted-stat dropdown has
-#: its own, far wider one for "Bg-corrected mean, area-normalised" —
-#: not measured, but scaled from the width measured for "Background-
-#: corrected mean" by the ratio of the two labels' text widths.
+#: its own, far wider one for "Bg-corrected mean intensity (area
+#: normalized, a.u.)" — not measured, but scaled from the width
+#: measured for "Background-corrected mean" by the ratio of the two
+#: labels' text widths.
 VALUE_SPIN_W = -138
 PARAM_SPIN_W = -102
 DROPDOWN_W = -176
-STAT_DROPDOWN_W = -315
+STAT_DROPDOWN_W = -440
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
