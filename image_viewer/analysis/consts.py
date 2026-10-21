@@ -200,8 +200,8 @@ NEGATIVE_MASK_NAME_PREFIX = "Mask"
 #: the area stat and is persisted, so it stays "intensity"), its value
 #: per ROI on the displayed image, its distribution per ROI across the
 #: series, the fits' first- or second-derivative curves, the per-ROI
-#: time-of-fastest-change bars, or that time against the one the user
-#: expects.
+#: time-of-fastest-change bars, that time against the one the user
+#: expects, or the heater log's temperature over the captures' time.
 VIEW_MODES = (
     "intensity",
     "per_image",
@@ -210,6 +210,7 @@ VIEW_MODES = (
     "second_derivative",
     "fastest_change",
     "actual_vs_expected",
+    "temperature",
 )
 VIEW_MODE_LABELS = {
     "intensity": "Over time",
@@ -219,6 +220,7 @@ VIEW_MODE_LABELS = {
     "second_derivative": "2nd derivative",
     "fastest_change": "Fastest change",
     "actual_vs_expected": "Actual vs expected",
+    "temperature": "Temperature over time",
 }
 
 #: The fitted-curve landmarks the Expected tab can compare against the
@@ -277,6 +279,19 @@ PLOT_CLICK_SLOP_PX = 3
 #: without reading as part of the analysis.
 EXCLUDED_POINT_ALPHA = 0.35
 EXCLUDED_POINT_MARKER = "o"
+
+#: The Temperature over time view: how far past the filtered captures'
+#: span the log is drawn each side, as a fraction of that span with a
+#: floor (s) for a run of one capture; every sensor as a thin faint
+#: line, the chosen one (or their mean) bold, with a dot at each
+#: analysed capture.
+TEMPERATURE_VIEW_MARGIN_FRACTION = 0.05
+TEMPERATURE_VIEW_MARGIN_MIN_S = 10.0
+TEMPERATURE_SENSOR_LINE_ALPHA = 0.35
+TEMPERATURE_SENSOR_LINE_WIDTH = 0.8
+TEMPERATURE_LINE_WIDTH = 2.0
+TEMPERATURE_LINE_COLOR = "black"
+TEMPERATURE_CAPTURE_MARKER = "o"
 
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"

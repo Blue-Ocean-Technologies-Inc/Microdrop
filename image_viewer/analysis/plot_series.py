@@ -22,14 +22,17 @@ from .consts import (
     BUTTER_CUTOFF,
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER_BOUNDS,
+    HEATER_SENSOR_MEAN,
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_PTS,
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
+    TEMPERATURE_VIEW_MARGIN_FRACTION,
+    TEMPERATURE_VIEW_MARGIN_MIN_S,
     TIME_UNIT_PER_SECOND,
     X_AXIS_LABELS,
 )
-from .heater_log import temperature_at
+from .heater_log import sensor_trace, sensors_in, temperature_at
 from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 
 # Logger import.
@@ -195,12 +198,17 @@ def quantity_label(text, unit):
     return f"{text} ({unit})" if unit else text
 
 
+def time_axis_label(figure_settings):
+    """The elapsed-time axis's text, in the figure's time unit."""
+    return f"Elapsed time ({figure_settings.time_unit})"
+
+
 def x_axis_label(figure_settings):
     """The x-axis text of the views drawn against the curves' x."""
     quantity, unit = x_quantity(figure_settings)
 
     if figure_settings.x_axis == "time":
-        return f"Elapsed time ({unit})"
+        return time_axis_label(figure_settings)
 
     return quantity_label(quantity, unit)
 
@@ -301,11 +309,83 @@ def _x_values(session, filtered_paths, paths, stat_cache):
             ),
         )
 
+    return _elapsed(session, filtered_paths, times, stat_cache)
+
+
+def _elapsed(session, filtered_paths, epochs, stat_cache):
+    """``epochs`` as elapsed time in the figure's time unit, from the
+    first analysed capture (the first filtered one when every image is
+    excluded) — the curves view's time origin."""
     origin = (analysed_paths(session, filtered_paths) or filtered_paths)[0]
     start_time = session.stat_info(origin, stat_cache)[1]
-    per_second = TIME_UNIT_PER_SECOND[figure.time_unit]
+    per_second = TIME_UNIT_PER_SECOND[session.figure.time_unit]
 
-    return [(capture_time - start_time) * per_second for capture_time in times]
+    return [(epoch - start_time) * per_second for epoch in epochs]
+
+
+def _captures_on_log(session, filtered_paths, paths, stat_cache):
+    """([path], [x], [°C]) for ``paths``: each capture's elapsed time
+    and the heater log's reading there, joined through the figure's
+    sensor and window exactly as the temperature axis joins them."""
+    figure = session.figure
+    times = [session.stat_info(path, stat_cache)[1] for path in paths]
+    temperatures = temperature_at(
+        session.heater_samples,
+        figure.heater_sensor,
+        times,
+        figure.heater_window_ms / 1000.0,
+    )
+
+    return (
+        list(paths),
+        _elapsed(session, filtered_paths, times, stat_cache),
+        temperatures,
+    )
+
+
+def temperature_over_time(session, filtered_paths):
+    """(traces, analysed, excluded): the Temperature over time view's
+    data, x in the figure's time unit from the curves view's origin.
+
+    ``traces`` is {sensor: ([x], [°C])} for every sensor the heater
+    log carries plus HEATER_SENSOR_MEAN, over the filtered captures'
+    span widened each side by TEMPERATURE_VIEW_MARGIN_FRACTION of it
+    (TEMPERATURE_VIEW_MARGIN_MIN_S at least). ``analysed`` and
+    ``excluded`` are ([path], [x], [°C]) at those captures (see
+    _captures_on_log).
+
+    The log's raw reading throughout: the calibration maps the
+    temperature axis back to expected values, and a temperature
+    plotted as a value is never put through it."""
+    if not filtered_paths:
+        return {}, ([], [], []), ([], [], [])
+
+    stat_cache = {}
+    epochs = [session.stat_info(path, stat_cache)[1] for path in filtered_paths]
+    first, last = min(epochs), max(epochs)
+    margin = max(
+        (last - first) * TEMPERATURE_VIEW_MARGIN_FRACTION,
+        TEMPERATURE_VIEW_MARGIN_MIN_S,
+    )
+    traces = {}
+
+    for sensor in (*sensors_in(session.heater_samples), HEATER_SENSOR_MEAN):
+        sample_epochs, temperatures = sensor_trace(
+            session.heater_samples, sensor, first - margin, last + margin
+        )
+        traces[sensor] = (
+            _elapsed(session, filtered_paths, sample_epochs, stat_cache),
+            temperatures,
+        )
+
+    analysed = analysed_paths(session, filtered_paths)
+    excluded = excluded_paths(session, filtered_paths)
+
+    return (
+        traces,
+        _captures_on_log(session, filtered_paths, analysed, stat_cache),
+        _captures_on_log(session, filtered_paths, excluded, stat_cache),
+    )
 
 
 def _roi_stats_run(session, roi, paths, stat_cache):

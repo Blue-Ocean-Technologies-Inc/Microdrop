@@ -19,6 +19,7 @@ coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 
 # Standard library imports.
+import itertools
 import math
 import os
 import re
@@ -94,11 +95,13 @@ from .consts import (
     CUSTOM_POINT_COLOR,
     CUSTOM_POINT_LABEL,
     CUSTOM_POINT_MARKER,
+    DEFAULT_ROI_COLORS,
     EXCLUDED_POINT_ALPHA,
     EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
     HEATER_LOGS_DIR_NAME,
+    HEATER_SENSOR_MEAN,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
     PLOT_PICK_RADIUS_PX,
@@ -109,6 +112,11 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
+    TEMPERATURE_CAPTURE_MARKER,
+    TEMPERATURE_LINE_COLOR,
+    TEMPERATURE_LINE_WIDTH,
+    TEMPERATURE_SENSOR_LINE_ALPHA,
+    TEMPERATURE_SENSOR_LINE_WIDTH,
     TIME_UNITS,
     X_AXIS_LABELS,
     X_AXIS_MODES,
@@ -140,6 +148,8 @@ from .plot_series import (
     step_ids,
     step_ordinals,
     step_tick_label,
+    temperature_over_time,
+    time_axis_label,
     x_axis_label,
     x_quantity,
 )
@@ -240,6 +250,14 @@ DERIVATIVE_SYMBOLS = {1: "dy/dx", 2: "d²"}
 #: The views a log value axis applies to. Not the bar charts: a bar
 #: grows from zero, which a log axis cannot show.
 LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution")
+
+#: The views drawing a point per image, which a click can toggle the
+#: exclusion of.
+PICK_VIEW_MODES = ("intensity", "temperature")
+
+#: The views drawing no plotted-stat value at all: the series' notes
+#: (gaps, dropped outliers) and the stat-unit axis limits do not apply.
+NON_STAT_VIEW_MODES = ("temperature",)
 
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
@@ -485,7 +503,8 @@ def _axes_tab():
                     tooltip=TEMPERATURE_CALIBRATION_TOOLTIP,
                 ),
             ),
-            visible_when="figure.x_axis == 'temperature'",
+            visible_when="figure.x_axis == 'temperature' "
+            "or figure.view_mode == 'temperature'",
             show_border=True,
         ),
         label="Axes",
@@ -1122,7 +1141,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """Ask for the exclusion of the image whose drawn point the
         click landed on — on the curves view, the only one drawing a
         point per image — to be toggled. Nothing near: nothing asked."""
-        if self._model.session.figure.view_mode != "intensity":
+        if self._model.session.figure.view_mode not in PICK_VIEW_MODES:
             return
 
         if not self._pick_targets:
@@ -1238,6 +1257,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_distribution(series, figure_settings)
             elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
+            elif view_mode == "temperature":
+                trim_edges = self._draw_temperature_over_time(figure_settings)
             else:
                 trim_edges = self._draw_actual_vs_expected(series, figure_settings)
 
@@ -1274,7 +1295,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             and not (log_x and figure_settings.x_min <= 0)
         ):
             self._axes.set_xlim(figure_settings.x_min, figure_settings.x_max)
-        if not figure_settings.y_auto and not (log_y and figure_settings.y_min <= 0):
+        if (
+            not figure_settings.y_auto
+            and view_mode not in NON_STAT_VIEW_MODES
+            and not (log_y and figure_settings.y_min <= 0)
+        ):
             self._axes.set_ylim(figure_settings.y_min, figure_settings.y_max)
         # After the scaling: the band is full-height in axes fractions,
         # so relim() would read those as data and pin the y limits.
@@ -1287,11 +1312,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._draw_excluded_points(excluded)
 
         self._note_hidden_points(series, log_x, log_y)
-        self._note_dropped_outliers()
+
+        if view_mode not in NON_STAT_VIEW_MODES:
+            self._note_dropped_outliers()
 
         # The per-ROI stat views draw every value whatever its
         # temperature, so frames the log misses are not missing there.
-        if view_mode not in ("per_image", "distribution"):
+        if view_mode not in ("per_image", "distribution", *NON_STAT_VIEW_MODES):
             self._note_missing_temperatures(series, figure_settings)
             self._note_missing_steps(series, figure_settings)
 
@@ -1556,6 +1583,100 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     color="gray" if missing else None,
                 )
             )
+
+    def _draw_temperature_over_time(self, figure_settings):
+        """The heater log against elapsed time, over the filtered
+        captures' span: every sensor thin and faint, the figure's
+        sensor (or their mean) bold, a dot at each analysed capture
+        and — while the figure shows them — a faint hollow marker at
+        each excluded one; both toggle exclusion on a click.
+
+        Always over time, whatever the x axis, and the log's raw
+        reading: the temperature calibration maps the temperature
+        axis, not a temperature plotted as a value. Nothing here is
+        smoothed or fitted."""
+        session = self._model.session
+        filtered_paths = self._model.filtered_paths
+
+        self._axes.set_xlabel(time_axis_label(figure_settings))
+        self._axes.set_ylabel("Temperature (°C)")
+        self._apply_legend(False)
+
+        if not filtered_paths:
+            self._draw_hint("No images")
+
+            return []
+
+        if not session.heater_samples:
+            self._draw_hint(
+                "No heater log loaded — choose its folder with the "
+                "Heater logs button on the Axes tab"
+            )
+
+            return []
+
+        traces, analysed, excluded = temperature_over_time(session, filtered_paths)
+        selected = figure_settings.heater_sensor
+        faint = [
+            sensor for sensor in traces if sensor not in (selected, HEATER_SENSOR_MEAN)
+        ]
+
+        for color, sensor in zip(itertools.cycle(DEFAULT_ROI_COLORS), faint):
+            x_values, temperatures = traces[sensor]
+            (line,) = self._axes.plot(
+                x_values,
+                temperatures,
+                color=color,
+                alpha=TEMPERATURE_SENSOR_LINE_ALPHA,
+                linewidth=TEMPERATURE_SENSOR_LINE_WIDTH,
+                label=sensor,
+            )
+            self._fit_artists.append(line)
+
+        x_values, temperatures = traces.get(selected, ([], []))
+        (line,) = self._axes.plot(
+            x_values,
+            temperatures,
+            color=TEMPERATURE_LINE_COLOR,
+            linewidth=TEMPERATURE_LINE_WIDTH,
+            label=selected,
+        )
+        self._fit_artists.append(line)
+
+        paths, x_values, temperatures = analysed
+        (dots,) = self._axes.plot(
+            x_values,
+            temperatures,
+            linestyle="",
+            marker=TEMPERATURE_CAPTURE_MARKER,
+            color=TEMPERATURE_LINE_COLOR,
+            label="Captures",
+        )
+        self._fit_artists.append(dots)
+        self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        # On the log line, so — unlike the curves view's — they sit
+        # inside the limits the traces already set.
+        if figure_settings.show_excluded_points:
+            paths, x_values, temperatures = excluded
+            (points,) = self._axes.plot(
+                x_values,
+                temperatures,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markerfacecolor="none",
+                markeredgecolor=TEMPERATURE_LINE_COLOR,
+                alpha=EXCLUDED_POINT_ALPHA,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+            self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        self._apply_legend(figure_settings.show_legend)
+
+        return []  # nothing fitted: no trimmed tail to shade
 
     def _fitted_rois(self, series, figure_settings):
         """(roi, name, fit, finite_t) per ROI the chosen method fits,

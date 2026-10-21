@@ -35,6 +35,7 @@ from image_viewer.analysis.plot_series import (
     step_ordinals,
     step_tick_label,
     subtracted_series,
+    temperature_over_time,
     visible_series,
     without_outliers,
     x_axis_label,
@@ -830,3 +831,54 @@ def test_excluded_points_are_not_tested_for_outliers(tmp_path):
 
     assert flags[roi.roi_id] == [False, False]
     assert excluded[roi.roi_id][2] == [1e6]
+
+
+# --------------------------------------------------------------------------- #
+# Temperature over time                                                        #
+# --------------------------------------------------------------------------- #
+def test_temperature_over_time_traces_the_log_around_the_captures(tmp_path):
+    session, _roi, paths = _three_images(tmp_path)
+    start = session.stat_info(paths[0])[1]
+    session.heater_samples = [
+        (start - 100.0, {"t1": 20.0, "t2": 30.0}),
+        (start - 5.0, {"t1": 21.0, "t2": 31.0}),
+        (start + 30.0, {"t1": 40.0, "t2": 50.0}),
+        (start + 65.0, {"t1": 41.0}),
+        (start + 200.0, {"t1": 60.0, "t2": 70.0}),
+    ]
+    session.figure.heater_sensor = "t1"
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    traces, analysed, excluded = temperature_over_time(session, paths)
+
+    # 60 s of captures: the 10 s floor beats 5% of the span, so the
+    # samples 100 s before and 140 s after are left out.
+    assert traces["t1"] == ([-5.0, 30.0, 65.0], [21.0, 40.0, 41.0])
+    assert traces["t2"] == ([-5.0, 30.0], [31.0, 50.0])
+    assert traces["mean"] == ([-5.0, 30.0, 65.0], [26.0, 45.0, 41.0])
+
+    # The captures read the chosen sensor by the temperature axis's join.
+    assert analysed[0] == [paths[0], paths[2]]
+    assert analysed[1] == [0.0, 60.0]
+    assert analysed[2][0] == 21.0 + 19.0 * 5.0 / 35.0
+    assert excluded == ([paths[1]], [30.0], [40.0])
+
+
+def test_temperature_over_time_follows_the_time_unit(tmp_path):
+    session, _roi, paths = _three_images(tmp_path)
+    start = session.stat_info(paths[0])[1]
+    session.heater_samples = [(start + 30.0, {"t1": 40.0})]
+    session.figure.time_unit = "min"
+
+    traces, analysed, _excluded = temperature_over_time(session, paths)
+
+    assert traces["t1"][0] == [0.5]
+    assert analysed[1] == [0.0, 0.5, 1.0]
+
+
+def test_temperature_over_time_without_images_is_empty():
+    assert temperature_over_time(AnalysisSession(), []) == (
+        {},
+        ([], [], []),
+        ([], [], []),
+    )

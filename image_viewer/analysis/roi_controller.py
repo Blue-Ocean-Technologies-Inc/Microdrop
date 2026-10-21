@@ -988,16 +988,18 @@ class RoiAnalysisController(HasTraits):
         self._heater_fingerprint = None
         self._ensure_heater_samples()
 
-    @observe("analysis_model:plot_visible")
-    def _on_plot_visibility_changed(self, event):
+    @observe("analysis_model:plot_visible, analysis_model:session:figure:view_mode")
+    def _on_heater_demand_changed(self, event):
         self._ensure_heater_samples()
 
     def _heater_samples_wanted(self):
-        """Only a shown plot on the temperature axis reads the samples
-        (the CSV export loads its own), so nothing else pays for them."""
-        return (
-            self.analysis_model.plot_visible
-            and self.session.figure.x_axis == "temperature"
+        """Only a shown plot on the temperature axis, or showing the
+        Temperature over time view, reads the samples (the CSV export
+        loads its own), so nothing else pays for them."""
+        figure = self.session.figure
+
+        return self.analysis_model.plot_visible and (
+            figure.x_axis == "temperature" or figure.view_mode == "temperature"
         )
 
     def _has_heater_inputs(self):
