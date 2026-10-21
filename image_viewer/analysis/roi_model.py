@@ -202,6 +202,10 @@ class FigureSettings(HasTraits):
     #: outliers, uncomputed images) instead of breaking it. Display
     #: only — the fits and the CSV keep the gaps.
     interpolate_gaps = Bool(True)
+    #: Draw the excluded images' points as faint hollow markers that
+    #: a click brings back into the analysis. Display only: they are
+    #: never fitted, and never move the axes either way.
+    show_excluded_points = Bool(True)
 
     #: Display-only smoothing of the drawn curves. The fits keep the
     #: unsmoothed points: neighbouring values in a smoothed curve are

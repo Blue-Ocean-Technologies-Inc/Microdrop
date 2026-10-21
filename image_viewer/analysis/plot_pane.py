@@ -636,6 +636,14 @@ def _cleanup_tab():
                 "it. Display only — the fits and the CSV "
                 "keep the gaps.",
             ),
+            _toggle(
+                "figure.show_excluded_points",
+                "Excluded points",
+                tooltip="Show the images excluded from analysis "
+                "as faint hollow markers you can click to "
+                "bring back. Off hides them, so the axes "
+                "scale to the analysed curves alone.",
+            ),
         ),
         HGroup(
             Item(
@@ -931,6 +939,7 @@ _PLOT_STATE = (
     "session:figure:outlier_threshold, "
     "session:figure:outlier_window, "
     "session:figure:interpolate_gaps, "
+    "session:figure:show_excluded_points, "
     "session:figure:x_axis, "
     "session:figure:time_unit, "
     "session:figure:heater_sensor, "
@@ -1206,7 +1215,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._apply_ordinal_ticks(figure_settings, log_x)
 
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings, excluded)
+            trim_edges = self._refresh_intensity(series, figure_settings)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
@@ -1262,6 +1271,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # After the scaling: the band is full-height in axes fractions,
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
+
+        # After the scaling too: relim() reads every line on the
+        # axes, so drawn before it the excluded points would pull
+        # the limits off the analysed curves.
+        if view_mode == "intensity" and figure_settings.show_excluded_points:
+            self._draw_excluded_points(excluded)
+
         self._note_hidden_points(series, log_x, log_y)
         self._note_dropped_outliers()
 
@@ -1290,7 +1306,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             FuncFormatter(lambda x, _position: step_tick_label(labels, x))
         )
 
-    def _refresh_intensity(self, series, figure_settings, excluded):
+    def _refresh_intensity(self, series, figure_settings):
         session = self._model.session
         # Smoothing is a display aid, so it goes no further than the
         # lines: `series` — unsmoothed — is what the fits below see.
@@ -1326,8 +1342,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
-        self._draw_excluded_points(excluded)
-        self._collect_pick_targets(series, drawn, excluded)
+        self._collect_pick_targets(series, drawn)
         if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
@@ -1349,7 +1364,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _draw_excluded_points(self, excluded):
         """Each excluded image's point as a faint hollow marker in its
         ROI's colour, with no line — still visible and clickable, but
-        plainly not part of the curve, the fits or anything else."""
+        plainly not part of the curve, the fits, the axis limits or
+        anything else. Registers them as pick targets, so a click can
+        bring one back."""
+        session = self._model.session
+        excluded_images = excluded_paths(session, self._model.filtered_paths)
+
         for roi_id, (_name, x_values, values) in excluded.items():
             roi = self._model.session.roi_by_id(roi_id)
 
@@ -1366,18 +1386,18 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 markeredgecolor=roi.style.color,
                 alpha=EXCLUDED_POINT_ALPHA * roi.style.plot_alpha,
                 label="_nolegend_",
+                scalex=False,
+                scaley=False,
             )
             self._fit_artists.append(points)
+            self._pick_targets.extend(zip(excluded_images, x_values, values))
 
-    def _collect_pick_targets(self, series, drawn, excluded):
-        """Remember every point a click can land on, with its image: the
-        curves' points where they are drawn (smoothed, say) but only
-        where there is a value — a bridged gap is no image's point — and
-        the excluded images' points."""
-        session = self._model.session
-        filtered_paths = self._model.filtered_paths
-        analysed = analysed_paths(session, filtered_paths)
-        excluded_images = excluded_paths(session, filtered_paths)
+    def _collect_pick_targets(self, series, drawn):
+        """Remember every curve point a click can land on, with its
+        image: where the point is drawn (smoothed, say) but only where
+        there is a value — a bridged gap is no image's point. The
+        excluded points register as they are drawn."""
+        analysed = analysed_paths(self._model.session, self._model.filtered_paths)
 
         for roi_id, (_name, x_values, values) in drawn.items():
             measured = series[roi_id][2]
@@ -1387,9 +1407,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 for path, x, y, value in zip(analysed, x_values, values, measured)
                 if value == value
             )
-
-        for _name, x_values, values in excluded.values():
-            self._pick_targets.extend(zip(excluded_images, x_values, values))
 
     def _stat_axis_label(self, figure_settings):
         """The plotted stat's y-axis text with its transforms noted —

@@ -86,6 +86,7 @@ _FIGURE_FIELDS = (
     "outlier_threshold",
     "outlier_window",
     "interpolate_gaps",
+    "show_excluded_points",
     "smooth_method",
     "savgol_window",
     "savgol_order",

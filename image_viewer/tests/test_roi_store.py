@@ -95,6 +95,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.flip_actual_expected = True
     session.figure.compare_second_derivative_max = True
     session.figure.trend_method = "sigmoid"
+    session.figure.show_excluded_points = False
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
@@ -112,6 +113,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.compare_second_derivative_max is True
     assert loaded.figure.compare_second_derivative_min is False
     assert loaded.figure.trend_method == "sigmoid"
+    assert loaded.figure.show_excluded_points is False
 
 
 def test_custom_points_round_trip(tmp_path):
