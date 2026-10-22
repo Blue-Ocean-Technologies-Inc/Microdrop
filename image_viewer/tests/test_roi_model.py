@@ -179,3 +179,14 @@ def test_copy_needs_a_trend_on_an_unflipped_uncalibrated_temperature_axis():
     figure.temperature_expression = "x"
     assert model.copy_trend_blocker == ""
     assert model.copy_trend_tooltip == COPY_TREND_TOOLTIP
+
+
+def test_an_roi_deleted_from_one_image_does_not_apply_there_alone():
+    positive = Roi(absent_at=[200.0])
+    mask = Roi(is_negative=True, base_anchor=100.0, absent_at=[300.0])
+
+    assert positive.applies_at(100.0) and positive.applies_at(300.0)
+    assert not positive.applies_at(200.0)
+    assert not mask.applies_at(50.0)  # before its anchor, as ever
+    assert mask.applies_at(200.0)
+    assert not mask.applies_at(300.0)

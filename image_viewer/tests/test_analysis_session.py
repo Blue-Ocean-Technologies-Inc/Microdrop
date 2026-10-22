@@ -293,3 +293,39 @@ def test_a_positive_roi_applies_before_its_anchor_too(tmp_path):
 
     for path in (before, drawn_on):
         assert [row[0] for row in session.effective_for(path)] == [roi.roi_id]
+
+
+def test_an_roi_deleted_from_one_image_has_no_key_geometry_or_outline_there(
+    tmp_path,
+):
+    shown, deleted_on = _images(tmp_path, "10_00_00", "10_05_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+    measured = session.cache_key(deleted_on, roi)
+
+    roi.absent_at = [capture_timestamp(deleted_on)]
+
+    assert session.cache_key(deleted_on, roi)[4] is None
+    assert not session.measures(deleted_on, roi)
+    assert session.effective_for(deleted_on) == []
+    assert session.absent_on(deleted_on) == [roi]
+    assert session.cache_key(shown, roi)[4] == (9.0, 9.0, 2.0, 2.0, 0.0)
+    assert session.absent_on(shown) == []
+
+    # Restored, the pair finds its old stats under its old key.
+    roi.absent_at = []
+
+    assert session.cache_key(deleted_on, roi) == measured
+
+
+def test_a_mask_deleted_from_one_image_cuts_nothing_there(tmp_path):
+    cut, spared = _images(tmp_path, "10_00_00", "10_05_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+    unmasked = session.cache_key(spared, roi)
+    mask = _mask(absent_at=[capture_timestamp(spared)])
+    session.rois.append(mask)
+
+    assert session.negatives_for(cut) == (("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),)
+    assert session.negatives_for(spared) == ()
+    assert session.cache_key(spared, roi) == unmasked

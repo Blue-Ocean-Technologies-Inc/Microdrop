@@ -235,6 +235,7 @@ def save_session(experiment_directory, session):
                     repr(anchor): list(geometry)
                     for anchor, geometry in roi.overrides.items()
                 },
+                "absent_at": list(roi.absent_at),
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
@@ -273,6 +274,9 @@ def _roi_from(entry):
             float(anchor): normalize(kind, override)[1]
             for anchor, override in entry["overrides"].items()
         },
+        # Absent in configs written before an ROI could be deleted from
+        # one image alone.
+        absent_at=[float(time) for time in entry.get("absent_at", [])],
         # "is_standard" is what this was called before the
         # rename, and absent entirely in configs written before
         # the feature — where no ROI was one either way.

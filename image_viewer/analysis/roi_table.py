@@ -118,7 +118,8 @@ _TABLE_STRUCTURE = (
 _TABLE_VALUES = (
     "session:stats_revision, current_image_path, filtered_paths.items, "
     "session:rois:items:geometry, "
-    "session:rois:items:overrides.items"
+    "session:rois:items:overrides.items, "
+    "session:rois:items:absent_at"
 )
 
 

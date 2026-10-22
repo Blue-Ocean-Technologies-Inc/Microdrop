@@ -25,7 +25,7 @@ from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
-from microdrop_application.dialogs.pyface_wrapper import confirm
+from microdrop_application.dialogs.pyface_wrapper import choose, confirm
 
 # Local imports.
 from ..consts import CAPTURE_TIMESTAMP_FORMAT
@@ -35,6 +35,8 @@ from ..model import ImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS,
+    DELETE_ROI_ALL_IMAGES,
+    DELETE_ROI_THIS_IMAGE,
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
     NEGATIVE_MASK_COLOR,
@@ -56,7 +58,12 @@ from .roi_batch import (
     RoiBatchRunner,
     pool_is_warm,
 )
-from .roi_commands import AddRoisCommand, EditRoiCommand, RemoveRoisCommand
+from .roi_commands import (
+    AddRoisCommand,
+    EditRoiCommand,
+    HideRoiOnImageCommand,
+    RemoveRoisCommand,
+)
 from .roi_compute import stats_are_current
 from .roi_geometry import translated
 from .roi_model import (
@@ -489,18 +496,86 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:delete_roi_button")
     def _delete_selected_roi(self, event):
+        """Delete the selected ROI from the shown image alone, or — asked
+        — from every image. With no image shown there is only the
+        latter, and nothing to ask."""
         session = self.session
         roi = session.roi_by_id(self.analysis_model.selected_roi_id)
+
         if roi is None:
             self.analysis_model.progress_text = (
                 "Select an ROI first (edit mode) to delete it"
             )
             return
-        self._push(RemoveRoisCommand(session=session, rois=[roi]))
+
+        current = self.viewer_model.current_path
+        choice = (
+            choose(
+                message=f"Delete {roi.name} from this image only, or from all images?",
+                title="Delete ROI",
+                choices=[DELETE_ROI_THIS_IMAGE, DELETE_ROI_ALL_IMAGES],
+                informative="On this image only, it can be put back with "
+                "Undo or the Restore button in the sidebar's exclusion "
+                "section.",
+            )
+            if current
+            else DELETE_ROI_ALL_IMAGES
+        )
+
+        if choice is None:
+            return
+
+        if choice == DELETE_ROI_THIS_IMAGE:
+            self._set_absent_on_shown_image(roi, restore=False)
+        else:
+            self._push(RemoveRoisCommand(session=session, rois=[roi]))
+
         self.analysis_model.selected_roi_id = ""
 
         if roi.is_negative:
             self._instant_stats(session.positive_rois)
+
+    def _set_absent_on_shown_image(self, roi, restore):
+        """Take ``roi`` off the shown image alone, or put it back there,
+        as one undoable step."""
+        self._push(
+            HideRoiOnImageCommand(
+                session=self.session,
+                roi=roi,
+                capture_time=capture_timestamp(self.viewer_model.current_path),
+                restore=restore,
+            )
+        )
+        # A pair with no stats now (or its old ones again) computes
+        # nothing, so nothing else would redraw the plot.
+        self.session.stats_revision += 1
+
+    @observe("analysis_model:restore_absent_rois_button")
+    def _restore_absent_rois(self, event):
+        current = self.viewer_model.current_path
+
+        if not current:
+            return
+
+        restored = self.session.absent_on(current)
+
+        for roi in restored:
+            self._set_absent_on_shown_image(roi, restore=True)
+
+        self._instant_stats(self.session.positive_rois)
+
+    @observe(
+        "analysis_model:current_image_path, analysis_model:session, "
+        "analysis_model:session:rois.items, "
+        "analysis_model:session:rois:items:absent_at"
+    )
+    def _mirror_absent_roi_count(self, event):
+        """Keep the sidebar's count of ROIs deleted from the shown image
+        alone current (a top-level mirror its visible_when can see)."""
+        current = self.analysis_model.current_image_path
+        self.viewer_model.absent_roi_count = (
+            len(self.session.absent_on(current)) if current else 0
+        )
 
     @observe("analysis_model:clear_rois_button")
     def _clear_rois(self, event):
@@ -663,6 +738,8 @@ class RoiAnalysisController(HasTraits):
                 continue
             missing = {}
             for roi in rois:
+                if not session.measures(path, roi, stat_cache):
+                    continue  # deleted from this image alone
                 key = session.cache_key(path, roi, stat_cache)
                 if not stats_are_current(session.stats.get(key)):
                     missing[roi.roi_id] = (roi.kind, tuple(key[4]))
@@ -801,6 +878,10 @@ class RoiAnalysisController(HasTraits):
         missing = {}
 
         for roi in rois:
+            # Deleted from this image alone: nothing to measure.
+            if not session.measures(current, roi, stat_cache):
+                continue
+
             key = session.cache_key(current, roi, stat_cache)
             self._dispatched_keys[(current, roi.roi_id)] = key
 

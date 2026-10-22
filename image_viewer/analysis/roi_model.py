@@ -439,6 +439,13 @@ class Roi(HasTraits):
     #: anchor forward until the next override.
     overrides = Dict(Float, List)
 
+    #: Capture times of the images the ROI was deleted from one at a
+    #: time (see applies_at): there it is not drawn, selectable or
+    #: measured — a positive ROI's curve gaps at the image, a negative
+    #: mask cuts nothing from it. Replaced, never mutated in place: the
+    #: canvas and the table follow it by assignment.
+    absent_at = List(Float)
+
     #: Plot styling (line color/style/marker); persisted with the ROI.
     style = Instance(RoiStyle, ())
 
@@ -482,11 +489,15 @@ class Roi(HasTraits):
 
     def applies_at(self, capture_time):
         """Whether this ROI is in force on an image captured at
-        ``capture_time``. A positive ROI always applies; a negative mask
-        applies from the image it was drawn on (its base_anchor) onward,
-        and on earlier images is neither drawn nor subtracted. A mask
-        created with no image shown has a 0.0 anchor, so applies to
+        ``capture_time``. Not on an image it was deleted from alone
+        (absent_at). Otherwise a positive ROI always applies; a negative
+        mask applies from the image it was drawn on (its base_anchor)
+        onward, and on earlier images is neither drawn nor subtracted. A
+        mask created with no image shown has a 0.0 anchor, so applies to
         every image."""
+        if capture_time in self.absent_at:
+            return False
+
         return not self.is_negative or capture_time >= self.base_anchor
 
     def effective_geometry(self, capture_time):
@@ -740,15 +751,35 @@ class AnalysisSession(HasTraits):
         the same path for every ROI."""
         stat_cache = {} if stat_cache is None else stat_cache
         mtime, capture_time = self.stat_info(path, stat_cache)
+        # An ROI deleted on this image alone has no geometry here, so its
+        # key matches no stats (a gap) and is never dispatched (see
+        # measures); restoring it finds its old stats under the old key.
+        geometry = (
+            tuple(roi.effective_geometry(capture_time))
+            if roi.applies_at(capture_time)
+            else None
+        )
 
         return (
             str(path),
             mtime,
             roi.roi_id,
             roi.kind,
-            tuple(roi.effective_geometry(capture_time)),
+            geometry,
             self.correction_for(path, stat_cache),
         )
+
+    def measures(self, path, roi, stat_cache=None):
+        """Whether ``roi`` (a positive one) is measured on ``path`` — not
+        when it was deleted from that image alone. The batch and the
+        instant compute skip the pairs it rules out."""
+        return roi.applies_at(self.stat_info(path, stat_cache)[1])
+
+    def absent_on(self, path):
+        """The ROIs deleted from ``path``'s image alone."""
+        capture_time = self.stat_info(path)[1]
+
+        return [roi for roi in self.rois if capture_time in roi.absent_at]
 
     def correction_key(self):
         """Everything about how the image is treated before a stat is
@@ -1173,6 +1204,10 @@ class RoiAnalysisModel(HasTraits):
     #: A click on a curves-view point: toggle that image's exclusion
     #: and show it. RoiAnalysisController reacts. # image path (str)
     toggle_exclusion_request = Event()
+
+    #: Put back every ROI deleted from the displayed image alone — the
+    #: sidebar's way back besides undo. RoiAnalysisController reacts.
+    restore_absent_rois_button = Button("Restore")
 
     #: Bulk exclusion: mark (exclude) or unmark (include) every image
     #: before / after the displayed one (exclusive) with the checkbox

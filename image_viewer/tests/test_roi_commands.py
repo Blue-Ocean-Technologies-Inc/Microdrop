@@ -19,6 +19,7 @@ from pyface.undo.api import CommandStack, UndoManager
 from image_viewer.analysis.roi_commands import (
     AddRoisCommand,
     EditRoiCommand,
+    HideRoiOnImageCommand,
     RemoveRoisCommand,
 )
 from image_viewer.analysis.roi_model import AnalysisSession, Roi
@@ -179,3 +180,39 @@ def test_commands_follow_the_live_list_after_it_is_replaced():
 
     stack.undo()
     assert session.rois[0] is removed
+
+
+def test_hiding_an_roi_on_one_image_undoes_and_redoes():
+    session = _session(1)
+    (roi,) = session.rois
+    roi.absent_at = [300.0]
+    stack = _stack()
+
+    stack.push(HideRoiOnImageCommand(session=session, roi=roi, capture_time=100.0))
+    assert roi.absent_at == [100.0, 300.0]
+    assert stack.undo_name == "Delete ROI 1 on one image"
+
+    stack.undo()
+    assert roi.absent_at == [300.0]
+
+    stack.redo()
+    assert roi.absent_at == [100.0, 300.0]
+    assert session.rois == [roi]  # still in every other image
+
+
+def test_restoring_an_roi_on_one_image_is_the_inverse():
+    session = _session(1)
+    (roi,) = session.rois
+    roi.absent_at = [100.0]
+    stack = _stack()
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=100.0, restore=True
+        )
+    )
+    assert roi.absent_at == []
+    assert stack.undo_name == "Restore ROI 1 on one image"
+
+    stack.undo()
+    assert roi.absent_at == [100.0]

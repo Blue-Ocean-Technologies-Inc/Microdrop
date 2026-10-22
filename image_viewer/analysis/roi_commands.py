@@ -19,7 +19,7 @@ and lands as one list change, so a multi-ROI step notifies once."""
 
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Float, Instance, Int, List, Tuple
+from traits.api import Any, Bool, Float, Instance, Int, List, Tuple
 
 # Local imports.
 from .roi_model import AnalysisSession, Roi
@@ -152,3 +152,38 @@ class EditRoiCommand(_SessionCommand):
 
     def redo(self):
         self.roi.apply_edit(self.capture_time, list(self.geometry))
+
+
+class HideRoiOnImageCommand(_SessionCommand):
+    """Delete an ROI from one image only (its ``absent_at``), leaving
+    every other image as it was — or, with ``restore``, put it back on
+    that image."""
+
+    #: The ROI taken off (or put back on) the image.
+    roi = Instance(Roi)
+
+    #: Capture time of the image.
+    capture_time = Float()
+
+    #: Put the ROI back on the image instead of taking it off.
+    restore = Bool(False)
+
+    def _name_default(self):
+        verb = "Restore" if self.restore else "Delete"
+
+        return f"{verb} {self.roi.name} on one image"
+
+    def do(self):
+        self.redo()
+
+    def undo(self):
+        self._set_absent(self.restore)
+
+    def redo(self):
+        self._set_absent(not self.restore)
+
+    def _set_absent(self, absent):
+        times = [time for time in self.roi.absent_at if time != self.capture_time]
+
+        # A fresh list: the canvas and the table follow it by assignment.
+        self.roi.absent_at = sorted([*times, self.capture_time]) if absent else times

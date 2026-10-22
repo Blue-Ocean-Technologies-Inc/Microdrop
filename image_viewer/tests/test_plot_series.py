@@ -996,3 +996,13 @@ def test_temperature_over_time_without_images_is_empty():
         ([], [], []),
         ([], [], []),
     )
+
+
+def test_an_roi_deleted_from_one_image_gaps_there(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    roi.absent_at = [session.stat_info(paths[1])[1]]
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values[0] == 1.0 and values[2] == 3.0
+    assert math.isnan(values[1])

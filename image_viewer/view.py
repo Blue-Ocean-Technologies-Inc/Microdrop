@@ -492,6 +492,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:absent_at, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
@@ -534,6 +535,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:absent_at, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
@@ -965,6 +967,14 @@ exclusion_group = VGroup(
         "(stats batch, plot, export, drift tracking). Viewing "
         "and ROI drawing on it still work; the mark is saved "
         "with the experiment.",
+    ),
+    HGroup(
+        UItem("absent_roi_text", style="readonly"),
+        UItem(
+            "object.roi_analysis.restore_absent_rois_button",
+            tooltip="Put back every ROI deleted from the shown image alone",
+        ),
+        visible_when="absent_roi_count",
     ),
     VGroup(
         Label("Exclude all images:"),

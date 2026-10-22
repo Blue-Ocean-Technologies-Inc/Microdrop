@@ -159,6 +159,11 @@ ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
 #: section away, large enough to grab its handle again.
 ROI_PLOT_SECTION_MIN_PX = 40
 
+#: The delete dialog's choices: take the selected ROI off the shown
+#: image only, or remove it from every image.
+DELETE_ROI_THIS_IMAGE = "This image only"
+DELETE_ROI_ALL_IMAGES = "All images"
+
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
 

@@ -21,6 +21,8 @@ from pyface.api import YES
 from image_viewer.analysis import roi_controller
 from image_viewer.analysis.consts import (
     DEFAULT_ROI_COLORS,
+    DELETE_ROI_ALL_IMAGES,
+    DELETE_ROI_THIS_IMAGE,
     NEGATIVE_MASK_COLOR,
     PASTE_OFFSET_PX,
 )
@@ -256,7 +258,10 @@ def test_a_pasted_mask_stays_a_mask_whatever_the_toggle():
     assert pasted.style.color == NEGATIVE_MASK_COLOR
 
 
-def test_changing_a_mask_remeasures_every_roi_on_the_image(tmp_path):
+def test_changing_a_mask_remeasures_every_roi_on_the_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        roi_controller, "choose", lambda **kwargs: DELETE_ROI_ALL_IMAGES
+    )
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     runner = controller.runner
@@ -537,3 +542,43 @@ def test_each_undo_and_redo_remeasures_the_positives_once(tmp_path):
     (redone,) = runner.instant
     assert set(redone[1]) == positives
     assert redone[2][4] == (("ellipse", (12.0, 10.0, 3.0, 3.0, 0.0)),)
+
+
+def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        roi_controller, "choose", lambda **kwargs: DELETE_ROI_THIS_IMAGE
+    )
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    model.delete_roi_button = True
+
+    assert controller.session.rois == [roi]
+    assert roi.absent_at == [capture_timestamp(image)]
+    assert model.selected_roi_id == ""
+    assert controller.viewer_model.absent_roi_count == 1
+
+    model.undo_roi_button = True
+    assert roi.absent_at == []
+    assert controller.viewer_model.absent_roi_count == 0
+
+    model.redo_roi_button = True
+    model.restore_absent_rois_button = True
+    assert roi.absent_at == []
+    assert controller.viewer_model.absent_roi_count == 0
+
+
+def test_cancelling_the_delete_dialog_deletes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: None)
+    controller, _image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    model.delete_roi_button = True
+
+    assert controller.session.rois == [roi] and roi.absent_at == []
