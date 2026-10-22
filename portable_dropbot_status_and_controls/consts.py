@@ -21,6 +21,8 @@ from device_viewer.consts import (
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
+    CHIP_DETECT_RULE_ANY_POGO,
+    CHIP_DETECT_RULE_BOTH_POGOS,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
     MOTOR_PARAMS_UPDATED,
@@ -47,6 +49,17 @@ current_folder_path = os.path.dirname(os.path.abspath(__file__))
 PORTABLE_DROPBOT_IMAGE = os.path.join(
     current_folder_path, "images", "portable_dropbot.png"
 )
+
+#: Portable DropBot Settings preferences: display text for each choice,
+#: keyed by the backend's own values.
+FAN_BOARD_LABELS = {
+    "signal": "MCU board fan",
+    "motor": "Motor board fans",
+}
+CHIP_DETECT_RULE_LABELS = {
+    CHIP_DETECT_RULE_BOTH_POGOS: "Both pogo pads touching the chip",
+    CHIP_DETECT_RULE_ANY_POGO: "At least one pogo pad touching the chip",
+}
 
 #: Display Scale (Tools menu): slider bounds as a percentage of the
 #: panel's native scale — below 100% the interface shrinks and more

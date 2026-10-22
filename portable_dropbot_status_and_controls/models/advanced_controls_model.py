@@ -39,7 +39,7 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
 
     # ---- Power system ------------------------------------------------
     #: Requested buzzer state, not read back from the device — the
-    #: toggle shows what was last asked for. (The MCU fan toggle lives
+    #: toggle shows what was last asked for. (The fan toggle lives
     #: in the main status pane's mechanism quick controls.)
     buzzer_state = Bool()
 

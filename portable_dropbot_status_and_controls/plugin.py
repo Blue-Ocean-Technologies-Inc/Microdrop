@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import observe
+from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
+from traits.api import List, observe
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
@@ -24,6 +25,9 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     id = PKG + ".plugin"
     name = f"{PKG_name} Plugin"
+
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     def _get_dock_pane_class(self):
         from .dock_panes import PortableDropbotStatusAndControls
@@ -51,6 +55,16 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
+
+    def _preferences_panes_default(self):
+        from .preferences import PortableDropbotSettingsPreferencesPane
+
+        return [PortableDropbotSettingsPreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import portable_dropbot_tab
+
+        return [portable_dropbot_tab]
 
     def _get_menu_additions(self) -> list:
         from pyface.action.schema.schema_addition import SchemaAddition
