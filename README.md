@@ -235,7 +235,7 @@ Keys act while the image view has keyboard focus (click the image first); F1 or 
 | X | Toggle excluding the shown image from analysis |
 | **Actions** | |
 | Ctrl+C / Ctrl+V | Copy / paste the selected ROI |
-| Del | Delete the selected ROI |
+| Del | Delete the selected ROI on this image (asks about all images) |
 | Ctrl+Z | Undo |
 | Ctrl+Y / Ctrl+Shift+Z | Redo |
 | Ctrl+Return | Calculate (run the batch) |
