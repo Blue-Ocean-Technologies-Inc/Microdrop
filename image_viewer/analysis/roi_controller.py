@@ -69,6 +69,7 @@ from .roi_commands import (
     HideRoiOnImageCommand,
     MergeRoiOnImageCommand,
     RemoveRoisCommand,
+    merged_absences,
 )
 from .roi_compute import stats_are_current
 from .roi_geometry import translated
@@ -97,28 +98,16 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-def _ranges_opened_at(roi, capture_time):
-    """(absent_from, absent_until) for ``roi`` with the image captured at
-    ``capture_time`` taken out of its deletion ranges — a range starting
-    (or ending) exactly there now starts just after (ends just before)
-    it, so every other image it covered, captures still to come
-    included, stays deleted. None when a range covers the image from
-    both sides: opening a hole in it would mean splitting it."""
-    absent_from, absent_until = roi.absent_from, roi.absent_until
+def _history_and_correction(renamed, target, capture_time):
+    """(history, correction) of two ROIs a rename merges, whichever way
+    the user renamed: the correction is the one drawn on the shown image
+    (base_anchor at its ``capture_time``); the history is the other, and
+    survives. When both or neither were drawn there, the ``renamed`` ROI
+    is the correction."""
+    if target.base_anchor == capture_time and renamed.base_anchor != capture_time:
+        return renamed, target
 
-    if capture_time >= absent_from:
-        if capture_time > absent_from:
-            return None
-
-        absent_from = math.nextafter(capture_time, math.inf)
-
-    if capture_time <= absent_until:
-        if capture_time < absent_until:
-            return None
-
-        absent_until = math.nextafter(capture_time, -math.inf)
-
-    return absent_from, absent_until
+    return target, renamed
 
 
 class RoiAnalysisController(HasTraits):
@@ -659,33 +648,33 @@ class RoiAnalysisController(HasTraits):
             return
 
         capture_time = capture_timestamp(current)
-        ranges = _ranges_opened_at(roi, capture_time)
+        history, correction = _history_and_correction(
+            renamed=replacement, target=roi, capture_time=capture_time
+        )
 
-        if ranges is None:
+        if merged_absences(history, correction, capture_time) is None:
             model.progress_text = (
-                f"{roi.name} is removed here by a range — Restore it first"
+                f"{history.name} is removed here by a range — Restore it first"
             )
             return
 
-        absent_from, absent_until = ranges
-        merged_name = replacement.name
+        correction_name = correction.name
         self._push(
             MergeRoiOnImageCommand(
                 session=self.session,
-                roi=roi,
-                replacement=replacement,
+                roi=history,
+                replacement=correction,
                 capture_time=capture_time,
-                absent_from=absent_from,
-                absent_until=absent_until,
+                merged_name=name,
             )
         )
 
-        if model.selected_roi_id == replacement.roi_id:
-            model.selected_roi_id = roi.roi_id
+        if model.selected_roi_id in (replacement.roi_id, roi.roi_id):
+            model.selected_roi_id = history.roi_id
 
-        model.progress_text = f"{merged_name} merged into {roi.name}"
+        model.progress_text = f"{correction_name} merged into {history.name}"
         self.session.stats_revision += 1
-        self._instant_stats([roi])
+        self._instant_stats([history])
 
     @observe("analysis_model:restore_absent_rois_button")
     def _restore_absent_rois(self, event):

@@ -22,7 +22,7 @@ import math
 
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Tuple
+from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Str, Tuple
 
 # Local imports.
 from .consts import ROI_ABSENCE_SCOPES
@@ -241,42 +241,125 @@ def _bound(pick, current, capture_time):
     return capture_time if math.isnan(current) else pick(current, capture_time)
 
 
-class MergeRoiOnImageCommand(_SessionCommand):
-    """Merge ``replacement`` into ``roi`` on the shown image: ``roi``
-    takes the replacement's shape there (as its single-image shape), its
-    other single-image shapes and its forward overrides — the replacement
-    winning where both have one, so tracking done on it continues as
-    ``roi`` — and comes back on the image; the replacement goes. ``roi``
-    keeps its identity: id, plot line, CSV column, style."""
+def merged_overrides(history, correction, capture_time):
+    """``history``'s forward overrides with ``correction``'s definitions
+    laid over them, so the merged shape on each image is the
+    correction's wherever it defined one and the history's elsewhere.
 
-    #: The ROI keeping its identity.
+    The correction's definitions are its forward overrides plus its base
+    geometry from its base anchor (unless that is the shown image, where
+    the merge gives it as the single-image shape instead). Between its
+    first and last anchor the correction holds, so the history's anchors
+    in there go; past its last anchor any later history anchor takes
+    over again, as the latest anchor always wins."""
+    spans = {}
+
+    if correction.base_anchor != capture_time:
+        spans[correction.base_anchor] = list(correction.geometry)
+
+    spans.update(_copied(correction.overrides))
+    overrides = _copied(history.overrides)
+
+    if spans:
+        first, last = min(spans), max(spans)
+        overrides = {
+            anchor: geometry
+            for anchor, geometry in overrides.items()
+            if not first < anchor < last
+        }
+        overrides.update(spans)
+
+    return overrides
+
+
+def merged_absences(history, correction, capture_time):
+    """(absent_at, absent_from, absent_until) of two merged ROIs: absent
+    only where both were, and present on the shown image (captured at
+    ``capture_time``). None when that needs a hole in a range covering
+    the image from both sides.
+
+    Exact where it can be with one point list and two half-open ranges:
+    a point either ROI was deleted at stays when the other was deleted
+    there too (by a point or a range); a "later" range stays only if both
+    had one (the later start), an "earlier" one likewise (the earlier
+    end). One ROI's "later" crossed with the other's "earlier" is a
+    bounded stretch the two ranges cannot express: it is left out, the
+    ROI shown there rather than lost. A range starting or ending exactly
+    on the shown image is moved just past it, keeping every other image
+    it covered — captures still to come included."""
+    points = {*history.absent_at, *correction.absent_at}
+    absent_at = sorted(
+        time
+        for time in points
+        if time != capture_time
+        and history.absent_by(time)
+        and correction.absent_by(time)
+    )
+    absent_from = (
+        max(history.absent_from, correction.absent_from)
+        if not math.isnan(history.absent_from + correction.absent_from)
+        else math.nan
+    )
+    absent_until = (
+        min(history.absent_until, correction.absent_until)
+        if not math.isnan(history.absent_until + correction.absent_until)
+        else math.nan
+    )
+
+    if capture_time >= absent_from:
+        if capture_time > absent_from:
+            return None
+
+        absent_from = math.nextafter(capture_time, math.inf)
+
+    if capture_time <= absent_until:
+        if capture_time < absent_until:
+            return None
+
+        absent_until = math.nextafter(capture_time, -math.inf)
+
+    return absent_at, absent_from, absent_until
+
+
+class MergeRoiOnImageCommand(_SessionCommand):
+    """Merge two ROIs' definitions into one, per image: ``roi`` (the
+    history) survives with its identity — id, plot line, CSV column,
+    style, expected values — takes ``merged_name``, and on every image has
+    ``replacement``'s shape (the correction drawn on the shown image)
+    where that defined one and its own elsewhere (merged_overrides);
+    on the shown image it has the correction's shape. It is absent only
+    where both were (merged_absences). The correction goes, untouched,
+    so an undo puts it back exactly."""
+
+    #: The surviving ROI, with the history.
     roi = Instance(Roi)
 
-    #: The ROI merged into it and removed from the session.
+    #: The correction merged into it and removed from the session.
     replacement = Instance(Roi)
 
     #: Capture time of the shown image.
     capture_time = Float()
 
-    #: ``roi``'s deletion ranges once the image is taken out of them
-    #: (RoiAnalysisController works them out; NaN for none).
-    absent_from = Float(math.nan)
-    absent_until = Float(math.nan)
+    #: The surviving ROI's name after the merge — the name the user
+    #: typed ('' keeps its own). Not ``name``: that is the command's own
+    #: undo-stack label.
+    merged_name = Str()
 
-    #: ``roi``'s overrides, single-image shapes and absences before the
-    #: merge: (overrides, local_overrides, absent_at, absent_from,
-    #: absent_until).
-    _before = Tuple(Any, Any, List, Float, Float)
+    #: ``roi``'s name, overrides, single-image shapes and absences before
+    #: the merge: (name, overrides, local_overrides, absent_at,
+    #: absent_from, absent_until).
+    _before = Tuple(Str, Any, Any, List, Float, Float)
 
     #: Where the replacement stood in the ROI list, for the undo.
     _pairs = List(Tuple(Int, Instance(Roi)))
 
     def _name_default(self):
-        return f"Merge {self.replacement.name} into {self.roi.name}"
+        return f"Merge {self.replacement.name} into {self.merged_name or self.roi.name}"
 
     def do(self):
         roi = self.roi
         self._before = (
+            roi.name,
             _copied(roi.overrides),
             _copied(roi.local_overrides),
             list(roi.absent_at),
@@ -286,8 +369,11 @@ class MergeRoiOnImageCommand(_SessionCommand):
         self.redo()
 
     def undo(self):
-        overrides, local_overrides, absent_at, absent_from, absent_until = self._before
+        name, overrides, local_overrides, absent_at, absent_from, absent_until = (
+            self._before
+        )
         self.roi.trait_set(
+            name=name,
             overrides=_copied(overrides),
             local_overrides=_copied(local_overrides),
             absent_at=list(absent_at),
@@ -298,17 +384,25 @@ class MergeRoiOnImageCommand(_SessionCommand):
 
     def redo(self):
         roi, replacement, capture_time = self.roi, self.replacement, self.capture_time
+        absences = merged_absences(roi, replacement, capture_time)
+        # The controller checks first; a stale redo keeps the history's.
+        absent_at, absent_from, absent_until = absences or (
+            list(roi.absent_at),
+            roi.absent_from,
+            roi.absent_until,
+        )
         # Fresh dicts and lists: the canvas and the table follow them by
         # assignment.
         roi.trait_set(
-            overrides={**_copied(roi.overrides), **_copied(replacement.overrides)},
+            name=self.merged_name or roi.name,
+            overrides=merged_overrides(roi, replacement, capture_time),
             local_overrides={
                 **_copied(roi.local_overrides),
                 **_copied(replacement.local_overrides),
                 capture_time: replacement.effective_geometry(capture_time),
             },
-            absent_at=[time for time in roi.absent_at if time != capture_time],
-            absent_from=self.absent_from,
-            absent_until=self.absent_until,
+            absent_at=absent_at,
+            absent_from=absent_from,
+            absent_until=absent_until,
         )
         self._pairs = _remove_from_session(self.session, [replacement])

@@ -25,6 +25,7 @@ from image_viewer.analysis.roi_commands import (
     HideRoiOnImageCommand,
     MergeRoiOnImageCommand,
     RemoveRoisCommand,
+    merged_absences,
 )
 from image_viewer.analysis.roi_model import AnalysisSession, Roi
 
@@ -243,42 +244,67 @@ def test_edit_undo_restores_a_single_image_shape():
     assert roi.local_overrides == {30.0: [1.0, 1.0, 1.0, 1.0, 0.0]}
 
 
-def test_merging_an_roi_into_another_carries_its_shapes_and_undoes_exactly():
+def test_a_merge_takes_each_images_shape_from_whichever_roi_defined_it():
     session = _session(2)
-    roi, replacement = session.rois
-    roi.absent_at = [100.0, 300.0]
-    roi.absent_from = 100.0
-    roi.overrides = {50.0: [5.0] * 5, 200.0: [20.0] * 5}
-    roi.local_overrides = {400.0: [40.0] * 5}
-    replacement.overrides = {200.0: [22.0] * 5, 250.0: [25.0] * 5}
-    replacement.local_overrides = {400.0: [44.0] * 5}
+    history, correction = session.rois
+    history.geometry = [1.0] * 5
+    history.overrides = {
+        100.0: [10.0] * 5,
+        260.0: [26.0] * 5,  # inside the correction's span: it goes
+        400.0: [40.0] * 5,  # after it: it takes over again
+    }
+    history.local_overrides = {50.0: [5.0] * 5}
+    correction.trait_set(
+        geometry=[20.0] * 5,
+        base_anchor=200.0,
+        overrides={300.0: [30.0] * 5},
+        local_overrides={350.0: [35.0] * 5},
+    )
     stack = _stack()
 
     stack.push(
         MergeRoiOnImageCommand(
             session=session,
-            roi=roi,
-            replacement=replacement,
-            capture_time=100.0,
-            absent_from=150.0,
+            roi=history,
+            replacement=correction,
+            capture_time=250.0,
+            merged_name="Droplet",
         )
     )
-    assert session.rois == [roi]
-    assert stack.undo_name == "Merge ROI 2 into ROI 1"
-    # The replacement wins where both have a shape.
-    assert roi.overrides == {50.0: [5.0] * 5, 200.0: [22.0] * 5, 250.0: [25.0] * 5}
-    assert roi.local_overrides == {400.0: [44.0] * 5, 100.0: [2.0] * 5}
-    assert roi.absent_at == [300.0] and roi.absent_from == 150.0
+
+    assert session.rois == [history]
+    assert history.name == "Droplet"
+    assert stack.undo_name == "Merge ROI 2 into Droplet"
+    shapes = {
+        time: history.effective_geometry(time)[0]
+        for time in (0.0, 50.0, 150.0, 200.0, 250.0, 270.0, 300.0, 350.0, 400.0, 500.0)
+    }
+    assert shapes == {
+        0.0: 1.0,  # history's base
+        50.0: 5.0,  # history's single-image shape
+        150.0: 10.0,  # history's override, before the correction's span
+        200.0: 20.0,  # the correction's base, from its anchor
+        250.0: 20.0,  # the shown image: the correction's shape
+        270.0: 20.0,  # the history's anchor inside the span is gone
+        300.0: 30.0,  # the correction's override
+        350.0: 35.0,  # the correction's single-image shape
+        400.0: 40.0,  # the history's later override takes over again
+        500.0: 40.0,
+    }
 
     stack.undo()
-    assert session.rois == [roi, replacement]
-    assert roi.overrides == {50.0: [5.0] * 5, 200.0: [20.0] * 5}
-    assert roi.local_overrides == {400.0: [40.0] * 5}
-    assert roi.absent_at == [100.0, 300.0] and roi.absent_from == 100.0
+
+    assert session.rois == [history, correction]
+    assert history.name == "ROI 1"
+    assert history.overrides == {
+        100.0: [10.0] * 5,
+        260.0: [26.0] * 5,
+        400.0: [40.0] * 5,
+    }
+    assert history.local_overrides == {50.0: [5.0] * 5}
 
     stack.redo()
-    assert session.rois == [roi]
-    assert roi.effective_geometry(100.0) == [2.0] * 5
+    assert history.effective_geometry(270.0) == [20.0] * 5
 
 
 def test_deleting_later_widens_and_earlier_extends_the_range():
@@ -336,3 +362,75 @@ def test_restoring_a_range_clears_it_and_undo_brings_it_back():
 
     stack.undo()
     assert roi.absent_from == 200.0
+
+
+def test_a_merged_roi_is_absent_only_where_both_were():
+    history = Roi(absent_at=[10.0, 20.0, 30.0], absent_from=500.0, absent_until=5.0)
+    correction = Roi(absent_at=[20.0, 600.0], absent_from=550.0, absent_until=50.0)
+
+    # 10 and 30 the correction's earlier range covers, 600 the history's
+    # later one; the ranges keep their overlap.
+    assert merged_absences(history, correction, 100.0) == (
+        [10.0, 20.0, 30.0, 600.0],
+        550.0,
+        5.0,
+    )
+
+
+def test_a_merge_shows_the_roi_where_the_ranges_cannot_say_both():
+    # The history's "later" crossed with the correction's "earlier" is a
+    # bounded stretch: shown rather than lost.
+    history = Roi(absent_from=100.0)
+    correction = Roi(absent_until=200.0)
+
+    absent_at, absent_from, absent_until = merged_absences(history, correction, 300.0)
+
+    assert absent_at == []
+    assert math.isnan(absent_from) and math.isnan(absent_until)
+
+
+def test_a_merge_opens_a_shared_range_at_the_shown_image_or_refuses():
+    history = Roi(absent_from=100.0)
+    correction = Roi(absent_from=100.0)
+
+    _at, absent_from, _until = merged_absences(history, correction, 100.0)
+
+    assert 100.0 < absent_from < 100.0 + 1e-9
+    assert merged_absences(history, correction, 150.0) is None
+
+
+def test_undoing_a_merge_gives_back_both_rois_whole():
+    session = _session(2)
+    survivor, removed = session.rois
+    removed.trait_set(
+        overrides={200.0: [22.0] * 5},
+        local_overrides={300.0: [33.0] * 5},
+        absent_at=[400.0],
+        absent_until=50.0,
+        expected_fastest_change=12.0,
+        is_background_ref=True,
+    )
+    removed.style.color = "#123456"
+    stack = _stack()
+
+    stack.push(
+        MergeRoiOnImageCommand(
+            session=session,
+            roi=survivor,
+            replacement=removed,
+            capture_time=100.0,
+            merged_name="Droplet",
+        )
+    )
+    assert survivor.name == "Droplet"
+
+    stack.undo()
+
+    assert session.rois == [survivor, removed]
+    assert survivor.name == "ROI 1"
+    assert removed.name == "ROI 2"
+    assert removed.overrides == {200.0: [22.0] * 5}
+    assert removed.local_overrides == {300.0: [33.0] * 5}
+    assert removed.absent_at == [400.0] and removed.absent_until == 50.0
+    assert removed.expected_fastest_change == 12.0 and removed.is_background_ref
+    assert removed.style.color == "#123456"

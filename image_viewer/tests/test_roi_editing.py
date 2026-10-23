@@ -37,6 +37,7 @@ from image_viewer.analysis.roi_controller import (
     RoiAnalysisController,
 )
 from image_viewer.analysis.roi_model import (
+    Roi,
     RoiAnalysisModel,
 )
 from image_viewer.discovery import capture_timestamp
@@ -745,7 +746,9 @@ def test_a_merge_opens_a_range_that_starts_or_ends_on_the_image(
     controller, image = _two_rois_on_image(tmp_path)
     first, second = controller.session.rois
     capture_time = capture_timestamp(image)
+    # Both deleted over the range: the merge keeps what both shared.
     setattr(first, field, capture_time)
+    setattr(second, field, capture_time)
 
     controller.analysis_model.rename_roi_request = (second.roi_id, first.name)
 
@@ -758,7 +761,7 @@ def test_a_merge_opens_a_range_that_starts_or_ends_on_the_image(
 def test_a_merge_inside_a_range_asks_for_a_restore_first(tmp_path):
     controller, image = _two_rois_on_image(tmp_path)
     first, second = controller.session.rois
-    first.absent_from = capture_timestamp(image) - 60.0
+    first.absent_from = second.absent_from = capture_timestamp(image) - 60.0
 
     controller.analysis_model.rename_roi_request = (second.roi_id, first.name)
 
@@ -801,3 +804,47 @@ def test_a_drift_check_writes_nothing_over_a_correction_or_a_deletion():
     model.ai_roi_tracked = (roi.roi_id, 400.0, [50.0, 50.0, 5.0, 5.0, 0.0])
 
     assert roi.overrides == {400.0: [50.0, 50.0, 5.0, 5.0, 0.0]}
+
+
+@pytest.mark.parametrize("rename_old_onto_new", [False, True])
+def test_a_merge_keeps_the_longer_lived_roi_whichever_way_it_is_renamed(
+    tmp_path, rename_old_onto_new
+):
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    capture_time = capture_timestamp(image)
+    # The long-standing ROI: drawn before the shown image, tracked since.
+    old = Roi(
+        name="ROI 1",
+        kind="ellipse",
+        geometry=[10.0, 10.0, 5.0, 5.0, 0.0],
+        base_anchor=capture_time - 120.0,
+        overrides={capture_time - 60.0: [12.0, 10.0, 5.0, 5.0, 0.0]},
+        absent_at=[capture_time],
+        expected_fastest_change=42.0,
+    )
+    controller.session.rois.append(old)
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    new = controller.session.rois[-1]
+    renamed, target = (old, new) if rename_old_onto_new else (new, old)
+    typed = target.name
+    model.selected_roi_id = renamed.roi_id
+
+    model.rename_roi_request = (renamed.roi_id, typed)
+
+    # The old ROI survives, whatever the direction, under the typed name,
+    # with its own definitions everywhere but the shown image.
+    assert controller.session.rois == [old]
+    assert old.name == typed
+    assert old.geometry == [10.0, 10.0, 5.0, 5.0, 0.0]
+    assert old.effective_geometry(capture_time - 60.0) == [12.0, 10.0, 5.0, 5.0, 0.0]
+    assert old.effective_geometry(capture_time) == [30.0, 30.0, 8.0, 8.0, 0.0]
+    assert old.absent_at == [] and old.expected_fastest_change == 42.0
+    assert model.selected_roi_id == old.roi_id
+    assert model.progress_text == f"{new.name} merged into {typed}"
+
+    model.undo_roi_button = True
+
+    assert controller.session.rois == [old, new]
+    assert old.name == "ROI 1" and new.name == "ROI 2"
+    assert old.absent_at == [capture_time] and old.local_overrides == {}
