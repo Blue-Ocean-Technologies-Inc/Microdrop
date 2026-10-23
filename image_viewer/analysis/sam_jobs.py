@@ -16,11 +16,12 @@ this plugin's established off-GUI pattern (see ``roi_batch.py``).
 Track is the interesting one: it ports the PROTO ``droplet_roi``
 prototype's ``TrackWorker.run`` pipeline (labelme-derived) without Qt.
 A prefetch thread loads + normalizes + encodes each frame that will be
-segmented (every ``interval``-th frame, plus always the last — the
-skipped frames are simply never emitted, so the consumer's previous
-geometry carries forward for free) while the consumer decodes each
-ROI's center in a small pool and chains the found center into the
-next segmented frame.
+segmented (drift_plan.drift_steps picks them: every ``interval``-th
+frame, plus always the last — the skipped frames are simply never
+emitted, so the consumer's previous geometry carries forward for free)
+while the consumer decodes each ROI's center in a small pool and chains
+the found center into the next segmented frame, restarting it from any
+shape the user corrected on the way.
 """
 
 # Standard library imports.
@@ -194,22 +195,21 @@ class SamJobRunner(HasTraits):
 
     # -- track ------------------------------------------------------------
 
-    def track(self, refiner, frames, start_geometries, interval, perspective=()):
-        """Track each ROI across ``frames`` = [(path_str, capture_time),
-        ...] in series order, starting from ``start_geometries`` =
-        {roi_id: (cx, cy)}. Only every ``interval``-th frame (plus
-        always the final one) is segmented; the rest emit nothing.
-        Every frame is warped by ``perspective`` first (() for none), the
-        space the ROIs were drawn in."""
+    def track(self, refiner, steps, start_geometries, perspective=()):
+        """Track each ROI across ``steps`` (drift_plan.drift_steps: the
+        frames to segment, in series order, each with the seeds the user's
+        corrections restart ROIs from and the ROIs held off it), starting
+        from ``start_geometries`` = {roi_id: (cx, cy)}. Every frame is
+        warped by ``perspective`` first (() for none), the space the ROIs
+        were drawn in."""
         cancel, results = self._start_job()
         self.track_running = True
         thread = threading.Thread(
             target=self._run_track,
             args=(
                 refiner,
-                frames,
+                steps,
                 start_geometries,
-                interval,
                 perspective,
                 cancel,
                 results,
@@ -220,20 +220,15 @@ class SamJobRunner(HasTraits):
         thread.start()
 
     def _run_track(
-        self, refiner, frames, start_geometries, interval, perspective, cancel, results
+        self, refiner, steps, start_geometries, perspective, cancel, results
     ):
-        total = len(frames)
+        total = len(steps)
         frames_done = 0
-        step = max(interval, 1)
-        segment_indices = sorted(
-            set(range(0, total, step)) | ({total - 1} if total else set())
-        )
-        segment_frames = [frames[index] for index in segment_indices]
         ready = queue.Queue(maxsize=2)
 
         def prefetch():
             try:
-                for path, capture_time in segment_frames:
+                for path, capture_time, seeds, held in steps:
                     if cancel.is_set():
                         return
                     image = cv2.imread(path, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
@@ -246,7 +241,10 @@ class SamJobRunner(HasTraits):
                     )
                     while not cancel.is_set():
                         try:
-                            ready.put(("frame", (path, capture_time)), timeout=0.2)
+                            ready.put(
+                                ("frame", (path, capture_time, seeds, held)),
+                                timeout=0.2,
+                            )
                             break
                         except queue.Full:
                             continue
@@ -271,8 +269,12 @@ class SamJobRunner(HasTraits):
                         results.put((AI_FAILED, {"stage": "track", "error": payload}))
                         logger.warning(f"SAM track failed: {payload}")
                         break
-                    path, capture_time = payload
-                    roi_ids = list(centers)
+                    path, capture_time, seeds, held = payload
+                    # A user's correction restarts the chain; an ROI held
+                    # off the frame (corrected or deleted there) is not
+                    # segmented and gets nothing written.
+                    centers.update(seeds)
+                    roi_ids = [roi_id for roi_id in centers if roi_id not in held]
 
                     def segment_one(roi_id):
                         cx, cy = centers[roi_id]
@@ -307,7 +309,7 @@ class SamJobRunner(HasTraits):
                                 # both count only the frames the tracker segments
                                 # (every interval-th plus the last).
                                 "done": frames_done,
-                                "total": len(segment_frames),
+                                "total": total,
                             },
                         )
                     )

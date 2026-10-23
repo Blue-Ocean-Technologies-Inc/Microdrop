@@ -721,3 +721,22 @@ def test_deleting_onward_or_backward_spares_the_other_side(
     model.undo_roi_button = True
 
     assert not roi.applies_at(capture_time)
+
+
+def test_a_drift_check_writes_nothing_over_a_correction_or_a_deletion():
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    roi.local_overrides = {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
+    roi.absent_at = [300.0]
+
+    model.ai_roi_tracked = (roi.roi_id, 200.0, [99.0, 99.0, 5.0, 5.0, 0.0])
+    model.ai_roi_tracked = (roi.roi_id, 300.0, [99.0, 99.0, 5.0, 5.0, 0.0])
+
+    assert roi.local_overrides == {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
+    assert roi.overrides == {}
+
+    model.ai_roi_tracked = (roi.roi_id, 400.0, [50.0, 50.0, 5.0, 5.0, 0.0])
+
+    assert roi.overrides == {400.0: [50.0, 50.0, 5.0, 5.0, 0.0]}

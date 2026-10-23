@@ -32,6 +32,7 @@ from microdrop_application.dialogs.pyface_wrapper import information
 from ..discovery import capture_timestamp
 from ..model import ImageViewerModel
 from ..sam_download import download_ai_model, model_is_cached
+from .drift_plan import drift_steps
 from .perspective import embedding_id, warp_frame
 from .protocol_guard import proceed_despite_protocol
 from .roi_geometry import centre_of
@@ -248,11 +249,14 @@ class AiRoiController(HasTraits):
             return
         frames = [(str(path), capture_timestamp(path)) for path in later]
         # Negative masks stay where they were drawn: only the measured
-        # ROIs follow the droplets.
+        # ROIs follow the droplets. Each starts from its shape on the
+        # shown image — a single-image correction there included — and
+        # restarts from any the user made further on (drift_steps).
+        rois = self.session.positive_rois
         start_time = capture_timestamp(current)
         start_geometries = {
             roi.roi_id: centre_of(roi.kind, roi.effective_geometry(start_time))
-            for roi in self.session.positive_rois
+            for roi in rois
         }
         if not start_geometries:
             self.analysis_model.progress_text = "No ROIs to track"
@@ -268,9 +272,8 @@ class AiRoiController(HasTraits):
         self.analysis_model.ai_track_running = True
         self.runner.track(
             refiner,
-            frames,
+            drift_steps(frames, rois, self.analysis_model.ai_drift_interval),
             start_geometries,
-            self.analysis_model.ai_drift_interval,
             self.session.perspective.effective_matrix(),
         )
 
