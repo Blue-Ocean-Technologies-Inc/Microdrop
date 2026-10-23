@@ -217,7 +217,8 @@ class FigureSettings(HasTraits):
     interpolate_gaps = Bool(True)
     #: Draw the excluded images' points as faint hollow markers that
     #: a click brings back into the analysis. Display only: they are
-    #: never fitted, and never move the axes either way.
+    #: never fitted and never move the axis limits — but while shown,
+    #: the earliest of them can set the elapsed-time origin.
     show_excluded_points = Bool(True)
 
     #: Display-only smoothing of the drawn curves. The fits keep the

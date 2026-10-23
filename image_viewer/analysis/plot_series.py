@@ -389,8 +389,7 @@ def _x_values(session, filtered_paths, paths, stat_cache):
 
     Steps and frames number the filtered series, exclusions included,
     so excluding an image renumbers nothing. Elapsed time runs from the
-    first analysed capture (the first filtered one when every image is
-    excluded), in the figure's time unit. Temperature is the heater
+    origin _elapsed picks, in the figure's time unit. Temperature is the heater
     log's at each capture (NaN where the log does not cover it),
     mapped back through the figure's calibration; the count is the
     readings it found no root for, 0 on every other axis."""
@@ -425,11 +424,21 @@ def _x_values(session, filtered_paths, paths, stat_cache):
 
 
 def _elapsed(session, filtered_paths, epochs, stat_cache):
-    """``epochs`` as elapsed time in the figure's time unit, from the
-    first analysed capture (the first filtered one when every image is
-    excluded) — the curves view's time origin."""
-    origin = (analysed_paths(session, filtered_paths) or filtered_paths)[0]
-    start_time = session.stat_info(origin, stat_cache)[1]
+    """``epochs`` as elapsed time in the figure's time unit from the
+    curves view's time origin: the earliest filtered capture while the
+    excluded points are shown, so none of them lands before zero, else
+    the earliest analysed one (the earliest filtered one when every
+    image is excluded).
+
+    The earliest by capture time, not series position: the series
+    runs in file-modification order, which a copied folder can
+    shuffle."""
+    if session.figure.show_excluded_points:
+        origin_paths = filtered_paths
+    else:
+        origin_paths = analysed_paths(session, filtered_paths) or filtered_paths
+
+    start_time = min(session.stat_info(path, stat_cache)[1] for path in origin_paths)
     per_second = TIME_UNIT_PER_SECOND[session.figure.time_unit]
 
     return [(epoch - start_time) * per_second for epoch in epochs]

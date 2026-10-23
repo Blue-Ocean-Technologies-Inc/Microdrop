@@ -783,6 +783,25 @@ def test_excluded_points_share_the_time_mapping(tmp_path):
     assert excluded_series(session, paths)[roi.roi_id][1] == [30.0]
 
 
+def test_a_shown_excluded_first_capture_sets_the_time_origin(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.show_excluded_points = True
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+
+    assert excluded_series(session, paths)[roi.roi_id][1] == [0.0]
+    assert derive_series(session, paths)[roi.roi_id][1] == [30.0, 60.0]
+
+
+def test_a_hidden_excluded_first_capture_leaves_the_origin_to_the_analysed(
+    tmp_path,
+):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.show_excluded_points = False
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+
+    assert derive_series(session, paths)[roi.roi_id][1] == [0.0, 30.0]
+
+
 def test_step_ordinals_number_the_distinct_steps_in_order_of_appearance():
     ordinals, labels = step_ordinals(["1.2", "1.10", "", "1.2", "1.9"])
 
