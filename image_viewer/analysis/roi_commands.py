@@ -52,6 +52,12 @@ def _insert_into_session(session, pairs):
     session.rois[:] = rois
 
 
+def _copied(overrides):
+    """A deep copy of an {anchor: geometry} dict, so a snapshot shares
+    no list with the ROI it was taken from."""
+    return {anchor: list(geometry) for anchor, geometry in overrides.items()}
+
+
 class _SessionCommand(AbstractCommand):
     """A change to one session's ROI set."""
 
@@ -128,27 +134,28 @@ class EditRoiCommand(_SessionCommand):
     #: The geometry the gesture left the shape with.
     geometry = List(Float)
 
-    #: The ROI's base geometry and overrides before the edit.
-    _before = Tuple(List, Any)
+    #: The ROI's base geometry, overrides and single-image overrides
+    #: before the edit.
+    _before = Tuple(List, Any, Any)
 
     def _name_default(self):
         return f"Edit {self.roi.name}"
 
     def do(self):
-        overrides = {
-            anchor: list(geometry) for anchor, geometry in self.roi.overrides.items()
-        }
-        self._before = (list(self.roi.geometry), overrides)
+        self._before = (
+            list(self.roi.geometry),
+            _copied(self.roi.overrides),
+            _copied(self.roi.local_overrides),
+        )
         self.redo()
 
     def undo(self):
-        # Fresh list and dict objects: the canvas follows ``geometry``
-        # and ``overrides.items`` by assignment.
-        geometry, overrides = self._before
+        # Fresh list and dict objects: the canvas follows ``geometry``,
+        # ``overrides.items`` and ``local_overrides`` by assignment.
+        geometry, overrides, local_overrides = self._before
         self.roi.geometry = list(geometry)
-        self.roi.overrides = {
-            anchor: list(values) for anchor, values in overrides.items()
-        }
+        self.roi.overrides = _copied(overrides)
+        self.roi.local_overrides = _copied(local_overrides)
 
     def redo(self):
         self.roi.apply_edit(self.capture_time, list(self.geometry))

@@ -235,6 +235,10 @@ def save_session(experiment_directory, session):
                     repr(anchor): list(geometry)
                     for anchor, geometry in roi.overrides.items()
                 },
+                "local_overrides": {
+                    repr(capture_time): list(geometry)
+                    for capture_time, geometry in roi.local_overrides.items()
+                },
                 "absent_at": list(roi.absent_at),
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
@@ -273,6 +277,11 @@ def _roi_from(entry):
         overrides={
             float(anchor): normalize(kind, override)[1]
             for anchor, override in entry["overrides"].items()
+        },
+        # Absent in configs written before single-image shapes.
+        local_overrides={
+            float(capture_time): normalize(kind, override)[1]
+            for capture_time, override in entry.get("local_overrides", {}).items()
         },
         # Absent in configs written before an ROI could be deleted from
         # one image alone.

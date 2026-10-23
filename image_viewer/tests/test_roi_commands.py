@@ -216,3 +216,24 @@ def test_restoring_an_roi_on_one_image_is_the_inverse():
 
     stack.undo()
     assert roi.absent_at == [100.0]
+
+
+def test_edit_undo_restores_a_single_image_shape():
+    session = _session(1)
+    (roi,) = session.rois
+    roi.local_overrides = {30.0: [1.0, 1.0, 1.0, 1.0, 0.0]}
+    stack = _stack()
+
+    stack.push(
+        EditRoiCommand(
+            session=session,
+            roi=roi,
+            capture_time=30.0,
+            geometry=[5.0, 6.0, 7.0, 8.0, 0.0],
+        )
+    )
+    assert roi.local_overrides == {30.0: [5.0, 6.0, 7.0, 8.0, 0.0]}
+    assert roi.overrides == {}
+
+    stack.undo()
+    assert roi.local_overrides == {30.0: [1.0, 1.0, 1.0, 1.0, 0.0]}

@@ -190,3 +190,43 @@ def test_an_roi_deleted_from_one_image_does_not_apply_there_alone():
     assert not mask.applies_at(50.0)  # before its anchor, as ever
     assert mask.applies_at(200.0)
     assert not mask.applies_at(300.0)
+
+
+def test_a_single_image_shape_beats_the_forward_overrides_and_the_base():
+    roi = _roi()
+    roi.apply_edit(200.0, [60.0, 60.0, 12.0])
+    roi.local_overrides = {250.0: [1.0, 2.0, 3.0]}
+
+    assert roi.effective_geometry(250.0) == [1.0, 2.0, 3.0]
+    assert roi.effective_geometry(249.0) == [60.0, 60.0, 12.0]
+    assert roi.effective_geometry(251.0) == [60.0, 60.0, 12.0]
+    assert roi.effective_geometry(150.0) == [50.0, 50.0, 10.0, 10.0, 0.0]
+
+    # An edit on that image edits its own shape; the drift reset keeps it.
+    roi.apply_edit(250.0, [4.0, 5.0, 6.0])
+
+    assert roi.local_overrides == {250.0: [4.0, 5.0, 6.0]}
+    assert roi.overrides == {200.0: [60.0, 60.0, 12.0]}
+
+    roi.clear_overrides()
+
+    assert roi.effective_geometry(250.0) == [4.0, 5.0, 6.0]
+
+
+def test_a_single_image_shape_changes_that_images_cache_key_alone(tmp_path):
+    first = tmp_path / "a_2026_07_20-10_00_00_raw.png"
+    second = tmp_path / "b_2026_07_20-10_00_30_raw.png"
+
+    for image in (first, second):
+        image.write_bytes(b"")
+
+    roi = _roi()
+    session = AnalysisSession(rois=[roi])
+    keys = [session.cache_key(str(image), roi) for image in (first, second)]
+    capture_time = session.stat_info(str(second))[1]
+
+    roi.local_overrides = {capture_time: [1.0, 2.0, 3.0, 4.0, 0.0]}
+
+    assert session.cache_key(str(first), roi) == keys[0]
+    assert session.cache_key(str(second), roi) != keys[1]
+    assert session.cache_key(str(second), roi)[4] == (1.0, 2.0, 3.0, 4.0, 0.0)

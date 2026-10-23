@@ -439,6 +439,13 @@ class Roi(HasTraits):
     #: anchor forward until the next override.
     overrides = Dict(Float, List)
 
+    #: capture time -> geometry applying on that one image alone, over
+    #: any forward override and the base — a shape redrawn for a single
+    #: image. Not drift: the drift reset (clear_overrides) leaves it.
+    #: Replaced, never mutated in place: the canvas and the table follow
+    #: it by assignment.
+    local_overrides = Dict(Float, List)
+
     #: Capture times of the images the ROI was deleted from one at a
     #: time (see applies_at): there it is not drawn, selectable or
     #: measured — a positive ROI's curve gaps at the image, a negative
@@ -502,8 +509,12 @@ class Roi(HasTraits):
 
     def effective_geometry(self, capture_time):
         """The geometry in force for an image captured at
-        ``capture_time``: the override with the greatest anchor at or
-        before it, else the base geometry."""
+        ``capture_time``: its own single-image override, else the
+        forward override with the greatest anchor at or before it, else
+        the base geometry."""
+        if capture_time in self.local_overrides:
+            return list(self.local_overrides[capture_time])
+
         anchors = [anchor for anchor in self.overrides if anchor <= capture_time]
         if anchors:
             return list(self.overrides[max(anchors)])
@@ -511,9 +522,15 @@ class Roi(HasTraits):
 
     def apply_edit(self, capture_time, geometry):
         """Record an edit made while viewing the image captured at
-        ``capture_time``: at or before the base anchor it updates the
+        ``capture_time``: on an image with its own single-image shape it
+        edits that shape, at or before the base anchor it updates the
         base, later it upserts a forward override."""
-        if capture_time <= self.base_anchor:
+        if capture_time in self.local_overrides:
+            self.local_overrides = {
+                **self.local_overrides,
+                capture_time: list(geometry),
+            }
+        elif capture_time <= self.base_anchor:
             self.geometry = list(geometry)
         else:
             self.overrides[capture_time] = list(geometry)
