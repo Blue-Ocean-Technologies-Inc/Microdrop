@@ -1362,10 +1362,11 @@ correction_group = Group(
 )
 
 # AI (SAM) detection options: significance/size filters over the last
-# pick/detect/track pass's candidates, the shape accepted candidates
-# become, and the drift re-check interval, plus Accept/Clear over the
-# pending candidates. Hidden with the rest of the AI surface when the
-# optional SAM stack is not installed.
+# pick/detect pass's candidates (the size window also gates each drift
+# check detection), the shape accepted candidates become, and the drift
+# re-check interval, plus Accept/Clear over the pending candidates.
+# Hidden with the rest of the AI surface when the optional SAM stack is
+# not installed.
 ai_group = Group(
     Item(
         "object.roi_analysis.ai_significance",
@@ -1390,7 +1391,9 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is below this. Applies to all candidates.",
+        "is below this. Applies to all candidates, and to drift "
+        "tracking: a smaller detection is rejected and the ROI stays "
+        "where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_max_size",
@@ -1402,7 +1405,9 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is above this. Applies to all candidates.",
+        "is above this. Applies to all candidates, and to drift "
+        "tracking: a larger detection is rejected and the ROI stays "
+        "where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_output_kind",

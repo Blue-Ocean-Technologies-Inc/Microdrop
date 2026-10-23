@@ -1123,6 +1123,10 @@ class RoiAnalysisModel(HasTraits):
     #: batch counts it otherwise fills from are stale during a track).
     ai_track_done = Int(0)
     ai_track_total = Int(0)
+    #: Detections the size window turned away during the current drift
+    #: check (each left its ROI where it was); folded into the progress
+    #: text when non-zero.
+    ai_track_rejected = Int(0)
     #: Count of ROIs accepted from AI candidates this session (readout).
     ai_accept_count = Int(0)
 

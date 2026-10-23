@@ -86,10 +86,12 @@ def test_an_roi_deleted_from_a_frame_is_held_off_it():
 
 class _FakeRefiner:
     """Records each segment_point prompt; "finds" the droplet one pixel
-    right of wherever it is prompted."""
+    right of wherever it is prompted, ``sizes[frame]`` px across (10 px
+    by default)."""
 
-    def __init__(self):
+    def __init__(self, sizes=None):
         self.prompts = []
+        self.sizes = sizes or {}
 
     def prepare(self, image_id, image):
         pass
@@ -97,10 +99,10 @@ class _FakeRefiner:
     def segment_point(self, image_id, cx, cy):
         self.prompts.append((image_id, cx, cy))
 
-        return (cx + 1.0, cy)
+        return (cx + 1.0, cy, self.sizes.get(image_id, 10.0))
 
 
-def test_the_runner_restarts_from_seeds_and_leaves_held_rois_alone(monkeypatch):
+def _fake_frames_and_candidates(monkeypatch):
     monkeypatch.setattr(
         sam_jobs.cv2, "imread", lambda path, flags: np.zeros((4, 4), np.uint16)
     )
@@ -108,8 +110,26 @@ def test_the_runner_restarts_from_seeds_and_leaves_held_rois_alone(monkeypatch):
     monkeypatch.setattr(
         sam_jobs,
         "candidate_from_detection",
-        lambda detection, prompt: SimpleNamespace(ellipse=detection),
+        lambda detection, prompt: SimpleNamespace(
+            ellipse=detection[:2], size=detection[2]
+        ),
     )
+
+
+def _track_frames(results):
+    frames = []
+
+    while not results.empty():
+        kind, payload = results.get()
+
+        if kind == sam_jobs.TRACK_FRAME:
+            frames.append(payload)
+
+    return frames
+
+
+def test_the_runner_restarts_from_seeds_and_leaves_held_rois_alone(monkeypatch):
+    _fake_frames_and_candidates(monkeypatch)
     refiner = _FakeRefiner()
     results = queue.Queue()
     steps = [
@@ -120,7 +140,7 @@ def test_the_runner_restarts_from_seeds_and_leaves_held_rois_alone(monkeypatch):
     starts = {"a": (10.0, 10.0), "b": (20.0, 20.0)}
 
     sam_jobs.SamJobRunner()._run_track(
-        refiner, steps, starts, (), threading.Event(), results
+        refiner, steps, starts, 0, 100, (), threading.Event(), results
     )
 
     assert sorted(refiner.prompts) == [
@@ -130,12 +150,39 @@ def test_the_runner_restarts_from_seeds_and_leaves_held_rois_alone(monkeypatch):
         ("f3.png", 50.0, 50.0),  # a restarts from its correction
     ]
 
-    frames = []
-
-    while not results.empty():
-        kind, payload = results.get()
-
-        if kind == sam_jobs.TRACK_FRAME:
-            frames.append((payload["capture_time"], sorted(payload["candidates"])))
+    frames = [
+        (payload["capture_time"], sorted(payload["candidates"]))
+        for payload in _track_frames(results)
+    ]
 
     assert frames == [(1.0, ["a", "b"]), (2.0, ["b"]), (3.0, ["a"])]
+
+
+def test_an_out_of_window_detection_is_rejected_and_not_chained(monkeypatch):
+    _fake_frames_and_candidates(monkeypatch)
+    refiner = _FakeRefiner(sizes={"f2.png": 500.0})
+    results = queue.Queue()
+    steps = [
+        ("f1.png", 1.0, {}, set()),
+        ("f2.png", 2.0, {}, set()),
+        ("f3.png", 3.0, {}, set()),
+    ]
+
+    sam_jobs.SamJobRunner()._run_track(
+        refiner, steps, {"a": (10.0, 10.0)}, 5, 100, (), threading.Event(), results
+    )
+
+    # f2's background grab is found at 12 but rejected: f3 is segmented
+    # from f1's accepted centre, 11.
+    assert refiner.prompts == [
+        ("f1.png", 10.0, 10.0),
+        ("f2.png", 11.0, 10.0),
+        ("f3.png", 11.0, 10.0),
+    ]
+
+    frames = _track_frames(results)
+
+    assert frames[1]["candidates"] == {"a": None}
+    assert frames[1]["rejected"] == {"a": 500.0}
+    assert frames[0]["rejected"] == frames[2]["rejected"] == {}
+    assert frames[2]["candidates"]["a"].ellipse == (12.0, 10.0)

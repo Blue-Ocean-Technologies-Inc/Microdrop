@@ -264,6 +264,7 @@ class AiRoiController(HasTraits):
         refiner = self._refiner_for_current_model()
         self.analysis_model.ai_track_done = 0
         self.analysis_model.ai_track_total = 0
+        self.analysis_model.ai_track_rejected = 0
         # Say something immediately: the first frame's encode takes
         # seconds, and until it finishes no TRACK_FRAME arrives.
         self.analysis_model.progress_text = (
@@ -274,6 +275,8 @@ class AiRoiController(HasTraits):
             refiner,
             drift_steps(frames, rois, self.analysis_model.ai_drift_interval),
             start_geometries,
+            self.analysis_model.ai_min_size,
+            self.analysis_model.ai_max_size,
             self.session.perspective.effective_matrix(),
         )
 
@@ -372,9 +375,14 @@ class AiRoiController(HasTraits):
         elif kind == TRACK_FRAME:
             model.ai_track_done = payload["done"]
             model.ai_track_total = payload["total"]
+            model.ai_track_rejected += len(payload["rejected"])
+            rejected = model.ai_track_rejected
+            rejected_text = f", {rejected} rejected by size" if rejected else ""
             model.progress_text = (
                 f"Drift check {payload['done']}/{payload['total']} frames"
+                f"{rejected_text}"
             )
+
             for roi_id, candidate in payload["candidates"].items():
                 if candidate is not None:
                     model.ai_roi_tracked = (
@@ -389,8 +397,13 @@ class AiRoiController(HasTraits):
             # frame including the skipped ones the segmenter never touches
             # -- the two aren't the same unit, so "m/n" always read like an
             # early stop when interval > 1. Report only the honest count.
+            rejected = model.ai_track_rejected
+            rejected_text = (
+                f", {rejected} detections rejected by size" if rejected else ""
+            )
             model.progress_text = (
                 f"Drift tracking done ({payload['frames_done']} frames checked)"
+                f"{rejected_text}"
             )
         elif kind == AI_FAILED:
             # Already logged (with more detail) by the runner itself.

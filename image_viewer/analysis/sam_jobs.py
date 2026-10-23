@@ -21,7 +21,9 @@ frame, plus always the last — the skipped frames are simply never
 emitted, so the consumer's previous geometry carries forward for free)
 while the consumer decodes each ROI's center in a small pool and chains
 the found center into the next segmented frame, restarting it from any
-shape the user corrected on the way.
+shape the user corrected on the way. A detection outside the candidate
+size window is rejected rather than chained: the ROI keeps its last good
+shape on that frame and the next one is segmented from where it was.
 """
 
 # Standard library imports.
@@ -195,11 +197,15 @@ class SamJobRunner(HasTraits):
 
     # -- track ------------------------------------------------------------
 
-    def track(self, refiner, steps, start_geometries, perspective=()):
+    def track(
+        self, refiner, steps, start_geometries, min_size, max_size, perspective=()
+    ):
         """Track each ROI across ``steps`` (drift_plan.drift_steps: the
         frames to segment, in series order, each with the seeds the user's
         corrections restart ROIs from and the ROIs held off it), starting
-        from ``start_geometries`` = {roi_id: (cx, cy)}. Every frame is
+        from ``start_geometries`` = {roi_id: (cx, cy)}. A detection whose
+        size (mean ellipse diameter, px — ``Candidate.size``) falls
+        outside ``[min_size, max_size]`` is rejected. Every frame is
         warped by ``perspective`` first (() for none), the space the ROIs
         were drawn in."""
         cancel, results = self._start_job()
@@ -210,6 +216,8 @@ class SamJobRunner(HasTraits):
                 refiner,
                 steps,
                 start_geometries,
+                min_size,
+                max_size,
                 perspective,
                 cancel,
                 results,
@@ -220,7 +228,15 @@ class SamJobRunner(HasTraits):
         thread.start()
 
     def _run_track(
-        self, refiner, steps, start_geometries, perspective, cancel, results
+        self,
+        refiner,
+        steps,
+        start_geometries,
+        min_size,
+        max_size,
+        perspective,
+        cancel,
+        results,
     ):
         total = len(steps)
         frames_done = 0
@@ -284,6 +300,8 @@ class SamJobRunner(HasTraits):
 
                     detections = dict(pool.map(segment_one, roi_ids))
                     candidates = {}
+                    rejected = {}
+
                     for roi_id, detection in detections.items():
                         candidate = (
                             candidate_from_detection(
@@ -292,12 +310,29 @@ class SamJobRunner(HasTraits):
                             if detection is not None
                             else None
                         )
+
+                        # An out-of-window mask (a background grab, a
+                        # speck) counts as no detection: chaining its
+                        # centre would drag the ROI off the droplet.
+                        if candidate is not None and not (
+                            min_size <= candidate.size <= max_size
+                        ):
+                            rejected[roi_id] = candidate.size
+                            logger.info(
+                                f"Drift check {path}: rejected ROI {roi_id}, "
+                                f"size {candidate.size:.1f} px outside "
+                                f"{min_size}-{max_size} px"
+                            )
+                            candidate = None
+
                         candidates[roi_id] = candidate
+
                         if candidate is not None:
                             centers[roi_id] = (
                                 candidate.ellipse[0],
                                 candidate.ellipse[1],
                             )
+
                     frames_done += 1
                     results.put(
                         (
@@ -305,6 +340,9 @@ class SamJobRunner(HasTraits):
                             {
                                 "capture_time": capture_time,
                                 "candidates": candidates,
+                                # {roi_id: size} of the detections the
+                                # size window turned away on this frame.
+                                "rejected": rejected,
                                 # Progress in checked-frame units: done and total
                                 # both count only the frames the tracker segments
                                 # (every interval-th plus the last).
