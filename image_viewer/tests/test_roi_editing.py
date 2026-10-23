@@ -898,3 +898,18 @@ def test_deleting_over_a_range_spares_the_rest(
     model.undo_roi_button = True
 
     assert not roi.applies_at(capture_timestamp(restore_on))
+
+
+def test_hiding_the_selected_roi_clears_the_selection():
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 10.0, 5.0, 5.0, 0.0])
+    first, second = controller.session.rois
+    model.selected_roi_id = first.roi_id
+
+    second.style.visible = False
+    assert model.selected_roi_id == first.roi_id
+
+    first.style.visible = False
+    assert model.selected_roi_id == ""

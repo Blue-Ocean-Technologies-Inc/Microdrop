@@ -329,3 +329,19 @@ def test_a_mask_deleted_from_one_image_cuts_nothing_there(tmp_path):
     assert session.negatives_for(cut) == (("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),)
     assert session.negatives_for(spared) == ()
     assert session.cache_key(spared, roi) == unmasked
+
+
+def test_an_roi_hidden_with_its_eye_is_not_on_the_canvas(tmp_path):
+    (image,) = _images(tmp_path, "10_00_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    other = Roi(name="ROI 2", kind="ellipse", geometry=[9.0, 9.0, 4.0, 4.0, 0.0])
+    mask = _mask()
+    session = AnalysisSession(rois=[roi, other, mask])
+    measured = session.cache_key(image, roi)
+
+    roi.style.visible = False
+    mask.style.visible = False
+
+    assert [row[0] for row in session.effective_for(image)] == [other.roi_id]
+    # Hidden is not unmeasured: a positive's key is untouched by its eye.
+    assert session.cache_key(image, roi)[4] == measured[4]

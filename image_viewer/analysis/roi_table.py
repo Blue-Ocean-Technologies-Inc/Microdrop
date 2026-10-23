@@ -408,9 +408,10 @@ class RoiStatsTable(QTableWidget):
         item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
         item.setToolTip(
-            "Show or hide this mask — a hidden mask is not subtracted"
+            "Show or hide this mask on the image — a hidden mask is not subtracted"
             if roi.is_negative
-            else "Show or hide this ROI on the plot"
+            else "Show or hide this ROI on the plot and the image (it is "
+            "still measured and exported)"
         )
         return item
 

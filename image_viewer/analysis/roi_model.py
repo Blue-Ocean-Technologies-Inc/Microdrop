@@ -151,13 +151,15 @@ class RoiStyle(HasTraits):
     marker = Enum(*MARKER_NAMES)
     marker_size = Float(4.0)
 
-    #: Whether this ROI is drawn on the figure at all, and how opaque —
-    #: the device viewer's eye/alpha pair, as a percentage. Both are
-    #: display-only: a hidden ROI is still computed, still listed in the
-    #: stats table, and still exported to CSV. The one exception is a
-    #: negative mask's eye: a hidden mask is not subtracted (see
-    #: AnalysisSession.negatives_for). Range needs the explicit
-    #: default, or it would start every ROI fully transparent.
+    #: Whether this ROI is drawn at all, and how opaque on the figure —
+    #: the device viewer's eye/alpha pair, as a percentage. A hidden ROI
+    #: is drawn neither on the figure nor on the image, where it cannot
+    #: be clicked, selected or edited either, so an ROI it overlapped
+    #: can be. Measurement is untouched: a hidden ROI is still computed,
+    #: still listed in the stats table, and still exported to CSV. The
+    #: one exception is a negative mask's eye: a hidden mask is not
+    #: subtracted (see AnalysisSession.negatives_for). Range needs the
+    #: explicit default, or it would start every ROI fully transparent.
     visible = Bool(True)
     alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
 
@@ -863,8 +865,9 @@ class AnalysisSession(HasTraits):
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry, is_negative), ...] in force
-        for ``path`` — what the canvas draws for that image. A mask drawn
-        on a later image than ``path`` has no row (Roi.applies_at)."""
+        for ``path`` — what the canvas draws, and hit-tests, for that
+        image. An ROI hidden with its eye has no row, and neither has one
+        not in force there (Roi.applies_at)."""
         capture_time = capture_timestamp(path)
 
         return [
@@ -876,7 +879,7 @@ class AnalysisSession(HasTraits):
                 roi.is_negative,
             )
             for roi in self.rois
-            if roi.applies_at(capture_time)
+            if roi.style.visible and roi.applies_at(capture_time)
         ]
 
 

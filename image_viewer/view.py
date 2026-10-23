@@ -616,15 +616,14 @@ class _ImageCanvasEditor(QtEditor):
         )
         effective = session.effective_for(model.current_path)
 
-        if model.roi_analysis.show_rois:
-            # Only a mask is hidden on the canvas: it never plots, so its
-            # eye hides its outline (and takes it out of the stats),
-            # while a positive's eye is for the plot alone.
-            hidden_ids = {
-                roi.roi_id for roi in session.negative_rois if not roi.style.visible
-            }
-        else:
-            hidden_ids = {roi_id for roi_id, *_rest in effective}
+        # An ROI hidden with its eye is not in ``effective`` at all, so
+        # it is neither drawn nor clickable; the toolbar's toggle hides
+        # every shape but keeps them in the scene.
+        hidden_ids = (
+            set()
+            if model.roi_analysis.show_rois
+            else {roi_id for roi_id, *_rest in effective}
+        )
 
         self._roi_layer.sync(
             effective,

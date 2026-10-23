@@ -424,17 +424,24 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:session:rois:items:style:visible")
     def _on_roi_visibility_changed(self, event):
-        """A mask's eye decides whether it subtracts (a positive's is
-        plot-only), so remeasure as for a mask edit. The toggle also
-        selects a different cache set, which toggling back finds
-        complete: bump the revision, as nothing else would redraw.
+        """An ROI hidden with its eye leaves the image as well as the
+        plot, so it can no longer be the selection. A mask's eye also
+        decides whether it subtracts, so remeasure as for a mask edit;
+        the toggle selects a different cache set, which toggling back
+        finds complete: bump the revision, as nothing else would redraw.
         _on_plot_settings_changed saves the style."""
         roi = next(
-            (roi for roi in self.session.negative_rois if roi.style is event.object),
+            (roi for roi in self.session.rois if roi.style is event.object),
             None,
         )
 
         if roi is None:
+            return
+
+        if not event.new and self.analysis_model.selected_roi_id == roi.roi_id:
+            self.analysis_model.selected_roi_id = ""
+
+        if not roi.is_negative:
             return
 
         self.session.stats_revision += 1
