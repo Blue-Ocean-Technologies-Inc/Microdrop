@@ -240,6 +240,8 @@ def save_session(experiment_directory, session):
                     for capture_time, geometry in roi.local_overrides.items()
                 },
                 "absent_at": list(roi.absent_at),
+                "absent_from": roi.absent_from,
+                "absent_until": roi.absent_until,
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
@@ -286,6 +288,9 @@ def _roi_from(entry):
         # Absent in configs written before an ROI could be deleted from
         # one image alone.
         absent_at=[float(time) for time in entry.get("absent_at", [])],
+        # Absent in configs written before the ranged deletions.
+        absent_from=float(entry.get("absent_from", math.nan)),
+        absent_until=float(entry.get("absent_until", math.nan)),
         # "is_standard" is what this was called before the
         # rename, and absent entirely in configs written before
         # the feature — where no ROI was one either way.

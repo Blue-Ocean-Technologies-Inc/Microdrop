@@ -120,7 +120,9 @@ _TABLE_VALUES = (
     "session:rois:items:geometry, "
     "session:rois:items:overrides.items, "
     "session:rois:items:local_overrides, "
-    "session:rois:items:absent_at"
+    "session:rois:items:absent_at, "
+    "session:rois:items:absent_from, "
+    "session:rois:items:absent_until"
 )
 
 

@@ -36,12 +36,15 @@ from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS,
     DELETE_ROI_ALL_IMAGES,
+    DELETE_ROI_EARLIER_IMAGES,
+    DELETE_ROI_LATER_IMAGES,
     DELETE_ROI_THIS_IMAGE,
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
     NEGATIVE_MASK_COLOR,
     NEGATIVE_MASK_NAME_PREFIX,
     PASTE_OFFSET_PX,
+    ROI_ABSENCE_SCOPES,
     ROI_BATCH_PROTOCOL_WORKERS,
     ROI_DELETE_DONT_ASK_TEXT,
     ROI_DELETE_SCOPES,
@@ -516,8 +519,8 @@ class RoiAnalysisController(HasTraits):
         if scope is None:
             return
 
-        if scope == "image":
-            self._set_absent_on_shown_image(roi, restore=False)
+        if scope in ROI_ABSENCE_SCOPES:
+            self._set_absent_on_shown_image(roi, scope, restore=False)
         else:
             self._push(RemoveRoisCommand(session=session, rois=[roi]))
 
@@ -527,20 +530,27 @@ class RoiAnalysisController(HasTraits):
             self._instant_stats(session.positive_rois)
 
     def _roi_delete_scope(self, roi):
-        """ "image" or "all": what the preferences remember, else what the
-        dialog is told — None when it is cancelled. A ticked "don't ask
-        again" remembers the answer (the preferences tab undoes that)."""
+        """A ROI_DELETE_SCOPES key other than "ask": what the preferences
+        remember, else what the dialog is told — None when it is
+        cancelled. A ticked "don't ask again" remembers the answer (the
+        preferences tab undoes that)."""
         preferences = self.viewer_model.preferences
 
         if preferences.roi_delete_scope != "ask":
             return preferences.roi_delete_scope
 
         choice, dont_ask_again = choose(
-            message=f"Delete {roi.name} from this image only, or from all images?",
+            message=f"Which images should {roi.name} be deleted from?",
             title="Delete ROI",
-            choices=[DELETE_ROI_THIS_IMAGE, DELETE_ROI_ALL_IMAGES],
-            informative="On this image only, it can be put back with Undo or "
-            "the Restore button in the sidebar's exclusion section.",
+            choices=[
+                DELETE_ROI_THIS_IMAGE,
+                DELETE_ROI_LATER_IMAGES,
+                DELETE_ROI_EARLIER_IMAGES,
+                DELETE_ROI_ALL_IMAGES,
+            ],
+            informative="Short of all images, it can be put back with Undo or "
+            "the Restore button in the sidebar's exclusion section; later "
+            "and earlier include captures still to come.",
             checkbox_text=ROI_DELETE_DONT_ASK_TEXT,
         )
 
@@ -554,14 +564,16 @@ class RoiAnalysisController(HasTraits):
 
         return scope
 
-    def _set_absent_on_shown_image(self, roi, restore):
-        """Take ``roi`` off the shown image alone, or put it back there,
-        as one undoable step."""
+    def _set_absent_on_shown_image(self, roi, scope, restore):
+        """Take ``roi`` off the shown image — alone, or with every later
+        or earlier one by ``scope`` — or undo that, as one undoable
+        step."""
         self._push(
             HideRoiOnImageCommand(
                 session=self.session,
                 roi=roi,
                 capture_time=capture_timestamp(self.viewer_model.current_path),
+                scope=scope,
                 restore=restore,
             )
         )
@@ -629,24 +641,35 @@ class RoiAnalysisController(HasTraits):
         if not current:
             return
 
-        restored = self.session.absent_on(current)
+        capture_time = capture_timestamp(current)
 
-        for roi in restored:
-            self._set_absent_on_shown_image(roi, restore=True)
+        # A range is cleared whole: it has no hole for one image.
+        for roi in self.session.absent_on(current):
+            for scope in roi.absent_by(capture_time):
+                self._set_absent_on_shown_image(roi, scope, restore=True)
 
         self._instant_stats(self.session.positive_rois)
 
     @observe(
         "analysis_model:current_image_path, analysis_model:session, "
         "analysis_model:session:rois.items, "
-        "analysis_model:session:rois:items:absent_at"
+        "analysis_model:session:rois:items:absent_at, "
+        "analysis_model:session:rois:items:absent_from, "
+        "analysis_model:session:rois:items:absent_until"
     )
     def _mirror_absent_roi_count(self, event):
         """Keep the sidebar's count of ROIs deleted from the shown image
-        alone current (a top-level mirror its visible_when can see)."""
+        current (a top-level mirror its visible_when can see), and
+        whether any of those is a range."""
         current = self.analysis_model.current_image_path
-        self.viewer_model.absent_roi_count = (
-            len(self.session.absent_on(current)) if current else 0
+        absent = self.session.absent_on(current) if current else []
+        capture_time = capture_timestamp(current) if current else 0.0
+
+        self.viewer_model.trait_set(
+            absent_roi_count=len(absent),
+            absent_roi_ranged=any(
+                set(roi.absent_by(capture_time)) - {"image"} for roi in absent
+            ),
         )
 
     @observe("analysis_model:clear_rois_button")

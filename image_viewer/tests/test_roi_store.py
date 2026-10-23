@@ -48,6 +48,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
         base_anchor=100.0,
         overrides={200.0: [5.0, 6.0, 30.0, 40.0, 15.0]},
         absent_at=[150.0, 250.0],
+        absent_from=300.0,
+        absent_until=50.0,
         local_overrides={150.0: [7.0, 8.0, 30.0, 40.0, 15.0]},
         style=RoiStyle(
             color="#d62728",
@@ -77,6 +79,7 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.geometry == [1.0, 2.0, 30.0, 40.0, 15.0, 0.0]
     assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0, 15.0, 0.0]}
     assert back.absent_at == [150.0, 250.0]
+    assert (back.absent_from, back.absent_until) == (300.0, 50.0)
     assert back.local_overrides == {150.0: [7.0, 8.0, 30.0, 40.0, 15.0, 0.0]}
     assert back.style.color == "#d62728"
     assert back.style.line_style == "dashed"
@@ -198,6 +201,7 @@ def test_load_session_accepts_v1_bare_list(tmp_path):
     assert roi.style.line_style == "solid"
     assert roi.absent_at == []
     assert roi.local_overrides == {}
+    assert math.isnan(roi.absent_from) and math.isnan(roi.absent_until)
 
 
 def test_load_session_bad_plot_stat_keeps_parsed_roi(tmp_path):

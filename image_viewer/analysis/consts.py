@@ -162,6 +162,8 @@ ROI_PLOT_SECTION_MIN_PX = 40
 #: The delete dialog's choices: take the selected ROI off the shown
 #: image only, or remove it from every image.
 DELETE_ROI_THIS_IMAGE = "This image only"
+DELETE_ROI_LATER_IMAGES = "This and later images"
+DELETE_ROI_EARLIER_IMAGES = "This and earlier images"
 DELETE_ROI_ALL_IMAGES = "All images"
 
 #: What deleting an ROI does (ImageViewerPreferences.roi_delete_scope),
@@ -170,8 +172,14 @@ DELETE_ROI_ALL_IMAGES = "All images"
 ROI_DELETE_SCOPES = {
     "ask": "Ask each time",
     "image": DELETE_ROI_THIS_IMAGE,
+    "later": DELETE_ROI_LATER_IMAGES,
+    "earlier": DELETE_ROI_EARLIER_IMAGES,
     "all": DELETE_ROI_ALL_IMAGES,
 }
+
+#: The scopes that take an ROI off some images and keep it on the rest
+#: (Roi.absent_by names them the same way).
+ROI_ABSENCE_SCOPES = ("image", "later", "earlier")
 
 #: The delete dialog's checkbox, worded as the experiment delete's is.
 ROI_DELETE_DONT_ASK_TEXT = "Don't ask again (change under Preferences › Image Viewer)"

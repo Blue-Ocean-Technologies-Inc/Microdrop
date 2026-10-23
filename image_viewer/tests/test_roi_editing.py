@@ -26,6 +26,8 @@ from image_viewer.analysis import roi_controller
 from image_viewer.analysis.consts import (
     DEFAULT_ROI_COLORS,
     DELETE_ROI_ALL_IMAGES,
+    DELETE_ROI_EARLIER_IMAGES,
+    DELETE_ROI_LATER_IMAGES,
     DELETE_ROI_THIS_IMAGE,
     NEGATIVE_MASK_COLOR,
     PASTE_OFFSET_PX,
@@ -680,3 +682,42 @@ def test_a_rename_that_is_not_a_redraw_stays_a_rename(tmp_path):
 
     assert controller.session.rois == [first, second]
     assert second.name == first.name
+
+
+@pytest.mark.parametrize(
+    "choice, before, after",
+    [
+        (DELETE_ROI_LATER_IMAGES, True, False),
+        (DELETE_ROI_EARLIER_IMAGES, False, True),
+    ],
+)
+def test_deleting_onward_or_backward_spares_the_other_side(
+    tmp_path, monkeypatch, choice, before, after
+):
+    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: (choice, False))
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    capture_time = capture_timestamp(image)
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    model.delete_roi_button = True
+
+    assert controller.session.rois == [roi]
+    assert not roi.applies_at(capture_time)
+    assert roi.applies_at(capture_time - 60.0) is before
+    assert roi.applies_at(capture_time + 60.0) is after
+    assert controller.viewer_model.absent_roi_count == 1
+    assert controller.viewer_model.absent_roi_ranged
+    assert "ranges" in controller.viewer_model.absent_roi_text
+
+    # Restore clears the whole range.
+    model.restore_absent_rois_button = True
+
+    assert roi.applies_at(capture_time - 60.0) and roi.applies_at(capture_time + 60.0)
+    assert controller.viewer_model.absent_roi_count == 0
+
+    model.undo_roi_button = True
+
+    assert not roi.applies_at(capture_time)

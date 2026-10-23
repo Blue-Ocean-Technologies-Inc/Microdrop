@@ -17,11 +17,15 @@ clear, a load), and a command still holding the old one would edit a list
 nobody looks at (#755). Each list change resolves ``session.rois`` live
 and lands as one list change, so a multi-ROI step notifies once."""
 
+# Standard library imports.
+import math
+
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Bool, Float, Instance, Int, List, Str, Tuple
+from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Str, Tuple
 
 # Local imports.
+from .consts import ROI_ABSENCE_SCOPES
 from .roi_model import AnalysisSession, Roi
 
 
@@ -161,39 +165,80 @@ class EditRoiCommand(_SessionCommand):
         self.roi.apply_edit(self.capture_time, list(self.geometry))
 
 
-class HideRoiOnImageCommand(_SessionCommand):
-    """Delete an ROI from one image only (its ``absent_at``), leaving
-    every other image as it was — or, with ``restore``, put it back on
-    that image."""
+#: The undo stack's wording of each HideRoiOnImageCommand scope.
+_ABSENCE_SCOPE_WORDS = {
+    "image": "on one image",
+    "later": "from one image on",
+    "earlier": "up to one image",
+}
 
-    #: The ROI taken off (or put back on) the image.
+
+class HideRoiOnImageCommand(_SessionCommand):
+    """Delete an ROI from one image and, by ``scope``, every later or
+    every earlier one too, leaving the others as they were — or, with
+    ``restore``, undo such a deletion: put it back on that image, or
+    clear the range."""
+
+    #: The ROI taken off (or put back on) the images.
     roi = Instance(Roi)
 
     #: Capture time of the image.
     capture_time = Float()
 
-    #: Put the ROI back on the image instead of taking it off.
+    #: That image alone (absent_at), it and every later one
+    #: (absent_from), or it and every earlier one (absent_until).
+    #: Repeating "later" from another image widens the range — the
+    #: earliest start wins — and "earlier" likewise keeps the latest end.
+    scope = Enum(*ROI_ABSENCE_SCOPES)
+
+    #: Undo that deletion instead of making it.
     restore = Bool(False)
+
+    #: The ROI's absences before the step: (absent_at, absent_from,
+    #: absent_until).
+    _before = Tuple(List, Float, Float)
 
     def _name_default(self):
         verb = "Restore" if self.restore else "Delete"
 
-        return f"{verb} {self.roi.name} on one image"
+        return f"{verb} {self.roi.name} {_ABSENCE_SCOPE_WORDS[self.scope]}"
 
     def do(self):
+        roi = self.roi
+        self._before = (list(roi.absent_at), roi.absent_from, roi.absent_until)
         self.redo()
 
     def undo(self):
-        self._set_absent(self.restore)
+        absent_at, absent_from, absent_until = self._before
+        # A fresh list: the canvas and the table follow it by assignment.
+        self.roi.trait_set(
+            absent_at=list(absent_at),
+            absent_from=absent_from,
+            absent_until=absent_until,
+        )
 
     def redo(self):
-        self._set_absent(not self.restore)
+        roi, capture_time = self.roi, self.capture_time
 
-    def _set_absent(self, absent):
-        times = [time for time in self.roi.absent_at if time != self.capture_time]
+        if self.scope == "later":
+            roi.absent_from = (
+                math.nan if self.restore else _bound(min, roi.absent_from, capture_time)
+            )
+        elif self.scope == "earlier":
+            roi.absent_until = (
+                math.nan
+                if self.restore
+                else _bound(max, roi.absent_until, capture_time)
+            )
+        else:
+            times = [time for time in roi.absent_at if time != capture_time]
+            roi.absent_at = times if self.restore else sorted([*times, capture_time])
 
-        # A fresh list: the canvas and the table follow it by assignment.
-        self.roi.absent_at = sorted([*times, self.capture_time]) if absent else times
+
+def _bound(pick, current, capture_time):
+    """``capture_time``, or ``pick`` of it and ``current`` when a range
+    is already set (``current`` not NaN)."""
+    return capture_time if math.isnan(current) else pick(current, capture_time)
 
 
 class MergeRoiOnImageCommand(_SessionCommand):

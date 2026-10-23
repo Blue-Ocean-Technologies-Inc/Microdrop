@@ -453,6 +453,13 @@ class Roi(HasTraits):
     #: canvas and the table follow it by assignment.
     absent_at = List(Float)
 
+    #: The ROI is deleted from every image captured at or after
+    #: ``absent_from``, and at or before ``absent_until`` — ranges, so
+    #: captures still to arrive in a running experiment are covered too.
+    #: NaN: no such range.
+    absent_from = Float(math.nan)
+    absent_until = Float(math.nan)
+
     #: Plot styling (line color/style/marker); persisted with the ROI.
     style = Instance(RoiStyle, ())
 
@@ -502,10 +509,29 @@ class Roi(HasTraits):
         onward, and on earlier images is neither drawn nor subtracted. A
         mask created with no image shown has a 0.0 anchor, so applies to
         every image."""
-        if capture_time in self.absent_at:
+        if self.absent_by(capture_time):
             return False
 
         return not self.is_negative or capture_time >= self.base_anchor
+
+    def absent_by(self, capture_time):
+        """Which deletions take the ROI off the image captured at
+        ``capture_time`` (ROI_ABSENCE_SCOPES): "image" for that image
+        alone, "later" and "earlier" for the ranges. Empty where it is
+        not deleted. NaN never compares, so an unset range covers
+        nothing."""
+        scopes = []
+
+        if capture_time in self.absent_at:
+            scopes.append("image")
+
+        if capture_time >= self.absent_from:
+            scopes.append("later")
+
+        if capture_time <= self.absent_until:
+            scopes.append("earlier")
+
+        return scopes
 
     def effective_geometry(self, capture_time):
         """The geometry in force for an image captured at
@@ -793,10 +819,11 @@ class AnalysisSession(HasTraits):
         return roi.applies_at(self.stat_info(path, stat_cache)[1])
 
     def absent_on(self, path):
-        """The ROIs deleted from ``path``'s image alone."""
+        """The ROIs deleted from ``path``'s image — alone or as part of
+        a range of images."""
         capture_time = self.stat_info(path)[1]
 
-        return [roi for roi in self.rois if capture_time in roi.absent_at]
+        return [roi for roi in self.rois if roi.absent_by(capture_time)]
 
     def correction_key(self):
         """Everything about how the image is treated before a stat is

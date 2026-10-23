@@ -12,6 +12,9 @@
 CommandStack — including the #755 rule that they follow the session's
 live ROI list rather than the list object they first saw."""
 
+# Standard library imports.
+import math
+
 # Enthought library imports.
 from pyface.undo.api import CommandStack, UndoManager
 
@@ -269,3 +272,60 @@ def test_merging_a_redrawn_shape_into_an_roi_on_one_image_undoes_and_redoes():
     stack.redo()
     assert session.rois == [roi]
     assert roi.effective_geometry(100.0) == [2.0] * 5
+
+
+def test_deleting_later_widens_and_earlier_extends_the_range():
+    session = _session(1)
+    (roi,) = session.rois
+    stack = _stack()
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=200.0, scope="later"
+        )
+    )
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=300.0, scope="later"
+        )
+    )
+    assert roi.absent_from == 200.0  # the earliest start wins
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=100.0, scope="earlier"
+        )
+    )
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=50.0, scope="earlier"
+        )
+    )
+    assert roi.absent_until == 100.0  # the latest end wins
+    assert stack.undo_name == "Delete ROI 1 up to one image"
+
+    stack.undo()
+    stack.undo()
+    assert math.isnan(roi.absent_until) and roi.absent_from == 200.0
+
+
+def test_restoring_a_range_clears_it_and_undo_brings_it_back():
+    session = _session(1)
+    (roi,) = session.rois
+    roi.absent_from = 200.0
+    stack = _stack()
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session,
+            roi=roi,
+            capture_time=250.0,
+            scope="later",
+            restore=True,
+        )
+    )
+    assert math.isnan(roi.absent_from)
+    assert stack.undo_name == "Restore ROI 1 from one image on"
+
+    stack.undo()
+    assert roi.absent_from == 200.0

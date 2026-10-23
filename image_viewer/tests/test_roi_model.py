@@ -230,3 +230,20 @@ def test_a_single_image_shape_changes_that_images_cache_key_alone(tmp_path):
     assert session.cache_key(str(first), roi) == keys[0]
     assert session.cache_key(str(second), roi) != keys[1]
     assert session.cache_key(str(second), roi)[4] == (1.0, 2.0, 3.0, 4.0, 0.0)
+
+
+def test_an_roi_deleted_over_a_range_does_not_apply_inside_it():
+    later = Roi(absent_from=200.0)
+    earlier = Roi(absent_until=200.0)
+    both = Roi(absent_from=300.0, absent_until=100.0, absent_at=[200.0])
+
+    assert later.applies_at(199.0) and not later.applies_at(200.0)
+    assert not later.applies_at(1e9)
+    assert earlier.applies_at(201.0) and not earlier.applies_at(200.0)
+    assert not earlier.applies_at(0.0)
+    assert both.absent_by(50.0) == ["earlier"]
+    assert both.absent_by(150.0) == []
+    assert both.absent_by(200.0) == ["image"]
+    assert both.absent_by(400.0) == ["later"]
+    # Unset ranges cover nothing.
+    assert Roi().absent_by(0.0) == []
