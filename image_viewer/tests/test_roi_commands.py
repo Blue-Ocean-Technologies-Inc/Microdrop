@@ -20,6 +20,7 @@ from image_viewer.analysis.roi_commands import (
     AddRoisCommand,
     EditRoiCommand,
     HideRoiOnImageCommand,
+    MergeRoiOnImageCommand,
     RemoveRoisCommand,
 )
 from image_viewer.analysis.roi_model import AnalysisSession, Roi
@@ -237,3 +238,34 @@ def test_edit_undo_restores_a_single_image_shape():
 
     stack.undo()
     assert roi.local_overrides == {30.0: [1.0, 1.0, 1.0, 1.0, 0.0]}
+
+
+def test_merging_a_redrawn_shape_into_an_roi_on_one_image_undoes_and_redoes():
+    session = _session(2)
+    roi, replacement = session.rois
+    roi.absent_at = [100.0, 300.0]
+    replacement.name = roi.name
+    stack = _stack()
+
+    stack.push(
+        MergeRoiOnImageCommand(
+            session=session,
+            roi=roi,
+            replacement=replacement,
+            capture_time=100.0,
+            replacement_name="ROI 2",
+        )
+    )
+    assert session.rois == [roi]
+    assert roi.local_overrides == {100.0: [2.0] * 5}
+    assert roi.absent_at == [300.0]
+    assert stack.undo_name == "Replace ROI 1 on one image"
+
+    stack.undo()
+    assert session.rois == [roi, replacement]
+    assert roi.local_overrides == {} and roi.absent_at == [100.0, 300.0]
+    assert replacement.name == "ROI 2"
+
+    stack.redo()
+    assert session.rois == [roi]
+    assert roi.effective_geometry(100.0) == [2.0] * 5

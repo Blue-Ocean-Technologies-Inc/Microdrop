@@ -19,7 +19,7 @@ and lands as one list change, so a multi-ROI step notifies once."""
 
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Bool, Float, Instance, Int, List, Tuple
+from traits.api import Any, Bool, Float, Instance, Int, List, Str, Tuple
 
 # Local imports.
 from .roi_model import AnalysisSession, Roi
@@ -194,3 +194,56 @@ class HideRoiOnImageCommand(_SessionCommand):
 
         # A fresh list: the canvas and the table follow it by assignment.
         self.roi.absent_at = sorted([*times, self.capture_time]) if absent else times
+
+
+class MergeRoiOnImageCommand(_SessionCommand):
+    """Give ``roi`` the shape ``replacement`` has on one image, there
+    alone, and drop ``replacement`` — a shape redrawn on an image taking
+    over the identity (id, plot line, CSV column, style) of the ROI that
+    was deleted from that image."""
+
+    #: The ROI keeping its identity: back on the image, in a new shape.
+    roi = Instance(Roi)
+
+    #: The ROI whose shape it takes there, removed from the session.
+    replacement = Instance(Roi)
+
+    #: Capture time of the image.
+    capture_time = Float()
+
+    #: The replacement's name before the rename that asked for the
+    #: merge, given back to it on undo.
+    replacement_name = Str()
+
+    #: ``roi``'s single-image shapes and absences before the merge.
+    _before = Tuple(Any, List)
+
+    #: Where the replacement stood in the ROI list, for the undo.
+    _pairs = List(Tuple(Int, Instance(Roi)))
+
+    def _name_default(self):
+        return f"Replace {self.roi.name} on one image"
+
+    def do(self):
+        self._before = (_copied(self.roi.local_overrides), list(self.roi.absent_at))
+        self.redo()
+
+    def undo(self):
+        local_overrides, absent_at = self._before
+        self.roi.local_overrides = _copied(local_overrides)
+        self.roi.absent_at = list(absent_at)
+        _insert_into_session(self.session, self._pairs)
+
+        if self.replacement_name:
+            self.replacement.name = self.replacement_name
+
+    def redo(self):
+        capture_time = self.capture_time
+        self.roi.local_overrides = {
+            **_copied(self.roi.local_overrides),
+            capture_time: self.replacement.effective_geometry(capture_time),
+        }
+        self.roi.absent_at = [
+            time for time in self.roi.absent_at if time != capture_time
+        ]
+        self._pairs = _remove_from_session(self.session, [self.replacement])

@@ -64,6 +64,7 @@ from .roi_commands import (
     AddRoisCommand,
     EditRoiCommand,
     HideRoiOnImageCommand,
+    MergeRoiOnImageCommand,
     RemoveRoisCommand,
 )
 from .roi_compute import stats_are_current
@@ -567,6 +568,59 @@ class RoiAnalysisController(HasTraits):
         # A pair with no stats now (or its old ones again) computes
         # nothing, so nothing else would redraw the plot.
         self.session.stats_revision += 1
+
+    @observe("analysis_model:session:rois:items:name")
+    def _merge_renamed_roi(self, event):
+        """Renaming a shape drawn on the shown image to the name of an
+        ROI deleted from that image alone makes it that ROI's shape
+        there: the ROI comes back on the image, keeping its identity,
+        and the new shape goes. Every other rename is just a rename."""
+        replacement = event.object
+        current = self.viewer_model.current_path
+
+        if not current or replacement.is_negative:
+            return
+
+        capture_time = capture_timestamp(current)
+        roi = next(
+            (
+                roi
+                for roi in self.session.rois
+                if roi is not replacement and roi.name == event.new
+            ),
+            None,
+        )
+
+        if roi is None or roi.is_negative or capture_time not in roi.absent_at:
+            return
+
+        # Only a shape drawn here and not edited elsewhere: one with a
+        # life on other images is an ROI of its own.
+        if (
+            replacement.base_anchor != capture_time
+            or replacement.overrides
+            or replacement.local_overrides
+        ):
+            return
+
+        self._push(
+            MergeRoiOnImageCommand(
+                session=self.session,
+                roi=roi,
+                replacement=replacement,
+                capture_time=capture_time,
+                replacement_name=event.old,
+            )
+        )
+
+        if self.analysis_model.selected_roi_id == replacement.roi_id:
+            self.analysis_model.selected_roi_id = roi.roi_id
+
+        self.analysis_model.progress_text = (
+            f"{event.old} replaced {roi.name} on this image"
+        )
+        self.session.stats_revision += 1
+        self._instant_stats([roi])
 
     @observe("analysis_model:restore_absent_rois_button")
     def _restore_absent_rois(self, event):

@@ -124,6 +124,15 @@ _TABLE_VALUES = (
 )
 
 
+def _rename(model, roi_id, name):
+    """Give the session's ROI ``roi_id`` its new ``name``, if it is
+    still there."""
+    roi = model.session.roi_by_id(roi_id)
+
+    if roi is not None:
+        roi.name = name
+
+
 def _listed_rois(session):
     """The table's row order: the measured ROIs, then the masks cut out
     of them. Rows map back to ROIs by the roi_id their items carry."""
@@ -368,9 +377,14 @@ class RoiStatsTable(QTableWidget):
             return
         if item.column() != 0:
             return
-        roi = self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
-        if roi is not None and item.text().strip():
-            roi.name = item.text().strip()
+
+        roi_id = item.data(Qt.ItemDataRole.UserRole)
+        name = item.text().strip()
+
+        if name:
+            # Out of Qt's own edit: a rename can merge this ROI into
+            # another (RoiAnalysisController), removing this very row.
+            QTimer.singleShot(0, lambda: _rename(self._model, roi_id, name))
 
     def _visible_item(self, roi):
         """Eye toggle over roi.style.visible — the plot skips a hidden

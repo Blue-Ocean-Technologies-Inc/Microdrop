@@ -630,3 +630,53 @@ def test_dont_ask_again_remembers_the_delete_scope(
         assert second.absent_at == first.absent_at != []
     else:
         assert controller.session.rois == []
+
+
+def test_renaming_a_redrawn_shape_makes_it_the_deleted_rois_shape_there(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_THIS_IMAGE, False)
+    )
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    runner = controller.runner
+    capture_time = capture_timestamp(image)
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+    model.delete_roi_button = True
+
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    _roi, replacement = controller.session.rois
+    runner.instant.clear()
+
+    replacement.name = roi.name
+
+    assert controller.session.rois == [roi]
+    assert roi.absent_at == []
+    assert roi.effective_geometry(capture_time) == [30.0, 30.0, 8.0, 8.0, 0.0]
+    assert roi.effective_geometry(capture_time + 1.0) == [10.0, 10.0, 5.0, 5.0, 0.0]
+    assert "replaced ROI 1" in model.progress_text
+    (remeasured,) = runner.instant
+    assert remeasured[1] == {roi.roi_id: ("ellipse", (30.0, 30.0, 8.0, 8.0, 0.0))}
+
+    model.undo_roi_button = True
+
+    assert controller.session.rois == [roi, replacement]
+    assert replacement.name == "ROI 2"
+    assert roi.absent_at == [capture_time] and roi.local_overrides == {}
+
+
+def test_a_rename_that_is_not_a_redraw_stays_a_rename(tmp_path):
+    controller, _image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    first, second = controller.session.rois
+
+    # The first ROI is not deleted from this image: names may repeat.
+    second.name = first.name
+
+    assert controller.session.rois == [first, second]
+    assert second.name == first.name
