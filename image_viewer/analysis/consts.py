@@ -28,9 +28,10 @@ ROLLING_BALL_RADIUS_PX = 50
 # from drifting apart.
 # --------------------------------------------------------------------
 #: Ring gap / thickness (px). Gap may be 0 (ring hugs the shape); the
-#: ring itself needs at least one pixel of width to exist.
-RING_GAP_BOUNDS_PX = (0, 50)
-RING_THICKNESS_BOUNDS_PX = (1, 50)
+#: ring itself needs at least one pixel of width to exist. 500 leaves
+#: room to clear the halo of a droplet hundreds of pixels across.
+RING_GAP_BOUNDS_PX = (0, 500)
+RING_THICKNESS_BOUNDS_PX = (1, 500)
 #: Rolling-ball radius (px): below 5 the ball is smaller than the
 #: features it must clear; 500 exceeds any unevenness a frame carries.
 ROLLING_BALL_RADIUS_BOUNDS_PX = (5, 500)

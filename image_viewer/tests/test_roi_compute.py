@@ -24,6 +24,7 @@ from image_viewer.analysis.roi_compute import (
     masked_stats,
     negative_union,
     ring_contours,
+    ring_mask,
     roi_masks,
     stats_are_current,
     subtract_rolling_ball,
@@ -195,6 +196,49 @@ def test_ring_area_matches_the_annulus():
     inner, outer = 40.0 + gap, 40.0 + gap + thickness
     expected = math.pi * (outer**2 - inner**2)
     assert abs(np.count_nonzero(ring) - expected) / expected < 0.10
+
+
+def test_a_gap_0_ring_holds_no_interior_pixels():
+    interior, ring = roi_masks(
+        (200, 200), "polygon", (40.0, 40.0, 160.0, 60.0, 90.0, 150.0), 0, 5
+    )
+    assert np.count_nonzero(ring) > 0
+    assert np.count_nonzero((interior == 255) & (ring == 255)) == 0
+
+
+def test_a_gap_0_ring_is_every_pixel_within_the_thickness():
+    thickness = 4
+    interior, ring = roi_masks(
+        (60, 60), "polygon", (15.0, 15.0, 45.0, 20.0, 25.0, 45.0), 0, thickness
+    )
+
+    # Brute-force Euclidean distance from every pixel to the shape.
+    inside = np.argwhere(interior == 255)
+    pixels = np.argwhere(np.ones(interior.shape, dtype=bool))
+    squared = ((pixels[:, None, :] - inside[None, :, :]) ** 2).sum(axis=2).min(axis=1)
+
+    expected = np.count_nonzero((squared > 0) & (squared <= thickness**2))
+    assert np.count_nonzero(ring) == expected
+
+
+def test_an_empty_interior_has_no_ring():
+    ring = ring_mask(np.zeros((80, 80), dtype=np.uint8), 300, 50)
+    assert ring.shape == (80, 80)
+    assert not ring.any()
+
+
+def test_a_negative_mask_cuts_a_wide_gap_ring(tmp_path):
+    array = np.full((400, 400), 100, dtype=np.uint16)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    rois = {"a": ("ellipse", (200.0, 200.0, 40.0, 40.0, 0.0))}
+    dust = ("ellipse", (200.0, 330.0, 15.0, 15.0, 0.0))  # in the ring, 90 px out
+
+    plain = compute_image_stats(str(path), rois, 80, 20)["stats"]
+    cut = compute_image_stats(str(path), rois, 80, 20, negatives=(dust,))["stats"]
+
+    assert plain["a"]["outline_count"] > 0
+    assert cut["a"]["outline_count"] < plain["a"]["outline_count"]
 
 
 def test_gap_pushes_the_ring_outwards():

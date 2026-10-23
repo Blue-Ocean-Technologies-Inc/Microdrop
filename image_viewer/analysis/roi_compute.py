@@ -12,7 +12,8 @@
 worker processes): each ROI's interior mask, the background annulus
 outside it, and the summary stats of the masked pixels. Ported from the
 standalone fluorescence app's ROIManager (image_tools.py); the ring is
-this app's own, built by dilation so it never overlaps the shape."""
+this app's own, built from a distance transform so it never overlaps
+the shape."""
 
 # Standard library imports.
 import os
@@ -98,29 +99,41 @@ def _disk(radius):
 
 
 def ring_mask(interior, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX):
-    """The annulus outside ``interior``: the shape dilated by
-    gap + thickness, less the shape dilated by gap. With gap 0 the
-    inner edge is the shape's own boundary, so the ring can never
-    contain interior pixels. Dilation is exactly 'expand by N', which
-    is why this works for a traced contour as readily as an ellipse."""
+    """The annulus outside ``interior``: every pixel more than gap and
+    at most gap + thickness from the shape, by exact Euclidean distance.
+
+    A distance transform gives each pixel its distance to the nearest
+    interior pixel in one O(pixels) pass, so the ring is the annulus a
+    disk dilation would grow, at a cost that does not climb with the
+    gap — a disk kernel costs O(radius²) per pixel, and the large gaps
+    a wide frame needs to clear a droplet's halo took seconds per ROI.
+    Interior pixels sit at distance 0, so even with gap 0 the inner
+    edge is the shape's own boundary and the ring can never contain
+    interior pixels. It works for a traced contour as readily as an
+    ellipse."""
     gap_px = max(int(gap_px), 0)
     thickness_px = max(int(thickness_px), 1)
     ring = np.zeros_like(interior)
     rows, columns = np.nonzero(interior)
+
     if not len(rows):
         return ring
-    # Dilate on a crop, so cost tracks the ROI rather than the frame.
-    # One pixel past the ring's own reach, so the dilation has room and
-    # nothing is clipped by the crop's edge.
+
+    # Measure on a crop, so cost tracks the ROI rather than the frame.
+    # One pixel past the ring's own reach, so nothing in the ring is
+    # clipped by the crop's edge.
     pad = gap_px + thickness_px + 1
     top = max(int(rows.min()) - pad, 0)
     bottom = min(int(rows.max()) + pad + 1, interior.shape[0])
     left = max(int(columns.min()) - pad, 0)
     right = min(int(columns.max()) + pad + 1, interior.shape[1])
-    patch = interior[top:bottom, left:right]
-    outer = cv2.dilate(patch, _disk(gap_px + thickness_px))
-    inner = cv2.dilate(patch, _disk(gap_px)) if gap_px else patch
-    ring[top:bottom, left:right] = cv2.subtract(outer, inner)
+    outside = cv2.bitwise_not(interior[top:bottom, left:right])
+
+    # Distance from each outside pixel to the nearest interior one.
+    distance = cv2.distanceTransform(outside, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    band = (distance > gap_px) & (distance <= gap_px + thickness_px)
+    ring[top:bottom, left:right][band] = MASK_ON
+
     return ring
 
 
