@@ -1021,6 +1021,10 @@ class RoiAnalysisModel(HasTraits):
     #: View -> controller channels fired by the canvas ROI layer.
     canvas_roi_created = Event()  # (kind, geometry)
     canvas_roi_edited = Event()  # (roi_id, geometry)
+    #: A name the ROI table committed for an ROI, changed or not — a
+    #: name another ROI already has merges the two (see
+    #: RoiAnalysisController._rename_roi). # (roi_id, name)
+    rename_roi_request = Event()
     #: Escape out of an armed draw tool (which now stays armed until
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).

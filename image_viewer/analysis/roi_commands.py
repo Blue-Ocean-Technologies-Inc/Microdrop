@@ -22,7 +22,7 @@ import math
 
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Str, Tuple
+from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Tuple
 
 # Local imports.
 from .consts import ROI_ABSENCE_SCOPES
@@ -242,53 +242,73 @@ def _bound(pick, current, capture_time):
 
 
 class MergeRoiOnImageCommand(_SessionCommand):
-    """Give ``roi`` the shape ``replacement`` has on one image, there
-    alone, and drop ``replacement`` — a shape redrawn on an image taking
-    over the identity (id, plot line, CSV column, style) of the ROI that
-    was deleted from that image."""
+    """Merge ``replacement`` into ``roi`` on the shown image: ``roi``
+    takes the replacement's shape there (as its single-image shape), its
+    other single-image shapes and its forward overrides — the replacement
+    winning where both have one, so tracking done on it continues as
+    ``roi`` — and comes back on the image; the replacement goes. ``roi``
+    keeps its identity: id, plot line, CSV column, style."""
 
-    #: The ROI keeping its identity: back on the image, in a new shape.
+    #: The ROI keeping its identity.
     roi = Instance(Roi)
 
-    #: The ROI whose shape it takes there, removed from the session.
+    #: The ROI merged into it and removed from the session.
     replacement = Instance(Roi)
 
-    #: Capture time of the image.
+    #: Capture time of the shown image.
     capture_time = Float()
 
-    #: The replacement's name before the rename that asked for the
-    #: merge, given back to it on undo.
-    replacement_name = Str()
+    #: ``roi``'s deletion ranges once the image is taken out of them
+    #: (RoiAnalysisController works them out; NaN for none).
+    absent_from = Float(math.nan)
+    absent_until = Float(math.nan)
 
-    #: ``roi``'s single-image shapes and absences before the merge.
-    _before = Tuple(Any, List)
+    #: ``roi``'s overrides, single-image shapes and absences before the
+    #: merge: (overrides, local_overrides, absent_at, absent_from,
+    #: absent_until).
+    _before = Tuple(Any, Any, List, Float, Float)
 
     #: Where the replacement stood in the ROI list, for the undo.
     _pairs = List(Tuple(Int, Instance(Roi)))
 
     def _name_default(self):
-        return f"Replace {self.roi.name} on one image"
+        return f"Merge {self.replacement.name} into {self.roi.name}"
 
     def do(self):
-        self._before = (_copied(self.roi.local_overrides), list(self.roi.absent_at))
+        roi = self.roi
+        self._before = (
+            _copied(roi.overrides),
+            _copied(roi.local_overrides),
+            list(roi.absent_at),
+            roi.absent_from,
+            roi.absent_until,
+        )
         self.redo()
 
     def undo(self):
-        local_overrides, absent_at = self._before
-        self.roi.local_overrides = _copied(local_overrides)
-        self.roi.absent_at = list(absent_at)
+        overrides, local_overrides, absent_at, absent_from, absent_until = self._before
+        self.roi.trait_set(
+            overrides=_copied(overrides),
+            local_overrides=_copied(local_overrides),
+            absent_at=list(absent_at),
+            absent_from=absent_from,
+            absent_until=absent_until,
+        )
         _insert_into_session(self.session, self._pairs)
 
-        if self.replacement_name:
-            self.replacement.name = self.replacement_name
-
     def redo(self):
-        capture_time = self.capture_time
-        self.roi.local_overrides = {
-            **_copied(self.roi.local_overrides),
-            capture_time: self.replacement.effective_geometry(capture_time),
-        }
-        self.roi.absent_at = [
-            time for time in self.roi.absent_at if time != capture_time
-        ]
-        self._pairs = _remove_from_session(self.session, [self.replacement])
+        roi, replacement, capture_time = self.roi, self.replacement, self.capture_time
+        # Fresh dicts and lists: the canvas and the table follow them by
+        # assignment.
+        roi.trait_set(
+            overrides={**_copied(roi.overrides), **_copied(replacement.overrides)},
+            local_overrides={
+                **_copied(roi.local_overrides),
+                **_copied(replacement.local_overrides),
+                capture_time: replacement.effective_geometry(capture_time),
+            },
+            absent_at=[time for time in roi.absent_at if time != capture_time],
+            absent_from=self.absent_from,
+            absent_until=self.absent_until,
+        )
+        self._pairs = _remove_from_session(self.session, [replacement])

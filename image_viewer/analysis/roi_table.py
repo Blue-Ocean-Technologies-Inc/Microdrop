@@ -126,15 +126,6 @@ _TABLE_VALUES = (
 )
 
 
-def _rename(model, roi_id, name):
-    """Give the session's ROI ``roi_id`` its new ``name``, if it is
-    still there."""
-    roi = model.session.roi_by_id(roi_id)
-
-    if roi is not None:
-        roi.name = name
-
-
 def _listed_rois(session):
     """The table's row order: the measured ROIs, then the masks cut out
     of them. Rows map back to ROIs by the roi_id their items carry."""
@@ -153,6 +144,10 @@ class RoiStatsTable(QTableWidget):
         self._pending = None  # None | "rebuild" | "values"
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self._on_item_changed)
+        # Every committed edit, changed or not: itemChanged stays quiet
+        # when the text is unchanged, and re-committing a name another
+        # ROI carries must still merge the two.
+        self.itemDelegate().commitData.connect(self._on_editor_committed)
         self.cellClicked.connect(self._on_cell_clicked)
         model.observe(self._on_structure_changed, _TABLE_STRUCTURE)
         model.observe(self._on_values_changed, _TABLE_VALUES)
@@ -370,23 +365,30 @@ class RoiStatsTable(QTableWidget):
         self._rebuilding = False
 
     def _on_item_changed(self, item):
-        if self._rebuilding:
-            return
-        if item.column() == _BACKGROUND_REF_COLUMN:
-            roi = self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
-            if roi is not None:
-                roi.is_background_ref = item.checkState() == Qt.CheckState.Checked
-            return
-        if item.column() != 0:
+        """The Bkg Ref tick changed (names go through _on_editor_committed)."""
+        if self._rebuilding or item.column() != _BACKGROUND_REF_COLUMN:
             return
 
-        roi_id = item.data(Qt.ItemDataRole.UserRole)
-        name = item.text().strip()
+        roi = self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
 
-        if name:
-            # Out of Qt's own edit: a rename can merge this ROI into
-            # another (RoiAnalysisController), removing this very row.
-            QTimer.singleShot(0, lambda: _rename(self._model, roi_id, name))
+        if roi is not None:
+            roi.is_background_ref = item.checkState() == Qt.CheckState.Checked
+
+    def _on_editor_committed(self, editor):
+        """A cell edit was committed: for a name cell, ask for the rename
+        (RoiAnalysisController decides whether it is a merge)."""
+        # The cell being edited is the current one.
+        index = self.currentIndex()
+        item = self.item(index.row(), 0) if index.column() == 0 else None
+        name = editor.text().strip() if hasattr(editor, "text") else ""
+
+        if item is None or not name:
+            return
+
+        request = (item.data(Qt.ItemDataRole.UserRole), name)
+        model = self._model
+        # Out of Qt's own edit: a merge removes this very row.
+        QTimer.singleShot(0, lambda: model.trait_set(rename_roi_request=request))
 
     def _visible_item(self, roi):
         """Eye toggle over roi.style.visible — the plot skips a hidden

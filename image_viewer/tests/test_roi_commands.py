@@ -243,11 +243,15 @@ def test_edit_undo_restores_a_single_image_shape():
     assert roi.local_overrides == {30.0: [1.0, 1.0, 1.0, 1.0, 0.0]}
 
 
-def test_merging_a_redrawn_shape_into_an_roi_on_one_image_undoes_and_redoes():
+def test_merging_an_roi_into_another_carries_its_shapes_and_undoes_exactly():
     session = _session(2)
     roi, replacement = session.rois
     roi.absent_at = [100.0, 300.0]
-    replacement.name = roi.name
+    roi.absent_from = 100.0
+    roi.overrides = {50.0: [5.0] * 5, 200.0: [20.0] * 5}
+    roi.local_overrides = {400.0: [40.0] * 5}
+    replacement.overrides = {200.0: [22.0] * 5, 250.0: [25.0] * 5}
+    replacement.local_overrides = {400.0: [44.0] * 5}
     stack = _stack()
 
     stack.push(
@@ -256,18 +260,21 @@ def test_merging_a_redrawn_shape_into_an_roi_on_one_image_undoes_and_redoes():
             roi=roi,
             replacement=replacement,
             capture_time=100.0,
-            replacement_name="ROI 2",
+            absent_from=150.0,
         )
     )
     assert session.rois == [roi]
-    assert roi.local_overrides == {100.0: [2.0] * 5}
-    assert roi.absent_at == [300.0]
-    assert stack.undo_name == "Replace ROI 1 on one image"
+    assert stack.undo_name == "Merge ROI 2 into ROI 1"
+    # The replacement wins where both have a shape.
+    assert roi.overrides == {50.0: [5.0] * 5, 200.0: [22.0] * 5, 250.0: [25.0] * 5}
+    assert roi.local_overrides == {400.0: [44.0] * 5, 100.0: [2.0] * 5}
+    assert roi.absent_at == [300.0] and roi.absent_from == 150.0
 
     stack.undo()
     assert session.rois == [roi, replacement]
-    assert roi.local_overrides == {} and roi.absent_at == [100.0, 300.0]
-    assert replacement.name == "ROI 2"
+    assert roi.overrides == {50.0: [5.0] * 5, 200.0: [20.0] * 5}
+    assert roi.local_overrides == {400.0: [40.0] * 5}
+    assert roi.absent_at == [100.0, 300.0] and roi.absent_from == 100.0
 
     stack.redo()
     assert session.rois == [roi]

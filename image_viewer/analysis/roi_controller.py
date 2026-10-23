@@ -97,6 +97,30 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
+def _ranges_opened_at(roi, capture_time):
+    """(absent_from, absent_until) for ``roi`` with the image captured at
+    ``capture_time`` taken out of its deletion ranges — a range starting
+    (or ending) exactly there now starts just after (ends just before)
+    it, so every other image it covered, captures still to come
+    included, stays deleted. None when a range covers the image from
+    both sides: opening a hole in it would mean splitting it."""
+    absent_from, absent_until = roi.absent_from, roi.absent_until
+
+    if capture_time >= absent_from:
+        if capture_time > absent_from:
+            return None
+
+        absent_from = math.nextafter(capture_time, math.inf)
+
+    if capture_time <= absent_until:
+        if capture_time < absent_until:
+            return None
+
+        absent_until = math.nextafter(capture_time, -math.inf)
+
+    return absent_from, absent_until
+
+
 class RoiAnalysisController(HasTraits):
     """Glue between the viewer model (whose ``paths`` IS the filtered
     series), the analysis model, and the batch runner."""
@@ -592,56 +616,74 @@ class RoiAnalysisController(HasTraits):
         # nothing, so nothing else would redraw the plot.
         self.session.stats_revision += 1
 
-    @observe("analysis_model:session:rois:items:name")
-    def _merge_renamed_roi(self, event):
-        """Renaming a shape drawn on the shown image to the name of an
-        ROI deleted from that image alone makes it that ROI's shape
-        there: the ROI comes back on the image, keeping its identity,
-        and the new shape goes. Every other rename is just a rename."""
-        replacement = event.object
-        current = self.viewer_model.current_path
+    @observe("analysis_model:rename_roi_request")
+    def _rename_roi(self, event):
+        """Name an ROI as the table committed it. A name another ROI
+        already carries merges the renamed ROI into that one on the shown
+        image (MergeRoiOnImageCommand) — the way to give an ROI a new
+        shape from an image on, keeping its identity. With no image shown,
+        or a negative mask on either side, it is a plain rename and the
+        status says why it did not merge."""
+        roi_id, name = event.new
+        replacement = self.session.roi_by_id(roi_id)
 
-        if not current or replacement.is_negative:
+        if replacement is None:
             return
 
-        capture_time = capture_timestamp(current)
         roi = next(
             (
-                roi
-                for roi in self.session.rois
-                if roi is not replacement and roi.name == event.new
+                other
+                for other in self.session.rois
+                if other is not replacement and other.name == name
             ),
             None,
         )
 
-        if roi is None or roi.is_negative or capture_time not in roi.absent_at:
+        if roi is None:
+            replacement.name = name
             return
 
-        # Only a shape drawn here and not edited elsewhere: one with a
-        # life on other images is an ROI of its own.
-        if (
-            replacement.base_anchor != capture_time
-            or replacement.overrides
-            or replacement.local_overrides
-        ):
+        model = self.analysis_model
+        current = self.viewer_model.current_path
+
+        if not current:
+            model.progress_text = (
+                f"Show an image to merge {replacement.name} into {name}"
+            )
+            replacement.name = name
             return
 
+        if replacement.is_negative or roi.is_negative:
+            model.progress_text = "Masks cannot be merged: renamed only"
+            replacement.name = name
+            return
+
+        capture_time = capture_timestamp(current)
+        ranges = _ranges_opened_at(roi, capture_time)
+
+        if ranges is None:
+            model.progress_text = (
+                f"{roi.name} is removed here by a range — Restore it first"
+            )
+            return
+
+        absent_from, absent_until = ranges
+        merged_name = replacement.name
         self._push(
             MergeRoiOnImageCommand(
                 session=self.session,
                 roi=roi,
                 replacement=replacement,
                 capture_time=capture_time,
-                replacement_name=event.old,
+                absent_from=absent_from,
+                absent_until=absent_until,
             )
         )
 
-        if self.analysis_model.selected_roi_id == replacement.roi_id:
-            self.analysis_model.selected_roi_id = roi.roi_id
+        if model.selected_roi_id == replacement.roi_id:
+            model.selected_roi_id = roi.roi_id
 
-        self.analysis_model.progress_text = (
-            f"{event.old} replaced {roi.name} on this image"
-        )
+        model.progress_text = f"{merged_name} merged into {roi.name}"
         self.session.stats_revision += 1
         self._instant_stats([roi])
 
