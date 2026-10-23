@@ -170,6 +170,7 @@ _ABSENCE_SCOPE_WORDS = {
     "image": "on one image",
     "later": "from one image on",
     "earlier": "up to one image",
+    "except": "everywhere but one image",
 }
 
 
@@ -186,7 +187,8 @@ class HideRoiOnImageCommand(_SessionCommand):
     capture_time = Float()
 
     #: That image alone (absent_at), it and every later one
-    #: (absent_from), or it and every earlier one (absent_until).
+    #: (absent_from), it and every earlier one (absent_until), or every
+    #: image but it (both ranges, stopping either side of it).
     #: Repeating "later" from another image widens the range — the
     #: earliest start wins — and "earlier" likewise keeps the latest end.
     scope = Enum(*ROI_ABSENCE_SCOPES)
@@ -220,7 +222,20 @@ class HideRoiOnImageCommand(_SessionCommand):
     def redo(self):
         roi, capture_time = self.roi, self.capture_time
 
-        if self.scope == "later":
+        if self.scope == "except":
+            # Ranges stopping either side of the image, so captures still
+            # to come are covered too.
+            roi.trait_set(
+                absent_until=(
+                    math.nan
+                    if self.restore
+                    else math.nextafter(capture_time, -math.inf)
+                ),
+                absent_from=(
+                    math.nan if self.restore else math.nextafter(capture_time, math.inf)
+                ),
+            )
+        elif self.scope == "later":
             roi.absent_from = (
                 math.nan if self.restore else _bound(min, roi.absent_from, capture_time)
             )

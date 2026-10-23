@@ -25,7 +25,10 @@ from pyface.api import YES
 from image_viewer.analysis import roi_controller
 from image_viewer.analysis.consts import (
     DEFAULT_ROI_COLORS,
+    DELETE_ROI_ALL_BUT_THIS,
     DELETE_ROI_ALL_IMAGES,
+    DELETE_ROI_EARLIER_IMAGES,
+    DELETE_ROI_LATER_IMAGES,
     DELETE_ROI_THIS_IMAGE,
     NEGATIVE_MASK_COLOR,
     PASTE_OFFSET_PX,
@@ -848,3 +851,50 @@ def test_a_merge_keeps_the_longer_lived_roi_whichever_way_it_is_renamed(
     assert controller.session.rois == [old, new]
     assert old.name == "ROI 1" and new.name == "ROI 2"
     assert old.absent_at == [capture_time] and old.local_overrides == {}
+
+
+@pytest.mark.parametrize(
+    "choice, before, here, after",
+    [
+        (DELETE_ROI_LATER_IMAGES, True, False, False),
+        (DELETE_ROI_EARLIER_IMAGES, False, False, True),
+        (DELETE_ROI_ALL_BUT_THIS, False, True, False),
+    ],
+)
+def test_deleting_over_a_range_spares_the_rest(
+    tmp_path, monkeypatch, choice, before, here, after
+):
+    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: (choice, False))
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    capture_time = capture_timestamp(image)
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    model.delete_roi_button = True
+
+    assert controller.session.rois == [roi]
+    assert roi.applies_at(capture_time - 60.0) is before
+    assert roi.applies_at(capture_time) is here
+    assert roi.applies_at(capture_time + 60.0) is after
+
+    # Restore from a later image the ROI is off, as a range restore:
+    # it clears the range that covers that image.
+    later = tmp_path / "b_2026_07_20-10_01_00_raw.png"
+    later.write_bytes(b"")
+    restore_on = image if choice == DELETE_ROI_EARLIER_IMAGES else str(later)
+    controller.viewer_model.current_path = restore_on
+
+    assert controller.viewer_model.absent_roi_count == 1
+    assert controller.viewer_model.absent_roi_ranged
+    assert "ranges" in controller.viewer_model.absent_roi_text
+
+    model.restore_absent_rois_button = True
+
+    assert roi.applies_at(capture_timestamp(restore_on))
+    assert controller.viewer_model.absent_roi_count == 0
+
+    model.undo_roi_button = True
+
+    assert not roi.applies_at(capture_timestamp(restore_on))

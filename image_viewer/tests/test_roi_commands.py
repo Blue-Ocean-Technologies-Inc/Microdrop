@@ -434,3 +434,34 @@ def test_undoing_a_merge_gives_back_both_rois_whole():
     assert removed.absent_at == [400.0] and removed.absent_until == 50.0
     assert removed.expected_fastest_change == 12.0 and removed.is_background_ref
     assert removed.style.color == "#123456"
+
+
+def test_deleting_everywhere_but_one_image_and_undoing_it():
+    session = _session(1)
+    (roi,) = session.rois
+    stack = _stack()
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=200.0, scope="except"
+        )
+    )
+    assert stack.undo_name == "Delete ROI 1 everywhere but one image"
+    assert roi.applies_at(200.0)
+    assert not roi.applies_at(100.0) and not roi.applies_at(300.0)
+
+    stack.undo()
+    assert math.isnan(roi.absent_from) and math.isnan(roi.absent_until)
+
+    stack.redo()
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session,
+            roi=roi,
+            capture_time=200.0,
+            scope="except",
+            restore=True,
+        )
+    )
+    assert stack.undo_name == "Restore ROI 1 everywhere but one image"
+    assert roi.applies_at(100.0) and roi.applies_at(300.0)

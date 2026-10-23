@@ -247,3 +247,15 @@ def test_an_roi_deleted_over_a_range_does_not_apply_inside_it():
     assert both.absent_by(400.0) == ["later"]
     # Unset ranges cover nothing.
     assert Roi().absent_by(0.0) == []
+
+
+def test_an_roi_deleted_everywhere_but_one_image_applies_there_alone():
+    roi = Roi(
+        absent_until=math.nextafter(200.0, -math.inf),
+        absent_from=math.nextafter(200.0, math.inf),
+    )
+
+    assert roi.applies_at(200.0)
+    assert not roi.applies_at(199.999)
+    assert not roi.applies_at(200.001)
+    assert not roi.applies_at(0.0) and not roi.applies_at(1e9)

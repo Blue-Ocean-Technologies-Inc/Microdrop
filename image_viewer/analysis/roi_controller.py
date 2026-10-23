@@ -35,6 +35,7 @@ from ..model import ImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS,
+    DELETE_ROI_ALL_BUT_THIS,
     DELETE_ROI_ALL_IMAGES,
     DELETE_ROI_EARLIER_IMAGES,
     DELETE_ROI_LATER_IMAGES,
@@ -570,6 +571,7 @@ class RoiAnalysisController(HasTraits):
                 DELETE_ROI_THIS_IMAGE,
                 DELETE_ROI_LATER_IMAGES,
                 DELETE_ROI_EARLIER_IMAGES,
+                DELETE_ROI_ALL_BUT_THIS,
                 DELETE_ROI_ALL_IMAGES,
             ],
             informative="Short of all images, it can be put back with Undo or "
