@@ -67,7 +67,11 @@ def test_cache_key_includes_the_ring(tmp_path):
     session.ring.gap_px = 5
     after = session.cache_key(str(image), roi)
     assert before != after
-    assert after[5] == (5, session.ring.thickness_px, 0, (), ())
+    assert after[5] == (5, session.ring.thickness_px, 0, (), (), 100)
+
+    # Measuring less of each ROI selects a different set of stats too.
+    session.ring.inside_percent = 90
+    assert session.cache_key(str(image), roi)[5][-1] == 90
 
 
 def test_cache_key_includes_the_rolling_ball(tmp_path):
@@ -125,7 +129,7 @@ def test_experiment_switch_saves_and_reloads_stats(tmp_path, monkeypatch):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     controller.session.stats[key] = {"mean": 7.0, "count": 4.0}
     controller._mark_stats_dirty()
@@ -192,8 +196,13 @@ def test_negatives_for_applies_drift_overrides(tmp_path):
         ("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),
     )
     assert session.negatives_for(str(late)) == (("ellipse", (7.0, 7.0, 2.0, 2.0, 0.0)),)
-    assert session.correction_for(str(late)) == session.correction_key() + (
+    # The negatives slot in before the measured share, in
+    # compute_image_stats's parameter order.
+    *settings, inside_percent = session.correction_key()
+    assert session.correction_for(str(late)) == (
+        *settings,
         session.negatives_for(str(late)),
+        inside_percent,
     )
 
 

@@ -92,6 +92,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 # Local imports.
 from .analysis.consts import (
     AI_SIZE_FILTER_CEILING_PX,
+    MEASURE_INSIDE_BOUNDS_PERCENT,
     RING_GAP_BOUNDS_PX,
     RING_THICKNESS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
@@ -501,6 +502,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
@@ -547,6 +549,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
@@ -609,7 +612,9 @@ class _ImageCanvasEditor(QtEditor):
 
         session = model.roi_analysis.session
         ring = session.ring
-        self._roi_layer.set_ring(ring.gap_px, ring.thickness_px, ring.show_on_canvas)
+        self._roi_layer.set_ring(
+            ring.gap_px, ring.thickness_px, ring.show_on_canvas, ring.inside_percent
+        )
         ball = session.ball
         self._roi_layer.set_ball_reference(
             ball.enabled and ball.show_reference, ball.radius_px
@@ -1328,6 +1333,20 @@ correction_group = Group(
         ),
         tooltip="Thickness of the background ring, in pixels. "
         "Changing either value recomputes the statistics.",
+    ),
+    Item(
+        "object.roi_analysis.session.ring.inside_percent",
+        label="Measure inside (%)",
+        editor=RangeEditor(
+            low=MEASURE_INSIDE_BOUNDS_PERCENT[0],
+            high=MEASURE_INSIDE_BOUNDS_PERCENT[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Measure only the inner N% of each ROI, by its "
+        "equivalent radius, leaving a band along the boundary out — "
+        "so the bright rim at a droplet's edge does not enter the "
+        "mean. 100 measures the whole shape. The ring is unchanged.",
     ),
     Item(
         "object.roi_analysis.session.ball.radius_px",

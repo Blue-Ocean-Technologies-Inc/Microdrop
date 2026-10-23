@@ -246,7 +246,7 @@ def test_stats_store_round_trip_including_nan(tmp_path):
         "abcd1234",
         "ellipse",
         (10.0, 10.0, 5.0, 5.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
@@ -664,7 +664,7 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
         for image in (0, 1)
     ]
     csv_path = tmp_path / "out.csv"
-    write_intensity_csv(csv_path, rows, rois, correction=(2, 4, 60, ()))
+    write_intensity_csv(csv_path, rows, rois, correction=(2, 4, 60, (), 90))
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
@@ -681,7 +681,7 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     # And every row says what it was measured with — including that
     # no heater sensor read the (absent) temperature column.
     for row in body:
-        assert row[-5:] == ["2", "4", "60", "0", ""]
+        assert row[-6:] == ["2", "4", "90", "60", "0", ""]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
@@ -730,11 +730,14 @@ def test_write_expected_csv_round_trips_the_table(tmp_path):
 
 def test_background_ring_round_trips(tmp_path):
     session = AnalysisSession(directory=str(tmp_path))
-    session.ring.trait_set(gap_px=3, thickness_px=7, show_on_canvas=False)
+    session.ring.trait_set(
+        gap_px=3, thickness_px=7, inside_percent=85, show_on_canvas=False
+    )
     save_session(tmp_path, session)
 
     ring = load_session(tmp_path).ring
     assert ring.gap_px == 3 and ring.thickness_px == 7
+    assert ring.inside_percent == 85
     assert ring.show_on_canvas is False
 
 
@@ -767,7 +770,7 @@ def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     store[fresh] = {"mean": 9.0}
     save_roi_stats(tmp_path, store)
@@ -782,7 +785,7 @@ def _stats_key_for(image, roi_id="abcd1234", geometry=(5.0, 5.0, 2.0, 2.0, 0.0))
         roi_id,
         "ellipse",
         geometry,
-        (2, 4, 60, (), ()),
+        (2, 4, 60, (), (), 100),
     )
 
 
@@ -1044,6 +1047,56 @@ def test_stats_from_before_negative_masks_still_match(tmp_path):
     assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
 
 
+def test_stats_from_before_the_measured_share_still_match(tmp_path):
+    # Measured over the whole ROI, which is what a current key carries
+    # at 100% — the five-element correction is padded.
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "images": [
+                    {
+                        "file": "a_raw.png",
+                        "mtime": image.stat().st_mtime,
+                        "measurements": [
+                            {
+                                "roi_id": "abcd1234",
+                                "kind": "ellipse",
+                                "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+                                "correction": [2, 4, 0, [], []],
+                                "stats": {"mean": 7.0},
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    session = AnalysisSession(
+        rois=[
+            Roi(
+                roi_id="abcd1234",
+                name="ROI 1",
+                kind="ellipse",
+                geometry=[5.0, 5.0, 2.0, 2.0, 0.0],
+            )
+        ]
+    )
+    session.ring.trait_set(gap_px=2, thickness_px=4)
+    session.stats = load_roi_stats(tmp_path)
+
+    (roi,) = session.rois
+    assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
+
+    # Measuring less of the ROI is a different key: nothing matches.
+    session.ring.inside_percent = 90
+    assert session.cache_key(image, roi) not in session.stats
+
+
 def test_stats_measured_under_a_mask_round_trip(tmp_path):
     image = tmp_path / "a_raw.png"
     image.write_bytes(b"")
@@ -1057,7 +1110,7 @@ def test_stats_measured_under_a_mask_round_trip(tmp_path):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), negatives),
+        (2, 4, 0, (), negatives, 100),
     )
     save_roi_stats(tmp_path, {key: {"mean": 7.0}})
 

@@ -21,6 +21,12 @@ RING_THICKNESS_PX = 4
 #: than a droplet, or the ball rolls over the signal too.
 ROLLING_BALL_RADIUS_PX = 50
 
+#: Default share of each ROI that is measured, as a percentage of its
+#: equivalent radius: 100 measures the whole shape. Lower values leave
+#: a band along the boundary out, where a droplet's bright rim
+#: (meniscus lensing, not fluorescence) would otherwise lift the mean.
+MEASURE_INSIDE_PERCENT_DEFAULT = 100
+
 # --------------------------------------------------------------------
 # (min, max) bounds of every user-editable number. Each is read by the
 # model trait AND by the spinner that edits it — and, for the ball, by
@@ -32,6 +38,9 @@ ROLLING_BALL_RADIUS_PX = 50
 #: room to clear the halo of a droplet hundreds of pixels across.
 RING_GAP_BOUNDS_PX = (0, 500)
 RING_THICKNESS_BOUNDS_PX = (1, 500)
+#: Measured share of each ROI (%). Below half the radius the region
+#: left is too small to stand for the droplet.
+MEASURE_INSIDE_BOUNDS_PERCENT = (50, 100)
 #: Rolling-ball radius (px): below 5 the ball is smaller than the
 #: features it must clear; 500 exceeds any unevenness a frame carries.
 ROLLING_BALL_RADIUS_BOUNDS_PX = (5, 500)

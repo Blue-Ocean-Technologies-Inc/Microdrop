@@ -69,6 +69,8 @@ from .consts import (
     HEATER_WINDOW_MS,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
+    MEASURE_INSIDE_BOUNDS_PERCENT,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_BOUNDS_PTS,
@@ -398,14 +400,22 @@ class PerspectiveCorrection(HasTraits):
 
 
 class BackgroundRing(HasTraits):
-    """The annulus each ROI's background is read from (persisted per
-    experiment). These change what is measured, so they are part of the
-    stats cache key."""
+    """The annulus each ROI's background is read from, and how much of
+    the ROI inside it is measured (persisted per experiment). These
+    change what is measured, so they are part of the stats cache key."""
 
     #: Pixels between the ROI's edge and the ring — fluorescence bleeds
     #: past the boundary and that halo is not background.
     gap_px = Range(*RING_GAP_BOUNDS_PX, RING_GAP_PX, mode="spinner")
     thickness_px = Range(*RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, mode="spinner")
+
+    #: Share of each ROI's equivalent radius that is measured: below 100
+    #: a band along the boundary is left out, so a droplet's bright rim
+    #: does not enter its mean (roi_compute.inset_mask).
+    inside_percent = Range(
+        *MEASURE_INSIDE_BOUNDS_PERCENT, MEASURE_INSIDE_PERCENT_DEFAULT, mode="spinner"
+    )
+
     show_on_canvas = Bool(True)
 
 
@@ -830,14 +840,16 @@ class AnalysisSession(HasTraits):
 
     def correction_key(self):
         """Everything about how the image is treated before a stat is
-        read off it — the ring, the rolling ball that runs before it, and
-        the perspective warp that runs first. One tuple, so the cache key
-        and the work item cannot drift apart."""
+        read off it — the ring, the rolling ball that runs before it,
+        the perspective warp that runs first, and the share of each ROI
+        measured. One tuple, so the cache key and the work item cannot
+        drift apart."""
         return (
             self.ring.gap_px,
             self.ring.thickness_px,
             self.ball.effective_radius(),
             self.perspective.effective_matrix(),
+            self.ring.inside_percent,
         )
 
     def negatives_for(self, path, stat_cache=None):
@@ -859,10 +871,15 @@ class AnalysisSession(HasTraits):
         )
 
     def correction_for(self, path, stat_cache=None):
-        """correction_key() plus the negative masks in force for
-        ``path`` — the work item's correction tuple, whose last element
-        compute_image_stats takes as ``negatives``."""
-        return self.correction_key() + (self.negatives_for(path, stat_cache),)
+        """correction_key() with the negative masks in force for
+        ``path`` slotted in before the measured share — the work item's
+        correction tuple, spread into compute_image_stats in its
+        parameter order (..., negatives, inside_percent). The share
+        comes last because it was added last: a persisted key from
+        before it existed is padded at the end (roi_store)."""
+        *settings, inside_percent = self.correction_key()
+
+        return (*settings, self.negatives_for(path, stat_cache), inside_percent)
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry, is_negative), ...] in force

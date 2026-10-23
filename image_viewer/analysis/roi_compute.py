@@ -10,12 +10,14 @@
 
 """Pure per-image ROI statistics (Qt-free and importable by spawned
 worker processes): each ROI's interior mask, the background annulus
-outside it, and the summary stats of the masked pixels. Ported from the
-standalone fluorescence app's ROIManager (image_tools.py); the ring is
-this app's own, built from a distance transform so it never overlaps
-the shape."""
+outside it, the inner part of the interior that is measured, and the
+summary stats of the masked pixels. Ported from the standalone
+fluorescence app's ROIManager (image_tools.py); the ring and the inset
+are this app's own, built from distance transforms so the ring never
+overlaps the shape and the inset never leaves it."""
 
 # Standard library imports.
+import math
 import os
 
 # Third-party imports.
@@ -25,6 +27,7 @@ import numpy as np
 # Local imports.
 from .consts import (
     MASK_ON,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     MIN_POLYGON_POINTS,
     OUTLINE_STATS_PREFIX,
     RING_GAP_PX,
@@ -137,6 +140,61 @@ def ring_mask(interior, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX):
     return ring
 
 
+def inset_mask(interior, inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT):
+    """``interior`` less a band of constant width along its boundary:
+    the part of the ROI whose intensity is measured.
+
+    The band is a share of the shape's equivalent radius, the radius of
+    the circle with the same area::
+
+        inset_px = round((1 - inside_percent / 100) * sqrt(area_px / pi))
+
+    so for a circle, 90 keeps the concentric circle at 90% of its
+    radius, and for any other shape it is the outer ring run in
+    reverse: every interior pixel more than inset_px from the nearest
+    exterior pixel, by exact Euclidean distance. The frame's edge
+    counts as exterior, so a shape cut off by it is inset there too.
+    100 returns ``interior`` itself."""
+    if inside_percent >= MEASURE_INSIDE_PERCENT_DEFAULT:
+        return interior
+
+    rows, columns = np.nonzero(interior)
+
+    if not len(rows):
+        return interior
+
+    equivalent_radius = math.sqrt(len(rows) / math.pi)
+    inset_px = round((1 - inside_percent / 100) * equivalent_radius)
+
+    # Measure on the shape's bounding box, so cost tracks the ROI rather
+    # than the frame, bordered by one exterior pixel so every interior
+    # pixel has an exterior one to be measured from.
+    top, bottom = int(rows.min()), int(rows.max()) + 1
+    left, right = int(columns.min()), int(columns.max()) + 1
+    crop = cv2.copyMakeBorder(
+        interior[top:bottom, left:right], 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0
+    )
+
+    # Distance from each interior pixel to the nearest exterior one.
+    distance = cv2.distanceTransform(crop, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    inset = np.zeros_like(interior)
+    inset[top:bottom, left:right][distance[1:-1, 1:-1] > inset_px] = MASK_ON
+
+    return inset
+
+
+def _contours_of(mask):
+    """The boundaries of ``mask`` as (N, 2) image-pixel arrays, each
+    with enough points to draw as a closed outline."""
+    found, _hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    return [
+        points.reshape(-1, 2).astype(float)
+        for points in found
+        if len(points) >= MIN_POLYGON_POINTS
+    ]
+
+
 def roi_masks(
     shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
 ):
@@ -163,12 +221,18 @@ def ring_contours(
     if negatives:
         ring = cv2.subtract(ring, negative_union(shape, negatives))
 
-    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    return [
-        points.reshape(-1, 2).astype(float)
-        for points in found
-        if len(points) >= MIN_POLYGON_POINTS
-    ]
+    return _contours_of(ring)
+
+
+def inset_contours(
+    shape, kind, geometry, inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT
+):
+    """The boundary of the measured part of one ROI (inset_mask) as
+    (N, 2) image-pixel arrays — taken from the very mask whose
+    intensity is averaged, like ring_contours."""
+    interior = interior_mask(shape, kind, geometry)
+
+    return _contours_of(inset_mask(interior, inside_percent))
 
 
 def _shrink_factor(radius_px):
@@ -256,6 +320,7 @@ def compute_image_stats(
     ball_radius_px=0,
     perspective=(),
     negatives=(),
+    inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
 ):
     """Stats for every ROI on one image — the process-pool work unit.
 
@@ -275,7 +340,14 @@ def compute_image_stats(
     drawn.
 
     The droplet's shape (``roi_shape_stats``) is read off the same
-    corrected frame, inside the interior mask.
+    corrected frame, inside the whole interior mask.
+
+    ``inside_percent`` below 100 takes the intensity stats, ``count``
+    included, over the inner part of each ROI only (inset_mask), leaving
+    out the band along the boundary where a droplet's bright rim sits.
+    The ring is still grown from the whole interior, and the shape stats
+    still read the whole interior: both describe the droplet, not the
+    region sampled inside it.
 
     ``negatives`` ((kind, geometry), ...) are negative masks: their
     union is cut out of every ROI's interior before anything is
@@ -290,25 +362,37 @@ def compute_image_stats(
         if array is None:
             raise ValueError("unreadable image")
         array = warp_frame(array, perspective)
+
         if ball_radius_px:
             array = subtract_rolling_ball(array, ball_radius_px)
+
         interiors, rings = {}, {}
+
         for roi_id, (kind, geometry) in effective_rois.items():
             interiors[roi_id], rings[roi_id] = roi_masks(
                 array.shape[:2], kind, geometry, gap_px, thickness_px
             )
+
         union = np.zeros(array.shape[:2], dtype=np.uint8)
+
         for interior in interiors.values():
             cv2.bitwise_or(union, interior, union)
+
         excluded = negative_union(array.shape[:2], negatives)
+
         for roi_id, ring in rings.items():
-            others = cv2.subtract(union, interiors[roi_id])
+            interior = interiors[roi_id]
+            others = cv2.subtract(union, interior)
             ring[others == MASK_ON] = 0
             ring[excluded == MASK_ON] = 0
-            effective = cv2.subtract(interiors[roi_id], excluded)
-            stats = masked_stats(array, effective)
+            effective = cv2.subtract(interior, excluded)
+            measured = cv2.subtract(inset_mask(interior, inside_percent), excluded)
+
+            stats = masked_stats(array, measured)
+
             for name, value in masked_stats(array, ring).items():
                 stats[OUTLINE_STATS_PREFIX + name] = value
+
             stats.update(roi_shape_stats(array, effective))
             result["stats"][roi_id] = stats
     except Exception as error:

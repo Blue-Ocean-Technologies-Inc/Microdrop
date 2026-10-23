@@ -241,6 +241,7 @@ class RoiAnalysisController(HasTraits):
     @observe(
         "analysis_model:session:ring:gap_px, "
         "analysis_model:session:ring:thickness_px, "
+        "analysis_model:session:ring:inside_percent, "
         "analysis_model:session:ball:enabled, "
         "analysis_model:session:ball:radius_px, "
         "analysis_model:session:perspective:enabled, "
@@ -912,11 +913,11 @@ class RoiAnalysisController(HasTraits):
                 self._write_export()
             return
         self.analysis_model.batch_running = True
-        gap, width, ball, perspective = self.session.correction_key()
+        gap, width, ball, perspective, inside = self.session.correction_key()
         logger.info(
             f"ROI batch: {len(work)} images x {len(self.session.positive_rois)} "
             f"ROIs, {len(self.session.negative_rois)} negative masks; ring "
-            f"gap={gap}px width={width}px; rolling ball="
+            f"gap={gap}px width={width}px; measuring inside {inside}%; rolling ball="
             f"{f'r={ball}px' if ball else 'off'}; perspective "
             f"{'on' if perspective else 'off'}"
         )
@@ -1221,6 +1222,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:scale:unit, "
         "analysis_model:session:ring:gap_px, "
         "analysis_model:session:ring:thickness_px, "
+        "analysis_model:session:ring:inside_percent, "
         "analysis_model:session:ring:show_on_canvas, "
         "analysis_model:session:ball:enabled, "
         "analysis_model:session:ball:radius_px, "

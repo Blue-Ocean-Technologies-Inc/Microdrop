@@ -21,6 +21,9 @@ import numpy as np
 from image_viewer.analysis.roi_compute import (
     _shrink_factor,
     compute_image_stats,
+    inset_contours,
+    inset_mask,
+    interior_mask,
     masked_stats,
     negative_union,
     ring_contours,
@@ -453,3 +456,40 @@ def test_a_fully_covered_roi_measures_nothing_without_raising(tmp_path):
         assert math.isnan(stats[name])
     # The uncovered neighbour still measures.
     assert result["stats"]["b"]["count"] > 0
+
+
+_BIG_CIRCLE = ("ellipse", (150.0, 150.0, 100.0, 100.0, 0.0))
+
+
+def test_measuring_all_of_an_roi_keeps_its_interior():
+    interior = interior_mask((300, 300), *_BIG_CIRCLE)
+
+    assert inset_mask(interior, 100) is interior
+
+
+def test_measuring_ninety_percent_inside_keeps_the_inner_circle():
+    interior = interior_mask((300, 300), *_BIG_CIRCLE)
+    inset = inset_mask(interior, 90)
+    rows, columns = np.nonzero(inset)
+    radii = np.hypot(columns - 150.0, rows - 150.0)
+
+    # The circle at 90% of the radius...
+    assert abs(len(rows) - math.pi * 90.0**2) / (math.pi * 90.0**2) < 0.02
+    # ...and nothing from the 10 px band inside the edge at radius 100.
+    assert radii.max() < 90.5
+    # Its outline is the one closed boundary the canvas draws.
+    assert len(inset_contours((300, 300), *_BIG_CIRCLE, 90)) == 1
+
+
+def test_measuring_inside_shrinks_the_count_but_not_the_ring(tmp_path):
+    array = np.full((300, 300), 100, dtype=np.uint16)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    rois = {"a": _BIG_CIRCLE}
+
+    whole = compute_image_stats(str(path), rois)["stats"]["a"]
+    inner = compute_image_stats(str(path), rois, inside_percent=90)["stats"]["a"]
+
+    assert inner["count"] < whole["count"]
+    # The ring is grown from the whole interior either way.
+    assert inner["outline_count"] == whole["outline_count"]

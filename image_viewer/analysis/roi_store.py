@@ -24,6 +24,7 @@ from .consts import (
     ANALYSIS_DIR_NAME,
     AREA_NORMALIZED_STATS,
     FIT_EQUATIONS_FILENAME,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     OUTLINE_STATS_PREFIX,
     ROI_CONFIG_FILENAME,
     ROI_STATS_FILENAME,
@@ -135,8 +136,10 @@ _SENSOR_STYLE_FIELDS = (
 #: config written before the scale bar opens uncalibrated).
 _SCALE_FIELDS = ("metres_per_pixel", "value", "unit")
 
-#: Persisted BackgroundRing fields (tolerated-missing on load).
-_RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")
+#: Persisted BackgroundRing fields (tolerated-missing on load, so a
+#: config written before the measured share existed measures all of
+#: each ROI).
+_RING_FIELDS = ("gap_px", "thickness_px", "inside_percent", "show_on_canvas")
 
 #: Persisted RollingBall fields (tolerated-missing on load, so a config
 #: written before the ball existed opens with it off).
@@ -529,11 +532,15 @@ def _stats_key(entry):
         # Written before negative masks existed: measured with none,
         # which is what a current key carries for an image without one.
         ring = list(ring) + [()]
+    if ring is not None and len(ring) < 6:
+        # Written before the measured share existed: measured over the
+        # whole ROI, which is what a current key carries at 100%.
+        ring = list(ring) + [MEASURE_INSIDE_PERCENT_DEFAULT]
     if ring is not None:
         # The perspective matrix and the negative masks come back from
         # JSON as lists.
         negatives = tuple((kind, tuple(geometry)) for kind, geometry in ring[4])
-        ring = list(ring[:3]) + [tuple(ring[3]), negatives]
+        ring = list(ring[:3]) + [tuple(ring[3]), negatives, ring[5]]
     return (
         entry["path"],
         float(entry["mtime"]),
@@ -670,8 +677,9 @@ def write_intensity_csv(
     heads the image filter's column (e.g. "wavelength").
     ``pixel_area`` scales the derived size-aware columns; it is 1.0
     (px²) for an uncalibrated experiment. ``correction`` is the
-    session's (gap, width, ball radius, perspective matrix), recorded on
-    every row (the matrix as a 0/1 perspective_corrected flag).
+    session's (gap, width, ball radius, perspective matrix, measured
+    share), recorded on every row (the matrix as a 0/1
+    perspective_corrected flag).
 
     Long rather than wide: the ROI is a VALUE in a column, not a prefix
     repeated across seventeen column names per ROI. Six ROIs used to
@@ -707,14 +715,17 @@ def write_intensity_csv(
         "outlier",
         "ring_gap_px",
         "ring_width_px",
+        "inside_pct",
         "ball_radius_px",
         "perspective_corrected",
         "heater_sensor",
     ]
-    gap, width, ball, perspective = (
-        correction if correction is not None else (0, 0, 0, ())
+    gap, width, ball, perspective, inside = (
+        correction
+        if correction is not None
+        else (0, 0, 0, (), MEASURE_INSIDE_PERCENT_DEFAULT)
     )
-    settings = [gap, width, ball, int(bool(perspective)), heater_sensor]
+    settings = [gap, width, inside, ball, int(bool(perspective)), heater_sensor]
     normalised = (
         {}
         if normalize_stat is None
