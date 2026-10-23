@@ -43,6 +43,8 @@ from .consts import (
     NEGATIVE_MASK_NAME_PREFIX,
     PASTE_OFFSET_PX,
     ROI_BATCH_PROTOCOL_WORKERS,
+    ROI_DELETE_DONT_ASK_TEXT,
+    ROI_DELETE_SCOPES,
     STATS_SAVE_DEBOUNCE_S,
 )
 from .curve_fit import FIT_LABELS, fit_series
@@ -496,9 +498,9 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:delete_roi_button")
     def _delete_selected_roi(self, event):
-        """Delete the selected ROI from the shown image alone, or — asked
-        — from every image. With no image shown there is only the
-        latter, and nothing to ask."""
+        """Delete the selected ROI from the shown image alone, or from
+        every image — asked, or as the preferences remember. With no
+        image shown there is only the latter, and nothing to ask."""
         session = self.session
         roi = session.roi_by_id(self.analysis_model.selected_roi_id)
 
@@ -508,24 +510,12 @@ class RoiAnalysisController(HasTraits):
             )
             return
 
-        current = self.viewer_model.current_path
-        choice = (
-            choose(
-                message=f"Delete {roi.name} from this image only, or from all images?",
-                title="Delete ROI",
-                choices=[DELETE_ROI_THIS_IMAGE, DELETE_ROI_ALL_IMAGES],
-                informative="On this image only, it can be put back with "
-                "Undo or the Restore button in the sidebar's exclusion "
-                "section.",
-            )
-            if current
-            else DELETE_ROI_ALL_IMAGES
-        )
+        scope = self._roi_delete_scope(roi) if self.viewer_model.current_path else "all"
 
-        if choice is None:
+        if scope is None:
             return
 
-        if choice == DELETE_ROI_THIS_IMAGE:
+        if scope == "image":
             self._set_absent_on_shown_image(roi, restore=False)
         else:
             self._push(RemoveRoisCommand(session=session, rois=[roi]))
@@ -534,6 +524,34 @@ class RoiAnalysisController(HasTraits):
 
         if roi.is_negative:
             self._instant_stats(session.positive_rois)
+
+    def _roi_delete_scope(self, roi):
+        """ "image" or "all": what the preferences remember, else what the
+        dialog is told — None when it is cancelled. A ticked "don't ask
+        again" remembers the answer (the preferences tab undoes that)."""
+        preferences = self.viewer_model.preferences
+
+        if preferences.roi_delete_scope != "ask":
+            return preferences.roi_delete_scope
+
+        choice, dont_ask_again = choose(
+            message=f"Delete {roi.name} from this image only, or from all images?",
+            title="Delete ROI",
+            choices=[DELETE_ROI_THIS_IMAGE, DELETE_ROI_ALL_IMAGES],
+            informative="On this image only, it can be put back with Undo or "
+            "the Restore button in the sidebar's exclusion section.",
+            checkbox_text=ROI_DELETE_DONT_ASK_TEXT,
+        )
+
+        if choice is None:
+            return None
+
+        scope = {label: scope for scope, label in ROI_DELETE_SCOPES.items()}[choice]
+
+        if dont_ask_again:
+            preferences.roi_delete_scope = scope
+
+        return scope
 
     def _set_absent_on_shown_image(self, roi, restore):
         """Take ``roi`` off the shown image alone, or put it back there,

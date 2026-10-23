@@ -164,6 +164,18 @@ ROI_PLOT_SECTION_MIN_PX = 40
 DELETE_ROI_THIS_IMAGE = "This image only"
 DELETE_ROI_ALL_IMAGES = "All images"
 
+#: What deleting an ROI does (ImageViewerPreferences.roi_delete_scope),
+#: by preference value: ask with the dialog above, or apply one of its
+#: choices without asking — the label each has on the preferences tab.
+ROI_DELETE_SCOPES = {
+    "ask": "Ask each time",
+    "image": DELETE_ROI_THIS_IMAGE,
+    "all": DELETE_ROI_ALL_IMAGES,
+}
+
+#: The delete dialog's checkbox, worded as the experiment delete's is.
+ROI_DELETE_DONT_ASK_TEXT = "Don't ask again (change under Preferences › Image Viewer)"
+
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
 

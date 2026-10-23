@@ -14,7 +14,11 @@ that stay armed, copying a shape into a new ROI, and undo/redo."""
 # Standard library imports.
 import csv
 
+# Third-party imports.
+import pytest
+
 # Enthought library imports.
+from apptools.preferences.api import Preferences
 from pyface.api import YES
 
 # Microdrop package imports.
@@ -39,6 +43,7 @@ from image_viewer.discovery import capture_timestamp
 from image_viewer.model import (
     ImageViewerModel,
 )
+from image_viewer.preferences import ImageViewerPreferences
 
 
 def _controller():
@@ -214,8 +219,11 @@ class _RecordingRunner(RoiBatchRunner):
 def _controller_on_image(tmp_path):
     image = tmp_path / "a_2026_07_20-10_00_00_raw.png"
     image.write_bytes(b"")
+    # Preferences of its own, in memory: a remembered delete scope must
+    # not leak into the next test through the shared default.
+    preferences = ImageViewerPreferences(preferences=Preferences())
     controller = RoiAnalysisController(
-        viewer_model=ImageViewerModel(),
+        viewer_model=ImageViewerModel(preferences=preferences),
         analysis_model=RoiAnalysisModel(),
         runner=_RecordingRunner(),
     )
@@ -260,7 +268,7 @@ def test_a_pasted_mask_stays_a_mask_whatever_the_toggle():
 
 def test_changing_a_mask_remeasures_every_roi_on_the_image(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        roi_controller, "choose", lambda **kwargs: DELETE_ROI_ALL_IMAGES
+        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_ALL_IMAGES, False)
     )
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
@@ -546,7 +554,7 @@ def test_each_undo_and_redo_remeasures_the_positives_once(tmp_path):
 
 def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        roi_controller, "choose", lambda **kwargs: DELETE_ROI_THIS_IMAGE
+        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_THIS_IMAGE, False)
     )
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
@@ -572,7 +580,7 @@ def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path, monkeypat
 
 
 def test_cancelling_the_delete_dialog_deletes_nothing(tmp_path, monkeypatch):
-    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: None)
+    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: (None, True))
     controller, _image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
@@ -582,3 +590,43 @@ def test_cancelling_the_delete_dialog_deletes_nothing(tmp_path, monkeypatch):
     model.delete_roi_button = True
 
     assert controller.session.rois == [roi] and roi.absent_at == []
+    # A ticked box on Cancel remembers nothing.
+    assert controller.viewer_model.preferences.roi_delete_scope == "ask"
+
+
+@pytest.mark.parametrize(
+    "choice, scope", [(DELETE_ROI_THIS_IMAGE, "image"), (DELETE_ROI_ALL_IMAGES, "all")]
+)
+def test_dont_ask_again_remembers_the_delete_scope(
+    tmp_path, monkeypatch, choice, scope
+):
+    asked = []
+
+    def choose(**kwargs):
+        asked.append(kwargs["checkbox_text"])
+
+        return choice, True
+
+    monkeypatch.setattr(roi_controller, "choose", choose)
+    controller, _image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [40.0, 10.0, 5.0, 5.0, 0.0])
+    first, second = controller.session.rois
+
+    model.selected_roi_id = first.roi_id
+    model.delete_roi_button = True
+
+    assert controller.viewer_model.preferences.roi_delete_scope == scope
+
+    # The next delete applies the remembered scope without asking.
+    model.selected_roi_id = second.roi_id
+    model.delete_roi_button = True
+
+    assert len(asked) == 1
+
+    if scope == "image":
+        assert controller.session.rois == [first, second]
+        assert second.absent_at == first.absent_at != []
+    else:
+        assert controller.session.rois == []
