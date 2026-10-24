@@ -21,7 +21,7 @@ import numpy as np
 
 # Microdrop package imports.
 from image_viewer.analysis import sam_jobs
-from image_viewer.analysis.drift_plan import drift_steps, frame_plan
+from image_viewer.analysis.drift_plan import drift_steps, frame_plan, rim_steps
 from image_viewer.analysis.roi_model import Roi
 
 FRAMES = [(f"f{index}.png", float(index)) for index in range(1, 8)]
@@ -186,3 +186,18 @@ def test_an_out_of_window_detection_is_rejected_and_not_chained(monkeypatch):
     assert frames[1]["rejected"] == {"a": 500.0}
     assert frames[0]["rejected"] == frames[2]["rejected"] == {}
     assert frames[2]["candidates"]["a"].ellipse == (12.0, 10.0)
+
+
+def test_rim_steps_cover_every_frame_and_seed_from_the_corrected_shape():
+    shape = [40.0, 41.0, 3.0, 3.0, 0.0]
+    roi = _roi(local_overrides={4.0: shape})
+
+    steps = rim_steps(FRAMES, [roi])
+
+    assert [capture_time for _path, capture_time, *_rest in steps] == [
+        capture_time for _path, capture_time in FRAMES
+    ]
+    assert steps[3][2:] == ({roi.roi_id: ("ellipse", shape)}, {roi.roi_id})
+    assert all(
+        seeds == {} for index, (*_rest, seeds, _held) in enumerate(steps) if index != 3
+    )

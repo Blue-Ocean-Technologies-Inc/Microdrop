@@ -415,3 +415,30 @@ AI_CANDIDATE_DISCARDED_OPACITY = 0.3
 #: Hard ceiling of the candidate size filters (mean ellipse diameter,
 #: px).
 AI_SIZE_FILTER_CEILING_PX = 50000
+
+# --------------------------------------------------------------------------- #
+# Rim tracer (rim_tracer.py)                                                   #
+# --------------------------------------------------------------------------- #
+#: Rays cast from each droplet's centre: one per degree, so the contour
+#: has a radius every degree and the angular smoothing reads in degrees.
+RIM_RAYS = 360
+#: Width of a droplet's bright rim (px) the rim filter is tuned to. The
+#: difference of Gaussians across the rim scales with it; the bounds
+#: span a hairline edge to a broad meniscus glow.
+RIM_WIDTH_PX_DEFAULT = 5
+RIM_WIDTH_BOUNDS_PX = (2, 30)
+#: How far (px) the rim may move along each ray between consecutive
+#: frames. Small on purpose: a tight window is what keeps the trace off
+#: the specks, speckle clouds and reflection rings next to the rim.
+RIM_SEARCH_PX_DEFAULT = 3
+RIM_SEARCH_BOUNDS_PX = (1, 60)
+#: A capture gap longer than this (s) may hide a reshape (a round
+#: droplet spreading square at a step change), so the next frame is
+#: searched RIM_GAP_SEARCH_PX either side instead — as is the first
+#: frame after a drawn shape, which only roughly follows the rim.
+RIM_GAP_SECONDS = 30
+RIM_GAP_SEARCH_PX = 30
+#: Frames in the per-angle temporal median over each traced rim
+#: (centred, so a frame is final once half this many more are traced).
+#: It removes one- or two-frame hops onto a neighbouring ridge.
+RIM_SMOOTH_FRAMES = 7

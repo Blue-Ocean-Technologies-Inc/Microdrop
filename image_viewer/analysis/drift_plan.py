@@ -11,7 +11,7 @@
 """The drift tracker's plan over the frames after the shown one: which
 it segments, and on each, which ROIs it restarts from a shape the user
 corrected and which it leaves alone. Pure, so the plan is testable
-without SAM; sam_jobs runs it."""
+without SAM; sam_jobs runs it, and rim_jobs runs rim_steps."""
 
 # Local imports.
 from .roi_geometry import centre_of
@@ -63,3 +63,27 @@ def drift_steps(frames, rois, interval):
             carried = {}
 
     return steps
+
+
+def rim_steps(frames, rois):
+    """The rim tracer's steps over ``frames``: every frame (the tracer
+    follows the rim a few px per frame, so it skips none), each as
+    drift_steps' but with ``seeds`` as {roi_id: (kind, geometry)} — the
+    shape the user gave that image, which the tracer restarts from."""
+    by_id = {roi.roi_id: roi for roi in rois}
+
+    return [
+        (
+            path,
+            capture_time,
+            {
+                roi_id: (
+                    by_id[roi_id].kind,
+                    by_id[roi_id].local_overrides[capture_time],
+                )
+                for roi_id in seeds
+            },
+            held,
+        )
+        for path, capture_time, seeds, held in drift_steps(frames, rois, 1)
+    ]
