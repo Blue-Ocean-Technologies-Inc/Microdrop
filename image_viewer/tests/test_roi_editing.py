@@ -13,6 +13,7 @@ that stay armed, copying a shape into a new ROI, and undo/redo."""
 
 # Standard library imports.
 import csv
+import math
 
 # Third-party imports.
 import pytest
@@ -43,6 +44,7 @@ from image_viewer.analysis.roi_model import (
     Roi,
     RoiAnalysisModel,
 )
+from image_viewer.analysis.sam_detect import Candidate
 from image_viewer.discovery import capture_timestamp
 from image_viewer.model import (
     ImageViewerModel,
@@ -798,15 +800,66 @@ def test_a_drift_check_writes_nothing_over_a_correction_or_a_deletion():
     roi.local_overrides = {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
     roi.absent_at = [300.0]
 
-    model.ai_roi_tracked = (roi.roi_id, 200.0, [99.0, 99.0, 5.0, 5.0, 0.0])
-    model.ai_roi_tracked = (roi.roi_id, 300.0, [99.0, 99.0, 5.0, 5.0, 0.0])
+    stray = Candidate(ellipse=[99.0, 99.0, 5.0, 5.0, 0.0])
+    model.ai_roi_tracked = (roi.roi_id, 200.0, stray)
+    model.ai_roi_tracked = (roi.roi_id, 300.0, stray)
 
     assert roi.local_overrides == {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
     assert roi.overrides == {}
 
-    model.ai_roi_tracked = (roi.roi_id, 400.0, [50.0, 50.0, 5.0, 5.0, 0.0])
+    model.ai_roi_tracked = (
+        roi.roi_id,
+        400.0,
+        Candidate(ellipse=[50.0, 50.0, 5.0, 5.0, 0.0]),
+    )
 
     assert roi.overrides == {400.0: [50.0, 50.0, 5.0, 5.0, 0.0]}
+
+
+def test_a_tracked_shape_keeps_each_rois_own_kind():
+    controller = _controller()
+    model = controller.analysis_model
+    drawn = [
+        ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0]),
+        ("polygon", [0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0]),
+        ("box", [0.0, 0.0, 20.0, 10.0, 0.0, 3.0]),
+        ("capsule", [10.0, 10.0, 5.0, 3.0, 0.0]),
+    ]
+
+    for kind, geometry in drawn:
+        model.canvas_roi_created = (kind, geometry)
+
+    # A tracked droplet: its traced outline and fitted ellipse.
+    candidate = Candidate(
+        polygon=[40.0, 50.0, 60.0, 50.0, 60.0, 70.0, 40.0, 70.0],
+        ellipse=[50.0, 60.0, 12.0, 8.0, 30.0],
+    )
+
+    for roi in controller.session.rois:
+        model.ai_roi_tracked = (roi.roi_id, 400.0, candidate)
+
+    ellipse, polygon, box, capsule = (
+        roi.overrides[400.0] for roi in controller.session.rois
+    )
+    ellipse_area = math.pi * 12.0 * 8.0
+
+    assert ellipse == [50.0, 60.0, 12.0, 8.0, 30.0]
+    assert polygon == list(candidate.polygon)
+
+    # Same centre, tilt and proportions; the drawn corner radius kept;
+    # what the rounded box encloses matches the ellipse.
+    x, y, width, height, angle, corner_radius = box
+    assert (x + width / 2.0, y + height / 2.0) == pytest.approx((50.0, 60.0))
+    assert (angle, corner_radius) == (30.0, 3.0)
+    assert width / height == pytest.approx(1.5)
+    assert width * height - (4.0 - math.pi) * 3.0**2 == pytest.approx(ellipse_area)
+
+    cx, cy, half_length, radius, angle = capsule
+    assert (cx, cy, angle) == (50.0, 60.0, 30.0)
+    assert (half_length + radius) / radius == pytest.approx(1.5)
+    assert 4.0 * half_length * radius + math.pi * radius**2 == pytest.approx(
+        ellipse_area
+    )
 
 
 @pytest.mark.parametrize("rename_old_onto_new", [False, True])

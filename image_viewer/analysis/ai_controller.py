@@ -464,13 +464,11 @@ class AiRoiController(HasTraits):
                 f"{label} {payload['done']}/{payload['total']} frames{rejected_text}"
             )
 
+            # Written in each ROI's own kind (roi_controller), not the
+            # Output Shape new ROIs take.
             for roi_id, candidate in payload["candidates"].items():
                 if candidate is not None:
-                    model.ai_roi_tracked = (
-                        roi_id,
-                        payload["capture_time"],
-                        candidate.geometry_for(model.ai_output_kind)[1],
-                    )
+                    model.ai_roi_tracked = (roi_id, payload["capture_time"], candidate)
         elif kind == TRACK_FINISHED:
             model.ai_track_running = False
             # frames_done counts segmented frames actually processed (every

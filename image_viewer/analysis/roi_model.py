@@ -1134,7 +1134,8 @@ class RoiAnalysisModel(HasTraits):
         if self.ai_min_size > event.new:
             self.ai_min_size = event.new
 
-    #: Geometry accepted candidates are converted to.
+    #: Kind of the new ROIs Pick and Detect all make. Tracking keeps
+    #: each ROI's own kind.
     ai_output_kind = Enum("polygon", "ellipse")
     #: How many images between drift re-checks while tracking.
     ai_drift_interval = Range(1, 50, AI_DRIFT_CHECK_INTERVAL_DEFAULT)
@@ -1155,7 +1156,7 @@ class RoiAnalysisModel(HasTraits):
     #: Trace rims button (view event; AiRoiController reacts): follows
     #: each droplet by its bright rim, no AI model needed. It shares the
     #: drift check's running flag, progress counts and size window, and
-    #: writes its shapes as ai_output_kind like Track does.
+    #: like Track writes each ROI's shape in that ROI's own kind.
     trace_rims_button = Button()
 
     #: Width (px) of the droplets' bright rim the rim tracer looks for.
@@ -1172,8 +1173,8 @@ class RoiAnalysisModel(HasTraits):
     #: pairs is [(kind, geometry), ...] and anchor is the capture time
     #: they were accepted against.
     ai_rois_accepted = Event()
-    #: One ROI's geometry updated by a drift re-check while tracking.
-    #: # (roi_id, capture_time, geometry)
+    #: One ROI's shape found by a drift re-check or rim trace, written
+    #: in the ROI's own kind. # (roi_id, capture_time, Candidate)
     ai_roi_tracked = Event()
 
     #: The ROI shape held for pasting: kind and the geometry it had on

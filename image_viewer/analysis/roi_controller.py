@@ -383,11 +383,12 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:ai_roi_tracked")
     def _on_ai_roi_tracked(self, event):
-        """Record a drift re-check's shape as a forward override — never
-        on an image the ROI is deleted from, nor over a shape the user
-        gave it for that image alone (the plan holds those back; this
-        guards a run started before the user's change)."""
-        roi_id, capture_time, geometry = event.new
+        """Record a drift re-check's shape as a forward override, in the
+        ROI's own kind — never on an image the ROI is deleted from, nor
+        over a shape the user gave it for that image alone (the plan
+        holds those back; this guards a run started before the user's
+        change)."""
+        roi_id, capture_time, candidate = event.new
         roi = self.session.roi_by_id(roi_id)
 
         if (
@@ -397,6 +398,9 @@ class RoiAnalysisController(HasTraits):
         ):
             return
 
+        _kind, geometry = candidate.geometry_for(
+            roi.kind, roi.effective_geometry(capture_time)
+        )
         roi.apply_edit(capture_time, [float(value) for value in geometry])
         self._ai_config_dirty = True
 

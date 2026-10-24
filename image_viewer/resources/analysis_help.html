@@ -763,8 +763,9 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
     outline outside them is not recorded.
     Use them to throw away dust (too small) or whole electrodes (too big). <strong>Start at 0 and 500 px.</strong></p></dd>
     <dt>Output Shape</dt>
-    <dd><p>What an accepted candidate becomes: the traced <em>polygon</em> outline (follows the droplet exactly) or a fitted
-    <em>ellipse</em> (smoother, easier to edit). <strong>Starts as polygon.</strong></p></dd>
+    <dd><p>What a new ROI from Pick or an accepted candidate becomes: the traced <em>polygon</em> outline (follows the droplet
+    exactly) or a fitted <em>ellipse</em> (smoother, easier to edit). Tracking leaves it alone: every ROI keeps the kind it
+    was drawn as, so an ellipse stays an ellipse and a box a box. <strong>Starts as polygon.</strong></p></dd>
     <dt>Drift Interval</dt>
     <dd><p>While tracking, re-find the droplets every Nth image (the last image is always checked); images in between
     keep the last position. A larger number tracks faster but follows quick movement less closely.
@@ -788,8 +789,9 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
     smooth, and only lets it move a few pixels from the previous image, which keeps it off specks, dust and the
     reflection under the droplet. After a long pause between captures it searches wider, because the droplet may have
     changed shape. Every outline is then steadied against the three images on either side of it. Every later image is
-    traced, so <span class="ui">Drift Interval</span> does not apply; <span class="ui">Min Size</span>,
-    <span class="ui">Max Size</span> and <span class="ui">Output Shape</span> do.</p></dd>
+    traced, so <span class="ui">Drift Interval</span> does not apply; <span class="ui">Min Size</span> and
+    <span class="ui">Max Size</span> do. Each ROI keeps the kind it was drawn as: a polygon follows the rim exactly, and
+    an ellipse, box or capsule takes the rim's fitted ellipse (same centre, tilt, proportions and area).</p></dd>
     <dt>Rim width (px)</dt>
     <dd><p>How wide the bright rim looks on the image. Match it to the rim; a wrong width finds the line less reliably.
     <strong>Starts at 5 px.</strong></p></dd>

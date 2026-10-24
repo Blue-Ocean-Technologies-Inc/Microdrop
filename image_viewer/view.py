@@ -1447,9 +1447,9 @@ ai_group = Group(
     Item(
         "object.roi_analysis.ai_output_kind",
         label="Output Shape",
-        tooltip="Shape an accepted candidate, a tracked ROI or a "
-        "traced rim becomes: the traced polygon outline, or the fitted "
-        "ellipse.",
+        tooltip="Shape a new ROI from Pick or Detect all becomes: the "
+        "traced polygon outline, or the fitted ellipse. Track and Trace "
+        "rims keep each ROI's own shape kind.",
     ),
     Item(
         "object.roi_analysis.ai_drift_interval",
