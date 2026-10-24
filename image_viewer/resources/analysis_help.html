@@ -435,6 +435,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
         <li><a href="#negative-mask">Negative masks</a></li>
         <li><a href="#drift">Moving an ROI later (drift)</a></li>
         <li><a href="#ai">AI detection options</a></li>
+        <li><a href="#rim-trace">Tracing droplet rims</a></li>
         <li><a href="#exclude">Excluding images</a></li>
         <li><a href="#scale">Image scale</a></li>
         <li><a href="#contrast">Contrast</a></li>
@@ -740,14 +741,14 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
     <dd><p>When a droplet has moved partly out of its outline. Step to the first image where it has moved and drag the ROI back onto it.</p></dd>
     <dt>What changing it does</dt>
     <dd><p>Only the images from that point on are re-measured. <span class="ui">Reset</span> can also clear these overrides.
-    The AI <span class="ui">Track</span> button creates them automatically.</p></dd>
+    The AI <span class="ui">Track</span> button and <a href="#rim-trace"><span class="ui">Trace rims</span></a> create them automatically.</p></dd>
     <dt>Typical value</dt>
     <dd><p>None until you need one.</p></dd>
   </dl>
 </article>
 
 <article class="term" id="ai">
-  <h3>AI detection options <span class="where">AI Detection section (when AI support is installed)</span></h3>
+  <h3>AI detection options <span class="where">AI Detection section; Significance and Drift Interval need AI support</span></h3>
   <p>The AI tools find droplets for you. <span class="ui">Pick</span> outlines the droplet you click,
   <span class="ui">Detect all</span> searches the whole image, and <span class="ui">Track</span> follows your ROIs through later images.
   What it finds appears as dashed <em>candidates</em>: click one to discard it, then press Accept.</p>
@@ -758,7 +759,8 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
     Raise it to hide noise, lower it to see faint droplets. Nothing is deleted: sliding it back brings candidates back.
     <strong>Starts at 2.</strong> Candidates you clicked yourself are never hidden by it.</p></dd>
     <dt>Min Size / Max Size</dt>
-    <dd><p>Hide candidates smaller or larger than this average diameter, in pixels.
+    <dd><p>Hide candidates smaller or larger than this average diameter, in pixels; while tracking or tracing rims, an
+    outline outside them is not recorded.
     Use them to throw away dust (too small) or whole electrodes (too big). <strong>Start at 0 and 500 px.</strong></p></dd>
     <dt>Output Shape</dt>
     <dd><p>What an accepted candidate becomes: the traced <em>polygon</em> outline (follows the droplet exactly) or a fitted
@@ -767,6 +769,37 @@ the <a href="#part-toolbar">Toolbar icons</a> section shows every button exactly
     <dd><p>While tracking, re-find the droplets every Nth image (the last image is always checked); images in between
     keep the last position. A larger number tracks faster but follows quick movement less closely.
     <strong>Starts at 3.</strong></p></dd>
+  </dl>
+</article>
+
+<article class="term" id="rim-trace">
+  <h3>Tracing droplet rims (Trace rims) <span class="where">ROI toolbar, beside Track</span></h3>
+  <p>Fluorescent droplets often show a thin bright rim at their edge. <span class="ui">Trace rims</span> follows that rim
+  instead of asking the AI, so it needs no AI support installed. Starting from each ROI as it is on the image you are
+  looking at, it finds the rim on every later image and records the outline as the ROI's shape there, the same way
+  <span class="ui">Track</span> does. Press it again to stop; the images already traced are kept.</p>
+  <dl class="facts">
+    <dt>What it needs</dt>
+    <dd><p>A visible bright rim around each droplet, and an ROI drawn roughly on it (within about 30 px).
+    Negative masks stay where you drew them. A shape you fix by hand on a later image restarts the trace from there,
+    and images you deleted the ROI from are left alone.</p></dd>
+    <dt>What it does</dt>
+    <dd><p>On each image it looks along 360 rays from the droplet's centre for the bright line, keeps the outline
+    smooth, and only lets it move a few pixels from the previous image, which keeps it off specks, dust and the
+    reflection under the droplet. After a long pause between captures it searches wider, because the droplet may have
+    changed shape. Every outline is then steadied against the three images on either side of it. Every later image is
+    traced, so <span class="ui">Drift Interval</span> does not apply; <span class="ui">Min Size</span>,
+    <span class="ui">Max Size</span> and <span class="ui">Output Shape</span> do.</p></dd>
+    <dt>Rim width (px)</dt>
+    <dd><p>How wide the bright rim looks on the image. Match it to the rim; a wrong width finds the line less reliably.
+    <strong>Starts at 5 px.</strong></p></dd>
+    <dt>Rim search (px)</dt>
+    <dd><p>How far the rim may move from one image to the next. Keep it small so the trace cannot jump to a nearby
+    bright feature; raise it if droplets move or spread quickly between captures. <strong>Starts at 3 px.</strong></p></dd>
+    <dt>Pair it with</dt>
+    <dd><p>The traced outline sits on the bright rim itself, and the rim is glare, not fluorescence. Lower
+    <span class="ui">Measure inside (%)</span> in the Measurement section (to about 90-95) so the measured mean leaves the
+    rim out.</p></dd>
   </dl>
 </article>
 
@@ -863,6 +896,7 @@ scrolls sideways, and the toolbar on its right edge and the sidebar scroll down,
   <symbol id="ic-wand_shine" viewBox="0 5 48 48"><path d="M16.6 20.4L10.6 14.4L13.4 11.6L19.4 17.6L16.6 20.4M24 15.7L24 7.2L28 7.2L28 15.7L24 15.7M38.5 42.5L32.5 36.5L35.4 33.6L41.4 39.6L38.5 42.5M35.4 20.4L32.5 17.6L38.5 11.6L41.4 14.4L35.4 20.4M37.3 29L37.3 25L45.8 25L45.8 29L37.3 29M10.2 48.4L4.6 42.8C4.2 42.4 4 41.9 4 41.4C4 40.8 4.2 40.4 4.6 40L22.8 21.8C23.9 20.6 25.3 20 27 20C28.7 20 30.1 20.6 31.2 21.8C32.4 22.9 33 24.3 33 26C33 27.7 32.4 29.1 31.2 30.2L13.1 48.4C12.7 48.8 12.2 49 11.7 49C11.1 49 10.7 48.8 10.2 48.4M24.2 31.7C24.2 31.7 24 31.4 23.5 30.9C23 30.5 22.8 30.2 22.8 30.2C22.8 30.2 22.5 30 22.1 29.6C21.6 29.1 21.3 28.8 21.3 28.8L22.8 30.2L24.2 31.7M11.7 44.2L24.2 31.7L21.3 28.8L8.8 41.3L11.7 44.2"/></symbol>
   <symbol id="ic-eye_tracking" viewBox="0 5 48 48"><path d="M12 51L6 51C4.9 51 4 50.6 3.2 49.8C2.4 49 2 48.1 2 47L2 41L6 41L6 47L12 47L12 51M36 51L36 47L42 47L42 41L46 41L46 47C46 48.1 45.6 49 44.8 49.8C44 50.6 43.1 51 42 51L36 51M24 42C20 42 16.4 40.8 13.1 38.5C9.9 36.1 7.5 32.9 6 29C7.5 25.1 9.9 21.9 13.1 19.6C16.4 17.2 20 16 24 16C28 16 31.6 17.2 34.9 19.6C38.1 21.9 40.5 25.1 42 29C40.5 32.9 38.1 36.1 34.9 38.5C31.6 40.8 28 42 24 42M24 38C26.9 38 29.6 37.2 32 35.6C34.5 34 36.4 31.8 37.7 29C36.4 26.2 34.5 24 32 22.4C29.6 20.8 26.9 20 24 20C21.1 20 18.4 20.8 15.9 22.4C13.5 24 11.7 26.2 10.3 29C11.7 31.8 13.5 34 15.9 35.6C18.4 37.2 21.1 38 24 38M24 36C25.9 36 27.6 35.3 28.9 34C30.3 32.6 31 30.9 31 29C31 27.1 30.3 25.4 28.9 24.1C27.6 22.7 25.9 22 24 22C22.1 22 20.4 22.7 19.1 24.1C17.7 25.4 17 27.1 17 29C17 30.9 17.7 32.6 19.1 34C20.4 35.3 22.1 36 24 36M24 32C23.2 32 22.5 31.7 21.9 31.1C21.3 30.5 21 29.8 21 29C21 28.2 21.3 27.5 21.9 26.9C22.5 26.3 23.2 26 24 26C24.8 26 25.5 26.3 26.1 26.9C26.7 27.5 27 28.2 27 29C27 29.8 26.7 30.5 26.1 31.1C25.5 31.7 24.8 32 24 32M2 17L2 11C2 9.9 2.4 8.9 3.2 8.2C4 7.4 4.9 7 6 7L12 7L12 11L6 11L6 17L2 17M42 17L42 11L36 11L36 7L42 7C43.1 7 44 7.4 44.8 8.2C45.6 8.9 46 9.9 46 11L46 17L42 17M24 29"/></symbol>
   <symbol id="ic-ink_highlighter_move" viewBox="0 5 48 48"><path d="M27.6 13L14 13L14 9L31.6 9L27.6 13M19.6 21L8 21L8 17L23.6 17L19.6 21M11.6 29L2 29L2 25L15.6 25L11.6 29M29.2 33L24 27.8L14 37.8L19.2 43L29.2 33M26.9 24.9L32 30.2L42 20.2L36.8 15L26.9 24.9M22.7 23.6L33.5 34.3L22 45.8C21.2 46.6 20.3 47 19.2 47C18.1 47 17.2 46.6 16.4 45.8L16.3 45.7L15 47L5 47L11.3 40.7L11.2 40.6C10.4 39.8 10 38.9 10 37.8C10 36.7 10.4 35.8 11.2 35L22.7 23.6M22.7 23.6L34 12.2C34.8 11.4 35.7 11 36.8 11C37.9 11 38.8 11.4 39.6 12.2L44.8 17.4C45.6 18.2 46 19.1 46 20.2C46 21.3 45.6 22.2 44.8 23L33.5 34.3L22.7 23.6"/></symbol>
+  <symbol id="ic-trip_origin" viewBox="0 5 48 48"><path fill-rule="evenodd" d="M4 29A20 20 0 1 0 44 29A20 20 0 1 0 4 29ZM12 29A12 12 0 1 1 36 29A12 12 0 1 1 12 29Z"/></symbol>
   <symbol id="ic-cancel" viewBox="0 5 48 48"><path d="M16.8 39L24 31.8L31.2 39L34 36.2L26.8 29L34 21.8L31.2 19L24 26.2L16.8 19L14 21.8L21.2 29L14 36.2L16.8 39M24 49C21.2 49 18.6 48.5 16.2 47.4C13.8 46.4 11.7 45 9.8 43.1C8.1 41.4 6.6 39.2 5.6 36.8C4.5 34.4 4 31.8 4 29C4 26.2 4.5 23.6 5.6 21.2C6.6 18.8 8.1 16.6 9.8 14.8C11.7 13 13.8 11.6 16.2 10.6C18.6 9.5 21.2 9 24 9C26.8 9 29.4 9.5 31.8 10.6C34.2 11.6 36.4 13 38.2 14.8C40 16.6 41.4 18.8 42.4 21.2C43.5 23.6 44 26.2 44 29C44 31.8 43.5 34.4 42.4 36.8C41.4 39.2 40 41.4 38.2 43.1C36.4 45 34.2 46.4 31.8 47.4C29.4 48.5 26.8 49 24 49M24 45C28.5 45 32.2 43.5 35.4 40.4C38.5 37.2 40 33.5 40 29C40 24.5 38.5 20.8 35.4 17.6C32.2 14.6 28.5 13 24 13C19.5 13 15.8 14.6 12.7 17.6C9.6 20.8 8 24.5 8 29C8 33.5 9.6 37.2 12.7 40.4C15.8 43.5 19.5 45 24 45M24 29"/></symbol>
   <symbol id="ic-visibility" viewBox="0 5 48 48"><path d="M24 37C26.5 37 28.6 36.1 30.4 34.4C32.1 32.6 33 30.5 33 28C33 25.5 32.1 23.4 30.4 21.6C28.6 19.9 26.5 19 24 19C21.5 19 19.4 19.9 17.6 21.6C15.9 23.4 15 25.5 15 28C15 30.5 15.9 32.6 17.6 34.4C19.4 36.1 21.5 37 24 37M24 33.4C22.5 33.4 21.2 32.9 20.2 31.8C19.1 30.8 18.6 29.5 18.6 28C18.6 26.5 19.1 25.2 20.2 24.2C21.2 23.1 22.5 22.6 24 22.6C25.5 22.6 26.8 23.1 27.8 24.2C28.9 25.2 29.4 26.5 29.4 28C29.4 29.5 28.9 30.8 27.8 31.8C26.8 32.9 25.5 33.4 24 33.4M24 43C19.1 43 14.7 41.6 10.7 38.9C6.7 36.2 3.8 32.6 2 28C3.8 23.4 6.7 19.8 10.7 17.1C14.7 14.4 19.1 13 24 13C28.9 13 33.3 14.4 37.3 17.1C41.3 19.8 44.2 23.4 46 28C44.2 32.6 41.3 36.2 37.3 38.9C33.3 41.6 28.9 43 24 43M24 39C27.8 39 31.2 38 34.4 36C37.5 34 39.9 31.4 41.6 28C39.9 24.6 37.5 22 34.4 20C31.2 18 27.8 17 24 17C20.2 17 16.8 18 13.6 20C10.5 22 8.1 24.6 6.4 28C8.1 31.4 10.5 34 13.6 36C16.8 38 20.2 39 24 39"/></symbol>
   <symbol id="ic-visibility_off" viewBox="0 5 48 48"><path d="M32.2 31.6L29.3 28.7C29.6 27.1 29.1 25.7 27.9 24.3C26.8 22.9 25.2 22.4 23.3 22.7L20.4 19.8C21 19.5 21.5 19.3 22.1 19.2C22.7 19.1 23.3 19 24 19C26.5 19 28.6 19.9 30.4 21.6C32.1 23.4 33 25.5 33 28C33 28.7 32.9 29.3 32.8 29.9C32.7 30.5 32.5 31 32.2 31.6M38.6 37.9L35.7 35.1C37 34.1 38.1 33.1 39.1 31.9C40.1 30.8 40.9 29.5 41.6 28C39.9 24.6 37.5 22 34.4 20C31.3 18 27.8 17 24 17C23 17 22.1 17.1 21.1 17.2C20.2 17.3 19.3 17.5 18.4 17.8L15.3 14.7C16.7 14.1 18.1 13.7 19.5 13.4C20.9 13.1 22.4 13 24 13C29 13 33.5 14.4 37.5 17.2C41.4 19.9 44.2 23.6 46 28C45.2 30 44.2 31.8 43 33.5C41.7 35.2 40.3 36.6 38.6 37.9M39.6 50.2L31.2 41.9C30 42.3 28.9 42.5 27.7 42.7C26.5 42.9 25.3 43 24 43C19 43 14.5 41.6 10.6 38.8C6.6 36 3.8 32.4 2 28C2.7 26.2 3.6 24.6 4.7 23.1C5.7 21.6 6.9 20.2 8.3 19L2.8 13.4L5.6 10.6L42.4 47.4L39.6 50.2M11.1 21.8C10.1 22.7 9.3 23.6 8.4 24.6C7.7 25.7 7 26.8 6.4 28C8.1 31.4 10.5 34 13.6 36C16.7 38 20.2 39 24 39C24.7 39 25.3 39 25.9 38.9C26.6 38.8 27.2 38.7 27.9 38.6L26.1 36.7C25.7 36.8 25.4 36.9 25.1 36.9C24.7 37 24.4 37 24 37C21.5 37 19.4 36.1 17.6 34.4C15.9 32.6 15 30.5 15 28C15 27.6 15 27.3 15.1 26.9C15.1 26.6 15.2 26.3 15.3 25.9L11.1 21.8M19.5 30.2"/></symbol>
@@ -942,6 +976,7 @@ scrolls sideways, and the toolbar on its right edge and the sidebar scroll down,
       <tr class="group-start"><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span><span class="tbtn on"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-wand_shine"/></svg></span></td><td class="lbl">AI picker</td><td>Click a droplet and the AI outlines it for you as a new ROI. Stays armed until Esc. Needs Help &gt; Install AI ROI Support.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-eye_tracking"/></svg></span></td><td class="lbl">Detect all droplets</td><td>Lets the AI find every droplet on the current image. They appear as dashed candidates: click any you do not want, then Accept.</td></tr>
       <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-ink_highlighter_move"/></svg></span></td><td class="lbl">Track ROIs across images</td><td>Lets the AI follow each ROI through the later images and record how the droplets drift. Press again to stop; finished images are kept.</td></tr>
+      <tr><td class="icons"><span class="tbtn"><svg class="ic" viewBox="0 5 48 48" aria-hidden="true"><use href="#ic-trip_origin"/></svg></span></td><td class="lbl">Trace droplet rims</td><td>Follows each droplet's bright rim from its ROI through every later image, with no AI needed (see <a href="#rim-trace">Tracing droplet rims</a>). Press again to stop; finished images are kept.</td></tr>
     </tbody>
   </table>
 </article>

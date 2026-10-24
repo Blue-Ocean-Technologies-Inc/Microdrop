@@ -75,6 +75,10 @@ from .consts import (
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_BOUNDS_PTS,
     OUTLIER_WINDOW_PTS,
+    RIM_SEARCH_BOUNDS_PX,
+    RIM_SEARCH_PX_DEFAULT,
+    RIM_WIDTH_BOUNDS_PX,
+    RIM_WIDTH_PX_DEFAULT,
     RING_GAP_BOUNDS_PX,
     RING_GAP_PX,
     RING_THICKNESS_BOUNDS_PX,
@@ -1147,6 +1151,18 @@ class RoiAnalysisModel(HasTraits):
     ai_track_rejected = Int(0)
     #: Count of ROIs accepted from AI candidates this session (readout).
     ai_accept_count = Int(0)
+
+    #: Trace rims button (view event; AiRoiController reacts): follows
+    #: each droplet by its bright rim, no AI model needed. It shares the
+    #: drift check's running flag, progress counts and size window, and
+    #: writes its shapes as ai_output_kind like Track does.
+    trace_rims_button = Button()
+
+    #: Width (px) of the droplets' bright rim the rim tracer looks for.
+    rim_width_px = Range(*RIM_WIDTH_BOUNDS_PX, RIM_WIDTH_PX_DEFAULT, mode="spinner")
+
+    #: How far (px) the rim tracer lets a rim move between frames.
+    rim_search_px = Range(*RIM_SEARCH_BOUNDS_PX, RIM_SEARCH_PX_DEFAULT, mode="spinner")
 
     #: Canvas click while in "ai_pick" interaction mode. # (x, y)
     canvas_ai_pick = Event()

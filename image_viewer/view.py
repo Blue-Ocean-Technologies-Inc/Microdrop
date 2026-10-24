@@ -93,6 +93,8 @@ from microdrop_utils.traitsui_qt_helpers import (
 from .analysis.consts import (
     AI_SIZE_FILTER_CEILING_PX,
     MEASURE_INSIDE_BOUNDS_PERCENT,
+    RIM_SEARCH_BOUNDS_PX,
+    RIM_WIDTH_BOUNDS_PX,
     RING_GAP_BOUNDS_PX,
     RING_THICKNESS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
@@ -1270,6 +1272,18 @@ analysis_toolbar = VGroup(
         ),
         enabled_when="analysis.ai_available",
     ),
+    # No AI model behind it, so never disabled with the AI tools.
+    UItem(
+        "object.roi_analysis.trace_rims_button",
+        editor=IconButtonEditor(
+            glyph="trip_origin",
+            tooltip="Trace rims: follow each droplet's bright rim from "
+            "its ROI on the shown image through every later frame — no AI "
+            "model needed. Press again to stop; finished frames are kept. "
+            "Pair with Measure inside (%) to keep the rim glare out of the "
+            "mean.",
+        ),
+    ),
     # Takes the column's stretch so the cluster gaps above stay at
     # their fixed 12 px instead of spreading down the pane (the fixed
     # spacers are growable Minimum spacer items).
@@ -1382,10 +1396,11 @@ correction_group = Group(
 
 # AI (SAM) detection options: significance/size filters over the last
 # pick/detect pass's candidates (the size window also gates each drift
-# check detection), the shape accepted candidates become, and the drift
-# re-check interval, plus Accept/Clear over the pending candidates.
-# Hidden with the rest of the AI surface when the optional SAM stack is
-# not installed.
+# check detection and rim trace), the shape accepted candidates and
+# tracked shapes become, the drift re-check interval and the rim
+# tracer's settings, plus Accept/Clear over the pending candidates. The
+# SAM-only options are disabled when the optional SAM stack is not
+# installed; the rest serve the rim tracer, which needs no model.
 ai_group = Group(
     Item(
         "object.roi_analysis.ai_significance",
@@ -1396,6 +1411,7 @@ ai_group = Group(
         "droplets score 2-4, one-off noise 1; click-added "
         "ROIs are exempt. Non-destructive: sliding back "
         "reveals hidden candidates.",
+        enabled_when="analysis.ai_available",
     ),
     # The size window's spinners bound each other (magnet z-stage
     # preferences parity): min cannot pass max, max cannot dip under
@@ -1411,8 +1427,8 @@ ai_group = Group(
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
         "is below this. Applies to all candidates, and to drift "
-        "tracking: a smaller detection is rejected and the ROI stays "
-        "where it was on that frame.",
+        "tracking and rim tracing: a smaller detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_max_size",
@@ -1425,14 +1441,15 @@ ai_group = Group(
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
         "is above this. Applies to all candidates, and to drift "
-        "tracking: a larger detection is rejected and the ROI stays "
-        "where it was on that frame.",
+        "tracking and rim tracing: a larger detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_output_kind",
         label="Output Shape",
-        tooltip="Shape an accepted candidate becomes: the traced "
-        "polygon outline, or the fitted ellipse.",
+        tooltip="Shape an accepted candidate, a tracked ROI or a "
+        "traced rim becomes: the traced polygon outline, or the fitted "
+        "ellipse.",
     ),
     Item(
         "object.roi_analysis.ai_drift_interval",
@@ -1441,6 +1458,35 @@ ai_group = Group(
         tooltip="Track drift: re-segment every Nth frame (the "
         "final frame always); skipped frames inherit. "
         "Larger N = faster tracking for slow drift.",
+        enabled_when="analysis.ai_available",
+    ),
+    Item(
+        "object.roi_analysis.rim_width_px",
+        label="Rim width (px)",
+        editor=RangeEditor(
+            low=RIM_WIDTH_BOUNDS_PX[0],
+            high=RIM_WIDTH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how wide the droplets' bright rim is, in "
+        "pixels. The rim filter is tuned to this width; set it to "
+        "what the rim measures on the image.",
+    ),
+    Item(
+        "object.roi_analysis.rim_search_px",
+        label="Rim search (px)",
+        editor=RangeEditor(
+            low=RIM_SEARCH_BOUNDS_PX[0],
+            high=RIM_SEARCH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how far the rim may move between "
+        "consecutive frames, in pixels. Small keeps the trace off "
+        "specks and reflections next to the rim; raise it for droplets "
+        "that move or spread fast. After a long gap between captures "
+        "the search widens on its own.",
     ),
     HGroup(
         UItem(
@@ -1463,19 +1509,16 @@ ai_group = Group(
 )
 
 # The measurement and AI grids as one collapsible block under the image,
-# each also collapsing on its own chevron. The AI header and grid hide
-# together when the optional SAM stack is not installed. The block
+# each also collapsing on its own chevron. The AI grid stays when the
+# optional SAM stack is not installed: the rim tracer uses it. The block
 # scrolls on its own both ways, so its grids never set the image column's
 # minimum, and sits under a divider the user drags against the canvas.
 advanced_settings_group = VGroup(
     HGroup(UItem("scale_text", style="readonly")),
     _collapse_header("show_measurement_settings", "Measurement"),
     correction_group,
-    VGroup(
-        _collapse_header("show_ai_settings", "AI Detection"),
-        ai_group,
-        visible_when="analysis.ai_available",
-    ),
+    _collapse_header("show_ai_settings", "AI Detection"),
+    ai_group,
     visible_when="show_advanced_settings",
     scrollable=True,
 )
