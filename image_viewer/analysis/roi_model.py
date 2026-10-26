@@ -980,7 +980,11 @@ class RoiAnalysisModel(HasTraits):
     #: Opens the perspective-definition window.
     define_perspective_button = Button()
     edit_mode = Bool(False)
+
+    #: Delete the selected ROI — the analysis toolbar's button and the
+    #: Del key both fire it, so the two run one handler.
     delete_roi_button = Button()
+
     clear_rois_button = Button()
     calculate_button = Button()
     export_csv_button = Button()

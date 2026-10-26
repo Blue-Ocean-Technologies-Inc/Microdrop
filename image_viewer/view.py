@@ -1215,14 +1215,6 @@ analysis_toolbar = VGroup(
             "override from there on",
         ),
     ),
-    # Delete-selected sits directly under the edit toggle: selecting
-    # (edit mode) and deleting the selection are one motion.
-    UItem(
-        "object.roi_analysis.delete_roi_button",
-        editor=IconButtonEditor(
-            glyph=ICON_DELETE, tooltip="Delete the selected ROI (Del)"
-        ),
-    ),
     UItem(
         "object.roi_analysis.copy_roi_button",
         editor=IconButtonEditor(
@@ -1236,6 +1228,15 @@ analysis_toolbar = VGroup(
             tooltip="Paste the copied shape as a new ROI, offset "
             "from the original (Ctrl+V)",
         ),
+    ),
+    # The same handler as the Del key; it asks which images (Left Del /
+    # Del / Right Del) unless the preferences remember an answer.
+    UItem(
+        "object.roi_analysis.delete_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_DELETE, tooltip="Delete the selected ROI (Del)"
+        ),
+        enabled_when="analysis.selected_roi_id",
     ),
     "12",  # AI tools
     UItem(
