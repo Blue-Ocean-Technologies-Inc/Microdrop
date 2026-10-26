@@ -1369,18 +1369,22 @@ class RoiAnalysisController(HasTraits):
 
     @observe(
         "analysis_model:current_image_path, analysis_model:session, "
-        "analysis_model:session:excluded_images"
+        "analysis_model:session:excluded_images, "
+        "analysis_model:session:area_fit_excluded_images"
     )
     def _mirror_current_image_excluded(self, event):
-        """Point the checkbox at the displayed image's exclusion state
-        (image navigation, session swaps and bulk changes to the
-        marks all land here)."""
+        """Point the checkboxes at the displayed image's exclusion and
+        area-fit exclusion states (image navigation, session swaps and
+        bulk changes to the marks all land here)."""
         current = self.analysis_model.current_image_path
         self._syncing_excluded = True
         try:
             self.analysis_model.current_image_excluded = bool(
                 current
             ) and self.session.is_excluded(current)
+            self.analysis_model.current_image_area_fit_excluded = bool(
+                current
+            ) and self.session.is_area_fit_excluded(current)
         finally:
             self._syncing_excluded = False
 
@@ -1414,18 +1418,69 @@ class RoiAnalysisController(HasTraits):
         """A plot point was clicked: show its image, then flip that
         image's exclusion through the checkbox — the one path that
         marks, saves and re-runs — so the sidebar shows what changed."""
-        path = event.new
-        self.viewer_model.current_path = path
-
-        # The mirrors above point the checkbox at the shown image; one
-        # that is not the clicked one must not be toggled instead.
-        if self.analysis_model.current_image_path != path:
-            logger.warning(f"Cannot show {path} to toggle its exclusion")
+        if not self._show_clicked_image(event.new):
             return
 
         self.analysis_model.current_image_excluded = (
             not self.analysis_model.current_image_excluded
         )
+
+    @observe("analysis_model:toggle_area_fit_exclusion_request")
+    def _toggle_requested_area_fit_exclusion(self, event):
+        """A plot point was Shift+clicked: show its image, then flip
+        whether the area fit leaves it out, through its checkbox."""
+        if not self._show_clicked_image(event.new):
+            return
+
+        self.analysis_model.current_image_area_fit_excluded = (
+            not self.analysis_model.current_image_area_fit_excluded
+        )
+
+    def _show_clicked_image(self, path):
+        """Show the image of a clicked plot point; whether it is now the
+        displayed one. The mirrors above point the checkboxes at the
+        shown image, and one that is not the clicked one must not be
+        toggled instead."""
+        self.viewer_model.current_path = path
+
+        if self.analysis_model.current_image_path != path:
+            logger.warning(f"Cannot show {path} to toggle its exclusion")
+
+            return False
+
+        return True
+
+    @observe("analysis_model:current_image_area_fit_excluded")
+    def _on_current_image_area_fit_excluded(self, event):
+        """The area-fit checkbox was toggled by the user: mark/unmark
+        the displayed image for the area fit."""
+        current = self.analysis_model.current_image_path
+
+        if self._syncing_excluded or not current:
+            return
+
+        name = Path(current).name
+        marks = list(self.session.area_fit_excluded_images)
+
+        if event.new and name not in marks:
+            self._set_area_fit_excluded_images(marks + [name])
+        elif not event.new and name in marks:
+            self._set_area_fit_excluded_images(
+                [entry for entry in marks if entry != name]
+            )
+
+    @observe("analysis_model:include_all_in_area_fit_button")
+    def _include_every_image_in_area_fit(self, event):
+        if self.session.area_fit_excluded_images:
+            self._set_area_fit_excluded_images([])
+
+    def _set_area_fit_excluded_images(self, names):
+        """Replace the area-fit exclusion marks with ``names`` — their
+        one write path. The stats are untouched, so a running batch
+        carries on; stats_revision is what the plot redraws on."""
+        self.session.area_fit_excluded_images = names
+        self.session.stats_revision += 1
+        self._save_config()
 
     @observe("analysis_model:exclude_before_button")
     def _exclude_all_before(self, event):

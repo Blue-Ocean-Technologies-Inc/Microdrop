@@ -372,6 +372,12 @@ PLOT_CLICK_SLOP_PX = 3
 EXCLUDED_POINT_ALPHA = 0.35
 EXCLUDED_POINT_MARKER = "o"
 
+#: Images left out of the area fit only, on the Area view: a hollow
+#: marker this much larger than the ROI's own, ringing the point the
+#: fitted line ignores.
+AREA_FIT_EXCLUDED_POINT_MARKER = "s"
+AREA_FIT_EXCLUDED_POINT_SCALE = 1.8
+
 #: The Temperature over time view: how far past the filtered captures'
 #: span the log is drawn each side, as a fraction of that span with a
 #: floor (s) for a run of one capture. How it is drawn is the

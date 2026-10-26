@@ -993,6 +993,21 @@ exclusion_group = VGroup(
         "with the experiment.",
     ),
     HGroup(
+        Item(
+            "object.roi_analysis.current_image_area_fit_excluded",
+            label="Exclude current image from area fit",
+            tooltip="Leave the shown image out of the straight-line "
+            "area fit (Cleanup tab, Area from linear fit) while it "
+            "stays in the analysis. Shift+click a plot point does "
+            "the same; the mark is saved with the experiment.",
+        ),
+        UItem(
+            "object.roi_analysis.include_all_in_area_fit_button",
+            enabled_when="object.roi_analysis.has_area_fit_exclusions",
+            tooltip="Put every image back into the area fit",
+        ),
+    ),
+    HGroup(
         UItem("absent_roi_text", style="readonly"),
         UItem(
             "object.roi_analysis.restore_absent_rois_button",

@@ -1328,6 +1328,28 @@ class RoiAnalysisModel(HasTraits):
     #: and show it. RoiAnalysisController reacts. # image path (str)
     toggle_exclusion_request = Event()
 
+    #: Whether the DISPLAYED image is left out of the area fit — the
+    #: sidebar checkbox, mirrored like current_image_excluded against
+    #: session.area_fit_excluded_images.
+    current_image_area_fit_excluded = Bool(False)
+
+    #: A Shift+click on a curves-view point: toggle that image's
+    #: area-fit exclusion and show it. # image path (str)
+    toggle_area_fit_exclusion_request = Event()
+
+    #: Put every image back into the area fit.
+    include_all_in_area_fit_button = Button("Restore all")
+
+    #: Whether any image is left out of the area fit — the restore
+    #: button's enabled_when, which does not see changes nested in the
+    #: session.
+    has_area_fit_exclusions = Property(
+        Bool, observe="session.area_fit_excluded_images.items"
+    )
+
+    def _get_has_area_fit_exclusions(self):
+        return bool(self.session.area_fit_excluded_images)
+
     #: Put back every ROI deleted from the displayed image alone — the
     #: sidebar's way back besides undo. RoiAnalysisController reacts.
     restore_absent_rois_button = Button("Restore")

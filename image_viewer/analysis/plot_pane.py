@@ -92,6 +92,8 @@ from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
     ANNOTATION_FONT_SCALE,
+    AREA_FIT_EXCLUDED_POINT_MARKER,
+    AREA_FIT_EXCLUDED_POINT_SCALE,
     AREA_FIT_STATS,
     AREA_NORMALIZED_STATS,
     BAR_GAP_BOUNDS,
@@ -770,7 +772,8 @@ def _cleanup_tab():
                 "fitted to its pixel count against capture time, "
                 "instead of the jittery per-image count, for the "
                 "area-normalised means. The Area view draws the line "
-                "over its points.",
+                "over its points; Shift+click a point to leave it out "
+                "of the fit.",
             ),
         ),
         label="Cleanup",
@@ -1208,7 +1211,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _toggle_exclusion_at(self, event):
         """Ask for the exclusion of the image whose drawn point the
         click landed on — on the curves view, the only one drawing a
-        point per image — to be toggled. Nothing near: nothing asked."""
+        point per image — to be toggled; with Shift held, its exclusion
+        from the area fit alone. Nothing near: nothing asked."""
         if self._model.session.figure.view_mode not in PICK_VIEW_MODES:
             return
 
@@ -1230,7 +1234,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             PLOT_PICK_RADIUS_PX * self.device_pixel_ratio,
         )
 
-        if path is not None:
+        if path is None:
+            return
+
+        # Read off the keyboard at the release: the event's key is only
+        # known while the canvas holds the focus.
+        if "shift" in event.modifiers:
+            self._model.toggle_area_fit_exclusion_request = path
+        else:
             self._model.toggle_exclusion_request = path
 
     def detach(self):
@@ -1479,6 +1490,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._collect_pick_targets(series, drawn)
         self._draw_area_fit(area_fit)
 
+        if session.plot_stat == "area":
+            self._mark_area_fit_excluded(drawn)
+
         if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
@@ -1550,6 +1564,42 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 label="_nolegend_",
             )
             self._fit_artists.append(line)
+
+    def _mark_area_fit_excluded(self, drawn):
+        """Ring each point the area fit leaves out with a larger hollow
+        marker in its ROI's colour — on the Area view, where the fitted
+        line runs past them."""
+        session = self._model.session
+        analysed = analysed_paths(session, self._model.filtered_paths)
+        left_out = [
+            index
+            for index, path in enumerate(analysed)
+            if session.is_area_fit_excluded(path)
+        ]
+
+        if not left_out:
+            return
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            roi = session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                [x_values[index] for index in left_out],
+                [values[index] for index in left_out],
+                linestyle="",
+                marker=AREA_FIT_EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size * AREA_FIT_EXCLUDED_POINT_SCALE,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=roi.style.plot_alpha,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
 
     def _collect_pick_targets(self, series, drawn):
         """Remember every curve point a click can land on, with its
