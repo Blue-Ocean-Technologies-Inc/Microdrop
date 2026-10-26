@@ -178,7 +178,7 @@ KEYBOARD_SHORTCUTS = (
     (
         "Del",
         "delete_roi",
-        "Delete the selected ROI (asks which images)",
+        "Delete the selected ROI (asks Left Del / Del / Right Del)",
         "Actions",
     ),
     ("Ctrl+Z", "undo", "Undo", "Actions"),
