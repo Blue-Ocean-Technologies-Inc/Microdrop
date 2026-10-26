@@ -71,6 +71,22 @@ BUTTER_ORDER_BOUNDS = (1, 8)
 BUTTER_ORDER = 2
 BUTTER_CUTOFF_BOUNDS = (0.01, 0.99)
 BUTTER_CUTOFF = 0.2
+#: The plot's font size (pt), for the axis titles and tick labels —
+#: 10 is matplotlib's own default, so a new figure looks as it did
+#: before the setting existed.
+FIGURE_FONT_SIZE_BOUNDS_PT = (6, 24)
+FIGURE_FONT_SIZE_PT = 10
+#: The empty share of each ROI's slot between neighbouring bars in the
+#: bar views; a bar fills the rest. 0.2 is matplotlib's default width
+#: of 0.8; at 0.9 a bar is a sliver, at 0 the bars touch.
+BAR_GAP_BOUNDS = (0.0, 0.9)
+BAR_GAP = 0.2
+#: The legend's and the small notes' sizes as fractions of the plot's
+#: font size — matplotlib's "small" and "x-small", which resolve
+#: against the global rcParams rather than the figure, so the pane
+#: scales them itself.
+LEGEND_FONT_SCALE = 0.833
+ANNOTATION_FONT_SCALE = 0.694
 
 #: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
 #: the analysis draws, tests and combines uses it, so it is one name

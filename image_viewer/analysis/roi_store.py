@@ -67,6 +67,8 @@ _FIGURE_FIELDS = (
     "initial_guesses",
     "trim_poor_fit",
     "show_legend",
+    "font_size",
+    "bar_gap",
     "show_fit_equations",
     "show_second_derivative_max",
     "show_second_derivative_min",

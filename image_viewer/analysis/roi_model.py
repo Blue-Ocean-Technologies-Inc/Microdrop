@@ -53,6 +53,8 @@ from .consts import (
     AI_MIN_SIZE_DEFAULT_PX,
     AI_SIGNIFICANCE_DEFAULT,
     AI_SIZE_FILTER_CEILING_PX,
+    BAR_GAP,
+    BAR_GAP_BOUNDS,
     BUTTER_CUTOFF,
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER,
@@ -64,6 +66,8 @@ from .consts import (
     COPY_TREND_TOOLTIP,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRICS,
+    FIGURE_FONT_SIZE_BOUNDS_PT,
+    FIGURE_FONT_SIZE_PT,
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
@@ -247,6 +251,11 @@ class FigureSettings(HasTraits):
     #: per image. Stacks with the ring correction and subtract_first.
     subtract_background_ref = Bool(False)
     show_legend = Bool(True)
+    #: Font size (pt) of the axis titles and tick labels; the legend
+    #: and the notes on the figure scale with it.
+    font_size = Range(*FIGURE_FONT_SIZE_BOUNDS_PT, FIGURE_FONT_SIZE_PT, mode="spinner")
+    #: The empty share of each ROI's slot between the bar views' bars.
+    bar_gap = Range(*BAR_GAP_BOUNDS, BAR_GAP)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)
     #: Mark where the fitted curve's second derivative peaks/troughs.

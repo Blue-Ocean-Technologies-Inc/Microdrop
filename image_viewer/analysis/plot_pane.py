@@ -91,6 +91,8 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
+    ANNOTATION_FONT_SCALE,
+    BAR_GAP_BOUNDS,
     BUTTER_CUTOFF_BOUNDS,
     CUSTOM_POINT_ALPHA,
     CUSTOM_POINT_COLOR,
@@ -100,7 +102,9 @@ from .consts import (
     EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
+    FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
     PLOT_PICK_RADIUS_PX,
@@ -423,6 +427,28 @@ def _axes_tab():
                 "figure.show_legend",
                 "Legend",
                 tooltip="Show the ROI legend on the figure",
+            ),
+        ),
+        HGroup(
+            Item(
+                "figure.font_size",
+                label="Font size",
+                width=PARAM_SPIN_W,
+                tooltip="Font size (pt) of the axis titles and tick "
+                "labels; the legend and the notes on the figure "
+                "scale with it, and the saved figure uses it too",
+            ),
+            Item(
+                "figure.bar_gap",
+                label="Bar gap",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=BAR_GAP_BOUNDS[0], high=BAR_GAP_BOUNDS[1], decimals=2, step=0.05
+                ),
+                enabled_when="figure.view_mode in ('per_image', 'fastest_change')",
+                tooltip="The empty share of each ROI's slot between "
+                "the bars of the Per image and Fastest change "
+                "views: 0 makes the bars touch",
             ),
         ),
         VGroup(
@@ -936,6 +962,8 @@ _PLOT_STATE = (
     "session:figure:custom_expression, "
     "session:figure:trim_poor_fit, "
     "session:figure:show_legend, "
+    "session:figure:font_size, "
+    "session:figure:bar_gap, "
     "session:figure:show_fit_equations, "
     "session:figure:show_second_derivative_max, "
     "session:figure:show_second_derivative_min, "
@@ -1335,7 +1363,29 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._note_missing_temperatures(series, figure_settings)
             self._note_missing_steps(series, figure_settings)
 
+        # Last, on every redraw: the views only set the titles' text,
+        # and tick labels and offsets (×1e6) are made afresh as the
+        # limits move. Set on the axes, never rcParams, which every
+        # other figure in the app shares.
+        for axis in (self._axes.xaxis, self._axes.yaxis):
+            axis.label.set_fontsize(figure_settings.font_size)
+            axis.offsetText.set_fontsize(figure_settings.font_size)
+
+        self._axes.tick_params(which="both", labelsize=figure_settings.font_size)
+
         self.draw_idle()
+
+    def _font_size(self, scale=1.0):
+        """The figure's font size (pt) times ``scale``. Matplotlib's
+        relative sizes ("small", "x-small") resolve against the global
+        rcParams, not the figure, so the smaller text scales from this."""
+        return self._model.session.figure.font_size * scale
+
+    def _grown_with_font(self, fraction):
+        """An axes-fraction offset tuned at the default font size,
+        grown with the figure's, so stacked lines of text stay clear of
+        each other at any size."""
+        return fraction * self._font_size() / FIGURE_FONT_SIZE_PT
 
     def _apply_ordinal_ticks(self, figure_settings, log_x):
         """Whole-number ticks on the step and frame axes, the step
@@ -1510,7 +1560,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries)
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
 
@@ -1562,17 +1612,19 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # ROI names on x: no time span to shade
 
-    def _draw_roi_bars(self, entries):
+    def _draw_roi_bars(self, entries, figure_settings):
         """Bar per (name, height, style) entry, coloured and faded by
-        the ROI's style and labelled with its value. A NaN height keeps
-        its slot as an empty bar marked n/a, so a ROI never shifts
-        along x when one image lacks it."""
+        the ROI's style and labelled with its value, filling its slot
+        but for the figure's bar gap. A NaN height keeps its slot as an
+        empty bar marked n/a, so a ROI never shifts along x when one
+        image lacks it."""
         positions = list(range(len(entries)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
         bars = self._axes.bar(
             positions,
             [0.0 if height != height else height for _name, height, _style in entries],
+            width=1.0 - figure_settings.bar_gap,
             color=[style.color for _name, _height, style in entries],
         )
 
@@ -1592,7 +1644,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     textcoords="offset points",
                     xytext=(0, 4),
                     ha="center",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color="gray" if missing else None,
                 )
             )
@@ -1861,7 +1913,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries)
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
 
@@ -1984,7 +2036,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     (x, y),
                     textcoords="offset points",
                     xytext=(6, 4),
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                 )
             )
 
@@ -2012,7 +2064,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                         for marker in markers
                     ],
                     loc="lower right",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                 )
             )
 
@@ -2039,7 +2091,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     f"Too few points for a {FIT_LABELS[method].lower()} trend",
                     transform=self._axes.transAxes,
                     va="top",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color="gray",
                 )
             )
@@ -2068,7 +2120,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 text,
                 transform=self._axes.transAxes,
                 va="top",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -2092,7 +2144,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _apply_legend(self, wanted):
         if wanted:
-            self._axes.legend(loc="best", fontsize="small")
+            self._axes.legend(loc="best", fontsize=self._font_size(LEGEND_FONT_SCALE))
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
 
@@ -2115,14 +2167,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_HIDDEN_Y,
+                self._grown_with_font(NOTE_HIDDEN_Y),
                 f"Log axis hides {hidden} non-positive "
                 f"{'point' if hidden == 1 else 'points'}",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -2147,14 +2199,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_OUTLIERS_Y,
+                self._grown_with_font(NOTE_OUTLIERS_Y),
                 f"{dropped} {'point' if dropped == 1 else 'points'} "
                 f"dropped as outliers",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -2183,13 +2235,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_NO_TEMP_Y,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
                 note,
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -2212,13 +2264,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_NO_TEMP_Y,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
                 f"{missing} {noun} without a protocol step",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -2232,6 +2284,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="center",
                 color="gray",
+                fontsize=self._font_size(),
             )
         )
 
@@ -2276,11 +2329,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 self._fit_artists.append(
                     self._axes.text(
                         EQUATION_BOX_X,
-                        EQUATION_BOX_TOP_Y - EQUATION_LINE_STEP_Y * index,
+                        EQUATION_BOX_TOP_Y
+                        - self._grown_with_font(EQUATION_LINE_STEP_Y) * index,
                         text,
                         transform=self._axes.transAxes,
                         va="top",
-                        fontsize="x-small",
+                        fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                         color=color,
                         alpha=alpha,
                     )
@@ -2362,7 +2416,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     (t_star, y_star),
                     textcoords="offset points",
                     xytext=(6, 6),
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color=roi.style.color,
                     alpha=alpha,
                 )

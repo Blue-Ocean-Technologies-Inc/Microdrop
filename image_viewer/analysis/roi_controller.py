@@ -1146,6 +1146,8 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:custom_expression, "
         "analysis_model:session:figure:trim_poor_fit, "
         "analysis_model:session:figure:show_legend, "
+        "analysis_model:session:figure:font_size, "
+        "analysis_model:session:figure:bar_gap, "
         "analysis_model:session:figure:show_fit_equations, "
         "analysis_model:session:figure:show_second_derivative_max, "
         "analysis_model:session:figure:show_second_derivative_min, "
