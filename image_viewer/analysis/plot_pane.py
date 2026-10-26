@@ -1073,7 +1073,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         #: moved since: a press released without moving is a click.
         self._press_position = None
         self._panned = False
+        #: Set by a font-size change: the next redraw re-fits the
+        #: margins once, after the text has its new size.
+        self._refit_margins = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
+        model.observe(self._on_font_size_changed, "session:figure:font_size")
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
         model.observe(self._on_displayed_image_changed, "current_image_path")
         for event_name, handler in (
@@ -1096,6 +1100,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _on_fit_requested(self, event):
         self.release_view()
+
+    def _on_font_size_changed(self, event):
+        # Only a font-size change re-fits the margins: every other
+        # redraw must keep the ones set through configure-subplots.
+        self._refit_margins = True
 
     def _toolbar_busy(self):
         """True while the navigation toolbar's pan or zoom tool is armed
@@ -1213,6 +1222,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._model.observe(self._on_fit_requested, _VIEW_RESET_STATE, remove=True)
         self._model.observe(
             self._on_displayed_image_changed, "current_image_path", remove=True
+        )
+        self._model.observe(
+            self._on_font_size_changed, "session:figure:font_size", remove=True
         )
 
     def showEvent(self, event):
@@ -1372,6 +1384,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             axis.offsetText.set_fontsize(figure_settings.font_size)
 
         self._axes.tick_params(which="both", labelsize=figure_settings.font_size)
+
+        if self._refit_margins:
+            self._refit_margins = False
+            self._figure.tight_layout()
 
         self.draw_idle()
 
