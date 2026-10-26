@@ -178,7 +178,7 @@ class ScaleEntry(HasTraits):
     unit = Enum(DEFAULT_UNIT, UNITS)
 
     traits_view = View(
-        Item("value", label="Length"),
+        Item("value", label="Length (0 clears)"),
         Item("unit", label="Units"),
         title="Set image scale",
         buttons=["OK", "Cancel"],
@@ -681,21 +681,33 @@ class _ImageCanvasEditor(QtEditor):
 
     def _on_scale_line_drawn(self, length_px):
         """Ask what the line measures, store the calibration on the
-        session, and remember it as the seed for the next experiment."""
+        session, and remember it as the seed for the next experiment.
+        A length of 0 clears both instead."""
         analysis = self.object.roi_analysis
         scale = analysis.session.scale
+        preferences = self.object.preferences
         entry = ScaleEntry(value=scale.value or 1.0, unit=scale.unit)
-        calibration = None
-        if entry.edit_traits().result:
-            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
-        if calibration is not None:
-            scale.trait_set(
-                metres_per_pixel=calibration, value=entry.value, unit=entry.unit
-            )
-            preferences = self.object.preferences
-            preferences.last_scale_metres_per_px = calibration
-            preferences.last_scale_unit = entry.unit
+        confirmed = entry.edit_traits().result
+
+        if confirmed and entry.value == 0:
+            # Typing 0 is deliberate, so it clears even after a
+            # misclick-short line; dropping the seed keeps later
+            # experiments from being re-calibrated with it.
+            scale.trait_set(metres_per_pixel=0.0, value=0.0)
+            preferences.last_scale_metres_per_px = 0.0
             self._push_scale()
+
+        elif confirmed:
+            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
+
+            if calibration is not None:
+                scale.trait_set(
+                    metres_per_pixel=calibration, value=entry.value, unit=entry.unit
+                )
+                preferences.last_scale_metres_per_px = calibration
+                preferences.last_scale_unit = entry.unit
+                self._push_scale()
+
         analysis.interaction_mode = "pan"
 
     def _on_interaction_mode_changed(self, event):
