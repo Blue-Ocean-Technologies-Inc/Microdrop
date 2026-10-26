@@ -144,16 +144,19 @@ def area_reference_count(stats_run):
     )
 
 
-def area_fit_line(stats_run, times, fit_excluded=None):
-    """(slope, intercept) of the least-squares straight line through
-    one ROI's pixel count against capture time (s) along ``stats_run``
-    (stats dicts or None, image order, at ``times``), over the images
-    with a count that ``fit_excluded`` (flags along the run, None for
-    none) does not flag.
+def area_fit_curve(stats_run, times, method, fit_excluded=None):
+    """The ``method`` curve (one of FIT_METHODS but "none") least-squares
+    fitted to one ROI's pixel count against capture time (s) along
+    ``stats_run`` (stats dicts or None, image order, at ``times``), over
+    the images with a count that ``fit_excluded`` (flags along the run,
+    None for none) does not flag — a FitResult whose ``predict`` reads
+    the fitted count at any time.
 
-    None with fewer than two such images at distinct times, or when the
-    line is not positive at the reference image (area_reference_count's
-    first image with a count) — there is then no area to divide by."""
+    None when there are too few such images for the curve, they share
+    one capture time, the curve cannot be solved, or it is not strictly
+    positive at every image of the run with a count and a capture time
+    — each of those areas is divided by, so one non-positive reading
+    voids the fit."""
     flags = [False] * len(stats_run) if fit_excluded is None else fit_excluded
     points = [
         (time, stats["count"])
@@ -161,7 +164,7 @@ def area_fit_line(stats_run, times, fit_excluded=None):
         if stats and stats.get("count") and not excluded and math.isfinite(time)
     ]
 
-    if len(points) < 2:
+    if not points:
         return None
 
     fit_times, counts = np.asarray(points, dtype=float).T
@@ -169,26 +172,33 @@ def area_fit_line(stats_run, times, fit_excluded=None):
     if float(np.ptp(fit_times)) == 0.0:
         return None
 
-    slope, intercept = (float(value) for value in np.polyfit(fit_times, counts, 1))
-    reference_time = next(
-        (time for stats, time in zip(stats_run, times) if stats and stats.get("count")),
-        None,
-    )
+    fit = fit_series(fit_times, counts, method)
 
-    if slope * reference_time + intercept <= 0.0:
+    if fit is None:
         return None
 
-    return slope, intercept
+    counted_times = np.asarray(
+        [
+            time
+            for stats, time in zip(stats_run, times)
+            if stats and stats.get("count") and math.isfinite(time)
+        ],
+        dtype=float,
+    )
+    fitted = np.asarray(fit.predict(counted_times), dtype=float)
+
+    if not np.all(np.isfinite(fitted) & (fitted > 0.0)):
+        return None
+
+    return fit
 
 
-def _area_fitted_run(stats_run, times, line):
-    """``stats_run`` with each pixel count read off ``line`` at its
-    capture time; an image without a count keeps its stats as they
-    are."""
-    slope, intercept = line
-
+def _area_fitted_run(stats_run, times, fit):
+    """``stats_run`` with each pixel count read off ``fit`` (an
+    area_fit_curve FitResult) at its capture time; an image without a
+    count keeps its stats as they are."""
     return [
-        {**stats, "count": slope * time + intercept}
+        {**stats, "count": float(fit.predict(time))}
         if stats and stats.get("count")
         else stats
         for stats, time in zip(stats_run, times)
@@ -205,21 +215,22 @@ def area_normalized_values(stats_run, stat, reference_run=None, area_fit=None):
     image whatever unit the experiment is calibrated in. NaN
     everywhere when no image has a pixel count.
 
-    ``area_fit``, when given, is (times, reference_times, fit_excluded):
-    the capture times (s) along ``stats_run`` and along the reference
-    run, and the reference images the fit leaves out. Each area then
-    comes off the reference run's area_fit_line, so the value is
+    ``area_fit``, when given, is (times, reference_times, fit_excluded,
+    method): the capture times (s) along ``stats_run`` and along the
+    reference run, the reference images the fit leaves out, and the
+    curve to fit (one of FIT_METHODS but "none"). Each area then comes
+    off the reference run's area_fit_curve, so the value is
     mean × Â(t) / Â(t_ref) — still the mean on the reference image —
-    or stays the per-image count where there is no line."""
+    or stays the per-image count where there is no fit."""
     reference_run = stats_run if reference_run is None else reference_run
 
     if area_fit is not None:
-        times, reference_times, fit_excluded = area_fit
-        line = area_fit_line(reference_run, reference_times, fit_excluded)
+        times, reference_times, fit_excluded, method = area_fit
+        fit = area_fit_curve(reference_run, reference_times, method, fit_excluded)
 
-        if line is not None:
-            stats_run = _area_fitted_run(stats_run, times, line)
-            reference_run = _area_fitted_run(reference_run, reference_times, line)
+        if fit is not None:
+            stats_run = _area_fitted_run(stats_run, times, fit)
+            reference_run = _area_fitted_run(reference_run, reference_times, fit)
 
     reference = area_reference_count(reference_run)
 
@@ -236,8 +247,8 @@ def roi_stat_values(stats_run, stat, pixel_area=1.0, reference_run=None, area_fi
     order). Every stat but the SERIES_STATS is per image; those need a
     run for their reference — ``reference_run`` when given (the
     analysed images, for a run of excluded ones), else ``stats_run``.
-    ``area_fit`` takes the area-normalised stats' area from a
-    straight-line fit (see area_normalized_values)."""
+    ``area_fit`` takes the area-normalised stats' area from a fitted
+    curve (see area_normalized_values)."""
     if stat == "shape_change":
         return shape_change_values(stats_run, reference_run)
 
@@ -592,8 +603,8 @@ def _series_over(session, filtered_paths, paths):
 
     The SERIES_STATS take their reference from the analysed images
     either way, so an excluded image's point reads against the same
-    baseline as the curve it left — and, with the figure's area_fit,
-    against the same fitted area."""
+    baseline as the curve it left — and, with the figure's
+    area_fit_method, against the same fitted area."""
     rois = session.positive_rois
 
     if not paths or not rois:
@@ -607,11 +618,14 @@ def _series_over(session, filtered_paths, paths):
     x_values, uninvertible = _x_values(session, filtered_paths, paths, stat_cache)
     area_fit = None
 
-    if session.figure.area_fit and session.plot_stat in AREA_NORMALIZED_STATS:
+    method = session.figure.area_fit_method
+
+    if method != "none" and session.plot_stat in AREA_NORMALIZED_STATS:
         area_fit = (
             [session.stat_info(path, stat_cache)[1] for path in paths],
             [session.stat_info(path, stat_cache)[1] for path in analysed],
             [session.is_area_fit_excluded(path) for path in analysed],
+            method,
         )
 
     series = {}
@@ -633,11 +647,12 @@ def _series_over(session, filtered_paths, paths):
 
 
 def area_fit_series(session, filtered_paths):
-    """{roi_id: (name, [x], [area])}: each ROI's area_fit_line at the
-    analysed images, in the plotted area unit against the figure's x
-    axis — the line the Area view draws over the measured points. A
-    ROI the fit has no line for is left out, its area-normalised stats
-    reading the per-image area instead."""
+    """{roi_id: (name, [x], [area])}: each ROI's area_fit_curve, of the
+    figure's area_fit_method, at the analysed images, in the plotted
+    area unit against the figure's x axis — the fit the Area view draws
+    over the measured points. A ROI the curve cannot be fitted for is
+    left out, its area-normalised stats reading the per-image area
+    instead."""
     rois = session.positive_rois
     analysed = analysed_paths(session, filtered_paths)
 
@@ -649,24 +664,27 @@ def area_fit_series(session, filtered_paths):
     times = [session.stat_info(path, stat_cache)[1] for path in analysed]
     fit_excluded = [session.is_area_fit_excluded(path) for path in analysed]
     x_values, _uninvertible = _x_values(session, filtered_paths, analysed, stat_cache)
-    lines = {}
+    method = session.figure.area_fit_method
+    fits = {}
 
     for roi in rois:
-        line = area_fit_line(
-            _roi_stats_run(session, roi, analysed, stat_cache), times, fit_excluded
+        fit = area_fit_curve(
+            _roi_stats_run(session, roi, analysed, stat_cache),
+            times,
+            method,
+            fit_excluded,
         )
 
-        if line is None:
+        if fit is None:
             continue
 
-        slope, intercept = line
-        lines[roi.roi_id] = (
+        fits[roi.roi_id] = (
             roi.name,
             list(x_values),
-            [(slope * time + intercept) * area_per_pixel for time in times],
+            [float(fit.predict(time)) * area_per_pixel for time in times],
         )
 
-    return lines
+    return fits
 
 
 def derive_series(session, filtered_paths):
@@ -1137,7 +1155,7 @@ def analysed_and_excluded_series(session, filtered_paths):
 
     Last, the Area view's area_fit_series through those corrections
     too, so each line runs over the points it was fitted to ({} unless
-    the figure's area_fit is on and the plotted stat is "area")."""
+    the figure has an area_fit_method and the plotted stat is "area")."""
     return _corrected_series(session, filtered_paths, True, with_excluded=True)
 
 
@@ -1150,7 +1168,9 @@ def _corrected_series(session, filtered_paths, visible_only, with_excluded):
     excluded = excluded_series(session, filtered_paths) if with_excluded else {}
     area_fit = (
         area_fit_series(session, filtered_paths)
-        if with_excluded and figure.area_fit and session.plot_stat == "area"
+        if with_excluded
+        and figure.area_fit_method != "none"
+        and session.plot_stat == "area"
         else {}
     )
     flags = {}

@@ -1165,7 +1165,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:normalize, "
         "analysis_model:session:figure:subtract_first, "
         "analysis_model:session:figure:subtract_background_ref, "
-        "analysis_model:session:figure:area_fit, "
+        "analysis_model:session:figure:area_fit_method, "
         "analysis_model:session:figure:remove_outliers, "
         "analysis_model:session:figure:outlier_threshold, "
         "analysis_model:session:figure:outlier_window, "
@@ -1605,11 +1605,8 @@ class RoiAnalysisController(HasTraits):
                 outlier_flags,
                 session.figure.heater_sensor if session.heater_samples else "",
                 self.viewer_model.filter_label.lower() or "filter",
-                area_fit_excluded=(
-                    [session.is_area_fit_excluded(path) for path in paths]
-                    if session.figure.area_fit
-                    else None
-                ),
+                session.figure.area_fit_method,
+                [session.is_area_fit_excluded(path) for path in paths],
             )
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")

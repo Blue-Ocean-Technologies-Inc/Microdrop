@@ -23,7 +23,7 @@ from image_viewer.analysis.curve_fit import TREND_METHODS
 from image_viewer.analysis.plot_series import (
     analysed_and_excluded_series,
     analysed_paths,
-    area_fit_line,
+    area_fit_curve,
     area_fit_series,
     area_normalized_values,
     background_ref_baseline,
@@ -1030,7 +1030,7 @@ def test_an_roi_deleted_from_one_image_gaps_there(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Area from a linear fit                                                       #
+# Area fit                                                                     #
 # --------------------------------------------------------------------------- #
 #: Counts at 0, 10 and 20 s whose least-squares line is 102 - t: the
 #: fitted areas are 102, 92 and 82.
@@ -1042,46 +1042,61 @@ def _area_run(means=(10.0, 10.0, 10.0), counts=_JITTERY_COUNTS):
     return [{"mean": mean, "count": count} for mean, count in zip(means, counts)]
 
 
-def test_the_area_fit_is_the_least_squares_line_of_count_on_time():
-    slope, intercept = area_fit_line(_area_run(), _FIT_TIMES)
+def test_the_linear_area_fit_is_the_least_squares_line_of_count_on_time():
+    fit = area_fit_curve(_area_run(), _FIT_TIMES, "linear")
 
-    assert slope == pytest.approx(-1.0)
-    assert intercept == pytest.approx(102.0)
+    assert fit.predict(np.asarray(_FIT_TIMES)) == pytest.approx([102.0, 92.0, 82.0])
 
 
 def test_the_area_fit_skips_its_excluded_images_and_those_without_a_count():
     stats_run = [*_area_run(), None, {"mean": 10.0}]
     times = [*_FIT_TIMES, 30.0, 40.0]
 
-    slope, intercept = area_fit_line(
-        stats_run, times, [False, False, True, False, False]
+    fit = area_fit_curve(stats_run, times, "linear", [False, False, True, False, False])
+
+    # Through (0, 100) and (10, 96) alone: 100 - 0.4 t.
+    assert fit.predict(np.asarray(_FIT_TIMES)) == pytest.approx([100.0, 96.0, 92.0])
+
+
+def test_a_quadratic_area_fit_follows_a_quadratic_count():
+    times = [0.0, 10.0, 20.0, 30.0]
+    counts = [100.0 + 0.05 * time**2 - time for time in times]
+
+    fit = area_fit_curve(_area_run(counts=counts), times, "poly2")
+
+    assert fit.predict(np.asarray(times)) == pytest.approx(counts)
+
+
+def test_the_area_fit_needs_the_curves_points_at_distinct_times():
+    assert area_fit_curve(_area_run()[:1], [0.0], "linear") is None
+    assert (
+        area_fit_curve(_area_run(), _FIT_TIMES, "linear", [False, True, True]) is None
     )
-
-    # Through (0, 100) and (10, 96) alone.
-    assert slope == pytest.approx(-0.4)
-    assert intercept == pytest.approx(100.0)
-
-
-def test_the_area_fit_needs_two_points_at_distinct_times():
-    assert area_fit_line(_area_run()[:1], [0.0]) is None
-    assert area_fit_line(_area_run(), _FIT_TIMES, [False, True, True]) is None
-    assert area_fit_line(_area_run()[:2], [5.0, 5.0]) is None
+    assert area_fit_curve(_area_run()[:2], [5.0, 5.0], "linear") is None
+    # A sigmoid needs five points; three leave the per-image area.
+    assert area_fit_curve(_area_run(), _FIT_TIMES, "sigmoid") is None
 
 
-def test_the_area_fit_needs_a_positive_area_at_the_reference_image():
+def test_the_area_fit_needs_a_positive_area_at_every_counted_image():
     # The line through the last two points, 16 t - 1520, is negative
-    # at the reference image's t = 0.
+    # at the first image's t = 0.
     stats_run = [{"count": 50.0}, {"count": 80.0}, {"count": 96.0}]
     times = [0.0, 100.0, 101.0]
 
-    assert area_fit_line(stats_run, times, [True, False, False]) is None
+    assert area_fit_curve(stats_run, times, "linear", [True, False, False]) is None
+
+    # 112 - 1.2 t through the first two crosses zero before the last.
+    stats_run = [{"count": 112.0}, {"count": 100.0}, {"count": 5.0}]
+    times = [0.0, 10.0, 100.0]
+
+    assert area_fit_curve(stats_run, times, "linear", [False, False, True]) is None
 
 
 def test_area_normalised_means_read_the_fitted_area():
     values = area_normalized_values(
         _area_run(),
         "area_normalized",
-        area_fit=(_FIT_TIMES, _FIT_TIMES, None),
+        area_fit=(_FIT_TIMES, _FIT_TIMES, None, "linear"),
     )
 
     # mean × Â(t) / Â(t_ref): still the mean on the reference image.
@@ -1094,7 +1109,19 @@ def test_area_normalised_means_fall_back_to_the_measured_area_without_a_fit():
     values = roi_stat_values(
         stats_run,
         "area_normalized",
-        area_fit=(_FIT_TIMES, _FIT_TIMES, [False, True, True]),
+        area_fit=(_FIT_TIMES, _FIT_TIMES, [False, True, True], "linear"),
+    )
+
+    assert values == roi_stat_values(stats_run, "area_normalized")
+
+
+def test_a_curve_with_too_few_points_falls_back_to_the_measured_area():
+    stats_run = _area_run()
+
+    values = roi_stat_values(
+        stats_run,
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, None, "sigmoid"),
     )
 
     assert values == roi_stat_values(stats_run, "area_normalized")
@@ -1104,7 +1131,10 @@ def test_an_excluded_image_reads_against_the_analysed_runs_fit():
     excluded_run = [{"mean": 20.0, "count": 40.0}]
 
     values = area_normalized_values(
-        excluded_run, "area_normalized", _area_run(), ([5.0], _FIT_TIMES, None)
+        excluded_run,
+        "area_normalized",
+        _area_run(),
+        ([5.0], _FIT_TIMES, None, "linear"),
     )
 
     # Its own count plays no part: Â(5) / Â(0) of the analysed run's line.
@@ -1120,7 +1150,7 @@ def _area_fit_session(tmp_path):
         session.stats[session.cache_key(path, roi)] = {"mean": 10.0, "count": count}
 
     session.plot_stat = "area_normalized"
-    session.figure.area_fit = True
+    session.figure.area_fit_method = "linear"
 
     return session, roi, paths
 
@@ -1132,7 +1162,7 @@ def test_derive_series_reads_the_area_fit_when_the_figure_asks(tmp_path):
 
     assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
 
-    session.figure.area_fit = False
+    session.figure.area_fit_method = "none"
     _name, _x, values = derive_series(session, paths)[roi.roi_id]
 
     assert values == pytest.approx([10.0, 9.6, 8.0])

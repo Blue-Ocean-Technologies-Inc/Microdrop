@@ -250,11 +250,13 @@ class FigureSettings(HasTraits):
     #: Subtract the mean of the ROIs marked as background references,
     #: per image. Stacks with the ring correction and subtract_first.
     subtract_background_ref = Bool(False)
-    #: Read the area-normalised stats' area off each ROI's straight-line
-    #: fit of pixel count against capture time (the analysed images
-    #: less the area-fit-excluded ones) rather than the noisy per-image
-    #: count, and draw that line over the Area view's points.
-    area_fit = Bool(False)
+    #: The curve each ROI's pixel count is fitted with against capture
+    #: time (the analysed images less the area-fit-excluded ones) for
+    #: the area-normalised stats to read their area off, rather than
+    #: the noisy per-image count; the Area view draws it over its
+    #: points. "none" leaves the per-image count. Its own choice,
+    #: independent of fit_method and trend_method.
+    area_fit_method = Enum(*FIT_METHODS)
     show_legend = Bool(True)
     #: Font size (pt) of the axis titles and tick labels; the legend
     #: and the notes on the figure scale with it.
@@ -681,8 +683,8 @@ class AnalysisSession(HasTraits):
         return Path(path).name in self.excluded_images
 
     #: Filenames the area fit alone leaves out: still analysed, plotted
-    #: and exported, but not part of the straight line the figure's
-    #: area_fit reads each ROI's area from.
+    #: and exported, but not part of the curve the figure's
+    #: area_fit_method reads each ROI's area from.
     area_fit_excluded_images = List(Str)
 
     def is_area_fit_excluded(self, path):

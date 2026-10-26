@@ -30,6 +30,7 @@ from .consts import (
     ROI_STATS_FILENAME,
     SHAPE_STATS,
 )
+from .curve_fit import FIT_METHODS
 from .plot_series import normalized_series, roi_stat_values
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
@@ -86,7 +87,7 @@ _FIGURE_FIELDS = (
     "normalize",
     "subtract_first",
     "subtract_background_ref",
-    "area_fit",
+    "area_fit_method",
     "remove_outliers",
     "outlier_threshold",
     "outlier_window",
@@ -412,6 +413,19 @@ def load_session(experiment_directory) -> AnalysisSession:
                     stored.get("temperature_slope", 1.0),
                     stored.get("temperature_intercept", 0.0),
                 )
+
+            # A config written before the curve choice stored an on/off
+            # area_fit; on meant the straight line.
+            if "area_fit_method" not in stored and stored.get("area_fit") is True:
+                stored["area_fit_method"] = "linear"
+
+            if stored.get("area_fit_method", "none") not in FIT_METHODS:
+                logger.warning(
+                    f"Ignoring invalid area_fit_method in {path}: "
+                    f"{stored['area_fit_method']!r}"
+                )
+                stored["area_fit_method"] = "none"
+
             figure.trait_set(
                 **{name: stored[name] for name in _FIGURE_FIELDS if name in stored}
             )
@@ -641,18 +655,20 @@ def _csv_cells(values):
     return ["" if value != value else value for value in values]
 
 
-def _roi_columns(rows, rois, stat, pixel_area, area_fit_excluded=None):
+def _roi_columns(
+    rows, rois, stat, pixel_area, area_fit_method="none", area_fit_excluded=None
+):
     """{roi_id: [value, ...]}: ``stat`` down the rows for each ROI, by
     the plot's own derivation — shape change included, whose reference
     is the ROI's first row with a droplet, and the area-normalised
-    means' area from the straight-line fit over the rows'
-    ``elapsed_sec`` while ``area_fit_excluded`` flags the rows it
-    leaves out (None for the per-image area)."""
+    means' area from the ``area_fit_method`` curve fitted over the
+    rows' ``elapsed_sec`` ("none" for the per-image area) while
+    ``area_fit_excluded`` flags the rows it leaves out (None for none)."""
     area_fit = None
 
-    if area_fit_excluded is not None:
+    if area_fit_method != "none":
         times = [row["elapsed_sec"] for row in rows]
-        area_fit = (times, times, area_fit_excluded)
+        area_fit = (times, times, area_fit_excluded, area_fit_method)
 
     return {
         roi.roi_id: roi_stat_values(
@@ -665,14 +681,26 @@ def _roi_columns(rows, rois, stat, pixel_area, area_fit_excluded=None):
     }
 
 
-def _normalised_columns(rows, rois, normalize_stat, pixel_area, area_fit_excluded=None):
+def _normalised_columns(
+    rows,
+    rois,
+    normalize_stat,
+    pixel_area,
+    area_fit_method="none",
+    area_fit_excluded=None,
+):
     """{roi_id: [cell, ...]} for the normalised column, run through the
     plot's own normaliser so a CSV column and its curve can never
     disagree."""
     series = {
         roi_id: (roi_id, list(range(len(rows))), values)
         for roi_id, values in _roi_columns(
-            rows, rois, normalize_stat, pixel_area, area_fit_excluded
+            rows,
+            rois,
+            normalize_stat,
+            pixel_area,
+            area_fit_method,
+            area_fit_excluded,
         ).items()
     }
     return {
@@ -692,6 +720,7 @@ def write_intensity_csv(
     outliers=None,
     heater_sensor="",
     filter_column="filter",
+    area_fit_method="none",
     area_fit_excluded=None,
 ):
     """One row per (image, ROI), blank cells where that pair has no
@@ -706,10 +735,11 @@ def write_intensity_csv(
     (px²) for an uncalibrated experiment. ``correction`` is the
     session's (gap, width, ball radius, perspective matrix, measured
     share), recorded on every row (the matrix as a 0/1
-    perspective_corrected flag). ``area_fit_excluded``, one flag per
-    row, takes the area-normalised columns' area from the plot's
-    straight-line fit, leaving the flagged rows out of it; None keeps
-    the per-image area (recorded as the area_fitted column).
+    perspective_corrected flag). ``area_fit_method``, one of
+    FIT_METHODS, takes the area-normalised columns' area from the
+    plot's fit of that curve ("none" keeps the per-image area; recorded
+    as the area_fit column), leaving out the rows flagged in
+    ``area_fit_excluded`` (one flag per row, None for none).
 
     Long rather than wide: the ROI is a VALUE in a column, not a prefix
     repeated across seventeen column names per ROI. Six ROIs used to
@@ -748,7 +778,7 @@ def write_intensity_csv(
         "inside_pct",
         "ball_radius_px",
         "perspective_corrected",
-        "area_fitted",
+        "area_fit",
         "heater_sensor",
     ]
     gap, width, ball, perspective, inside = (
@@ -762,14 +792,19 @@ def write_intensity_csv(
         inside,
         ball,
         int(bool(perspective)),
-        int(area_fit_excluded is not None),
+        area_fit_method,
         heater_sensor,
     ]
     normalised = (
         {}
         if normalize_stat is None
         else _normalised_columns(
-            rows, rois, normalize_stat, pixel_area, area_fit_excluded
+            rows,
+            rois,
+            normalize_stat,
+            pixel_area,
+            area_fit_method,
+            area_fit_excluded,
         )
     )
     # Every derived column is computed down the whole file per ROI: shape
@@ -778,7 +813,7 @@ def write_intensity_csv(
         stat: {
             roi_id: _csv_cells(values)
             for roi_id, values in _roi_columns(
-                rows, rois, stat, pixel_area, area_fit_excluded
+                rows, rois, stat, pixel_area, area_fit_method, area_fit_excluded
             ).items()
         }
         for stat in CSV_DERIVED_COLUMNS + SHAPE_STATS

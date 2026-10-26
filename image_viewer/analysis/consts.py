@@ -116,10 +116,10 @@ AREA_NORMALIZED_STATS = {
     "bg_area_normalized": "bg_integrated",
 }
 
-#: The stats the "Area from linear fit" correction applies to: the
-#: area-normalised means read their area off each ROI's straight-line
-#: fit of pixel count against capture time, and the area itself is
-#: drawn with that line over its points.
+#: The stats the "Area fit" correction applies to: the area-normalised
+#: means read their area off each ROI's fitted curve of pixel count
+#: against capture time, and the area itself is drawn with that fit
+#: over its points.
 AREA_FIT_STATS = ("area", *AREA_NORMALIZED_STATS)
 
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).

@@ -996,8 +996,8 @@ exclusion_group = VGroup(
         Item(
             "object.roi_analysis.current_image_area_fit_excluded",
             label="Exclude current image from area fit",
-            tooltip="Leave the shown image out of the straight-line "
-            "area fit (Cleanup tab, Area from linear fit) while it "
+            tooltip="Leave the shown image out of the area fit "
+            "(Cleanup tab, Area fit) while it "
             "stays in the analysis. Shift+click a plot point does "
             "the same; the mark is saved with the experiment.",
         ),

@@ -733,7 +733,7 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     # the area was not fitted and no heater sensor read the (absent)
     # temperature column.
     for row in body:
-        assert row[-7:] == ["2", "4", "90", "60", "0", "0", ""]
+        assert row[-7:] == ["2", "4", "90", "60", "0", "none", ""]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
@@ -1232,13 +1232,13 @@ def test_a_config_without_a_temperature_style_loads_the_defaults(tmp_path):
 
 def test_the_area_fit_and_its_exclusions_round_trip(tmp_path):
     session = AnalysisSession(directory=str(tmp_path))
-    session.figure.area_fit = True
+    session.figure.area_fit_method = "sigmoid"
     session.area_fit_excluded_images = ["b_raw.png"]
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
 
-    assert loaded.figure.area_fit is True
+    assert loaded.figure.area_fit_method == "sigmoid"
     assert loaded.area_fit_excluded_images == ["b_raw.png"]
 
 
@@ -1247,12 +1247,31 @@ def test_a_config_written_before_the_area_fit_loads_without_it(tmp_path):
 
     loaded = load_session(tmp_path)
 
-    assert loaded.figure.area_fit is False
+    assert loaded.figure.area_fit_method == "none"
     assert loaded.area_fit_excluded_images == []
 
 
-def _area_csv(tmp_path, area_fit_excluded):
-    """The area_normalized and area_fitted cells of a three-row export
+@pytest.mark.parametrize("area_fit, method", [(True, "linear"), (False, "none")])
+def test_a_config_with_the_area_fit_toggle_loads_it_as_a_method(
+    tmp_path, area_fit, method
+):
+    _write_figure(tmp_path, {"area_fit": area_fit})
+
+    assert load_session(tmp_path).figure.area_fit_method == method
+
+
+def test_an_unknown_area_fit_method_loads_as_none(tmp_path):
+    _write_figure(tmp_path, {"area_fit_method": "spline", "normalize": True})
+
+    figure = load_session(tmp_path).figure
+
+    # The rest of the figure settings survive the bad value.
+    assert figure.area_fit_method == "none"
+    assert figure.normalize is True
+
+
+def _area_csv(tmp_path, area_fit_method):
+    """The area_normalized and area_fit cells of a three-row export
     whose counts (100, 96, 80 at 0, 10, 20 s) fit the line 102 - t."""
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
     rows = [
@@ -1269,24 +1288,30 @@ def _area_csv(tmp_path, area_fit_excluded):
         )
     ]
     csv_path = tmp_path / "out.csv"
-    write_intensity_csv(csv_path, rows, [roi], area_fit_excluded=area_fit_excluded)
+    write_intensity_csv(
+        csv_path,
+        rows,
+        [roi],
+        area_fit_method=area_fit_method,
+        area_fit_excluded=[False, False, False],
+    )
 
     with open(csv_path, newline="", encoding="utf-8") as handle:
         header, *body = csv.reader(handle)
 
     return (
         [float(row[header.index("area_normalized")]) for row in body],
-        {row[header.index("area_fitted")] for row in body},
+        {row[header.index("area_fit")] for row in body},
     )
 
 
 def test_the_csv_reads_the_area_fit_through_the_plots_derivation(tmp_path):
-    values, fitted = _area_csv(tmp_path, [False, False, False])
+    values, fitted = _area_csv(tmp_path, "linear")
 
     assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
-    assert fitted == {"1"}
+    assert fitted == {"linear"}
 
-    values, fitted = _area_csv(tmp_path, None)
+    values, fitted = _area_csv(tmp_path, "none")
 
     assert values == pytest.approx([10.0, 9.6, 8.0])
-    assert fitted == {"0"}
+    assert fitted == {"none"}

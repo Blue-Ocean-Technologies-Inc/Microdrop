@@ -125,6 +125,7 @@ from .consts import (
 )
 from .curve_fit import (
     FIT_LABELS,
+    FIT_METHODS,
     TREND_METHODS,
     fastest_change_time,
     fit_series,
@@ -200,7 +201,7 @@ def y_axis_label(
     normalize=False,
     subtract_first=False,
     subtract_background_ref=False,
-    area_fit=False,
+    area_fit_method="none",
 ):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
@@ -213,7 +214,7 @@ def y_axis_label(
     )
     # In the order they were applied, so the axis reads as the recipe.
     # The Area view's points stay measured; only its overlay is fitted.
-    if area_fit and plot_stat in AREA_NORMALIZED_STATS:
+    if area_fit_method != "none" and plot_stat in AREA_NORMALIZED_STATS:
         label = f"{label} (area fitted)"
     if subtract_background_ref:
         label = f"{label} (bkg-ref corrected)"
@@ -764,16 +765,18 @@ def _cleanup_tab():
                 "Stacks with the ring correction and "
                 "with Subtract first.",
             ),
-            _toggle(
-                "figure.area_fit",
-                "Area from linear fit",
+            Item(
+                "figure.area_fit_method",
+                label="Area fit",
+                width=DROPDOWN_W,
+                editor=EnumEditor(values={key: FIT_LABELS[key] for key in FIT_METHODS}),
                 enabled_when=f"session.plot_stat in {AREA_FIT_STATS!r}",
-                tooltip="Read each ROI's area off a straight line "
-                "fitted to its pixel count against capture time, "
-                "instead of the jittery per-image count, for the "
-                "area-normalised means. The Area view draws the line "
+                tooltip="Fit each ROI's pixel count against capture "
+                "time with the chosen curve and read its area off the "
+                "fit, instead of the jittery per-image count, for the "
+                "area-normalised means. The Area view draws the fit "
                 "over its points; Shift+click a point to leave it out "
-                "of the fit.",
+                "of the fit only.",
             ),
         ),
         label="Cleanup",
@@ -1001,7 +1004,7 @@ _PLOT_STATE = (
     "session:figure:normalize, "
     "session:figure:subtract_first, "
     "session:figure:subtract_background_ref, "
-    "session:figure:area_fit, "
+    "session:figure:area_fit_method, "
     "session:figure:remove_outliers, "
     "session:figure:outlier_threshold, "
     "session:figure:outlier_window, "
@@ -1543,10 +1546,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._pick_targets.extend(zip(excluded_images, x_values, values))
 
     def _draw_area_fit(self, area_fit):
-        """Each ROI's straight-line area fit (area_fit_series), dashed
-        in its colour over its area points, so the fit can be judged
-        against what it was fitted to. In x order: on a temperature or
-        step axis the images need not arrive in it."""
+        """Each ROI's area fit (area_fit_series), dashed in its colour
+        through the fitted area at each of its analysed images, so the
+        fit can be judged against what it was fitted to. In x order: on
+        a temperature or step axis the images need not arrive in it."""
         for roi_id, (_name, x_values, values) in area_fit.items():
             roi = self._model.session.roi_by_id(roi_id)
 
@@ -1628,7 +1631,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             figure_settings.normalize,
             figure_settings.subtract_first,
             figure_settings.subtract_background_ref,
-            figure_settings.area_fit,
+            figure_settings.area_fit_method,
         )
 
     def _draw_per_image(self, series, figure_settings):
@@ -2323,14 +2326,18 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         )
 
     def _note_area_fit_fallbacks(self, series, area_fit):
-        """Count the measured ROIs the area fit has no line for — fewer
-        than two points it may use — whose area stays the per-image
-        count. ``area_fit`` is the Area view's lines; the area-normalised
-        stats fit theirs inside the series, so they are asked for
-        here."""
+        """Count the measured ROIs the area fit could not be solved for
+        — too few points it may use for the chosen curve, no solution,
+        or a fit that is not positive at every image — whose area stays
+        the per-image count. ``area_fit`` is the Area view's fits; the
+        area-normalised stats fit theirs inside the series, so they are
+        asked for here."""
         session = self._model.session
 
-        if not session.figure.area_fit or session.plot_stat not in AREA_FIT_STATS:
+        if (
+            session.figure.area_fit_method == "none"
+            or session.plot_stat not in AREA_FIT_STATS
+        ):
             return
 
         if session.plot_stat != "area":
@@ -2347,7 +2354,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._axes.text(
                 0.5,
                 self._grown_with_font(NOTE_AREA_FIT_Y),
-                f"{fallbacks} {noun} with too few points for the area fit "
+                f"{fallbacks} {noun} the area fit could not be solved for "
                 f"use the per-image area",
                 transform=self._axes.transAxes,
                 ha="center",
