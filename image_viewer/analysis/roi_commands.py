@@ -167,18 +167,16 @@ class EditRoiCommand(_SessionCommand):
 
 #: The undo stack's wording of each HideRoiOnImageCommand scope.
 _ABSENCE_SCOPE_WORDS = {
-    "image": "on one image",
-    "later": "from one image on",
-    "earlier": "up to one image",
-    "except": "everywhere but one image",
+    "image": "on this image",
+    "left": "on earlier images",
+    "right": "on later images",
 }
 
 
 class HideRoiOnImageCommand(_SessionCommand):
-    """Delete an ROI from one image and, by ``scope``, every later or
-    every earlier one too, leaving the others as they were — or, with
-    ``restore``, undo such a deletion: put it back on that image, or
-    clear the range."""
+    """Delete an ROI from one image, or from every image before or after
+    it, leaving the others as they were — or, with ``restore``, undo
+    such a deletion: put it back on that image, or clear the range."""
 
     #: The ROI taken off (or put back on) the images.
     roi = Instance(Roi)
@@ -186,11 +184,11 @@ class HideRoiOnImageCommand(_SessionCommand):
     #: Capture time of the image.
     capture_time = Float()
 
-    #: That image alone (absent_at), it and every later one
-    #: (absent_from), it and every earlier one (absent_until), or every
-    #: image but it (both ranges, stopping either side of it).
-    #: Repeating "later" from another image widens the range — the
-    #: earliest start wins — and "earlier" likewise keeps the latest end.
+    #: That image alone (absent_at), every image before it
+    #: (absent_until) or every image after it (absent_from). The ranges
+    #: stop one float step short of the image, so it keeps the ROI.
+    #: Repeating "right" from another image widens the range — the
+    #: earliest start wins — and "left" likewise keeps the latest end.
     scope = Enum(*ROI_ABSENCE_SCOPES)
 
     #: Undo that deletion instead of making it.
@@ -222,38 +220,31 @@ class HideRoiOnImageCommand(_SessionCommand):
     def redo(self):
         roi, capture_time = self.roi, self.capture_time
 
-        if self.scope == "except":
-            # Ranges stopping either side of the image, so captures still
-            # to come are covered too.
-            roi.trait_set(
-                absent_until=(
-                    math.nan
-                    if self.restore
-                    else math.nextafter(capture_time, -math.inf)
-                ),
-                absent_from=(
-                    math.nan if self.restore else math.nextafter(capture_time, math.inf)
-                ),
-            )
-        elif self.scope == "later":
+        if self.scope == "right":
             roi.absent_from = (
-                math.nan if self.restore else _bound(min, roi.absent_from, capture_time)
+                math.nan
+                if self.restore
+                else _bound(
+                    min, roi.absent_from, math.nextafter(capture_time, math.inf)
+                )
             )
-        elif self.scope == "earlier":
+        elif self.scope == "left":
             roi.absent_until = (
                 math.nan
                 if self.restore
-                else _bound(max, roi.absent_until, capture_time)
+                else _bound(
+                    max, roi.absent_until, math.nextafter(capture_time, -math.inf)
+                )
             )
         else:
             times = [time for time in roi.absent_at if time != capture_time]
             roi.absent_at = times if self.restore else sorted([*times, capture_time])
 
 
-def _bound(pick, current, capture_time):
-    """``capture_time``, or ``pick`` of it and ``current`` when a range
-    is already set (``current`` not NaN)."""
-    return capture_time if math.isnan(current) else pick(current, capture_time)
+def _bound(pick, current, bound):
+    """``bound``, or ``pick`` of it and ``current`` when a range is
+    already set (``current`` not NaN)."""
+    return bound if math.isnan(current) else pick(current, bound)
 
 
 def merged_overrides(history, correction, capture_time):
@@ -295,13 +286,14 @@ def merged_absences(history, correction, capture_time):
 
     Exact where it can be with one point list and two half-open ranges:
     a point either ROI was deleted at stays when the other was deleted
-    there too (by a point or a range); a "later" range stays only if both
-    had one (the later start), an "earlier" one likewise (the earlier
-    end). One ROI's "later" crossed with the other's "earlier" is a
-    bounded stretch the two ranges cannot express: it is left out, the
-    ROI shown there rather than lost. A range starting or ending exactly
-    on the shown image is moved just past it, keeping every other image
-    it covered — captures still to come included."""
+    there too (by a point or a range); a "right" range stays only if both
+    had one (the later start), a "left" one likewise (the earlier end).
+    One ROI's "right" crossed with the other's "left" is a bounded
+    stretch the two ranges cannot express: it is left out, the ROI
+    shown there rather than lost. A range starting or ending exactly on
+    the shown image (an older config's, which took that image too) is
+    moved just past it, as Right / Left Del store theirs, keeping every
+    other image it covered — captures still to come included."""
     points = {*history.absent_at, *correction.absent_at}
     absent_at = sorted(
         time

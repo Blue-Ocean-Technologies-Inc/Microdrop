@@ -471,9 +471,14 @@ class Roi(HasTraits):
     absent_at = List(Float)
 
     #: The ROI is deleted from every image captured at or after
-    #: ``absent_from``, and at or before ``absent_until`` — ranges, so
-    #: captures still to arrive in a running experiment are covered too.
-    #: NaN: no such range.
+    #: ``absent_from`` (a "right" range), and at or before
+    #: ``absent_until`` (a "left" one) — ranges, so captures still to
+    #: arrive in a running experiment are covered too. NaN: no such
+    #: range. Both bounds are inclusive: Right / Left Del store the shown
+    #: image's capture time moved one float step away from it
+    #: (math.nextafter), so the range stops short of that image, while
+    #: configs from versions whose ranges took the shown image too keep
+    #: meaning just that.
     absent_from = Float(math.nan)
     absent_until = Float(math.nan)
 
@@ -520,8 +525,9 @@ class Roi(HasTraits):
 
     def applies_at(self, capture_time):
         """Whether this ROI is in force on an image captured at
-        ``capture_time``. Not on an image it was deleted from alone
-        (absent_at). Otherwise a positive ROI always applies; a negative
+        ``capture_time``. Not on an image it was deleted from, alone
+        (absent_at) or by a range (absent_from / absent_until; see
+        absent_by). Otherwise a positive ROI always applies; a negative
         mask applies from the image it was drawn on (its base_anchor)
         onward, and on earlier images is neither drawn nor subtracted. A
         mask created with no image shown has a 0.0 anchor, so applies to
@@ -534,19 +540,19 @@ class Roi(HasTraits):
     def absent_by(self, capture_time):
         """Which deletions take the ROI off the image captured at
         ``capture_time`` (ROI_ABSENCE_SCOPES): "image" for that image
-        alone, "later" and "earlier" for the ranges. Empty where it is
-        not deleted. NaN never compares, so an unset range covers
-        nothing."""
+        alone, "left" for the range up to ``absent_until`` and "right"
+        for the one from ``absent_from``. Empty where it is not deleted.
+        NaN never compares, so an unset range covers nothing."""
         scopes = []
 
         if capture_time in self.absent_at:
             scopes.append("image")
 
-        if capture_time >= self.absent_from:
-            scopes.append("later")
-
         if capture_time <= self.absent_until:
-            scopes.append("earlier")
+            scopes.append("left")
+
+        if capture_time >= self.absent_from:
+            scopes.append("right")
 
         return scopes
 

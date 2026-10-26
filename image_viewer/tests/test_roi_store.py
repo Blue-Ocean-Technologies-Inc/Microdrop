@@ -90,6 +90,57 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.expected_second_derivative_min == 110.0
 
 
+def test_left_and_right_del_ranges_round_trip_short_of_the_shown_image(tmp_path):
+    shown = 200.0
+    roi = Roi(
+        absent_from=math.nextafter(shown, math.inf),
+        absent_until=math.nextafter(shown, -math.inf),
+    )
+    save_session(tmp_path, AnalysisSession(rois=[roi]))
+
+    (back,) = load_session(tmp_path).rois
+
+    assert (back.absent_from, back.absent_until) == (
+        roi.absent_from,
+        roi.absent_until,
+    )
+    assert back.applies_at(shown)
+    assert back.absent_by(300.0) == ["right"] and back.absent_by(100.0) == ["left"]
+
+
+def test_a_legacy_inclusive_range_still_takes_the_image_it_was_deleted_on(
+    tmp_path,
+):
+    # Written by "this and later" / "this and earlier" deletes on the
+    # image captured at 200 and 100: those images were deleted too.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(
+        json.dumps(
+            {
+                "rois": [
+                    {
+                        "roi_id": "abcd1234",
+                        "name": "ROI 1",
+                        "kind": "ellipse",
+                        "geometry": [10.0, 10.0, 5.0, 5.0, 0.0],
+                        "base_anchor": 0.0,
+                        "overrides": {},
+                        "absent_from": 200.0,
+                        "absent_until": 100.0,
+                    }
+                ]
+            }
+        )
+    )
+
+    (roi,) = load_session(tmp_path).rois
+
+    assert not roi.applies_at(200.0) and not roi.applies_at(100.0)
+    assert roi.applies_at(150.0)
+    assert roi.absent_by(200.0) == ["right"] and roi.absent_by(100.0) == ["left"]
+
+
 def test_figure_fit_settings_round_trip(tmp_path):
     session = AnalysisSession()
     session.figure.fit_method = "exponential"

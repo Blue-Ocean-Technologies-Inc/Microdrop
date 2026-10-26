@@ -35,17 +35,11 @@ from ..model import ImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS,
-    DELETE_ROI_ALL_BUT_THIS,
-    DELETE_ROI_ALL_IMAGES,
-    DELETE_ROI_EARLIER_IMAGES,
-    DELETE_ROI_LATER_IMAGES,
-    DELETE_ROI_THIS_IMAGE,
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
     NEGATIVE_MASK_COLOR,
     NEGATIVE_MASK_NAME_PREFIX,
     PASTE_OFFSET_PX,
-    ROI_ABSENCE_SCOPES,
     ROI_BATCH_PROTOCOL_WORKERS,
     ROI_DELETE_DONT_ASK_TEXT,
     ROI_DELETE_SCOPES,
@@ -540,8 +534,9 @@ class RoiAnalysisController(HasTraits):
     @observe("analysis_model:delete_roi_button")
     def _delete_selected_roi(self, event):
         """Delete the selected ROI from the shown image alone, or from
-        every image — asked, or as the preferences remember. With no
-        image shown there is only the latter, and nothing to ask."""
+        every image before or after it — asked, or as the preferences
+        remember. With no image shown there is no image to keep it on:
+        it is removed outright, without asking."""
         session = self.session
         roi = session.roi_by_id(self.analysis_model.selected_roi_id)
 
@@ -551,12 +546,12 @@ class RoiAnalysisController(HasTraits):
             )
             return
 
-        scope = self._roi_delete_scope(roi) if self.viewer_model.current_path else "all"
+        if self.viewer_model.current_path:
+            scope = self._roi_delete_scope(roi)
 
-        if scope is None:
-            return
+            if scope is None:
+                return
 
-        if scope in ROI_ABSENCE_SCOPES:
             self._set_absent_on_shown_image(roi, scope, restore=False)
         else:
             self._push(RemoveRoisCommand(session=session, rois=[roi]))
@@ -576,26 +571,26 @@ class RoiAnalysisController(HasTraits):
         if preferences.roi_delete_scope != "ask":
             return preferences.roi_delete_scope
 
+        choices = {
+            label: scope for scope, label in ROI_DELETE_SCOPES.items() if scope != "ask"
+        }
+
         choice, dont_ask_again = choose(
-            message=f"Which images should {roi.name} be deleted from?",
+            message=f"Delete {roi.name} from which images?",
             title="Delete ROI",
-            choices=[
-                DELETE_ROI_THIS_IMAGE,
-                DELETE_ROI_LATER_IMAGES,
-                DELETE_ROI_EARLIER_IMAGES,
-                DELETE_ROI_ALL_BUT_THIS,
-                DELETE_ROI_ALL_IMAGES,
-            ],
-            informative="Short of all images, it can be put back with Undo or "
-            "the Restore button in the sidebar's exclusion section; later "
-            "and earlier include captures still to come.",
+            choices=list(choices),
+            informative="Left Del deletes it from every image before this "
+            "one. Del deletes it from this image only. Right Del deletes it "
+            "from every image after this one, captures still to come "
+            "included. Undo or the Restore button in the sidebar's exclusion "
+            "section brings it back.",
             checkbox_text=ROI_DELETE_DONT_ASK_TEXT,
         )
 
         if choice is None:
             return None
 
-        scope = {label: scope for scope, label in ROI_DELETE_SCOPES.items()}[choice]
+        scope = choices[choice]
 
         if dont_ask_again:
             preferences.roi_delete_scope = scope
@@ -603,8 +598,8 @@ class RoiAnalysisController(HasTraits):
         return scope
 
     def _set_absent_on_shown_image(self, roi, scope, restore):
-        """Take ``roi`` off the shown image — alone, or with every later
-        or earlier one by ``scope`` — or undo that, as one undoable
+        """Take ``roi`` off the shown image alone, or off every image
+        before or after it, by ``scope`` — or undo that, as one undoable
         step."""
         self._push(
             HideRoiOnImageCommand(

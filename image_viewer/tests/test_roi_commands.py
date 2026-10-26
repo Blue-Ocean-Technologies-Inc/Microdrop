@@ -195,7 +195,7 @@ def test_hiding_an_roi_on_one_image_undoes_and_redoes():
 
     stack.push(HideRoiOnImageCommand(session=session, roi=roi, capture_time=100.0))
     assert roi.absent_at == [100.0, 300.0]
-    assert stack.undo_name == "Delete ROI 1 on one image"
+    assert stack.undo_name == "Delete ROI 1 on this image"
 
     stack.undo()
     assert roi.absent_at == [300.0]
@@ -217,7 +217,7 @@ def test_restoring_an_roi_on_one_image_is_the_inverse():
         )
     )
     assert roi.absent_at == []
-    assert stack.undo_name == "Restore ROI 1 on one image"
+    assert stack.undo_name == "Restore ROI 1 on this image"
 
     stack.undo()
     assert roi.absent_at == [100.0]
@@ -307,39 +307,67 @@ def test_a_merge_takes_each_images_shape_from_whichever_roi_defined_it():
     assert history.effective_geometry(270.0) == [20.0] * 5
 
 
-def test_deleting_later_widens_and_earlier_extends_the_range():
+def test_right_and_left_del_spare_the_shown_image():
     session = _session(1)
     (roi,) = session.rois
     stack = _stack()
 
     stack.push(
         HideRoiOnImageCommand(
-            session=session, roi=roi, capture_time=200.0, scope="later"
+            session=session, roi=roi, capture_time=200.0, scope="right"
         )
     )
+    assert stack.undo_name == "Delete ROI 1 on later images"
+    assert roi.applies_at(100.0) and roi.applies_at(200.0)
+    assert not roi.applies_at(200.001) and not roi.applies_at(1e9)
+    assert roi.absent_by(300.0) == ["right"] and roi.absent_by(200.0) == []
+
+    stack.undo()
     stack.push(
         HideRoiOnImageCommand(
-            session=session, roi=roi, capture_time=300.0, scope="later"
+            session=session, roi=roi, capture_time=200.0, scope="left"
         )
     )
-    assert roi.absent_from == 200.0  # the earliest start wins
+    assert stack.undo_name == "Delete ROI 1 on earlier images"
+    assert roi.applies_at(200.0) and roi.applies_at(300.0)
+    assert not roi.applies_at(199.999) and not roi.applies_at(0.0)
+    assert roi.absent_by(100.0) == ["left"] and roi.absent_by(200.0) == []
+
+
+def test_deleting_right_widens_and_left_extends_the_range():
+    session = _session(1)
+    (roi,) = session.rois
+    stack = _stack()
 
     stack.push(
         HideRoiOnImageCommand(
-            session=session, roi=roi, capture_time=100.0, scope="earlier"
+            session=session, roi=roi, capture_time=200.0, scope="right"
         )
     )
     stack.push(
         HideRoiOnImageCommand(
-            session=session, roi=roi, capture_time=50.0, scope="earlier"
+            session=session, roi=roi, capture_time=300.0, scope="right"
         )
     )
-    assert roi.absent_until == 100.0  # the latest end wins
-    assert stack.undo_name == "Delete ROI 1 up to one image"
+    # The earliest start wins, just past its image.
+    assert roi.absent_from == math.nextafter(200.0, math.inf)
+
+    stack.push(
+        HideRoiOnImageCommand(
+            session=session, roi=roi, capture_time=100.0, scope="left"
+        )
+    )
+    stack.push(
+        HideRoiOnImageCommand(session=session, roi=roi, capture_time=50.0, scope="left")
+    )
+    # The latest end wins, just short of its image.
+    assert roi.absent_until == math.nextafter(100.0, -math.inf)
+    assert stack.undo_name == "Delete ROI 1 on earlier images"
 
     stack.undo()
     stack.undo()
-    assert math.isnan(roi.absent_until) and roi.absent_from == 200.0
+    assert math.isnan(roi.absent_until)
+    assert roi.absent_from == math.nextafter(200.0, math.inf)
 
 
 def test_restoring_a_range_clears_it_and_undo_brings_it_back():
@@ -353,12 +381,12 @@ def test_restoring_a_range_clears_it_and_undo_brings_it_back():
             session=session,
             roi=roi,
             capture_time=250.0,
-            scope="later",
+            scope="right",
             restore=True,
         )
     )
     assert math.isnan(roi.absent_from)
-    assert stack.undo_name == "Restore ROI 1 from one image on"
+    assert stack.undo_name == "Restore ROI 1 on later images"
 
     stack.undo()
     assert roi.absent_from == 200.0
@@ -368,8 +396,8 @@ def test_a_merged_roi_is_absent_only_where_both_were():
     history = Roi(absent_at=[10.0, 20.0, 30.0], absent_from=500.0, absent_until=5.0)
     correction = Roi(absent_at=[20.0, 600.0], absent_from=550.0, absent_until=50.0)
 
-    # 10 and 30 the correction's earlier range covers, 600 the history's
-    # later one; the ranges keep their overlap.
+    # 10 and 30 the correction's left range covers, 600 the history's
+    # right one; the ranges keep their overlap.
     assert merged_absences(history, correction, 100.0) == (
         [10.0, 20.0, 30.0, 600.0],
         550.0,
@@ -378,7 +406,7 @@ def test_a_merged_roi_is_absent_only_where_both_were():
 
 
 def test_a_merge_shows_the_roi_where_the_ranges_cannot_say_both():
-    # The history's "later" crossed with the correction's "earlier" is a
+    # The history's "right" crossed with the correction's "left" is a
     # bounded stretch: shown rather than lost.
     history = Roi(absent_from=100.0)
     correction = Roi(absent_until=200.0)
@@ -387,6 +415,29 @@ def test_a_merge_shows_the_roi_where_the_ranges_cannot_say_both():
 
     assert absent_at == []
     assert math.isnan(absent_from) and math.isnan(absent_until)
+
+
+def test_a_merge_keeps_a_left_and_a_right_range_both_had():
+    # Right Del and Left Del from the shown image, on both ROIs: the
+    # ranges already stop short of it, so the merge keeps them as they are.
+    shown = 200.0
+    ranges = {
+        "absent_from": math.nextafter(shown, math.inf),
+        "absent_until": math.nextafter(shown, -math.inf),
+    }
+    history = Roi(**ranges)
+    correction = Roi(**ranges)
+
+    absent_at, absent_from, absent_until = merged_absences(history, correction, shown)
+
+    assert absent_at == []
+    assert (absent_from, absent_until) == (
+        ranges["absent_from"],
+        ranges["absent_until"],
+    )
+    merged = Roi(absent_from=absent_from, absent_until=absent_until)
+    assert merged.applies_at(shown)
+    assert not merged.applies_at(100.0) and not merged.applies_at(300.0)
 
 
 def test_a_merge_opens_a_shared_range_at_the_shown_image_or_refuses():
@@ -436,32 +487,32 @@ def test_undoing_a_merge_gives_back_both_rois_whole():
     assert removed.style.color == "#123456"
 
 
-def test_deleting_everywhere_but_one_image_and_undoing_it():
+def test_left_and_right_del_from_one_image_keep_it_there_alone():
     session = _session(1)
     (roi,) = session.rois
     stack = _stack()
 
-    stack.push(
-        HideRoiOnImageCommand(
-            session=session, roi=roi, capture_time=200.0, scope="except"
+    for scope in ("left", "right"):
+        stack.push(
+            HideRoiOnImageCommand(
+                session=session, roi=roi, capture_time=200.0, scope=scope
+            )
         )
-    )
-    assert stack.undo_name == "Delete ROI 1 everywhere but one image"
+
     assert roi.applies_at(200.0)
     assert not roi.applies_at(100.0) and not roi.applies_at(300.0)
 
     stack.undo()
-    assert math.isnan(roi.absent_from) and math.isnan(roi.absent_until)
+    assert roi.applies_at(300.0) and not roi.applies_at(100.0)
 
     stack.redo()
     stack.push(
         HideRoiOnImageCommand(
             session=session,
             roi=roi,
-            capture_time=200.0,
-            scope="except",
+            capture_time=300.0,
+            scope="right",
             restore=True,
         )
     )
-    assert stack.undo_name == "Restore ROI 1 everywhere but one image"
-    assert roi.applies_at(100.0) and roi.applies_at(300.0)
+    assert roi.applies_at(300.0) and not roi.applies_at(100.0)
