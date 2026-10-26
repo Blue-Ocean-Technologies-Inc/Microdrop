@@ -357,17 +357,6 @@ EXCLUDED_POINT_MARKER = "o"
 TEMPERATURE_VIEW_MARGIN_FRACTION = 0.05
 TEMPERATURE_VIEW_MARGIN_MIN_S = 10.0
 
-#: The Fastest change view's bars: their share of each ROI's slot, and
-#: the y range's padding past the lowest and highest bar, as a fraction
-#: of their spread with a floor (a fraction of the largest magnitude)
-#: for bars that all stand at one value.
-FASTEST_CHANGE_BAR_WIDTH = 0.35
-FASTEST_CHANGE_Y_PAD_FRACTION = 0.5
-FASTEST_CHANGE_Y_MIN_PAD_FRACTION = 0.01
-
-#: Opacity of the plot's gridlines, in every view that draws them.
-PLOT_GRID_ALPHA = 0.3
-
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"
 

@@ -100,13 +100,9 @@ from .consts import (
     EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
-    FASTEST_CHANGE_BAR_WIDTH,
-    FASTEST_CHANGE_Y_MIN_PAD_FRACTION,
-    FASTEST_CHANGE_Y_PAD_FRACTION,
     HEATER_LOGS_DIR_NAME,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
-    PLOT_GRID_ALPHA,
     PLOT_PICK_RADIUS_PX,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
@@ -1028,13 +1024,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes = self._figure.add_subplot(111)
         self._axes.set_xlabel(x_axis_label(model.session.figure))
         self._axes.set_ylabel("Mean intensity")
+        self._axes.grid(True, alpha=0.3)
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
-        #: Set per fastest-change redraw: the (x, y) ranges its bars are
-        #: framed in, a y of None keeping the autoscaled one; None keeps
-        #: both.
-        self._bar_limits = None
         #: Set per curves-view redraw: (image path, x, y) of every point
         #: a click can toggle the exclusion of, in data coordinates.
         self._pick_targets = []
@@ -1237,7 +1230,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         figure_settings = session.figure
         self._fits = None
         self._pick_targets = []
-        self._bar_limits = None
         # The Expected tab and its CSV read these whatever is shown, and
         # the model fits the Actual vs expected trend from them, so they
         # go before any view draws. The fitting views reuse these fits;
@@ -1266,13 +1258,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         log_y = view_mode in LOG_Y_VIEW_MODES and figure_settings.log_y
         self._axes.set_xscale("log" if log_x else "linear")
         self._axes.set_yscale("log" if log_y else "linear")
-
-        # The fastest-change bars read as a plain chart, gridless; grid()
-        # turned off takes no line properties, or it turns back on.
-        if view_mode == "fastest_change":
-            self._axes.grid(False)
-        else:
-            self._axes.grid(True, alpha=PLOT_GRID_ALPHA)
 
         # After the scales, which reset the tick locators and formatters.
         if time_axis and figure_settings.x_axis in ("step", "frame"):
@@ -1312,15 +1297,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._axes.set_autoscale_on(True)
         self._axes.relim()
         self._axes.autoscale_view()
-
-        if self._bar_limits is not None:
-            x_range, y_range = self._bar_limits
-            self._axes.set_xlim(x_range)
-
-            # Bars carry sticky edges at 0, which autoscale never leaves.
-            if y_range is not None:
-                self._axes.set_ylim(y_range)
-
         if kept is not None:
             self._axes.set_xlim(kept[0])
             self._axes.set_ylim(kept[1])
@@ -1586,19 +1562,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # ROI names on x: no time span to shade
 
-    def _draw_roi_bars(self, entries, width=0.8, annotate=True):
+    def _draw_roi_bars(self, entries):
         """Bar per (name, height, style) entry, coloured and faded by
-        the ROI's style, ``width`` of its slot wide (0.8 is matplotlib's
-        default) and, with ``annotate``, labelled with its value. A NaN
-        height keeps its slot as an empty bar marked n/a, so a ROI never
-        shifts along x when one image lacks it."""
+        the ROI's style and labelled with its value. A NaN height keeps
+        its slot as an empty bar marked n/a, so a ROI never shifts
+        along x when one image lacks it."""
         positions = list(range(len(entries)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
         bars = self._axes.bar(
             positions,
             [0.0 if height != height else height for _name, height, _style in entries],
-            width=width,
             color=[style.color for _name, _height, style in entries],
         )
 
@@ -1607,9 +1581,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         self._fit_artists.append(bars)
         self._axes.set_xticks(positions, [name for name, _height, _style in entries])
-
-        if not annotate:
-            return
 
         for x, (_name, height, _style) in zip(positions, entries):
             missing = height != height
@@ -1864,12 +1835,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _draw_fastest_change(self, series, figure_settings):
         """Bar per ROI: seconds until the fitted curve changes fastest
         (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
-        fails or whose speed is flat (linear) get no bar. The y axis is
-        zoomed to the bars' spread, so close values stay apart."""
+        fails or whose speed is flat (linear) get no bar."""
         quantity, unit = x_quantity(figure_settings)
 
-        self._axes.set_ylabel(quantity_label(quantity, unit))
-        self._axes.set_xlabel("")
+        self._axes.set_ylabel(quantity_label(f"{quantity} of fastest change", unit))
+        self._axes.set_xlabel("ROI")
         self._apply_legend(False)
 
         if figure_settings.fit_method == "none":
@@ -1891,21 +1861,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries, width=FASTEST_CHANGE_BAR_WIDTH, annotate=False)
-
-        heights = [actual for _name, actual, _style in entries]
-        low, high = min(heights), max(heights)
-        pad = max(
-            (high - low) * FASTEST_CHANGE_Y_PAD_FRACTION,
-            max(abs(low), abs(high)) * FASTEST_CHANGE_Y_MIN_PAD_FRACTION,
-        )
-
-        # Half a slot past the end bars, as in a category chart; bars all
-        # at 0 leave nothing to pad y by, so its autoscaled range stands.
-        self._bar_limits = (
-            (-0.5, len(entries) - 0.5),
-            (low - pad, high + pad) if pad > 0 else None,
-        )
+        self._draw_roi_bars(entries)
 
         return []  # ROI names on x: no time span to shade
 
