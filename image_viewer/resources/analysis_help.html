@@ -497,7 +497,7 @@ ul.uses li { margin: 4px 0; max-width: 75ch; }
         <li><a href="#normalize">Normalize</a></li>
         <li><a href="#subfirst">Subtract first</a></li>
         <li><a href="#bkgref">Bkg Ref</a></li>
-        <li><a href="#areafit">Area from linear fit</a></li>
+        <li><a href="#areafit">Area fit</a></li>
       </ol>
     </li>
     <li><a href="#part-fit">Fit tab and views</a>
@@ -1542,7 +1542,7 @@ says which one to pick for what.</p>
   <h3>The order things happen</h3>
   <p>When several options are on, they are applied in this order, so each one sees what it should:</p>
   <ol>
-    <li><strong>Area from linear fit</strong> is part of the value itself, so it comes before everything.</li>
+    <li><strong>Area fit</strong> is part of the value itself, so it comes before everything.</li>
     <li><strong>Outliers</strong> are removed next, so one bad point cannot spoil the steps after it.</li>
     <li><strong>Bkg Ref</strong> subtraction.</li>
     <li>Hidden ROIs (eye off) are dropped from the figure.</li>
@@ -1673,16 +1673,20 @@ says which one to pick for what.</p>
 </article>
 
 <article class="term" id="areafit">
-  <h3>Area from linear fit <span class="where">Cleanup tab; for the area-normalised means and Area</span></h3>
+  <h3>Area fit <span class="where">Cleanup tab; for the area-normalised means and Area</span></h3>
   <dl class="facts">
     <dt>What it is</dt><dd><p>A tracked ROI's area jitters from frame to frame, and the area-normalised means inherit that noise.
-    With this on, each ROI's area is read off a straight line fitted to its pixel count against capture time instead: the mean × Â(t) / Â(first image), where Â is the line.
-    The curve still starts at the mean on the first included image.</p></dd>
-    <dt>When to use it</dt><dd><p>When the droplet shrinks steadily (evaporation) and the area-normalised curve is noisier than the mean.</p></dd>
-    <dt>What changing it does</dt><dd><p>The Y axis says "(area fitted)" and the CSV's area-normalised columns use the fit too (its <code>area_fitted</code> column says so).
-    Plot <strong>Area</strong> to judge the fit: each ROI's line is drawn dashed over its points. Images marked <span class="ui">Exclude current image from area fit</span> (or Shift+clicked) are left out of the line and ringed with a hollow square there.
-    The fit is always against time, whatever the X axis. A ROI with fewer than two usable points keeps its per-image area, and a note on the plot counts it.</p></dd>
-    <dt>Typical value</dt><dd><p><strong>Off.</strong></p></dd>
+    Pick a curve in the <span class="ui">Area fit</span> dropdown and each ROI's area is read off that curve, fitted to its pixel count against capture time, instead: the mean × Â(t) / Â(first image), where Â is the fit.
+    The curve still starts at the mean on the first included image.</p>
+    <p>The curves are the Fit tab's: <strong>Linear</strong>, <strong>Quadratic</strong>, <strong>Cubic</strong>, <strong>Exponential</strong> and <strong>Sigmoid</strong>.
+    The choice is the area fit's own: it does not follow the Fit tab's fit or the Expected tab's trend, and changing either leaves it alone.</p></dd>
+    <dt>When to use it</dt><dd><p>When the droplet's area changes smoothly and the area-normalised curve is noisier than the mean: <strong>Linear</strong> for steady evaporation, <strong>Quadratic</strong> or <strong>Cubic</strong> when the rate drifts, <strong>Exponential</strong> or <strong>Sigmoid</strong> for an area that levels off.</p></dd>
+    <dt>What changing it does</dt><dd><p>The Y axis says "(area fitted)" and the CSV's area-normalised columns use the fit too (its <code>area_fit</code> column names the curve, <code>none</code> when off).
+    Plot <strong>Area</strong> to judge the fit: each ROI's fit is drawn dashed over its points. Images marked <span class="ui">Exclude current image from area fit</span> (or Shift+clicked) are left out of the fit and ringed with a hollow square there.
+    The fit is always against time, whatever the X axis.
+    Each curve needs a minimum number of usable points: 2 for Linear, 3 for Quadratic, 4 for Cubic and Exponential, 5 for Sigmoid.
+    A ROI with too few, whose fit cannot be solved, or whose fitted area is not positive at every image keeps its per-image area, and a note on the plot counts it.</p></dd>
+    <dt>Typical value</dt><dd><p><strong>No fit</strong> (off).</p></dd>
   </dl>
 </article>
 </section>
