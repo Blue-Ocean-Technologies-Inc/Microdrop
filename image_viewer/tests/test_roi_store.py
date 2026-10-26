@@ -730,9 +730,10 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     background_ref_column = header.index("is_background_ref")
     assert [row[background_ref_column] for row in body[:3]] == ["0", "0", "1"]
     # And every row says what it was measured with — including that
-    # no heater sensor read the (absent) temperature column.
+    # the area was not fitted and no heater sensor read the (absent)
+    # temperature column.
     for row in body:
-        assert row[-6:] == ["2", "4", "90", "60", "0", ""]
+        assert row[-7:] == ["2", "4", "90", "60", "0", "0", ""]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
@@ -1227,3 +1228,65 @@ def test_a_config_without_a_temperature_style_loads_the_defaults(tmp_path):
         100,
         35,
     )
+
+
+def test_the_area_fit_and_its_exclusions_round_trip(tmp_path):
+    session = AnalysisSession(directory=str(tmp_path))
+    session.figure.area_fit = True
+    session.area_fit_excluded_images = ["b_raw.png"]
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path)
+
+    assert loaded.figure.area_fit is True
+    assert loaded.area_fit_excluded_images == ["b_raw.png"]
+
+
+def test_a_config_written_before_the_area_fit_loads_without_it(tmp_path):
+    _write_figure(tmp_path, {})
+
+    loaded = load_session(tmp_path)
+
+    assert loaded.figure.area_fit is False
+    assert loaded.area_fit_excluded_images == []
+
+
+def _area_csv(tmp_path, area_fit_excluded):
+    """The area_normalized and area_fitted cells of a three-row export
+    whose counts (100, 96, 80 at 0, 10, 20 s) fit the line 102 - t."""
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [
+        {
+            "filename": f"img_{index}_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": elapsed,
+            "capture_session": "burst_a",
+            "filter": "Green 540 nm",
+            "stats": {roi.roi_id: {"mean": 10.0, "count": count}},
+        }
+        for index, (elapsed, count) in enumerate(
+            ((0.0, 100.0), (10.0, 96.0), (20.0, 80.0))
+        )
+    ]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, [roi], area_fit_excluded=area_fit_excluded)
+
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        header, *body = csv.reader(handle)
+
+    return (
+        [float(row[header.index("area_normalized")]) for row in body],
+        {row[header.index("area_fitted")] for row in body},
+    )
+
+
+def test_the_csv_reads_the_area_fit_through_the_plots_derivation(tmp_path):
+    values, fitted = _area_csv(tmp_path, [False, False, False])
+
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+    assert fitted == {"1"}
+
+    values, fitted = _area_csv(tmp_path, None)
+
+    assert values == pytest.approx([10.0, 9.6, 8.0])
+    assert fitted == {"0"}

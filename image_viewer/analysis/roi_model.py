@@ -250,6 +250,11 @@ class FigureSettings(HasTraits):
     #: Subtract the mean of the ROIs marked as background references,
     #: per image. Stacks with the ring correction and subtract_first.
     subtract_background_ref = Bool(False)
+    #: Read the area-normalised stats' area off each ROI's straight-line
+    #: fit of pixel count against capture time (the analysed images
+    #: less the area-fit-excluded ones) rather than the noisy per-image
+    #: count, and draw that line over the Area view's points.
+    area_fit = Bool(False)
     show_legend = Bool(True)
     #: Font size (pt) of the axis titles and tick labels; the legend
     #: and the notes on the figure scale with it.
@@ -674,6 +679,15 @@ class AnalysisSession(HasTraits):
     def is_excluded(self, path):
         """Whether analysis skips the image at ``path``."""
         return Path(path).name in self.excluded_images
+
+    #: Filenames the area fit alone leaves out: still analysed, plotted
+    #: and exported, but not part of the straight line the figure's
+    #: area_fit reads each ROI's area from.
+    area_fit_excluded_images = List(Str)
+
+    def is_area_fit_excluded(self, path):
+        """Whether the area fit leaves out the image at ``path``."""
+        return Path(path).name in self.area_fit_excluded_images
 
     #: (path str, mtime, roi_id, kind, geometry tuple) -> stats dict.
     #: The geometry in the key makes invalidation implicit: an edit only

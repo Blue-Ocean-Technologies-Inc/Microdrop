@@ -23,6 +23,8 @@ from image_viewer.analysis.curve_fit import TREND_METHODS
 from image_viewer.analysis.plot_series import (
     analysed_and_excluded_series,
     analysed_paths,
+    area_fit_line,
+    area_fit_series,
     area_normalized_values,
     background_ref_baseline,
     background_ref_corrected_series,
@@ -883,7 +885,7 @@ def test_excluded_points_follow_the_curves_corrections(tmp_path):
     session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
     session.figure.subtract_first = True
 
-    series, _flags, excluded = analysed_and_excluded_series(session, paths)
+    series, _flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
 
     # The analysed curve is 1, 3 less its first value; the excluded
     # point (2) shifts by that same 1, not by its own value.
@@ -891,7 +893,7 @@ def test_excluded_points_follow_the_curves_corrections(tmp_path):
     assert excluded[roi.roi_id][2] == [1.0]
 
     session.figure.normalize = True
-    series, _flags, excluded = analysed_and_excluded_series(session, paths)
+    series, _flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
 
     assert series[roi.roi_id][2] == [0.0, 100.0]
     assert excluded[roi.roi_id][2] == [50.0]
@@ -903,7 +905,7 @@ def test_excluded_points_are_not_tested_for_outliers(tmp_path):
     session.stats[session.cache_key(paths[1], roi)] = {"mean": 1e6}
     session.figure.remove_outliers = True
 
-    _series, flags, excluded = analysed_and_excluded_series(session, paths)
+    _series, flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
 
     assert flags[roi.roi_id] == [False, False]
     assert excluded[roi.roi_id][2] == [1e6]
@@ -1025,3 +1027,177 @@ def test_an_roi_deleted_from_one_image_gaps_there(tmp_path):
 
     assert values[0] == 1.0 and values[2] == 3.0
     assert math.isnan(values[1])
+
+
+# --------------------------------------------------------------------------- #
+# Area from a linear fit                                                       #
+# --------------------------------------------------------------------------- #
+#: Counts at 0, 10 and 20 s whose least-squares line is 102 - t: the
+#: fitted areas are 102, 92 and 82.
+_JITTERY_COUNTS = (100.0, 96.0, 80.0)
+_FIT_TIMES = [0.0, 10.0, 20.0]
+
+
+def _area_run(means=(10.0, 10.0, 10.0), counts=_JITTERY_COUNTS):
+    return [{"mean": mean, "count": count} for mean, count in zip(means, counts)]
+
+
+def test_the_area_fit_is_the_least_squares_line_of_count_on_time():
+    slope, intercept = area_fit_line(_area_run(), _FIT_TIMES)
+
+    assert slope == pytest.approx(-1.0)
+    assert intercept == pytest.approx(102.0)
+
+
+def test_the_area_fit_skips_its_excluded_images_and_those_without_a_count():
+    stats_run = [*_area_run(), None, {"mean": 10.0}]
+    times = [*_FIT_TIMES, 30.0, 40.0]
+
+    slope, intercept = area_fit_line(
+        stats_run, times, [False, False, True, False, False]
+    )
+
+    # Through (0, 100) and (10, 96) alone.
+    assert slope == pytest.approx(-0.4)
+    assert intercept == pytest.approx(100.0)
+
+
+def test_the_area_fit_needs_two_points_at_distinct_times():
+    assert area_fit_line(_area_run()[:1], [0.0]) is None
+    assert area_fit_line(_area_run(), _FIT_TIMES, [False, True, True]) is None
+    assert area_fit_line(_area_run()[:2], [5.0, 5.0]) is None
+
+
+def test_the_area_fit_needs_a_positive_area_at_the_reference_image():
+    # The line through the last two points, 16 t - 1520, is negative
+    # at the reference image's t = 0.
+    stats_run = [{"count": 50.0}, {"count": 80.0}, {"count": 96.0}]
+    times = [0.0, 100.0, 101.0]
+
+    assert area_fit_line(stats_run, times, [True, False, False]) is None
+
+
+def test_area_normalised_means_read_the_fitted_area():
+    values = area_normalized_values(
+        _area_run(),
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, None),
+    )
+
+    # mean × Â(t) / Â(t_ref): still the mean on the reference image.
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+
+
+def test_area_normalised_means_fall_back_to_the_measured_area_without_a_fit():
+    stats_run = _area_run()
+
+    values = roi_stat_values(
+        stats_run,
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, [False, True, True]),
+    )
+
+    assert values == roi_stat_values(stats_run, "area_normalized")
+
+
+def test_an_excluded_image_reads_against_the_analysed_runs_fit():
+    excluded_run = [{"mean": 20.0, "count": 40.0}]
+
+    values = area_normalized_values(
+        excluded_run, "area_normalized", _area_run(), ([5.0], _FIT_TIMES, None)
+    )
+
+    # Its own count plays no part: Â(5) / Â(0) of the analysed run's line.
+    assert values == pytest.approx([20.0 * 97 / 102])
+
+
+def _area_fit_session(tmp_path):
+    """Three captures 30 s apart, one ROI of jittery area: the fitted
+    line is 102 - t / 3 px, so 102, 92 and 82 at the captures."""
+    session, roi, paths = _three_images(tmp_path)
+
+    for path, count in zip(paths, _JITTERY_COUNTS):
+        session.stats[session.cache_key(path, roi)] = {"mean": 10.0, "count": count}
+
+    session.plot_stat = "area_normalized"
+    session.figure.area_fit = True
+
+    return session, roi, paths
+
+
+def test_derive_series_reads_the_area_fit_when_the_figure_asks(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+
+    session.figure.area_fit = False
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0, 9.6, 8.0])
+
+
+def test_an_image_left_out_of_the_area_fit_stays_in_the_series(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.area_fit_excluded_images = ["c_2026_07_20-10_01_00_raw.png"]
+
+    _name, x_values, values = derive_series(session, paths)[roi.roi_id]
+
+    # The line through the first two alone: 100 - 0.4 t / 3, so 92 at 60 s.
+    assert x_values == [0.0, 30.0, 60.0]
+    assert values == pytest.approx([10.0, 9.6, 9.2])
+
+
+def test_excluded_points_read_against_the_analysed_area_fit(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    # Through (0, 100) and (60, 80): 100 - t / 3.
+    assert values == pytest.approx([10.0, 10.0 * 80 / 100])
+
+    _name, _x, values = excluded_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0 * 90 / 100])
+
+
+def test_the_area_view_carries_each_rois_fitted_line(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.plot_stat = "area"
+
+    _name, x_values, areas = area_fit_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 30.0, 60.0]
+    assert areas == pytest.approx([102.0, 92.0, 82.0])
+
+    # The measured points stay measured; only the overlay is fitted.
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == list(_JITTERY_COUNTS)
+
+    series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit[roi.roi_id][2] == pytest.approx([102.0, 92.0, 82.0])
+
+    # Through the curve's corrections, against the curve's first value.
+    session.figure.subtract_first = True
+    _series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit[roi.roi_id][2] == pytest.approx([2.0, -8.0, -18.0])
+
+
+def test_only_the_area_view_carries_the_fitted_lines(tmp_path):
+    session, _roi, paths = _area_fit_session(tmp_path)
+
+    _series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit == {}
+
+
+def test_a_roi_without_an_area_fit_has_no_line(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.area_fit_excluded_images = [Path(path).name for path in paths[1:]]
+
+    assert area_fit_series(session, paths) == {}

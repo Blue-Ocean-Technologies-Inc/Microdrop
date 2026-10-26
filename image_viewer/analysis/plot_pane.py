@@ -92,6 +92,8 @@ from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
     ANNOTATION_FONT_SCALE,
+    AREA_FIT_STATS,
+    AREA_NORMALIZED_STATS,
     BAR_GAP_BOUNDS,
     BUTTER_CUTOFF_BOUNDS,
     CUSTOM_POINT_ALPHA,
@@ -136,6 +138,7 @@ from .plot_series import (
     SMOOTH_METHODS,
     analysed_and_excluded_series,
     analysed_paths,
+    area_fit_series,
     excluded_paths,
     finite_values,
     image_values,
@@ -195,6 +198,7 @@ def y_axis_label(
     normalize=False,
     subtract_first=False,
     subtract_background_ref=False,
+    area_fit=False,
 ):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
@@ -206,6 +210,9 @@ def y_axis_label(
         else template.format(unit=area_unit(scale.metres_per_pixel, scale.unit))
     )
     # In the order they were applied, so the axis reads as the recipe.
+    # The Area view's points stay measured; only its overlay is fitted.
+    if area_fit and plot_stat in AREA_NORMALIZED_STATS:
+        label = f"{label} (area fitted)"
     if subtract_background_ref:
         label = f"{label} (bkg-ref corrected)"
     if subtract_first:
@@ -237,6 +244,7 @@ EQUATION_LINE_STEP_Y = 0.06
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
 NOTE_NO_TEMP_Y = 0.09
+NOTE_AREA_FIT_Y = 0.125
 
 #: The views drawn against the time (or temperature) axis; the rest
 #: put ROI names along x.
@@ -754,6 +762,16 @@ def _cleanup_tab():
                 "Stacks with the ring correction and "
                 "with Subtract first.",
             ),
+            _toggle(
+                "figure.area_fit",
+                "Area from linear fit",
+                enabled_when=f"session.plot_stat in {AREA_FIT_STATS!r}",
+                tooltip="Read each ROI's area off a straight line "
+                "fitted to its pixel count against capture time, "
+                "instead of the jittery per-image count, for the "
+                "area-normalised means. The Area view draws the line "
+                "over its points.",
+            ),
         ),
         label="Cleanup",
     )
@@ -980,6 +998,7 @@ _PLOT_STATE = (
     "session:figure:normalize, "
     "session:figure:subtract_first, "
     "session:figure:subtract_background_ref, "
+    "session:figure:area_fit, "
     "session:figure:remove_outliers, "
     "session:figure:outlier_threshold, "
     "session:figure:outlier_window, "
@@ -1264,7 +1283,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         session = self._model.session
         # One pipeline, shared with the export, so a saved fit and the
         # drawn one cannot disagree about which points they saw.
-        series, self._outliers, excluded = analysed_and_excluded_series(
+        series, self._outliers, excluded, area_fit = analysed_and_excluded_series(
             session, self._model.filtered_paths
         )
         figure_settings = session.figure
@@ -1304,7 +1323,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._apply_ordinal_ticks(figure_settings, log_x)
 
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings)
+            trim_edges = self._refresh_intensity(series, figure_settings, area_fit)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
@@ -1368,6 +1387,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         if view_mode not in NON_STAT_VIEW_MODES:
             self._note_dropped_outliers()
+            self._note_area_fit_fallbacks(series, area_fit)
 
         # The per-ROI stat views draw every value whatever its
         # temperature, so frames the log misses are not missing there.
@@ -1420,7 +1440,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             FuncFormatter(lambda x, _position: step_tick_label(labels, x))
         )
 
-    def _refresh_intensity(self, series, figure_settings):
+    def _refresh_intensity(self, series, figure_settings, area_fit):
         session = self._model.session
         # Smoothing is a display aid, so it goes no further than the
         # lines: `series` — unsmoothed — is what the fits below see.
@@ -1457,6 +1477,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
         self._collect_pick_targets(series, drawn)
+        self._draw_area_fit(area_fit)
+
         if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
@@ -1506,6 +1528,29 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._fit_artists.append(points)
             self._pick_targets.extend(zip(excluded_images, x_values, values))
 
+    def _draw_area_fit(self, area_fit):
+        """Each ROI's straight-line area fit (area_fit_series), dashed
+        in its colour over its area points, so the fit can be judged
+        against what it was fitted to. In x order: on a temperature or
+        step axis the images need not arrive in it."""
+        for roi_id, (_name, x_values, values) in area_fit.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            x = np.asarray(x_values, dtype=float)
+            order = np.argsort(x)
+            (line,) = self._axes.plot(
+                x[order],
+                np.asarray(values, dtype=float)[order],
+                linestyle="--",
+                alpha=0.8 * roi.style.plot_alpha,
+                color=roi.style.color,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(line)
+
     def _collect_pick_targets(self, series, drawn):
         """Remember every curve point a click can land on, with its
         image: where the point is drawn (smoothed, say) but only where
@@ -1533,6 +1578,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             figure_settings.normalize,
             figure_settings.subtract_first,
             figure_settings.subtract_background_ref,
+            figure_settings.area_fit,
         )
 
     def _draw_per_image(self, series, figure_settings):
@@ -2218,6 +2264,41 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 self._grown_with_font(NOTE_OUTLIERS_Y),
                 f"{dropped} {'point' if dropped == 1 else 'points'} "
                 f"dropped as outliers",
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
+
+    def _note_area_fit_fallbacks(self, series, area_fit):
+        """Count the measured ROIs the area fit has no line for — fewer
+        than two points it may use — whose area stays the per-image
+        count. ``area_fit`` is the Area view's lines; the area-normalised
+        stats fit theirs inside the series, so they are asked for
+        here."""
+        session = self._model.session
+
+        if not session.figure.area_fit or session.plot_stat not in AREA_FIT_STATS:
+            return
+
+        if session.plot_stat != "area":
+            area_fit = area_fit_series(session, self._model.filtered_paths)
+
+        fallbacks = sum(1 for roi_id in finite_values(series) if roi_id not in area_fit)
+
+        if not fallbacks:
+            return
+
+        noun = "ROI" if fallbacks == 1 else "ROIs"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                self._grown_with_font(NOTE_AREA_FIT_Y),
+                f"{fallbacks} {noun} with too few points for the area fit "
+                f"use the per-image area",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
