@@ -10,8 +10,9 @@
 
 """Regenerate the SVG glyph paths of the analysis help guide's toolbar icons.
 
-Traces each Material Symbols glyph the guide's Toolbar icons section shows,
-through Qt's own text outlining, into SVG path data. Writes ``glyphs.json``
+Traces each glyph the guide's Toolbar icons section shows (Material Symbols,
+or the font GLYPH_FONTS names for it), through Qt's own text outlining, into
+SVG path data. Writes ``glyphs.json``
 mapping glyph name to ``{"d", "adv", "h", "bbox"}`` (path data, advance
 width, line height and bounding box, at a 48 px font size).
 
@@ -74,6 +75,8 @@ from microdrop_style.icons.icons import (
     ICON_VIEW_3D,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
+    MDI_ICON_BACKSPACE,
+    MDI_ICON_BACKSPACE_REVERSE,
 )
 
 # Logger import.
@@ -131,6 +134,16 @@ GLYPHS = {
     "fit_screen": ICON_FIT_SCREEN,
     "undo": ICON_UNDO,
     "redo": ICON_REDO,
+    "backspace_outline": MDI_ICON_BACKSPACE,
+    "backspace_reverse_outline": MDI_ICON_BACKSPACE_REVERSE,
+}
+
+#: Font registry name (microdrop_style.font_paths) per glyph name, for the
+#: glyphs not in DEFAULT_GLYPH_FONT.
+DEFAULT_GLYPH_FONT = "material_symbols"
+GLYPH_FONTS = {
+    "backspace_outline": "material_design_icons",
+    "backspace_reverse_outline": "material_design_icons",
 }
 
 
@@ -172,12 +185,19 @@ def main():
     # Font loading needs a live QGuiApplication for the whole run.
     app = QGuiApplication.instance() or QGuiApplication(sys.argv)  # noqa: F841
 
-    font = QFont(load_font_and_get_family("material_symbols"))
-    font.setPixelSize(GLYPH_PIXEL_SIZE)
-    metrics = QFontMetricsF(font)
+    fonts = {}
     glyphs = {}
 
     for name, text in GLYPHS.items():
+        font_name = GLYPH_FONTS.get(name, DEFAULT_GLYPH_FONT)
+
+        if font_name not in fonts:
+            font = QFont(load_font_and_get_family(font_name))
+            font.setPixelSize(GLYPH_PIXEL_SIZE)
+            fonts[font_name] = font
+
+        font = fonts[font_name]
+        metrics = QFontMetricsF(font)
         path = QPainterPath()
         path.addText(QPointF(0, metrics.ascent()), font, text)
         box = path.boundingRect()
