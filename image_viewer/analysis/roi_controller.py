@@ -427,7 +427,9 @@ class RoiAnalysisController(HasTraits):
         decides whether it subtracts, so remeasure as for a mask edit;
         the toggle selects a different cache set, which toggling back
         finds complete: bump the revision, as nothing else would redraw.
-        _on_plot_settings_changed saves the style."""
+        Switching an eye on moves the ROI to the end of the session's
+        visibility_order, switching it off drops it.
+        _on_plot_settings_changed saves the style and the order."""
         roi = next(
             (roi for roi in self.session.rois if roi.style is event.object),
             None,
@@ -435,6 +437,15 @@ class RoiAnalysisController(HasTraits):
 
         if roi is None:
             return
+
+        order = [
+            roi_id for roi_id in self.session.visibility_order if roi_id != roi.roi_id
+        ]
+
+        if event.new:
+            order.append(roi.roi_id)
+
+        self.session.visibility_order = order
 
         if not event.new and self.analysis_model.selected_roi_id == roi.roi_id:
             self.analysis_model.selected_roi_id = ""
@@ -1180,6 +1191,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:rois:items:style:marker, "
         "analysis_model:session:rois:items:style:marker_size, "
         "analysis_model:session:rois:items:style:visible, "
+        "analysis_model:session:visibility_order.items, "
         "analysis_model:session:rois:items:style:alpha, "
         "analysis_model:session:scale:metres_per_pixel, "
         "analysis_model:session:scale:value, "

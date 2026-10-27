@@ -996,6 +996,18 @@ def visible_series(session, series):
     return shown
 
 
+def in_visibility_order(session, roi_ids):
+    """``roi_ids`` with the ones in the session's visibility_order moved
+    to the end in that order — the ROI whose eye was switched on last
+    comes last — and the never-toggled ones ahead of them in their given
+    order. Ids in visibility_order but not in ``roi_ids`` are skipped."""
+    roi_ids = list(roi_ids)
+    toggled = [roi_id for roi_id in session.visibility_order if roi_id in roi_ids]
+    untoggled = [roi_id for roi_id in roi_ids if roi_id not in toggled]
+
+    return untoggled + toggled
+
+
 #: Smoothers the plot offers, in dropdown order.
 SMOOTH_METHODS = ("none", "savgol", "butterworth")
 SMOOTH_LABELS = {

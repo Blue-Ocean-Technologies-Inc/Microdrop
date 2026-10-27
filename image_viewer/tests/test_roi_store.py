@@ -228,6 +228,26 @@ def test_custom_points_round_trip(tmp_path):
     assert math.isnan(blank.actual) and math.isnan(blank.expected)
 
 
+def test_visibility_order_round_trips_pruned_to_the_loaded_rois(tmp_path):
+    session = AnalysisSession(
+        rois=[Roi(roi_id="a", name="ROI 1"), Roi(roi_id="b", name="ROI 2")],
+        visibility_order=["b", "gone", "a"],
+    )
+    save_session(tmp_path, session)
+
+    assert load_session(tmp_path).visibility_order == ["b", "a"]
+
+
+def test_a_config_without_a_visibility_order_loads_an_empty_one(tmp_path):
+    save_session(tmp_path, AnalysisSession(rois=[Roi(roi_id="a", name="ROI 1")]))
+    config = tmp_path / "analysis" / "roi_config.json"
+    payload = json.loads(config.read_text())
+    del payload["visibility_order"]
+    config.write_text(json.dumps(payload))
+
+    assert load_session(tmp_path).visibility_order == []
+
+
 def test_load_session_accepts_v1_bare_list(tmp_path):
     analysis = tmp_path / "analysis"
     analysis.mkdir()

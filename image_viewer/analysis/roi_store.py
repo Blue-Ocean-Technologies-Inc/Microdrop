@@ -231,6 +231,7 @@ def save_session(experiment_directory, session):
         },
         "excluded_images": list(session.excluded_images),
         "area_fit_excluded_images": list(session.area_fit_excluded_images),
+        "visibility_order": list(session.visibility_order),
         "temperature_style": _temperature_style_payload(session.temperature_style),
         "rois": [
             {
@@ -385,6 +386,20 @@ def load_session(experiment_directory) -> AnalysisSession:
             logger.warning(
                 f"Ignoring invalid area_fit_excluded_images in {path}: {error}"
             )
+
+        # Removing an ROI leaves its id in the saved order; pruning to
+        # the loaded ROIs drops it here.
+        roi_ids = {roi.roi_id for roi in rois}
+
+        try:
+            stored_order = [
+                str(roi_id) for roi_id in payload.get("visibility_order", [])
+            ]
+            session.visibility_order = [
+                roi_id for roi_id in dict.fromkeys(stored_order) if roi_id in roi_ids
+            ]
+        except Exception as error:
+            logger.warning(f"Ignoring invalid visibility_order in {path}: {error}")
 
         try:
             session.plot_stat = payload.get("plot_stat", "mean")

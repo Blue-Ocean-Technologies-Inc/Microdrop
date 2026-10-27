@@ -145,6 +145,7 @@ from .plot_series import (
     excluded_paths,
     finite_values,
     image_values,
+    in_visibility_order,
     interpolated_series,
     quantity_label,
     smoothed_series,
@@ -2014,11 +2015,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        entries = [
-            (name, actual, roi.style)
+        # Left to right in the order the ROIs' eyes were switched on, so
+        # the ROI just shown lands rightmost.
+        points = {
+            roi.roi_id: (name, actual, roi.style)
             for roi, name, actual in self._fastest_change_points(
                 series, figure_settings
             )
+        }
+        entries = [
+            points[roi_id]
+            for roi_id in in_visibility_order(self._model.session, points)
         ]
 
         if not entries:

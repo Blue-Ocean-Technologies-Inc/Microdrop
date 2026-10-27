@@ -691,6 +691,12 @@ class AnalysisSession(HasTraits):
         """Whether the area fit leaves out the image at ``path``."""
         return Path(path).name in self.area_fit_excluded_images
 
+    #: ROI ids in the order their eye was last switched on, the most
+    #: recent last; switching an eye off drops the id. ROIs never
+    #: toggled (shown since load, or newly drawn) are not listed. The
+    #: fastest-change bars follow it, untoggled ROIs first.
+    visibility_order = List(Str)
+
     #: (path str, mtime, roi_id, kind, geometry tuple) -> stats dict.
     #: The geometry in the key makes invalidation implicit: an edit only
     #: misses on the images its override actually covers.

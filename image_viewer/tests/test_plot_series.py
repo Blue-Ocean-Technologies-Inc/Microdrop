@@ -33,6 +33,7 @@ from image_viewer.analysis.plot_series import (
     excluded_series,
     finite_values,
     image_values,
+    in_visibility_order,
     interpolated_series,
     normalized_series,
     outlier_mask,
@@ -198,6 +199,25 @@ def test_visible_series_drops_series_without_an_roi():
     # A stale entry cannot be styled, so it cannot be drawn either.
     session = AnalysisSession(rois=[])
     assert visible_series(session, {"gone": ("ROI 9", [], [])}) == {}
+
+
+def test_untoggled_rois_lead_in_the_given_order():
+    session = AnalysisSession(visibility_order=["b"])
+
+    assert in_visibility_order(session, ["a", "b", "c"]) == ["a", "c", "b"]
+
+
+def test_toggled_rois_follow_in_the_order_they_were_shown():
+    session = AnalysisSession(visibility_order=["c", "a"])
+
+    assert in_visibility_order(session, ["a", "b", "c"]) == ["b", "c", "a"]
+
+
+def test_toggled_ids_missing_from_the_given_ones_are_skipped():
+    session = AnalysisSession(visibility_order=["gone", "a"])
+
+    assert in_visibility_order(session, ["a", "b"]) == ["b", "a"]
+    assert in_visibility_order(session, []) == []
 
 
 def test_plot_alpha_is_the_percentage_as_a_fraction():

@@ -897,3 +897,25 @@ def test_hiding_the_selected_roi_clears_the_selection():
 
     first.style.visible = False
     assert model.selected_roi_id == ""
+
+
+def test_switching_eyes_on_orders_the_rois_last_shown_last():
+    controller = _controller()
+    model = controller.analysis_model
+    session = controller.session
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 10.0, 5.0, 5.0, 0.0])
+    first, second = session.rois
+    assert session.visibility_order == []
+
+    second.style.visible = False
+    first.style.visible = False
+    second.style.visible = True
+    first.style.visible = True
+    assert session.visibility_order == [second.roi_id, first.roi_id]
+
+    second.style.visible = False
+    assert session.visibility_order == [first.roi_id]
+
+    second.style.visible = True
+    assert session.visibility_order == [first.roi_id, second.roi_id]
