@@ -550,12 +550,16 @@ class RoiCanvasLayer:
         self._close_contour()
         return True
 
+    def is_tracing_contour(self):
+        """Whether a contour has vertices placed and is not yet closed."""
+        return self.mode == "draw_polygon" and bool(self._draft_points)
+
     def key_press(self, key):
         """While tracing a contour: Enter closes it, Escape discards it,
         Backspace takes back the last vertex. Otherwise Escape puts an
         armed draw tool away — so a half-drawn contour costs two
         Escapes, the first for the trace and the second for the tool."""
-        if self.mode == "draw_polygon" and self._draft_points:
+        if self.is_tracing_contour():
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self._close_contour()
             elif key == Qt.Key.Key_Escape:

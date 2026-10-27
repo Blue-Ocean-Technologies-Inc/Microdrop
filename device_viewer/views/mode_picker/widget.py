@@ -16,21 +16,17 @@ from pyface.qt import QtCore, QtWidgets
 from traits.api import Callable, HasTraits, Instance, Property, observe
 
 # Microdrop package imports.
+from device_viewer.consts import KEYBOARD_SHORTCUTS
 from device_viewer.models.main_model import DeviceViewMainModel
-from device_viewer.services.keyboard_shortcut_service import shortcut_label
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_AUTOMATION, ICON_DRAW, ICON_EDIT
 
+# Microdrop utils imports.
+from microdrop_utils.keyboard_shortcuts import tooltip_with_shortcut
 
-def _tooltip_with_shortcut(tooltip, action):
-    """Append the key bound to ``action``, as "Draw (D)"."""
-    label = shortcut_label(action)
-
-    if not label:
-        return tooltip
-
-    return f"{tooltip} ({label})"
+#: Append the key bound to an action to a tooltip, as "Draw (D)".
+_tooltip_with_shortcut = partial(tooltip_with_shortcut, KEYBOARD_SHORTCUTS)
 
 
 def if_editable(func):

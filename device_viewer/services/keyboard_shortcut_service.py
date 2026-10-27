@@ -12,7 +12,7 @@
 from functools import partial
 
 # Enthought library imports.
-from pyface.qt import QtCore, QtGui
+from pyface.qt import QtCore
 from traits.api import Any, Bool, Callable, Dict, HasTraits, Instance
 
 # Microdrop package imports.
@@ -25,6 +25,7 @@ from device_viewer.models.main_model import DeviceViewMainModel
 from dropbot_controller.consts import SET_REALTIME_MODE
 
 # Microdrop utils imports.
+from microdrop_utils import keyboard_shortcuts
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
@@ -63,78 +64,16 @@ ARROW_VERBS = ("step", "extend", "shrink", "split", "draw_route")
 # camera or zone modes for them would discard their in-progress state.
 ROUTE_DRAWING_MODES = ("edit", "draw", "edit-draw")
 
-# Suffixes of the second-key rows that run their primary action.
-_ALTERNATE_ACTION_SUFFIXES = ("_alt", "_equal")
-
 # Releasing either of these ends a Ctrl+Shift+arrow split session.
 _SPLIT_MODIFIER_KEYS = (Qt.Key.Key_Control, Qt.Key.Key_Shift)
 
 
-def _primary_action(action):
-    """Return the action an alternate-key row stands for."""
-    for suffix in _ALTERNATE_ACTION_SUFFIXES:
-        if action.endswith(suffix):
-            return action.removesuffix(suffix)
-
-    return action
-
-
-def _native_key_text(sequence):
-    return QtGui.QKeySequence(sequence).toString(
-        QtGui.QKeySequence.SequenceFormat.NativeText
-    )
-
-
-def _key_sequence_of(event):
-    """Return the event's keys, ignoring the keypad flag.
-
-    Numpad keys, and on macOS the arrows, carry KeypadModifier; the table
-    names the key alone.
-    """
-    combination = event.keyCombination()
-    modifiers = combination.keyboardModifiers() & ~Qt.KeyboardModifier.KeypadModifier
-
-    return QtGui.QKeySequence(QtCore.QKeyCombination(modifiers, combination.key()))
-
-
-def shortcut_label(action):
-    """Return the native key text of the first row bound to ``action``."""
-    return next(
-        (
-            _native_key_text(sequence)
-            for sequence, row_action, _, _ in KEYBOARD_SHORTCUTS
-            if row_action == action
-        ),
-        "",
-    )
-
-
-def cheat_sheet_rows():
-    """Return ``[(group, [(keys, description)])]`` in cheat sheet order.
-
-    An alternate-key row is folded into its primary row's keys, as
-    "F1 / Ctrl+/".
-    """
-    keys_by_action = {}
-    rows_by_group = {group: [] for group in KEYBOARD_SHORTCUT_GROUPS}
-
-    for sequence, action, description, group in KEYBOARD_SHORTCUTS:
-        primary = _primary_action(action)
-
-        if primary in keys_by_action:
-            keys_by_action[primary].append(_native_key_text(sequence))
-            continue
-
-        keys_by_action[primary] = [_native_key_text(sequence)]
-        rows_by_group[group].append((primary, description))
-
-    return [
-        (
-            group,
-            [(" / ".join(keys_by_action[action]), text) for action, text in rows],
-        )
-        for group, rows in rows_by_group.items()
-    ]
+#: The table helpers bound to KEYBOARD_SHORTCUTS, for the mode picker's
+#: tooltips and the cheat sheet.
+shortcut_label = partial(keyboard_shortcuts.shortcut_label, KEYBOARD_SHORTCUTS)
+cheat_sheet_rows = partial(
+    keyboard_shortcuts.cheat_sheet_rows, KEYBOARD_SHORTCUTS, KEYBOARD_SHORTCUT_GROUPS
+)
 
 
 class KeyboardShortcutService(HasTraits):
@@ -176,21 +115,24 @@ class KeyboardShortcutService(HasTraits):
     _split_session_active = Bool(False)
 
     def traits_init(self):
-        self._actions_by_sequence = {
-            QtGui.QKeySequence(sequence): action
-            for sequence, action, _, _ in KEYBOARD_SHORTCUTS
-        }
+        self._actions_by_sequence = keyboard_shortcuts.actions_by_sequence(
+            KEYBOARD_SHORTCUTS
+        )
 
     # ------------------ Key events ------------------------------------
 
     def handle_key_press_event(self, event):
         """Run the shortcut bound to the pressed keys; return True if one ran."""
-        action = self._actions_by_sequence.get(_key_sequence_of(event))
+        action = self._actions_by_sequence.get(
+            keyboard_shortcuts.key_sequence_of(event)
+        )
 
         if action is None:
             return False
 
-        if not (self.model.editable or _primary_action(action) in VIEW_ONLY_ACTIONS):
+        primary = keyboard_shortcuts.primary_action(action)
+
+        if not (self.model.editable or primary in VIEW_ONLY_ACTIONS):
             return False
 
         return self.resolve_action(action)() is not False
@@ -215,7 +157,9 @@ class KeyboardShortcutService(HasTraits):
                 self.stepping.map_direction_for_device_rotation(direction),
             )
 
-        return getattr(self, f"action_{_primary_action(action)}", None)
+        primary = keyboard_shortcuts.primary_action(action)
+
+        return getattr(self, f"action_{primary}", None)
 
     # ------------------ Arrow actions ---------------------------------
 
