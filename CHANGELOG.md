@@ -1,3 +1,98 @@
+## [v1.32.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.32.0) (2026-10-27)
+
+### Feat
+
+- **image_viewer**: keyboard shortcuts for the ROI tools ([`0a46c37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0a46c37ef289770e51e4b647125ed352e7964482))
+- **image_viewer**: order fastest-change bars by visibility toggles ([`f609f0f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f609f0f4e2af1b0a78ade9318622187623f722c4))
+- **image_viewer**: Left Del and Right Del as their own buttons ([`095deb8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/095deb89045141dde7e650254b5c8d1f6b3cefcd))
+- **image_viewer**: choose the curve the area fit uses ([`97e3217`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97e32179cfc4cb4c1dd99d527dcef7dda32802df))
+- **image_viewer**: exclude images from the area fit only ([`c35f87a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c35f87a2000d29a3d004746e28bdf50f48d6dec1))
+- **image_viewer**: area from a linear fit for area-normalised stats ([`f0d4272`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f0d42727283bb8b2783e88c4ece88f35e156c07f))
+- **image_viewer**: font size and bar gap figure settings ([`19a1da5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/19a1da53a72d077acbfc08c26a939d5dd86e2fe2))
+- **image_viewer**: zoom fastest-change bars to their spread ([`92134e4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/92134e44a5f48ea0094f1d82ec8092756d354df4))
+- **image_viewer**: clear scale with a length of 0 ([`e0d3b8e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e0d3b8e0bea99c685ac076e509111c69e846126d))
+- **image_viewer**: delete ROI button on the analysis toolbar ([`8e6e524`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8e6e52410a7c5e7bbba0aa7971a09f3c43854424))
+- **image_viewer**: Left Del / Del / Right Del delete scopes ([`356e538`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/356e538586cf5b34bd52d45ebbeddbebe2689cc4))
+- **image_viewer**: Trace rims button beside Track drift ([`a6eb8e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a6eb8e899f5f1cfb15fde23c2004ef36b0e5daa9))
+- **image_viewer**: rim tracer traces droplets by their bright edge ([`1078560`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/10785608231ca696f4741edc28a09544490604c5))
+- **image_viewer**: measure only the inner part of each ROI ([`a158052`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a158052e88d864d1fdd04a977d18ee00c3a7152f))
+- **image_viewer**: size window gates the drift tracker ([`e75f7d2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e75f7d2e82367ec95741c2118eaee7aeaa7276b3))
+- **image_viewer**: allow ring gaps up to 500 px ([`de1bd46`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/de1bd4622f2d1fc6dd9820ab55feb2823a8fbbb7))
+- **image_viewer**: the table's eye hides the ROI on the image too ([`7cfaa11`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7cfaa11f29307ca173edaa850233fb54b02af01c))
+- **image_viewer**: delete an ROI everywhere but the shown image ([`4457938`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4457938dee9094871c9fea8ef7923a69119a0304))
+- **image_viewer**: delete an ROI from this image onward or backward ([`869d87d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/869d87debced37fb337b8a7dcfcf9f6311a4596c))
+- **image_viewer**: replace an ROI's shape on one image by renaming ([`427bcde`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/427bcde30feb3fb0dec1cfcd65ac525466f2c50a))
+- **image_viewer**: single-image ROI geometry overrides ([`c2316c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c2316c0c55346777efb245ede7dc424581aef910))
+- **image_viewer**: remember the ROI delete scope ([`b90307a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b90307ac32edfc5a11494c93d1f8f8baaf3dfa0d))
+- **image_viewer**: delete an ROI on one image only ([`3fec6be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3fec6bea86ec543001fa066a3741b7a25585d57c))
+- **image_viewer**: alpha for the temperature plot's line and markers ([`5bbe691`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5bbe691743715acdafd23d2ba68fcc000d152e74))
+- **image_viewer**: style panel for the temperature plot ([`ab2e3a6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ab2e3a6b9eb996a6f1e9f1f5ea59062913eeed95))
+- **image_viewer**: temperature over time plot view ([`9d32170`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9d3217057b3f9517513a30d6f25dc871edb1df47))
+- **image_viewer**: include every excluded image at once ([`55984ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/55984ac6baa77a30848d44fdacd3b75ba7b27282))
+- **image_viewer**: toggle for the excluded plot points ([`6f46031`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6f460312cab010c48b26228e426fa7281cd6807c))
+- **image_viewer**: click a plot point to exclude its image ([`1deec8f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1deec8f9a5dccb105778e9045d71e83f7cc3ac69))
+- **image_viewer**: choosable time units on the plot ([`ac5c696`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ac5c69606091fdac1af7d585e98e0aef50295617))
+- **image_viewer**: protocol step and frame x axes ([`cccaba5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cccaba5187c1807785026513c74d39a7660919ea))
+- **image_viewer**: area-normalised mean plot stat ([`5e40e15`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5e40e155bac0ec82512a092469189258459ce5ab))
+- **roi-plot**: copy the trend expression for the compensation ([`91db18a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91db18ae27f7c2380c1b6d4999543bb6ccddd36a))
+- **traitsui-helpers**: live tooltip for IconButtonEditor ([`efe081a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/efe081a729b524c5b8776ef937a2e772e291f247))
+- **roi-plot**: calibrate the temperature axis with actual = f(expected) ([`aad3e8c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aad3e8c3a2e599d38f7e45f26a5429ada60c5b18))
+- **curve-fit**: give every fit a full-precision expression ([`5838a75`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5838a75e8444968131ad7be485630d63aac0aa69))
+- **expression**: invert a function numerically ([`eed39e9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eed39e94575d0ccdf2f7cf6f0479e7547c09067f))
+- **expression**: parse parameterless functions of x ([`fb065e3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fb065e3b83f704000aa987efcc0ed34b5cddc114))
+- **device_viewer**: keyboard shortcut cheat sheet and tooltips ([`ab041eb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ab041ebe2826111aa337a83a3b9c0496fb769458))
+- **device_viewer**: draw routes with Alt+arrows ([`6957b0b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6957b0bdd67862ec1d099edd7c59eabcff620792))
+- **device_viewer**: keyboard shortcut service ([`260351a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/260351afe08f210da22f1be741d1608eafcc6b77))
+- **device_viewer**: declare the keyboard shortcut table ([`e42b6f3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e42b6f3f52d43dbdc62684d49a9267de36a4f4bd))
+- **protocol-tree**: insert step/group above a row ([`364188d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/364188d39ca42c0d3f2664e834817256e6bd69be))
+- **image_viewer**: extend actual-vs-expected view ([`cac195b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cac195b244e7e701697642537e970e757fa2dfa4))
+- **microdrop_utils**: multi-cell table copy and paste ([`f3650d3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3650d3d6f8201566b5b5e859bc6a8829210afc6))
+- **report**: outlier filter and section folds ([`1139620`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/11396205a28378fab59550413743af9c125673ec))
+
+### Fix
+
+- **image_viewer**: refit plot margins when the font size changes ([`f7cb3a6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f7cb3a660e4414e0037f03b1d659217cdf0339cd))
+- **image_viewer**: tracked shapes keep each ROI's own kind ([`4617f45`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4617f45085a296773a3fb1e8c259e011779a94fb))
+- **image_viewer**: shown excluded points set the time origin ([`e1c8e2f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e1c8e2f5abcd8a5086ce0f398f27def2bd454059))
+- **image_viewer**: merge ROI definitions per image ([`7df6381`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7df6381634c8465ee6ac5f56b2dec6e08195235d))
+- **image_viewer**: merge ROIs on a name collision ([`a2aa76a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a2aa76aeba015b602d1569e5c2e1ccc05055b5ea))
+- **image_viewer**: drift tracking follows per-image ROI corrections ([`bebf790`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bebf7903bc9e04dbe465c8f9ac7ca913f6dc909d))
+- **image_viewer**: clearer area-normalized stat labels ([`031e240`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/031e240efccd6b855008529a85b81cc15972c8e0))
+- **protocol_tree**: report a missing channel map once per run ([`ac8d740`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ac8d740b71bf8b0eb5a5c45d73653ddd0b4896b8))
+- **protocol_tree**: keep device channel map across protocol resets ([`ba42fd4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ba42fd411b35ec1806679d22a1abd5e1b6d66e73))
+- **roi-plot**: copy the identity trend as x ([`02e2f74`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/02e2f74338b6ecd70a9b09408c5cf19c8fdcfc8c))
+- **device_viewer**: keep Find Liquid out of display mode ([`f133d70`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f133d70d1a1b685608569d843931ab4cb77ae6d3))
+- **device_viewer**: accept keys the shortcut service handled ([`723ef1c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/723ef1c80f19c65f422fb52834307a9c4a890762))
+- **device_viewer**: route erase built routes positionally ([`e53b4b5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e53b4b563dbed437a227f9ef7fd1d8b4223307f5))
+- **device_viewer**: endpoint erase looked up the route on the main model ([`e473ca5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e473ca5199a1ba3818f16cf095b5adcd2da0a6b0))
+
+### Refactor
+
+- **device_viewer**: share the keyboard shortcut helpers ([`1297219`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1297219758a1ba261ef41dd167ff9081ca20f682))
+- **roi-plot**: fit the Actual vs expected trend in the model ([`c91ba28`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c91ba28a71f21d388d45784f522e03790f4ab8f2))
+- **expression**: move the equation parser to microdrop_utils ([`e5c092b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5c092b638fce5f0846f2aec2fdaddbc3a2a90f3))
+- **device_viewer**: chunk the electrode scene handlers ([`4f1ffcd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4f1ffcde8cfb7be887525ad5b30ffe2c47f2179d))
+- **device_viewer**: route key events through the shortcut service ([`c52bada`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c52badabf34607d497a4f559c2d4b413d26a49a6))
+- **device_viewer**: make neighbor_in_direction public ([`9505fe6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9505fe640034f27f1aad34e09718a4ba60d921ca))
+
+### Docs
+
+- **image_viewer**: README shortcut table matches the Del action ([`056eb50`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/056eb505ee6ee83f46ae5c03a16738e780f8974b))
+- **image_viewer**: Del shortcut deletes from the shown image ([`9fe1860`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9fe186071a0f2e3024bf34dffbd255e3c7086232))
+- **image_viewer**: Del asks Left Del / Del / Right Del ([`b03eede`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b03eede6e0fd68e08f13d538d9a8b1c7d8b721d0))
+- **image_viewer**: Del asks which images ([`7314490`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/73144905591b1b42a9a827dfaebe8df98b1096f2))
+- **image_viewer**: describe per-image ROI deletion in tooltip and sheet ([`4747b3c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4747b3c707adcfd04782182af166eb07ceb7f016))
+- **image_viewer**: say how the fastest-change bars are ordered ([`e40b97f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e40b97f8362f15839f99faf782ddfda0fdc7e0e3))
+- **image_viewer**: help rows for Left Del, Del and Right Del ([`d880aa6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d880aa6a37b8c662c2cc28ac4f5d6aecf41288b0))
+- **image_viewer**: explain the area fit's curve choice ([`7354420`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7354420579bbf3f311f5cab2d06224a0b6e54a5e))
+- **image_viewer**: explain the area fit and its exclusions ([`089ebf3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/089ebf34c8f3bb8519ff9c426459c3c7d90ec2bf))
+- document the device viewer keyboard shortcuts ([`0706d1b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0706d1b71ff494ed644288ad0e0e45ef3c18da04))
+
+### Test
+
+- **protocol-tree**: cover insert-above placement ([`cc0cdba`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc0cdba42c9e709d41a7d51c0d8d998bd5705607))
+- **image_viewer**: cover expected-view extensions ([`b5a7f9e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b5a7f9eac1fd2fd717b9f07cc788952c76881a99))
+
 ## [v1.31.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.31.0) (2026-10-16)
 
 ### Feat
