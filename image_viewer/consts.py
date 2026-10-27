@@ -175,12 +175,7 @@ KEYBOARD_SHORTCUTS = (
     ),
     ("Ctrl+C", "copy_roi", "Copy the selected ROI", "Actions"),
     ("Ctrl+V", "paste_roi", "Paste the copied ROI", "Actions"),
-    (
-        "Del",
-        "delete_roi",
-        "Delete the selected ROI (asks Left Del / Del / Right Del)",
-        "Actions",
-    ),
+    ("Del", "delete_roi", "Delete the selected ROI from the shown image", "Actions"),
     ("Ctrl+Z", "undo", "Undo", "Actions"),
     ("Ctrl+Y", "redo", "Redo", "Actions"),
     ("Ctrl+Shift+Z", "redo_alt", "Redo", "Actions"),
