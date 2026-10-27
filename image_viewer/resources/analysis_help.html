@@ -1803,7 +1803,7 @@ midpoint of a melt curve or the speed of a decay.</p>
     <dt>What it is</dt><dd>
       <p><strong>Intensity</strong>: the normal chart of your chosen stat.</p>
       <p><strong>2nd derivative</strong>: draws each fit's d² curve (the lower panel in the demo above). Peaks and troughs are the d² max and min.</p>
-      <p><strong>Fastest change</strong>: one bar per ROI showing <em>when</em> its fitted curve changed fastest. For a sigmoid that is its midpoint.</p>
+      <p><strong>Fastest change</strong>: one bar per ROI showing <em>when</em> its fitted curve changed fastest. For a sigmoid that is its midpoint. The bars run in the order each ROI's eye was last switched on, the most recently shown ROI rightmost; ROIs never toggled come first, in table order.</p>
     </dd>
     <dt>When to use it</dt><dd><p>Fastest change is a quick way to compare timing across many droplets: "which reacted first, and by how much?"</p></dd>
     <dt>What changing it does</dt><dd><p>The two extra views need a fit method; without one they show a hint instead. A straight-line fit changes at a constant speed, so it has no "fastest" moment and no bar.</p></dd>
