@@ -413,7 +413,35 @@ class DeviceViewerSyncController(HasTraits):
             "PROTOCOL TREE (Device Sync): Updating metadata. Electrode Channels "
             f"Change: {event.new}"
         )
-        self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
+        self._write_channel_map_to_metadata()
+
+    @observe("row_manager:protocol_metadata")
+    def _reseed_channel_map_into_metadata(self, event):
+        """Carry the live device's channel map into replaced protocol metadata.
+
+        A new protocol or a loaded file replaces the dict wholesale, dropping
+        the map or bringing a stale one from another device. Once a device
+        has published, it is the source of truth; until then a loaded file's
+        map is kept.
+        """
+        if not self.electrode_ids_channels_map:
+            return
+
+        logger.info(
+            "PROTOCOL TREE (Device Sync): Protocol metadata replaced. Re-seeding "
+            "the live device's electrode channel map."
+        )
+        self._write_channel_map_to_metadata()
+
+    def _write_channel_map_to_metadata(self):
+        """Store the live electrode-to-channel map in the protocol metadata.
+
+        An item write, so the protocol_metadata reassignment observer above
+        does not fire again.
+        """
+        self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = dict(
+            self.electrode_ids_channels_map
+        )
 
     @observe("row_manager:cell_changed")
     def _republish_on_param_cell_change(self, event):

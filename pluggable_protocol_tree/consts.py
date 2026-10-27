@@ -130,6 +130,12 @@ DV_EXECUTION_PARAM_COL_IDS = frozenset(
 # by phase publishers).
 ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
 
+# Run-scratch keys marking channel-map problems already logged this run, so
+# the routes handler reports them once instead of on every phase: a flag for
+# a missing map, and the set of electrode ids a partial map does not cover.
+MISSING_CHANNEL_MAP_REPORTED_KEY = "_missing_channel_map_reported"
+UNMAPPED_ELECTRODES_REPORTED_KEY = "_unmapped_electrodes_reported"
+
 # Builtin step column holding the ids of the electrodes actuated for the step.
 ELECTRODES_COL_ID = "electrodes"
 
