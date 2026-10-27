@@ -22,12 +22,15 @@ from pathlib import Path
 # Local imports.
 from .consts import (
     ANALYSIS_DIR_NAME,
+    AREA_NORMALIZED_STATS,
     FIT_EQUATIONS_FILENAME,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     OUTLINE_STATS_PREFIX,
     ROI_CONFIG_FILENAME,
     ROI_STATS_FILENAME,
     SHAPE_STATS,
 )
+from .curve_fit import FIT_METHODS
 from .plot_series import normalized_series, roi_stat_values
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
@@ -42,6 +45,7 @@ from .roi_model import (
     RollingBall,
     ScaleCalibration,
 )
+from .temperature_style import SensorStyle, TemperaturePlotStyle
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -64,6 +68,8 @@ _FIGURE_FIELDS = (
     "initial_guesses",
     "trim_poor_fit",
     "show_legend",
+    "font_size",
+    "bar_gap",
     "show_fit_equations",
     "show_second_derivative_max",
     "show_second_derivative_min",
@@ -81,16 +87,19 @@ _FIGURE_FIELDS = (
     "normalize",
     "subtract_first",
     "subtract_background_ref",
+    "area_fit_method",
     "remove_outliers",
     "outlier_threshold",
     "outlier_window",
     "interpolate_gaps",
+    "show_excluded_points",
     "smooth_method",
     "savgol_window",
     "savgol_order",
     "butter_order",
     "butter_cutoff",
     "x_axis",
+    "time_unit",
     "heater_sensor",
     "heater_window_ms",
     "temperature_expression",
@@ -100,12 +109,41 @@ _FIGURE_FIELDS = (
 )
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size", "visible", "alpha")
 
+#: Persisted TemperaturePlotStyle fields and, per sensor row,
+#: SensorStyle fields (both tolerated-missing on load, and the whole
+#: block too, so a config written before the style opens with its
+#: defaults).
+_TEMPERATURE_STYLE_FIELDS = (
+    "line_color",
+    "line_style",
+    "line_width",
+    "line_alpha",
+    "capture_marker",
+    "capture_size",
+    "capture_color_follows_line",
+    "capture_color",
+    "capture_alpha",
+    "excluded_size",
+    "excluded_alpha",
+    "show_legend",
+)
+_SENSOR_STYLE_FIELDS = (
+    "sensor",
+    "visible",
+    "color",
+    "line_style",
+    "line_width",
+    "alpha",
+)
+
 #: Persisted ScaleCalibration fields (tolerated-missing on load, so a
 #: config written before the scale bar opens uncalibrated).
 _SCALE_FIELDS = ("metres_per_pixel", "value", "unit")
 
-#: Persisted BackgroundRing fields (tolerated-missing on load).
-_RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")
+#: Persisted BackgroundRing fields (tolerated-missing on load, so a
+#: config written before the measured share existed measures all of
+#: each ROI).
+_RING_FIELDS = ("gap_px", "thickness_px", "inside_percent", "show_on_canvas")
 
 #: Persisted RollingBall fields (tolerated-missing on load, so a config
 #: written before the ball existed opens with it off).
@@ -135,6 +173,43 @@ def _temperature_expression_from_linear(slope, intercept):
     return f"(x - {intercept})/{slope}"
 
 
+def _temperature_style_payload(style):
+    """The temperature view's style as JSON-ready data — every sensor
+    row, the ones the loaded log lacks included."""
+    payload = {name: getattr(style, name) for name in _TEMPERATURE_STYLE_FIELDS}
+    payload["sensors"] = [
+        {name: getattr(row, name) for name in _SENSOR_STYLE_FIELDS}
+        for row in style.sensors
+    ]
+
+    return payload
+
+
+def _temperature_style_from(stored, path):
+    """A TemperaturePlotStyle from its saved block (absent: defaults).
+    An unreadable sensor row is skipped, not the whole style."""
+    style = TemperaturePlotStyle()
+    style.trait_set(
+        **{name: stored[name] for name in _TEMPERATURE_STYLE_FIELDS if name in stored}
+    )
+
+    for entry in stored.get("sensors", []):
+        try:
+            style.sensors.append(
+                SensorStyle(
+                    **{
+                        name: entry[name]
+                        for name in _SENSOR_STYLE_FIELDS
+                        if name in entry
+                    }
+                )
+            )
+        except Exception as error:
+            logger.warning(f"Skipping unreadable sensor style in {path}: {error}")
+
+    return style
+
+
 def analysis_directory(experiment_directory) -> Path:
     """The experiment's analysis output folder, created on demand."""
     directory = Path(experiment_directory) / ANALYSIS_DIR_NAME
@@ -155,6 +230,9 @@ def save_session(experiment_directory, session):
             name: getattr(session.perspective, name) for name in _PERSPECTIVE_FIELDS
         },
         "excluded_images": list(session.excluded_images),
+        "area_fit_excluded_images": list(session.area_fit_excluded_images),
+        "visibility_order": list(session.visibility_order),
+        "temperature_style": _temperature_style_payload(session.temperature_style),
         "rois": [
             {
                 "roi_id": roi.roi_id,
@@ -166,6 +244,13 @@ def save_session(experiment_directory, session):
                     repr(anchor): list(geometry)
                     for anchor, geometry in roi.overrides.items()
                 },
+                "local_overrides": {
+                    repr(capture_time): list(geometry)
+                    for capture_time, geometry in roi.local_overrides.items()
+                },
+                "absent_at": list(roi.absent_at),
+                "absent_from": roi.absent_from,
+                "absent_until": roi.absent_until,
                 "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
@@ -204,6 +289,17 @@ def _roi_from(entry):
             float(anchor): normalize(kind, override)[1]
             for anchor, override in entry["overrides"].items()
         },
+        # Absent in configs written before single-image shapes.
+        local_overrides={
+            float(capture_time): normalize(kind, override)[1]
+            for capture_time, override in entry.get("local_overrides", {}).items()
+        },
+        # Absent in configs written before an ROI could be deleted from
+        # one image alone.
+        absent_at=[float(time) for time in entry.get("absent_at", [])],
+        # Absent in configs written before the ranged deletions.
+        absent_from=float(entry.get("absent_from", math.nan)),
+        absent_until=float(entry.get("absent_until", math.nan)),
         # "is_standard" is what this was called before the
         # rename, and absent entirely in configs written before
         # the feature — where no ROI was one either way.
@@ -269,11 +365,42 @@ def load_session(experiment_directory) -> AnalysisSession:
         session.custom_points = custom_points
 
         try:
+            session.temperature_style = _temperature_style_from(
+                dict(payload.get("temperature_style", {})), path
+            )
+        except Exception as error:
+            logger.warning(f"Ignoring invalid temperature style in {path}: {error}")
+
+        try:
             session.excluded_images = [
                 str(name) for name in payload.get("excluded_images", [])
             ]
         except Exception as error:
             logger.warning(f"Ignoring invalid excluded_images in {path}: {error}")
+
+        try:
+            session.area_fit_excluded_images = [
+                str(name) for name in payload.get("area_fit_excluded_images", [])
+            ]
+        except Exception as error:
+            logger.warning(
+                f"Ignoring invalid area_fit_excluded_images in {path}: {error}"
+            )
+
+        # Removing an ROI leaves its id in the saved order; pruning to
+        # the loaded ROIs drops it here.
+        roi_ids = {roi.roi_id for roi in rois}
+
+        try:
+            stored_order = [
+                str(roi_id) for roi_id in payload.get("visibility_order", [])
+            ]
+            session.visibility_order = [
+                roi_id for roi_id in dict.fromkeys(stored_order) if roi_id in roi_ids
+            ]
+        except Exception as error:
+            logger.warning(f"Ignoring invalid visibility_order in {path}: {error}")
+
         try:
             session.plot_stat = payload.get("plot_stat", "mean")
         except Exception as error:
@@ -301,6 +428,19 @@ def load_session(experiment_directory) -> AnalysisSession:
                     stored.get("temperature_slope", 1.0),
                     stored.get("temperature_intercept", 0.0),
                 )
+
+            # A config written before the curve choice stored an on/off
+            # area_fit; on meant the straight line.
+            if "area_fit_method" not in stored and stored.get("area_fit") is True:
+                stored["area_fit_method"] = "linear"
+
+            if stored.get("area_fit_method", "none") not in FIT_METHODS:
+                logger.warning(
+                    f"Ignoring invalid area_fit_method in {path}: "
+                    f"{stored['area_fit_method']!r}"
+                )
+                stored["area_fit_method"] = "none"
+
             figure.trait_set(
                 **{name: stored[name] for name in _FIGURE_FIELDS if name in stored}
             )
@@ -435,11 +575,15 @@ def _stats_key(entry):
         # Written before negative masks existed: measured with none,
         # which is what a current key carries for an image without one.
         ring = list(ring) + [()]
+    if ring is not None and len(ring) < 6:
+        # Written before the measured share existed: measured over the
+        # whole ROI, which is what a current key carries at 100%.
+        ring = list(ring) + [MEASURE_INSIDE_PERCENT_DEFAULT]
     if ring is not None:
         # The perspective matrix and the negative masks come back from
         # JSON as lists.
         negatives = tuple((kind, tuple(geometry)) for kind, geometry in ring[4])
-        ring = list(ring[:3]) + [tuple(ring[3]), negatives]
+        ring = list(ring[:3]) + [tuple(ring[3]), negatives, ring[5]]
     return (
         entry["path"],
         float(entry["mtime"]),
@@ -503,12 +647,21 @@ def load_roi_stats(experiment_directory) -> dict:
 
 
 #: Per-ROI CSV columns, in order: interior stats, outline stats, then
-#: the values derived from the pixel count and the scale, then the
-#: droplet-shape quantities (SHAPE_STATS).
+#: the values derived from the pixel count and the scale (the
+#: area-normalised means measured from the file's first row with a
+#: pixel count, as the plot measures them from its first analysed
+#: image), then the droplet-shape quantities (SHAPE_STATS).
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
     OUTLINE_STATS_PREFIX + name for name in STAT_NAMES
 )
-CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated", "per_area", "bg_per_area")
+CSV_DERIVED_COLUMNS = (
+    "area",
+    "integrated",
+    "bg_integrated",
+    "per_area",
+    "bg_per_area",
+    *AREA_NORMALIZED_STATS,
+)
 
 
 def _csv_cells(values):
@@ -517,26 +670,52 @@ def _csv_cells(values):
     return ["" if value != value else value for value in values]
 
 
-def _roi_columns(rows, rois, stat, pixel_area):
+def _roi_columns(
+    rows, rois, stat, pixel_area, area_fit_method="none", area_fit_excluded=None
+):
     """{roi_id: [value, ...]}: ``stat`` down the rows for each ROI, by
     the plot's own derivation — shape change included, whose reference
-    is the ROI's first row with a droplet."""
+    is the ROI's first row with a droplet, and the area-normalised
+    means' area from the ``area_fit_method`` curve fitted over the
+    rows' ``elapsed_sec`` ("none" for the per-image area) while
+    ``area_fit_excluded`` flags the rows it leaves out (None for none)."""
+    area_fit = None
+
+    if area_fit_method != "none":
+        times = [row["elapsed_sec"] for row in rows]
+        area_fit = (times, times, area_fit_excluded, area_fit_method)
+
     return {
         roi.roi_id: roi_stat_values(
-            [row["stats"].get(roi.roi_id) for row in rows], stat, pixel_area
+            [row["stats"].get(roi.roi_id) for row in rows],
+            stat,
+            pixel_area,
+            area_fit=area_fit,
         )
         for roi in rois
     }
 
 
-def _normalised_columns(rows, rois, normalize_stat, pixel_area):
+def _normalised_columns(
+    rows,
+    rois,
+    normalize_stat,
+    pixel_area,
+    area_fit_method="none",
+    area_fit_excluded=None,
+):
     """{roi_id: [cell, ...]} for the normalised column, run through the
     plot's own normaliser so a CSV column and its curve can never
     disagree."""
     series = {
         roi_id: (roi_id, list(range(len(rows))), values)
         for roi_id, values in _roi_columns(
-            rows, rois, normalize_stat, pixel_area
+            rows,
+            rois,
+            normalize_stat,
+            pixel_area,
+            area_fit_method,
+            area_fit_excluded,
         ).items()
     }
     return {
@@ -556,6 +735,8 @@ def write_intensity_csv(
     outliers=None,
     heater_sensor="",
     filter_column="filter",
+    area_fit_method="none",
+    area_fit_excluded=None,
 ):
     """One row per (image, ROI), blank cells where that pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
@@ -567,8 +748,13 @@ def write_intensity_csv(
     heads the image filter's column (e.g. "wavelength").
     ``pixel_area`` scales the derived size-aware columns; it is 1.0
     (px²) for an uncalibrated experiment. ``correction`` is the
-    session's (gap, width, ball radius, perspective matrix), recorded on
-    every row (the matrix as a 0/1 perspective_corrected flag).
+    session's (gap, width, ball radius, perspective matrix, measured
+    share), recorded on every row (the matrix as a 0/1
+    perspective_corrected flag). ``area_fit_method``, one of
+    FIT_METHODS, takes the area-normalised columns' area from the
+    plot's fit of that curve ("none" keeps the per-image area; recorded
+    as the area_fit column), leaving out the rows flagged in
+    ``area_fit_excluded`` (one flag per row, None for none).
 
     Long rather than wide: the ROI is a VALUE in a column, not a prefix
     repeated across seventeen column names per ROI. Six ROIs used to
@@ -604,25 +790,46 @@ def write_intensity_csv(
         "outlier",
         "ring_gap_px",
         "ring_width_px",
+        "inside_pct",
         "ball_radius_px",
         "perspective_corrected",
+        "area_fit",
         "heater_sensor",
     ]
-    gap, width, ball, perspective = (
-        correction if correction is not None else (0, 0, 0, ())
+    gap, width, ball, perspective, inside = (
+        correction
+        if correction is not None
+        else (0, 0, 0, (), MEASURE_INSIDE_PERCENT_DEFAULT)
     )
-    settings = [gap, width, ball, int(bool(perspective)), heater_sensor]
+    settings = [
+        gap,
+        width,
+        inside,
+        ball,
+        int(bool(perspective)),
+        area_fit_method,
+        heater_sensor,
+    ]
     normalised = (
         {}
         if normalize_stat is None
-        else _normalised_columns(rows, rois, normalize_stat, pixel_area)
+        else _normalised_columns(
+            rows,
+            rois,
+            normalize_stat,
+            pixel_area,
+            area_fit_method,
+            area_fit_excluded,
+        )
     )
     # Every derived column is computed down the whole file per ROI: shape
     # change needs the ROI's first row as its reference.
     derived = {
         stat: {
             roi_id: _csv_cells(values)
-            for roi_id, values in _roi_columns(rows, rois, stat, pixel_area).items()
+            for roi_id, values in _roi_columns(
+                rows, rois, stat, pixel_area, area_fit_method, area_fit_excluded
+            ).items()
         }
         for stat in CSV_DERIVED_COLUMNS + SHAPE_STATS
     }

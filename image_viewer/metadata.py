@@ -14,9 +14,11 @@ carries, rendered as rich text for the sidebar's Metadata section and its
 pop-out window.
 
 Generic on purpose — the viewer shows whatever chunks a file holds and
-knows no plugin's key. OpenCV drops text chunks when decoding, so they
-are read separately through ``QImageReader``, which parses only the
-header (no pixel decode) until ``read()``.
+knows no plugin's key, with one exception: ``capture_step_id`` reads the
+protocol step out of the capture details for the ROI plot's step axis.
+OpenCV drops text chunks when decoding, so they are read separately
+through ``QImageReader``, which parses only the header (no pixel decode)
+until ``read()``.
 """
 
 # Standard library imports.
@@ -24,10 +26,18 @@ import html
 import json
 import re
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 # Enthought library imports.
 from pyface.qt.QtGui import QImage, QImageReader
+
+# Local imports.
+from .consts import (
+    CAPTURE_METADATA_KEY,
+    CAPTURE_STEP_CACHE_SIZE,
+    CAPTURE_STEP_ID_FIELD,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -129,6 +139,43 @@ def read_png_text(path) -> dict[str, str]:
         return {}
 
     return {key: reader.text(key) for key in reader.textKeys()}
+
+
+def capture_step_id(path, mtime=None):
+    """The dotted id of the protocol step the capture at ``path`` was
+    taken in ("1.2"), or "" when its capture details name none (a free
+    mode capture, another app's image, an unreadable file).
+
+    Remembered per (path, mtime), so a redraw re-reads no header and a
+    rewritten file is read afresh. Pass ``mtime`` when it is already
+    known, to spare the stat."""
+    if mtime is None:
+        try:
+            mtime = Path(path).stat().st_mtime
+        except OSError:
+            mtime = 0.0
+
+    return _capture_step_id_at(str(path), mtime)
+
+
+@lru_cache(maxsize=CAPTURE_STEP_CACHE_SIZE)
+def _capture_step_id_at(path, mtime):
+    """capture_step_id() for one file version; ``mtime`` only keys the
+    cache."""
+    text = read_png_text(path).get(CAPTURE_METADATA_KEY)
+
+    if not text:
+        return ""
+
+    try:
+        details = json.loads(text)
+    except ValueError as error:
+        logger.warning(f"Unreadable capture details in {path}: {error}")
+        return ""
+
+    step_id = details.get(CAPTURE_STEP_ID_FIELD) if isinstance(details, dict) else None
+
+    return "" if step_id is None else str(step_id)
 
 
 def read_file_info(path) -> dict[str, str]:

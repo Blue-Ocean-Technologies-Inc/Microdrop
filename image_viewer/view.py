@@ -45,6 +45,7 @@ from traitsui.qt.editor import Editor as QtEditor
 
 # Microdrop style imports.
 from microdrop_style.button_styles import SLIM_NARROW_BUTTON_STYLE
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_ADJUST,
     ICON_CANCEL,
@@ -78,6 +79,8 @@ from microdrop_style.icons.icons import (
     ICON_VIEW_3D,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
+    MDI_ICON_BACKSPACE,
+    MDI_ICON_BACKSPACE_REVERSE,
 )
 
 # Microdrop utils imports.
@@ -92,6 +95,9 @@ from microdrop_utils.traitsui_qt_helpers import (
 # Local imports.
 from .analysis.consts import (
     AI_SIZE_FILTER_CEILING_PX,
+    MEASURE_INSIDE_BOUNDS_PERCENT,
+    RIM_SEARCH_BOUNDS_PX,
+    RIM_WIDTH_BOUNDS_PX,
     RING_GAP_BOUNDS_PX,
     RING_THICKNESS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
@@ -175,7 +181,7 @@ class ScaleEntry(HasTraits):
     unit = Enum(DEFAULT_UNIT, UNITS)
 
     traits_view = View(
-        Item("value", label="Length"),
+        Item("value", label="Length (0 clears)"),
         Item("unit", label="Units"),
         title="Set image scale",
         buttons=["OK", "Cancel"],
@@ -492,11 +498,16 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:local_overrides, "
+            "roi_analysis:session:rois:items:absent_at, "
+            "roi_analysis:session:rois:items:absent_from, "
+            "roi_analysis:session:rois:items:absent_until, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
@@ -534,11 +545,16 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:local_overrides, "
+            "roi_analysis:session:rois:items:absent_at, "
+            "roi_analysis:session:rois:items:absent_from, "
+            "roi_analysis:session:rois:items:absent_until, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
@@ -601,22 +617,23 @@ class _ImageCanvasEditor(QtEditor):
 
         session = model.roi_analysis.session
         ring = session.ring
-        self._roi_layer.set_ring(ring.gap_px, ring.thickness_px, ring.show_on_canvas)
+        self._roi_layer.set_ring(
+            ring.gap_px, ring.thickness_px, ring.show_on_canvas, ring.inside_percent
+        )
         ball = session.ball
         self._roi_layer.set_ball_reference(
             ball.enabled and ball.show_reference, ball.radius_px
         )
         effective = session.effective_for(model.current_path)
 
-        if model.roi_analysis.show_rois:
-            # Only a mask is hidden on the canvas: it never plots, so its
-            # eye hides its outline (and takes it out of the stats),
-            # while a positive's eye is for the plot alone.
-            hidden_ids = {
-                roi.roi_id for roi in session.negative_rois if not roi.style.visible
-            }
-        else:
-            hidden_ids = {roi_id for roi_id, *_rest in effective}
+        # An ROI hidden with its eye is not in ``effective`` at all, so
+        # it is neither drawn nor clickable; the toolbar's toggle hides
+        # every shape but keeps them in the scene.
+        hidden_ids = (
+            set()
+            if model.roi_analysis.show_rois
+            else {roi_id for roi_id, *_rest in effective}
+        )
 
         self._roi_layer.sync(
             effective,
@@ -667,21 +684,33 @@ class _ImageCanvasEditor(QtEditor):
 
     def _on_scale_line_drawn(self, length_px):
         """Ask what the line measures, store the calibration on the
-        session, and remember it as the seed for the next experiment."""
+        session, and remember it as the seed for the next experiment.
+        A length of 0 clears both instead."""
         analysis = self.object.roi_analysis
         scale = analysis.session.scale
+        preferences = self.object.preferences
         entry = ScaleEntry(value=scale.value or 1.0, unit=scale.unit)
-        calibration = None
-        if entry.edit_traits().result:
-            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
-        if calibration is not None:
-            scale.trait_set(
-                metres_per_pixel=calibration, value=entry.value, unit=entry.unit
-            )
-            preferences = self.object.preferences
-            preferences.last_scale_metres_per_px = calibration
-            preferences.last_scale_unit = entry.unit
+        confirmed = entry.edit_traits().result
+
+        if confirmed and entry.value == 0:
+            # Typing 0 is deliberate, so it clears even after a
+            # misclick-short line; dropping the seed keeps later
+            # experiments from being re-calibrated with it.
+            scale.trait_set(metres_per_pixel=0.0, value=0.0)
+            preferences.last_scale_metres_per_px = 0.0
             self._push_scale()
+
+        elif confirmed:
+            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
+
+            if calibration is not None:
+                scale.trait_set(
+                    metres_per_pixel=calibration, value=entry.value, unit=entry.unit
+                )
+                preferences.last_scale_metres_per_px = calibration
+                preferences.last_scale_unit = entry.unit
+                self._push_scale()
+
         analysis.interaction_mode = "pan"
 
     def _on_interaction_mode_changed(self, event):
@@ -966,6 +995,29 @@ exclusion_group = VGroup(
         "and ROI drawing on it still work; the mark is saved "
         "with the experiment.",
     ),
+    HGroup(
+        Item(
+            "object.roi_analysis.current_image_area_fit_excluded",
+            label="Exclude current image from area fit",
+            tooltip="Leave the shown image out of the area fit "
+            "(Cleanup tab, Area fit) while it "
+            "stays in the analysis. Shift+click a plot point does "
+            "the same; the mark is saved with the experiment.",
+        ),
+        UItem(
+            "object.roi_analysis.include_all_in_area_fit_button",
+            enabled_when="object.roi_analysis.has_area_fit_exclusions",
+            tooltip="Put every image back into the area fit",
+        ),
+    ),
+    HGroup(
+        UItem("absent_roi_text", style="readonly"),
+        UItem(
+            "object.roi_analysis.restore_absent_rois_button",
+            tooltip="Put back every ROI deleted from the shown image alone",
+        ),
+        visible_when="absent_roi_count",
+    ),
     VGroup(
         Label("Exclude all images:"),
         UItem(
@@ -976,6 +1028,7 @@ exclusion_group = VGroup(
             "object.roi_analysis.exclude_after_button",
             tooltip="Exclude every image after the shown one from the analysis",
         ),
+        Label(""),
         Label("Include all images:"),
         UItem(
             "object.roi_analysis.include_before_button",
@@ -985,7 +1038,11 @@ exclusion_group = VGroup(
             "object.roi_analysis.include_after_button",
             tooltip="Clear the exclusion mark from every image after the shown one",
         ),
-        columns=3,
+        UItem(
+            "object.roi_analysis.include_all_button",
+            tooltip="Clear the exclusion mark from every image",
+        ),
+        columns=4,
     ),
     visible_when="show_exclusion",
     show_border=True,
@@ -1188,14 +1245,6 @@ analysis_toolbar = VGroup(
             "override from there on",
         ),
     ),
-    # Delete-selected sits directly under the edit toggle: selecting
-    # (edit mode) and deleting the selection are one motion.
-    UItem(
-        "object.roi_analysis.delete_roi_button",
-        editor=IconButtonEditor(
-            glyph=ICON_DELETE, tooltip="Delete the selected ROI (Del)"
-        ),
-    ),
     UItem(
         "object.roi_analysis.copy_roi_button",
         editor=IconButtonEditor(
@@ -1209,6 +1258,38 @@ analysis_toolbar = VGroup(
             tooltip="Paste the copied shape as a new ROI, offset "
             "from the original (Ctrl+V)",
         ),
+    ),
+    # Left Del / Del / Right Del: the selected ROI off every image before
+    # the shown one, off the shown one (the Del key's handler too), or
+    # off every image after it. The side buttons need an image to stop
+    # at; with none shown, Del removes the ROI outright.
+    UItem(
+        "object.roi_analysis.delete_roi_left_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image before this one "
+            "(this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
+    ),
+    UItem(
+        "object.roi_analysis.delete_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_DELETE,
+            tooltip="Delete the selected ROI from the shown image (Del)",
+        ),
+        enabled_when="analysis.selected_roi_id",
+    ),
+    UItem(
+        "object.roi_analysis.delete_roi_right_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE_REVERSE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image after this one, "
+            "captures still to come included (this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
     ),
     "12",  # AI tools
     UItem(
@@ -1244,6 +1325,18 @@ analysis_toolbar = VGroup(
             "Support if disabled.",
         ),
         enabled_when="analysis.ai_available",
+    ),
+    # No AI model behind it, so never disabled with the AI tools.
+    UItem(
+        "object.roi_analysis.trace_rims_button",
+        editor=IconButtonEditor(
+            glyph="trip_origin",
+            tooltip="Trace rims: follow each droplet's bright rim from "
+            "its ROI on the shown image through every later frame — no AI "
+            "model needed. Press again to stop; finished frames are kept. "
+            "Pair with Measure inside (%) to keep the rim glare out of the "
+            "mean.",
+        ),
     ),
     # Takes the column's stretch so the cluster gaps above stay at
     # their fixed 12 px instead of spreading down the pane (the fixed
@@ -1310,6 +1403,20 @@ correction_group = Group(
         "Changing either value recomputes the statistics.",
     ),
     Item(
+        "object.roi_analysis.session.ring.inside_percent",
+        label="Measure inside (%)",
+        editor=RangeEditor(
+            low=MEASURE_INSIDE_BOUNDS_PERCENT[0],
+            high=MEASURE_INSIDE_BOUNDS_PERCENT[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Measure only the inner N% of each ROI, by its "
+        "equivalent radius, leaving a band along the boundary out — "
+        "so the bright rim at a droplet's edge does not enter the "
+        "mean. 100 measures the whole shape. The ring is unchanged.",
+    ),
+    Item(
         "object.roi_analysis.session.ball.radius_px",
         label="Ball Radius",
         editor=RangeEditor(
@@ -1342,10 +1449,12 @@ correction_group = Group(
 )
 
 # AI (SAM) detection options: significance/size filters over the last
-# pick/detect/track pass's candidates, the shape accepted candidates
-# become, and the drift re-check interval, plus Accept/Clear over the
-# pending candidates. Hidden with the rest of the AI surface when the
-# optional SAM stack is not installed.
+# pick/detect pass's candidates (the size window also gates each drift
+# check detection and rim trace), the shape accepted candidates and
+# tracked shapes become, the drift re-check interval and the rim
+# tracer's settings, plus Accept/Clear over the pending candidates. The
+# SAM-only options are disabled when the optional SAM stack is not
+# installed; the rest serve the rim tracer, which needs no model.
 ai_group = Group(
     Item(
         "object.roi_analysis.ai_significance",
@@ -1356,6 +1465,7 @@ ai_group = Group(
         "droplets score 2-4, one-off noise 1; click-added "
         "ROIs are exempt. Non-destructive: sliding back "
         "reveals hidden candidates.",
+        enabled_when="analysis.ai_available",
     ),
     # The size window's spinners bound each other (magnet z-stage
     # preferences parity): min cannot pass max, max cannot dip under
@@ -1370,7 +1480,9 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is below this. Applies to all candidates.",
+        "is below this. Applies to all candidates, and to drift "
+        "tracking and rim tracing: a smaller detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_max_size",
@@ -1382,13 +1494,16 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is above this. Applies to all candidates.",
+        "is above this. Applies to all candidates, and to drift "
+        "tracking and rim tracing: a larger detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_output_kind",
         label="Output Shape",
-        tooltip="Shape an accepted candidate becomes: the traced "
-        "polygon outline, or the fitted ellipse.",
+        tooltip="Shape a new ROI from Pick or Detect all becomes: the "
+        "traced polygon outline, or the fitted ellipse. Track and Trace "
+        "rims keep each ROI's own shape kind.",
     ),
     Item(
         "object.roi_analysis.ai_drift_interval",
@@ -1397,6 +1512,35 @@ ai_group = Group(
         tooltip="Track drift: re-segment every Nth frame (the "
         "final frame always); skipped frames inherit. "
         "Larger N = faster tracking for slow drift.",
+        enabled_when="analysis.ai_available",
+    ),
+    Item(
+        "object.roi_analysis.rim_width_px",
+        label="Rim width (px)",
+        editor=RangeEditor(
+            low=RIM_WIDTH_BOUNDS_PX[0],
+            high=RIM_WIDTH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how wide the droplets' bright rim is, in "
+        "pixels. The rim filter is tuned to this width; set it to "
+        "what the rim measures on the image.",
+    ),
+    Item(
+        "object.roi_analysis.rim_search_px",
+        label="Rim search (px)",
+        editor=RangeEditor(
+            low=RIM_SEARCH_BOUNDS_PX[0],
+            high=RIM_SEARCH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how far the rim may move between "
+        "consecutive frames, in pixels. Small keeps the trace off "
+        "specks and reflections next to the rim; raise it for droplets "
+        "that move or spread fast. After a long gap between captures "
+        "the search widens on its own.",
     ),
     HGroup(
         UItem(
@@ -1419,19 +1563,16 @@ ai_group = Group(
 )
 
 # The measurement and AI grids as one collapsible block under the image,
-# each also collapsing on its own chevron. The AI header and grid hide
-# together when the optional SAM stack is not installed. The block
+# each also collapsing on its own chevron. The AI grid stays when the
+# optional SAM stack is not installed: the rim tracer uses it. The block
 # scrolls on its own both ways, so its grids never set the image column's
 # minimum, and sits under a divider the user drags against the canvas.
 advanced_settings_group = VGroup(
     HGroup(UItem("scale_text", style="readonly")),
     _collapse_header("show_measurement_settings", "Measurement"),
     correction_group,
-    VGroup(
-        _collapse_header("show_ai_settings", "AI Detection"),
-        ai_group,
-        visible_when="analysis.ai_available",
-    ),
+    _collapse_header("show_ai_settings", "AI Detection"),
+    ai_group,
     visible_when="show_advanced_settings",
     scrollable=True,
 )

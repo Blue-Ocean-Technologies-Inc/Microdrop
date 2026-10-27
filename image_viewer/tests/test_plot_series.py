@@ -12,6 +12,7 @@
 
 # Standard library imports.
 import math
+from pathlib import Path
 
 # Third-party imports.
 import numpy as np
@@ -20,24 +21,35 @@ import pytest
 # Microdrop package imports.
 from image_viewer.analysis.curve_fit import TREND_METHODS
 from image_viewer.analysis.plot_series import (
+    analysed_and_excluded_series,
     analysed_paths,
+    area_fit_curve,
+    area_fit_series,
+    area_normalized_values,
     background_ref_baseline,
     background_ref_corrected_series,
     calibrated_temperatures,
     derive_series,
+    excluded_series,
     finite_values,
     image_values,
+    in_visibility_order,
     interpolated_series,
     normalized_series,
     outlier_mask,
+    roi_stat_values,
     shape_change_values,
     smoothed_values,
     stat_value,
+    step_ordinals,
+    step_tick_label,
     subtracted_series,
+    temperature_over_time,
     trend_fit,
     trend_points,
     visible_series,
     without_outliers,
+    x_axis_label,
     x_quantity,
 )
 from image_viewer.analysis.roi_model import (
@@ -187,6 +199,25 @@ def test_visible_series_drops_series_without_an_roi():
     # A stale entry cannot be styled, so it cannot be drawn either.
     session = AnalysisSession(rois=[])
     assert visible_series(session, {"gone": ("ROI 9", [], [])}) == {}
+
+
+def test_untoggled_rois_lead_in_the_given_order():
+    session = AnalysisSession(visibility_order=["b"])
+
+    assert in_visibility_order(session, ["a", "b", "c"]) == ["a", "c", "b"]
+
+
+def test_toggled_rois_follow_in_the_order_they_were_shown():
+    session = AnalysisSession(visibility_order=["c", "a"])
+
+    assert in_visibility_order(session, ["a", "b", "c"]) == ["b", "c", "a"]
+
+
+def test_toggled_ids_missing_from_the_given_ones_are_skipped():
+    session = AnalysisSession(visibility_order=["gone", "a"])
+
+    assert in_visibility_order(session, ["a", "b"]) == ["b", "a"]
+    assert in_visibility_order(session, []) == []
 
 
 def test_plot_alpha_is_the_percentage_as_a_fraction():
@@ -635,6 +666,271 @@ def test_per_image_shape_stats_plot_as_stored(tmp_path):
     assert values == [2.0]
 
 
+# --------------------------------------------------------------------------- #
+# Area-normalised mean                                                         #
+# --------------------------------------------------------------------------- #
+def test_area_normalised_means_are_plot_stats_after_the_per_area_pair():
+    position = PLOT_STATS.index("bg_per_area")
+
+    assert PLOT_STATS[position + 1 : position + 3] == (
+        "area_normalized",
+        "bg_area_normalized",
+    )
+
+
+def test_the_area_normalised_mean_is_flat_under_pure_concentration():
+    # Evaporation: the same fluorophore in half the area reads twice the
+    # mean (and, in a ring of the same medium, twice the background).
+    stats_run = [
+        {"mean": 10.0, "outline_mean": 4.0, "count": 100.0},
+        {"mean": 20.0, "outline_mean": 8.0, "count": 50.0},
+    ]
+
+    assert roi_stat_values(stats_run, "area_normalized") == [10.0, 10.0]
+    assert roi_stat_values(stats_run, "bg_area_normalized") == [6.0, 6.0]
+
+
+def test_the_area_normalised_mean_equals_the_mean_on_the_first_image():
+    stats_run = [
+        None,
+        {"mean": 10.0, "count": 0.0},
+        {"mean": 12.0, "count": 40.0},
+        {"mean": 30.0, "count": 20.0},
+    ]
+
+    # The reference is the first image with a pixel count; a calibration
+    # cancels in the area ratio.
+    values = roi_stat_values(stats_run, "area_normalized", pixel_area=1e-4)
+
+    assert math.isnan(values[0])
+    assert values[1:] == [0.0, 12.0, 15.0]
+
+
+def test_the_area_normalised_mean_reads_against_a_given_reference_run():
+    reference_run = [{"mean": 10.0, "count": 100.0}]
+    excluded_run = [{"mean": 40.0, "count": 25.0}]
+
+    assert area_normalized_values(excluded_run, "area_normalized", reference_run) == [
+        10.0
+    ]
+
+
+def test_the_area_normalised_mean_is_nan_without_any_pixel_count():
+    values = roi_stat_values([{"mean": 10.0}, None], "area_normalized")
+
+    assert all(math.isnan(value) for value in values)
+    # Per image it has no reference to read against.
+    assert math.isnan(stat_value({"mean": 10.0, "count": 5.0}, "area_normalized"))
+
+
+def test_the_area_normalised_mean_rebaselines_when_the_first_image_is_excluded(
+    tmp_path,
+):
+    first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi], plot_stat="area_normalized")
+    session.stats[session.cache_key(first, roi)] = {"mean": 10.0, "count": 100.0}
+    session.stats[session.cache_key(second, roi)] = {"mean": 20.0, "count": 40.0}
+
+    _name, _x, values = derive_series(session, [first, second])[roi.roi_id]
+
+    assert values == [10.0, 8.0]
+
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+    _name, _x, values = derive_series(session, [first, second])[roi.roi_id]
+
+    assert values == [20.0]
+
+    # The excluded image still reads against the analysed baseline.
+    _name, _x, values = excluded_series(session, [first, second])[roi.roi_id]
+
+    assert values == [25.0]
+
+
+# --------------------------------------------------------------------------- #
+# Step, frame and time-unit x axes                                             #
+# --------------------------------------------------------------------------- #
+def _three_images(tmp_path):
+    """Three captures 30 s apart, one ROI with a mean on each."""
+    paths = [
+        _image(tmp_path, "a_2026_07_20-10_00_00_raw.png"),
+        _image(tmp_path, "b_2026_07_20-10_00_30_raw.png"),
+        _image(tmp_path, "c_2026_07_20-10_01_00_raw.png"),
+    ]
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+
+    for value, path in enumerate(paths, start=1):
+        session.stats[session.cache_key(path, roi)] = {"mean": float(value)}
+
+    return session, roi, paths
+
+
+def test_the_time_axis_reads_in_the_chosen_unit(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+
+    session.figure.time_unit = "min"
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 0.5, 1.0]
+
+    session.figure.time_unit = "ms"
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 30_000.0, 60_000.0]
+
+
+def test_the_frame_axis_numbers_the_filtered_series_exclusions_included(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.x_axis = "frame"
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    _name, x_values, values = derive_series(session, paths)[roi.roi_id]
+
+    assert x_values == [1.0, 3.0]
+    assert values == [1.0, 3.0]
+
+    _name, x_values, values = excluded_series(session, paths)[roi.roi_id]
+
+    assert x_values == [2.0]
+    assert values == [2.0]
+
+
+def test_excluded_points_share_the_time_mapping(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    assert derive_series(session, paths)[roi.roi_id][1] == [0.0, 60.0]
+    assert excluded_series(session, paths)[roi.roi_id][1] == [30.0]
+
+
+def test_a_shown_excluded_first_capture_sets_the_time_origin(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.show_excluded_points = True
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+
+    assert excluded_series(session, paths)[roi.roi_id][1] == [0.0]
+    assert derive_series(session, paths)[roi.roi_id][1] == [30.0, 60.0]
+
+
+def test_a_hidden_excluded_first_capture_leaves_the_origin_to_the_analysed(
+    tmp_path,
+):
+    session, roi, paths = _three_images(tmp_path)
+    session.figure.show_excluded_points = False
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+
+    assert derive_series(session, paths)[roi.roi_id][1] == [0.0, 30.0]
+
+
+def test_step_ordinals_number_the_distinct_steps_in_order_of_appearance():
+    ordinals, labels = step_ordinals(["1.2", "1.10", "", "1.2", "1.9"])
+
+    # "1.10" is not after "1.9" here: the series order decides.
+    assert labels == ["1.2", "1.10", "1.9"]
+    assert ordinals[:2] == [1.0, 2.0]
+    assert math.isnan(ordinals[2])
+    assert ordinals[3:] == [1.0, 3.0]
+
+
+def test_step_tick_labels_name_whole_ordinals_only():
+    labels = ["1.2", "1.10"]
+
+    assert step_tick_label(labels, 1.0) == "1.2"
+    assert step_tick_label(labels, 2) == "1.10"
+    assert step_tick_label(labels, 1.5) == ""
+    assert step_tick_label(labels, 0.0) == ""
+    assert step_tick_label(labels, 3.0) == ""
+
+
+def test_the_step_axis_is_stable_when_an_image_is_excluded(tmp_path, monkeypatch):
+    session, roi, paths = _three_images(tmp_path)
+    fourth = _image(tmp_path, "d_2026_07_20-10_01_30_raw.png")
+    session.stats[session.cache_key(fourth, roi)] = {"mean": 4.0}
+    paths.append(fourth)
+    steps = {"a": "1.2", "b": "", "c": "1.10", "d": "1.2"}
+    monkeypatch.setattr(
+        "image_viewer.metadata.capture_step_id",
+        lambda path, mtime=None: steps[Path(path).name[0]],
+    )
+    session.figure.x_axis = "step"
+
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    # The step-less capture is a gap, and a repeated step plots at its
+    # first ordinal.
+    assert x_values[0] == 1.0
+    assert math.isnan(x_values[1])
+    assert x_values[2:] == [2.0, 1.0]
+
+    session.excluded_images = ["a_2026_07_20-10_00_00_raw.png"]
+    _name, x_values, _values = derive_series(session, paths)[roi.roi_id]
+
+    assert math.isnan(x_values[0])
+    assert x_values[1:] == [2.0, 1.0]
+    assert excluded_series(session, paths)[roi.roi_id][1] == [1.0]
+
+
+def test_the_x_axis_names_its_quantity_and_unit():
+    session = AnalysisSession()
+    figure = session.figure
+
+    assert x_axis_label(figure) == "Elapsed time (s)"
+
+    figure.time_unit = "min"
+
+    assert x_quantity(figure) == ("Time", "min")
+    assert x_axis_label(figure) == "Elapsed time (min)"
+
+    figure.x_axis = "step"
+
+    assert x_quantity(figure) == ("Protocol step", "")
+    assert x_axis_label(figure) == "Protocol step"
+
+    figure.x_axis = "frame"
+
+    assert x_axis_label(figure) == "Frame"
+
+    figure.x_axis = "temperature"
+
+    assert x_axis_label(figure) == "Temperature (°C)"
+
+
+# --------------------------------------------------------------------------- #
+# Excluded points through the corrections                                      #
+# --------------------------------------------------------------------------- #
+def test_excluded_points_follow_the_curves_corrections(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+    session.figure.subtract_first = True
+
+    series, _flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
+
+    # The analysed curve is 1, 3 less its first value; the excluded
+    # point (2) shifts by that same 1, not by its own value.
+    assert series[roi.roi_id][2] == [0.0, 2.0]
+    assert excluded[roi.roi_id][2] == [1.0]
+
+    session.figure.normalize = True
+    series, _flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
+
+    assert series[roi.roi_id][2] == [0.0, 100.0]
+    assert excluded[roi.roi_id][2] == [50.0]
+
+
+def test_excluded_points_are_not_tested_for_outliers(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+    session.stats[session.cache_key(paths[1], roi)] = {"mean": 1e6}
+    session.figure.remove_outliers = True
+
+    _series, flags, excluded, _area_fit = analysed_and_excluded_series(session, paths)
+
+    assert flags[roi.roi_id] == [False, False]
+    assert excluded[roi.roi_id][2] == [1e6]
+
+
 def test_trend_fit_recovers_an_exact_line():
     fit = trend_fit([1, 2, 3, 4], [12.5, 15.0, 17.5, 20.0], "linear")
     assert fit.params["c1"] == pytest.approx(2.5)
@@ -690,3 +986,268 @@ def test_trend_points_pair_expected_with_actual_and_follow_the_flip():
     assert trend_points(session, actuals) == ([50.0, 40.0], [52.0, 41.0])
     session.figure.flip_actual_expected = True
     assert trend_points(session, actuals) == ([52.0, 41.0], [50.0, 40.0])
+
+
+# --------------------------------------------------------------------------- #
+# Temperature over time                                                        #
+# --------------------------------------------------------------------------- #
+def test_temperature_over_time_traces_the_log_around_the_captures(tmp_path):
+    session, _roi, paths = _three_images(tmp_path)
+    start = session.stat_info(paths[0])[1]
+    session.heater_samples = [
+        (start - 100.0, {"t1": 20.0, "t2": 30.0}),
+        (start - 5.0, {"t1": 21.0, "t2": 31.0}),
+        (start + 30.0, {"t1": 40.0, "t2": 50.0}),
+        (start + 65.0, {"t1": 41.0}),
+        (start + 200.0, {"t1": 60.0, "t2": 70.0}),
+    ]
+    session.figure.heater_sensor = "t1"
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    traces, analysed, excluded = temperature_over_time(session, paths)
+
+    # 60 s of captures: the 10 s floor beats 5% of the span, so the
+    # samples 100 s before and 140 s after are left out.
+    assert traces["t1"] == ([-5.0, 30.0, 65.0], [21.0, 40.0, 41.0])
+    assert traces["t2"] == ([-5.0, 30.0], [31.0, 50.0])
+    assert traces["mean"] == ([-5.0, 30.0, 65.0], [26.0, 45.0, 41.0])
+
+    # The captures read the chosen sensor by the temperature axis's join.
+    assert analysed[0] == [paths[0], paths[2]]
+    assert analysed[1] == [0.0, 60.0]
+    assert analysed[2][0] == 21.0 + 19.0 * 5.0 / 35.0
+    assert excluded == ([paths[1]], [30.0], [40.0])
+
+
+def test_temperature_over_time_follows_the_time_unit(tmp_path):
+    session, _roi, paths = _three_images(tmp_path)
+    start = session.stat_info(paths[0])[1]
+    session.heater_samples = [(start + 30.0, {"t1": 40.0})]
+    session.figure.time_unit = "min"
+
+    traces, analysed, _excluded = temperature_over_time(session, paths)
+
+    assert traces["t1"][0] == [0.5]
+    assert analysed[1] == [0.0, 0.5, 1.0]
+
+
+def test_temperature_over_time_without_images_is_empty():
+    assert temperature_over_time(AnalysisSession(), []) == (
+        {},
+        ([], [], []),
+        ([], [], []),
+    )
+
+
+def test_an_roi_deleted_from_one_image_gaps_there(tmp_path):
+    session, roi, paths = _three_images(tmp_path)
+    roi.absent_at = [session.stat_info(paths[1])[1]]
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values[0] == 1.0 and values[2] == 3.0
+    assert math.isnan(values[1])
+
+
+# --------------------------------------------------------------------------- #
+# Area fit                                                                     #
+# --------------------------------------------------------------------------- #
+#: Counts at 0, 10 and 20 s whose least-squares line is 102 - t: the
+#: fitted areas are 102, 92 and 82.
+_JITTERY_COUNTS = (100.0, 96.0, 80.0)
+_FIT_TIMES = [0.0, 10.0, 20.0]
+
+
+def _area_run(means=(10.0, 10.0, 10.0), counts=_JITTERY_COUNTS):
+    return [{"mean": mean, "count": count} for mean, count in zip(means, counts)]
+
+
+def test_the_linear_area_fit_is_the_least_squares_line_of_count_on_time():
+    fit = area_fit_curve(_area_run(), _FIT_TIMES, "linear")
+
+    assert fit.predict(np.asarray(_FIT_TIMES)) == pytest.approx([102.0, 92.0, 82.0])
+
+
+def test_the_area_fit_skips_its_excluded_images_and_those_without_a_count():
+    stats_run = [*_area_run(), None, {"mean": 10.0}]
+    times = [*_FIT_TIMES, 30.0, 40.0]
+
+    fit = area_fit_curve(stats_run, times, "linear", [False, False, True, False, False])
+
+    # Through (0, 100) and (10, 96) alone: 100 - 0.4 t.
+    assert fit.predict(np.asarray(_FIT_TIMES)) == pytest.approx([100.0, 96.0, 92.0])
+
+
+def test_a_quadratic_area_fit_follows_a_quadratic_count():
+    times = [0.0, 10.0, 20.0, 30.0]
+    counts = [100.0 + 0.05 * time**2 - time for time in times]
+
+    fit = area_fit_curve(_area_run(counts=counts), times, "poly2")
+
+    assert fit.predict(np.asarray(times)) == pytest.approx(counts)
+
+
+def test_the_area_fit_needs_the_curves_points_at_distinct_times():
+    assert area_fit_curve(_area_run()[:1], [0.0], "linear") is None
+    assert (
+        area_fit_curve(_area_run(), _FIT_TIMES, "linear", [False, True, True]) is None
+    )
+    assert area_fit_curve(_area_run()[:2], [5.0, 5.0], "linear") is None
+    # A sigmoid needs five points; three leave the per-image area.
+    assert area_fit_curve(_area_run(), _FIT_TIMES, "sigmoid") is None
+
+
+def test_the_area_fit_needs_a_positive_area_at_every_counted_image():
+    # The line through the last two points, 16 t - 1520, is negative
+    # at the first image's t = 0.
+    stats_run = [{"count": 50.0}, {"count": 80.0}, {"count": 96.0}]
+    times = [0.0, 100.0, 101.0]
+
+    assert area_fit_curve(stats_run, times, "linear", [True, False, False]) is None
+
+    # 112 - 1.2 t through the first two crosses zero before the last.
+    stats_run = [{"count": 112.0}, {"count": 100.0}, {"count": 5.0}]
+    times = [0.0, 10.0, 100.0]
+
+    assert area_fit_curve(stats_run, times, "linear", [False, False, True]) is None
+
+
+def test_area_normalised_means_read_the_fitted_area():
+    values = area_normalized_values(
+        _area_run(),
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, None, "linear"),
+    )
+
+    # mean × Â(t) / Â(t_ref): still the mean on the reference image.
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+
+
+def test_area_normalised_means_fall_back_to_the_measured_area_without_a_fit():
+    stats_run = _area_run()
+
+    values = roi_stat_values(
+        stats_run,
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, [False, True, True], "linear"),
+    )
+
+    assert values == roi_stat_values(stats_run, "area_normalized")
+
+
+def test_a_curve_with_too_few_points_falls_back_to_the_measured_area():
+    stats_run = _area_run()
+
+    values = roi_stat_values(
+        stats_run,
+        "area_normalized",
+        area_fit=(_FIT_TIMES, _FIT_TIMES, None, "sigmoid"),
+    )
+
+    assert values == roi_stat_values(stats_run, "area_normalized")
+
+
+def test_an_excluded_image_reads_against_the_analysed_runs_fit():
+    excluded_run = [{"mean": 20.0, "count": 40.0}]
+
+    values = area_normalized_values(
+        excluded_run,
+        "area_normalized",
+        _area_run(),
+        ([5.0], _FIT_TIMES, None, "linear"),
+    )
+
+    # Its own count plays no part: Â(5) / Â(0) of the analysed run's line.
+    assert values == pytest.approx([20.0 * 97 / 102])
+
+
+def _area_fit_session(tmp_path):
+    """Three captures 30 s apart, one ROI of jittery area: the fitted
+    line is 102 - t / 3 px, so 102, 92 and 82 at the captures."""
+    session, roi, paths = _three_images(tmp_path)
+
+    for path, count in zip(paths, _JITTERY_COUNTS):
+        session.stats[session.cache_key(path, roi)] = {"mean": 10.0, "count": count}
+
+    session.plot_stat = "area_normalized"
+    session.figure.area_fit_method = "linear"
+
+    return session, roi, paths
+
+
+def test_derive_series_reads_the_area_fit_when_the_figure_asks(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+
+    session.figure.area_fit_method = "none"
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0, 9.6, 8.0])
+
+
+def test_an_image_left_out_of_the_area_fit_stays_in_the_series(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.area_fit_excluded_images = ["c_2026_07_20-10_01_00_raw.png"]
+
+    _name, x_values, values = derive_series(session, paths)[roi.roi_id]
+
+    # The line through the first two alone: 100 - 0.4 t / 3, so 92 at 60 s.
+    assert x_values == [0.0, 30.0, 60.0]
+    assert values == pytest.approx([10.0, 9.6, 9.2])
+
+
+def test_excluded_points_read_against_the_analysed_area_fit(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.excluded_images = ["b_2026_07_20-10_00_30_raw.png"]
+
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    # Through (0, 100) and (60, 80): 100 - t / 3.
+    assert values == pytest.approx([10.0, 10.0 * 80 / 100])
+
+    _name, _x, values = excluded_series(session, paths)[roi.roi_id]
+
+    assert values == pytest.approx([10.0 * 90 / 100])
+
+
+def test_the_area_view_carries_each_rois_fitted_line(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.plot_stat = "area"
+
+    _name, x_values, areas = area_fit_series(session, paths)[roi.roi_id]
+
+    assert x_values == [0.0, 30.0, 60.0]
+    assert areas == pytest.approx([102.0, 92.0, 82.0])
+
+    # The measured points stay measured; only the overlay is fitted.
+    _name, _x, values = derive_series(session, paths)[roi.roi_id]
+
+    assert values == list(_JITTERY_COUNTS)
+
+    series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit[roi.roi_id][2] == pytest.approx([102.0, 92.0, 82.0])
+
+    # Through the curve's corrections, against the curve's first value.
+    session.figure.subtract_first = True
+    _series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit[roi.roi_id][2] == pytest.approx([2.0, -8.0, -18.0])
+
+
+def test_only_the_area_view_carries_the_fitted_lines(tmp_path):
+    session, _roi, paths = _area_fit_session(tmp_path)
+
+    _series, _flags, _excluded, area_fit = analysed_and_excluded_series(session, paths)
+
+    assert area_fit == {}
+
+
+def test_a_roi_without_an_area_fit_has_no_line(tmp_path):
+    session, roi, paths = _area_fit_session(tmp_path)
+    session.area_fit_excluded_images = [Path(path).name for path in paths[1:]]
+
+    assert area_fit_series(session, paths) == {}

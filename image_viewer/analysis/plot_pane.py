@@ -36,11 +36,17 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.ticker import AutoLocator, ScalarFormatter
+from matplotlib.ticker import (
+    AutoLocator,
+    FuncFormatter,
+    MaxNLocator,
+    ScalarFormatter,
+)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -85,15 +91,27 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
+    ANNOTATION_FONT_SCALE,
+    AREA_FIT_EXCLUDED_POINT_MARKER,
+    AREA_FIT_EXCLUDED_POINT_SCALE,
+    AREA_FIT_STATS,
+    AREA_NORMALIZED_STATS,
+    BAR_GAP_BOUNDS,
     BUTTER_CUTOFF_BOUNDS,
     CUSTOM_POINT_ALPHA,
     CUSTOM_POINT_COLOR,
     CUSTOM_POINT_LABEL,
     CUSTOM_POINT_MARKER,
+    EXCLUDED_POINT_ALPHA,
+    EXCLUDED_POINT_MARKER,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRIC_MARKERS,
+    FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
+    PLOT_CLICK_SLOP_PX,
+    PLOT_PICK_RADIUS_PX,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
     ROI_PLOT_CANVAS_MIN_HEIGHT,
@@ -101,11 +119,13 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
+    TIME_UNITS,
     X_AXIS_LABELS,
     X_AXIS_MODES,
 )
 from .curve_fit import (
     FIT_LABELS,
+    FIT_METHODS,
     TREND_METHODS,
     fastest_change_time,
     fit_series,
@@ -115,21 +135,32 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .heater_log import heater_coverage_note
+from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
+    analysed_and_excluded_series,
     analysed_paths,
-    analysed_series,
+    area_fit_series,
+    excluded_paths,
     finite_values,
     image_values,
+    in_visibility_order,
     interpolated_series,
+    quantity_label,
     smoothed_series,
+    step_ids,
+    step_ordinals,
+    step_tick_label,
+    temperature_over_time,
+    time_axis_label,
     x_axis_label,
     x_quantity,
 )
 from .roi_model import PLOT_STATS, CustomPoint, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
+from .temperature_style_view import temperature_style_view
 
 #: Human labels for the plotted stat (dropdown + y-axis).
 PLOT_STAT_LABELS = {
@@ -143,6 +174,8 @@ PLOT_STAT_LABELS = {
     "bg_integrated": "Integrated (bg-corrected)",
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
+    "area_normalized": "Mean intensity (area normalized, a.u.)",
+    "bg_area_normalized": "Bg-corrected mean intensity (area normalized, a.u.)",
     "area": "Area",
     "circularity": "Circularity",
     "shape_change": "Shape change",
@@ -169,6 +202,7 @@ def y_axis_label(
     normalize=False,
     subtract_first=False,
     subtract_background_ref=False,
+    area_fit_method="none",
 ):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
@@ -180,6 +214,9 @@ def y_axis_label(
         else template.format(unit=area_unit(scale.metres_per_pixel, scale.unit))
     )
     # In the order they were applied, so the axis reads as the recipe.
+    # The Area view's points stay measured; only its overlay is fitted.
+    if area_fit_method != "none" and plot_stat in AREA_NORMALIZED_STATS:
+        label = f"{label} (area fitted)"
     if subtract_background_ref:
         label = f"{label} (bkg-ref corrected)"
     if subtract_first:
@@ -206,11 +243,12 @@ EQUATION_LINE_STEP_Y = 0.06
 
 #: Footnotes along the bottom edge, in axes fractions: the
 #: log-axis hidden-point count at the bottom, the dropped-outlier
-#: count one line above it, the no-temperature count above that, so
-#: none of the three ever overprint.
+#: count one line above it, the no-temperature (or, on the step axis,
+#: no-step) count above that, so none of the three ever overprint.
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
 NOTE_NO_TEMP_Y = 0.09
+NOTE_AREA_FIT_Y = 0.125
 
 #: The views drawn against the time (or temperature) axis; the rest
 #: put ROI names along x.
@@ -222,6 +260,14 @@ DERIVATIVE_SYMBOLS = {1: "dy/dx", 2: "d²"}
 #: The views a log value axis applies to. Not the bar charts: a bar
 #: grows from zero, which a log axis cannot show.
 LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution")
+
+#: The views drawing a point per image, which a click can toggle the
+#: exclusion of.
+PICK_VIEW_MODES = ("intensity", "temperature")
+
+#: The views drawing no plotted-stat value at all: the series' notes
+#: (gaps, dropped outliers) and the stat-unit axis limits do not apply.
+NON_STAT_VIEW_MODES = ("temperature",)
 
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
@@ -240,11 +286,14 @@ LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 #: arrows are the widest: a value box shows "-44.7649" or "123456.0" in
 #: full, a parameter box "0.25" or "101", a dropdown its longest
 #: built-in label ("Actual vs expected"). The plotted-stat dropdown has
-#: its own, far wider one for "Background-corrected mean".
+#: its own, far wider one for "Bg-corrected mean intensity (area
+#: normalized, a.u.)" — not measured, but scaled from the width
+#: measured for "Background-corrected mean" by the ratio of the two
+#: labels' text widths.
 VALUE_SPIN_W = -138
 PARAM_SPIN_W = -102
 DROPDOWN_W = -176
-STAT_DROPDOWN_W = -245
+STAT_DROPDOWN_W = -440
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
@@ -370,15 +419,48 @@ def _axes_tab():
                     values=list(X_AXIS_MODES), format_func=X_AXIS_LABELS.get
                 ),
                 tooltip="What the curves are plotted against: "
-                "elapsed capture time, or the heater log's "
+                "elapsed capture time, the heater log's "
                 "temperature at each capture (joined on "
-                "wall-clock time). The fits follow it — a "
-                "melt midpoint reads in °C.",
+                "wall-clock time), the protocol step each "
+                "capture was taken in, or the image's frame "
+                "number in the filtered series. The fits "
+                "follow it — a melt midpoint reads in °C.",
+            ),
+            Item(
+                "figure.time_unit",
+                label="Unit",
+                width=PARAM_SPIN_W,
+                editor=HoverScrollEnumEditor(values=list(TIME_UNITS)),
+                visible_when="figure.x_axis == 'time'",
+                tooltip="The time axis's unit; the fits and their "
+                "landmarks read in it too",
             ),
             _toggle(
                 "figure.show_legend",
                 "Legend",
                 tooltip="Show the ROI legend on the figure",
+            ),
+        ),
+        HGroup(
+            Item(
+                "figure.font_size",
+                label="Font size",
+                width=PARAM_SPIN_W,
+                tooltip="Font size (pt) of the axis titles and tick "
+                "labels; the legend and the notes on the figure "
+                "scale with it, and the saved figure uses it too",
+            ),
+            Item(
+                "figure.bar_gap",
+                label="Bar gap",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=BAR_GAP_BOUNDS[0], high=BAR_GAP_BOUNDS[1], decimals=2, step=0.05
+                ),
+                enabled_when="figure.view_mode in ('per_image', 'fastest_change')",
+                tooltip="The empty share of each ROI's slot between "
+                "the bars of the Per image and Fastest change "
+                "views: 0 makes the bars touch",
             ),
         ),
         VGroup(
@@ -441,7 +523,8 @@ def _axes_tab():
                 style="readonly",
                 visible_when="session.temperature_uninvertible_hint",
             ),
-            visible_when="figure.x_axis == 'temperature'",
+            visible_when="figure.x_axis == 'temperature' "
+            "or figure.view_mode == 'temperature'",
             show_border=True,
         ),
         label="Axes",
@@ -592,6 +675,22 @@ def _cleanup_tab():
                 "it. Display only — the fits and the CSV "
                 "keep the gaps.",
             ),
+            _toggle(
+                "figure.show_excluded_points",
+                "Excluded points",
+                tooltip="Show the images excluded from analysis "
+                "as faint hollow markers you can click to "
+                "bring back. Off hides them, so the axes "
+                "scale to the analysed curves alone.",
+            ),
+            UItem(
+                "model.include_all_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Clear the exclusion mark from every image",
+                ),
+                enabled_when="session.excluded_images",
+            ),
         ),
         HGroup(
             Item(
@@ -666,6 +765,19 @@ def _cleanup_tab():
                 "reference measured in the same frame. "
                 "Stacks with the ring correction and "
                 "with Subtract first.",
+            ),
+            Item(
+                "figure.area_fit_method",
+                label="Area fit",
+                width=DROPDOWN_W,
+                editor=EnumEditor(values={key: FIT_LABELS[key] for key in FIT_METHODS}),
+                enabled_when=f"session.plot_stat in {AREA_FIT_STATS!r}",
+                tooltip="Fit each ROI's pixel count against capture "
+                "time with the chosen curve and read its area off the "
+                "fit, instead of the jittery per-image count, for the "
+                "area-normalised means. The Area view draws the fit "
+                "over its points; Shift+click a point to leave it out "
+                "of the fit only.",
             ),
         ),
         label="Cleanup",
@@ -875,6 +987,8 @@ _PLOT_STATE = (
     "session:figure:custom_expression, "
     "session:figure:trim_poor_fit, "
     "session:figure:show_legend, "
+    "session:figure:font_size, "
+    "session:figure:bar_gap, "
     "session:figure:show_fit_equations, "
     "session:figure:show_second_derivative_max, "
     "session:figure:show_second_derivative_min, "
@@ -891,11 +1005,32 @@ _PLOT_STATE = (
     "session:figure:normalize, "
     "session:figure:subtract_first, "
     "session:figure:subtract_background_ref, "
+    "session:figure:area_fit_method, "
     "session:figure:remove_outliers, "
     "session:figure:outlier_threshold, "
     "session:figure:outlier_window, "
     "session:figure:interpolate_gaps, "
+    "session:figure:show_excluded_points, "
+    "session:temperature_style:line_color, "
+    "session:temperature_style:line_style, "
+    "session:temperature_style:line_width, "
+    "session:temperature_style:capture_marker, "
+    "session:temperature_style:capture_size, "
+    "session:temperature_style:capture_color_follows_line, "
+    "session:temperature_style:capture_color, "
+    "session:temperature_style:excluded_size, "
+    "session:temperature_style:line_alpha, "
+    "session:temperature_style:capture_alpha, "
+    "session:temperature_style:excluded_alpha, "
+    "session:temperature_style:show_legend, "
+    "session:temperature_style:shown_sensors.items, "
+    "session:temperature_style:sensors:items:visible, "
+    "session:temperature_style:sensors:items:color, "
+    "session:temperature_style:sensors:items:line_style, "
+    "session:temperature_style:sensors:items:line_width, "
+    "session:temperature_style:sensors:items:alpha, "
     "session:figure:x_axis, "
+    "session:figure:time_unit, "
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
     "session:figure:temperature_expression, "
@@ -915,6 +1050,11 @@ _PLOT_STATE = (
     "session:custom_points:items:actual, "
     "session:custom_points:items:expected"
 )
+
+#: What decides whether the plot pane shows the ROI table or the
+#: temperature view's style panel beneath the chart (a session swap
+#: re-decides it in _on_session_swapped).
+_TABLE_OR_STYLE_STATE = "session:figure:view_mode"
 
 #: Changes that mean "show me everything again", releasing a view the
 #: user zoomed or panned into.
@@ -942,6 +1082,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
+        #: Set per curves-view redraw: (image path, x, y) of every point
+        #: a click can toggle the exclusion of, in data coordinates.
+        self._pick_targets = []
         #: Set per redraw: which points the outlier test dropped.
         self._outliers = {}
         #: This redraw's fits, solved on first use (see _fitted_rois).
@@ -952,7 +1095,15 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         #: every redraw until they ask for a fit.
         self._user_view = False
         self._panning = False
+        #: Where the current press landed, and whether the pointer has
+        #: moved since: a press released without moving is a click.
+        self._press_position = None
+        self._panned = False
+        #: Set by a font-size change: the next redraw re-fits the
+        #: margins once, after the text has its new size.
+        self._refit_margins = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
+        model.observe(self._on_font_size_changed, "session:figure:font_size")
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
         model.observe(self._on_displayed_image_changed, "current_image_path")
         for event_name, handler in (
@@ -975,6 +1126,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _on_fit_requested(self, event):
         self.release_view()
+
+    def _on_font_size_changed(self, event):
+        # Only a font-size change re-fits the margins: every other
+        # redraw must keep the ones set through configure-subplots.
+        self._refit_margins = True
 
     def _toolbar_busy(self):
         """True while the navigation toolbar's pan or zoom tool is armed
@@ -1024,10 +1180,24 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # axis scale moves.
         self._axes.start_pan(event.x, event.y, event.button)
         self._panning = True
+        self._press_position = (event.x, event.y)
+        self._panned = False
 
     def _on_motion(self, event):
         if not self._panning:
             return
+
+        # Drift within the slop is still a click; the pan starts once
+        # the pointer leaves it. Matplotlib counts physical pixels.
+        self._panned = self._panned or left_press_point(
+            self._press_position,
+            (event.x, event.y),
+            PLOT_CLICK_SLOP_PX * self.device_pixel_ratio,
+        )
+
+        if not self._panned:
+            return
+
         self._axes.drag_pan(1, event.key, event.x, event.y)
         self._user_view = True
         self.draw_idle()
@@ -1038,6 +1208,46 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.end_pan()
         self._panning = False
 
+        # A press that never left the click slop is a click, not a pan.
+        if not self._panned:
+            self._toggle_exclusion_at(event)
+
+    def _toggle_exclusion_at(self, event):
+        """Ask for the exclusion of the image whose drawn point the
+        click landed on — on the curves view, the only one drawing a
+        point per image — to be toggled; with Shift held, its exclusion
+        from the area fit alone. Nothing near: nothing asked."""
+        if self._model.session.figure.view_mode not in PICK_VIEW_MODES:
+            return
+
+        if not self._pick_targets:
+            return
+
+        positions = self._axes.transData.transform(
+            [(x, y) for _path, x, y in self._pick_targets]
+        )
+        path = nearest_point(
+            [
+                (path, display_x, display_y)
+                for (path, _x, _y), (display_x, display_y) in zip(
+                    self._pick_targets, positions
+                )
+            ],
+            (event.x, event.y),
+            # Matplotlib events and transforms count physical pixels.
+            PLOT_PICK_RADIUS_PX * self.device_pixel_ratio,
+        )
+
+        if path is None:
+            return
+
+        # Read off the keyboard at the release: the event's key is only
+        # known while the canvas holds the focus.
+        if "shift" in event.modifiers:
+            self._model.toggle_area_fit_exclusion_request = path
+        else:
+            self._model.toggle_exclusion_request = path
+
     def detach(self):
         # An in-flight coalesced singleShot may fire after the widget's
         # C++ side is gone; the flag makes it a no-op.
@@ -1046,6 +1256,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._model.observe(self._on_fit_requested, _VIEW_RESET_STATE, remove=True)
         self._model.observe(
             self._on_displayed_image_changed, "current_image_path", remove=True
+        )
+        self._model.observe(
+            self._on_font_size_changed, "session:figure:font_size", remove=True
         )
 
     def showEvent(self, event):
@@ -1085,9 +1298,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         session = self._model.session
         # One pipeline, shared with the export, so a saved fit and the
         # drawn one cannot disagree about which points they saw.
-        series, self._outliers = analysed_series(session, self._model.filtered_paths)
+        series, self._outliers, excluded, area_fit = analysed_and_excluded_series(
+            session, self._model.filtered_paths
+        )
         figure_settings = session.figure
         self._fits = None
+        self._pick_targets = []
         # The Expected tab and its CSV read these whatever is shown, and
         # the model fits the Actual vs expected trend from them, so they
         # go before any view draws. The fitting views reuse these fits;
@@ -1117,8 +1333,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.set_xscale("log" if log_x else "linear")
         self._axes.set_yscale("log" if log_y else "linear")
 
+        # After the scales, which reset the tick locators and formatters.
+        if time_axis and figure_settings.x_axis in ("step", "frame"):
+            self._apply_ordinal_ticks(figure_settings, log_x)
+
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings)
+            trim_edges = self._refresh_intensity(series, figure_settings, area_fit)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
@@ -1133,6 +1353,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_distribution(series, figure_settings)
             elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
+            elif view_mode == "temperature":
+                trim_edges = self._draw_temperature_over_time(figure_settings)
             else:
                 trim_edges = self._draw_actual_vs_expected(series, figure_settings)
 
@@ -1160,22 +1382,80 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             and not (log_x and figure_settings.x_min <= 0)
         ):
             self._axes.set_xlim(figure_settings.x_min, figure_settings.x_max)
-        if not figure_settings.y_auto and not (log_y and figure_settings.y_min <= 0):
+        if (
+            not figure_settings.y_auto
+            and view_mode not in NON_STAT_VIEW_MODES
+            and not (log_y and figure_settings.y_min <= 0)
+        ):
             self._axes.set_ylim(figure_settings.y_min, figure_settings.y_max)
         # After the scaling: the band is full-height in axes fractions,
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
+
+        # After the scaling too: relim() reads every line on the
+        # axes, so drawn before it the excluded points would pull
+        # the limits off the analysed curves.
+        if view_mode == "intensity" and figure_settings.show_excluded_points:
+            self._draw_excluded_points(excluded)
+
         self._note_hidden_points(series, log_x, log_y)
-        self._note_dropped_outliers()
+
+        if view_mode not in NON_STAT_VIEW_MODES:
+            self._note_dropped_outliers()
+            self._note_area_fit_fallbacks(series, area_fit)
 
         # The per-ROI stat views draw every value whatever its
         # temperature, so frames the log misses are not missing there.
-        if view_mode not in ("per_image", "distribution"):
+        if view_mode not in ("per_image", "distribution", *NON_STAT_VIEW_MODES):
             self._note_missing_temperatures(series, figure_settings)
+            self._note_missing_steps(series, figure_settings)
+
+        # Last, on every redraw: the views only set the titles' text,
+        # and tick labels and offsets (×1e6) are made afresh as the
+        # limits move. Set on the axes, never rcParams, which every
+        # other figure in the app shares.
+        for axis in (self._axes.xaxis, self._axes.yaxis):
+            axis.label.set_fontsize(figure_settings.font_size)
+            axis.offsetText.set_fontsize(figure_settings.font_size)
+
+        self._axes.tick_params(which="both", labelsize=figure_settings.font_size)
+
+        if self._refit_margins:
+            self._refit_margins = False
+            self._figure.tight_layout()
 
         self.draw_idle()
 
-    def _refresh_intensity(self, series, figure_settings):
+    def _font_size(self, scale=1.0):
+        """The figure's font size (pt) times ``scale``. Matplotlib's
+        relative sizes ("small", "x-small") resolve against the global
+        rcParams, not the figure, so the smaller text scales from this."""
+        return self._model.session.figure.font_size * scale
+
+    def _grown_with_font(self, fraction):
+        """An axes-fraction offset tuned at the default font size,
+        grown with the figure's, so stacked lines of text stay clear of
+        each other at any size."""
+        return fraction * self._font_size() / FIGURE_FONT_SIZE_PT
+
+    def _apply_ordinal_ticks(self, figure_settings, log_x):
+        """Whole-number ticks on the step and frame axes, the step
+        axis's labelled with the step ids — its x is only where a step
+        falls in the series (see step_ordinals)."""
+        if not log_x:
+            self._axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+        if figure_settings.x_axis != "step":
+            return
+
+        _ordinals, labels = step_ordinals(
+            step_ids(self._model.session, self._model.filtered_paths)
+        )
+        self._axes.xaxis.set_major_formatter(
+            FuncFormatter(lambda x, _position: step_tick_label(labels, x))
+        )
+
+    def _refresh_intensity(self, series, figure_settings, area_fit):
         session = self._model.session
         # Smoothing is a display aid, so it goes no further than the
         # lines: `series` — unsmoothed — is what the fits below see.
@@ -1211,6 +1491,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
+        self._collect_pick_targets(series, drawn)
+        self._draw_area_fit(area_fit)
+
+        if session.plot_stat == "area":
+            self._mark_area_fit_excluded(drawn)
+
         if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
@@ -1229,6 +1515,112 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._apply_legend(bool(self._lines) and figure_settings.show_legend)
         return trim_edges
 
+    def _draw_excluded_points(self, excluded):
+        """Each excluded image's point as a faint hollow marker in its
+        ROI's colour, with no line — still visible and clickable, but
+        plainly not part of the curve, the fits, the axis limits or
+        anything else. Registers them as pick targets, so a click can
+        bring one back."""
+        session = self._model.session
+        excluded_images = excluded_paths(session, self._model.filtered_paths)
+
+        for roi_id, (_name, x_values, values) in excluded.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                x_values,
+                values,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=EXCLUDED_POINT_ALPHA * roi.style.plot_alpha,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+            self._pick_targets.extend(zip(excluded_images, x_values, values))
+
+    def _draw_area_fit(self, area_fit):
+        """Each ROI's area fit (area_fit_series), dashed in its colour
+        through the fitted area at each of its analysed images, so the
+        fit can be judged against what it was fitted to. In x order: on
+        a temperature or step axis the images need not arrive in it."""
+        for roi_id, (_name, x_values, values) in area_fit.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            x = np.asarray(x_values, dtype=float)
+            order = np.argsort(x)
+            (line,) = self._axes.plot(
+                x[order],
+                np.asarray(values, dtype=float)[order],
+                linestyle="--",
+                alpha=0.8 * roi.style.plot_alpha,
+                color=roi.style.color,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(line)
+
+    def _mark_area_fit_excluded(self, drawn):
+        """Ring each point the area fit leaves out with a larger hollow
+        marker in its ROI's colour — on the Area view, where the fitted
+        line runs past them."""
+        session = self._model.session
+        analysed = analysed_paths(session, self._model.filtered_paths)
+        left_out = [
+            index
+            for index, path in enumerate(analysed)
+            if session.is_area_fit_excluded(path)
+        ]
+
+        if not left_out:
+            return
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            roi = session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                [x_values[index] for index in left_out],
+                [values[index] for index in left_out],
+                linestyle="",
+                marker=AREA_FIT_EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size * AREA_FIT_EXCLUDED_POINT_SCALE,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=roi.style.plot_alpha,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+
+    def _collect_pick_targets(self, series, drawn):
+        """Remember every curve point a click can land on, with its
+        image: where the point is drawn (smoothed, say) but only where
+        there is a value — a bridged gap is no image's point. The
+        excluded points register as they are drawn."""
+        analysed = analysed_paths(self._model.session, self._model.filtered_paths)
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            measured = series[roi_id][2]
+
+            self._pick_targets.extend(
+                (path, x, y)
+                for path, x, y, value in zip(analysed, x_values, values, measured)
+                if value == value
+            )
+
     def _stat_axis_label(self, figure_settings):
         """The plotted stat's y-axis text with its transforms noted —
         shared by every view that draws the stat itself."""
@@ -1240,6 +1632,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             figure_settings.normalize,
             figure_settings.subtract_first,
             figure_settings.subtract_background_ref,
+            figure_settings.area_fit_method,
         )
 
     def _draw_per_image(self, series, figure_settings):
@@ -1283,7 +1676,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries)
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
 
@@ -1335,17 +1728,19 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # ROI names on x: no time span to shade
 
-    def _draw_roi_bars(self, entries):
+    def _draw_roi_bars(self, entries, figure_settings):
         """Bar per (name, height, style) entry, coloured and faded by
-        the ROI's style and labelled with its value. A NaN height keeps
-        its slot as an empty bar marked n/a, so a ROI never shifts
-        along x when one image lacks it."""
+        the ROI's style and labelled with its value, filling its slot
+        but for the figure's bar gap. A NaN height keeps its slot as an
+        empty bar marked n/a, so a ROI never shifts along x when one
+        image lacks it."""
         positions = list(range(len(entries)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
         bars = self._axes.bar(
             positions,
             [0.0 if height != height else height for _name, height, _style in entries],
+            width=1.0 - figure_settings.bar_gap,
             color=[style.color for _name, _height, style in entries],
         )
 
@@ -1365,10 +1760,112 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     textcoords="offset points",
                     xytext=(0, 4),
                     ha="center",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color="gray" if missing else None,
                 )
             )
+
+    def _draw_temperature_over_time(self, figure_settings):
+        """The heater log against elapsed time, over the filtered
+        captures' span: every sensor thin and faint, the figure's
+        sensor (or their mean) bold, a dot at each analysed capture
+        and — while the figure shows them — a faint hollow marker at
+        each excluded one; both toggle exclusion on a click.
+
+        Always over time, whatever the x axis, and the log's raw
+        reading: the temperature calibration maps the temperature
+        axis, not a temperature plotted as a value. Nothing here is
+        smoothed or fitted."""
+        session = self._model.session
+        filtered_paths = self._model.filtered_paths
+
+        self._axes.set_xlabel(time_axis_label(figure_settings))
+        self._axes.set_ylabel("Temperature (°C)")
+        self._apply_legend(False)
+
+        if not filtered_paths:
+            self._draw_hint("No images")
+
+            return []
+
+        if not session.heater_samples:
+            self._draw_hint(
+                "No heater log loaded — choose its folder with the "
+                "Heater logs button on the Axes tab"
+            )
+
+            return []
+
+        traces, analysed, excluded = temperature_over_time(session, filtered_paths)
+        style = session.temperature_style
+        selected = figure_settings.heater_sensor
+
+        # The chosen sensor is the bold line, so not a faint one too.
+        for row in style.shown_sensors:
+            if not row.visible or row.sensor == selected or row.sensor not in traces:
+                continue
+
+            x_values, temperatures = traces[row.sensor]
+            (line,) = self._axes.plot(
+                x_values,
+                temperatures,
+                color=row.color,
+                alpha=row.plot_alpha,
+                linestyle=LINE_STYLES[row.line_style],
+                linewidth=row.line_width,
+                label=row.sensor,
+            )
+            self._fit_artists.append(line)
+
+        x_values, temperatures = traces.get(selected, ([], []))
+        (line,) = self._axes.plot(
+            x_values,
+            temperatures,
+            color=style.line_color,
+            linestyle=LINE_STYLES[style.line_style],
+            linewidth=style.line_width,
+            alpha=style.plot_alpha("line_alpha"),
+            label=selected,
+        )
+        self._fit_artists.append(line)
+
+        paths, x_values, temperatures = analysed
+        (dots,) = self._axes.plot(
+            x_values,
+            temperatures,
+            linestyle="",
+            marker="" if style.capture_marker == "none" else style.capture_marker,
+            markersize=style.capture_size,
+            color=style.capture_plot_color,
+            alpha=style.plot_alpha("capture_alpha"),
+            label="Captures",
+        )
+        self._fit_artists.append(dots)
+        self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        # On the log line, so — unlike the curves view's — they sit
+        # inside the limits the traces already set.
+        if figure_settings.show_excluded_points:
+            paths, x_values, temperatures = excluded
+            (points,) = self._axes.plot(
+                x_values,
+                temperatures,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markersize=style.excluded_size,
+                markerfacecolor="none",
+                markeredgecolor=style.capture_plot_color,
+                alpha=style.plot_alpha("excluded_alpha"),
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+            self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        self._apply_legend(style.show_legend)
+
+        return []  # nothing fitted: no trimmed tail to shade
 
     def _fitted_rois(self, series, figure_settings):
         """(roi, name, fit, finite_t) per ROI the chosen method fits,
@@ -1509,7 +2006,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         fails or whose speed is flat (linear) get no bar."""
         quantity, unit = x_quantity(figure_settings)
 
-        self._axes.set_ylabel(f"{quantity} of fastest change ({unit})")
+        self._axes.set_ylabel(quantity_label(f"{quantity} of fastest change", unit))
         self._axes.set_xlabel("ROI")
         self._apply_legend(False)
 
@@ -1518,11 +2015,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        entries = [
-            (name, actual, roi.style)
+        # Left to right in the order the ROIs' eyes were switched on, so
+        # the ROI just shown lands rightmost.
+        points = {
+            roi.roi_id: (name, actual, roi.style)
             for roi, name, actual in self._fastest_change_points(
                 series, figure_settings
             )
+        }
+        entries = [
+            points[roi_id]
+            for roi_id in in_visibility_order(self._model.session, points)
         ]
 
         if not entries:
@@ -1532,7 +2035,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries)
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
 
@@ -1546,12 +2049,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         trend gives expected from actual."""
         quantity, unit = x_quantity(figure_settings)
         metrics = figure_settings.compared_metrics
-        measured = (
-            f"{quantity.lower()} of fastest change ({unit})"
+        measured = quantity_label(
+            f"{quantity.lower()} of fastest change"
             if metrics == ["zero"]
             else f"{quantity.lower()} at "
-            + " / ".join(EXPECTED_METRIC_LABELS[metric] for metric in metrics)
-            + f" ({unit})"
+            + " / ".join(EXPECTED_METRIC_LABELS[metric] for metric in metrics),
+            unit,
         )
         x_name, y_name = (
             ("actual", "expected")
@@ -1655,7 +2158,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     (x, y),
                     textcoords="offset points",
                     xytext=(6, 4),
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                 )
             )
 
@@ -1683,7 +2186,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                         for marker in markers
                     ],
                     loc="lower right",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                 )
             )
 
@@ -1710,7 +2213,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     f"Too few points for a {FIT_LABELS[method].lower()} trend",
                     transform=self._axes.transAxes,
                     va="top",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color="gray",
                 )
             )
@@ -1739,7 +2242,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 text,
                 transform=self._axes.transAxes,
                 va="top",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1763,7 +2266,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _apply_legend(self, wanted):
         if wanted:
-            self._axes.legend(loc="best", fontsize="small")
+            self._axes.legend(loc="best", fontsize=self._font_size(LEGEND_FONT_SCALE))
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
 
@@ -1786,14 +2289,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_HIDDEN_Y,
+                self._grown_with_font(NOTE_HIDDEN_Y),
                 f"Log axis hides {hidden} non-positive "
                 f"{'point' if hidden == 1 else 'points'}",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1818,14 +2321,53 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_OUTLIERS_Y,
+                self._grown_with_font(NOTE_OUTLIERS_Y),
                 f"{dropped} {'point' if dropped == 1 else 'points'} "
                 f"dropped as outliers",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
+
+    def _note_area_fit_fallbacks(self, series, area_fit):
+        """Count the measured ROIs the area fit could not be solved for
+        — too few points it may use for the chosen curve, no solution,
+        or a fit that is not positive at every image — whose area stays
+        the per-image count. ``area_fit`` is the Area view's fits; the
+        area-normalised stats fit theirs inside the series, so they are
+        asked for here."""
+        session = self._model.session
+
+        if (
+            session.figure.area_fit_method == "none"
+            or session.plot_stat not in AREA_FIT_STATS
+        ):
+            return
+
+        if session.plot_stat != "area":
+            area_fit = area_fit_series(session, self._model.filtered_paths)
+
+        fallbacks = sum(1 for roi_id in finite_values(series) if roi_id not in area_fit)
+
+        if not fallbacks:
+            return
+
+        noun = "ROI" if fallbacks == 1 else "ROIs"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                self._grown_with_font(NOTE_AREA_FIT_Y),
+                f"{fallbacks} {noun} the area fit could not be solved for "
+                f"use the per-image area",
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1854,13 +2396,42 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_NO_TEMP_Y,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
                 note,
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
+
+    def _note_missing_steps(self, series, figure_settings):
+        """Count the images whose capture names no protocol step (NaN x
+        on the step axis) — like the frames a heater log misses, they
+        cannot be drawn anywhere honest, so they are counted instead of
+        silently vanishing."""
+        if figure_settings.x_axis != "step":
+            return
+
+        frames = next((x_values for _name, x_values, _values in series.values()), [])
+        missing = sum(1 for x in frames if x != x)
+
+        if not missing:
+            return
+
+        noun = "image" if missing == 1 else "images"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
+                f"{missing} {noun} without a protocol step",
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1874,6 +2445,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="center",
                 color="gray",
+                fontsize=self._font_size(),
             )
         )
 
@@ -1918,11 +2490,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 self._fit_artists.append(
                     self._axes.text(
                         EQUATION_BOX_X,
-                        EQUATION_BOX_TOP_Y - EQUATION_LINE_STEP_Y * index,
+                        EQUATION_BOX_TOP_Y
+                        - self._grown_with_font(EQUATION_LINE_STEP_Y) * index,
                         text,
                         transform=self._axes.transAxes,
                         va="top",
-                        fontsize="x-small",
+                        fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                         color=color,
                         alpha=alpha,
                     )
@@ -2004,7 +2577,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     (t_star, y_star),
                     textcoords="offset points",
                     xytext=(6, 6),
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color=roi.style.color,
                     alpha=alpha,
                 )
@@ -2077,13 +2650,19 @@ class RoiPlotDockPane(DockPane):
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self._controls_scroll)
         splitter.addWidget(self.canvas)
-        self.table = RoiStatsTable(roi_analysis_model, splitter)
-        splitter.addWidget(self.table)
+        # The ROI table, or — while the Temperature over time view is
+        # up, where it has nothing to say — that view's style panel.
+        self._table_stack = QStackedWidget(splitter)
+        self.table = RoiStatsTable(roi_analysis_model, self._table_stack)
+        self._table_stack.addWidget(self.table)
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.addWidget(self._style_ui.control)
+        splitter.addWidget(self._table_stack)
         # Nothing collapses to nothing by dragging: a section dragged
         # shut is hard to find again.
         splitter.setChildrenCollapsible(False)
         self._controls_scroll.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
-        self.table.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
+        self._table_stack.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
         splitter.setStretchFactor(0, 0)  # controls keep their size
         splitter.setStretchFactor(1, 3)  # the chart takes the room
         splitter.setStretchFactor(2, 1)
@@ -2099,6 +2678,8 @@ class RoiPlotDockPane(DockPane):
         # roi_analysis.progress_text, and one status belongs in one
         # place.
         roi_analysis_model.observe(self._on_session_swapped, "session")
+        roi_analysis_model.observe(self._show_table_or_style, _TABLE_OR_STYLE_STATE)
+        self._show_table_or_style()
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations, "fit_equations_button")
         roi_analysis_model.observe(self._on_heater_dir, "heater_dir_button")
@@ -2146,6 +2727,32 @@ class RoiPlotDockPane(DockPane):
         self._controls_scroll.setWidget(self._controls_ui.control)
         old_ui.dispose()
 
+        # The style panel edits the old session's style: rebuild it on
+        # the new one's, in the same stack slot.
+        old_style_ui = self._style_ui
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.removeWidget(old_style_ui.control)
+        self._table_stack.addWidget(self._style_ui.control)
+        old_style_ui.dispose()
+        self._show_table_or_style()
+
+    def _build_style_panel(self, parent):
+        """The temperature view's style panel on the session's style."""
+        return temperature_style_view.ui(
+            # TableEditor cell editors copy the context's "object".
+            context={"object": roi_analysis_model.session.temperature_style},
+            kind="subpanel",
+            parent=parent,
+        )
+
+    def _show_table_or_style(self, event=None):
+        """The style panel while the Temperature over time view is up,
+        the ROI table under every other view."""
+        temperature = roi_analysis_model.session.figure.view_mode == "temperature"
+        page = self._style_ui.control if temperature else self.table
+
+        self._table_stack.setCurrentWidget(page)
+
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
 
@@ -2183,6 +2790,10 @@ class RoiPlotDockPane(DockPane):
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()
+            self._style_ui.dispose()
+            roi_analysis_model.observe(
+                self._show_table_or_style, _TABLE_OR_STYLE_STATE, remove=True
+            )
             if (
                 self._equations_ui is not None
                 and self._equations_ui.control is not None

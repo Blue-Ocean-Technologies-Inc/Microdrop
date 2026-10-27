@@ -21,9 +21,13 @@ import numpy as np
 from image_viewer.analysis.roi_compute import (
     _shrink_factor,
     compute_image_stats,
+    inset_contours,
+    inset_mask,
+    interior_mask,
     masked_stats,
     negative_union,
     ring_contours,
+    ring_mask,
     roi_masks,
     stats_are_current,
     subtract_rolling_ball,
@@ -195,6 +199,49 @@ def test_ring_area_matches_the_annulus():
     inner, outer = 40.0 + gap, 40.0 + gap + thickness
     expected = math.pi * (outer**2 - inner**2)
     assert abs(np.count_nonzero(ring) - expected) / expected < 0.10
+
+
+def test_a_gap_0_ring_holds_no_interior_pixels():
+    interior, ring = roi_masks(
+        (200, 200), "polygon", (40.0, 40.0, 160.0, 60.0, 90.0, 150.0), 0, 5
+    )
+    assert np.count_nonzero(ring) > 0
+    assert np.count_nonzero((interior == 255) & (ring == 255)) == 0
+
+
+def test_a_gap_0_ring_is_every_pixel_within_the_thickness():
+    thickness = 4
+    interior, ring = roi_masks(
+        (60, 60), "polygon", (15.0, 15.0, 45.0, 20.0, 25.0, 45.0), 0, thickness
+    )
+
+    # Brute-force Euclidean distance from every pixel to the shape.
+    inside = np.argwhere(interior == 255)
+    pixels = np.argwhere(np.ones(interior.shape, dtype=bool))
+    squared = ((pixels[:, None, :] - inside[None, :, :]) ** 2).sum(axis=2).min(axis=1)
+
+    expected = np.count_nonzero((squared > 0) & (squared <= thickness**2))
+    assert np.count_nonzero(ring) == expected
+
+
+def test_an_empty_interior_has_no_ring():
+    ring = ring_mask(np.zeros((80, 80), dtype=np.uint8), 300, 50)
+    assert ring.shape == (80, 80)
+    assert not ring.any()
+
+
+def test_a_negative_mask_cuts_a_wide_gap_ring(tmp_path):
+    array = np.full((400, 400), 100, dtype=np.uint16)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    rois = {"a": ("ellipse", (200.0, 200.0, 40.0, 40.0, 0.0))}
+    dust = ("ellipse", (200.0, 330.0, 15.0, 15.0, 0.0))  # in the ring, 90 px out
+
+    plain = compute_image_stats(str(path), rois, 80, 20)["stats"]
+    cut = compute_image_stats(str(path), rois, 80, 20, negatives=(dust,))["stats"]
+
+    assert plain["a"]["outline_count"] > 0
+    assert cut["a"]["outline_count"] < plain["a"]["outline_count"]
 
 
 def test_gap_pushes_the_ring_outwards():
@@ -409,3 +456,40 @@ def test_a_fully_covered_roi_measures_nothing_without_raising(tmp_path):
         assert math.isnan(stats[name])
     # The uncovered neighbour still measures.
     assert result["stats"]["b"]["count"] > 0
+
+
+_BIG_CIRCLE = ("ellipse", (150.0, 150.0, 100.0, 100.0, 0.0))
+
+
+def test_measuring_all_of_an_roi_keeps_its_interior():
+    interior = interior_mask((300, 300), *_BIG_CIRCLE)
+
+    assert inset_mask(interior, 100) is interior
+
+
+def test_measuring_ninety_percent_inside_keeps_the_inner_circle():
+    interior = interior_mask((300, 300), *_BIG_CIRCLE)
+    inset = inset_mask(interior, 90)
+    rows, columns = np.nonzero(inset)
+    radii = np.hypot(columns - 150.0, rows - 150.0)
+
+    # The circle at 90% of the radius...
+    assert abs(len(rows) - math.pi * 90.0**2) / (math.pi * 90.0**2) < 0.02
+    # ...and nothing from the 10 px band inside the edge at radius 100.
+    assert radii.max() < 90.5
+    # Its outline is the one closed boundary the canvas draws.
+    assert len(inset_contours((300, 300), *_BIG_CIRCLE, 90)) == 1
+
+
+def test_measuring_inside_shrinks_the_count_but_not_the_ring(tmp_path):
+    array = np.full((300, 300), 100, dtype=np.uint16)
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    rois = {"a": _BIG_CIRCLE}
+
+    whole = compute_image_stats(str(path), rois)["stats"]["a"]
+    inner = compute_image_stats(str(path), rois, inside_percent=90)["stats"]["a"]
+
+    assert inner["count"] < whole["count"]
+    # The ring is grown from the whole interior either way.
+    assert inner["outline_count"] == whole["outline_count"]

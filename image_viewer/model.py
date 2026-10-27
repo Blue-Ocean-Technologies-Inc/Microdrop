@@ -272,6 +272,28 @@ class ImageViewerModel(HasTraits):
     #: ROI intensity-analysis state (shared with the plot pane).
     roi_analysis = Instance(RoiAnalysisModel)
 
+    #: How many ROIs were deleted from the displayed image alone —
+    #: mirrored here by RoiAnalysisController, as the sidebar's
+    #: visible_when does not see changes nested in roi_analysis.
+    absent_roi_count = Int(0)
+
+    #: Whether any of them was deleted as part of a range of images —
+    #: restoring it then clears the range, bringing it back on those
+    #: images too.
+    absent_roi_ranged = Bool(False)
+
+    #: The sidebar's line about them.
+    absent_roi_text = Property(Str, observe="absent_roi_count, absent_roi_ranged")
+
+    def _get_absent_roi_text(self):
+        noun = "ROI" if self.absent_roi_count == 1 else "ROIs"
+        text = f"{self.absent_roi_count} {noun} removed on this image"
+
+        if self.absent_roi_ranged:
+            text += " (Restore also clears their ranges of images)"
+
+        return text
+
     #: Guards the two-way preferences sync against echoing its own writes
     #: (declared trait, so the pull observer can read it in any ordering).
     _self_preference_change = Bool(False)

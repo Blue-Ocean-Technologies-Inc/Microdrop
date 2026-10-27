@@ -11,8 +11,10 @@
 """Controller for the AI (SAM) ROI tools: reacts to the pick/detect/track
 toolbuttons and canvas events, gates every launch on the model being
 downloaded, and drains the off-GUI job runner's results into the shared
-analysis model. All observers run on the GUI thread; the only off-thread
-work is inside SamJobRunner.
+analysis model. The rim tracer (Trace rims) lives here too: it needs no
+model, but follows the ROIs through later frames as Track does and
+reports through the same messages. All observers run on the GUI thread;
+the only off-thread work is inside SamJobRunner and RimJobRunner.
 
 Sanctioned exception to the analysis package's Qt-free rule: the model
 gate below (``_ensure_model_ready``) deliberately imports
@@ -32,8 +34,10 @@ from microdrop_application.dialogs.pyface_wrapper import information
 from ..discovery import capture_timestamp
 from ..model import ImageViewerModel
 from ..sam_download import download_ai_model, model_is_cached
+from .drift_plan import drift_steps, rim_steps
 from .perspective import embedding_id, warp_frame
 from .protocol_guard import proceed_despite_protocol
+from .rim_jobs import RimJobRunner
 from .roi_geometry import centre_of
 from .roi_model import RoiAnalysisModel
 from .sam_detect import (
@@ -66,6 +70,9 @@ class AiRoiController(HasTraits):
     viewer_model = Instance(ImageViewerModel)
     analysis_model = Instance(RoiAnalysisModel)
     runner = Instance(SamJobRunner, ())
+
+    #: Runs Trace rims; only one of it and the SAM track runs at a time.
+    rim_runner = Instance(RimJobRunner, ())
 
     #: The active refiner, rebuilt whenever the preferred model changes.
     refiner = Either(None, Instance(SamRefiner))
@@ -223,8 +230,7 @@ class AiRoiController(HasTraits):
 
     @observe("analysis_model:ai_track_button")
     def _on_track(self, event):
-        if self.runner.track_running:
-            self.runner.cancel()
+        if self._stop_running_tracker():
             return
 
         if not proceed_despite_protocol(self.analysis_model):
@@ -232,47 +238,124 @@ class AiRoiController(HasTraits):
 
         if not self._ensure_model_ready():
             return
-        current = self.viewer_model.current_path
-        paths = self.viewer_model.paths
-        strings = [str(path) for path in paths]
-        if current not in strings:
-            self.analysis_model.progress_text = "No later frames to track"
+
+        frames = self._later_frames()
+
+        if not frames:
             return
-        later = [
-            path
-            for path in paths[strings.index(current) + 1 :]
-            if not self.session.is_excluded(path)
-        ]
-        if not later:
-            self.analysis_model.progress_text = "No later frames to track"
-            return
-        frames = [(str(path), capture_timestamp(path)) for path in later]
+
         # Negative masks stay where they were drawn: only the measured
-        # ROIs follow the droplets.
-        start_time = capture_timestamp(current)
+        # ROIs follow the droplets. Each starts from its shape on the
+        # shown image — a single-image correction there included — and
+        # restarts from any the user made further on (drift_steps).
+        rois = self.session.positive_rois
+        start_time = capture_timestamp(self.viewer_model.current_path)
         start_geometries = {
             roi.roi_id: centre_of(roi.kind, roi.effective_geometry(start_time))
-            for roi in self.session.positive_rois
+            for roi in rois
         }
+
         if not start_geometries:
             self.analysis_model.progress_text = "No ROIs to track"
             return
+
         refiner = self._refiner_for_current_model()
-        self.analysis_model.ai_track_done = 0
-        self.analysis_model.ai_track_total = 0
+
         # Say something immediately: the first frame's encode takes
         # seconds, and until it finishes no TRACK_FRAME arrives.
-        self.analysis_model.progress_text = (
-            f"Drift check starting ({len(frames)} frames)…"
-        )
-        self.analysis_model.ai_track_running = True
+        self._start_track_progress(f"Drift check starting ({len(frames)} frames)…")
         self.runner.track(
             refiner,
-            frames,
+            drift_steps(frames, rois, self.analysis_model.ai_drift_interval),
             start_geometries,
-            self.analysis_model.ai_drift_interval,
+            self.analysis_model.ai_min_size,
+            self.analysis_model.ai_max_size,
             self.session.perspective.effective_matrix(),
         )
+
+    @observe("analysis_model:trace_rims_button")
+    def _on_trace_rims(self, event):
+        """Follow every measured ROI's droplet by its bright rim through
+        the later frames. No AI model is involved, so nothing is gated on
+        one; frames, starts and restarts are as Track's, but every frame
+        is traced (the rim may only move a few px from one to the next)."""
+        if self._stop_running_tracker():
+            return
+
+        if not proceed_despite_protocol(self.analysis_model):
+            return
+
+        frames = self._later_frames()
+
+        if not frames:
+            return
+
+        model = self.analysis_model
+        current = self.viewer_model.current_path
+        rois = self.session.positive_rois
+        start_time = capture_timestamp(current)
+        start_shapes = {
+            roi.roi_id: (roi.kind, roi.effective_geometry(start_time)) for roi in rois
+        }
+
+        if not start_shapes:
+            model.progress_text = "No ROIs to track"
+            return
+
+        self._start_track_progress(f"Rim trace starting ({len(frames)} frames)…")
+        self.rim_runner.track(
+            rim_steps(frames, rois),
+            start_shapes,
+            model.ai_min_size,
+            model.ai_max_size,
+            self.session.perspective.effective_matrix(),
+            model.rim_width_px,
+            model.rim_search_px,
+            start_frame=(str(current), start_time),
+        )
+
+    def _stop_running_tracker(self):
+        """Stop whichever tracker runs, Track's or Trace rims': either
+        button stops it, so the two never run at once. Whether one ran."""
+        running = [
+            runner for runner in (self.runner, self.rim_runner) if runner.track_running
+        ]
+
+        for runner in running:
+            runner.cancel()
+
+        return bool(running)
+
+    def _later_frames(self):
+        """[(path, capture_time), ...] of the frames after the shown one
+        that the analysis does not exclude; [] with the reason on the
+        progress readout when there are none."""
+        current = self.viewer_model.current_path
+        paths = self.viewer_model.paths
+        strings = [str(path) for path in paths]
+        later = []
+
+        if current in strings:
+            later = [
+                path
+                for path in paths[strings.index(current) + 1 :]
+                if not self.session.is_excluded(path)
+            ]
+
+        if not later:
+            self.analysis_model.progress_text = "No later frames to track"
+
+        return [(str(path), capture_timestamp(path)) for path in later]
+
+    def _start_track_progress(self, text):
+        """Zero the tracking progress counts and show ``text`` while the
+        first frame is worked on."""
+        model = self.analysis_model
+        model.ai_track_done = 0
+        model.ai_track_total = 0
+        model.ai_track_rejected = 0
+        model.progress_text = text
+        model.ai_track_running = True
 
     # ------------------------------------------------------------------ #
     # Candidate review                                                     #
@@ -327,20 +410,24 @@ class AiRoiController(HasTraits):
     # ------------------------------------------------------------------ #
     def drain_results(self):
         """Called by the dock pane's drain QTimer (GUI thread): move
-        finished SAM job results from the runner's queue into the model.
-        Each message is handled in isolation so a bad payload logs a
-        warning instead of stalling the whole drain."""
-        while True:
-            try:
-                kind, payload = self.runner.results.get_nowait()
-            except queue.Empty:
-                break
-            try:
-                self._handle_result(kind, payload)
-            except Exception as error:
-                logger.warning(f"AI result handling failed ({kind}): {error}")
+        finished job results from both runners' queues into the model.
+        Each runner keeps its own queue, swapped per job so a superseded
+        job's stragglers are never drained. Each message is handled in
+        isolation so a bad payload logs a warning instead of stalling the
+        whole drain."""
+        for runner in (self.runner, self.rim_runner):
+            while True:
+                try:
+                    kind, payload = runner.results.get_nowait()
+                except queue.Empty:
+                    break
 
-    def _handle_result(self, kind, payload):
+                try:
+                    self._handle_result(kind, payload, runner is self.rim_runner)
+                except Exception as error:
+                    logger.warning(f"AI result handling failed ({kind}): {error}")
+
+    def _handle_result(self, kind, payload, from_rim_tracer=False):
         model = self.analysis_model
         if kind == PICK_RESULT:
             candidate = payload["candidate"]
@@ -369,16 +456,19 @@ class AiRoiController(HasTraits):
         elif kind == TRACK_FRAME:
             model.ai_track_done = payload["done"]
             model.ai_track_total = payload["total"]
+            model.ai_track_rejected += len(payload["rejected"])
+            rejected = model.ai_track_rejected
+            rejected_text = f", {rejected} rejected by size" if rejected else ""
+            label = "Rim trace" if from_rim_tracer else "Drift check"
             model.progress_text = (
-                f"Drift check {payload['done']}/{payload['total']} frames"
+                f"{label} {payload['done']}/{payload['total']} frames{rejected_text}"
             )
+
+            # Written in each ROI's own kind (roi_controller), not the
+            # Output Shape new ROIs take.
             for roi_id, candidate in payload["candidates"].items():
                 if candidate is not None:
-                    model.ai_roi_tracked = (
-                        roi_id,
-                        payload["capture_time"],
-                        candidate.geometry_for(model.ai_output_kind)[1],
-                    )
+                    model.ai_roi_tracked = (roi_id, payload["capture_time"], candidate)
         elif kind == TRACK_FINISHED:
             model.ai_track_running = False
             # frames_done counts segmented frames actually processed (every
@@ -386,12 +476,22 @@ class AiRoiController(HasTraits):
             # frame including the skipped ones the segmenter never touches
             # -- the two aren't the same unit, so "m/n" always read like an
             # early stop when interval > 1. Report only the honest count.
-            model.progress_text = (
-                f"Drift tracking done ({payload['frames_done']} frames checked)"
+            rejected = model.ai_track_rejected
+            noun = "traces" if from_rim_tracer else "detections"
+            rejected_text = f", {rejected} {noun} rejected by size" if rejected else ""
+            summary = (
+                f"Rim tracing done ({payload['frames_done']} frames traced)"
+                if from_rim_tracer
+                else f"Drift tracking done ({payload['frames_done']} frames checked)"
             )
+            model.progress_text = f"{summary}{rejected_text}"
         elif kind == AI_FAILED:
             # Already logged (with more detail) by the runner itself.
-            model.progress_text = f"AI {payload['stage']} failed: {payload['error']}"
+            model.progress_text = (
+                f"Rim trace failed: {payload['error']}"
+                if from_rim_tracer
+                else f"AI {payload['stage']} failed: {payload['error']}"
+            )
             if model.interaction_mode == "ai_pick":
                 # Disarm the pick tool: a failed pick left it armed, so the
                 # next canvas click would just relaunch into the same

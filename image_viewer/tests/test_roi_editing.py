@@ -13,8 +13,13 @@ that stay armed, copying a shape into a new ROI, and undo/redo."""
 
 # Standard library imports.
 import csv
+import math
+
+# Third-party imports.
+import pytest
 
 # Enthought library imports.
+from apptools.preferences.api import Preferences
 from pyface.api import YES
 
 # Microdrop package imports.
@@ -23,6 +28,7 @@ from image_viewer.analysis.consts import (
     DEFAULT_ROI_COLORS,
     NEGATIVE_MASK_COLOR,
     PASTE_OFFSET_PX,
+    ROI_DELETE_BUTTON_SCOPES,
 )
 from image_viewer.analysis.roi_batch import (
     RoiBatchRunner,
@@ -31,12 +37,15 @@ from image_viewer.analysis.roi_controller import (
     RoiAnalysisController,
 )
 from image_viewer.analysis.roi_model import (
+    Roi,
     RoiAnalysisModel,
 )
+from image_viewer.analysis.sam_detect import Candidate
 from image_viewer.discovery import capture_timestamp
 from image_viewer.model import (
     ImageViewerModel,
 )
+from image_viewer.preferences import ImageViewerPreferences
 
 
 def _controller():
@@ -130,17 +139,19 @@ def test_one_copy_seeds_repeated_pastes():
     assert controller.session.rois[1].geometry == controller.session.rois[2].geometry
 
 
-def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none():
+@pytest.mark.parametrize("button", list(ROI_DELETE_BUTTON_SCOPES))
+def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none(button):
+    # No image shown: every delete button removes the ROI outright.
     controller = _controller()
     model = controller.analysis_model
     model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
     model.selected_roi_id = controller.session.rois[0].roi_id
 
-    model.delete_roi_button = True
+    setattr(model, button, True)
     assert controller.session.rois == []
     assert model.selected_roi_id == ""
 
-    model.delete_roi_button = True
+    setattr(model, button, True)
     assert "Select an ROI" in model.progress_text
 
 
@@ -212,8 +223,11 @@ class _RecordingRunner(RoiBatchRunner):
 def _controller_on_image(tmp_path):
     image = tmp_path / "a_2026_07_20-10_00_00_raw.png"
     image.write_bytes(b"")
+    # Preferences of its own, in memory: nothing the controller stores
+    # may leak into the next test through the shared default.
+    preferences = ImageViewerPreferences(preferences=Preferences())
     controller = RoiAnalysisController(
-        viewer_model=ImageViewerModel(),
+        viewer_model=ImageViewerModel(preferences=preferences),
         analysis_model=RoiAnalysisModel(),
         runner=_RecordingRunner(),
     )
@@ -537,3 +551,371 @@ def test_each_undo_and_redo_remeasures_the_positives_once(tmp_path):
     (redone,) = runner.instant
     assert set(redone[1]) == positives
     assert redone[2][4] == (("ellipse", (12.0, 10.0, 3.0, 3.0, 0.0)),)
+
+
+def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path):
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    model.delete_roi_button = True
+
+    assert controller.session.rois == [roi]
+    assert roi.absent_at == [capture_timestamp(image)]
+    assert model.selected_roi_id == ""
+    assert controller.viewer_model.absent_roi_count == 1
+
+    model.undo_roi_button = True
+    assert roi.absent_at == []
+    assert controller.viewer_model.absent_roi_count == 0
+
+    model.redo_roi_button = True
+    model.restore_absent_rois_button = True
+    assert roi.absent_at == []
+    assert controller.viewer_model.absent_roi_count == 0
+
+
+def _two_rois_on_image(tmp_path):
+    """A controller on an image with two ROIs drawn on it."""
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+
+    return controller, image
+
+
+def test_renaming_a_redrawn_shape_makes_it_the_deleted_rois_shape_there(tmp_path):
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    runner = controller.runner
+    capture_time = capture_timestamp(image)
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+    model.delete_roi_button = True
+
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    _roi, replacement = controller.session.rois
+    replacement.overrides = {capture_time + 60.0: [33.0, 30.0, 8.0, 8.0, 0.0]}
+    model.selected_roi_id = replacement.roi_id
+    runner.instant.clear()
+
+    model.rename_roi_request = (replacement.roi_id, roi.name)
+
+    assert controller.session.rois == [roi]
+    assert roi.absent_at == []
+    assert roi.effective_geometry(capture_time) == [30.0, 30.0, 8.0, 8.0, 0.0]
+    # Tracking done on the merged ROI carries over.
+    assert roi.effective_geometry(capture_time + 60.0) == [33.0, 30.0, 8.0, 8.0, 0.0]
+    assert model.selected_roi_id == roi.roi_id
+    assert model.progress_text == "ROI 2 merged into ROI 1"
+    (remeasured,) = runner.instant
+    assert remeasured[1] == {roi.roi_id: ("ellipse", (30.0, 30.0, 8.0, 8.0, 0.0))}
+
+    model.undo_roi_button = True
+
+    assert controller.session.rois == [roi, replacement]
+    assert replacement.name == "ROI 2"
+    assert roi.absent_at == [capture_time] and roi.local_overrides == {}
+
+
+def test_a_name_collision_merges_whatever_the_shapes_history(tmp_path):
+    controller, image = _two_rois_on_image(tmp_path)
+    first, second = controller.session.rois
+
+    # Not deleted from the image, and both drawn there: still a merge.
+    controller.analysis_model.rename_roi_request = (second.roi_id, first.name)
+
+    assert controller.session.rois == [first]
+    assert first.effective_geometry(capture_timestamp(image)) == [
+        30.0,
+        30.0,
+        8.0,
+        8.0,
+        0.0,
+    ]
+
+
+def test_recommitting_a_duplicate_name_merges_the_duplicates(tmp_path):
+    controller, _image = _two_rois_on_image(tmp_path)
+    first, second = controller.session.rois
+    # Duplicates left by an earlier version's plain renames.
+    second.name = first.name
+
+    controller.analysis_model.rename_roi_request = (second.roi_id, second.name)
+
+    assert controller.session.rois == [first]
+
+
+def test_a_collision_without_an_image_or_with_a_mask_only_renames(tmp_path):
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    first, second = controller.session.rois
+
+    model.rename_roi_request = (second.roi_id, first.name)
+
+    assert controller.session.rois == [first, second]
+    assert second.name == first.name
+    assert model.progress_text == "Show an image to merge ROI 2 into ROI 1"
+
+    masked, _image = _two_rois_on_image(tmp_path)
+    masked.analysis_model.negative_mode = True
+    masked.analysis_model.canvas_roi_created = ("ellipse", [9.0, 9.0, 2.0, 2.0, 0.0])
+    roi, _other, mask = masked.session.rois
+
+    masked.analysis_model.rename_roi_request = (mask.roi_id, roi.name)
+
+    assert mask in masked.session.rois and mask.name == roi.name
+    assert "Masks cannot be merged" in masked.analysis_model.progress_text
+
+
+@pytest.mark.parametrize(
+    "field, opened",
+    [("absent_from", 1.0), ("absent_until", -1.0)],
+    ids=["right", "left"],
+)
+def test_a_merge_opens_a_range_that_starts_or_ends_on_the_image(
+    tmp_path, field, opened
+):
+    controller, image = _two_rois_on_image(tmp_path)
+    first, second = controller.session.rois
+    capture_time = capture_timestamp(image)
+    # Both deleted over an inclusive range, as configs from before
+    # Left / Right Del hold them: the merge keeps what both shared.
+    setattr(first, field, capture_time)
+    setattr(second, field, capture_time)
+
+    controller.analysis_model.rename_roi_request = (second.roi_id, first.name)
+
+    assert controller.session.rois == [first]
+    assert first.applies_at(capture_time)
+    # Every other image of the range stays deleted.
+    assert not first.applies_at(capture_time + opened)
+
+
+def test_a_merge_inside_a_range_asks_for_a_restore_first(tmp_path):
+    controller, image = _two_rois_on_image(tmp_path)
+    first, second = controller.session.rois
+    first.absent_from = second.absent_from = capture_timestamp(image) - 60.0
+
+    controller.analysis_model.rename_roi_request = (second.roi_id, first.name)
+
+    assert controller.session.rois == [first, second]
+    assert second.name == "ROI 2"
+    assert "Restore it first" in controller.analysis_model.progress_text
+
+
+def test_a_new_roi_is_never_named_after_an_existing_one():
+    controller = _controller()
+    model = controller.analysis_model
+
+    for x in (10.0, 30.0, 50.0):
+        model.canvas_roi_created = ("ellipse", [x, 10.0, 5.0, 5.0, 0.0])
+
+    first, second, third = controller.session.rois
+    second.name = first.name  # a duplicate, as plain renames could leave
+    third.name = "Droplet"
+
+    model.canvas_roi_created = ("ellipse", [70.0, 10.0, 5.0, 5.0, 0.0])
+    names = [roi.name for roi in controller.session.rois]
+
+    assert names[-1] not in names[:-1]
+
+
+def test_a_drift_check_writes_nothing_over_a_correction_or_a_deletion():
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    roi.local_overrides = {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
+    roi.absent_at = [300.0]
+
+    stray = Candidate(ellipse=[99.0, 99.0, 5.0, 5.0, 0.0])
+    model.ai_roi_tracked = (roi.roi_id, 200.0, stray)
+    model.ai_roi_tracked = (roi.roi_id, 300.0, stray)
+
+    assert roi.local_overrides == {200.0: [30.0, 30.0, 5.0, 5.0, 0.0]}
+    assert roi.overrides == {}
+
+    model.ai_roi_tracked = (
+        roi.roi_id,
+        400.0,
+        Candidate(ellipse=[50.0, 50.0, 5.0, 5.0, 0.0]),
+    )
+
+    assert roi.overrides == {400.0: [50.0, 50.0, 5.0, 5.0, 0.0]}
+
+
+def test_a_tracked_shape_keeps_each_rois_own_kind():
+    controller = _controller()
+    model = controller.analysis_model
+    drawn = [
+        ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0]),
+        ("polygon", [0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0]),
+        ("box", [0.0, 0.0, 20.0, 10.0, 0.0, 3.0]),
+        ("capsule", [10.0, 10.0, 5.0, 3.0, 0.0]),
+    ]
+
+    for kind, geometry in drawn:
+        model.canvas_roi_created = (kind, geometry)
+
+    # A tracked droplet: its traced outline and fitted ellipse.
+    candidate = Candidate(
+        polygon=[40.0, 50.0, 60.0, 50.0, 60.0, 70.0, 40.0, 70.0],
+        ellipse=[50.0, 60.0, 12.0, 8.0, 30.0],
+    )
+
+    for roi in controller.session.rois:
+        model.ai_roi_tracked = (roi.roi_id, 400.0, candidate)
+
+    ellipse, polygon, box, capsule = (
+        roi.overrides[400.0] for roi in controller.session.rois
+    )
+    ellipse_area = math.pi * 12.0 * 8.0
+
+    assert ellipse == [50.0, 60.0, 12.0, 8.0, 30.0]
+    assert polygon == list(candidate.polygon)
+
+    # Same centre, tilt and proportions; the drawn corner radius kept;
+    # what the rounded box encloses matches the ellipse.
+    x, y, width, height, angle, corner_radius = box
+    assert (x + width / 2.0, y + height / 2.0) == pytest.approx((50.0, 60.0))
+    assert (angle, corner_radius) == (30.0, 3.0)
+    assert width / height == pytest.approx(1.5)
+    assert width * height - (4.0 - math.pi) * 3.0**2 == pytest.approx(ellipse_area)
+
+    cx, cy, half_length, radius, angle = capsule
+    assert (cx, cy, angle) == (50.0, 60.0, 30.0)
+    assert (half_length + radius) / radius == pytest.approx(1.5)
+    assert 4.0 * half_length * radius + math.pi * radius**2 == pytest.approx(
+        ellipse_area
+    )
+
+
+@pytest.mark.parametrize("rename_old_onto_new", [False, True])
+def test_a_merge_keeps_the_longer_lived_roi_whichever_way_it_is_renamed(
+    tmp_path, rename_old_onto_new
+):
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    capture_time = capture_timestamp(image)
+    # The long-standing ROI: drawn before the shown image, tracked since.
+    old = Roi(
+        name="ROI 1",
+        kind="ellipse",
+        geometry=[10.0, 10.0, 5.0, 5.0, 0.0],
+        base_anchor=capture_time - 120.0,
+        overrides={capture_time - 60.0: [12.0, 10.0, 5.0, 5.0, 0.0]},
+        absent_at=[capture_time],
+        expected_fastest_change=42.0,
+    )
+    controller.session.rois.append(old)
+    model.canvas_roi_created = ("ellipse", [30.0, 30.0, 8.0, 8.0, 0.0])
+    new = controller.session.rois[-1]
+    renamed, target = (old, new) if rename_old_onto_new else (new, old)
+    typed = target.name
+    model.selected_roi_id = renamed.roi_id
+
+    model.rename_roi_request = (renamed.roi_id, typed)
+
+    # The old ROI survives, whatever the direction, under the typed name,
+    # with its own definitions everywhere but the shown image.
+    assert controller.session.rois == [old]
+    assert old.name == typed
+    assert old.geometry == [10.0, 10.0, 5.0, 5.0, 0.0]
+    assert old.effective_geometry(capture_time - 60.0) == [12.0, 10.0, 5.0, 5.0, 0.0]
+    assert old.effective_geometry(capture_time) == [30.0, 30.0, 8.0, 8.0, 0.0]
+    assert old.absent_at == [] and old.expected_fastest_change == 42.0
+    assert model.selected_roi_id == old.roi_id
+    assert model.progress_text == f"{new.name} merged into {typed}"
+
+    model.undo_roi_button = True
+
+    assert controller.session.rois == [old, new]
+    assert old.name == "ROI 1" and new.name == "ROI 2"
+    assert old.absent_at == [capture_time] and old.local_overrides == {}
+
+
+@pytest.mark.parametrize(
+    "button, before, after",
+    [("delete_roi_right_button", True, False), ("delete_roi_left_button", False, True)],
+)
+def test_deleting_over_a_range_spares_the_shown_image_and_the_rest(
+    tmp_path, button, before, after
+):
+    controller, image = _controller_on_image(tmp_path)
+    model = controller.analysis_model
+    capture_time = capture_timestamp(image)
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    (roi,) = controller.session.rois
+    model.selected_roi_id = roi.roi_id
+
+    setattr(model, button, True)
+
+    assert controller.session.rois == [roi]
+    assert roi.applies_at(capture_time - 60.0) is before
+    assert roi.applies_at(capture_time)
+    assert roi.applies_at(capture_time + 60.0) is after
+    assert controller.viewer_model.absent_roi_count == 0
+
+    # Restore from an image the ROI is off, as a range restore: it
+    # clears the range that covers that image.
+    off_image_time = "10_01_00" if after is False else "09_59_00"
+    restore_on = tmp_path / f"b_2026_07_20-{off_image_time}_raw.png"
+    restore_on.write_bytes(b"")
+    controller.viewer_model.current_path = str(restore_on)
+
+    assert controller.viewer_model.absent_roi_count == 1
+    assert controller.viewer_model.absent_roi_ranged
+    assert "ranges" in controller.viewer_model.absent_roi_text
+
+    model.restore_absent_rois_button = True
+
+    assert roi.applies_at(capture_timestamp(str(restore_on)))
+    assert controller.viewer_model.absent_roi_count == 0
+
+    model.undo_roi_button = True
+
+    assert not roi.applies_at(capture_timestamp(str(restore_on)))
+
+
+def test_hiding_the_selected_roi_clears_the_selection():
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 10.0, 5.0, 5.0, 0.0])
+    first, second = controller.session.rois
+    model.selected_roi_id = first.roi_id
+
+    second.style.visible = False
+    assert model.selected_roi_id == first.roi_id
+
+    first.style.visible = False
+    assert model.selected_roi_id == ""
+
+
+def test_switching_eyes_on_orders_the_rois_last_shown_last():
+    controller = _controller()
+    model = controller.analysis_model
+    session = controller.session
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.canvas_roi_created = ("ellipse", [30.0, 10.0, 5.0, 5.0, 0.0])
+    first, second = session.rois
+    assert session.visibility_order == []
+
+    second.style.visible = False
+    first.style.visible = False
+    second.style.visible = True
+    first.style.visible = True
+    assert session.visibility_order == [second.roi_id, first.roi_id]
+
+    second.style.visible = False
+    assert session.visibility_order == [first.roi_id]
+
+    second.style.visible = True
+    assert session.visibility_order == [first.roi_id, second.roi_id]

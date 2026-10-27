@@ -47,6 +47,10 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
         geometry=[1.0, 2.0, 30.0, 40.0, 15.0],
         base_anchor=100.0,
         overrides={200.0: [5.0, 6.0, 30.0, 40.0, 15.0]},
+        absent_at=[150.0, 250.0],
+        absent_from=300.0,
+        absent_until=50.0,
+        local_overrides={150.0: [7.0, 8.0, 30.0, 40.0, 15.0]},
         style=RoiStyle(
             color="#d62728",
             line_style="dashed",
@@ -74,6 +78,9 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.roi_id == roi.roi_id and back.name == "Cell body"
     assert back.geometry == [1.0, 2.0, 30.0, 40.0, 15.0, 0.0]
     assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0, 15.0, 0.0]}
+    assert back.absent_at == [150.0, 250.0]
+    assert (back.absent_from, back.absent_until) == (300.0, 50.0)
+    assert back.local_overrides == {150.0: [7.0, 8.0, 30.0, 40.0, 15.0, 0.0]}
     assert back.style.color == "#d62728"
     assert back.style.line_style == "dashed"
     assert back.style.marker == "o" and back.style.marker_size == 7.0
@@ -81,6 +88,57 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.expected_fastest_change == 95.0
     assert back.expected_second_derivative_max == 80.0
     assert back.expected_second_derivative_min == 110.0
+
+
+def test_left_and_right_del_ranges_round_trip_short_of_the_shown_image(tmp_path):
+    shown = 200.0
+    roi = Roi(
+        absent_from=math.nextafter(shown, math.inf),
+        absent_until=math.nextafter(shown, -math.inf),
+    )
+    save_session(tmp_path, AnalysisSession(rois=[roi]))
+
+    (back,) = load_session(tmp_path).rois
+
+    assert (back.absent_from, back.absent_until) == (
+        roi.absent_from,
+        roi.absent_until,
+    )
+    assert back.applies_at(shown)
+    assert back.absent_by(300.0) == ["right"] and back.absent_by(100.0) == ["left"]
+
+
+def test_a_legacy_inclusive_range_still_takes_the_image_it_was_deleted_on(
+    tmp_path,
+):
+    # Written by "this and later" / "this and earlier" deletes on the
+    # image captured at 200 and 100: those images were deleted too.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(
+        json.dumps(
+            {
+                "rois": [
+                    {
+                        "roi_id": "abcd1234",
+                        "name": "ROI 1",
+                        "kind": "ellipse",
+                        "geometry": [10.0, 10.0, 5.0, 5.0, 0.0],
+                        "base_anchor": 0.0,
+                        "overrides": {},
+                        "absent_from": 200.0,
+                        "absent_until": 100.0,
+                    }
+                ]
+            }
+        )
+    )
+
+    (roi,) = load_session(tmp_path).rois
+
+    assert not roi.applies_at(200.0) and not roi.applies_at(100.0)
+    assert roi.applies_at(150.0)
+    assert roi.absent_by(200.0) == ["right"] and roi.absent_by(100.0) == ["left"]
 
 
 def test_figure_fit_settings_round_trip(tmp_path):
@@ -97,6 +155,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.flip_actual_expected = True
     session.figure.compare_second_derivative_max = True
     session.figure.trend_method = "sigmoid"
+    session.figure.show_excluded_points = False
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
@@ -113,6 +172,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.compare_second_derivative_max is True
     assert loaded.figure.compare_second_derivative_min is False
     assert loaded.figure.trend_method == "sigmoid"
+    assert loaded.figure.show_excluded_points is False
 
 
 def _write_figure(tmp_path, figure):
@@ -168,6 +228,26 @@ def test_custom_points_round_trip(tmp_path):
     assert math.isnan(blank.actual) and math.isnan(blank.expected)
 
 
+def test_visibility_order_round_trips_pruned_to_the_loaded_rois(tmp_path):
+    session = AnalysisSession(
+        rois=[Roi(roi_id="a", name="ROI 1"), Roi(roi_id="b", name="ROI 2")],
+        visibility_order=["b", "gone", "a"],
+    )
+    save_session(tmp_path, session)
+
+    assert load_session(tmp_path).visibility_order == ["b", "a"]
+
+
+def test_a_config_without_a_visibility_order_loads_an_empty_one(tmp_path):
+    save_session(tmp_path, AnalysisSession(rois=[Roi(roi_id="a", name="ROI 1")]))
+    config = tmp_path / "analysis" / "roi_config.json"
+    payload = json.loads(config.read_text())
+    del payload["visibility_order"]
+    config.write_text(json.dumps(payload))
+
+    assert load_session(tmp_path).visibility_order == []
+
+
 def test_load_session_accepts_v1_bare_list(tmp_path):
     analysis = tmp_path / "analysis"
     analysis.mkdir()
@@ -190,6 +270,9 @@ def test_load_session_accepts_v1_bare_list(tmp_path):
     assert roi.roi_id == "abcd1234" and roi.kind == "ellipse"
     assert loaded.plot_stat == "mean"  # defaults fill in
     assert roi.style.line_style == "solid"
+    assert roi.absent_at == []
+    assert roi.local_overrides == {}
+    assert math.isnan(roi.absent_from) and math.isnan(roi.absent_until)
 
 
 def test_load_session_bad_plot_stat_keeps_parsed_roi(tmp_path):
@@ -234,7 +317,7 @@ def test_stats_store_round_trip_including_nan(tmp_path):
         "abcd1234",
         "ellipse",
         (10.0, 10.0, 5.0, 5.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
@@ -652,7 +735,7 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
         for image in (0, 1)
     ]
     csv_path = tmp_path / "out.csv"
-    write_intensity_csv(csv_path, rows, rois, correction=(2, 4, 60, ()))
+    write_intensity_csv(csv_path, rows, rois, correction=(2, 4, 60, (), 90))
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
@@ -667,9 +750,10 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     background_ref_column = header.index("is_background_ref")
     assert [row[background_ref_column] for row in body[:3]] == ["0", "0", "1"]
     # And every row says what it was measured with — including that
-    # no heater sensor read the (absent) temperature column.
+    # the area was not fitted and no heater sensor read the (absent)
+    # temperature column.
     for row in body:
-        assert row[-5:] == ["2", "4", "60", "0", ""]
+        assert row[-7:] == ["2", "4", "90", "60", "0", "none", ""]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
@@ -718,11 +802,14 @@ def test_write_expected_csv_round_trips_the_table(tmp_path):
 
 def test_background_ring_round_trips(tmp_path):
     session = AnalysisSession(directory=str(tmp_path))
-    session.ring.trait_set(gap_px=3, thickness_px=7, show_on_canvas=False)
+    session.ring.trait_set(
+        gap_px=3, thickness_px=7, inside_percent=85, show_on_canvas=False
+    )
     save_session(tmp_path, session)
 
     ring = load_session(tmp_path).ring
     assert ring.gap_px == 3 and ring.thickness_px == 7
+    assert ring.inside_percent == 85
     assert ring.show_on_canvas is False
 
 
@@ -755,7 +842,7 @@ def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     store[fresh] = {"mean": 9.0}
     save_roi_stats(tmp_path, store)
@@ -770,7 +857,7 @@ def _stats_key_for(image, roi_id="abcd1234", geometry=(5.0, 5.0, 2.0, 2.0, 0.0))
         roi_id,
         "ellipse",
         geometry,
-        (2, 4, 60, (), ()),
+        (2, 4, 60, (), (), 100),
     )
 
 
@@ -1032,6 +1119,56 @@ def test_stats_from_before_negative_masks_still_match(tmp_path):
     assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
 
 
+def test_stats_from_before_the_measured_share_still_match(tmp_path):
+    # Measured over the whole ROI, which is what a current key carries
+    # at 100% — the five-element correction is padded.
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "images": [
+                    {
+                        "file": "a_raw.png",
+                        "mtime": image.stat().st_mtime,
+                        "measurements": [
+                            {
+                                "roi_id": "abcd1234",
+                                "kind": "ellipse",
+                                "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+                                "correction": [2, 4, 0, [], []],
+                                "stats": {"mean": 7.0},
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    session = AnalysisSession(
+        rois=[
+            Roi(
+                roi_id="abcd1234",
+                name="ROI 1",
+                kind="ellipse",
+                geometry=[5.0, 5.0, 2.0, 2.0, 0.0],
+            )
+        ]
+    )
+    session.ring.trait_set(gap_px=2, thickness_px=4)
+    session.stats = load_roi_stats(tmp_path)
+
+    (roi,) = session.rois
+    assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
+
+    # Measuring less of the ROI is a different key: nothing matches.
+    session.ring.inside_percent = 90
+    assert session.cache_key(image, roi) not in session.stats
+
+
 def test_stats_measured_under_a_mask_round_trip(tmp_path):
     image = tmp_path / "a_raw.png"
     image.write_bytes(b"")
@@ -1045,8 +1182,156 @@ def test_stats_measured_under_a_mask_round_trip(tmp_path):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), negatives),
+        (2, 4, 0, (), negatives, 100),
     )
     save_roi_stats(tmp_path, {key: {"mean": 7.0}})
 
     assert load_roi_stats(tmp_path) == {key: {"mean": 7.0}}
+
+
+def test_the_temperature_style_round_trips_with_every_sensor_row(tmp_path):
+    session = AnalysisSession()
+    style = session.temperature_style
+    style.show_sensors(["t1", "t2"])
+    style.show_sensors(["t2"])  # t1 is no longer in the log, but kept
+    t1, t2 = style.sensors
+    t1.trait_set(color="#123456", visible=False)
+    t2.trait_set(line_style="dashed", line_width=1.5, alpha=60)
+    style.trait_set(
+        line_color="#ff0000",
+        line_width=3.0,
+        capture_marker="s",
+        capture_size=8.0,
+        capture_color_follows_line=False,
+        capture_color="#00ff00",
+        excluded_size=4.0,
+        show_legend=False,
+        line_alpha=80,
+        capture_alpha=70,
+        excluded_alpha=20,
+    )
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path).temperature_style
+
+    assert [row.sensor for row in loaded.sensors] == ["t1", "t2"]
+    assert loaded.sensors[0].color == "#123456"
+    assert loaded.sensors[0].visible is False
+    assert loaded.sensors[1].line_style == "dashed"
+    assert loaded.sensors[1].line_width == 1.5
+    assert loaded.sensors[1].alpha == 60
+    assert loaded.line_color == "#ff0000" and loaded.line_width == 3.0
+    assert loaded.capture_marker == "s" and loaded.capture_size == 8.0
+    assert loaded.capture_color_follows_line is False
+    assert loaded.capture_plot_color == "#00ff00"
+    assert loaded.excluded_size == 4.0
+    assert (loaded.line_alpha, loaded.capture_alpha, loaded.excluded_alpha) == (
+        80,
+        70,
+        20,
+    )
+    assert loaded.show_legend is False
+    # Which rows show is the loaded log's business, not the file's.
+    assert loaded.shown_sensors == []
+
+
+def test_a_config_without_a_temperature_style_loads_the_defaults(tmp_path):
+    _write_figure(tmp_path, {})
+
+    style = load_session(tmp_path).temperature_style
+
+    assert style.sensors == []
+    assert style.line_color == "#000000" and style.line_width == 2.0
+    assert style.capture_marker == "o" and style.show_legend is True
+    assert (style.line_alpha, style.capture_alpha, style.excluded_alpha) == (
+        100,
+        100,
+        35,
+    )
+
+
+def test_the_area_fit_and_its_exclusions_round_trip(tmp_path):
+    session = AnalysisSession(directory=str(tmp_path))
+    session.figure.area_fit_method = "sigmoid"
+    session.area_fit_excluded_images = ["b_raw.png"]
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path)
+
+    assert loaded.figure.area_fit_method == "sigmoid"
+    assert loaded.area_fit_excluded_images == ["b_raw.png"]
+
+
+def test_a_config_written_before_the_area_fit_loads_without_it(tmp_path):
+    _write_figure(tmp_path, {})
+
+    loaded = load_session(tmp_path)
+
+    assert loaded.figure.area_fit_method == "none"
+    assert loaded.area_fit_excluded_images == []
+
+
+@pytest.mark.parametrize("area_fit, method", [(True, "linear"), (False, "none")])
+def test_a_config_with_the_area_fit_toggle_loads_it_as_a_method(
+    tmp_path, area_fit, method
+):
+    _write_figure(tmp_path, {"area_fit": area_fit})
+
+    assert load_session(tmp_path).figure.area_fit_method == method
+
+
+def test_an_unknown_area_fit_method_loads_as_none(tmp_path):
+    _write_figure(tmp_path, {"area_fit_method": "spline", "normalize": True})
+
+    figure = load_session(tmp_path).figure
+
+    # The rest of the figure settings survive the bad value.
+    assert figure.area_fit_method == "none"
+    assert figure.normalize is True
+
+
+def _area_csv(tmp_path, area_fit_method):
+    """The area_normalized and area_fit cells of a three-row export
+    whose counts (100, 96, 80 at 0, 10, 20 s) fit the line 102 - t."""
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [
+        {
+            "filename": f"img_{index}_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": elapsed,
+            "capture_session": "burst_a",
+            "filter": "Green 540 nm",
+            "stats": {roi.roi_id: {"mean": 10.0, "count": count}},
+        }
+        for index, (elapsed, count) in enumerate(
+            ((0.0, 100.0), (10.0, 96.0), (20.0, 80.0))
+        )
+    ]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(
+        csv_path,
+        rows,
+        [roi],
+        area_fit_method=area_fit_method,
+        area_fit_excluded=[False, False, False],
+    )
+
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        header, *body = csv.reader(handle)
+
+    return (
+        [float(row[header.index("area_normalized")]) for row in body],
+        {row[header.index("area_fit")] for row in body},
+    )
+
+
+def test_the_csv_reads_the_area_fit_through_the_plots_derivation(tmp_path):
+    values, fitted = _area_csv(tmp_path, "linear")
+
+    assert values == pytest.approx([10.0, 10.0 * 92 / 102, 10.0 * 82 / 102])
+    assert fitted == {"linear"}
+
+    values, fitted = _area_csv(tmp_path, "none")
+
+    assert values == pytest.approx([10.0, 9.6, 8.0])
+    assert fitted == {"none"}

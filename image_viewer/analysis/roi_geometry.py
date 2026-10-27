@@ -70,6 +70,44 @@ def normalize(kind, geometry):
     return kind, values
 
 
+def ellipse_as(kind, ellipse, like=()):
+    """``ellipse`` ([cx, cy, rx, ry, angle]) as a canonical ``kind``
+    geometry with the same centre, orientation, aspect and area — how a
+    tracked droplet's fitted ellipse moves and resizes an ROI drawn as a
+    box or capsule. The one field an ellipse cannot supply, a box's
+    corner radius, is kept from ``like`` (the ROI's current geometry)."""
+    _, (cx, cy, rx, ry, angle) = normalize("ellipse", ellipse)
+    ellipse_area = np.pi * rx * ry
+
+    if kind == "box":
+        corner_radius = normalize("box", like)[1][5] if like else 0.0
+
+        # Rounded corners take (4 - pi) r^2 off the rectangle, so the
+        # box is scaled until what is left matches the ellipse.
+        scale = (
+            np.sqrt((ellipse_area + (4.0 - np.pi) * corner_radius**2) / (4.0 * rx * ry))
+            if rx * ry > 0
+            else 1.0
+        )
+        width, height = 2.0 * rx * scale, 2.0 * ry * scale
+
+        return normalize(
+            "box",
+            [cx - width / 2.0, cy - height / 2.0, width, height, angle, corner_radius],
+        )[1]
+
+    if kind == "capsule":
+        # Along the ellipse's long axis: the capsule spanning its extents,
+        # scaled to its area.
+        long, short, axis = (rx, ry, angle) if rx >= ry else (ry, rx, angle + 90.0)
+        capsule_area = 4.0 * (long - short) * short + np.pi * short**2
+        scale = np.sqrt(ellipse_area / capsule_area) if capsule_area > 0 else 1.0
+
+        return [cx, cy, float((long - short) * scale), float(short * scale), axis]
+
+    return [cx, cy, rx, ry, angle]
+
+
 def translated(kind, geometry, offset_x, offset_y):
     """``geometry`` moved by (offset_x, offset_y) — every coordinate
     pair for a contour, the anchor point for everything else."""

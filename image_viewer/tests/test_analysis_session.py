@@ -67,7 +67,11 @@ def test_cache_key_includes_the_ring(tmp_path):
     session.ring.gap_px = 5
     after = session.cache_key(str(image), roi)
     assert before != after
-    assert after[5] == (5, session.ring.thickness_px, 0, (), ())
+    assert after[5] == (5, session.ring.thickness_px, 0, (), (), 100)
+
+    # Measuring less of each ROI selects a different set of stats too.
+    session.ring.inside_percent = 90
+    assert session.cache_key(str(image), roi)[5][-1] == 90
 
 
 def test_cache_key_includes_the_rolling_ball(tmp_path):
@@ -125,7 +129,7 @@ def test_experiment_switch_saves_and_reloads_stats(tmp_path, monkeypatch):
         "abcd1234",
         "ellipse",
         (5.0, 5.0, 2.0, 2.0, 0.0),
-        (2, 4, 0, (), ()),
+        (2, 4, 0, (), (), 100),
     )
     controller.session.stats[key] = {"mean": 7.0, "count": 4.0}
     controller._mark_stats_dirty()
@@ -192,8 +196,13 @@ def test_negatives_for_applies_drift_overrides(tmp_path):
         ("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),
     )
     assert session.negatives_for(str(late)) == (("ellipse", (7.0, 7.0, 2.0, 2.0, 0.0)),)
-    assert session.correction_for(str(late)) == session.correction_key() + (
+    # The negatives slot in before the measured share, in
+    # compute_image_stats's parameter order.
+    *settings, inside_percent = session.correction_key()
+    assert session.correction_for(str(late)) == (
+        *settings,
         session.negatives_for(str(late)),
+        inside_percent,
     )
 
 
@@ -293,3 +302,55 @@ def test_a_positive_roi_applies_before_its_anchor_too(tmp_path):
 
     for path in (before, drawn_on):
         assert [row[0] for row in session.effective_for(path)] == [roi.roi_id]
+
+
+def test_an_roi_deleted_from_one_image_has_no_key_geometry_or_outline_there(
+    tmp_path,
+):
+    shown, deleted_on = _images(tmp_path, "10_00_00", "10_05_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+    measured = session.cache_key(deleted_on, roi)
+
+    roi.absent_at = [capture_timestamp(deleted_on)]
+
+    assert session.cache_key(deleted_on, roi)[4] is None
+    assert not session.measures(deleted_on, roi)
+    assert session.effective_for(deleted_on) == []
+    assert session.absent_on(deleted_on) == [roi]
+    assert session.cache_key(shown, roi)[4] == (9.0, 9.0, 2.0, 2.0, 0.0)
+    assert session.absent_on(shown) == []
+
+    # Restored, the pair finds its old stats under its old key.
+    roi.absent_at = []
+
+    assert session.cache_key(deleted_on, roi) == measured
+
+
+def test_a_mask_deleted_from_one_image_cuts_nothing_there(tmp_path):
+    cut, spared = _images(tmp_path, "10_00_00", "10_05_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+    unmasked = session.cache_key(spared, roi)
+    mask = _mask(absent_at=[capture_timestamp(spared)])
+    session.rois.append(mask)
+
+    assert session.negatives_for(cut) == (("ellipse", (5.0, 5.0, 2.0, 2.0, 0.0)),)
+    assert session.negatives_for(spared) == ()
+    assert session.cache_key(spared, roi) == unmasked
+
+
+def test_an_roi_hidden_with_its_eye_is_not_on_the_canvas(tmp_path):
+    (image,) = _images(tmp_path, "10_00_00")
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[9.0, 9.0, 2.0, 2.0, 0.0])
+    other = Roi(name="ROI 2", kind="ellipse", geometry=[9.0, 9.0, 4.0, 4.0, 0.0])
+    mask = _mask()
+    session = AnalysisSession(rois=[roi, other, mask])
+    measured = session.cache_key(image, roi)
+
+    roi.style.visible = False
+    mask.style.visible = False
+
+    assert [row[0] for row in session.effective_for(image)] == [other.roi_id]
+    # Hidden is not unmeasured: a positive's key is untouched by its eye.
+    assert session.cache_key(image, roi)[4] == measured[4]

@@ -30,22 +30,32 @@ from microdrop_utils.expression import (
 # Local imports.
 from ..scale_bar import pixel_area
 from .consts import (
+    AREA_NORMALIZED_STATS,
     BUTTER_CUTOFF,
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER_BOUNDS,
+    HEATER_SENSOR_MEAN,
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_PTS,
     SAVGOL_ORDER,
     SAVGOL_WINDOW_PTS,
+    TEMPERATURE_VIEW_MARGIN_FRACTION,
+    TEMPERATURE_VIEW_MARGIN_MIN_S,
+    TIME_UNIT_PER_SECOND,
+    X_AXIS_LABELS,
 )
 from .curve_fit import POLYNOMIAL_DEGREES, fit_series, polynomial_result
-from .heater_log import temperature_at
+from .heater_log import sensor_trace, sensors_in, temperature_at
 from .shape_descriptors import HU_ROOT_KEY, shape_deviation
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: The stats read against a reference image of the ROI's run rather
+#: than per image alone.
+SERIES_STATS = ("shape_change", *AREA_NORMALIZED_STATS)
 
 #: Relative rounding noise a polynomial trend's coefficients are
 #: snapped across: below it a term is 0, within it of 1 a slope is 1.
@@ -76,7 +86,8 @@ def stat_value(stats, stat, pixel_area=1.0):
     stats are missing entirely or lack the pieces a stat needs.
     ``bg_corrected`` is interior mean minus outline-ring mean.
     ``pixel_area`` is one pixel's area in the display unit (1.0 = px²),
-    which the size-aware stats scale by."""
+    which the size-aware stats scale by. The SERIES_STATS need the
+    ROI's whole run and read NaN here (see roi_stat_values)."""
     if not stats:
         return math.nan
     if stat == "bg_corrected":
@@ -105,15 +116,16 @@ def shape_reference(stats_run):
     )
 
 
-def shape_change_values(stats_run):
+def shape_change_values(stats_run, reference_run=None):
     """Shape change along one ROI's ``stats_run`` (stats dicts or None,
     image order): each image's root-normalised Hu distance from
-    ``shape_reference``. NaN where an image has no droplet or no stats,
-    and everywhere when no image has a droplet.
+    ``shape_reference`` of ``reference_run`` (the run itself by
+    default). NaN where an image has no droplet or no stats, and
+    everywhere when no image has a droplet.
 
     The run is the analysed images, so excluding the first one moves
     the reference to the next — the series re-baselines itself."""
-    reference = shape_reference(stats_run)
+    reference = shape_reference(stats_run if reference_run is None else reference_run)
 
     if reference is None:
         return [math.nan] * len(stats_run)
@@ -121,12 +133,127 @@ def shape_change_values(stats_run):
     return [shape_deviation(stats or {}, reference) for stats in stats_run]
 
 
-def roi_stat_values(stats_run, stat, pixel_area=1.0):
+def area_reference_count(stats_run):
+    """The ROI's pixel count on the first image of ``stats_run`` with
+    one — the reference area the area-normalised means divide by, by
+    the same first-analysed-image rule as ``shape_reference``. None
+    when no image has one."""
+    return next(
+        (stats["count"] for stats in stats_run if stats and stats.get("count")),
+        None,
+    )
+
+
+def area_fit_curve(stats_run, times, method, fit_excluded=None):
+    """The ``method`` curve (one of FIT_METHODS but "none") least-squares
+    fitted to one ROI's pixel count against capture time (s) along
+    ``stats_run`` (stats dicts or None, image order, at ``times``), over
+    the images with a count that ``fit_excluded`` (flags along the run,
+    None for none) does not flag — a FitResult whose ``predict`` reads
+    the fitted count at any time.
+
+    None when there are too few such images for the curve, they share
+    one capture time, the curve cannot be solved, or it is not strictly
+    positive at every image of the run with a count and a capture time
+    — each of those areas is divided by, so one non-positive reading
+    voids the fit."""
+    flags = [False] * len(stats_run) if fit_excluded is None else fit_excluded
+    points = [
+        (time, stats["count"])
+        for stats, time, excluded in zip(stats_run, times, flags)
+        if stats and stats.get("count") and not excluded and math.isfinite(time)
+    ]
+
+    if not points:
+        return None
+
+    fit_times, counts = np.asarray(points, dtype=float).T
+
+    if float(np.ptp(fit_times)) == 0.0:
+        return None
+
+    fit = fit_series(fit_times, counts, method)
+
+    if fit is None:
+        return None
+
+    counted_times = np.asarray(
+        [
+            time
+            for stats, time in zip(stats_run, times)
+            if stats and stats.get("count") and math.isfinite(time)
+        ],
+        dtype=float,
+    )
+    fitted = np.asarray(fit.predict(counted_times), dtype=float)
+
+    if not np.all(np.isfinite(fitted) & (fitted > 0.0)):
+        return None
+
+    return fit
+
+
+def _area_fitted_run(stats_run, times, fit):
+    """``stats_run`` with each pixel count read off ``fit`` (an
+    area_fit_curve FitResult) at its capture time; an image without a
+    count keeps its stats as they are."""
+    return [
+        {**stats, "count": float(fit.predict(time))}
+        if stats and stats.get("count")
+        else stats
+        for stats, time in zip(stats_run, times)
+    ]
+
+
+def area_normalized_values(stats_run, stat, reference_run=None, area_fit=None):
+    """``stat``, one of AREA_NORMALIZED_STATS, along one ROI's
+    ``stats_run``: its integrated signal over the reference area of
+    ``reference_run`` (the run itself by default).
+
+    The area is taken as a pixel count: A / A_ref is a ratio, so the
+    calibration cancels and the value equals the mean on the reference
+    image whatever unit the experiment is calibrated in. NaN
+    everywhere when no image has a pixel count.
+
+    ``area_fit``, when given, is (times, reference_times, fit_excluded,
+    method): the capture times (s) along ``stats_run`` and along the
+    reference run, the reference images the fit leaves out, and the
+    curve to fit (one of FIT_METHODS but "none"). Each area then comes
+    off the reference run's area_fit_curve, so the value is
+    mean × Â(t) / Â(t_ref) — still the mean on the reference image —
+    or stays the per-image count where there is no fit."""
+    reference_run = stats_run if reference_run is None else reference_run
+
+    if area_fit is not None:
+        times, reference_times, fit_excluded, method = area_fit
+        fit = area_fit_curve(reference_run, reference_times, method, fit_excluded)
+
+        if fit is not None:
+            stats_run = _area_fitted_run(stats_run, times, fit)
+            reference_run = _area_fitted_run(reference_run, reference_times, fit)
+
+    reference = area_reference_count(reference_run)
+
+    if reference is None:
+        return [math.nan] * len(stats_run)
+
+    integrated = AREA_NORMALIZED_STATS[stat]
+
+    return [stat_value(stats, integrated) / reference for stats in stats_run]
+
+
+def roi_stat_values(stats_run, stat, pixel_area=1.0, reference_run=None, area_fit=None):
     """``stat`` along one ROI's ``stats_run`` (stats dicts or None, image
-    order). Every stat but shape change is per image; shape change needs
-    the whole run for its reference."""
+    order). Every stat but the SERIES_STATS is per image; those need a
+    run for their reference — ``reference_run`` when given (the
+    analysed images, for a run of excluded ones), else ``stats_run``.
+    ``area_fit`` takes the area-normalised stats' area from a fitted
+    curve (see area_normalized_values)."""
     if stat == "shape_change":
-        return shape_change_values(stats_run)
+        return shape_change_values(stats_run, reference_run)
+
+    if stat in AREA_NORMALIZED_STATS:
+        return area_normalized_values(stats_run, stat, reference_run, area_fit)
 
     return [stat_value(stats, stat, pixel_area) for stats in stats_run]
 
@@ -157,20 +284,39 @@ def calibrated_temperatures(figure, temperatures):
 
 
 def x_quantity(figure_settings):
-    """What the curves are plotted against, as (quantity, unit); the
-    unit is flagged once a calibration has moved the temperature off
-    the log's own reading."""
-    if figure_settings.x_axis != "temperature":
-        return "Time", "s"
+    """What the curves are plotted against, as (quantity, unit): the
+    time axis in its chosen unit, the step and frame axes unitless
+    (""), and the temperature flagged once a calibration has moved it
+    off the log's own reading."""
+    x_axis = figure_settings.x_axis
+
+    if x_axis == "time":
+        return "Time", figure_settings.time_unit
+
+    if x_axis != "temperature":
+        return X_AXIS_LABELS[x_axis], ""
 
     return "Temperature", "°C, calibrated" if is_calibrated(figure_settings) else "°C"
 
 
+def quantity_label(text, unit):
+    """``text`` with ``unit`` in brackets, or bare when it has none."""
+    return f"{text} ({unit})" if unit else text
+
+
+def time_axis_label(figure_settings):
+    """The elapsed-time axis's text, in the figure's time unit."""
+    return f"Elapsed time ({figure_settings.time_unit})"
+
+
 def x_axis_label(figure_settings):
-    """The x-axis text of the views drawn against time or temperature."""
+    """The x-axis text of the views drawn against the curves' x."""
     quantity, unit = x_quantity(figure_settings)
 
-    return f"Elapsed time ({unit})" if quantity == "Time" else f"{quantity} ({unit})"
+    if figure_settings.x_axis == "time":
+        return time_axis_label(figure_settings)
+
+    return quantity_label(quantity, unit)
 
 
 def trend_points(session, expected_actuals):
@@ -262,37 +408,88 @@ def analysed_paths(session, filtered_paths):
     return [path for path in filtered_paths if not session.is_excluded(path)]
 
 
-def derive_series(session, filtered_paths):
-    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
-    the filtered images. The x is elapsed seconds from the first
-    filtered capture — or, when the figure's x_axis says so, the
-    heater log's temperature at each capture (NaN where the log does
-    not cover it) through the figure's calibration, so the fits
-    downstream read against °C too.
-    NaN where an (image, ROI) pair has no computed stats (line gaps).
-    User-excluded images are left out entirely (no gap: they are not
-    part of the analysis).
+def excluded_paths(session, filtered_paths):
+    """The filtered images the user excluded, in filtered order — the
+    points excluded_series runs over."""
+    return [path for path in filtered_paths if session.is_excluded(path)]
 
-    Sets ``session.temperature_uninvertible`` to the captures the
-    calibration found no root for — 0 on the time axis — so every
-    caller refreshes the Axes tab's gap note."""
-    paths = analysed_paths(session, filtered_paths)
-    rois = session.positive_rois
 
-    if not paths or not rois:
-        session.temperature_uninvertible = 0
+def step_ordinals(step_ids):
+    """(ordinals, labels) for a run of protocol step ids ("" for an
+    image without one): each id's 1-based position among the distinct
+    ids in order of first appearance (NaN for ""), and those distinct
+    ids in ordinal order — the step axis's tick labels.
 
-        return {}
+    Ordinals rather than the ids themselves, which are not numbers:
+    "1.10" follows "1.9"."""
+    positions = {}
+    ordinals = []
 
-    stat_cache = {}
-    # Named to leave the imported pixel_area() function reachable.
-    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
-    times = [session.stat_info(path, stat_cache)[1] for path in paths]
-    start_time = times[0]
+    for step_id in step_ids:
+        if not step_id:
+            ordinals.append(math.nan)
+            continue
+
+        positions.setdefault(step_id, len(positions) + 1)
+        ordinals.append(float(positions[step_id]))
+
+    return ordinals, list(positions)
+
+
+def step_ids(session, filtered_paths, stat_cache=None):
+    """Each filtered image's protocol step id, "" where its capture
+    names none."""
+    # Imported here: the capture details are read through Qt, which
+    # only the step axis needs — the rest of the module stays Qt-free.
+    from ..metadata import capture_step_id
+
+    return [
+        capture_step_id(path, session.stat_info(path, stat_cache)[0])
+        for path in filtered_paths
+    ]
+
+
+def step_tick_label(labels, x):
+    """The step axis's tick text at ``x``: the id of the step whose
+    ordinal it is, "" between steps or beyond them."""
+    index = round(x)
+
+    if index != x or not 1 <= index <= len(labels):
+        return ""
+
+    return labels[index - 1]
+
+
+def _x_values(session, filtered_paths, paths, stat_cache):
+    """(x values, uninvertible count): the x of each of ``paths``
+    (drawn from ``filtered_paths``) on the figure's axis — one mapping
+    for analysed and excluded images alike, so an excluded image's
+    point sits where it would plot.
+
+    Steps and frames number the filtered series, exclusions included,
+    so excluding an image renumbers nothing. Elapsed time runs from the
+    origin _elapsed picks, in the figure's time unit. Temperature is the heater
+    log's at each capture (NaN where the log does not cover it),
+    mapped back through the figure's calibration; the count is the
+    readings it found no root for, 0 on every other axis."""
     figure = session.figure
 
+    if figure.x_axis == "frame":
+        frames = {path: index for index, path in enumerate(filtered_paths, start=1)}
+
+        return [float(frames[path]) for path in paths], 0
+
+    if figure.x_axis == "step":
+        ordinals, _labels = step_ordinals(step_ids(session, filtered_paths, stat_cache))
+        ordinal_of = dict(zip(filtered_paths, ordinals))
+
+        return [ordinal_of[path] for path in paths], 0
+
+    times = [session.stat_info(path, stat_cache)[1] for path in paths]
+
     if figure.x_axis == "temperature":
-        x_values, uninvertible = calibrated_temperatures(
+        # The heater join runs on raw epoch seconds whatever the unit.
+        return calibrated_temperatures(
             figure,
             temperature_at(
                 session.heater_samples,
@@ -301,20 +498,224 @@ def derive_series(session, filtered_paths):
                 figure.heater_window_ms / 1000.0,
             ),
         )
-    else:
-        x_values = [capture_time - start_time for capture_time in times]
-        uninvertible = 0
 
-    session.temperature_uninvertible = uninvertible
+    return _elapsed(session, filtered_paths, times, stat_cache), 0
+
+
+def _elapsed(session, filtered_paths, epochs, stat_cache):
+    """``epochs`` as elapsed time in the figure's time unit from the
+    curves view's time origin: the earliest filtered capture while the
+    excluded points are shown, so none of them lands before zero, else
+    the earliest analysed one (the earliest filtered one when every
+    image is excluded).
+
+    The earliest by capture time, not series position: the series
+    runs in file-modification order, which a copied folder can
+    shuffle."""
+    if session.figure.show_excluded_points:
+        origin_paths = filtered_paths
+    else:
+        origin_paths = analysed_paths(session, filtered_paths) or filtered_paths
+
+    start_time = min(session.stat_info(path, stat_cache)[1] for path in origin_paths)
+    per_second = TIME_UNIT_PER_SECOND[session.figure.time_unit]
+
+    return [(epoch - start_time) * per_second for epoch in epochs]
+
+
+def _captures_on_log(session, filtered_paths, paths, stat_cache):
+    """([path], [x], [°C]) for ``paths``: each capture's elapsed time
+    and the heater log's reading there, joined through the figure's
+    sensor and window exactly as the temperature axis joins them."""
+    figure = session.figure
+    times = [session.stat_info(path, stat_cache)[1] for path in paths]
+    temperatures = temperature_at(
+        session.heater_samples,
+        figure.heater_sensor,
+        times,
+        figure.heater_window_ms / 1000.0,
+    )
+
+    return (
+        list(paths),
+        _elapsed(session, filtered_paths, times, stat_cache),
+        temperatures,
+    )
+
+
+def temperature_over_time(session, filtered_paths):
+    """(traces, analysed, excluded): the Temperature over time view's
+    data, x in the figure's time unit from the curves view's origin.
+
+    ``traces`` is {sensor: ([x], [°C])} for every sensor the heater
+    log carries plus HEATER_SENSOR_MEAN, over the filtered captures'
+    span widened each side by TEMPERATURE_VIEW_MARGIN_FRACTION of it
+    (TEMPERATURE_VIEW_MARGIN_MIN_S at least). ``analysed`` and
+    ``excluded`` are ([path], [x], [°C]) at those captures (see
+    _captures_on_log).
+
+    The log's raw reading throughout: the calibration maps the
+    temperature axis back to expected values, and a temperature
+    plotted as a value is never put through it."""
+    if not filtered_paths:
+        return {}, ([], [], []), ([], [], [])
+
+    stat_cache = {}
+    epochs = [session.stat_info(path, stat_cache)[1] for path in filtered_paths]
+    first, last = min(epochs), max(epochs)
+    margin = max(
+        (last - first) * TEMPERATURE_VIEW_MARGIN_FRACTION,
+        TEMPERATURE_VIEW_MARGIN_MIN_S,
+    )
+    traces = {}
+
+    for sensor in (*sensors_in(session.heater_samples), HEATER_SENSOR_MEAN):
+        sample_epochs, temperatures = sensor_trace(
+            session.heater_samples, sensor, first - margin, last + margin
+        )
+        traces[sensor] = (
+            _elapsed(session, filtered_paths, sample_epochs, stat_cache),
+            temperatures,
+        )
+
+    analysed = analysed_paths(session, filtered_paths)
+    excluded = excluded_paths(session, filtered_paths)
+
+    return (
+        traces,
+        _captures_on_log(session, filtered_paths, analysed, stat_cache),
+        _captures_on_log(session, filtered_paths, excluded, stat_cache),
+    )
+
+
+def _roi_stats_run(session, roi, paths, stat_cache):
+    """``roi``'s stats dict on each of ``paths``, None where uncomputed."""
+    return [
+        session.stats.get(session.cache_key(path, roi, stat_cache)) for path in paths
+    ]
+
+
+def _series_over(session, filtered_paths, paths):
+    """({roi_id: (name, [x], [value])}, uninvertible count) for
+    ``session.plot_stat`` over ``paths``, drawn from ``filtered_paths``
+    — the body derive_series and excluded_series share. NaN where an
+    (image, ROI) pair has no computed stats; the count is _x_values's.
+
+    The SERIES_STATS take their reference from the analysed images
+    either way, so an excluded image's point reads against the same
+    baseline as the curve it left — and, with the figure's
+    area_fit_method, against the same fitted area."""
+    rois = session.positive_rois
+
+    if not paths or not rois:
+        return {}, 0
+
+    stat_cache = {}
+    # Named to leave the imported pixel_area() function reachable.
+    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
+    analysed = analysed_paths(session, filtered_paths)
+    referenced = session.plot_stat in SERIES_STATS and paths != analysed
+    x_values, uninvertible = _x_values(session, filtered_paths, paths, stat_cache)
+    area_fit = None
+
+    method = session.figure.area_fit_method
+
+    if method != "none" and session.plot_stat in AREA_NORMALIZED_STATS:
+        area_fit = (
+            [session.stat_info(path, stat_cache)[1] for path in paths],
+            [session.stat_info(path, stat_cache)[1] for path in analysed],
+            [session.is_area_fit_excluded(path) for path in analysed],
+            method,
+        )
+
     series = {}
 
     for roi in rois:
-        stats_run = [
-            session.stats.get(session.cache_key(path, roi, stat_cache))
-            for path in paths
-        ]
-        values = roi_stat_values(stats_run, session.plot_stat, area_per_pixel)
+        reference_run = (
+            _roi_stats_run(session, roi, analysed, stat_cache) if referenced else None
+        )
+        values = roi_stat_values(
+            _roi_stats_run(session, roi, paths, stat_cache),
+            session.plot_stat,
+            area_per_pixel,
+            reference_run,
+            area_fit,
+        )
         series[roi.roi_id] = (roi.name, list(x_values), values)
+
+    return series, uninvertible
+
+
+def area_fit_series(session, filtered_paths):
+    """{roi_id: (name, [x], [area])}: each ROI's area_fit_curve, of the
+    figure's area_fit_method, at the analysed images, in the plotted
+    area unit against the figure's x axis — the fit the Area view draws
+    over the measured points. A ROI the curve cannot be fitted for is
+    left out, its area-normalised stats reading the per-image area
+    instead."""
+    rois = session.positive_rois
+    analysed = analysed_paths(session, filtered_paths)
+
+    if not analysed or not rois:
+        return {}
+
+    stat_cache = {}
+    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
+    times = [session.stat_info(path, stat_cache)[1] for path in analysed]
+    fit_excluded = [session.is_area_fit_excluded(path) for path in analysed]
+    x_values, _uninvertible = _x_values(session, filtered_paths, analysed, stat_cache)
+    method = session.figure.area_fit_method
+    fits = {}
+
+    for roi in rois:
+        fit = area_fit_curve(
+            _roi_stats_run(session, roi, analysed, stat_cache),
+            times,
+            method,
+            fit_excluded,
+        )
+
+        if fit is None:
+            continue
+
+        fits[roi.roi_id] = (
+            roi.name,
+            list(x_values),
+            [float(fit.predict(time)) * area_per_pixel for time in times],
+        )
+
+    return fits
+
+
+def derive_series(session, filtered_paths):
+    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
+    the analysed images, against the figure's x axis (see _x_values) —
+    so the fits downstream read in the axis's own terms (°C, a step,
+    minutes).
+    NaN where an (image, ROI) pair has no computed stats (line gaps).
+    User-excluded images are left out entirely (no gap: they are not
+    part of the analysis; excluded_series has them).
+
+    Sets ``session.temperature_uninvertible`` to the captures the
+    calibration found no root for — 0 on every other axis — so every
+    caller refreshes the Axes tab's gap note."""
+    series, uninvertible = _series_over(
+        session, filtered_paths, analysed_paths(session, filtered_paths)
+    )
+    session.temperature_uninvertible = uninvertible
+
+    return series
+
+
+def excluded_series(session, filtered_paths):
+    """derive_series over the user-excluded images instead — the points
+    the curves view draws faintly so they can be clicked back in. Its
+    x come from the same mapping, and its values follow
+    ``excluded_paths``; never fitted, smoothed or tested for
+    outliers."""
+    series, _uninvertible = _series_over(
+        session, filtered_paths, excluded_paths(session, filtered_paths)
+    )
 
     return series
 
@@ -350,13 +751,28 @@ def finite_values(series):
     return samples
 
 
-def subtracted_series(series):
+def _reference_values(reference, roi_id):
+    """The values of ``roi_id``'s curve in ``reference``, [] when it has
+    none."""
+    entry = reference.get(roi_id)
+
+    return [] if entry is None else entry[2]
+
+
+def subtracted_series(series, reference=None):
     """``series`` with each curve less its own first finite value, so
-    every ROI starts at zero and shows change from baseline. NaN stays
-    NaN; a curve with no finite value passes through untouched."""
+    every ROI starts at zero and shows change from baseline — or less
+    the first finite value of its curve in ``reference``, which lets
+    excluded points follow the curve they left. NaN stays NaN; a curve
+    with no finite value to subtract passes through untouched."""
+    reference = series if reference is None else reference
     shifted = {}
+
     for roi_id, (name, elapsed, values) in series.items():
-        first = next((value for value in values if value == value), None)
+        first = next(
+            (value for value in _reference_values(reference, roi_id) if value == value),
+            None,
+        )
         shifted[roi_id] = (
             name,
             elapsed,
@@ -364,6 +780,7 @@ def subtracted_series(series):
             if first is None
             else [value if value != value else value - first for value in values],
         )
+
     return shifted
 
 
@@ -535,15 +952,21 @@ def background_ref_corrected_series(session, series):
     return corrected
 
 
-def normalized_series(series):
+def normalized_series(series, reference=None):
     """``series`` with each ROI stretched to 0-100% of its own finite
-    range, so curves of wildly different brightness can be compared for
-    shape and timing. NaN stays NaN, so a gap stays a gap; a curve with
-    no range (min == max) sits flat at 0%, there being nothing to
-    stretch and no span to divide by."""
+    range — or of its curve's range in ``reference``, which lets
+    excluded points follow the curve they left — so curves of wildly
+    different brightness can be compared for shape and timing. NaN
+    stays NaN, so a gap stays a gap; a curve with no range (min == max)
+    sits flat at 0%, there being nothing to stretch and no span to
+    divide by."""
+    reference = series if reference is None else reference
     scaled = {}
+
     for roi_id, (name, elapsed, values) in series.items():
-        finite = [value for value in values if value == value]
+        finite = [
+            value for value in _reference_values(reference, roi_id) if value == value
+        ]
         low = min(finite) if finite else 0.0
         span = (max(finite) - low) if finite else 0.0
         scaled[roi_id] = (
@@ -556,6 +979,7 @@ def normalized_series(series):
                 for value in values
             ],
         )
+
     return scaled
 
 
@@ -570,6 +994,18 @@ def visible_series(session, series):
         if roi is not None and roi.style.visible:
             shown[roi_id] = entry
     return shown
+
+
+def in_visibility_order(session, roi_ids):
+    """``roi_ids`` with the ones in the session's visibility_order moved
+    to the end in that order — the ROI whose eye was switched on last
+    comes last — and the never-toggled ones ahead of them in their given
+    order. Ids in visibility_order but not in ``roi_ids`` are skipped."""
+    roi_ids = list(roi_ids)
+    toggled = [roi_id for roi_id in session.visibility_order if roi_id in roi_ids]
+    untoggled = [roi_id for roi_id in roi_ids if roi_id not in toggled]
+
+    return untoggled + toggled
 
 
 #: Smoothers the plot offers, in dropdown order.
@@ -713,10 +1149,45 @@ def analysed_series(session, filtered_paths, visible_only=True):
     Smoothing is NOT here: it is a display aid, and a fit of a smoothed
     curve reports a goodness it did not earn.
     """
+    series, flags, _excluded, _area_fit = _corrected_series(
+        session, filtered_paths, visible_only, with_excluded=False
+    )
+
+    return series, flags
+
+
+def analysed_and_excluded_series(session, filtered_paths):
+    """analysed_series()'s (series, outlier flags) for the visible ROIs,
+    plus excluded_series() through the same corrections — the
+    background references per image, the baseline shift and the
+    normalisation each taking its parameters from the analysed curve,
+    so an excluded point lands where it would sit were it included
+    without moving anything it is not part of. The outlier test passes
+    them by: they are not part of the analysis it tests.
+
+    Last, the Area view's area_fit_series through those corrections
+    too, so each line runs over the points it was fitted to ({} unless
+    the figure has an area_fit_method and the plotted stat is "area")."""
+    return _corrected_series(session, filtered_paths, True, with_excluded=True)
+
+
+def _corrected_series(session, filtered_paths, visible_only, with_excluded):
+    """(series, outlier flags, excluded, area fit): analysed_series()'s
+    pipeline, carrying excluded_series() and the Area view's
+    area_fit_series() along when ``with_excluded`` ({} otherwise)."""
     figure = session.figure
     series = derive_series(session, filtered_paths)
+    excluded = excluded_series(session, filtered_paths) if with_excluded else {}
+    area_fit = (
+        area_fit_series(session, filtered_paths)
+        if with_excluded
+        and figure.area_fit_method != "none"
+        and session.plot_stat == "area"
+        else {}
+    )
     flags = {}
     steps = []
+
     if figure.remove_outliers:
         series, flags = without_outliers(
             series, figure.outlier_threshold, figure.outlier_window
@@ -729,25 +1200,42 @@ def analysed_series(session, filtered_paths, visible_only=True):
             f"window {figure.outlier_window}) dropped "
             f"{dropped}"
         )
+
     if figure.subtract_background_ref:
         # After the outliers, before the visibility filter: the
         # references are the very curves a user hides once they are
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
         series = background_ref_corrected_series(session, series)
+        # Per image, so the excluded points read their own references.
+        excluded = background_ref_corrected_series(session, excluded)
+        area_fit = background_ref_corrected_series(session, area_fit)
         marked = sum(1 for roi in session.positive_rois if roi.is_background_ref)
         steps.append(f"background-ref({marked} marked)")
+
     if visible_only:
         series = visible_series(session, series)
+        excluded = visible_series(session, excluded)
+        area_fit = visible_series(session, area_fit)
+
+    # The excluded points and the area-fit lines go first in each
+    # step: their parameters are the curve's as it stood before it.
     if figure.subtract_first:
+        excluded = subtracted_series(excluded, reference=series)
+        area_fit = subtracted_series(area_fit, reference=series)
         series = subtracted_series(series)
         steps.append("subtract-first")
+
     if figure.normalize:
+        excluded = normalized_series(excluded, reference=series)
+        area_fit = normalized_series(area_fit, reference=series)
         series = normalized_series(series)
         steps.append("normalise")
+
     logger.debug(
         f"Series for {len(series)} ROIs over {len(filtered_paths)} "
         f"images, stat={session.plot_stat}"
         + (f"; {'; '.join(steps)}" if steps else "; no corrections")
     )
-    return series, flags
+
+    return series, flags, excluded, area_fit

@@ -17,11 +17,15 @@ clear, a load), and a command still holding the old one would edit a list
 nobody looks at (#755). Each list change resolves ``session.rois`` live
 and lands as one list change, so a multi-ROI step notifies once."""
 
+# Standard library imports.
+import math
+
 # Enthought library imports.
 from pyface.undo.api import AbstractCommand
-from traits.api import Any, Float, Instance, Int, List, Tuple
+from traits.api import Any, Bool, Enum, Float, Instance, Int, List, Str, Tuple
 
 # Local imports.
+from .consts import ROI_ABSENCE_SCOPES
 from .roi_model import AnalysisSession, Roi
 
 
@@ -50,6 +54,12 @@ def _insert_into_session(session, pairs):
         rois.insert(min(index, len(rois)), roi)
 
     session.rois[:] = rois
+
+
+def _copied(overrides):
+    """A deep copy of an {anchor: geometry} dict, so a snapshot shares
+    no list with the ROI it was taken from."""
+    return {anchor: list(geometry) for anchor, geometry in overrides.items()}
 
 
 class _SessionCommand(AbstractCommand):
@@ -128,27 +138,278 @@ class EditRoiCommand(_SessionCommand):
     #: The geometry the gesture left the shape with.
     geometry = List(Float)
 
-    #: The ROI's base geometry and overrides before the edit.
-    _before = Tuple(List, Any)
+    #: The ROI's base geometry, overrides and single-image overrides
+    #: before the edit.
+    _before = Tuple(List, Any, Any)
 
     def _name_default(self):
         return f"Edit {self.roi.name}"
 
     def do(self):
-        overrides = {
-            anchor: list(geometry) for anchor, geometry in self.roi.overrides.items()
-        }
-        self._before = (list(self.roi.geometry), overrides)
+        self._before = (
+            list(self.roi.geometry),
+            _copied(self.roi.overrides),
+            _copied(self.roi.local_overrides),
+        )
         self.redo()
 
     def undo(self):
-        # Fresh list and dict objects: the canvas follows ``geometry``
-        # and ``overrides.items`` by assignment.
-        geometry, overrides = self._before
+        # Fresh list and dict objects: the canvas follows ``geometry``,
+        # ``overrides.items`` and ``local_overrides`` by assignment.
+        geometry, overrides, local_overrides = self._before
         self.roi.geometry = list(geometry)
-        self.roi.overrides = {
-            anchor: list(values) for anchor, values in overrides.items()
-        }
+        self.roi.overrides = _copied(overrides)
+        self.roi.local_overrides = _copied(local_overrides)
 
     def redo(self):
         self.roi.apply_edit(self.capture_time, list(self.geometry))
+
+
+#: The undo stack's wording of each HideRoiOnImageCommand scope.
+_ABSENCE_SCOPE_WORDS = {
+    "image": "on this image",
+    "left": "on earlier images",
+    "right": "on later images",
+}
+
+
+class HideRoiOnImageCommand(_SessionCommand):
+    """Delete an ROI from one image, or from every image before or after
+    it, leaving the others as they were — or, with ``restore``, undo
+    such a deletion: put it back on that image, or clear the range."""
+
+    #: The ROI taken off (or put back on) the images.
+    roi = Instance(Roi)
+
+    #: Capture time of the image.
+    capture_time = Float()
+
+    #: That image alone (absent_at), every image before it
+    #: (absent_until) or every image after it (absent_from). The ranges
+    #: stop one float step short of the image, so it keeps the ROI.
+    #: Repeating "right" from another image widens the range — the
+    #: earliest start wins — and "left" likewise keeps the latest end.
+    scope = Enum(*ROI_ABSENCE_SCOPES)
+
+    #: Undo that deletion instead of making it.
+    restore = Bool(False)
+
+    #: The ROI's absences before the step: (absent_at, absent_from,
+    #: absent_until).
+    _before = Tuple(List, Float, Float)
+
+    def _name_default(self):
+        verb = "Restore" if self.restore else "Delete"
+
+        return f"{verb} {self.roi.name} {_ABSENCE_SCOPE_WORDS[self.scope]}"
+
+    def do(self):
+        roi = self.roi
+        self._before = (list(roi.absent_at), roi.absent_from, roi.absent_until)
+        self.redo()
+
+    def undo(self):
+        absent_at, absent_from, absent_until = self._before
+        # A fresh list: the canvas and the table follow it by assignment.
+        self.roi.trait_set(
+            absent_at=list(absent_at),
+            absent_from=absent_from,
+            absent_until=absent_until,
+        )
+
+    def redo(self):
+        roi, capture_time = self.roi, self.capture_time
+
+        if self.scope == "right":
+            roi.absent_from = (
+                math.nan
+                if self.restore
+                else _bound(
+                    min, roi.absent_from, math.nextafter(capture_time, math.inf)
+                )
+            )
+        elif self.scope == "left":
+            roi.absent_until = (
+                math.nan
+                if self.restore
+                else _bound(
+                    max, roi.absent_until, math.nextafter(capture_time, -math.inf)
+                )
+            )
+        else:
+            times = [time for time in roi.absent_at if time != capture_time]
+            roi.absent_at = times if self.restore else sorted([*times, capture_time])
+
+
+def _bound(pick, current, bound):
+    """``bound``, or ``pick`` of it and ``current`` when a range is
+    already set (``current`` not NaN)."""
+    return bound if math.isnan(current) else pick(current, bound)
+
+
+def merged_overrides(history, correction, capture_time):
+    """``history``'s forward overrides with ``correction``'s definitions
+    laid over them, so the merged shape on each image is the
+    correction's wherever it defined one and the history's elsewhere.
+
+    The correction's definitions are its forward overrides plus its base
+    geometry from its base anchor (unless that is the shown image, where
+    the merge gives it as the single-image shape instead). Between its
+    first and last anchor the correction holds, so the history's anchors
+    in there go; past its last anchor any later history anchor takes
+    over again, as the latest anchor always wins."""
+    spans = {}
+
+    if correction.base_anchor != capture_time:
+        spans[correction.base_anchor] = list(correction.geometry)
+
+    spans.update(_copied(correction.overrides))
+    overrides = _copied(history.overrides)
+
+    if spans:
+        first, last = min(spans), max(spans)
+        overrides = {
+            anchor: geometry
+            for anchor, geometry in overrides.items()
+            if not first < anchor < last
+        }
+        overrides.update(spans)
+
+    return overrides
+
+
+def merged_absences(history, correction, capture_time):
+    """(absent_at, absent_from, absent_until) of two merged ROIs: absent
+    only where both were, and present on the shown image (captured at
+    ``capture_time``). None when that needs a hole in a range covering
+    the image from both sides.
+
+    Exact where it can be with one point list and two half-open ranges:
+    a point either ROI was deleted at stays when the other was deleted
+    there too (by a point or a range); a "right" range stays only if both
+    had one (the later start), a "left" one likewise (the earlier end).
+    One ROI's "right" crossed with the other's "left" is a bounded
+    stretch the two ranges cannot express: it is left out, the ROI
+    shown there rather than lost. A range starting or ending exactly on
+    the shown image (an older config's, which took that image too) is
+    moved just past it, as Right / Left Del store theirs, keeping every
+    other image it covered — captures still to come included."""
+    points = {*history.absent_at, *correction.absent_at}
+    absent_at = sorted(
+        time
+        for time in points
+        if time != capture_time
+        and history.absent_by(time)
+        and correction.absent_by(time)
+    )
+    absent_from = (
+        max(history.absent_from, correction.absent_from)
+        if not math.isnan(history.absent_from + correction.absent_from)
+        else math.nan
+    )
+    absent_until = (
+        min(history.absent_until, correction.absent_until)
+        if not math.isnan(history.absent_until + correction.absent_until)
+        else math.nan
+    )
+
+    if capture_time >= absent_from:
+        if capture_time > absent_from:
+            return None
+
+        absent_from = math.nextafter(capture_time, math.inf)
+
+    if capture_time <= absent_until:
+        if capture_time < absent_until:
+            return None
+
+        absent_until = math.nextafter(capture_time, -math.inf)
+
+    return absent_at, absent_from, absent_until
+
+
+class MergeRoiOnImageCommand(_SessionCommand):
+    """Merge two ROIs' definitions into one, per image: ``roi`` (the
+    history) survives with its identity — id, plot line, CSV column,
+    style, expected values — takes ``merged_name``, and on every image has
+    ``replacement``'s shape (the correction drawn on the shown image)
+    where that defined one and its own elsewhere (merged_overrides);
+    on the shown image it has the correction's shape. It is absent only
+    where both were (merged_absences). The correction goes, untouched,
+    so an undo puts it back exactly."""
+
+    #: The surviving ROI, with the history.
+    roi = Instance(Roi)
+
+    #: The correction merged into it and removed from the session.
+    replacement = Instance(Roi)
+
+    #: Capture time of the shown image.
+    capture_time = Float()
+
+    #: The surviving ROI's name after the merge — the name the user
+    #: typed ('' keeps its own). Not ``name``: that is the command's own
+    #: undo-stack label.
+    merged_name = Str()
+
+    #: ``roi``'s name, overrides, single-image shapes and absences before
+    #: the merge: (name, overrides, local_overrides, absent_at,
+    #: absent_from, absent_until).
+    _before = Tuple(Str, Any, Any, List, Float, Float)
+
+    #: Where the replacement stood in the ROI list, for the undo.
+    _pairs = List(Tuple(Int, Instance(Roi)))
+
+    def _name_default(self):
+        return f"Merge {self.replacement.name} into {self.merged_name or self.roi.name}"
+
+    def do(self):
+        roi = self.roi
+        self._before = (
+            roi.name,
+            _copied(roi.overrides),
+            _copied(roi.local_overrides),
+            list(roi.absent_at),
+            roi.absent_from,
+            roi.absent_until,
+        )
+        self.redo()
+
+    def undo(self):
+        name, overrides, local_overrides, absent_at, absent_from, absent_until = (
+            self._before
+        )
+        self.roi.trait_set(
+            name=name,
+            overrides=_copied(overrides),
+            local_overrides=_copied(local_overrides),
+            absent_at=list(absent_at),
+            absent_from=absent_from,
+            absent_until=absent_until,
+        )
+        _insert_into_session(self.session, self._pairs)
+
+    def redo(self):
+        roi, replacement, capture_time = self.roi, self.replacement, self.capture_time
+        absences = merged_absences(roi, replacement, capture_time)
+        # The controller checks first; a stale redo keeps the history's.
+        absent_at, absent_from, absent_until = absences or (
+            list(roi.absent_at),
+            roi.absent_from,
+            roi.absent_until,
+        )
+        # Fresh dicts and lists: the canvas and the table follow them by
+        # assignment.
+        roi.trait_set(
+            name=self.merged_name or roi.name,
+            overrides=merged_overrides(roi, replacement, capture_time),
+            local_overrides={
+                **_copied(roi.local_overrides),
+                **_copied(replacement.local_overrides),
+                capture_time: replacement.effective_geometry(capture_time),
+            },
+            absent_at=absent_at,
+            absent_from=absent_from,
+            absent_until=absent_until,
+        )
+        self._pairs = _remove_from_session(self.session, [replacement])

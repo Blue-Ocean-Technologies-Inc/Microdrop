@@ -100,6 +100,18 @@ SLIDESHOW_INTERVAL_MS = 1_500
 #: back).
 CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
 
+#: PNG text-chunk key of the JSON capture details the fluorescence
+#: plugin embeds in every capture, and the field in it naming the
+#: protocol step the capture was taken in (e.g. "1.2"; null in free
+#: mode). Mirrors CAPTURE_METADATA_KEY in the fluorescence plugin's
+#: fluorescence_controls_ui/consts.py, which the viewer cannot import.
+CAPTURE_METADATA_KEY = "CaptureDetails"
+CAPTURE_STEP_ID_FIELD = "step_dotted_id"
+
+#: Capture files whose protocol step is remembered at once, keyed by
+#: (path, mtime) — comfortably more than one experiment's captures.
+CAPTURE_STEP_CACHE_SIZE = 8192
+
 #: Decoded frames kept in the viewer's navigation cache. Full 16-bit
 #: frames run ~20 MB decoded, so this bounds the cache near 160 MB while
 #: making back-and-forth seeking over recent frames instant.

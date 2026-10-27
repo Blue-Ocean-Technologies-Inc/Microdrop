@@ -53,6 +53,8 @@ from .consts import (
     AI_MIN_SIZE_DEFAULT_PX,
     AI_SIGNIFICANCE_DEFAULT,
     AI_SIZE_FILTER_CEILING_PX,
+    BAR_GAP,
+    BAR_GAP_BOUNDS,
     BUTTER_CUTOFF,
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER,
@@ -64,13 +66,23 @@ from .consts import (
     COPY_TREND_TOOLTIP,
     EXPECTED_METRIC_LABELS,
     EXPECTED_METRICS,
+    FIGURE_FONT_SIZE_BOUNDS_PT,
+    FIGURE_FONT_SIZE_PT,
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
+    LINE_STYLE_NAMES,
+    MARKER_NAMES,
+    MEASURE_INSIDE_BOUNDS_PERCENT,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD,
     OUTLIER_WINDOW_BOUNDS_PTS,
     OUTLIER_WINDOW_PTS,
+    RIM_SEARCH_BOUNDS_PX,
+    RIM_SEARCH_PX_DEFAULT,
+    RIM_WIDTH_BOUNDS_PX,
+    RIM_WIDTH_PX_DEFAULT,
     RING_GAP_BOUNDS_PX,
     RING_GAP_PX,
     RING_THICKNESS_BOUNDS_PX,
@@ -83,6 +95,7 @@ from .consts import (
     SAVGOL_WINDOW_BOUNDS_PTS,
     SAVGOL_WINDOW_PTS,
     SHAPE_STATS,
+    TIME_UNITS,
     VIEW_HOLDING_MODES,
     VIEW_MODE_LABELS_BY_X_AXIS,
     VIEW_MODES,
@@ -93,6 +106,7 @@ from .fit_presets import choices_for
 from .perspective import perspective_matrix
 from .plot_series import SMOOTH_METHODS, is_calibrated, trend_fit, trend_points
 from .sam_detect import Candidate
+from .temperature_style import TemperaturePlotStyle
 
 #: The Roi trait holding the user's expected value of each
 #: EXPECTED_METRICS landmark. The zero crossing's keeps its original
@@ -113,7 +127,15 @@ ROI_NAME_PATTERN = r"^{prefix} (\d+)$"
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
 #: area-statistics design note). "area" is the ROI's own size, in
-#: the calibrated unit. The droplet-shape quantities close the list.
+#: the calibrated unit.
+#: The area-normalised pair takes out what a shrinking droplet does to
+#: the mean: evaporation keeps the fluorophore count N while the area
+#: A shrinks, so the mean (∝ N/A) rises though the integrated signal
+#: (mean × A ∝ N) stays flat — and per area (∝ N/A²) would only make
+#: it worse. Dividing the integrated signal by the ROI's area on the
+#: first analysed image instead, integrated / A_ref, keeps intensity
+#: units, equals the mean on that first image, and plots flat under
+#: pure concentration. The droplet-shape quantities close the list.
 PLOT_STATS = (
     "mean",
     "bg_corrected",
@@ -125,6 +147,8 @@ PLOT_STATS = (
     "bg_integrated",
     "per_area",
     "bg_per_area",
+    "area_normalized",
+    "bg_area_normalized",
     "area",
 ) + SHAPE_STATS
 
@@ -133,17 +157,19 @@ class RoiStyle(HasTraits):
     """Plot styling for one ROI's line (persisted per experiment)."""
 
     color = Str("#1f77b4")
-    line_style = Enum("solid", "dashed", "dotted", "dashdot")
-    marker = Enum("none", ".", "o", "s", "^", "x")
+    line_style = Enum(*LINE_STYLE_NAMES)
+    marker = Enum(*MARKER_NAMES)
     marker_size = Float(4.0)
 
-    #: Whether this ROI is drawn on the figure at all, and how opaque —
-    #: the device viewer's eye/alpha pair, as a percentage. Both are
-    #: display-only: a hidden ROI is still computed, still listed in the
-    #: stats table, and still exported to CSV. The one exception is a
-    #: negative mask's eye: a hidden mask is not subtracted (see
-    #: AnalysisSession.negatives_for). Range needs the explicit
-    #: default, or it would start every ROI fully transparent.
+    #: Whether this ROI is drawn at all, and how opaque on the figure —
+    #: the device viewer's eye/alpha pair, as a percentage. A hidden ROI
+    #: is drawn neither on the figure nor on the image, where it cannot
+    #: be clicked, selected or edited either, so an ROI it overlapped
+    #: can be. Measurement is untouched: a hidden ROI is still computed,
+    #: still listed in the stats table, and still exported to CSV. The
+    #: one exception is a negative mask's eye: a hidden mask is not
+    #: subtracted (see AnalysisSession.negatives_for). Range needs the
+    #: explicit default, or it would start every ROI fully transparent.
     visible = Bool(True)
     alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
 
@@ -199,6 +225,11 @@ class FigureSettings(HasTraits):
     #: outliers, uncomputed images) instead of breaking it. Display
     #: only — the fits and the CSV keep the gaps.
     interpolate_gaps = Bool(True)
+    #: Draw the excluded images' points as faint hollow markers that
+    #: a click brings back into the analysis. Display only: they are
+    #: never fitted and never move the axis limits — but while shown,
+    #: the earliest of them can set the elapsed-time origin.
+    show_excluded_points = Bool(True)
 
     #: Display-only smoothing of the drawn curves. The fits keep the
     #: unsmoothed points: neighbouring values in a smoothed curve are
@@ -219,7 +250,19 @@ class FigureSettings(HasTraits):
     #: Subtract the mean of the ROIs marked as background references,
     #: per image. Stacks with the ring correction and subtract_first.
     subtract_background_ref = Bool(False)
+    #: The curve each ROI's pixel count is fitted with against capture
+    #: time (the analysed images less the area-fit-excluded ones) for
+    #: the area-normalised stats to read their area off, rather than
+    #: the noisy per-image count; the Area view draws it over its
+    #: points. "none" leaves the per-image count. Its own choice,
+    #: independent of fit_method and trend_method.
+    area_fit_method = Enum(*FIT_METHODS)
     show_legend = Bool(True)
+    #: Font size (pt) of the axis titles and tick labels; the legend
+    #: and the notes on the figure scale with it.
+    font_size = Range(*FIGURE_FONT_SIZE_BOUNDS_PT, FIGURE_FONT_SIZE_PT, mode="spinner")
+    #: The empty share of each ROI's slot between the bar views' bars.
+    bar_gap = Range(*BAR_GAP_BOUNDS, BAR_GAP)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)
     #: Mark where the fitted curve's second derivative peaks/troughs.
@@ -255,11 +298,16 @@ class FigureSettings(HasTraits):
     #: Which fit the Actual vs expected view's trend line uses.
     trend_method = Enum(*TREND_METHODS)
 
-    #: What the curves are plotted against: elapsed capture time, or
-    #: the heater log's temperature at each capture. The swap happens
-    #: in derive_series, so the fits follow it — a melt curve's
-    #: midpoint comes out as a °C rather than a second.
+    #: What the curves are plotted against: elapsed capture time, the
+    #: heater log's temperature at each capture, the protocol step it
+    #: was taken in, or its frame number. The swap happens in
+    #: derive_series, so the fits follow it — a melt curve's midpoint
+    #: comes out as a °C rather than a second.
     x_axis = Enum(*X_AXIS_MODES)
+    #: The time axis's unit, applied in derive_series so the fits and
+    #: their landmarks read in it too. The heater join and the CSV's
+    #: elapsed_sec stay in seconds.
+    time_unit = Enum(*TIME_UNITS)
     #: Which thermistor the temperature axis reads; "mean" averages
     #: every sensor on each log line.
     heater_sensor = Str(HEATER_SENSOR_MEAN)
@@ -372,14 +420,22 @@ class PerspectiveCorrection(HasTraits):
 
 
 class BackgroundRing(HasTraits):
-    """The annulus each ROI's background is read from (persisted per
-    experiment). These change what is measured, so they are part of the
-    stats cache key."""
+    """The annulus each ROI's background is read from, and how much of
+    the ROI inside it is measured (persisted per experiment). These
+    change what is measured, so they are part of the stats cache key."""
 
     #: Pixels between the ROI's edge and the ring — fluorescence bleeds
     #: past the boundary and that halo is not background.
     gap_px = Range(*RING_GAP_BOUNDS_PX, RING_GAP_PX, mode="spinner")
     thickness_px = Range(*RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, mode="spinner")
+
+    #: Share of each ROI's equivalent radius that is measured: below 100
+    #: a band along the boundary is left out, so a droplet's bright rim
+    #: does not enter its mean (roi_compute.inset_mask).
+    inside_percent = Range(
+        *MEASURE_INSIDE_BOUNDS_PERCENT, MEASURE_INSIDE_PERCENT_DEFAULT, mode="spinner"
+    )
+
     show_on_canvas = Bool(True)
 
 
@@ -415,6 +471,32 @@ class Roi(HasTraits):
     #: anchor capture time -> geometry; an override applies from its
     #: anchor forward until the next override.
     overrides = Dict(Float, List)
+
+    #: capture time -> geometry applying on that one image alone, over
+    #: any forward override and the base — a shape redrawn for a single
+    #: image. Not drift: the drift reset (clear_overrides) leaves it.
+    #: Replaced, never mutated in place: the canvas and the table follow
+    #: it by assignment.
+    local_overrides = Dict(Float, List)
+
+    #: Capture times of the images the ROI was deleted from one at a
+    #: time (see applies_at): there it is not drawn, selectable or
+    #: measured — a positive ROI's curve gaps at the image, a negative
+    #: mask cuts nothing from it. Replaced, never mutated in place: the
+    #: canvas and the table follow it by assignment.
+    absent_at = List(Float)
+
+    #: The ROI is deleted from every image captured at or after
+    #: ``absent_from`` (a "right" range), and at or before
+    #: ``absent_until`` (a "left" one) — ranges, so captures still to
+    #: arrive in a running experiment are covered too. NaN: no such
+    #: range. Both bounds are inclusive: Right / Left Del store the shown
+    #: image's capture time moved one float step away from it
+    #: (math.nextafter), so the range stops short of that image, while
+    #: configs from versions whose ranges took the shown image too keep
+    #: meaning just that.
+    absent_from = Float(math.nan)
+    absent_until = Float(math.nan)
 
     #: Plot styling (line color/style/marker); persisted with the ROI.
     style = Instance(RoiStyle, ())
@@ -459,17 +541,45 @@ class Roi(HasTraits):
 
     def applies_at(self, capture_time):
         """Whether this ROI is in force on an image captured at
-        ``capture_time``. A positive ROI always applies; a negative mask
-        applies from the image it was drawn on (its base_anchor) onward,
-        and on earlier images is neither drawn nor subtracted. A mask
-        created with no image shown has a 0.0 anchor, so applies to
+        ``capture_time``. Not on an image it was deleted from, alone
+        (absent_at) or by a range (absent_from / absent_until; see
+        absent_by). Otherwise a positive ROI always applies; a negative
+        mask applies from the image it was drawn on (its base_anchor)
+        onward, and on earlier images is neither drawn nor subtracted. A
+        mask created with no image shown has a 0.0 anchor, so applies to
         every image."""
+        if self.absent_by(capture_time):
+            return False
+
         return not self.is_negative or capture_time >= self.base_anchor
+
+    def absent_by(self, capture_time):
+        """Which deletions take the ROI off the image captured at
+        ``capture_time`` (ROI_ABSENCE_SCOPES): "image" for that image
+        alone, "left" for the range up to ``absent_until`` and "right"
+        for the one from ``absent_from``. Empty where it is not deleted.
+        NaN never compares, so an unset range covers nothing."""
+        scopes = []
+
+        if capture_time in self.absent_at:
+            scopes.append("image")
+
+        if capture_time <= self.absent_until:
+            scopes.append("left")
+
+        if capture_time >= self.absent_from:
+            scopes.append("right")
+
+        return scopes
 
     def effective_geometry(self, capture_time):
         """The geometry in force for an image captured at
-        ``capture_time``: the override with the greatest anchor at or
-        before it, else the base geometry."""
+        ``capture_time``: its own single-image override, else the
+        forward override with the greatest anchor at or before it, else
+        the base geometry."""
+        if capture_time in self.local_overrides:
+            return list(self.local_overrides[capture_time])
+
         anchors = [anchor for anchor in self.overrides if anchor <= capture_time]
         if anchors:
             return list(self.overrides[max(anchors)])
@@ -477,9 +587,15 @@ class Roi(HasTraits):
 
     def apply_edit(self, capture_time, geometry):
         """Record an edit made while viewing the image captured at
-        ``capture_time``: at or before the base anchor it updates the
+        ``capture_time``: on an image with its own single-image shape it
+        edits that shape, at or before the base anchor it updates the
         base, later it upserts a forward override."""
-        if capture_time <= self.base_anchor:
+        if capture_time in self.local_overrides:
+            self.local_overrides = {
+                **self.local_overrides,
+                capture_time: list(geometry),
+            }
+        elif capture_time <= self.base_anchor:
             self.geometry = list(geometry)
         else:
             self.overrides[capture_time] = list(geometry)
@@ -566,6 +682,21 @@ class AnalysisSession(HasTraits):
         """Whether analysis skips the image at ``path``."""
         return Path(path).name in self.excluded_images
 
+    #: Filenames the area fit alone leaves out: still analysed, plotted
+    #: and exported, but not part of the curve the figure's
+    #: area_fit_method reads each ROI's area from.
+    area_fit_excluded_images = List(Str)
+
+    def is_area_fit_excluded(self, path):
+        """Whether the area fit leaves out the image at ``path``."""
+        return Path(path).name in self.area_fit_excluded_images
+
+    #: ROI ids in the order their eye was last switched on, the most
+    #: recent last; switching an eye off drops the id. ROIs never
+    #: toggled (shown since load, or newly drawn) are not listed. The
+    #: fastest-change bars follow it, untoggled ROIs first.
+    visibility_order = List(Str)
+
     #: (path str, mtime, roi_id, kind, geometry tuple) -> stats dict.
     #: The geometry in the key makes invalidation implicit: an edit only
     #: misses on the images its override actually covers.
@@ -629,6 +760,9 @@ class AnalysisSession(HasTraits):
     #: User-typed points the Actual vs expected view plots and fits
     #: beside the ROIs' own.
     custom_points = List(Instance(CustomPoint))
+
+    #: How the Temperature over time view draws the heater log.
+    temperature_style = Instance(TemperaturePlotStyle, ())
 
     #: The Actual vs expected trend — actual = f(expected) unless flipped —
     #: None when there is nothing to fit. Set by RoiAnalysisModel; never
@@ -714,26 +848,49 @@ class AnalysisSession(HasTraits):
         the same path for every ROI."""
         stat_cache = {} if stat_cache is None else stat_cache
         mtime, capture_time = self.stat_info(path, stat_cache)
+        # An ROI deleted on this image alone has no geometry here, so its
+        # key matches no stats (a gap) and is never dispatched (see
+        # measures); restoring it finds its old stats under the old key.
+        geometry = (
+            tuple(roi.effective_geometry(capture_time))
+            if roi.applies_at(capture_time)
+            else None
+        )
 
         return (
             str(path),
             mtime,
             roi.roi_id,
             roi.kind,
-            tuple(roi.effective_geometry(capture_time)),
+            geometry,
             self.correction_for(path, stat_cache),
         )
 
+    def measures(self, path, roi, stat_cache=None):
+        """Whether ``roi`` (a positive one) is measured on ``path`` — not
+        when it was deleted from that image alone. The batch and the
+        instant compute skip the pairs it rules out."""
+        return roi.applies_at(self.stat_info(path, stat_cache)[1])
+
+    def absent_on(self, path):
+        """The ROIs deleted from ``path``'s image — alone or as part of
+        a range of images."""
+        capture_time = self.stat_info(path)[1]
+
+        return [roi for roi in self.rois if roi.absent_by(capture_time)]
+
     def correction_key(self):
         """Everything about how the image is treated before a stat is
-        read off it — the ring, the rolling ball that runs before it, and
-        the perspective warp that runs first. One tuple, so the cache key
-        and the work item cannot drift apart."""
+        read off it — the ring, the rolling ball that runs before it,
+        the perspective warp that runs first, and the share of each ROI
+        measured. One tuple, so the cache key and the work item cannot
+        drift apart."""
         return (
             self.ring.gap_px,
             self.ring.thickness_px,
             self.ball.effective_radius(),
             self.perspective.effective_matrix(),
+            self.ring.inside_percent,
         )
 
     def negatives_for(self, path, stat_cache=None):
@@ -755,15 +912,21 @@ class AnalysisSession(HasTraits):
         )
 
     def correction_for(self, path, stat_cache=None):
-        """correction_key() plus the negative masks in force for
-        ``path`` — the work item's correction tuple, whose last element
-        compute_image_stats takes as ``negatives``."""
-        return self.correction_key() + (self.negatives_for(path, stat_cache),)
+        """correction_key() with the negative masks in force for
+        ``path`` slotted in before the measured share — the work item's
+        correction tuple, spread into compute_image_stats in its
+        parameter order (..., negatives, inside_percent). The share
+        comes last because it was added last: a persisted key from
+        before it existed is padded at the end (roi_store)."""
+        *settings, inside_percent = self.correction_key()
+
+        return (*settings, self.negatives_for(path, stat_cache), inside_percent)
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry, is_negative), ...] in force
-        for ``path`` — what the canvas draws for that image. A mask drawn
-        on a later image than ``path`` has no row (Roi.applies_at)."""
+        for ``path`` — what the canvas draws, and hit-tests, for that
+        image. An ROI hidden with its eye has no row, and neither has one
+        not in force there (Roi.applies_at)."""
         capture_time = capture_timestamp(path)
 
         return [
@@ -775,7 +938,7 @@ class AnalysisSession(HasTraits):
                 roi.is_negative,
             )
             for roi in self.rois
-            if roi.applies_at(capture_time)
+            if roi.style.visible and roi.applies_at(capture_time)
         ]
 
 
@@ -848,7 +1011,21 @@ class RoiAnalysisModel(HasTraits):
     #: Opens the perspective-definition window.
     define_perspective_button = Button()
     edit_mode = Bool(False)
+
+    #: Delete the selected ROI from the shown image (outright with none
+    #: shown) — the analysis toolbar's button and the Del key both fire
+    #: it, so the two run one handler.
     delete_roi_button = Button()
+
+    #: Left Del: delete the selected ROI from every image before the
+    #: shown one; the shown image keeps it.
+    delete_roi_left_button = Button()
+
+    #: Right Del: delete the selected ROI from every image after the
+    #: shown one, captures still to come included; the shown image keeps
+    #: it.
+    delete_roi_right_button = Button()
+
     clear_rois_button = Button()
     calculate_button = Button()
     export_csv_button = Button()
@@ -920,6 +1097,10 @@ class RoiAnalysisModel(HasTraits):
     #: View -> controller channels fired by the canvas ROI layer.
     canvas_roi_created = Event()  # (kind, geometry)
     canvas_roi_edited = Event()  # (roi_id, geometry)
+    #: A name the ROI table committed for an ROI, changed or not — a
+    #: name another ROI already has merges the two (see
+    #: RoiAnalysisController._rename_roi). # (roi_id, name)
+    rename_roi_request = Event()
     #: Escape out of an armed draw tool (which now stays armed until
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).
@@ -1004,7 +1185,8 @@ class RoiAnalysisModel(HasTraits):
         if self.ai_min_size > event.new:
             self.ai_min_size = event.new
 
-    #: Geometry accepted candidates are converted to.
+    #: Kind of the new ROIs Pick and Detect all make. Tracking keeps
+    #: each ROI's own kind.
     ai_output_kind = Enum("polygon", "ellipse")
     #: How many images between drift re-checks while tracking.
     ai_drift_interval = Range(1, 50, AI_DRIFT_CHECK_INTERVAL_DEFAULT)
@@ -1015,8 +1197,24 @@ class RoiAnalysisModel(HasTraits):
     #: batch counts it otherwise fills from are stale during a track).
     ai_track_done = Int(0)
     ai_track_total = Int(0)
+    #: Detections the size window turned away during the current drift
+    #: check (each left its ROI where it was); folded into the progress
+    #: text when non-zero.
+    ai_track_rejected = Int(0)
     #: Count of ROIs accepted from AI candidates this session (readout).
     ai_accept_count = Int(0)
+
+    #: Trace rims button (view event; AiRoiController reacts): follows
+    #: each droplet by its bright rim, no AI model needed. It shares the
+    #: drift check's running flag, progress counts and size window, and
+    #: like Track writes each ROI's shape in that ROI's own kind.
+    trace_rims_button = Button()
+
+    #: Width (px) of the droplets' bright rim the rim tracer looks for.
+    rim_width_px = Range(*RIM_WIDTH_BOUNDS_PX, RIM_WIDTH_PX_DEFAULT, mode="spinner")
+
+    #: How far (px) the rim tracer lets a rim move between frames.
+    rim_search_px = Range(*RIM_SEARCH_BOUNDS_PX, RIM_SEARCH_PX_DEFAULT, mode="spinner")
 
     #: Canvas click while in "ai_pick" interaction mode. # (x, y)
     canvas_ai_pick = Event()
@@ -1026,8 +1224,8 @@ class RoiAnalysisModel(HasTraits):
     #: pairs is [(kind, geometry), ...] and anchor is the capture time
     #: they were accepted against.
     ai_rois_accepted = Event()
-    #: One ROI's geometry updated by a drift re-check while tracking.
-    #: # (roi_id, capture_time, geometry)
+    #: One ROI's shape found by a drift re-check or rim trace, written
+    #: in the ROI's own kind. # (roi_id, capture_time, Candidate)
     ai_roi_tracked = Event()
 
     #: The ROI shape held for pasting: kind and the geometry it had on
@@ -1144,6 +1342,36 @@ class RoiAnalysisModel(HasTraits):
     #: against session.excluded_images in both directions.
     current_image_excluded = Bool(False)
 
+    #: A click on a curves-view point: toggle that image's exclusion
+    #: and show it. RoiAnalysisController reacts. # image path (str)
+    toggle_exclusion_request = Event()
+
+    #: Whether the DISPLAYED image is left out of the area fit — the
+    #: sidebar checkbox, mirrored like current_image_excluded against
+    #: session.area_fit_excluded_images.
+    current_image_area_fit_excluded = Bool(False)
+
+    #: A Shift+click on a curves-view point: toggle that image's
+    #: area-fit exclusion and show it. # image path (str)
+    toggle_area_fit_exclusion_request = Event()
+
+    #: Put every image back into the area fit.
+    include_all_in_area_fit_button = Button("Restore all")
+
+    #: Whether any image is left out of the area fit — the restore
+    #: button's enabled_when, which does not see changes nested in the
+    #: session.
+    has_area_fit_exclusions = Property(
+        Bool, observe="session.area_fit_excluded_images.items"
+    )
+
+    def _get_has_area_fit_exclusions(self):
+        return bool(self.session.area_fit_excluded_images)
+
+    #: Put back every ROI deleted from the displayed image alone — the
+    #: sidebar's way back besides undo. RoiAnalysisController reacts.
+    restore_absent_rois_button = Button("Restore")
+
     #: Bulk exclusion: mark (exclude) or unmark (include) every image
     #: before / after the displayed one (exclusive) with the checkbox
     #: above's exclusion.
@@ -1151,6 +1379,10 @@ class RoiAnalysisModel(HasTraits):
     exclude_after_button = Button("After")
     include_before_button = Button("Before")
     include_after_button = Button("After")
+
+    #: Unmark every image of the experiment at once: the include
+    #: buttons above with no shown image to count from.
+    include_all_button = Button("All")
 
 
 #: The single analysis state shared by the viewer pane and the plot pane
