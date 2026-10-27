@@ -191,42 +191,18 @@ ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
 #: section away, large enough to grab its handle again.
 ROI_PLOT_SECTION_MIN_PX = 40
 
-#: The delete dialog's choices, as its buttons read: take the selected
-#: ROI off every image before the shown one, off the shown image alone,
-#: or off every image after it (captures still to come included). The
-#: two ranges stop short of the shown image.
-DELETE_ROI_LEFT = "Left Del"
-DELETE_ROI_THIS_IMAGE = "Del"
-DELETE_ROI_RIGHT = "Right Del"
-
-#: What deleting an ROI does (ImageViewerPreferences.roi_delete_scope),
-#: by preference value: ask with the dialog above, or apply one of its
-#: choices without asking — the label each has on the preferences tab.
-#: Ordered as the dialog shows its choices.
-ROI_DELETE_SCOPES = {
-    "ask": "Ask each time",
-    "left": DELETE_ROI_LEFT,
-    "image": DELETE_ROI_THIS_IMAGE,
-    "right": DELETE_ROI_RIGHT,
-}
-
-#: roi_delete_scope values earlier versions stored, read as today's:
-#: their ranges took the shown image too, so each maps to the range on
-#: its side; all images and all-but-this are no longer offered, so those
-#: ask again.
-LEGACY_ROI_DELETE_SCOPES = {
-    "later": "right",
-    "earlier": "left",
-    "except": "ask",
-    "all": "ask",
-}
-
 #: The scopes that take an ROI off some images and keep it on the rest;
 #: Roi.absent_by names a deletion the same way.
 ROI_ABSENCE_SCOPES = ("image", "left", "right")
 
-#: The delete dialog's checkbox, worded as the experiment delete's is.
-ROI_DELETE_DONT_ASK_TEXT = "Don't ask again (change under Preferences › Image Viewer)"
+#: The ROI toolbar's delete buttons, by trait name, and the absence scope
+#: each deletes with: Left Del, Del (also the Del key), Right Del. The
+#: two side buttons stop short of the shown image.
+ROI_DELETE_BUTTON_SCOPES = {
+    "delete_roi_left_button": "left",
+    "delete_roi_button": "image",
+    "delete_roi_right_button": "right",
+}
 
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0

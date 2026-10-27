@@ -45,6 +45,7 @@ from traitsui.qt.editor import Editor as QtEditor
 
 # Microdrop style imports.
 from microdrop_style.button_styles import SLIM_NARROW_BUTTON_STYLE
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_ADJUST,
     ICON_CANCEL,
@@ -78,6 +79,8 @@ from microdrop_style.icons.icons import (
     ICON_VIEW_3D,
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
+    MDI_ICON_BACKSPACE,
+    MDI_ICON_BACKSPACE_REVERSE,
 )
 
 # Microdrop utils imports.
@@ -1256,14 +1259,37 @@ analysis_toolbar = VGroup(
             "from the original (Ctrl+V)",
         ),
     ),
-    # The same handler as the Del key; it asks which images (Left Del /
-    # Del / Right Del) unless the preferences remember an answer.
+    # Left Del / Del / Right Del: the selected ROI off every image before
+    # the shown one, off the shown one (the Del key's handler too), or
+    # off every image after it. The side buttons need an image to stop
+    # at; with none shown, Del removes the ROI outright.
+    UItem(
+        "object.roi_analysis.delete_roi_left_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image before this one "
+            "(this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
+    ),
     UItem(
         "object.roi_analysis.delete_roi_button",
         editor=IconButtonEditor(
-            glyph=ICON_DELETE, tooltip="Delete the selected ROI (Del)"
+            glyph=ICON_DELETE,
+            tooltip="Delete the selected ROI from the shown image (Del)",
         ),
         enabled_when="analysis.selected_roi_id",
+    ),
+    UItem(
+        "object.roi_analysis.delete_roi_right_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE_REVERSE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image after this one, "
+            "captures still to come included (this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
     ),
     "12",  # AI tools
     UItem(

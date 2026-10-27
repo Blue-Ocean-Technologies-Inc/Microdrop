@@ -14,7 +14,7 @@ calibration, saved fit equations, and the AI ROI detection options."""
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import BaseEnum, Bool, Float, Int, Str
+from traits.api import Bool, Float, Int, Str
 from traitsui.api import EnumEditor, Item, VGroup, View
 
 # Microdrop style imports.
@@ -24,7 +24,6 @@ from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
 # Local imports.
-from .analysis.consts import LEGACY_ROI_DELETE_SCOPES, ROI_DELETE_SCOPES
 from .analysis.sam_detect import AI_MODEL_OPTIONS, DEFAULT_AI_MODEL
 from .consts import (
     DEVICE_OUTLINE_ALPHA_PCT,
@@ -38,20 +37,6 @@ from .scale_bar import DEFAULT_UNIT
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-class RoiDeleteScope(BaseEnum):
-    """An Enum of ROI_DELETE_SCOPES that takes the values earlier
-    versions stored (LEGACY_ROI_DELETE_SCOPES) as today's. The
-    preferences node validates a stored string through the trait on
-    load, so a plain Enum would refuse the old value and fail the whole
-    node; BaseEnum has no C fast-validator to bypass this one."""
-
-    def validate(self, object, name, value):
-        if isinstance(value, str):
-            value = LEGACY_ROI_DELETE_SCOPES.get(value, value)
-
-        return super().validate(object, name, value)
 
 
 class ImageViewerPreferences(PreferencesHelper):
@@ -83,17 +68,6 @@ class ImageViewerPreferences(PreferencesHelper):
     # ask again" checkbox clears this; the preferences tab turns it back on.
     confirm_experiment_delete = Bool(
         True, desc="Ask before deleting an experiment folder"
-    )
-
-    # What deleting an ROI with an image shown removes it from: asked
-    # each time, or — once its dialog's "don't ask again" box is ticked
-    # — the answer given then (ROI_DELETE_SCOPES). The preferences tab
-    # changes it or sets it back to asking.
-    roi_delete_scope = RoiDeleteScope(
-        *ROI_DELETE_SCOPES,
-        desc="Whether deleting an ROI asks, or removes it from every earlier "
-        "image (Left Del), the shown image only (Del) or every later image "
-        "(Right Del)",
     )
 
     # Display window. Edited from the viewer pane's own toolbar —
@@ -183,26 +157,8 @@ class ImageViewerPreferencesPane(PreferencesPane):
         style_sheet=preferences_group_style_sheet,
     )
 
-    # Indexed labels, as the AI model's, so the dropdown keeps this order.
-    roi_analysis_group = VGroup(
-        create_item_label_group(
-            "roi_delete_scope",
-            label_text="When deleting an ROI",
-            editor=EnumEditor(
-                values={
-                    scope: f"{index}:{label}"
-                    for index, (scope, label) in enumerate(ROI_DELETE_SCOPES.items())
-                }
-            ),
-        ),
-        label="ROI Analysis",
-        show_border=True,
-        style_sheet=preferences_group_style_sheet,
-    )
-
     view = View(
         experiments_group,
-        roi_analysis_group,
         ai_group,
         Item("_"),  # Separator to space this out from further contributions.
         resizable=True,

@@ -26,11 +26,9 @@ from pyface.api import YES
 from image_viewer.analysis import roi_controller
 from image_viewer.analysis.consts import (
     DEFAULT_ROI_COLORS,
-    DELETE_ROI_LEFT,
-    DELETE_ROI_RIGHT,
-    DELETE_ROI_THIS_IMAGE,
     NEGATIVE_MASK_COLOR,
     PASTE_OFFSET_PX,
+    ROI_DELETE_BUTTON_SCOPES,
 )
 from image_viewer.analysis.roi_batch import (
     RoiBatchRunner,
@@ -43,7 +41,6 @@ from image_viewer.analysis.roi_model import (
     RoiAnalysisModel,
 )
 from image_viewer.analysis.sam_detect import Candidate
-from image_viewer.consts import PREFERENCES_PATH
 from image_viewer.discovery import capture_timestamp
 from image_viewer.model import (
     ImageViewerModel,
@@ -142,17 +139,19 @@ def test_one_copy_seeds_repeated_pastes():
     assert controller.session.rois[1].geometry == controller.session.rois[2].geometry
 
 
-def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none():
+@pytest.mark.parametrize("button", list(ROI_DELETE_BUTTON_SCOPES))
+def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none(button):
+    # No image shown: every delete button removes the ROI outright.
     controller = _controller()
     model = controller.analysis_model
     model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
     model.selected_roi_id = controller.session.rois[0].roi_id
 
-    model.delete_roi_button = True
+    setattr(model, button, True)
     assert controller.session.rois == []
     assert model.selected_roi_id == ""
 
-    model.delete_roi_button = True
+    setattr(model, button, True)
     assert "Select an ROI" in model.progress_text
 
 
@@ -224,8 +223,8 @@ class _RecordingRunner(RoiBatchRunner):
 def _controller_on_image(tmp_path):
     image = tmp_path / "a_2026_07_20-10_00_00_raw.png"
     image.write_bytes(b"")
-    # Preferences of its own, in memory: a remembered delete scope must
-    # not leak into the next test through the shared default.
+    # Preferences of its own, in memory: nothing the controller stores
+    # may leak into the next test through the shared default.
     preferences = ImageViewerPreferences(preferences=Preferences())
     controller = RoiAnalysisController(
         viewer_model=ImageViewerModel(preferences=preferences),
@@ -271,10 +270,7 @@ def test_a_pasted_mask_stays_a_mask_whatever_the_toggle():
     assert pasted.style.color == NEGATIVE_MASK_COLOR
 
 
-def test_changing_a_mask_remeasures_every_roi_on_the_image(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_THIS_IMAGE, False)
-    )
+def test_changing_a_mask_remeasures_every_roi_on_the_image(tmp_path):
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     runner = controller.runner
@@ -557,10 +553,7 @@ def test_each_undo_and_redo_remeasures_the_positives_once(tmp_path):
     assert redone[2][4] == (("ellipse", (12.0, 10.0, 3.0, 3.0, 0.0)),)
 
 
-def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_THIS_IMAGE, False)
-    )
+def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path):
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
@@ -584,104 +577,6 @@ def test_deleting_on_one_image_keeps_the_roi_everywhere_else(tmp_path, monkeypat
     assert controller.viewer_model.absent_roi_count == 0
 
 
-def test_cancelling_the_delete_dialog_deletes_nothing(tmp_path, monkeypatch):
-    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: (None, True))
-    controller, _image = _controller_on_image(tmp_path)
-    model = controller.analysis_model
-    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
-    (roi,) = controller.session.rois
-    model.selected_roi_id = roi.roi_id
-
-    model.delete_roi_button = True
-
-    assert controller.session.rois == [roi] and roi.absent_at == []
-    # A ticked box on Cancel remembers nothing.
-    assert controller.viewer_model.preferences.roi_delete_scope == "ask"
-
-
-def test_the_delete_dialog_offers_left_del_del_right_del(tmp_path, monkeypatch):
-    asked = []
-
-    def choose(**kwargs):
-        asked.append(kwargs)
-
-        return None, False
-
-    monkeypatch.setattr(roi_controller, "choose", choose)
-    controller, _image = _controller_on_image(tmp_path)
-    model = controller.analysis_model
-    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
-    model.selected_roi_id = controller.session.rois[0].roi_id
-
-    model.delete_roi_button = True
-
-    (kwargs,) = asked
-    assert kwargs["choices"] == [
-        DELETE_ROI_LEFT,
-        DELETE_ROI_THIS_IMAGE,
-        DELETE_ROI_RIGHT,
-    ]
-    assert kwargs["message"] == "Delete ROI 1 from which images?"
-
-
-@pytest.mark.parametrize(
-    "stored, loaded",
-    [
-        ("later", "right"),
-        ("earlier", "left"),
-        ("except", "ask"),
-        ("all", "ask"),
-        ("right", "right"),
-    ],
-)
-def test_a_stored_legacy_delete_scope_loads_as_todays(tmp_path, stored, loaded):
-    path = tmp_path / "preferences.ini"
-    path.write_text(f"[{PREFERENCES_PATH}]\nroi_delete_scope = {stored}\n")
-
-    preferences = ImageViewerPreferences(preferences=Preferences(filename=str(path)))
-
-    assert preferences.roi_delete_scope == loaded
-
-
-@pytest.mark.parametrize(
-    "choice, scope", [(DELETE_ROI_THIS_IMAGE, "image"), (DELETE_ROI_RIGHT, "right")]
-)
-def test_dont_ask_again_remembers_the_delete_scope(
-    tmp_path, monkeypatch, choice, scope
-):
-    asked = []
-
-    def choose(**kwargs):
-        asked.append(kwargs["checkbox_text"])
-
-        return choice, True
-
-    monkeypatch.setattr(roi_controller, "choose", choose)
-    controller, _image = _controller_on_image(tmp_path)
-    model = controller.analysis_model
-    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
-    model.canvas_roi_created = ("ellipse", [40.0, 10.0, 5.0, 5.0, 0.0])
-    first, second = controller.session.rois
-
-    model.selected_roi_id = first.roi_id
-    model.delete_roi_button = True
-
-    assert controller.viewer_model.preferences.roi_delete_scope == scope
-
-    # The next delete applies the remembered scope without asking.
-    model.selected_roi_id = second.roi_id
-    model.delete_roi_button = True
-
-    assert len(asked) == 1
-
-    assert controller.session.rois == [first, second]
-
-    if scope == "image":
-        assert second.absent_at == first.absent_at != []
-    else:
-        assert second.absent_from == first.absent_from
-
-
 def _two_rois_on_image(tmp_path):
     """A controller on an image with two ROIs drawn on it."""
     controller, image = _controller_on_image(tmp_path)
@@ -692,12 +587,7 @@ def _two_rois_on_image(tmp_path):
     return controller, image
 
 
-def test_renaming_a_redrawn_shape_makes_it_the_deleted_rois_shape_there(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setattr(
-        roi_controller, "choose", lambda **kwargs: (DELETE_ROI_THIS_IMAGE, False)
-    )
+def test_renaming_a_redrawn_shape_makes_it_the_deleted_rois_shape_there(tmp_path):
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     runner = controller.runner
@@ -952,13 +842,12 @@ def test_a_merge_keeps_the_longer_lived_roi_whichever_way_it_is_renamed(
 
 
 @pytest.mark.parametrize(
-    "choice, before, after",
-    [(DELETE_ROI_RIGHT, True, False), (DELETE_ROI_LEFT, False, True)],
+    "button, before, after",
+    [("delete_roi_right_button", True, False), ("delete_roi_left_button", False, True)],
 )
 def test_deleting_over_a_range_spares_the_shown_image_and_the_rest(
-    tmp_path, monkeypatch, choice, before, after
+    tmp_path, button, before, after
 ):
-    monkeypatch.setattr(roi_controller, "choose", lambda **kwargs: (choice, False))
     controller, image = _controller_on_image(tmp_path)
     model = controller.analysis_model
     capture_time = capture_timestamp(image)
@@ -966,7 +855,7 @@ def test_deleting_over_a_range_spares_the_shown_image_and_the_rest(
     (roi,) = controller.session.rois
     model.selected_roi_id = roi.roi_id
 
-    model.delete_roi_button = True
+    setattr(model, button, True)
 
     assert controller.session.rois == [roi]
     assert roi.applies_at(capture_time - 60.0) is before
@@ -976,7 +865,7 @@ def test_deleting_over_a_range_spares_the_shown_image_and_the_rest(
 
     # Restore from an image the ROI is off, as a range restore: it
     # clears the range that covers that image.
-    off_image_time = "10_01_00" if choice == DELETE_ROI_RIGHT else "09_59_00"
+    off_image_time = "10_01_00" if after is False else "09_59_00"
     restore_on = tmp_path / f"b_2026_07_20-{off_image_time}_raw.png"
     restore_on.write_bytes(b"")
     controller.viewer_model.current_path = str(restore_on)

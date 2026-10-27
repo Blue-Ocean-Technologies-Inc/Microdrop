@@ -1006,9 +1006,19 @@ class RoiAnalysisModel(HasTraits):
     define_perspective_button = Button()
     edit_mode = Bool(False)
 
-    #: Delete the selected ROI — the analysis toolbar's button and the
-    #: Del key both fire it, so the two run one handler.
+    #: Delete the selected ROI from the shown image (outright with none
+    #: shown) — the analysis toolbar's button and the Del key both fire
+    #: it, so the two run one handler.
     delete_roi_button = Button()
+
+    #: Left Del: delete the selected ROI from every image before the
+    #: shown one; the shown image keeps it.
+    delete_roi_left_button = Button()
+
+    #: Right Del: delete the selected ROI from every image after the
+    #: shown one, captures still to come included; the shown image keeps
+    #: it.
+    delete_roi_right_button = Button()
 
     clear_rois_button = Button()
     calculate_button = Button()
