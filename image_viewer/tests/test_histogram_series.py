@@ -23,11 +23,13 @@ import pytest
 from image_viewer.analysis.consts import HISTOGRAM_FIT_MIN_PIXELS
 from image_viewer.analysis.histogram_series import (
     bin_centres,
+    bins_within,
     fit_distribution,
     fitted_counts,
     histogram_counts,
     histogram_edges,
     in_range,
+    pixels_in_bins,
     smoothed_counts,
 )
 
@@ -60,7 +62,7 @@ def test_clip_trims_hot_pixels_off_the_range(rng):
     assert edges[0] == pytest.approx(np.percentile(pixels, 1.0))
     assert edges[-1] == pytest.approx(np.percentile(pixels, 99.0))
     assert edges[-1] < 1_000.0
-    assert in_range(pixels, edges).size < pixels.size
+    assert in_range(pixels, edges[0], edges[-1]).size < pixels.size
 
 
 def test_log_edges_are_geometric_over_the_positive_pixels():
@@ -104,7 +106,9 @@ def test_normalized_fractions_count_clipped_tails_in_the_whole(rng):
 
     fractions = histogram_counts(pixels, edges, normalize=True)
 
-    assert fractions.sum() == pytest.approx(in_range(pixels, edges).size / pixels.size)
+    assert fractions.sum() == pytest.approx(
+        in_range(pixels, edges[0], edges[-1]).size / pixels.size
+    )
     assert fractions.sum() < 1.0
 
 
@@ -194,3 +198,47 @@ def test_fitted_counts_break_off_below_the_floor():
 
     assert np.isnan(y_values[0]) and np.isnan(y_values[-1])
     assert np.nanmin(y_values) >= 0.5
+
+
+def test_the_intensity_range_drops_pixels_before_binning(rng):
+    background = rng.normal(50.0, 5.0, 3_000)
+    droplet = rng.normal(800.0, 20.0, 1_000)
+    pixels = np.concatenate([background, droplet])
+
+    kept = in_range(pixels, 400.0, 2_000.0)
+    edges = histogram_edges([kept], 32)
+
+    assert kept.size == 1_000
+    assert edges[0] > 400.0
+    assert histogram_counts(kept, edges).sum() == kept.size
+    assert histogram_counts(kept, edges, normalize=True).sum() == pytest.approx(1.0)
+
+
+def test_the_count_range_selects_the_pixels_of_the_bins_it_keeps():
+    # Bin heights 1, 3, 5 and 2 over the bins [0, 1), [1, 2), [2, 3), [3, 4].
+    pixels = np.array([0.5, 1.2, 1.5, 1.8, 2.1, 2.3, 2.5, 2.7, 2.9, 3.4, 4.0])
+    edges = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    counts = histogram_counts(pixels, edges)
+
+    selected = bins_within(counts, 2.0, 4.0)
+    fitted = pixels_in_bins(pixels, edges, selected)
+
+    assert counts == pytest.approx([1.0, 3.0, 5.0, 2.0])
+    assert selected.tolist() == [False, True, False, True]
+    # The right edge belongs to the last bin, as np.histogram has it.
+    assert fitted.tolist() == [1.2, 1.5, 1.8, 3.4, 4.0]
+    assert pixels_in_bins(np.array([-1.0, 5.0]), edges, selected).size == 0
+
+
+def test_too_few_pixels_in_the_count_range_leave_no_fit(rng):
+    pixels = rng.normal(500.0, 30.0, 5_000)
+    edges = histogram_edges([pixels], 64)
+    counts = histogram_counts(pixels, edges)
+
+    # Only the sparsest tail bins, a handful of pixels between them.
+    selected = bins_within(counts, 1.0, 1.0)
+    fitted = pixels_in_bins(pixels, edges, selected)
+
+    assert fitted.size < HISTOGRAM_FIT_MIN_PIXELS
+    assert fit_distribution(fitted, "normal") is None
+    assert fit_distribution(pixels_in_bins(pixels, edges, counts > 0), "normal")

@@ -111,6 +111,7 @@ from .consts import (
     FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
     HISTOGRAM_CLIP_BOUNDS_PERCENT,
+    HISTOGRAM_FILTERED_BIN_ALPHA,
     HISTOGRAM_FIT_FLOOR_PIXELS,
     HISTOGRAM_FIT_LABELS,
     HISTOGRAM_FIT_MIN_PIXELS,
@@ -146,11 +147,13 @@ from .fit_presets import fit_arguments, method_label
 from .heater_log import heater_coverage_note
 from .histogram_series import (
     bin_centres,
+    bins_within,
     fit_distribution,
     fitted_counts,
     histogram_counts,
     histogram_edges,
     in_range,
+    pixels_in_bins,
     smoothed_counts,
 )
 from .plot_pick import left_press_point, nearest_point
@@ -378,6 +381,22 @@ def _axis_spin(name, auto_flag):
             low=AXIS_LIMIT_BOUNDS[0], high=AXIS_LIMIT_BOUNDS[1], decimals=1, step=1.0
         ),
         enabled_when=f"not figure.{auto_flag}",
+    )
+
+
+def _filter_spin(name, filter_flag, decimals=1):
+    """A Histogram-view filter bound, as wide as an axis limit and
+    enabled while its filter is on — the axis spin's inverse."""
+    return UItem(
+        name,
+        width=VALUE_SPIN_W,
+        editor=DoubleSpinBoxEditor(
+            low=AXIS_LIMIT_BOUNDS[0],
+            high=AXIS_LIMIT_BOUNDS[1],
+            decimals=decimals,
+            step=1.0,
+        ),
+        enabled_when=f"figure.{filter_flag} and {_HISTOGRAM_VIEW}",
     )
 
 
@@ -928,9 +947,51 @@ def _cleanup_tab():
                 tooltip="Histogram view: trim this percent of the pooled "
                 "pixels off each end of the shared range before "
                 "binning, so a few hot or dead pixels do not stretch "
-                "it. The distribution fits see the pixels kept; the "
-                "median and mean lines stay the table's.",
+                "it. Applied after the intensity range. The "
+                "distribution fits see the pixels kept; the median "
+                "and mean lines stay those of every pixel the "
+                "intensity range keeps.",
             ),
+        ),
+        VGrid(
+            Label(""),
+            Label("On"),
+            Label("Min"),
+            Label("Max"),
+            Label("Intensity"),
+            UItem(
+                "figure.histogram_intensity_filter",
+                enabled_when=_HISTOGRAM_VIEW,
+                tooltip="Histogram view: keep only the pixels from Min to "
+                "Max — before the bins, the clip, the median and mean "
+                "lines and the fit — to cut away a dim background or a "
+                "saturated top. First switched on, it spans the "
+                "displayed pixels.",
+            ),
+            _filter_spin(
+                "figure.histogram_intensity_min", "histogram_intensity_filter"
+            ),
+            _filter_spin(
+                "figure.histogram_intensity_max", "histogram_intensity_filter"
+            ),
+            Label("Pixels"),
+            UItem(
+                "figure.histogram_count_filter",
+                enabled_when=_HISTOGRAM_VIEW,
+                tooltip="Histogram view: fit the distribution only to the "
+                "pixels in bins whose height lies from Min to Max — in "
+                "the y axis's units: pixels, or with Normalize the "
+                "fraction of the ROI; unsmoothed heights. Every bin is "
+                "still drawn; those left out are faded.",
+            ),
+            _filter_spin(
+                "figure.histogram_count_min", "histogram_count_filter", decimals=4
+            ),
+            _filter_spin(
+                "figure.histogram_count_max", "histogram_count_filter", decimals=4
+            ),
+            columns=4,
+            show_labels=False,
         ),
         label="Cleanup",
     )
@@ -1151,6 +1212,12 @@ _PLOT_STATE = (
     "session:figure:view_mode, "
     "session:figure:histogram_bins, "
     "session:figure:histogram_clip_percent, "
+    "session:figure:histogram_intensity_filter, "
+    "session:figure:histogram_intensity_min, "
+    "session:figure:histogram_intensity_max, "
+    "session:figure:histogram_count_filter, "
+    "session:figure:histogram_count_min, "
+    "session:figure:histogram_count_max, "
     "session:figure:histogram_fit, "
     "session:figure:histogram_show_median, "
     "session:figure:histogram_show_mean, "
@@ -1906,7 +1973,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         The Axes tab's limits and log scales act on it, Normalize turns
         counts into each ROI's fraction of its pixels, Savitzky-Golay
         smooths over the bins, and the Fit tab's distribution is drawn
-        dotted over each outline, its parameters in the legend."""
+        dotted over each outline, its parameters in the legend. The
+        Cleanup tab's intensity range drops pixels before any of it;
+        its pixel-count range picks the bins the fit is taken over."""
         session = self._model.session
         image_path = self._model.current_image_path
         paths = analysed_paths(session, self._model.filtered_paths)
@@ -1958,6 +2027,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
+        # The unfiltered range seeds the intensity filter's bounds the
+        # first time it is switched on.
+        pooled = np.concatenate([pixels for _name, pixels, _style in samples])
+        self._model.histogram_pixel_range = (float(pooled.min()), float(pooled.max()))
+
+        # Before anything else: the pixels outside the intensity range
+        # are not binned, marked or fitted at all.
+        if figure_settings.histogram_intensity_filter:
+            samples = self._in_intensity_range(samples, figure_settings)
+
+        if not samples:
+            self._draw_hint("No ROI has a pixel in the intensity range")
+
+            return []
+
         # Over the shown pixels' common range, so a bin covers the same
         # intensities in every outline — less the clipped tails, and on
         # a log axis spaced evenly in log, so no bin is a sliver there.
@@ -1973,21 +2057,38 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        unfitted = 0
+        unfitted, tallest_bin = 0, 0.0
 
         for name, pixels, style in samples:
+            counts = histogram_counts(pixels, edges, normalize)
+            tallest_bin = max(tallest_bin, float(counts.max()))
+            selected = (
+                bins_within(
+                    counts,
+                    figure_settings.histogram_count_min,
+                    figure_settings.histogram_count_max,
+                )
+                if figure_settings.histogram_count_filter
+                else None
+            )
             fit = None
 
-            # Fitted to the pixels the clip kept, so the curve describes
-            # the outline it is drawn over.
+            # Fitted to the pixels the clip kept — those in the bins the
+            # pixel-count range keeps, when it is on — so the curve
+            # describes the outline it is drawn over.
             if figure_settings.histogram_fit != "none":
-                kept = in_range(pixels, edges)
-                fit = fit_distribution(kept, figure_settings.histogram_fit)
+                fitted = (
+                    in_range(pixels, edges[0], edges[-1])
+                    if selected is None
+                    else pixels_in_bins(pixels, edges, selected)
+                )
+                fit = fit_distribution(fitted, figure_settings.histogram_fit)
                 unfitted += fit is None
 
             self._draw_histogram_outline(
-                histogram_counts(pixels, edges, normalize),
+                counts,
                 edges,
+                selected,
                 name if fit is None else f"{name} — {fit[1]}",
                 style,
                 figure_settings,
@@ -2000,13 +2101,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 # past it they fall through decades no pixel occupies,
                 # and relim() would drag the axis down after them.
                 unit = 1.0 / pixels.size if normalize else 1.0
+                floor = HISTOGRAM_FIT_FLOOR_PIXELS * unit
                 x_values, y_values = fitted_counts(
                     fit[0],
                     edges,
-                    kept.size * unit,
+                    fitted.size * unit,
                     FIT_CURVE_SAMPLES,
                     figure_settings.log_x,
-                    HISTOGRAM_FIT_FLOOR_PIXELS * unit if figure_settings.log_y else 0.0,
+                    floor if figure_settings.log_y else 0.0,
                 )
                 self._fit_artists.extend(
                     self._axes.plot(
@@ -2021,28 +2123,93 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             self._draw_histogram_markers(pixels, style, figure_settings)
 
+        # Seeds the pixel-count filter's bounds the first time it is
+        # switched on.
+        self._model.histogram_tallest_bin = tallest_bin
         self._note_histogram(samples, unfitted, figure_settings)
         self._apply_legend(figure_settings.show_legend)
 
         return []  # intensity on x: no time span to shade
 
-    def _draw_histogram_outline(self, counts, edges, label, style, figure_settings):
+    def _draw_histogram_outline(
+        self, counts, edges, selected, label, style, figure_settings
+    ):
         """One ROI's ``counts`` over ``edges``: a step outline, or with
         Savitzky-Golay smoothing a line through the bin centres — a
-        smoothed count no longer belongs to one bin's flat top."""
+        smoothed count no longer belongs to one bin's flat top.
+
+        With the pixel-count range on — ``selected`` marks the bins it
+        keeps, else None — the whole outline is faded and the kept bins
+        drawn over it at full strength, carrying the legend entry, so
+        what the fit ignored stays in view."""
         # The curves' own line width: matplotlib draws a patch's
         # outline thinner than a line, and these are read as curves.
         line_width = matplotlib.rcParams["lines.linewidth"]
+        smoothing = figure_settings.smooth_method == "savgol"
+        heights = (
+            smoothed_counts(
+                counts, figure_settings.savgol_window, figure_settings.savgol_order
+            )
+            if smoothing
+            else counts
+        )
+        alpha = style.plot_alpha
+        base_label = label
 
-        if figure_settings.smooth_method == "savgol":
+        if selected is not None:
+            alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
+            base_label = "_nolegend_"
+
+        if smoothing:
+            centres = bin_centres(edges, figure_settings.log_x)
             self._fit_artists.extend(
                 self._axes.plot(
-                    bin_centres(edges, figure_settings.log_x),
-                    smoothed_counts(
-                        counts,
-                        figure_settings.savgol_window,
-                        figure_settings.savgol_order,
-                    ),
+                    centres,
+                    heights,
+                    color=style.color,
+                    alpha=alpha,
+                    linewidth=line_width,
+                    label=base_label,
+                )
+            )
+        else:
+            # Each bin's count weighs a point at its left edge: the
+            # counts are binned already, normalised or not.
+            _counts, _edges, outlines = self._axes.hist(
+                edges[:-1],
+                edges,
+                weights=counts,
+                histtype="step",
+                color=style.color,
+                alpha=alpha,
+                linewidth=line_width,
+                label=base_label,
+            )
+            self._fit_artists.extend(outlines)
+
+        if selected is None:
+            return
+
+        # A NaN breaks the line and the stairs, so only the kept bins
+        # are drawn over the faded outline.
+        kept = np.where(selected, heights, np.nan)
+
+        if smoothing:
+            self._fit_artists.extend(
+                self._axes.plot(
+                    centres,
+                    kept,
+                    color=style.color,
+                    alpha=style.plot_alpha,
+                    linewidth=line_width,
+                    label=label,
+                )
+            )
+        else:
+            self._fit_artists.append(
+                self._axes.stairs(
+                    kept,
+                    edges,
                     color=style.color,
                     alpha=style.plot_alpha,
                     linewidth=line_width,
@@ -2050,27 +2217,28 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
 
-            return
+    def _in_intensity_range(self, samples, figure_settings):
+        """``samples`` with each ROI's pixels cut to the intensity
+        range, less the ROIs left with none."""
+        kept = []
 
-        # Each bin's count weighs a point at its left edge: the counts
-        # are binned already, normalised or not.
-        _counts, _edges, outlines = self._axes.hist(
-            edges[:-1],
-            edges,
-            weights=counts,
-            histtype="step",
-            color=style.color,
-            alpha=style.plot_alpha,
-            linewidth=line_width,
-            label=label,
-        )
-        self._fit_artists.extend(outlines)
+        for name, pixels, style in samples:
+            pixels = in_range(
+                pixels,
+                figure_settings.histogram_intensity_min,
+                figure_settings.histogram_intensity_max,
+            )
+
+            if pixels.size:
+                kept.append((name, pixels, style))
+
+        return kept
 
     def _draw_histogram_markers(self, pixels, style, figure_settings):
         """One ROI's median (solid) and mean (dashed) as vertical lines,
         each where switched on, faded by the marker opacity on top of
-        the ROI's own. Of all its pixels, clipped or not: they are the
-        table's median and mean."""
+        the ROI's own. Of every pixel the intensity range keeps, clipped
+        or not — with the range off, the table's median and mean."""
         alpha = figure_settings.histogram_marker_alpha * style.plot_alpha
 
         for shown, statistic, line_style in (

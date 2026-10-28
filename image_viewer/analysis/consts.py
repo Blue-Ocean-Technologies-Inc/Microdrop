@@ -118,6 +118,10 @@ HISTOGRAM_FIT_FLOOR_PIXELS = 0.5
 #: multiplied with their ROI's own plot opacity.
 HISTOGRAM_MARKER_ALPHA_BOUNDS = (0.0, 1.0)
 HISTOGRAM_MARKER_ALPHA = 1.0
+#: Opacity of the Histogram view's bins the pixel-count range leaves
+#: out of the distribution fit, as a fraction of their ROI's: faded,
+#: not hidden, so what the fit ignored stays in view.
+HISTOGRAM_FILTERED_BIN_ALPHA = 0.3
 
 #: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
 #: the analysis draws, tests and combines uses it, so it is one name

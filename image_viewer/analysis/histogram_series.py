@@ -69,11 +69,29 @@ def bin_centres(edges, log=False):
     return (edges[:-1] + edges[1:]) / 2.0
 
 
-def in_range(pixels, edges):
-    """The pixels inside the binned range — those a clip did not trim
-    away, which the histogram counts and the distribution is fitted
-    to."""
-    return pixels[(pixels >= edges[0]) & (pixels <= edges[-1])]
+def in_range(pixels, low, high):
+    """The pixels from ``low`` to ``high``, both included — those the
+    intensity filter keeps, or those inside the binned range, which a
+    clip did not trim away."""
+    return pixels[(pixels >= low) & (pixels <= high)]
+
+
+def bins_within(counts, low, high):
+    """Which bins' heights lie from ``low`` to ``high``, both included —
+    in the counts' own unit, pixels or fractions of the ROI."""
+    return (counts >= low) & (counts <= high)
+
+
+def pixels_in_bins(pixels, edges, selected):
+    """The pixels falling in the bins of ``edges`` that ``selected``
+    marks — binned as np.histogram bins them, the last bin closed on
+    the right; pixels outside the edges fall in none."""
+    inside = (pixels >= edges[0]) & (pixels <= edges[-1])
+    bins = np.clip(
+        np.searchsorted(edges, pixels, side="right") - 1, 0, len(selected) - 1
+    )
+
+    return pixels[inside & selected[bins]]
 
 
 def histogram_counts(pixels, edges, normalize=False):
