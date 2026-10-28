@@ -114,9 +114,9 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
     def _go_fullscreen_on_rpi(window):
         """Kiosk mode: on the portable rig's touchscreen, fullscreen covers
         the taskbar and removes the title bar (no close/minimize buttons) so
-        the instrument doesn't look like a desktop PC — the sidebar's Exit
-        button is then the only way back to the desktop. Other platforms
-        keep a normal, titled window."""
+        the instrument doesn't look like a desktop PC — File > Minimize and
+        the sidebar's Exit button are then the only ways back to the desktop.
+        Other platforms keep a normal, titled window."""
         from microdrop_utils.system_config import is_rpi
 
         if not is_rpi():
