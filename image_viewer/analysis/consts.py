@@ -88,8 +88,36 @@ BAR_GAP = 0.2
 LEGEND_FONT_SCALE = 0.833
 ANNOTATION_FONT_SCALE = 0.694
 #: Bins of the Histogram view, spread evenly over the shared range of
-#: every ROI it shows, so the ROIs compare bin for bin.
+#: every ROI it shows, so the ROIs compare bin for bin. Below 8 the
+#: outline is a few blocks; past 1024 most bins of a typical ROI are
+#: empty and the outline turns to noise.
+HISTOGRAM_BINS_BOUNDS = (8, 1024)
 HISTOGRAM_BINS = 128
+#: Percent of the pooled pixels trimmed off each tail of the shared
+#: range before binning, so a few hot or dead pixels do not stretch the
+#: range and squash every outline into a handful of bins. 10 already
+#: cuts a fifth of the pixels away.
+HISTOGRAM_CLIP_BOUNDS_PERCENT = (0.0, 10.0)
+HISTOGRAM_CLIP_PERCENT = 0.0
+#: The distributions the Histogram view can fit to each ROI's pixels,
+#: in dropdown order, with their dropdown labels.
+HISTOGRAM_FITS = ("none", "normal", "lognormal")
+HISTOGRAM_FIT_LABELS = {
+    "none": "No fit",
+    "normal": "Normal",
+    "lognormal": "Log-normal",
+}
+#: Fewest pixels a distribution is fitted to: below it the estimate of
+#: the spread is noise.
+HISTOGRAM_FIT_MIN_PIXELS = 10
+#: On a log count axis the fitted curve stops where a bin expects fewer
+#: pixels than this: past it a bin is expected empty, and the curve's
+#: tails would fall through decades no pixel occupies.
+HISTOGRAM_FIT_FLOOR_PIXELS = 0.5
+#: Opacity of the Histogram view's median and mean lines, as a fraction
+#: multiplied with their ROI's own plot opacity.
+HISTOGRAM_MARKER_ALPHA_BOUNDS = (0.0, 1.0)
+HISTOGRAM_MARKER_ALPHA = 1.0
 
 #: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
 #: the analysis draws, tests and combines uses it, so it is one name

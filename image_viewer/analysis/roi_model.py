@@ -71,6 +71,13 @@ from .consts import (
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
+    HISTOGRAM_BINS,
+    HISTOGRAM_BINS_BOUNDS,
+    HISTOGRAM_CLIP_BOUNDS_PERCENT,
+    HISTOGRAM_CLIP_PERCENT,
+    HISTOGRAM_FITS,
+    HISTOGRAM_MARKER_ALPHA,
+    HISTOGRAM_MARKER_ALPHA_BOUNDS,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
     MEASURE_INSIDE_BOUNDS_PERCENT,
@@ -278,6 +285,26 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+
+    #: The Histogram view's bins over the shared range of its ROIs.
+    histogram_bins = Range(*HISTOGRAM_BINS_BOUNDS, HISTOGRAM_BINS, mode="spinner")
+    #: Percent of the pooled pixels trimmed off each tail of the
+    #: Histogram view's range before binning, so hot or dead pixels do
+    #: not stretch it; the distribution fits see the pixels kept.
+    histogram_clip_percent = Range(
+        *HISTOGRAM_CLIP_BOUNDS_PERCENT, HISTOGRAM_CLIP_PERCENT
+    )
+    #: The distribution fitted to each ROI's pixels in the Histogram
+    #: view, drawn dotted over its outline — its own choice, independent
+    #: of the series' fit_method.
+    histogram_fit = Enum(*HISTOGRAM_FITS)
+    #: The Histogram view's per-ROI median (solid) and mean (dashed)
+    #: lines, and their opacity as a fraction of their ROI's own.
+    histogram_show_median = Bool(True)
+    histogram_show_mean = Bool(True)
+    histogram_marker_alpha = Range(
+        *HISTOGRAM_MARKER_ALPHA_BOUNDS, HISTOGRAM_MARKER_ALPHA
+    )
     #: Plot expected against actual instead of actual against expected,
     #: so the trend reads expected = slope × actual + intercept.
     flip_actual_expected = Bool(False)
