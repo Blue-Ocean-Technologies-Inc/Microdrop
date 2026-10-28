@@ -37,6 +37,21 @@ FILE_MENU_SUBMENUS_GROUP_ID = "SubmenusGroup"
 FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
 
 
+# App-wide colour-scheme override (MicrodropPreferences.color_scheme). The
+# light/dark values match microdrop_style.helpers.QT_THEME_NAMES, which maps
+# them onto Qt.ColorScheme; follow_system defers to the OS.
+COLOR_SCHEME_FOLLOW_SYSTEM = "follow_system"
+COLOR_SCHEME_LIGHT = "light"
+COLOR_SCHEME_DARK = "dark"
+
+# TraitsUI's EnumEditor sorts dict labels and strips a shared "n:" prefix,
+# which is what orders the dropdown.
+COLOR_SCHEME_LABELS = {
+    COLOR_SCHEME_FOLLOW_SYSTEM: "1:Follow system",
+    COLOR_SCHEME_LIGHT: "2:Light",
+    COLOR_SCHEME_DARK: "3:Dark",
+}
+
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"

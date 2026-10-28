@@ -31,6 +31,9 @@ from traits.etsconfig.api import ETSConfig
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
 
+# Microdrop style imports.
+from microdrop_style.helpers import apply_color_scheme
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -292,6 +295,13 @@ class MicrodropApplication(TasksApplication):
         self._get_current_experiment_directory().mkdir(parents=True, exist_ok=True)
 
         self.experiment_changed = True
+
+    @observe("started, preferences_helper:color_scheme")
+    def _apply_color_scheme_preference(self, event):
+        """Apply the colour-scheme preference once plugins have started (before
+        the first window is created) and again whenever it changes.
+        """
+        apply_color_scheme(self.preferences_helper.color_scheme)
 
     @observe("application_initialized")
     def _on_application_initialized(self, event):
