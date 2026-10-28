@@ -10,6 +10,7 @@
 
 """Eyeball the battery icon in a bare status bar, without the app.
 
+Click the icon to open the details panel; it keeps updating while open.
 By default cycles through synthetic snapshots, one per second, covering
 every glyph and colour; ``--file PATH`` instead polls a real status.json,
 e.g. ``/run/user/1000/rpi-battery-monitor/status.json`` on the Pi. Run from
@@ -34,7 +35,11 @@ from microdrop_style.helpers import style_app
 
 # Local imports.
 from ..controllers.battery_status_controller import BatteryStatusController
+from ..views.battery_details_view import show_battery_details
 from ..views.battery_status_view import build_status_bar_icon
+
+#: Pack fields every synthetic snapshot carries, for the details panel.
+SYNTHETIC_PACK = {"cells": 6, "chemistry": "li-ion", "soc_source": "coulomb"}
 
 #: Every fill glyph discharging then charging, then the special states
 #: (alert, no pack, unknown level, daemon unavailable), shown in this order.
@@ -44,6 +49,9 @@ SYNTHETIC_SNAPSHOTS = [
             "soc": soc,
             "voltage": 20 + soc / 20,
             "current": 1.2,
+            "power": 1.2 * (20 + soc / 20),
+            "state": "Discharging",
+            "remaining_ah": soc / 2,
             "time_to_empty_s": soc * 150,
         }
         for soc in (100, 85, 70, 55, 40, 25, 12, 3)
@@ -53,6 +61,9 @@ SYNTHETIC_SNAPSHOTS = [
             "soc": soc,
             "voltage": 22 + soc / 25,
             "current": -5.9,
+            "power": -5.9 * (22 + soc / 25),
+            "state": "Charging",
+            "remaining_ah": soc / 2,
             "charging": True,
             "time_to_full_s": (100 - soc) * 600,
         }
@@ -83,7 +94,13 @@ def main():
     window.setWindowTitle("Battery status icon demo")
     window.resize(480, 120)
 
-    icon, ui = build_status_bar_icon(model)
+    details_ui = None
+
+    def show_details():
+        nonlocal details_ui
+        details_ui = show_battery_details(model, icon, details_ui)
+
+    icon, ui = build_status_bar_icon(model, on_click=show_details)
     window.statusBar().addPermanentWidget(icon)
     window.show()
 
@@ -100,7 +117,9 @@ def main():
             if snapshot is None:
                 model.mark_unavailable()
             else:
-                model.apply_snapshot({**snapshot, "timestamp": now}, now)
+                model.apply_snapshot(
+                    {**SYNTHETIC_PACK, **snapshot, "timestamp": now}, now
+                )
 
             window.statusBar().showMessage(f"{model.level}: {model.tooltip}")
 

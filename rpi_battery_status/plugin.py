@@ -19,6 +19,7 @@ from microdrop_status_bar.consts import STATUS_BAR_ICONS
 # Local imports.
 from .consts import PKG, PKG_name
 from .controllers.battery_status_controller import BatteryStatusController
+from .views.battery_details_view import show_battery_details
 from .views.battery_status_view import build_status_bar_icon
 
 # Logger import.
@@ -31,7 +32,9 @@ class RpiBatteryStatusPlugin(Plugin):
     """Show the Raspberry Pi battery in the app status bar.
 
     Reads the rpi-battery-monitor daemon's status file; where no daemon
-    runs (e.g. Windows dev machines) the icon stays grey.
+    runs (e.g. Windows dev machines) the icon stays grey. Clicking (or
+    tapping) the icon opens a small panel with the full readings, which
+    keeps updating while it is open.
 
     The icon is built in ``start()``: ``TasksApplication.run`` creates its
     pyface GUI, and with it the QApplication, before starting plugins, and
@@ -57,16 +60,31 @@ class RpiBatteryStatusPlugin(Plugin):
     #: The TraitsUI UI inside that widget while the plugin runs.
     _icon_ui = Instance(UI)
 
+    #: The details panel's UI once opened; its control is None once closed.
+    _details_ui = Instance(UI)
+
     def start(self):
         """Contribute the battery icon and start polling."""
-        self._icon, self._icon_ui = build_status_bar_icon(self.controller.model)
+        self._icon, self._icon_ui = build_status_bar_icon(
+            self.controller.model, on_click=self._show_details
+        )
         self.status_bar_icons.append(self._icon)
 
         self.controller.start()
 
     def stop(self):
-        """Stop polling and withdraw the icon (hot unload)."""
+        """Stop polling and withdraw the icon and its panel (hot unload)."""
         self.controller.stop()
+
+        if self._details_ui is not None and self._details_ui.control is not None:
+            # The panel is a child of the icon, which the window may
+            # already have deleted at app exit.
+            try:
+                self._details_ui.dispose()
+            except RuntimeError as e:
+                logger.debug(f"Battery details panel already deleted: {e}")
+
+        self._details_ui = None
 
         if self._icon_ui is not None:
             self.status_bar_icons.remove(self._icon)
@@ -79,3 +97,9 @@ class RpiBatteryStatusPlugin(Plugin):
 
             self._icon = None
             self._icon_ui = None
+
+    def _show_details(self):
+        """Open the details panel at the icon, or raise the open one."""
+        self._details_ui = show_battery_details(
+            self.controller.model, self._icon, self._details_ui
+        )

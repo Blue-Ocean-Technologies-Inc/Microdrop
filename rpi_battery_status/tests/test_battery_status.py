@@ -8,7 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Rules of the battery model: fill glyph, percent text, levels, staleness."""
+"""Rules of the battery model: glyph, text, levels, staleness, panel rows."""
 
 # Third-party imports.
 import pytest
@@ -154,3 +154,108 @@ def test_real_pi_charging_snapshot(pi_charging_snapshot):
     assert model.tooltip == (
         "Battery 34 % · 23.6 V · 5.9 A · charging · 11 h 03 min to full"
     )
+
+
+def test_real_pi_charging_snapshot_details(pi_charging_snapshot):
+    model = BatteryStatus()
+    model.apply_snapshot(pi_charging_snapshot, pi_charging_snapshot["timestamp"] + 1)
+
+    assert model.voltage_per_cell == 3.9375
+    assert model.power == pytest.approx(-139.3875)
+    assert model.state == "Charging"
+    assert model.cells == 6
+    assert model.chemistry == "li-ion"
+    assert model.soc_source == "coulomb"
+    assert model.remaining_ah == pytest.approx(34.484282657375246)
+
+    assert model.headline == ""
+    assert model.charge_text == "34 %"
+    assert model.voltage_text == "23.6 V (3.94 V/cell)"
+    assert model.current_text == "5.9 A into the pack"
+    assert model.power_text == "139 W"
+    assert model.state_text == "Charging"
+    assert model.time_text == "11 h 03 min to full"
+    assert model.pack_text == "6 cells · li-ion · 34.5 Ah left"
+    assert model.source_text == "coulomb counting"
+
+
+def test_discharging_details():
+    model = fed(
+        soc=73.4, current=1.24, power=28.6, state="Discharging", time_to_empty_s=3900
+    )
+
+    assert model.current_text == "1.2 A draw"
+    assert model.power_text == "29 W"
+    assert model.state_text == "Discharging"
+    assert model.time_text == "1 h 05 min to empty"
+
+
+def test_idle_current_has_no_direction():
+    assert fed(current=0.02).current_text == "0.0 A"
+
+
+@pytest.mark.parametrize(
+    "soc_source, text",
+    [("voltage", "voltage curve"), ("blend", "blend"), ("kalman", "kalman")],
+)
+def test_source_text_maps_known_sources(soc_source, text):
+    assert fed(soc_source=soc_source).source_text == text
+
+
+def test_voltage_text_without_per_cell():
+    assert fed(voltage=23.44).voltage_text == "23.4 V"
+
+
+def test_pack_text_drops_unknown_parts():
+    assert fed(cells=6, remaining_ah=-1).pack_text == "6 cells"
+    assert fed(chemistry="li-ion", remaining_ah=12.0).pack_text == (
+        "li-ion · 12.0 Ah left"
+    )
+
+
+def test_alert_is_flagged_in_the_state_text():
+    assert fed(state="Discharging", alert=True).state_text == (
+        "Discharging — low-voltage alert"
+    )
+    assert fed(alert=True).state_text == "Low-voltage alert"
+
+
+def test_unknown_details_are_empty():
+    model = fed(
+        soc=None,
+        voltage="23.6",
+        voltage_per_cell=None,
+        current=None,
+        power=True,
+        state=7,
+        cells=6.0,
+        chemistry=None,
+        soc_source=None,
+        remaining_ah=None,
+        time_to_empty_s=-1,
+    )
+
+    assert model.headline == ""
+    assert model.charge_text == "Unknown"
+
+    for text in (
+        model.voltage_text,
+        model.current_text,
+        model.power_text,
+        model.state_text,
+        model.time_text,
+        model.pack_text,
+        model.source_text,
+    ):
+        assert text == ""
+
+
+def test_unavailable_and_absent_headlines():
+    assert BatteryStatus().headline == "Battery monitor unavailable"
+    assert BatteryStatus().charge_text == "Unknown"
+
+    absent = fed(soc=50, battery_absent=True)
+
+    assert absent.headline == "No battery connected"
+    assert absent.charge_text == "Unknown"
+    assert absent.tooltip == absent.headline

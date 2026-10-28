@@ -100,3 +100,11 @@ UNKNOWN_GLYPH = "battery_unknown"
 
 #: Percent text while the state of charge is unknown or meaningless.
 UNKNOWN_PERCENT_TEXT = "--"
+
+#: Details-panel wording for the daemon's soc_source values; any other
+#: value is shown as it arrives.
+SOC_SOURCE_TEXTS = {
+    "coulomb": "coulomb counting",
+    "voltage": "voltage curve",
+    "blend": "blend",
+}

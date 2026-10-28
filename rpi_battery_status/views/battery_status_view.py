@@ -10,13 +10,16 @@
 
 """The battery icon for the app status bar: fill glyph plus percent text.
 
+A left click (or touch tap) on the icon calls an injected callback, which
+the plugin uses to open the details panel.
+
 Runs standalone against just the model:
 ``BatteryStatus().edit_traits(view=BatteryStatusIconView)``.
 """
 
 # Enthought library imports.
-from pyface.qt import QtGui, QtWidgets
-from traitsui.api import Handler, HGroup, UItem, View
+from pyface.qt import QtCore, QtGui, QtWidgets
+from traitsui.api import Handler, HGroup, TextEditor, UItem, View
 
 # Microdrop package imports.
 from microdrop_status_bar.consts import ICON_PRIORITY_LEFTMOST
@@ -27,6 +30,34 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 
 # Local imports.
 from ..consts import LEVEL_COLORS
+
+# Plain labels let presses through to the clickable host widget; selectable
+# ones would swallow them.
+_UNSELECTABLE_TEXT = TextEditor(readonly_allow_selection=False)
+
+
+class _ClickableIcon(QtWidgets.QWidget):
+    """Status-bar host widget that calls ``on_click`` on a left press.
+
+    Qt synthesises a left press from an unhandled touch tap, so a tap on
+    the touch panel counts as a click.
+    """
+
+    def __init__(self, on_click=None):
+        super().__init__()
+        self._on_click = on_click
+
+        if on_click is not None:
+            self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        """Call ``on_click`` for a left press; pass anything else on."""
+        if self._on_click is None or event.button() != QtCore.Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+
+        event.accept()
+        self._on_click()
 
 
 class BatteryStatusIconHandler(Handler):
@@ -64,22 +95,24 @@ class BatteryStatusIconHandler(Handler):
 
 BatteryStatusIconView = View(
     HGroup(
-        UItem("glyph", style="readonly"),
-        UItem("percent_text", style="readonly"),
+        UItem("glyph", style="readonly", editor=_UNSELECTABLE_TEXT),
+        UItem("percent_text", style="readonly", editor=_UNSELECTABLE_TEXT),
     ),
     handler=BatteryStatusIconHandler,
 )
 
 
-def build_status_bar_icon(model):
+def build_status_bar_icon(model, on_click=None):
     """Return the battery icon widget for ``model`` and its TraitsUI UI.
 
     The widget is what the status bar takes, placed leftmost. TraitsUI only
     builds a bare subpanel (no dialog) inside a parent, so the widget hosts
     the UI's control. Dispose the UI when the icon is withdrawn so its
     handler stops observing the model.
+
+    ``on_click``, a zero-argument callable, runs on each left click or tap.
     """
-    icon = QtWidgets.QWidget()
+    icon = _ClickableIcon(on_click)
     icon.status_bar_icon_priority = ICON_PRIORITY_LEFTMOST
 
     ui = model.edit_traits(view=BatteryStatusIconView, parent=icon, kind="subpanel")
