@@ -257,8 +257,32 @@ MONITOR_INTERVAL_S = 2
 STATUS_FAILURE_DISCONNECT_LIMIT = 3
 
 #: chip_on_pad status bits: bit0 debounced presence, bit1/bit2 raw left/right
-#: pogo contact. A chip counts as on the pad only with all three set.
+#: pogo contact. Under the both-pogos rule a chip counts as on the pad only
+#: with all three set.
 CHIP_ON_PAD_SEATED_MASK = 0b111
+#: The debounced presence bit every chip-detect rule requires.
+CHIP_ON_PAD_PRESENCE_BIT = 0b001
+#: The left/right pogo contact bits; the any-pogo rule needs one of them.
+CHIP_ON_PAD_POGO_BITS = 0b110
+
+#: Chip-detect rules (Portable DropBot Settings preference): which contact
+#: masks the backend reports as a chip on the pad.
+CHIP_DETECT_RULE_BOTH_POGOS = "both_pogos"
+CHIP_DETECT_RULE_ANY_POGO = "any_pogo"
+CHIP_DETECT_RULES = (CHIP_DETECT_RULE_BOTH_POGOS, CHIP_DETECT_RULE_ANY_POGO)
+DEFAULT_CHIP_DETECT_RULE = CHIP_DETECT_RULE_BOTH_POGOS
+
+#: Boards whose fans the driver's setFan(on, board=...) drives, by the
+#: driver's own names: the MCU (signal) board fan or the motor board fans.
+FAN_BOARDS = ("signal", "motor")
+#: The board the status pane's fan toggle drives unless the Portable
+#: DropBot Settings preference says otherwise.
+DEFAULT_FAN_BOARD = "signal"
+
+#: The ETS preferences node both the backend's PortableDropbotPreferences and
+#: the frontend's settings pane bind to, so the frontend never imports the
+#: backend class (same shape as VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH).
+PORTABLE_DROPBOT_PREFERENCES_PATH = "microdrop.portable_dropbot_settings"
 
 # ---------------------------------------------------------------------------
 # app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
@@ -272,6 +296,8 @@ PORT_HINT_KEY = "port_hint"
 DEFAULT_VOLTAGE_KEY = "default_voltage"
 DEFAULT_FREQUENCY_KEY = "default_frequency"
 DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
+FAN_BOARD_KEY = "fan_board"
+CHIP_DETECT_RULE_KEY = "chip_detect_rule"
 
 PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     BAUD_RATE_KEY,
@@ -279,6 +305,8 @@ PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     DEFAULT_VOLTAGE_KEY,
     DEFAULT_FREQUENCY_KEY,
     DEFAULT_LIGHT_INTENSITY_KEY,
+    FAN_BOARD_KEY,
+    CHIP_DETECT_RULE_KEY,
 )
 
 # Last applied electrodes_state_change request.
@@ -411,6 +439,8 @@ FLUORESCENCE_CAPTURE = "portable_dropbot/requests/fluorescence_capture"
 #: publish_message with an empty message, exactly like PMT_CAPTURE_ABORT.
 FLUORESCENCE_CAPTURE_ABORT = "portable_dropbot/requests/fluorescence_capture_abort"
 # Power system (advanced): fan and buzzer only.
+#: JSON {"on": bool, "board"?: one of FAN_BOARDS}; board is optional and
+#: defaults to the fan-board preference (PortableDropbotPreferences.fan_board).
 SET_FAN = "portable_dropbot/requests/set_fan"
 SET_BUZZER = "portable_dropbot/requests/set_buzzer"
 # Motor mechanical params (advanced): RAM write, flash preset, and

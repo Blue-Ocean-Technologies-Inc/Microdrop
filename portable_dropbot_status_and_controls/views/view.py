@@ -103,11 +103,12 @@ mechanism_toolbar = HGroup(
         enabled_when="connected",
     ),
     UItem(
-        "mcu_fan_state",
+        "fan_state",
         editor=IconToggleEditor(
             on_glyph=ICON_MODE_FAN,
             off_glyph=ICON_MODE_FAN_OFF,
-            tooltip="MCU fan on/off (state is not read back)",
+            tooltip="Fan on/off — which board's fan is set in Preferences "
+            "(state is not read back)",
         ),
         enabled_when="connected",
     ),
