@@ -11,7 +11,8 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, that stat
 per ROI on the displayed image (bars) or across the series (violins),
-the fits' first- or second-derivative curves, the per-ROI
+the pixel intensities each ROI measures on the displayed image
+(histograms), the fits' first- or second-derivative curves, the per-ROI
 time-of-fastest-change bars, or that time against the expected one.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
@@ -108,6 +109,7 @@ from .consts import (
     EXPECTED_METRIC_MARKERS,
     FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    HISTOGRAM_BINS,
     LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
@@ -157,6 +159,7 @@ from .plot_series import (
     x_axis_label,
     x_quantity,
 )
+from .roi_compute import measured_pixels
 from .roi_model import PLOT_STATS, CustomPoint, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
@@ -251,23 +254,31 @@ NOTE_NO_TEMP_Y = 0.09
 NOTE_AREA_FIT_Y = 0.125
 
 #: The views drawn against the time (or temperature) axis; the rest
-#: put ROI names along x.
+#: put ROI names along x — or, the histogram, pixel intensity.
 TIME_VIEW_MODES = ("intensity", "first_derivative", "second_derivative")
+
+#: The views that read the displayed image, so stepping through the
+#: series redraws them.
+DISPLAYED_IMAGE_VIEW_MODES = ("per_image", "histogram")
 
 #: The derivative views' y-axis symbol, by derivative order.
 DERIVATIVE_SYMBOLS = {1: "dy/dx", 2: "d²"}
 
 #: The views a log value axis applies to. Not the bar charts: a bar
-#: grows from zero, which a log axis cannot show.
-LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution")
+#: grows from zero, which a log axis cannot show. The histogram's
+#: counts can: an empty bin simply drops out, and a log scale is what
+#: brings a sparse tail up beside the bulk of an ROI's pixels.
+LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution", "histogram")
 
 #: The views drawing a point per image, which a click can toggle the
 #: exclusion of.
 PICK_VIEW_MODES = ("intensity", "temperature")
 
 #: The views drawing no plotted-stat value at all: the series' notes
-#: (gaps, dropped outliers) and the stat-unit axis limits do not apply.
-NON_STAT_VIEW_MODES = ("temperature",)
+#: (gaps, dropped outliers, log-hidden points) and the stat-unit axis
+#: limits do not apply. The histogram draws pixels, not the stat: its
+#: value axis counts them.
+NON_STAT_VIEW_MODES = ("temperature", "histogram")
 
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
@@ -1089,6 +1100,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._outliers = {}
         #: This redraw's fits, solved on first use (see _fitted_rois).
         self._fits = None
+        #: (signature, measured_pixels result) of the displayed image —
+        #: the Histogram view's pixels, read again only when what they
+        #: are measured from changes (see _measured_pixels_of).
+        self._measured = None
         self._redraw_pending = False
         self._detached = False
         #: Set once the user zooms or pans: their view then survives
@@ -1269,10 +1284,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._schedule_redraw()
 
     def _on_displayed_image_changed(self, event):
-        # Only the per-image view reads the displayed image; redrawing
-        # the others would refit every ROI on each step through the
-        # series for nothing.
-        if self._model.session.figure.view_mode == "per_image":
+        # Only the per-image and histogram views read the displayed
+        # image; redrawing the others would refit every ROI on each step
+        # through the series for nothing.
+        if self._model.session.figure.view_mode in DISPLAYED_IMAGE_VIEW_MODES:
             self._schedule_redraw()
 
     def _schedule_redraw(self):
@@ -1307,8 +1322,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # The Expected tab and its CSV read these whatever is shown, and
         # the model fits the Actual vs expected trend from them, so they
         # go before any view draws. The fitting views reuse these fits;
-        # the per-image and distribution views fit nothing, so they pay
-        # this one fit pass to keep the actuals current.
+        # the per-image, distribution and histogram views fit nothing,
+        # so they pay this one fit pass to keep the actuals current.
         self._model.expected_actuals = {
             roi.roi_id: landmarks
             for roi, _name, landmarks in self._fit_landmarks(series, figure_settings)
@@ -1351,6 +1366,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
                 trim_edges = self._draw_distribution(series, figure_settings)
+            elif view_mode == "histogram":
+                trim_edges = self._draw_histogram(series, figure_settings)
             elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
             elif view_mode == "temperature":
@@ -1398,9 +1415,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if view_mode == "intensity" and figure_settings.show_excluded_points:
             self._draw_excluded_points(excluded)
 
-        self._note_hidden_points(series, log_x, log_y)
-
         if view_mode not in NON_STAT_VIEW_MODES:
+            self._note_hidden_points(series, log_x, log_y)
             self._note_dropped_outliers()
             self._note_area_fit_fallbacks(series, area_fit)
 
@@ -1727,6 +1743,142 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.set_xticks(positions, [name for name, _values, _style in samples])
 
         return []  # ROI names on x: no time span to shade
+
+    def _draw_histogram(self, series, figure_settings):
+        """Step outline per visible ROI of the pixel intensities it
+        measures on the displayed image — the very pixels its mean and
+        median are taken over: the inset interior less the negative
+        masks, on the warped, rolling-ball-corrected frame — its median
+        marked solid and its mean dashed. Every outline shares one set
+        of bins, so they compare bin for bin. It follows the viewer's
+        selection like the per-image view; the plotted stat plays no
+        part."""
+        session = self._model.session
+        image_path = self._model.current_image_path
+        paths = analysed_paths(session, self._model.filtered_paths)
+
+        self._axes.set_xlabel(
+            f"Intensity — {Path(image_path).name}" if image_path else "Intensity"
+        )
+        self._axes.set_ylabel("Pixels")
+        self._apply_legend(False)
+
+        if not image_path:
+            self._draw_hint("No image displayed")
+
+            return []
+
+        if image_path not in paths:
+            self._draw_hint(
+                "The displayed image is excluded from analysis"
+                if session.is_excluded(image_path)
+                else "The displayed image is not in the filtered series"
+            )
+
+            return []
+
+        measured = self._measured_pixels_of(image_path)
+
+        if measured["error"]:
+            self._draw_hint(
+                f"The displayed image could not be read: {measured['error']}"
+            )
+
+            return []
+
+        # The series holds the visible ROIs in the order every view
+        # draws them; an ROI deleted from this image alone, or covered
+        # entirely by negative masks, has no pixels to count.
+        samples = []
+
+        for roi_id, (name, _x_values, _values) in series.items():
+            roi = session.roi_by_id(roi_id)
+            pixels = measured["pixels"].get(roi_id)
+
+            if roi is not None and pixels is not None and pixels.size:
+                samples.append((name, pixels, roi.style))
+
+        if not samples:
+            self._draw_hint("No ROI measures any pixels on the displayed image")
+
+            return []
+
+        # Over the shown pixels' common range, so a bin covers the same
+        # intensities in every outline.
+        edges = np.histogram_bin_edges(
+            np.concatenate([pixels for _name, pixels, _style in samples]),
+            HISTOGRAM_BINS,
+        )
+
+        for name, pixels, style in samples:
+            # The curves' own line width: matplotlib draws a patch's
+            # outline thinner than a line, and these are read as curves.
+            _counts, _edges, outlines = self._axes.hist(
+                pixels,
+                edges,
+                histtype="step",
+                color=style.color,
+                alpha=style.plot_alpha,
+                linewidth=matplotlib.rcParams["lines.linewidth"],
+                label=name,
+            )
+            self._fit_artists.extend(outlines)
+
+            for statistic, line_style in ((np.median, "solid"), (np.mean, "dashed")):
+                self._fit_artists.append(
+                    self._axes.axvline(
+                        float(statistic(pixels)),
+                        color=style.color,
+                        alpha=style.plot_alpha,
+                        linestyle=LINE_STYLES[line_style],
+                    )
+                )
+
+        self._apply_legend(figure_settings.show_legend)
+
+        return []  # intensity on x: no time span to shade
+
+    def _measured_pixels_of(self, image_path):
+        """measured_pixels() of every positive ROI measured on
+        ``image_path``, called with the arguments the instant compute
+        dispatches for it (RoiAnalysisController._instant_stats: each
+        ROI's cache_key geometry, the image's correction_for), so the
+        histogram and the table's mean read one pixel set.
+
+        Every positive ROI, not just the visible ones, cached under
+        their cache_keys — the image's path and mtime, each geometry,
+        the correction — so an eye, the legend or a zoom redraws
+        without reading the image again, while moving an ROI, editing
+        a negative mask or rewriting the file reads it afresh.
+
+        Synchronous: ~0.2 s for a 1920x1080 frame, most of it the
+        decode. Should that grow, this call is the one to hand to a
+        LatestWinsWorker."""
+        session = self._model.session
+        stat_cache = {}
+        rois = [
+            roi
+            for roi in session.positive_rois
+            if session.measures(image_path, roi, stat_cache)
+        ]
+        keys = tuple(session.cache_key(image_path, roi, stat_cache) for roi in rois)
+        # The path too: with no ROI measured there is no key to carry it.
+        signature = (image_path, keys)
+
+        if self._measured is None or self._measured[0] != signature:
+            effective_rois = {
+                roi.roi_id: (roi.kind, tuple(key[4])) for roi, key in zip(rois, keys)
+            }
+            self._measured = (
+                signature,
+                measured_pixels(
+                    image_path,
+                    effective_rois,
+                    *session.correction_for(image_path, stat_cache),
+                ),
+            )
+
+        return self._measured[1]
 
     def _draw_roi_bars(self, entries, figure_settings):
         """Bar per (name, height, style) entry, coloured and faded by

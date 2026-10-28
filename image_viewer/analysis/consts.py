@@ -87,6 +87,9 @@ BAR_GAP = 0.2
 #: scales them itself.
 LEGEND_FONT_SCALE = 0.833
 ANNOTATION_FONT_SCALE = 0.694
+#: Bins of the Histogram view, spread evenly over the shared range of
+#: every ROI it shows, so the ROIs compare bin for bin.
+HISTOGRAM_BINS = 128
 
 #: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
 #: the analysis draws, tests and combines uses it, so it is one name
@@ -248,13 +251,15 @@ NEGATIVE_MASK_NAME_PREFIX = "Mask"
 #: Plot pane view modes: the plotted stat over time (the key predates
 #: the area stat and is persisted, so it stays "intensity"), its value
 #: per ROI on the displayed image, its distribution per ROI across the
-#: series, the fits' first- or second-derivative curves, the per-ROI
+#: series, the pixel intensities each ROI measures on the displayed
+#: image, the fits' first- or second-derivative curves, the per-ROI
 #: time-of-fastest-change bars, that time against the one the user
 #: expects, or the heater log's temperature over the captures' time.
 VIEW_MODES = (
     "intensity",
     "per_image",
     "distribution",
+    "histogram",
     "first_derivative",
     "second_derivative",
     "fastest_change",
@@ -265,6 +270,7 @@ VIEW_MODE_LABELS = {
     "intensity": "Over time",
     "per_image": "Per image",
     "distribution": "Distribution",
+    "histogram": "Histogram",
     "first_derivative": "1st derivative",
     "second_derivative": "2nd derivative",
     "fastest_change": "Fastest change",

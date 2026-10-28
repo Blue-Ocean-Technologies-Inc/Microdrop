@@ -312,6 +312,33 @@ def stats_are_current(stats):
     return stats is not None and all(key in stats for key in ROI_SHAPE_KEYS)
 
 
+def _measured_frame(image_path, ball_radius_px=0, perspective=()):
+    """The frame every ROI on ``image_path`` is measured on: read at its
+    own depth, warped by ``perspective``, then flattened by the rolling
+    ball when ``ball_radius_px`` is above 0 — warped first, because the
+    ROIs are drawn on the warped frame. Raises ValueError for a file
+    cv2 cannot read."""
+    array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+
+    if array is None:
+        raise ValueError("unreadable image")
+
+    array = warp_frame(array, perspective)
+
+    if ball_radius_px:
+        array = subtract_rolling_ball(array, ball_radius_px)
+
+    return array
+
+
+def _measured_mask(interior, excluded, inside_percent):
+    """The part of one ROI whose intensity is measured: the inner part
+    of ``interior`` (inset_mask) less ``excluded``, the negative-mask
+    union. One definition, so the stats and the histogram of an ROI
+    cannot be taken over different pixels."""
+    return cv2.subtract(inset_mask(interior, inside_percent), excluded)
+
+
 def compute_image_stats(
     image_path,
     effective_rois,
@@ -358,14 +385,7 @@ def compute_image_stats(
     result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
-        array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
-        if array is None:
-            raise ValueError("unreadable image")
-        array = warp_frame(array, perspective)
-
-        if ball_radius_px:
-            array = subtract_rolling_ball(array, ball_radius_px)
-
+        array = _measured_frame(image_path, ball_radius_px, perspective)
         interiors, rings = {}, {}
 
         for roi_id, (kind, geometry) in effective_rois.items():
@@ -386,7 +406,7 @@ def compute_image_stats(
             ring[others == MASK_ON] = 0
             ring[excluded == MASK_ON] = 0
             effective = cv2.subtract(interior, excluded)
-            measured = cv2.subtract(inset_mask(interior, inside_percent), excluded)
+            measured = _measured_mask(interior, excluded, inside_percent)
 
             stats = masked_stats(array, measured)
 
@@ -398,4 +418,46 @@ def compute_image_stats(
     except Exception as error:
         result["error"] = str(error)
         result["stats"] = {}
+    return result
+
+
+def measured_pixels(
+    image_path,
+    effective_rois,
+    gap_px=RING_GAP_PX,
+    thickness_px=RING_THICKNESS_PX,
+    ball_radius_px=0,
+    perspective=(),
+    negatives=(),
+    inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
+):
+    """The pixel values every ROI's intensity stats are taken over on
+    one image — what masked_stats reduces to the mean, median and count
+    compute_image_stats reports, read off the same corrected frame
+    through the same mask.
+
+    Takes compute_image_stats's arguments in its order, so a work
+    item's correction tuple spreads into either. The ring's
+    ``gap_px``/``thickness_px`` are accepted for that alone: the ring
+    is background, not part of the measured pixels.
+
+    Returns {"path", "mtime", "pixels": {roi_id: 1-D array in the
+    frame's dtype}, "error"} — an empty array for an ROI covered
+    entirely or outside the frame; a load failure fills "error" and
+    leaves "pixels" empty, as compute_image_stats does."""
+    result = {"path": str(image_path), "mtime": 0.0, "pixels": {}, "error": None}
+
+    try:
+        result["mtime"] = os.path.getmtime(image_path)
+        array = _measured_frame(image_path, ball_radius_px, perspective)
+        excluded = negative_union(array.shape[:2], negatives)
+
+        for roi_id, (kind, geometry) in effective_rois.items():
+            interior = interior_mask(array.shape[:2], kind, geometry)
+            measured = _measured_mask(interior, excluded, inside_percent)
+            result["pixels"][roi_id] = array[measured == MASK_ON]
+    except Exception as error:
+        result["error"] = str(error)
+        result["pixels"] = {}
+
     return result
