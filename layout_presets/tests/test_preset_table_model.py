@@ -75,7 +75,7 @@ def test_changes_after_editing_and_deleting(tmp_path):
 
     assert [row.name for row in table.rows] == ["square", "wide"]
     assert table.selected is None
-    assert table.changes() == (["tall"], {"square": "Alt+3", "wide": ""})
+    assert table.changes() == (["tall"], {}, {"square": "Alt+3", "wide": ""})
 
 
 def test_deleting_a_row_clears_the_collision_it_caused(tmp_path):
@@ -87,3 +87,72 @@ def test_deleting_a_row_clears_the_collision_it_caused(tmp_path):
     table.delete_selected()
 
     assert _row(table, "wide").warning == ""
+
+
+def test_invalid_rename_blocks_accept(tmp_path):
+    table = _table(tmp_path, wide="Alt+1")
+    row = _row(table, "wide")
+
+    assert table.can_accept
+
+    row.name = "wide/tall"
+
+    assert row.name_error == "A preset name cannot contain /"
+    assert row.warning == row.name_error
+    assert not table.can_accept
+
+    row.name = "  Wide room  "
+
+    assert row.name_error == ""
+    assert table.can_accept
+
+
+def test_duplicate_row_name_warns_and_blocks_accept(tmp_path):
+    table = _table(tmp_path, wide="Alt+1", tall="Alt+2")
+
+    _row(table, "tall").name = "WIDE"
+
+    assert _row(table, "WIDE").warning == "Another preset is already named 'WIDE'."
+    assert not table.can_accept
+
+
+def test_rename_onto_a_deleted_row_is_allowed(tmp_path):
+    table = _table(tmp_path, wide="Alt+1", tall="Alt+2")
+    _row(table, "tall").name = "wide"
+
+    assert not table.can_accept
+
+    table.selected = _row(table, "wide")
+    table.delete_selected()
+
+    assert table.can_accept
+
+
+def test_rename_onto_an_unlisted_file_on_disk_is_refused(tmp_path):
+    table = _table(tmp_path, wide="Alt+1")
+    table.disk_names = table.disk_names + ["broken"]
+
+    _row(table, "wide").name = "broken"
+
+    assert not table.can_accept
+
+
+def test_changes_with_a_rename_and_a_shortcut_edit_on_one_row(tmp_path):
+    table = _table(tmp_path, wide="Alt+1", tall="Alt+2")
+    row = _row(table, "wide")
+
+    row.name = " wider "
+    row.shortcut = "Alt+5"
+
+    assert table.changes() == ([], {"wide": "wider"}, {"wider": "Alt+5"})
+
+
+def test_deleting_a_renamed_row_deletes_its_saved_preset(tmp_path):
+    table = _table(tmp_path, wide="Alt+1", tall="Alt+2")
+    row = _row(table, "wide")
+    row.name = "wider"
+
+    table.selected = row
+    table.delete_selected()
+
+    assert table.changes() == (["wide"], {}, {})

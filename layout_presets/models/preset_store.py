@@ -86,13 +86,11 @@ class PresetStore(HasTraits):
 
     def refresh(self):
         """Rescan ``directory``, listing every preset that loads."""
-        directory = Path(self.directory)
-        names = []
-
-        if directory.is_dir():
-            for path in directory.glob(f"*{PRESET_FILE_SUFFIX}"):
-                if self._read(path) is not None:
-                    names.append(path.stem)
+        names = [
+            name
+            for name in self.saved_names()
+            if self._read(self._path_for(name)) is not None
+        ]
 
         self.shortcuts = {
             name: shortcut
@@ -104,6 +102,15 @@ class PresetStore(HasTraits):
     def has_preset(self, name):
         """Return whether a preset file named ``name`` is already on disk."""
         return self._path_for(name).exists()
+
+    def saved_names(self):
+        """Return the name of every preset file on disk, readable or not."""
+        directory = Path(self.directory)
+
+        if not directory.is_dir():
+            return []
+
+        return [path.stem for path in directory.glob(f"*{PRESET_FILE_SUFFIX}")]
 
     def next_default_name(self):
         """Return ``<stem>-N`` for the smallest N not already saved."""
@@ -163,6 +170,45 @@ class PresetStore(HasTraits):
         self._path_for(name).unlink()
         self._write_shortcuts(self._saved_preset_shortcuts())
         logger.info(f"Deleted layout preset '{name}'")
+
+        self.refresh()
+
+    def rename(self, old_name, new_name):
+        """Rename preset ``old_name`` to ``new_name``, carrying its shortcut.
+
+        Raises ``ValueError`` when ``old_name`` is unknown, ``new_name``
+        breaks the naming rule, or another preset already has that name.
+        """
+        error = preset_name_error(new_name)
+
+        if error:
+            raise ValueError(error)
+
+        old_name = old_name.strip()
+        new_name = new_name.strip()
+        old_path = self._path_for(old_name)
+        new_path = self._path_for(new_name)
+
+        if not self.has_preset(old_name):
+            raise ValueError(f"There is no layout preset named '{old_name}'.")
+
+        if new_name == old_name:
+            return
+
+        # A case-only rename on a case-insensitive filesystem finds its own
+        # file under the new name; that is no collision.
+        if new_path.exists() and not old_path.samefile(new_path):
+            raise ValueError(f"A layout preset named '{new_name}' already exists.")
+
+        shortcuts = self._saved_preset_shortcuts()
+        shortcut = shortcuts.pop(old_name, "")
+
+        if shortcut:
+            shortcuts[new_name] = shortcut
+
+        os.replace(old_path, new_path)
+        self._write_shortcuts(shortcuts)
+        logger.info(f"Renamed layout preset '{old_name}' to '{new_name}'")
 
         self.refresh()
 

@@ -8,12 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Manage Layout Presets dialog: every saved preset in a table, its
-shortcut editable in place and any collision shown beside it. Deleting a
-row only stages it; nothing changes on disk until OK."""
+"""The Manage Layout Presets dialog: every saved preset in a table, its name
+and shortcut editable in place and any problem shown beside it. A name that
+cannot be applied keeps OK disabled; a shortcut collision only warns.
+Deleting a row only stages it; nothing changes on disk until OK."""
 
 # Enthought library imports.
-from traitsui.api import HGroup, TableEditor, UItem, VGroup, View, spring
+from traitsui.api import Action, HGroup, TableEditor, UItem, VGroup, View, spring
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import KeySequenceEditor, ObjectColumn
@@ -23,7 +24,11 @@ from ..consts import MANAGE_LAYOUT_PRESETS_DIALOG_TITLE
 
 presets_table = TableEditor(
     columns=[
-        ObjectColumn(name="name", label="Preset", editable=False),
+        ObjectColumn(
+            name="name",
+            label="Preset",
+            tooltip="Double-click to rename the preset",
+        ),
         ObjectColumn(
             name="shortcut",
             label="Shortcut",
@@ -46,7 +51,7 @@ preset_table_view = View(
         ),
     ),
     title=MANAGE_LAYOUT_PRESETS_DIALOG_TITLE,
-    buttons=["OK", "Cancel"],
+    buttons=[Action(name="OK", enabled_when="can_accept"), "Cancel"],
     kind="livemodal",
     resizable=True,
     width=560,
@@ -60,8 +65,13 @@ if __name__ == "__main__":
 
     PresetTable(
         rows=[
-            PresetRow(name="wide", shortcut="Alt+1", saved_shortcut="Alt+1"),
-            PresetRow(name="tall", shortcut="Ctrl+R"),
+            PresetRow(
+                name="wide",
+                saved_name="wide",
+                shortcut="Alt+1",
+                saved_shortcut="Alt+1",
+            ),
+            PresetRow(name="tall", saved_name="tall", shortcut="Ctrl+R"),
         ],
         used_shortcuts={"Ctrl+R": "Reset Layout"},
     ).configure_traits(view=preset_table_view)

@@ -265,3 +265,42 @@ def test_unknown_preset_is_left_alone_with_a_warning(tmp_path, caplog):
     assert store.presets == ["wide"]
     assert store.shortcuts == {"wide": "Alt+1"}
     assert len([r for r in caplog.records if r.levelname == "WARNING"]) == 2
+
+
+def test_rename_moves_the_preset_and_carries_its_shortcut(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+
+    store.rename("wide", " wider ")
+
+    assert not (tmp_path / f"wide{PRESET_FILE_SUFFIX}").exists()
+    assert store.presets == ["wider"]
+    assert store.shortcuts == {"wider": "Alt+1"}
+    assert store.load("wider").size == (1280, 800)
+
+
+def test_rename_changes_only_the_case(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+
+    store.rename("wide", "Wide")
+
+    assert store.presets == ["Wide"]
+    assert store.shortcuts == {"Wide": "Alt+1"}
+
+
+@pytest.mark.parametrize(
+    "old_name, new_name", [("wide", "tall"), ("wide", "a/b"), ("missing", "new")]
+)
+def test_rename_refuses_collisions_invalid_and_unknown_names(
+    tmp_path, old_name, new_name
+):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+    store.save("tall", _window_layout(), PROTOCOL, shortcut="Alt+2")
+
+    with pytest.raises(ValueError):
+        store.rename(old_name, new_name)
+
+    assert store.presets == ["tall", "wide"]
+    assert store.shortcuts == {"tall": "Alt+2", "wide": "Alt+1"}

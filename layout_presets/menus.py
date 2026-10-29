@@ -118,10 +118,14 @@ def used_shortcuts(window, store, include_presets=True):
     return owners
 
 
-def apply_preset_table_changes(store, deleted_names, changed_shortcuts):
-    """Apply the Manage Layout Presets dialog's changes to ``store``."""
+def apply_preset_table_changes(store, deleted_names, renamed, changed_shortcuts):
+    """Apply the Manage Layout Presets dialog's changes to ``store``:
+    deletions, then renames, then shortcuts (keyed by the new names)."""
     for name in deleted_names:
         store.delete(name)
+
+    for old_name, new_name in renamed.items():
+        store.rename(old_name, new_name)
 
     for name, shortcut in changed_shortcuts.items():
         store.set_shortcut(name, shortcut)
@@ -296,7 +300,7 @@ class ManageLayoutPresetsAction(TaskAction):
 
     id = MANAGE_LAYOUT_PRESETS_ACTION_ID
     name = MANAGE_LAYOUT_PRESETS_ACTION_NAME
-    tooltip = "View, delete, and change the shortcuts of the layout presets"
+    tooltip = "View, rename, delete, and change the shortcuts of the layout presets"
 
     #: The presets being managed.
     store = Instance(PresetStore)
@@ -318,7 +322,7 @@ class ManageLayoutPresetsAction(TaskAction):
         if not ui.result:
             return
 
-        deleted_names, changed_shortcuts = table.changes()
+        deleted_names, renamed, changed_shortcuts = table.changes()
 
         # Asked once the table dialog has closed, so it never runs inside a
         # TableEditor commit.
@@ -326,8 +330,10 @@ class ManageLayoutPresetsAction(TaskAction):
             deleted_names = []
 
         try:
-            apply_preset_table_changes(self.store, deleted_names, changed_shortcuts)
-        except OSError as apply_error:
+            apply_preset_table_changes(
+                self.store, deleted_names, renamed, changed_shortcuts
+            )
+        except (OSError, ValueError) as apply_error:
             logger.error(f"Could not update the layout presets: {apply_error}")
             error(
                 window.control,
