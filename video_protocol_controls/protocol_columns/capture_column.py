@@ -25,6 +25,22 @@ Camera ownership: the Video column is the single publisher of camera
 state during a run (see video_column.camera_wanted). Capture contributes
 the lead as a reason a step wants the camera, and only waits.
 
+Another column may still choose the camera SOURCE around the run, with
+DEVICE_VIEWER_CAMERA_SELECT_SOURCE (answered on
+DEVICE_VIEWER_CAMERA_SOURCE_SELECTED): at run start, optionally with
+active=True, and at run end to restore the DEVICE_VIEWER_CAMERA_STATE it
+saw before — never per step. A select_source with active=True LEASES the
+camera to the run: while leased, the device viewer ignores this column's
+camera_active "false" (logged "Camera kept on: leased by a protocol
+run"), so a step without video cannot stop the run's feed; "true" still
+applies. The next select_source (the run-end restore, whatever it
+carries) releases the lease, and so does PROTOCOL_RUNNING "False", so a
+crashed run never leaves it held. Send the restore from
+on_post_protocol_end: the Video column's on_protocol_end "false" is then
+published while the lease still holds, and is ignored if it arrives
+before the restore — Dramatiq does not order delivery across messages,
+so one arriving after it still applies.
+
 Acknowledged capture: each capture carries a fresh request_id and the
 handler waits for the DEVICE_VIEWER_MEDIA_CAPTURED with that request_id,
 so the step does not end until the image is on disk. Without the wait,

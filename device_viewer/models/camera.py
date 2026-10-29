@@ -51,6 +51,15 @@ class CameraModel(HasTraits):
     #: The panel's camera toggle is on (a QCamera or provider feed is live).
     camera_active = Bool(False)
 
+    #: A protocol run holds the camera on (a select_source request with
+    #: active=True): DEVICE_VIEWER_CAMERA_ACTIVE "false" requests are ignored
+    #: until the next select_source request or the run's end.
+    camera_leased = Bool(False)
+
+    #: Why the provider feed last failed to open or stopped with an error;
+    #: cleared when a feed opens.
+    feed_error = Str()
+
     #: ``/dev/videoN`` node of the selected camera (Linux only), which the
     #: v4l2 exposure/focus fallbacks drive; None elsewhere.
     v4l2_device_path = Union(None, Str)
