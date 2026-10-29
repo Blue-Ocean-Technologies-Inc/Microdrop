@@ -20,7 +20,7 @@ import pytest
 from pyface.tasks.api import PaneItem, TaskLayout, TaskWindowLayout
 
 # Local imports.
-from ..consts import PRESET_FILE_SUFFIX
+from ..consts import PRESET_FILE_SUFFIX, SHORTCUTS_FILENAME
 from ..models.preset_store import PresetStore, is_valid_preset_name
 
 #: Saved with the protocol envisage's TasksApplication uses by default.
@@ -143,3 +143,81 @@ def test_unreadable_preset_is_skipped_and_logged(tmp_path, caplog):
         record.exc_info is not None and "broken" in record.getMessage()
         for record in caplog.records
     )
+
+
+def test_first_default_shortcut_in_an_empty_store(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+
+    assert store.next_default_shortcut() == "Alt+1"
+
+
+def test_default_shortcut_fills_the_first_gap(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("first", _window_layout(), PROTOCOL, shortcut="Alt+1")
+    store.save("third", _window_layout(), PROTOCOL, shortcut="Alt+3")
+
+    assert store.next_default_shortcut() == "Alt+2"
+
+
+def test_default_shortcut_ends_with_zero_then_none(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+
+    for key in "123456789":
+        store.save(f"p{key}", _window_layout(), PROTOCOL, shortcut=f"Alt+{key}")
+
+    assert store.next_default_shortcut() == "Alt+0"
+
+    store.save("p0", _window_layout(), PROTOCOL, shortcut="Alt+0")
+
+    assert store.next_default_shortcut() == ""
+
+
+def test_shortcut_persists_across_stores(tmp_path):
+    PresetStore(directory=str(tmp_path)).save(
+        "wide", _window_layout(), PROTOCOL, shortcut="Ctrl+Shift+1"
+    )
+    store = PresetStore(directory=str(tmp_path))
+
+    store.refresh()
+
+    assert store.shortcuts == {"wide": "Ctrl+Shift+1"}
+    assert store.shortcut_for("wide") == "Ctrl+Shift+1"
+    assert store.shortcut_for("missing") == ""
+
+
+def test_overwrite_replaces_or_clears_the_shortcut(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+2")
+
+    assert store.shortcut_for("wide") == "Alt+2"
+
+    store.save("wide", _window_layout(), PROTOCOL)
+
+    assert store.shortcuts == {}
+
+
+def test_refresh_drops_the_shortcut_of_a_deleted_preset(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+    store.save("tall", _window_layout(), PROTOCOL, shortcut="Alt+2")
+
+    (tmp_path / f"wide{PRESET_FILE_SUFFIX}").unlink()
+    store.refresh()
+
+    assert store.presets == ["tall"]
+    assert store.shortcuts == {"tall": "Alt+2"}
+    assert store.next_default_shortcut() == "Alt+1"
+
+
+def test_damaged_shortcuts_file_keeps_the_presets(tmp_path, caplog):
+    _touch_presets(tmp_path, "wide")
+    (tmp_path / SHORTCUTS_FILENAME).write_text("{not json")
+    store = PresetStore(directory=str(tmp_path))
+
+    store.refresh()
+
+    assert store.presets == ["wide"]
+    assert store.shortcuts == {}
+    assert any(record.exc_info is not None for record in caplog.records)

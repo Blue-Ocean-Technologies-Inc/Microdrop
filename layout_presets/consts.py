@@ -21,6 +21,14 @@ PRESET_FILE_SUFFIX = ".pickle"
 #: Default names are ``<stem>-1``, ``<stem>-2``, ... — the first one free.
 DEFAULT_PRESET_STEM = "preset"
 
+#: One JSON file beside the presets maps preset name -> key sequence.
+SHORTCUTS_FILENAME = "shortcuts.json"
+
+#: Default shortcuts are ``<modifier>+<key>`` for the first key, in this
+#: order, that no preset uses yet — mirroring the default name.
+DEFAULT_SHORTCUT_MODIFIER = "Alt"
+DEFAULT_SHORTCUT_KEYS = "1234567890"
+
 #: A preset name is a file stem, so it may not hold any of these.
 INVALID_PRESET_NAME_CHARACTERS = '/\\:*?"<>|'
 
@@ -44,4 +52,6 @@ NO_LAYOUT_PRESETS_LABEL = "(No saved presets)"
 SAVE_LAYOUT_PRESET_ACTION_ID = f"{PKG}.save_current_layout"
 SAVE_LAYOUT_PRESET_ACTION_NAME = "Save Current &Layout..."
 SAVE_LAYOUT_PRESET_DIALOG_TITLE = "Save Current Layout"
+DEVICE_VIEW_SHORTCUT_OWNER = "the device view"
+UNNAMED_SHORTCUT_OWNER = "an application shortcut"
 APPLY_LAYOUT_PRESET_DIALOG_TITLE = "Layout Presets"

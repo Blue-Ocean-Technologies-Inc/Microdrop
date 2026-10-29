@@ -12,20 +12,24 @@
 file in a directory, the file stem being the preset's name."""
 
 # Standard library imports.
+import json
 import os
 import pickle
 from pathlib import Path
 
 # Enthought library imports.
 from pyface.tasks.api import TaskWindowLayout
-from traits.api import Directory, HasTraits, List, Str
+from traits.api import Dict, Directory, HasTraits, List, Str
 
 # Local imports.
 from ..consts import (
     DEFAULT_PRESET_STEM,
+    DEFAULT_SHORTCUT_KEYS,
+    DEFAULT_SHORTCUT_MODIFIER,
     INVALID_PRESET_NAME_CHARACTERS,
     PRESET_FILE_SUFFIX,
     RESERVED_PRESET_NAMES,
+    SHORTCUTS_FILENAME,
 )
 
 # Logger import.
@@ -76,6 +80,10 @@ class PresetStore(HasTraits):
     #: SOURCE OF TRUTH for the menu — sorted names of the readable presets.
     presets = List(Str)
 
+    #: Preset name -> key sequence (Qt portable text) applying it, for the
+    #: listed presets that have one.
+    shortcuts = Dict(Str, Str)
+
     def refresh(self):
         """Rescan ``directory``, listing every preset that loads."""
         directory = Path(self.directory)
@@ -86,6 +94,11 @@ class PresetStore(HasTraits):
                 if self._read(path) is not None:
                     names.append(path.stem)
 
+        self.shortcuts = {
+            name: shortcut
+            for name, shortcut in self._read_shortcuts().items()
+            if name in names
+        }
         self.presets = sorted(names, key=str.casefold)
 
     def has_preset(self, name):
@@ -101,8 +114,26 @@ class PresetStore(HasTraits):
 
         return f"{DEFAULT_PRESET_STEM}-{number}"
 
-    def save(self, name, layout, protocol):
-        """Pickle ``layout`` as preset ``name``, replacing any of that name.
+    def next_default_shortcut(self):
+        """Return ``<modifier>+<key>`` for the first default key no preset
+        uses, or "" once every default key is taken."""
+        taken = set(self._saved_preset_shortcuts().values())
+
+        for key in DEFAULT_SHORTCUT_KEYS:
+            shortcut = f"{DEFAULT_SHORTCUT_MODIFIER}+{key}"
+
+            if shortcut not in taken:
+                return shortcut
+
+        return ""
+
+    def shortcut_for(self, name):
+        """Return the key sequence applying preset ``name``, or ""."""
+        return self.shortcuts.get(name.strip(), "")
+
+    def save(self, name, layout, protocol, shortcut=""):
+        """Pickle ``layout`` as preset ``name`` with key sequence
+        ``shortcut`` ("" for none), replacing any preset of that name.
 
         Raises ``ValueError`` when ``name`` breaks the naming rule.
         """
@@ -111,17 +142,22 @@ class PresetStore(HasTraits):
         if error:
             raise ValueError(error)
 
+        name = name.strip()
         path = self._path_for(name)
-        partial_path = path.with_name(f"{path.name}.partial")
-        path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write aside, then swap in, so a failed write never truncates the
-        # preset being overwritten.
-        with open(partial_path, "wb") as file:
-            pickle.dump(layout, file, protocol=protocol)
+        _write_atomically(path, pickle.dumps(layout, protocol=protocol))
 
-        os.replace(partial_path, path)
-        logger.info(f"Saved layout preset '{name.strip()}' to {path}")
+        shortcuts = self._saved_preset_shortcuts()
+        shortcuts.pop(name, None)
+
+        if shortcut:
+            shortcuts[name] = shortcut
+
+        _write_atomically(
+            Path(self.directory) / SHORTCUTS_FILENAME,
+            json.dumps(shortcuts, indent=2, sort_keys=True).encode("utf-8"),
+        )
+        logger.info(f"Saved layout preset '{name}' ({shortcut or 'no shortcut'})")
 
         self.refresh()
 
@@ -131,6 +167,40 @@ class PresetStore(HasTraits):
 
     def _path_for(self, name):
         return Path(self.directory) / f"{name.strip()}{PRESET_FILE_SUFFIX}"
+
+    def _saved_preset_shortcuts(self):
+        """Return the shortcuts file's entries whose preset is on disk."""
+        return {
+            name: shortcut
+            for name, shortcut in self._read_shortcuts().items()
+            if self.has_preset(name)
+        }
+
+    def _read_shortcuts(self):
+        """Return the shortcuts file's ``{name: key sequence}``, or {}."""
+        path = Path(self.directory) / SHORTCUTS_FILENAME
+
+        if not path.is_file():
+            return {}
+
+        try:
+            shortcuts = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # A damaged file only costs the shortcuts, never the presets.
+            logger.exception(f"Could not read layout preset shortcuts {path}")
+
+            return {}
+
+        if not isinstance(shortcuts, dict):
+            logger.error(f"Layout preset shortcuts {path} is not a JSON object")
+
+            return {}
+
+        return {
+            name: shortcut
+            for name, shortcut in shortcuts.items()
+            if isinstance(shortcut, str) and shortcut
+        }
 
     def _read(self, path):
         """Unpickle the layout at ``path``; log and return None on failure."""
@@ -154,3 +224,13 @@ class PresetStore(HasTraits):
             return None
 
         return layout
+
+
+def _write_atomically(path, content):
+    """Write ``content`` (bytes) to ``path`` aside, then swap it in, so a
+    failed write never truncates the file being replaced."""
+    partial_path = path.with_name(f"{path.name}.partial")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial_path.write_bytes(content)
+
+    os.replace(partial_path, path)
