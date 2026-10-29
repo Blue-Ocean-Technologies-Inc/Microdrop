@@ -66,7 +66,10 @@ from microdrop_utils.traitsui_qt_helpers import (
 # on/off: popped-out while the mechanism is ON (light/fan on, magnet
 # up, pogo down, tray in), sunken/grey while it is off — hence
 # invert_checked on every toggle whose True state is the ON state
-# (tray_out's True is the OFF state, so it maps directly).
+# (tray_out's True is the OFF state, so it maps directly). The tray
+# glyph moves the tray ONLY, leaving the pogo pushpads where they are;
+# clicking the device picture is the full eject/insert macro, which
+# releases and presses the pogo pads around the move.
 #
 # enabled_when sits on each item, not the group: a group-level
 # condition makes TraitsUI wrap the row in its own QWidget whose
@@ -88,7 +91,8 @@ mechanism_toolbar = HGroup(
             on_glyph=ICON_EJECT,
             off_glyph=ICON_INPUT,
             invert_checked=True,
-            tooltip="Pull the chip tray out / push it back in",
+            tooltip="Pull the chip tray out / push it back in — tray only, "
+            "the pogo pads stay where they are",
         ),
         enabled_when="connected",
     ),
@@ -141,7 +145,8 @@ left = VGroup(
                 fixed_size=True,
             ),
             show_label=False,
-            tooltip="Click to eject the tray; click again to bring it back in",
+            tooltip="Click to eject the tray; click again to bring it back in "
+            "(the pogo pads release before the move and press after)",
         ),
     ),
     mechanism_toolbar,

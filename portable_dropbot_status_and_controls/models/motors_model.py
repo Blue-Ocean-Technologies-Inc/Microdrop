@@ -8,14 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
-from traits.api import Button, Enum, Int, Range, Str
+# Enthought library imports.
+from traits.api import Bool, Button, Enum, Int, Range, Str
 
+# Microdrop package imports.
 from portable_dropbot_controller.consts import MOTOR_IDS
 from template_status_and_controls.base_model import BaseStatusModel
 
+# Local imports.
 from ..consts import (
-    MOTOR_MACRO_LABELS, MOTOR_SPEED_UM_PER_S_BOUNDS,
-    MOVE_DISTANCE_MM_BOUNDS, PORTABLE_DROPBOT_IMAGE,
+    MOTOR_MACRO_LABELS,
+    MOTOR_SPEED_UM_PER_S_BOUNDS,
+    MOVE_DISTANCE_MM_BOUNDS,
+    PORTABLE_DROPBOT_IMAGE,
 )
 
 
@@ -35,6 +40,9 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     macro_button_2 = Button()
     macro_button_1_label = Str(MOTOR_MACRO_LABELS["tray"][0])
     macro_button_2_label = Str(MOTOR_MACRO_LABELS["tray"][1])
+    #: Tray In/Out move the tray only: skip the pogo pushpad
+    #: release/press around the move. Not persisted.
+    tray_only = Bool(False)
     home_button = Button("Home")
     #: The coordinated resets (cabin+mag, pushpads, filter, PMT) —
     #: mechanism macros are silently rejected until these have run
@@ -50,8 +58,7 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     move_to_button = Button("Go")
     #: Runtime-only per-motor run speed; reverts to the flashed
     #: default on reboot.
-    speed_um_per_s = Range(*MOTOR_SPEED_UM_PER_S_BOUNDS, 1000,
-                           mode="spinner")
+    speed_um_per_s = Range(*MOTOR_SPEED_UM_PER_S_BOUNDS, 1000, mode="spinner")
     set_speed_button = Button("Set Speed")
 
     #: Local Prev/Next cycle position for the filter wheel, exactly

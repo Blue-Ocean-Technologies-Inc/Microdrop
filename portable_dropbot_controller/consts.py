@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from typing import Literal
+
 # Third-party imports.
 from pydantic import BaseModel, Field, field_validator
 
@@ -162,6 +165,17 @@ MOTOR_IDS = {
     "pogo_left": 4,
     "pogo_right": 5,
 }
+
+#: CHIP_CABIN_CTRL action code the motor board takes per tray direction.
+TRAY_ACTION_CODES = {"in": 0, "out": 1}
+#: CHIP_CABIN_CTRL flags value for a tray-only move: skip the pogo
+#: pushpad release/press around it (the firmware still drops the magnet
+#: out of the way as a safety interlock).
+CHIP_CABIN_TRAY_ONLY_FLAG = 1
+#: The CHIP_CABIN_CTRL reply's status byte, and the value it reads on a
+#: board error.
+CHIP_CABIN_STATUS_INDEX = 11
+CHIP_CABIN_STATUS_ERROR = 0xFF
 
 #: Motor name -> the driver PARAMS friendly name whose EasyFlash blob
 #: holds that motor's mechanical tuning struct.
@@ -377,6 +391,8 @@ REFRESH_PORTS = "portable_dropbot/requests/refresh_ports"
 DISCONNECT = "portable_dropbot/requests/disconnect"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
+#: Move the chip tray (MoveTrayRequest). A legacy bare "in"/"out"/"toggle"
+#: string is still accepted and runs the pogo pushpad macro.
 MOVE_TRAY = "portable_dropbot/requests/move_tray"
 MOVE_MAGNET = "portable_dropbot/requests/move_magnet"
 #: Protocol-step magnet: JSON {"on": bool, "height_mm": float}; acks
@@ -797,4 +813,23 @@ fluorescence_capture_progress_publisher = ValidatedTopicPublisher(
 )
 fluorescence_capture_done_publisher = ValidatedTopicPublisher(
     topic=FLUORESCENCE_CAPTURE_DONE, validator_class=FluorescenceCaptureDone
+)
+
+# --------------------------------------------------------------------- #
+# Mechanism message contracts (topic + schema, one importable unit)      #
+# --------------------------------------------------------------------- #
+
+
+class MoveTrayRequest(BaseModel):
+    """A chip tray move; "toggle" moves it opposite to where the motor
+    STATUS reports it."""
+
+    direction: Literal["in", "out", "toggle"]
+    #: True runs the firmware macro that releases the pogo pushpads before
+    #: the move and presses them after; False moves the tray only.
+    actuate_pogos: bool = True
+
+
+move_tray_publisher = ValidatedTopicPublisher(
+    topic=MOVE_TRAY, validator_class=MoveTrayRequest
 )

@@ -313,6 +313,24 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 - Demo: `examples/demos/protocol_report_contribution_demo.py` runs the whole pipeline headlessly over redis and prints the generated report path.
 
 
+### Portable DropBot chip tray: tray-only move vs the pogo pushpad macro
+
+Two ways to move the chip tray, one topic. The firmware's eject/insert macro releases the pogo pushpads before the tray moves and presses them after; the tray-only move leaves the pushpads where they are (the firmware still drops the magnet out of the way, as a safety interlock, either way).
+
+**Topic (`portable_dropbot_controller/consts.py`)**
+- `MOVE_TRAY = "portable_dropbot/requests/move_tray"` — `MoveTrayRequest {direction: "in" | "out" | "toggle", actuate_pogos: bool = true}`, published through `move_tray_publisher`. A legacy bare string `"in"` / `"out"` / `"toggle"` is still accepted and means `actuate_pogos: true`. `"toggle"` moves the tray opposite to the cabin state the motor STATUS reports (byte 1: 0 = in, 1 = out).
+
+**Senders (`portable_dropbot_status_and_controls`)**
+- Status pane tray glyph (`tray_out` toggle under the device picture) → `{direction: "in" | "out", actuate_pogos: false}`.
+- Status pane device picture click (`tray_toggle_clicked`, only while connected) → `{direction: "toggle", actuate_pogos: true}`.
+- Motors pane tray In/Out macros → `{direction: "in" | "out", actuate_pogos: not tray_only}`; the `tray_only` checkbox shows only while the target motor is the tray, and is not persisted.
+
+**Backend (`portable_dropbot_controller/services/portable_dropbot_motors_mixin_service.py`)**
+- `on_move_tray_request` parses the message (`parse_move_tray_request`; an unknown direction is logged and ignored), resolves `"toggle"`, then: `actuate_pogos: true` → `proxy.move_tray(direction)` (the legacy CHIP_CABIN_CTRL macro); `actuate_pogos: false` → `proxy.motor.chip_cabin_ctrl(TRAY_ACTION_CODES[direction], CHIP_CABIN_TRAY_ONLY_FLAG)` (action 0 = in, 1 = out; flags 1 = tray only), failed when the reply is missing or its status byte `CHIP_CABIN_STATUS_INDEX` reads `CHIP_CABIN_STATUS_ERROR` (0xFF). Either way it logs the outcome and republishes the status snapshot.
+
+**Traced flow (tray glyph)**
+glyph click → `MOVE_TRAY {direction, actuate_pogos: false}` → `on_move_tray_request` → `motor.chip_cabin_ctrl(action, 1)` → `_publish_status_snapshot()` → `STATUS_UPDATED` + `MOTORS_UPDATED` → status pane `_on_motors_updated_triggered` sets `tray_out_reported` from `mechanisms["cabin"]`, which re-syncs the glyph.
+
 ### Portable DropBot protocol columns: magnet + heater step execution
 
 The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
