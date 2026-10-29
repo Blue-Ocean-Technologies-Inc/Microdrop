@@ -28,6 +28,7 @@ root_packages =
     portable_dropbot_protocol_controls
     portable_dropbot_status_and_controls
     protocol_quick_action_tools
+    rpi_battery_status
     ssh_controls
     ssh_controls_ui
     template_status_and_controls
@@ -65,6 +66,7 @@ modules =
     portable_dropbot_protocol_controls
     portable_dropbot_status_and_controls
     protocol_quick_action_tools
+    rpi_battery_status
     ssh_controls
     ssh_controls_ui
     user_help_plugin
