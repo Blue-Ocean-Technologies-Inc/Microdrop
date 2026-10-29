@@ -52,6 +52,11 @@ NO_LAYOUT_PRESETS_LABEL = "(No saved presets)"
 SAVE_LAYOUT_PRESET_ACTION_ID = f"{PKG}.save_current_layout"
 SAVE_LAYOUT_PRESET_ACTION_NAME = "Save Current &Layout..."
 SAVE_LAYOUT_PRESET_DIALOG_TITLE = "Save Current Layout"
+
+MANAGE_LAYOUT_PRESETS_ACTION_ID = f"{PKG}.manage_presets"
+MANAGE_LAYOUT_PRESETS_ACTION_NAME = "&Manage Layout Presets..."
+MANAGE_LAYOUT_PRESETS_DIALOG_TITLE = "Manage Layout Presets"
+
 DEVICE_VIEW_SHORTCUT_OWNER = "the device view"
 UNNAMED_SHORTCUT_OWNER = "an application shortcut"
 APPLY_LAYOUT_PRESET_DIALOG_TITLE = "Layout Presets"

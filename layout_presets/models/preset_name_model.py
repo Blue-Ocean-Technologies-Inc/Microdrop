@@ -20,6 +20,11 @@ def preset_shortcut_owner(name):
     return f"preset '{name.strip()}'"
 
 
+def shortcut_collision_warning(shortcut, owner):
+    """Return the warning that ``shortcut`` is already used by ``owner``."""
+    return f"{shortcut} is already used by {owner}"
+
+
 class PresetName(HasTraits):
     """Qt-free state for the Save Current Layout naming dialog."""
 
@@ -57,4 +62,4 @@ class PresetName(HasTraits):
         if not self.shortcut or owner in ("", preset_shortcut_owner(self.name)):
             return ""
 
-        return f"{self.shortcut} is already used by {owner}"
+        return shortcut_collision_warning(self.shortcut, owner)

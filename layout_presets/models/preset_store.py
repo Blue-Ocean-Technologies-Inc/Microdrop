@@ -146,18 +146,38 @@ class PresetStore(HasTraits):
         path = self._path_for(name)
 
         _write_atomically(path, pickle.dumps(layout, protocol=protocol))
-
-        shortcuts = self._saved_preset_shortcuts()
-        shortcuts.pop(name, None)
-
-        if shortcut:
-            shortcuts[name] = shortcut
-
-        _write_atomically(
-            Path(self.directory) / SHORTCUTS_FILENAME,
-            json.dumps(shortcuts, indent=2, sort_keys=True).encode("utf-8"),
-        )
+        self._write_preset_shortcut(name, shortcut)
         logger.info(f"Saved layout preset '{name}' ({shortcut or 'no shortcut'})")
+
+        self.refresh()
+
+    def delete(self, name):
+        """Remove preset ``name`` and its shortcut; warn if it is unknown."""
+        name = name.strip()
+
+        if not self.has_preset(name):
+            logger.warning(f"Cannot delete unknown layout preset '{name}'")
+
+            return
+
+        self._path_for(name).unlink()
+        self._write_shortcuts(self._saved_preset_shortcuts())
+        logger.info(f"Deleted layout preset '{name}'")
+
+        self.refresh()
+
+    def set_shortcut(self, name, shortcut):
+        """Give preset ``name`` key sequence ``shortcut`` ("" removes it);
+        warn if the preset is unknown."""
+        name = name.strip()
+
+        if not self.has_preset(name):
+            logger.warning(f"Cannot set the shortcut of unknown layout preset '{name}'")
+
+            return
+
+        self._write_preset_shortcut(name, shortcut)
+        logger.info(f"Layout preset '{name}' shortcut: {shortcut or 'none'}")
 
         self.refresh()
 
@@ -167,6 +187,22 @@ class PresetStore(HasTraits):
 
     def _path_for(self, name):
         return Path(self.directory) / f"{name.strip()}{PRESET_FILE_SUFFIX}"
+
+    def _write_preset_shortcut(self, name, shortcut):
+        """Record ``shortcut`` ("" for none) as preset ``name``'s."""
+        shortcuts = self._saved_preset_shortcuts()
+        shortcuts.pop(name, None)
+
+        if shortcut:
+            shortcuts[name] = shortcut
+
+        self._write_shortcuts(shortcuts)
+
+    def _write_shortcuts(self, shortcuts):
+        _write_atomically(
+            Path(self.directory) / SHORTCUTS_FILENAME,
+            json.dumps(shortcuts, indent=2, sort_keys=True).encode("utf-8"),
+        )
 
     def _saved_preset_shortcuts(self):
         """Return the shortcuts file's entries whose preset is on disk."""

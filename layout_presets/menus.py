@@ -37,6 +37,9 @@ from .consts import (
     LAYOUT_PRESETS_ITEMS_GROUP_ID,
     LAYOUT_PRESETS_MENU_ID,
     LAYOUT_PRESETS_MENU_NAME,
+    MANAGE_LAYOUT_PRESETS_ACTION_ID,
+    MANAGE_LAYOUT_PRESETS_ACTION_NAME,
+    MANAGE_LAYOUT_PRESETS_DIALOG_TITLE,
     NO_LAYOUT_PRESETS_LABEL,
     SAVE_LAYOUT_PRESET_ACTION_ID,
     SAVE_LAYOUT_PRESET_ACTION_NAME,
@@ -45,7 +48,9 @@ from .consts import (
 )
 from .models.preset_name_model import PresetName, preset_shortcut_owner
 from .models.preset_store import PresetStore
+from .models.preset_table_model import PresetTable
 from .views.preset_name_view import preset_name_view
+from .views.preset_table_view import preset_table_view
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -68,9 +73,13 @@ def preset_menu_label(preset_name):
     return preset_name.replace("&", "&&")
 
 
-def used_shortcuts(window, store):
+def used_shortcuts(window, store, include_presets=True):
     """Return ``{key sequence: what uses it}`` for the shortcuts a preset
-    could collide with, keyed in Qt's portable text like the dialog's."""
+    could collide with, keyed in Qt's portable text like the dialogs'.
+
+    ``include_presets=False`` leaves the presets' own shortcuts out, for a
+    dialog that checks them against each other itself.
+    """
     # A preset's own submenu entry carries its shortcut too; it is listed
     # below as the preset, not under its bare menu label.
     preset_menu_entries = {
@@ -102,10 +111,20 @@ def used_shortcuts(window, store):
             f"{DEVICE_VIEW_SHORTCUT_OWNER} ({description})",
         )
 
-    for name, shortcut in store.shortcuts.items():
-        owners.setdefault(shortcut, preset_shortcut_owner(name))
+    if include_presets:
+        for name, shortcut in store.shortcuts.items():
+            owners.setdefault(shortcut, preset_shortcut_owner(name))
 
     return owners
+
+
+def apply_preset_table_changes(store, deleted_names, changed_shortcuts):
+    """Apply the Manage Layout Presets dialog's changes to ``store``."""
+    for name in deleted_names:
+        store.delete(name)
+
+    for name, shortcut in changed_shortcuts.items():
+        store.set_shortcut(name, shortcut)
 
 
 class SaveLayoutPresetAction(TaskAction):
@@ -272,6 +291,65 @@ class ApplyLayoutPresetAction(TaskAction):
         logger.info(f"Applied layout preset '{self.preset_name}'")
 
 
+class ManageLayoutPresetsAction(TaskAction):
+    """List the saved presets to edit their shortcuts or delete them."""
+
+    id = MANAGE_LAYOUT_PRESETS_ACTION_ID
+    name = MANAGE_LAYOUT_PRESETS_ACTION_NAME
+    tooltip = "View, delete, and change the shortcuts of the layout presets"
+
+    #: The presets being managed.
+    store = Instance(PresetStore)
+
+    def perform(self, event=None):
+        window = _event_window(self, event)
+
+        if window is None:
+            logger.warning("Manage Layout Presets: no task window")
+
+            return
+
+        self.store.refresh()
+        table = PresetTable.from_store(
+            self.store, used_shortcuts(window, self.store, include_presets=False)
+        )
+        ui = table.edit_traits(view=preset_table_view, parent=window.control)
+
+        if not ui.result:
+            return
+
+        deleted_names, changed_shortcuts = table.changes()
+
+        # Asked once the table dialog has closed, so it never runs inside a
+        # TableEditor commit.
+        if deleted_names and not self._confirm_deletion(window, deleted_names):
+            deleted_names = []
+
+        try:
+            apply_preset_table_changes(self.store, deleted_names, changed_shortcuts)
+        except OSError as apply_error:
+            logger.error(f"Could not update the layout presets: {apply_error}")
+            error(
+                window.control,
+                "The layout presets could not all be updated.",
+                title=MANAGE_LAYOUT_PRESETS_DIALOG_TITLE,
+                detail=f"{apply_error}",
+            )
+
+    def _confirm_deletion(self, window, deleted_names):
+        """Return whether the user confirms deleting ``deleted_names``."""
+        listed_names = ", ".join(f"'{name}'" for name in deleted_names)
+        answer = confirm(
+            window.control,
+            f"Delete the layout presets {listed_names}? This cannot be undone.",
+            title=MANAGE_LAYOUT_PRESETS_DIALOG_TITLE,
+            yes_label="Delete",
+            no_label="Keep",
+        )
+
+        return answer == YES
+
+
 class LayoutPresetsGroup(Group):
     """The Layout Presets submenu's items: one apply action per saved preset,
     rebuilt whenever the store's list changes (TaskToggleGroup's idiom)."""
@@ -315,7 +393,8 @@ class LayoutPresetsGroup(Group):
 
 
 def view_menu_group(store):
-    """Return the View-menu group: Save Current Layout... and the submenu."""
+    """Return the View-menu group: Save Current Layout..., the presets
+    submenu, and Manage Layout Presets..."""
     return SGroup(
         SaveLayoutPresetAction(store=store),
         SMenu(
@@ -323,5 +402,6 @@ def view_menu_group(store):
             id=LAYOUT_PRESETS_MENU_ID,
             name=LAYOUT_PRESETS_MENU_NAME,
         ),
+        ManageLayoutPresetsAction(store=store),
         id=LAYOUT_PRESETS_GROUP_ID,
     )

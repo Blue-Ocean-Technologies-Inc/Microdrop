@@ -221,3 +221,47 @@ def test_damaged_shortcuts_file_keeps_the_presets(tmp_path, caplog):
     assert store.presets == ["wide"]
     assert store.shortcuts == {}
     assert any(record.exc_info is not None for record in caplog.records)
+
+
+def test_delete_removes_the_preset_and_its_shortcut(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+    store.save("tall", _window_layout(), PROTOCOL, shortcut="Alt+2")
+
+    store.delete("wide")
+
+    assert not (tmp_path / f"wide{PRESET_FILE_SUFFIX}").exists()
+    assert store.presets == ["tall"]
+    assert store.shortcuts == {"tall": "Alt+2"}
+
+    reopened = PresetStore(directory=str(tmp_path))
+    reopened.refresh()
+
+    assert reopened.shortcuts == {"tall": "Alt+2"}
+
+
+def test_set_shortcut_changes_and_clears_one_entry(tmp_path):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+    store.save("tall", _window_layout(), PROTOCOL)
+
+    store.set_shortcut("tall", "Ctrl+Shift+2")
+
+    assert store.shortcuts == {"wide": "Alt+1", "tall": "Ctrl+Shift+2"}
+
+    store.set_shortcut("wide", "")
+
+    assert store.shortcuts == {"tall": "Ctrl+Shift+2"}
+    assert store.load("wide") is not None
+
+
+def test_unknown_preset_is_left_alone_with_a_warning(tmp_path, caplog):
+    store = PresetStore(directory=str(tmp_path))
+    store.save("wide", _window_layout(), PROTOCOL, shortcut="Alt+1")
+
+    store.delete("missing")
+    store.set_shortcut("missing", "Alt+2")
+
+    assert store.presets == ["wide"]
+    assert store.shortcuts == {"wide": "Alt+1"}
+    assert len([r for r in caplog.records if r.levelname == "WARNING"]) == 2
