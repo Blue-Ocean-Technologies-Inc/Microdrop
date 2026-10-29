@@ -71,6 +71,13 @@ from .consts import (
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
+    HISTOGRAM_BINS,
+    HISTOGRAM_BINS_BOUNDS,
+    HISTOGRAM_CLIP_BOUNDS_PERCENT,
+    HISTOGRAM_CLIP_PERCENT,
+    HISTOGRAM_FITS,
+    HISTOGRAM_MARKER_ALPHA,
+    HISTOGRAM_MARKER_ALPHA_BOUNDS,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
     MEASURE_INSIDE_BOUNDS_PERCENT,
@@ -278,6 +285,39 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+
+    #: The Histogram view's bins over the shared range of its ROIs.
+    histogram_bins = Range(*HISTOGRAM_BINS_BOUNDS, HISTOGRAM_BINS, mode="spinner")
+    #: Percent of the pooled pixels trimmed off each tail of the
+    #: Histogram view's range before binning, so hot or dead pixels do
+    #: not stretch it; the distribution fits see the pixels kept.
+    histogram_clip_percent = Range(
+        *HISTOGRAM_CLIP_BOUNDS_PERCENT, HISTOGRAM_CLIP_PERCENT
+    )
+    #: Keep only the pixels from histogram_intensity_min to
+    #: histogram_intensity_max, before anything else the Histogram view
+    #: does — binning, the clip, the median and mean lines and the fit.
+    histogram_intensity_filter = Bool(False)
+    histogram_intensity_min = Float(0.0)
+    histogram_intensity_max = Float(1.0)
+    #: Fit the distribution only to the pixels in bins whose height —
+    #: in the units shown, pixels or, normalised, fractions of the ROI —
+    #: lies from histogram_count_min to histogram_count_max. Every bin
+    #: is still drawn; the ones left out are faded.
+    histogram_count_filter = Bool(False)
+    histogram_count_min = Float(0.0)
+    histogram_count_max = Float(1.0)
+    #: The distribution fitted to each ROI's pixels in the Histogram
+    #: view, drawn dotted over its outline — its own choice, independent
+    #: of the series' fit_method.
+    histogram_fit = Enum(*HISTOGRAM_FITS)
+    #: The Histogram view's per-ROI median (solid) and mean (dashed)
+    #: lines, and their opacity as a fraction of their ROI's own.
+    histogram_show_median = Bool(True)
+    histogram_show_mean = Bool(True)
+    histogram_marker_alpha = Range(
+        *HISTOGRAM_MARKER_ALPHA_BOUNDS, HISTOGRAM_MARKER_ALPHA
+    )
     #: Plot expected against actual instead of actual against expected,
     #: so the trend reads expected = slope × actual + intercept.
     flip_actual_expected = Bool(False)
@@ -1287,6 +1327,40 @@ class RoiAnalysisModel(HasTraits):
     #: every redraw, whatever view it shows. A landmark the fit lacks is
     #: left out; empty while fitting is off.
     expected_actuals = Dict(Str, Dict(Str, Float))
+
+    #: The pooled intensity range of the pixels the Histogram view last
+    #: drew, before its intensity filter, and its tallest bin in the
+    #: units shown — pushed by the plot canvas like expected_actuals, to
+    #: seed the filters' bounds the first time each is switched on.
+    histogram_pixel_range = Tuple(Float, Float)
+    histogram_tallest_bin = Float(0.0)
+
+    @observe("session:figure:histogram_intensity_filter")
+    def _seed_histogram_intensity_range(self, event):
+        if event.new and self.histogram_pixel_range != (0.0, 0.0):
+            self._seed_untouched_range(
+                "histogram_intensity", *self.histogram_pixel_range
+            )
+
+    @observe("session:figure:histogram_count_filter")
+    def _seed_histogram_count_range(self, event):
+        if event.new and self.histogram_tallest_bin > 0:
+            self._seed_untouched_range(
+                "histogram_count", 0.0, self.histogram_tallest_bin
+            )
+
+    def _seed_untouched_range(self, prefix, low, high):
+        """Set the figure's ``<prefix>_min``/``_max`` to ``low``/``high``
+        as long as both still hold their defaults — a range the user typed
+        stays theirs."""
+        figure = self.session.figure
+        names = (f"{prefix}_min", f"{prefix}_max")
+        untouched = all(
+            getattr(figure, name) == figure.trait(name).default for name in names
+        )
+
+        if untouched:
+            figure.trait_set(**{names[0]: low, names[1]: high})
 
     #: The Expected table's rows, one per positive ROI per compared
     #: landmark, grouped by ROI.
