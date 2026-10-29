@@ -85,7 +85,6 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         from .controllers.display_scale_controller import apply_persisted_scale
 
         apply_persisted_scale()
-        self._widen_dock_separators_on_rpi()
         self._enable_long_press_right_click_on_rpi()
 
     @observe("application:application_initialized")
@@ -181,24 +180,3 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         # Parented to the app so the filter outlives this call.
         app.installEventFilter(TouchLongPressRightClickFilter(app))
-
-    @staticmethod
-    def _widen_dock_separators_on_rpi():
-        """The portable rig is a touchscreen — dock-pane resize handles
-        must be finger-sized. Other platforms keep the native handle."""
-        from microdrop_utils.system_config import is_rpi
-
-        if not is_rpi():
-            return
-
-        from pyface.qt.QtWidgets import QApplication
-
-        app = QApplication.instance()
-        if app is None:
-            return
-
-        from microdrop_style.dock_separator_style import get_dock_separator_style
-        from microdrop_style.helpers import is_dark_mode
-
-        theme = "dark" if is_dark_mode() else "light"
-        app.setStyleSheet(app.styleSheet() + get_dock_separator_style(theme))

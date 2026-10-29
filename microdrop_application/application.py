@@ -31,12 +31,23 @@ from traits.etsconfig.api import ETSConfig
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
 
+# Microdrop style imports.
+from microdrop_style.helpers import (
+    apply_color_scheme,
+    apply_dock_separator_style,
+    is_dark_mode,
+)
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.system_config import is_rpi
 
 # Local imports.
 from .consts import CHANGELOG_PATH, EXPERIMENT_DIR
-from .helpers import get_microdrop_redis_globals_manager
+from .helpers import (
+    get_microdrop_redis_globals_manager,
+    resolve_dock_separator_style,
+)
 from .preferences import MicrodropPreferences
 
 # Logger import.
@@ -181,6 +192,9 @@ class MicrodropApplication(TasksApplication):
         desc="Trigger if extra plugins are loaded post app initialization"
     )
 
+    #: Whether the dock separators already re-style on colour-scheme changes.
+    _dock_separator_follows_color_scheme = Bool(False)
+
     ###########################################################################
     # Private interface.
     ###########################################################################
@@ -292,6 +306,39 @@ class MicrodropApplication(TasksApplication):
         self._get_current_experiment_directory().mkdir(parents=True, exist_ok=True)
 
         self.experiment_changed = True
+
+    @observe("started, preferences_helper:color_scheme")
+    def _apply_color_scheme_preference(self, event):
+        """Apply the colour-scheme preference once plugins have started (before
+        the first window is created) and again whenever it changes.
+        """
+        apply_color_scheme(self.preferences_helper.color_scheme)
+
+    @observe(
+        "started, preferences_helper:dock_separator_color_mode, "
+        "preferences_helper:dock_separator_color"
+    )
+    def _apply_dock_separator_preference(self, event):
+        """Style the dock separators from the preference, and again whenever it
+        or the colour scheme changes (Qt passes the scheme as ``event``).
+        """
+        if not self._dock_separator_follows_color_scheme:
+            style_hints = QtWidgets.QApplication.styleHints()
+            style_hints.colorSchemeChanged.connect(
+                self._apply_dock_separator_preference
+            )
+            self._dock_separator_follows_color_scheme = True
+
+        preferences = self.preferences_helper
+
+        apply_dock_separator_style(
+            *resolve_dock_separator_style(
+                preferences.dock_separator_color_mode,
+                preferences.dock_separator_color.name(),
+                is_dark_mode(),
+                is_rpi(),
+            )
+        )
 
     @observe("application_initialized")
     def _on_application_initialized(self, event):
