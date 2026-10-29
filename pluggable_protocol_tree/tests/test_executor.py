@@ -785,6 +785,34 @@ def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
     assert spy.events[-1] == ("protocol_aborted",)
 
 
+def test_pre_protocol_start_error_stops_the_run_with_its_message():
+    """A column raising in on_pre_protocol_start (e.g. a camera that could
+    not be selected) aborts before any step and reaches the protocol-error
+    dialog with its own text."""
+
+    class _PreStartBoom(BaseColumnHandler):
+        def on_pre_protocol_start(self, ctx):
+            raise RuntimeError("camera 'ASI' failed to start")
+
+    col = Column(
+        model=BaseColumnModel(
+            col_id="flu", col_name="Fluorescence", default_value=None
+        ),
+        view=ReadOnlyLabelColumnView(),
+        handler=_PreStartBoom(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.signals)
+    ex.run()
+    err = [e for e in spy.events if e[0] == "protocol_error"]
+    assert len(err) == 1
+    assert "camera 'ASI' failed to start" in err[0][1]
+    assert "Fluorescence" in err[0][1]
+    assert "on_pre_protocol_start" in err[0][1]
+    assert ("protocol_started",) not in spy.events
+    assert not any(e[0] == "step_started" for e in spy.events)
+
+
 def test_hook_abort_error_routes_to_aborted_not_error():
     """AbortError from a hook (e.g. Stop during a pre-protocol dialog) is a
     clean cancellation, not a protocol_error."""

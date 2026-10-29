@@ -51,7 +51,11 @@ from microdrop_utils.v4l2_fps_getter import (
 )
 
 # Local imports.
-from ...consts import MIN_RECORDING_FPS
+from ...consts import (
+    CAMERA_FEED_START_TIMEOUT_MS,
+    MIN_RECORDING_FPS,
+    NO_CAMERA_LABEL,
+)
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
@@ -77,6 +81,10 @@ class CameraControlWidget(QWidget):
     #: A CameraControlsRequest dict, emitted by the dock pane's topic handler
     #: (a Dramatiq worker thread) and applied on the GUI thread.
     camera_controls_signal = Signal(object)
+
+    #: A CameraSelectSourceRequest dict, emitted by the dock pane's topic
+    #: handler (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_select_source_signal = Signal(object)
 
     def __init__(
         self,
@@ -118,6 +126,9 @@ class CameraControlWidget(QWidget):
         self._provider_sources = {}
         self._active_feed = None
         self._feed_controls = None
+        # The select_source request (dict) whose reply waits on a
+        # just-started provider feed's outcome; see apply_select_source.
+        self._pending_select_source = None
         # In-flight ImageSaver workers, referenced so a pool worker (and its
         # signals QObject) cannot be garbage-collected before its completion
         # signal is delivered back to the GUI thread.
@@ -152,6 +163,7 @@ class CameraControlWidget(QWidget):
         self.screen_capture_signal.connect(self.capture_button_handler)
         self.screen_recording_signal.connect(self.on_recording_active)
         self.camera_controls_signal.connect(self.apply_camera_controls)
+        self.camera_select_source_signal.connect(self.apply_select_source)
 
         # UI Initialization
         self._init_ui()
@@ -292,11 +304,17 @@ class CameraControlWidget(QWidget):
     def turn_on_camera(self):
         logger.info("Turning camera on")
 
+        # "<No Camera>" keeps the previous QCamera bound; never start it.
+        if not self.camera_model.selected_camera:
+            logger.warning("No camera source selected; the camera stays off")
+            return
+
         if self.camera_model.provider_selected:
             if self._active_feed is None:
                 self._start_provider_feed()
 
-            self._set_camera_active(True)
+            # A feed that failed to open (logged there) leaves the camera off.
+            self._set_camera_active(self._active_feed is not None)
 
             return
 
@@ -420,8 +438,11 @@ class CameraControlWidget(QWidget):
             feed = provider.open(key)
         except Exception as e:
             logger.error(f"Camera-source feed for '{label}' failed to open: {e}")
+            self.camera_model.feed_error = str(e)
+
             return
 
+        self.camera_model.feed_error = ""
         feed.error.connect(self._on_feed_error)
 
         # Optional preview: a feed may emit display frames plus a streaming
@@ -496,7 +517,9 @@ class CameraControlWidget(QWidget):
 
     def _on_feed_error(self, message):
         logger.error(f"Provider camera feed error: {message}")
+        self.camera_model.feed_error = message
         self.turn_off_camera()
+        self._finish_pending_select_source()
 
     # ------------------------------------------------------------------ #
     # Source and format selection                                          #
@@ -593,7 +616,7 @@ class CameraControlWidget(QWidget):
                 )
 
         # account for no camera
-        self.combo_cameras.addItem("<No Camera>", userData=None)
+        self.combo_cameras.addItem(NO_CAMERA_LABEL, userData=None)
 
         self.combo_cameras.blockSignals(False)
 
@@ -872,6 +895,86 @@ class CameraControlWidget(QWidget):
         """Apply a CameraControlsRequest dict on the GUI thread; the
         controller answers DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED."""
         self.controller.apply_camera_controls(request)
+
+    # ------------------------------------------------------------------ #
+    # Source selection by request (CameraSelectSourceRequest)              #
+    # ------------------------------------------------------------------ #
+    @Slot(object)
+    def apply_select_source(self, request):
+        """Select the dropdown entry a CameraSelectSourceRequest dict names,
+        through the same path as a click, then switch the camera on/off if
+        asked; the controller answers DEVICE_VIEWER_CAMERA_SOURCE_SELECTED.
+
+        A provider feed opens synchronously (an open failure is answered at
+        once, with its message) but may start asynchronously, so when the
+        request starts a new feed the reply waits for its outcome: the
+        feed's first ``error`` answers ok=False with that message, its
+        optional ``started`` signal — or CAMERA_FEED_START_TIMEOUT_MS
+        passing without an error — answers ok. A QCamera's start is not
+        waited on: ok=True means the selection and start request went
+        through, and a camera failing later shows as active=False on
+        DEVICE_VIEWER_CAMERA_STATE.
+        """
+        labels = [
+            self.combo_cameras.itemText(index)
+            for index in range(self.combo_cameras.count())
+        ]
+        index = self.controller.find_requested_source(request, labels)
+
+        if index is None:
+            return
+
+        error = ""
+        feed_before = self._active_feed
+
+        # Provider feeds are other plugins' code: any exception they raise
+        # while switching over is answered as a failure, not left to Qt.
+        try:
+            self.combo_cameras.setCurrentIndex(index)
+
+            if request["active"] is not None:
+                self.on_camera_active(request["active"])
+        except Exception as e:
+            logger.error(f"Camera source {request['label']!r}: {e}", exc_info=True)
+            error = f"camera source {request['label']!r} failed: {e}"
+
+        feed = self._active_feed
+
+        if not error and request["active"] and feed not in (None, feed_before):
+            self._await_feed_start(request, feed)
+
+            return
+
+        self.controller.source_selected(request, error)
+
+    def _await_feed_start(self, request, feed):
+        """Hold ``request``'s reply until ``feed`` starts, fails, or
+        CAMERA_FEED_START_TIMEOUT_MS passes (see apply_select_source)."""
+
+        # An earlier request still waiting is answered as things stand now.
+        self._finish_pending_select_source()
+        self._pending_select_source = request
+
+        started = getattr(feed, "started", None)
+
+        if started is not None:
+            started.connect(self._finish_pending_select_source)
+
+        QTimer.singleShot(
+            CAMERA_FEED_START_TIMEOUT_MS,
+            lambda: self._finish_pending_select_source(request),
+        )
+
+    def _finish_pending_select_source(self, request=None):
+        """Answer the waiting select_source request, if any (only when it is
+        ``request``, for the timeout of that one request)."""
+        pending = self._pending_select_source
+
+        if pending is None or (request is not None and request is not pending):
+            return
+
+        self._pending_select_source = None
+        self.controller.source_selected(pending)
 
     # ------------------------------------------------------------------ #
     # Video recording (background thread)                                  #

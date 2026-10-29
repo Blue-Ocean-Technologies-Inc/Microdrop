@@ -10,7 +10,8 @@
 
 """CameraController against a stub camera and stub preferences: source and
 format selection, media paths, capture/recording bookkeeping, and the
-set_controls handshake with its v4l2 fallbacks. No Qt camera, no Redis."""
+set_controls handshake with its v4l2 fallbacks, and the select_source
+reply plus camera-state publishing. No Qt camera, no Redis."""
 
 # Standard library imports.
 from pathlib import Path
@@ -126,6 +127,24 @@ def published(monkeypatch):
     return applied.calls
 
 
+@pytest.fixture(autouse=True)
+def states_published(monkeypatch):
+    """CameraState payloads, one per selection or on/off change."""
+    states = Recorder()
+    monkeypatch.setattr(camera_controller, "camera_state_publisher", states)
+
+    return states.calls
+
+
+@pytest.fixture
+def replies(monkeypatch):
+    """CameraSourceSelected replies to select_source requests."""
+    selected = Recorder()
+    monkeypatch.setattr(camera_controller, "camera_source_selected_publisher", selected)
+
+    return selected.calls
+
+
 @pytest.fixture
 def controller(tmp_path, monkeypatch):
     monkeypatch.setattr(
@@ -229,6 +248,133 @@ def test_camera_state_is_remembered(controller):
     controller.model.camera_active = True
 
     assert controller.preferences.camera_state is True
+
+
+# --------------------------------------------------------------------------- #
+# Camera state and select_source requests                                     #
+# --------------------------------------------------------------------------- #
+DROPDOWN = ["Cam A", "ASI: ZWO ASI183MM", "<No Camera>"]
+
+
+def _select_request(label, active=None, request_id="r1"):
+    return {"label": label, "active": active, "request_id": request_id}
+
+
+def test_camera_state_is_published_on_every_change(controller, states_published):
+    controller.select_source("Cam A", remembered_as="Cam A")
+    controller.model.camera_active = True
+    controller.model.camera_leased = True
+    controller.select_source("")
+
+    assert states_published == [
+        {"selected_camera": "Cam A", "active": False, "leased": False},
+        {"selected_camera": "Cam A", "active": True, "leased": False},
+        {"selected_camera": "Cam A", "active": True, "leased": True},
+        {"selected_camera": "", "active": True, "leased": True},
+    ]
+
+
+@pytest.mark.parametrize(
+    "label, index",
+    [
+        ("ASI: ZWO ASI183MM", 1),
+        ("asi: zwo asi183mm", 1),
+        ("", 2),
+        ("<No Camera>", 2),
+        ("Cam Z", None),
+    ],
+)
+def test_source_label_matching(label, index):
+    assert CameraController.match_source_label(DROPDOWN, label) == index
+
+
+def test_exact_label_wins_over_a_case_insensitive_one():
+    assert CameraController.match_source_label(["cam a", "Cam A"], "Cam A") == 1
+
+
+def test_unknown_label_is_answered_not_ok(controller, replies, states_published):
+    index = controller.find_requested_source(_select_request("Cam Z", True), DROPDOWN)
+
+    assert index is None
+    assert replies == [
+        {
+            "request_id": "r1",
+            "label": "Cam Z",
+            "ok": False,
+            "error": "unknown camera source 'Cam Z' "
+            "(available: Cam A, ASI: ZWO ASI183MM, <No Camera>)",
+            "active": False,
+        }
+    ]
+    assert states_published[-1] == {
+        "selected_camera": "",
+        "active": False,
+        "leased": False,
+    }
+
+
+def test_selected_source_is_answered_ok_then_state(
+    controller, replies, states_published
+):
+    controller.select_source("ASI: ZWO ASI183MM", provider=True)
+    controller.model.camera_active = True
+    states_published.clear()
+
+    controller.source_selected(_select_request("asi: zwo asi183mm", True, "r2"))
+
+    assert replies == [
+        {
+            "request_id": "r2",
+            "label": "ASI: ZWO ASI183MM",
+            "ok": True,
+            "error": "",
+            "active": True,
+        }
+    ]
+    assert states_published == [
+        {"selected_camera": "ASI: ZWO ASI183MM", "active": True, "leased": False}
+    ]
+
+
+def test_camera_asked_on_but_off_is_answered_not_ok(controller, replies):
+    controller.select_source("ASI: ZWO ASI183MM", provider=True)
+
+    controller.source_selected(_select_request("ASI: ZWO ASI183MM", True))
+
+    assert replies[0]["ok"] is False
+    assert replies[0]["error"] == (
+        "camera source 'ASI: ZWO ASI183MM' failed to start (see the log)"
+    )
+
+
+def test_feed_open_failure_is_answered_with_its_message(controller, replies):
+    controller.select_source("ASI: ZWO ASI183MM", provider=True)
+    controller.model.feed_error = "ASI camera not found"
+
+    controller.source_selected(_select_request("ASI: ZWO ASI183MM", True))
+
+    assert replies[0]["ok"] is False
+    assert replies[0]["error"] == (
+        "camera source 'ASI: ZWO ASI183MM' failed to start: ASI camera not found"
+    )
+    assert replies[0]["active"] is False
+
+
+def test_no_camera_asked_on_is_answered_not_ok(controller, replies):
+    controller.source_selected(_select_request("", True))
+
+    assert replies[0]["ok"] is False
+    assert replies[0]["error"] == "no camera source is selected"
+
+
+def test_switch_error_is_passed_through(controller, replies):
+    controller.select_source("Cam A")
+
+    controller.source_selected(_select_request("Cam A", None), "boom")
+
+    assert replies[0]["ok"] is False
+    assert replies[0]["error"] == "boom"
+    assert replies[0]["label"] == "Cam A"
 
 
 # --------------------------------------------------------------------------- #

@@ -83,6 +83,48 @@ class CameraControlsApplied(BaseModel):
     error: str = ""
 
 
+class CameraSelectSourceRequest(BaseModel):
+    """Select a camera source by its dropdown label, optionally turning the
+    camera on or off as well."""
+
+    #: A misspelt field (``activ``) would otherwise be dropped silently and
+    #: the camera left as it was — reject it so the requester is told.
+    model_config = ConfigDict(extra="forbid")
+
+    #: The dropdown label, e.g. "ASI: ZWO ASI183MM"; an exact match wins,
+    #: else a case-insensitive one. "" selects "<No Camera>" (the label
+    #: CameraState reports for it), so a state can be restored as sent.
+    label: str
+    #: True/False also turns the camera on/off; None leaves it as it is.
+    active: bool | None = None
+    #: Echoed on the CameraSourceSelected reply.
+    request_id: str = ""
+
+
+class CameraSourceSelected(BaseModel):
+    """The outcome of a CameraSelectSourceRequest, echoing its request_id;
+    ok=False carries why (unknown label, the camera failed to start)."""
+
+    request_id: str = ""
+    #: The selected dropdown label, or the requested one when it is unknown.
+    label: str
+    ok: bool
+    error: str = ""
+    #: Whether the camera is on after the request.
+    active: bool
+
+
+class CameraState(BaseModel):
+    """The device viewer's camera selection and on/off state."""
+
+    #: Current dropdown label; "" for "<No Camera>" or before any selection.
+    selected_camera: str
+    active: bool
+    #: A protocol run holds the camera on: camera_active "false" requests
+    #: are ignored until the next select_source request or the run's end.
+    leased: bool = False
+
+
 class RecordingActiveState(BaseModel):
     """
     Validates requests to set recording active state.

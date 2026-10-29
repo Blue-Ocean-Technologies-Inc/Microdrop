@@ -12,10 +12,11 @@
 
 Owns the decisions the camera widget used to make inline: which source and
 format to select, where captures and recordings are written, the recording
-and capture bookkeeping (and what it publishes), and exposure/focus requests
-with their v4l2 fallbacks for the Portable Pi's GStreamer backend. The Qt
-side (QCamera, recorders, frame grabs, dialogs) stays in the view, which
-calls in here and acts on the answers.
+and capture bookkeeping (and what it publishes), exposure/focus requests
+with their v4l2 fallbacks for the Portable Pi's GStreamer backend, and the
+camera's selection/on-off state with the replies to select_source
+requests. The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
+the view, which calls in here and acts on the answers.
 """
 
 # Standard library imports.
@@ -44,8 +45,11 @@ from microdrop_utils.v4l2_fps_getter import (
 from ..consts import (
     CAPTURES_DIR_NAME,
     MIN_RECORDING_FPS,
+    NO_CAMERA_LABEL,
     RECORDINGS_DIR_NAME,
     camera_controls_applied_publisher,
+    camera_source_selected_publisher,
+    camera_state_publisher,
     device_viewer_recording_state_publisher,
     media_capture_event_model,
     recording_state_model,
@@ -81,6 +85,19 @@ class CameraController(HasTraits):
     @observe("model:camera_active")
     def _remember_camera_state(self, event):
         self.preferences.camera_state = event.new
+
+    @observe("model:selected_camera, model:camera_active, model:camera_leased")
+    def _publish_camera_state(self, event=None):
+        """Publish the selection, on/off and lease state on
+        DEVICE_VIEWER_CAMERA_STATE — on every change, including the panel's
+        first source selection."""
+        camera_state_publisher.publish(
+            {
+                "selected_camera": self.model.selected_camera,
+                "active": self.model.camera_active,
+                "leased": self.model.camera_leased,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # Source and format selection                                          #
@@ -129,6 +146,75 @@ class CameraController(HasTraits):
         self.model.selected_camera = label
         self.model.provider_selected = provider
         self.model.v4l2_device_path = v4l2_device_path
+
+    @staticmethod
+    def match_source_label(labels, label):
+        """Index in ``labels`` (the dropdown, in order) of the entry ``label``
+        names, or None: the exact label, else a case-insensitive match; ""
+        names "<No Camera>", which CameraState reports as ""."""
+        wanted = label or NO_CAMERA_LABEL
+
+        if wanted in labels:
+            return labels.index(wanted)
+
+        folded = [entry.casefold() for entry in labels]
+
+        if wanted.casefold() in folded:
+            return folded.index(wanted.casefold())
+
+        return None
+
+    def find_requested_source(self, request, labels):
+        """Index in ``labels`` of the entry a CameraSelectSourceRequest dict
+        names; when it names none, answer the request ok=False and return
+        None."""
+        index = self.match_source_label(labels, request["label"])
+
+        if index is None:
+            self._answer_select_source(
+                request,
+                request["label"],
+                f"unknown camera source {request['label']!r} "
+                f"(available: {', '.join(labels)})",
+            )
+
+        return index
+
+    def source_selected(self, request, error=""):
+        """Answer a CameraSelectSourceRequest dict whose source is now
+        selected: ok unless ``error`` or the camera was asked on and is
+        not."""
+        label = self.model.selected_camera
+
+        if not error and request["active"] and not self.model.camera_active:
+            if not label:
+                error = "no camera source is selected"
+            elif self.model.provider_selected and self.model.feed_error:
+                error = (
+                    f"camera source {label!r} failed to start: {self.model.feed_error}"
+                )
+            else:
+                error = f"camera source {label!r} failed to start (see the log)"
+
+        self._answer_select_source(request, label, error)
+
+    def _answer_select_source(self, request, label, error):
+        """Publish the CameraSourceSelected reply, then the camera state, so
+        a requester also learns the state it may restore later."""
+        if error:
+            logger.error(f"Camera select_source not applied: {error}")
+
+        camera_source_selected_publisher.publish(
+            {
+                "request_id": request["request_id"],
+                "label": label,
+                "ok": not error,
+                "error": error,
+                "active": self.model.camera_active,
+            }
+        )
+
+        self._publish_camera_state()
 
     def rank_formats(self, formats, allow_strict_mode=True):
         """Indices of the formats to offer, best first, one per resolution.

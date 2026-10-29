@@ -37,6 +37,9 @@ from device_viewer.interfaces.layer_context import LayerContext as LayerContext
 from device_viewer.models.media import (
     CameraControlsApplied,
     CameraControlsRequest,
+    CameraSelectSourceRequest,
+    CameraSourceSelected,
+    CameraState,
     MediaCaptureEventModel,
     MediaCaptureMessageModel,
     RecordingStateModel,
@@ -84,6 +87,15 @@ DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
+#: Request: select a camera source by its dropdown label and optionally turn
+#: the camera on/off; answered on DEVICE_VIEWER_CAMERA_SOURCE_SELECTED.
+DEVICE_VIEWER_CAMERA_SELECT_SOURCE = "ui/device_viewer/camera/select_source"
+#: Signal: the outcome of a DEVICE_VIEWER_CAMERA_SELECT_SOURCE request.
+DEVICE_VIEWER_CAMERA_SOURCE_SELECTED = "ui/device_viewer/camera/source_selected"
+#: Signal: the device viewer's current camera selection and on/off state,
+#: published on every change and after every select_source reply (see
+#: CameraSelectSourceRequest).
+DEVICE_VIEWER_CAMERA_STATE = "ui/device_viewer/camera/state"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 # Another plugin sets the active camera's exposure/focus (CameraControlsRequest)
 # and gets the camera's readback (CameraControlsApplied) — the Portable
@@ -150,6 +162,7 @@ ACTOR_TOPIC_DICT = {
         DEVICE_VIEWER_SCREEN_CAPTURE,
         DEVICE_VIEWER_CAMERA_SET_CONTROLS,
         DEVICE_VIEWER_CAMERA_ACTIVE,
+        DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
         DEVICE_VIEWER_SCREEN_RECORDING,
         DROPLETS_DETECTED,
         PROTOCOL_RUNNING,
@@ -164,7 +177,9 @@ ACTOR_TOPIC_DICT = {
         PHASE_NAVIGATION_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
-        # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
+        # controller subscribes via SYNC_ACTOR_TOPIC_DICT. Likewise
+        # DEVICE_VIEWER_CAMERA_SOURCE_SELECTED / DEVICE_VIEWER_CAMERA_STATE
+        # are only published here, for the requester to subscribe to.
     ]
 }
 
@@ -210,6 +225,17 @@ camera_controls_applied_publisher = ValidatedTopicPublisher(
 )
 media_captured_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_MEDIA_CAPTURED, validator_class=MediaCaptureMessageModel
+)
+camera_select_source_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
+    validator_class=CameraSelectSourceRequest,
+)
+camera_source_selected_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SOURCE_SELECTED,
+    validator_class=CameraSourceSelected,
+)
+camera_state_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_STATE, validator_class=CameraState
 )
 
 APP_GLOBALS_KEYS = [
@@ -354,6 +380,15 @@ MIN_RECORDING_FPS = 20
 # ---------------------------------------------------------------------------
 # Camera preview
 # ---------------------------------------------------------------------------
+# The camera dropdown's last entry: no source. Selected by a
+# CameraSelectSourceRequest with label "" (CameraState reports it as "").
+NO_CAMERA_LABEL = "<No Camera>"
+
+# How long a select_source reply waits for a just-started provider feed's
+# outcome: its first feed.error fails the request, its optional
+# feed.started (or this timeout running out) answers ok.
+CAMERA_FEED_START_TIMEOUT_MS = 3000
+
 # Ceiling for frames forwarded to the device view's video item. Every frame
 # composited under the electrodes is a full-scene repaint, and the preview
 # doesn't need camera rate to be useful — recordings are unaffected (the
@@ -456,6 +491,11 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 #   provider.open(key)      -> feed                # QObject with:
 #       feed.error: Signal(str)                    #   fatal feed errors
 #       feed.start() / feed.stop()                 #   lifecycle
+#       feed.started: Signal()                     #   optional: the source
+#                                                  #   is delivering (else a
+#                                                  #   select_source reply
+#                                                  #   waits out
+#                                                  #   CAMERA_FEED_START_TIMEOUT_MS)
 #       feed.frame: Signal(QImage)                 #   optional preview frames
 #       feed.streaming: Signal(bool)               #   optional preview state
 #       feed.create_controls(parent) -> QWidget|None   # optional settings row
