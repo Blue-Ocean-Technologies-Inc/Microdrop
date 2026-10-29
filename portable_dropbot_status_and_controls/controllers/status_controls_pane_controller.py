@@ -20,7 +20,6 @@ from portable_dropbot_controller.consts import (
     DISCONNECT,
     LOCK_CHIP,
     MOVE_MAGNET,
-    MOVE_TRAY,
     REFRESH_PORTS,
     SET_FAN,
     SET_FREQUENCY,
@@ -28,6 +27,7 @@ from portable_dropbot_controller.consts import (
     SET_LIGHT_ON,
     SET_RGB_LIGHT,
     SET_VOLTAGE,
+    move_tray_publisher,
 )
 from template_status_and_controls.base_controller import (
     BaseStatusController,
@@ -95,10 +95,11 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
 
     @observe("model:tray_toggle_clicked")
     def _on_tray_toggle_clicked(self, event):
-        # The device picture is the tray button: the backend reads the
-        # current tray position and moves it the other way.
+        # The device picture is the eject button: the backend reads the
+        # current tray position and moves it the other way, releasing
+        # the pogo pushpads before the move and pressing them after.
         if self.model.connected:
-            publish_message(topic=MOVE_TRAY, message="toggle")
+            move_tray_publisher.publish({"direction": "toggle", "actuate_pogos": True})
             logger.info("Device picture clicked: toggling tray")
 
     # ---- Mechanism quick controls ------------------------------------
@@ -125,8 +126,11 @@ class PortableDropbotStatusAndControlsController(BaseStatusController):
     def _on_tray_out_changed(self, event):
         if bool(event.new) == self.model.tray_out_reported:
             return
-        publish_message(topic=MOVE_TRAY, message="out" if event.new else "in")
-        logger.info(f"Tray {'out' if event.new else 'in'} requested")
+
+        # The glyph moves the tray alone; the pogo pushpads stay put.
+        direction = "out" if event.new else "in"
+        move_tray_publisher.publish({"direction": direction, "actuate_pogos": False})
+        logger.info(f"Tray {direction} (tray only) requested")
 
     @observe("model:magnet_engaged")
     def _on_magnet_engaged_changed(self, event):

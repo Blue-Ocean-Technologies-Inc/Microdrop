@@ -11,6 +11,9 @@
 # Standard library imports.
 import json
 
+# Third-party imports.
+from pydantic import ValidationError
+
 # Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
@@ -19,10 +22,15 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
+    CHIP_CABIN_STATUS_ERROR,
+    CHIP_CABIN_STATUS_INDEX,
+    CHIP_CABIN_TRAY_ONLY_FLAG,
     FILTER_POSITIONS,
     MAGNET_APPLIED,
     MAGNET_HEIGHT_MM_BOUNDS,
     MOTOR_IDS,
+    TRAY_ACTION_CODES,
+    MoveTrayRequest,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -33,10 +41,24 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: What the tray and magnet mechanism requests accept — the driver's
-#: own vocabulary.
-_TRAY_ACTIONS = ("in", "out")
+#: What the magnet mechanism request accepts — the driver's own
+#: vocabulary.
 _MAGNET_ACTIONS = ("engage", "disengage", "press", "release")
+
+
+def parse_move_tray_request(message):
+    """Read a MOVE_TRAY message into a MoveTrayRequest.
+
+    A legacy bare direction ("in", "out", "toggle") runs the pogo pushpad
+    macro, as it always did. Raises pydantic.ValidationError on anything
+    else.
+    """
+    text = str(message).strip()
+
+    if text.startswith("{"):
+        return MoveTrayRequest.model_validate_json(text)
+
+    return MoveTrayRequest(direction=text.lower())
 
 
 @provides(IPortableDropbotControlMixinService)
@@ -52,7 +74,14 @@ class PortableDropbotMotorsMixinService(HasTraits):
     # Mechanism macros                                                     #
     # ------------------------------------------------------------------ #
     def on_move_tray_request(self, message):
-        direction = str(message).strip().lower()
+        try:
+            request = parse_move_tray_request(message)
+        except ValidationError as error:
+            logger.warning(f"Unknown tray request {message!r}: {error}")
+            return
+
+        direction = request.direction
+
         if direction == "toggle":
             # The status pane's device picture: one click ejects, the
             # next brings it back. Read the cabin state from the motor
@@ -64,24 +93,54 @@ class PortableDropbotMotorsMixinService(HasTraits):
             ok, motor_status = self._proxy_call(
                 "motor status read", lambda: self.proxy.uart.GetBoardStatus("motor")
             )
+
             if not ok or not motor_status or len(motor_status) < 2:
                 logger.warning("Tray toggle ignored: current tray position unknown.")
                 return
+
             direction = "in" if motor_status[1] == 1 else "out"
-        if direction not in _TRAY_ACTIONS:
-            logger.warning(f"Unknown tray direction: {direction!r}")
-            return
-        logger.info(f"Portable Dropbot tray {direction} requested")
+
+        move = f"tray {direction}" + ("" if request.actuate_pogos else " (tray only)")
+        logger.info(f"Portable Dropbot {move} requested")
+
+        if request.actuate_pogos:
+            ok = self._move_tray_with_pogos(direction)
+        else:
+            ok = self._move_tray_only(direction)
+
+        logger.info(f"Portable Dropbot {move} --> {'ok' if ok else 'FAILED'}")
+        self._publish_status_snapshot()
+
+    def _move_tray_with_pogos(self, direction):
+        """Run the firmware macro: release the pogo pushpads, move the
+        tray, press them again."""
         # move_tray returns the driver error flag: True means the move
         # reported an error status.
         ok, error_flag = self._proxy_call(
             f"tray {direction}", lambda: self.proxy.move_tray(direction)
         )
-        logger.info(
-            f"Portable Dropbot tray {direction} --> "
-            f"{'ok' if ok and error_flag is not True else 'FAILED'}"
+
+        return ok and error_flag is not True
+
+    def _move_tray_only(self, direction):
+        """Move the tray alone; the pogo pushpads stay where they are."""
+        ok, reply = self._proxy_call(
+            f"tray {direction} (tray only)",
+            lambda: self.proxy.motor.chip_cabin_ctrl(
+                TRAY_ACTION_CODES[direction], CHIP_CABIN_TRAY_ONLY_FLAG
+            ),
         )
-        self._publish_status_snapshot()
+
+        # No reply at all is a failure too: the board never answered.
+        if not ok or reply is None:
+            return False
+
+        status = reply.status_data
+
+        return (
+            len(status) > CHIP_CABIN_STATUS_INDEX
+            and status[CHIP_CABIN_STATUS_INDEX] != CHIP_CABIN_STATUS_ERROR
+        )
 
     def on_move_magnet_request(self, message):
         action = str(message).strip().lower()
