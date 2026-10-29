@@ -41,6 +41,7 @@ from microdrop_style.helpers import (
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.system_config import is_rpi
+from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
 
 # Local imports.
 from .consts import CHANGELOG_PATH, EXPERIMENT_DIR
@@ -120,34 +121,6 @@ def _show_whats_new():
     )
 
     cache.write_text(current_changelog, encoding="utf-8")
-
-
-def describe_dock_widgets(main_window):
-    """Describe every dock widget's geometry, for a window pyface refused to save.
-
-    Runs during application shutdown, so it must never raise itself; any
-    failure while introspecting the window is returned as text instead.
-    """
-    try:
-        lines = []
-
-        for widget in main_window.findChildren(QtWidgets.QDockWidget):
-            geometry = widget.geometry()
-            tabified_titles = [
-                tabbed.windowTitle()
-                for tabbed in main_window.tabifiedDockWidgets(widget)
-            ]
-            lines.append(
-                f"{widget.windowTitle()!r} visible={widget.isVisible()} "
-                f"area={main_window.dockWidgetArea(widget)} "
-                f"geometry={geometry.x()},{geometry.y()} "
-                f"{geometry.width()}x{geometry.height()} "
-                f"floating={widget.isFloating()} tabified_with={tabified_titles}"
-            )
-
-        return "\n".join(lines)
-    except Exception as error:
-        return f"Could not describe dock widgets: {error}"
 
 
 class MicrodropApplication(TasksApplication):

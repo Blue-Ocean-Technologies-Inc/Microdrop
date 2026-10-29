@@ -51,6 +51,7 @@ from pyface.qt.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QGroupBox,
+    QKeySequenceEdit,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -757,6 +758,32 @@ class DoubleSpinBoxEditor(BasicEditorFactory):
     high = Float(100.0)
     decimals = Int(1)
     step = Float(0.1)  # How much it increments when arrows are clicked
+
+
+class _KeySequenceEditor(QtEditor):
+    """A QKeySequenceEdit recording one key chord into a ``Str`` trait as
+    Qt's portable text ("Ctrl+Shift+1"); an empty string means none."""
+
+    def init(self, parent):
+        self.control = QKeySequenceEdit()
+        self.control.setMaximumSequenceLength(1)
+        self.control.setClearButtonEnabled(True)
+
+        self.control.keySequenceChanged.connect(self.update_object)
+
+    def update_object(self, sequence):
+        """Sync the recorded chord back to the trait."""
+        self.value = sequence.toString()
+
+    def update_editor(self):
+        """Show the trait's key sequence."""
+        self.control.setKeySequence(QKeySequence(self.value))
+
+
+class KeySequenceEditor(BasicEditorFactory):
+    """Edit a ``Str`` trait holding a key sequence by pressing the keys."""
+
+    klass = _KeySequenceEditor
 
 
 class _SentinelDoubleSpinBox(QDoubleSpinBox):
