@@ -72,6 +72,14 @@ UINT16_MAX = 65535.0
 DEFAULT_WINDOW_MAX = 10000.0
 
 
+def matches_experiment_filter(name, filter_text):
+    """Whether every whitespace-separated term of ``filter_text`` occurs in
+    ``name``, ignoring case; an empty filter matches every name."""
+    name = name.casefold()
+
+    return all(term in name for term in filter_text.casefold().split())
+
+
 class ImageViewerModel(HasTraits):
     """State for the captured-image viewer (16-bit aware)."""
 
@@ -128,6 +136,19 @@ class ImageViewerModel(HasTraits):
     experiment_index = Int(0)
     experiment_number = Property(Int, observe="experiment_index")
     max_experiment_number = Property(Int, observe="experiments.items")
+
+    #: Text typed into the Experiment search box; empty shows every
+    #: experiment.
+    experiment_filter = Str()
+
+    #: The Experiment dropdown's choices: the names matching
+    #: ``experiment_filter``, oldest first. The selected experiment stays
+    #: listed even when it does not match — the combo would otherwise show
+    #: some other row while holding it — so typing never moves the selection.
+    filtered_experiment_names = Property(
+        List(Str),
+        observe=["experiments.items", "experiment_filter", "selected_experiment"],
+    )
 
     #: Discovered captures by Image Group (the type subfolder an image sits
     #: in): ``{image_group: [(session, [paths...]), ...]}``
@@ -355,6 +376,14 @@ class ImageViewerModel(HasTraits):
 
     def _get_experiment_names(self):
         return [name for name, _captures in self.experiments]
+
+    def _get_filtered_experiment_names(self):
+        return [
+            name
+            for name in self.experiment_names
+            if name == self.selected_experiment
+            or matches_experiment_filter(name, self.experiment_filter)
+        ]
 
     def _get_experiment_number(self):
         return self.experiment_index + 1
