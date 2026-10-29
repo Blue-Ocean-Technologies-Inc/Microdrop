@@ -38,6 +38,7 @@ from traitsui.api import (
     Item,
     Label,
     RangeEditor,
+    TextEditor,
     UItem,
     VGroup,
     View,
@@ -918,13 +919,20 @@ def _collapse_header(trait, label):
 
 
 # Experiment layer (collapsed by default): browse another experiment's
-# captures without hunting for its folder — pick it and the viewer repoints
-# there, then the image-group / session / image levels reload under it.
+# captures without hunting for its folder — search narrows the dropdown,
+# pick one and the viewer repoints there, then the image-group / session /
+# image levels reload under it. The seek slider still spans every experiment.
 experiments_group = VGroup(
+    Item(
+        "experiment_filter",
+        label="Search",
+        editor=TextEditor(auto_set=True, enter_set=False),
+        tooltip="Type to filter the Experiment list; every word must match",
+    ),
     Item(
         "selected_experiment",
         label="Experiment",
-        editor=HoverScrollEnumEditor(values_name="experiment_names"),
+        editor=HoverScrollEnumEditor(values_name="filtered_experiment_names"),
         tooltip="Browse another experiment's captures (repoints the viewer "
         "at that experiment; use Home to return to the ongoing one)",
     ),
