@@ -8,14 +8,18 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import re
+
 # Enthought library imports.
-from pyface.qt.QtCore import QCoreApplication, QEvent, Qt
+from pyface.qt.QtCore import QCoreApplication, QEvent, Qt, QTimer
 from pyface.qt.QtGui import QFont, QIcon
 from pyface.qt.QtWidgets import QApplication
 
 # Local imports.
 from .button_styles import get_button_style, get_tooltip_style
 from .combo_box_style import get_combobox_style
+from .dock_separator_style import get_dock_separator_style
 from .font_paths import load_font_and_get_family
 from .general_style import get_general_style
 from .label_style import get_label_style
@@ -24,10 +28,23 @@ from .palettes import dark_palette
 
 QT_THEME_NAMES = {Qt.ColorScheme.Dark: "dark", Qt.ColorScheme.Light: "light"}
 
-# The scheme forced by apply_color_scheme (None follows the OS), and the app
-# palette from before the first override, restored when following the OS.
+# The scheme forced by apply_color_scheme (None follows the OS), the app
+# palette from before the first override, restored when following the OS, and
+# whether colour-scheme changes already trigger refresh_widget_palettes.
 _requested_color_scheme = None
 _startup_palette = None
+_palette_refresh_installed = False
+
+# Brackets for the dock-separator rules inside the application stylesheet, so
+# they are replaced in place and other contributors' rules survive.
+DOCK_SEPARATOR_STYLE_START_MARKER = "/* dock-separator */"
+DOCK_SEPARATOR_STYLE_END_MARKER = "/* /dock-separator */"
+
+_DOCK_SEPARATOR_STYLE_BLOCK = re.compile(
+    f"{re.escape(DOCK_SEPARATOR_STYLE_START_MARKER)}.*?"
+    f"{re.escape(DOCK_SEPARATOR_STYLE_END_MARKER)}\n?",
+    re.DOTALL,
+)
 
 
 def is_dark_mode():
@@ -37,16 +54,37 @@ def is_dark_mode():
     return QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
 
 
+def refresh_widget_palettes():
+    """Tell every non-window widget to re-resolve its palette from the app's.
+
+    Qt only tells top-level windows about a global palette change, and an app
+    stylesheet turns off parent-to-child palette inheritance.
+    """
+    for widget in QApplication.allWidgets():
+        if not widget.isWindow():
+            QCoreApplication.sendEvent(
+                widget, QEvent(QEvent.Type.ApplicationPaletteChange)
+            )
+
+
 def apply_color_scheme(color_scheme):
     """Force the app to a QT_THEME_NAMES scheme, or follow the OS for any other.
 
     Qt emits ``colorSchemeChanged`` when the effective scheme changes, so every
     widget already listening for OS theme switches re-styles itself.
     """
-    global _requested_color_scheme, _startup_palette
+    global _requested_color_scheme, _startup_palette, _palette_refresh_installed
 
     style_hints = QApplication.styleHints()
     qt_color_schemes = {name: scheme for scheme, name in QT_THEME_NAMES.items()}
+
+    if not _palette_refresh_installed:
+        # Deferred: Qt may emit before the platform palette lands. The
+        # fallback's manual emit below triggers a second, harmless refresh.
+        style_hints.colorSchemeChanged.connect(
+            lambda _color_scheme: QTimer.singleShot(0, refresh_widget_palettes)
+        )
+        _palette_refresh_installed = True
 
     if _startup_palette is None:
         _startup_palette = QApplication.palette()
@@ -72,21 +110,44 @@ def apply_color_scheme(color_scheme):
     # the Pi with or without qt5ct/gtk3) ignore the request: no palette
     # change, no signal. Swap the palette and announce the scheme ourselves;
     # is_dark_mode() reports the override. The startup palette is light there.
-    # A global setPalette only notifies top-level windows, and an app
-    # stylesheet turns off parent-to-child palette inheritance, so every other
-    # widget is told to re-resolve its palette from the new application one.
     if _requested_color_scheme == Qt.ColorScheme.Dark:
         QApplication.setPalette(dark_palette())
     else:
         QApplication.setPalette(_startup_palette)
 
-    for widget in QApplication.allWidgets():
-        if not widget.isWindow():
-            QCoreApplication.sendEvent(
-                widget, QEvent(QEvent.Type.ApplicationPaletteChange)
-            )
+    refresh_widget_palettes()
 
     style_hints.colorSchemeChanged.emit(_requested_color_scheme or current_color_scheme)
+
+
+def apply_dock_separator_style(color, thickness=None):
+    """Write the dock-separator rules into the application stylesheet.
+
+    The previously applied block is replaced, so repeated calls never
+    accumulate rules. A ``color`` of None removes the block, restoring the
+    native separators.
+    """
+    app = QApplication.instance()
+    current_style_sheet = app.styleSheet()
+    block = ""
+
+    if color is not None:
+        block = (
+            f"{DOCK_SEPARATOR_STYLE_START_MARKER}"
+            f"{get_dock_separator_style(color, thickness)}"
+            f"{DOCK_SEPARATOR_STYLE_END_MARKER}\n"
+        )
+
+    style_sheet, replaced = _DOCK_SEPARATOR_STYLE_BLOCK.subn(
+        lambda _match: block, current_style_sheet, count=1
+    )
+
+    if not replaced:
+        style_sheet = current_style_sheet + block
+
+    # Re-setting an unchanged sheet would still re-polish every widget.
+    if style_sheet != current_style_sheet:
+        app.setStyleSheet(style_sheet)
 
 
 def style_app(app_instance: "QApplication"):

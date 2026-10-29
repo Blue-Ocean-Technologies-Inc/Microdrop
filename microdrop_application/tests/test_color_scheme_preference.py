@@ -47,6 +47,19 @@ def _window_color():
     return QApplication.palette().color(QPalette.ColorRole.Window)
 
 
+def _show_docked_label_window():
+    """Show a main window with a label inside a dock, returning both."""
+    window = QMainWindow()
+    dock = QDockWidget("Dock", window)
+    dock_contents = QWidget()
+    label = QLabel("Label", dock_contents)
+    dock.setWidget(dock_contents)
+    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+    window.show()
+
+    return window, label
+
+
 def test_color_scheme_defaults_to_follow_system():
     assert MicrodropPreferences(preferences=Preferences()).color_scheme == (
         COLOR_SCHEME_FOLLOW_SYSTEM
@@ -115,14 +128,7 @@ def test_apply_color_scheme_fallback_reaches_children_under_app_stylesheet(qapp)
     previous_style_sheet = qapp.styleSheet()
     qapp.setStyleSheet("QMainWindow::separator { width: 8px; }")
 
-    window = QMainWindow()
-    dock = QDockWidget("Dock", window)
-    dock_contents = QWidget()
-    label = QLabel("Label", dock_contents)
-    dock.setWidget(dock_contents)
-    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
-    window.show()
-
+    window, label = _show_docked_label_window()
     startup_window_color = label.palette().color(QPalette.ColorRole.Window)
 
     try:
@@ -149,17 +155,48 @@ def test_apply_color_scheme_flips_dark_mode_and_restores_system(qapp):
     style_hints = QApplication.styleHints()
     system_scheme = style_hints.colorScheme()
 
-    apply_color_scheme(COLOR_SCHEME_DARK)
+    # An app stylesheet stops children inheriting the new platform palette.
+    previous_style_sheet = qapp.styleSheet()
+    qapp.setStyleSheet("QMainWindow::separator { width: 8px; }")
+    window, label = _show_docked_label_window()
 
-    assert style_hints.colorScheme() == Qt.ColorScheme.Dark
-    assert is_dark_mode()
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
 
-    apply_color_scheme(COLOR_SCHEME_LIGHT)
+        assert style_hints.colorScheme() == Qt.ColorScheme.Dark
+        assert is_dark_mode()
 
-    assert style_hints.colorScheme() == Qt.ColorScheme.Light
-    assert not is_dark_mode()
+        apply_color_scheme(COLOR_SCHEME_LIGHT)
 
-    apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+        assert style_hints.colorScheme() == Qt.ColorScheme.Light
+        assert not is_dark_mode()
 
-    assert style_hints.colorScheme() == system_scheme
-    assert is_dark_mode() == (system_scheme == Qt.ColorScheme.Dark)
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+        assert style_hints.colorScheme() == system_scheme
+        assert is_dark_mode() == (system_scheme == Qt.ColorScheme.Dark)
+
+        for _ in range(10):
+            qapp.processEvents()
+
+        system_label_color = label.palette().color(QPalette.ColorRole.Window)
+        system_label_dark = system_label_color.lightness() < 128
+
+        if system_scheme == Qt.ColorScheme.Dark:
+            apply_color_scheme(COLOR_SCHEME_LIGHT)
+        else:
+            apply_color_scheme(COLOR_SCHEME_DARK)
+
+        # The child refresh is deferred past the colorSchemeChanged emit.
+        for _ in range(50):
+            qapp.processEvents()
+            label_color = label.palette().color(QPalette.ColorRole.Window)
+
+            if (label_color.lightness() < 128) != system_label_dark:
+                break
+
+        assert (label_color.lightness() < 128) != system_label_dark
+    finally:
+        window.close()
+        qapp.setStyleSheet(previous_style_sheet)
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)

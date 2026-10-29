@@ -18,7 +18,17 @@ from dramatiq import get_broker
 from microdrop_application.consts import (
     ADVANCED_MODE_KEY,
     APP_GLOBALS_REDIS_HASH,
+    COLOR_SCHEME_DARK,
+    COLOR_SCHEME_FOLLOW_SYSTEM,
+    COLOR_SCHEME_LIGHT,
+    DOCK_SEPARATOR_COLOR_CUSTOM,
     EXPERIMENT_DIR,
+)
+
+# Microdrop style imports.
+from microdrop_style.dock_separator_style import (
+    DOCK_SEPARATOR_THEME_COLORS,
+    SEPARATOR_THICKNESS,
 )
 
 # Microdrop utils imports.
@@ -69,3 +79,33 @@ def get_current_experiment_directory() -> Path:
 
     experiments_root = Path(MicrodropPreferences().EXPERIMENTS_DIR)
     return experiments_root / current_exp_dir
+
+
+def resolve_dock_separator_style(color_mode, custom_color, dark_mode, rpi):
+    """Return the ``(color, thickness)`` the dock separators are styled with.
+
+    Parameters
+    ----------
+    color_mode : str
+        A DOCK_SEPARATOR_COLOR_LABELS key.
+    custom_color : str
+        Hex colour used in custom mode.
+    dark_mode : bool
+        Whether the app is dark, which picks the follow_system theme colour.
+    rpi : bool
+        Whether this is the portable rig, whose touchscreen needs
+        finger-sized separators.
+    """
+    if color_mode == DOCK_SEPARATOR_COLOR_CUSTOM:
+        color = custom_color
+
+    elif color_mode == COLOR_SCHEME_FOLLOW_SYSTEM:
+        theme = COLOR_SCHEME_DARK if dark_mode else COLOR_SCHEME_LIGHT
+        color = DOCK_SEPARATOR_THEME_COLORS[theme]
+
+    else:
+        color = DOCK_SEPARATOR_THEME_COLORS[color_mode]
+
+    thickness = SEPARATOR_THICKNESS if rpi else None
+
+    return color, thickness

@@ -52,6 +52,16 @@ COLOR_SCHEME_LABELS = {
     COLOR_SCHEME_DARK: "3:Dark",
 }
 
+# Dock-separator colour (MicrodropPreferences.dock_separator_color_mode): the
+# colour-scheme modes pick that theme's separator grey, custom uses
+# MicrodropPreferences.dock_separator_color.
+DOCK_SEPARATOR_COLOR_CUSTOM = "custom"
+
+DOCK_SEPARATOR_COLOR_LABELS = {
+    **COLOR_SCHEME_LABELS,
+    DOCK_SEPARATOR_COLOR_CUSTOM: "4:Custom",
+}
+
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"

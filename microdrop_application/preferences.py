@@ -22,13 +22,18 @@ from traits.etsconfig.api import ETSConfig
 from traitsui.api import Color, EnumEditor, Group, Item, RangeEditor, VGroup, View
 
 # Microdrop style imports.
+from microdrop_style.colors import GREY
 from microdrop_style.text_styles import preferences_group_style_sheet
 
 # Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
 # Local imports.
-from .consts import COLOR_SCHEME_LABELS
+from .consts import (
+    COLOR_SCHEME_LABELS,
+    DOCK_SEPARATOR_COLOR_CUSTOM,
+    DOCK_SEPARATOR_COLOR_LABELS,
+)
 
 
 class MicrodropPreferences(PreferencesHelper):
@@ -55,6 +60,13 @@ class MicrodropPreferences(PreferencesHelper):
     #: App-wide colour scheme: follow the OS (the default, listed first) or
     #: force light/dark. Applied by MicrodropApplication.
     color_scheme = Enum(*COLOR_SCHEME_LABELS)
+
+    #: Dock-pane separator colour: the follow_system/light/dark theme grey, or
+    #: dock_separator_color when custom. Applied by MicrodropApplication.
+    dock_separator_color_mode = Enum(*DOCK_SEPARATOR_COLOR_LABELS)
+
+    #: Separator colour used when dock_separator_color_mode is custom.
+    dock_separator_color = Color(GREY["light"])
 
     # dialogs:
     suppress_no_shorts_information = Bool(False)
@@ -120,6 +132,18 @@ class MicrodropPreferencesPane(PreferencesPane):
                 "color_scheme",
                 label="Color Scheme",
                 editor=EnumEditor(values=COLOR_SCHEME_LABELS),
+            ),
+            Item(
+                "dock_separator_color_mode",
+                label="Dock Separator Color",
+                editor=EnumEditor(values=DOCK_SEPARATOR_COLOR_LABELS),
+            ),
+            Item(
+                "dock_separator_color",
+                label="Custom Separator Color (hex)",
+                enabled_when=(
+                    f"dock_separator_color_mode == {DOCK_SEPARATOR_COLOR_CUSTOM!r}"
+                ),
             ),
             label="Appearance",
             show_border=True,
