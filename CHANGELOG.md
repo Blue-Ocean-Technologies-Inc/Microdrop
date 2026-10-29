@@ -1,3 +1,36 @@
+## [v1.33.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.33.0) (2026-10-29)
+
+### Feat
+
+- **layout_presets**: rename presets from the manage dialog ([`58f6f1c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/58f6f1c6164a6ff0f0b2e341662ea8005a273224))
+- **layout_presets**: manage dialog to edit shortcuts and delete presets ([`f9e7e1a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f9e7e1adce2f7c5d7aac775eb5403a8dabcb07da))
+- **layout_presets**: keyboard shortcut per preset, Alt+N by default ([`74f0fc7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/74f0fc7c6b52ce4a4aa0d137be147f90399e8989))
+- **layout_presets**: save and re-apply window layout presets ([`e830717`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e830717e40d920c99e1d42f6722847e93e690403))
+- **image_viewer**: histogram intensity range and pixel-count range filters ([`f5a170a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f5a170abc3c064a81a247a09db698bb14b0b501a))
+- **image_viewer**: histogram axes, cleanup, distribution fit, marker lines ([`dfb47cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dfb47cf409c33d210cd0ca0e862e635e1e98f088))
+- **image_viewer**: per-ROI pixel intensity histogram view ([`bdceaa0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bdceaa0b440ad5b005ab58d84d806c6f7c761e2f))
+- **image_viewer**: search box to filter the Experiment dropdown ([`afd78be`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/afd78be84cfa92532ce98522d020e19f977119f9))
+- **portable_dropbot**: tray-only moves from the glyph and motors pane ([`8c30555`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8c305554467caf7afa856c8e6eb94ef80b89c212))
+- **microdrop_application**: dock separator colour preference ([`4c65ba2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4c65ba2f1b1c1a81289d6a15d049909246747dee))
+- **microdrop_application**: color scheme preference (follow system/light/dark) ([`08b2c7c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/08b2c7c9f7e4f829f4a2f7a8ff33a6435d302aa1))
+- **rpi_battery_status**: click the icon for a battery details panel ([`218b401`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/218b401e3997a91e827db056229a1e06b1e3ecb7))
+- **rpi_battery_status**: status-bar battery icon for the portable rig ([`f4b9830`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f4b983071e8c67ad573dcf362752d9f3b4d3df25))
+- **microdrop_application**: File > Minimize above Exit ([`15b04b8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/15b04b8539bbc787dc7b1521d9c094c60b24fcc1))
+- **portable_dropbot_status_and_controls**: add settings tab ([`340d6ae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/340d6ae0f5612d73484bd25548627cafce637282))
+- **portable_dropbot_controller**: add fan board and chip-detect prefs ([`cb190cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cb190cf1b3b8ac8c2e7974b19e8f8d9adde36a82))
+
+### Fix
+
+- **microdrop_style**: propagate fallback palette under an app stylesheet ([`e7b737d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e7b737dfe1b09e1eaf21d039a60ea243b560cd95))
+
+### Refactor
+
+- **portable_dropbot_status_and_controls**: fan toggle uses pref ([`c770293`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c7702938baba51eef270118e864b6c6a34a8f770))
+
+### Chore
+
+- **portable_dropbot_status_and_controls**: ruff-clean status controller ([`1468f20`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1468f20f47ef0a6a7f2677b3aeae62288884e8ec))
+
 ## [v1.32.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.32.0) (2026-10-27)
 
 ### Feat
