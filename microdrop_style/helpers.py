@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from pyface.qt.QtCore import Qt
+from pyface.qt.QtCore import QCoreApplication, QEvent, Qt
 from pyface.qt.QtGui import QFont, QIcon
 from pyface.qt.QtWidgets import QApplication
 
@@ -72,10 +72,19 @@ def apply_color_scheme(color_scheme):
     # the Pi with or without qt5ct/gtk3) ignore the request: no palette
     # change, no signal. Swap the palette and announce the scheme ourselves;
     # is_dark_mode() reports the override. The startup palette is light there.
+    # A global setPalette only notifies top-level windows, and an app
+    # stylesheet turns off parent-to-child palette inheritance, so every other
+    # widget is told to re-resolve its palette from the new application one.
     if _requested_color_scheme == Qt.ColorScheme.Dark:
         QApplication.setPalette(dark_palette())
     else:
         QApplication.setPalette(_startup_palette)
+
+    for widget in QApplication.allWidgets():
+        if not widget.isWindow():
+            QCoreApplication.sendEvent(
+                widget, QEvent(QEvent.Type.ApplicationPaletteChange)
+            )
 
     style_hints.colorSchemeChanged.emit(_requested_color_scheme or current_color_scheme)
 

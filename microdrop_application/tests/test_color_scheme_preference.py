@@ -16,8 +16,14 @@ import pytest
 # Enthought library imports.
 from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import Qt
-from pyface.qt.QtGui import QPalette
-from pyface.qt.QtWidgets import QApplication
+from pyface.qt.QtGui import QColor, QPalette
+from pyface.qt.QtWidgets import (
+    QApplication,
+    QDockWidget,
+    QLabel,
+    QMainWindow,
+    QWidget,
+)
 
 # Microdrop package imports.
 from microdrop_application.consts import (
@@ -28,6 +34,7 @@ from microdrop_application.consts import (
 from microdrop_application.preferences import MicrodropPreferences
 
 # Microdrop style imports.
+from microdrop_style.colors import WHITE
 from microdrop_style.helpers import apply_color_scheme, is_dark_mode
 
 
@@ -96,6 +103,42 @@ def test_apply_color_scheme_fallback_when_platform_ignores_requests(qapp):
         assert _window_color() == startup_window_color
     finally:
         style_hints.colorSchemeChanged.disconnect(received.append)
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_apply_color_scheme_fallback_reaches_children_under_app_stylesheet(qapp):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    # An app stylesheet (the Pi's dock separators) stops child widgets
+    # inheriting the new application palette from their window.
+    previous_style_sheet = qapp.styleSheet()
+    qapp.setStyleSheet("QMainWindow::separator { width: 8px; }")
+
+    window = QMainWindow()
+    dock = QDockWidget("Dock", window)
+    dock_contents = QWidget()
+    label = QLabel("Label", dock_contents)
+    dock.setWidget(dock_contents)
+    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+    window.show()
+
+    startup_window_color = label.palette().color(QPalette.ColorRole.Window)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
+
+        label_palette = label.palette()
+
+        assert label_palette.color(QPalette.ColorRole.WindowText) == QColor(WHITE)
+        assert label_palette.color(QPalette.ColorRole.Window).lightness() < 128
+
+        apply_color_scheme(COLOR_SCHEME_LIGHT)
+
+        assert label.palette().color(QPalette.ColorRole.Window) == startup_window_color
+    finally:
+        window.close()
+        qapp.setStyleSheet(previous_style_sheet)
         apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
 
 
