@@ -23,8 +23,11 @@ service. The pane factory is any ``DockPane`` subclass/callable taking
 use).
 """
 
+# Enthought library imports.
+from pyface.qt import QtWidgets
 from pyface.ui.qt.tasks.dock_pane import AREA_MAP
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -46,7 +49,9 @@ def add_dock_pane_live(window, task, factory, area=None):
     """
     state = window._active_state
     if state is None:
-        logger.warning("add_dock_pane_live: window has no active task state; cannot add pane")
+        logger.warning(
+            "add_dock_pane_live: window has no active task state; cannot add pane"
+        )
         return None
 
     main_window = window.control
@@ -120,8 +125,7 @@ def restore_saved_task_layout(window, application):
     Returns True if a saved layout was found and applied.
     """
     if getattr(application, "always_use_default_layout", False):
-        logger.debug(
-            "restore_saved_task_layout: skipped (always_use_default_layout)")
+        logger.debug("restore_saved_task_layout: skipped (always_use_default_layout)")
         return False
 
     # The envisage TasksApplicationState loaded from the application_memento
@@ -133,15 +137,15 @@ def restore_saved_task_layout(window, application):
 
     saved_task_layout = saved_application_state.get_task_layout(task.id)
     if saved_task_layout is None:
-        logger.debug(
-            f"restore_saved_task_layout: no saved layout for task '{task.id}'")
+        logger.debug(f"restore_saved_task_layout: no saved layout for task '{task.id}'")
         return False
 
     # Clone so the live window's subsequent layout mutations cannot corrupt
     # the state object that gets pickled back at exit.
     window._window_backend.set_layout(saved_task_layout.clone_traits())
     logger.info(
-        f"restore_saved_task_layout: re-applied saved layout for task '{task.id}'")
+        f"restore_saved_task_layout: re-applied saved layout for task '{task.id}'"
+    )
     return True
 
 
@@ -191,3 +195,31 @@ def rebuild_menu_bar_live(window, task, application):
                 "rebuild_menu_bar_live: failed to destroy old menu bar manager"
             )
     logger.debug("rebuild_menu_bar_live: menu bar rebuilt")
+
+
+def describe_dock_widgets(main_window):
+    """Describe every dock widget's geometry, for a window pyface refused to save.
+
+    Runs during application shutdown, so it must never raise itself; any
+    failure while introspecting the window is returned as text instead.
+    """
+    try:
+        lines = []
+
+        for widget in main_window.findChildren(QtWidgets.QDockWidget):
+            geometry = widget.geometry()
+            tabified_titles = [
+                tabbed.windowTitle()
+                for tabbed in main_window.tabifiedDockWidgets(widget)
+            ]
+            lines.append(
+                f"{widget.windowTitle()!r} visible={widget.isVisible()} "
+                f"area={main_window.dockWidgetArea(widget)} "
+                f"geometry={geometry.x()},{geometry.y()} "
+                f"{geometry.width()}x{geometry.height()} "
+                f"floating={widget.isFloating()} tabified_with={tabified_titles}"
+            )
+
+        return "\n".join(lines)
+    except Exception as error:
+        return f"Could not describe dock widgets: {error}"

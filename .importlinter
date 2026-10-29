@@ -9,6 +9,7 @@ root_packages =
     electrode_controller
     image_viewer
     integrated_ssh_portal
+    layout_presets
     logger
     logger_ui
     manual_controls
@@ -50,6 +51,7 @@ modules =
     electrode_controller
     image_viewer
     integrated_ssh_portal
+    layout_presets
     logger_ui
     manual_controls
     message_router
