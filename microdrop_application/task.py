@@ -36,7 +36,7 @@ from .consts import (
     PKG,
 )
 from .dialogs.pyface_wrapper import YES, confirm, information
-from .menus import AdvancedModeAction, ResetLayoutAction
+from .menus import AdvancedModeAction, MinimizeWindowAction, ResetLayoutAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
 
@@ -91,10 +91,11 @@ class MicrodropTask(Task):
 
     menu_bar = SMenuBar(
         # Envisage's TasksPlugin adds Exit to "MenuBar/File" with no position
-        # hint, so it lands in whichever group comes last: the Exit group.
+        # hint, so it lands at the end of whichever group comes last: the Exit
+        # group, after Minimize.
         SMenu(
             SGroup(id=FILE_MENU_SUBMENUS_GROUP_ID),
-            SGroup(id=FILE_MENU_EXIT_GROUP_ID),
+            SGroup(MinimizeWindowAction(), id=FILE_MENU_EXIT_GROUP_ID),
             id="File",
             name="&File",
         ),

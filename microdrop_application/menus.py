@@ -82,3 +82,28 @@ class ResetLayoutAction(TaskWindowAction):
 
         window.reset_layout()
         logger.info(f"Reset the layout of task '{task.id}' to its default")
+
+
+class MinimizeWindowAction(TaskWindowAction):
+    """Minimize the task window to the desktop without quitting.
+
+    It exists for the portable rig: its kiosk window is fullscreen with no
+    title bar, so there is no window button to minimize it. On a desktop it
+    just duplicates the title bar's own button.
+    """
+
+    id = "minimize_window_action"
+    name = "&Minimize"
+    tooltip = "Minimize the window to the desktop"
+
+    def perform(self, event=None):
+        # Same hot-load caveat as Reset Layout: prefer the click event's task.
+        task = getattr(event, "task", None) or self.task
+        window = task.window if task is not None else None
+
+        if window is None or window.control is None:
+            logger.warning("Minimize: no task window to minimize")
+
+            return
+
+        window.control.showMinimized()
