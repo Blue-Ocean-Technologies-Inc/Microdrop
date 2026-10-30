@@ -150,6 +150,24 @@ def test_apply_color_scheme_fallback_when_platform_keeps_light_palette(
         apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
 
 
+def test_follow_system_fallback_when_platform_keeps_light_palette(qapp, monkeypatch):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    assert _window_color().lightness() >= 128
+
+    _report_color_scheme(monkeypatch, Qt.ColorScheme.Dark)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+        assert is_dark_mode()
+        assert _window_color().lightness() < 128
+    finally:
+        monkeypatch.undo()
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
 def test_apply_color_scheme_keeps_platform_palette_when_it_matches(qapp, monkeypatch):
     if not _platform_ignores_color_scheme_requests():
         pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
