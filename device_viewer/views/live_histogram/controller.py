@@ -18,7 +18,7 @@ bins it — only while the pane is shown and not paused, so a hidden pane
 costs nothing.
 
 The controller also answers the pane's crop glyph: it captures one frame
-and opens the region picker on it.
+and opens the non-modal region picker on it.
 """
 
 # Standard library imports.
@@ -30,7 +30,16 @@ import numpy as np
 # Enthought library imports.
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtGui import QImage
-from traits.api import Bool, Callable, Float, HasTraits, Instance, observe
+from traits.api import (
+    Bool,
+    Callable,
+    Float,
+    HasTraits,
+    Instance,
+    Property,
+    observe,
+)
+from traitsui.api import UI
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import warning
@@ -85,6 +94,17 @@ class LiveHistogramController(HasTraits):
 
     #: Returns the widget the region picker is parented to.
     get_dialog_parent = Callable()
+
+    #: Open the region picker with Live on: the last picker's choice, kept
+    #: for the session.
+    region_picker_live = Bool(False)
+
+    #: True while the region picker window is open.
+    region_picker_open = Property(Bool)
+
+    #: The open (or last) region picker's model and window.
+    _region_picker = Instance(RegionPickerModel)
+    _region_picker_ui = Instance(UI)
 
     #: True while the pane is shown; sampling runs only then.
     active = Bool(False)
@@ -182,8 +202,15 @@ class LiveHistogramController(HasTraits):
 
     @observe("model:pick_region")
     def open_region_picker(self, event=None):
-        """Capture a frame and let the user mark the region on it; OK
-        applies the region."""
+        """Capture a frame and open the region picker on it, beside the
+        pane; while one is open, bring it to the front instead."""
+
+        if self.region_picker_open:
+            self._region_picker_ui.control.raise_()
+            self._region_picker_ui.control.activateWindow()
+
+            return
+
         image = self.capture_frame()
         parent = self.get_dialog_parent() if self.get_dialog_parent else None
 
@@ -198,17 +225,36 @@ class LiveHistogramController(HasTraits):
 
             return
 
-        picker = RegionPickerModel(
-            region=self.model.region, frame_size=(image.width(), image.height())
+        self._region_picker = RegionPickerModel(
+            region=self.model.region,
+            frame_size=(image.width(), image.height()),
+            live=self.region_picker_live,
+        )
+        dialog = RegionPickerController(
+            model=self._region_picker,
+            histogram=self.model,
+            image=image,
+            capture_frame=self.capture_frame,
         )
 
-        if self.edit_region(picker, image, parent):
-            self.model.region = picker.region
+        # Non-modal and editing in place, so the pane keeps sampling and the
+        # Live toggle can show the region's effect as it is drawn.
+        self._region_picker_ui = dialog.edit_traits(
+            view=region_picker_view, parent=parent, kind="live"
+        )
 
-    def edit_region(self, picker, image, parent):
-        """Show the region picker modally on ``image``; True on OK."""
-        ui = RegionPickerController(
-            model=picker, image=image, capture_frame=self.capture_frame
-        ).edit_traits(view=region_picker_view, parent=parent, kind="livemodal")
+    def close_region_picker(self):
+        """Close the open region picker, if any, as its Cancel would."""
 
-        return ui.result
+        if self.region_picker_open:
+            self._region_picker_ui.dispose()
+
+    @observe("_region_picker:live")
+    def _remember_live_choice(self, event):
+        self.region_picker_live = event.new
+
+    def _get_region_picker_open(self):
+        # The UI drops its control once the window closes.
+        return self._region_picker_ui is not None and (
+            self._region_picker_ui.control is not None
+        )

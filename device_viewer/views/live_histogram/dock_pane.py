@@ -58,7 +58,9 @@ class LiveHistogramDockPane(TraitsDockPane):
         self.controller.active = event.new
 
     def destroy(self):
-        """Stop sampling before the pane's widgets go."""
+        """Stop sampling and close the region picker before the pane's
+        widgets go."""
         self.controller.active = False
+        self.controller.close_region_picker()
 
         super().destroy()

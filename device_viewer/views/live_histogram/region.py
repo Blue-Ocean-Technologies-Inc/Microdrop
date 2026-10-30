@@ -20,6 +20,7 @@ right and bottom sides of a fresh region pinned at the press outside it.
 
 # Enthought library imports.
 from traits.api import (
+    Bool,
     Button,
     Float,
     HasTraits,
@@ -197,6 +198,9 @@ class RegionPickerModel(HasTraits):
 
     #: Cover the whole frame again.
     full_frame = Button()
+
+    #: Apply the region to the histogram as it is edited, not only on OK.
+    live = Bool(False)
 
     #: The sides the current drag holds (none between drags), and where it
     #: started (frame fractions) on which region.

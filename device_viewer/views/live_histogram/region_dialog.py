@@ -10,22 +10,25 @@
 
 """The Live Histogram's region picker, modelled on the camera alignment
 tool's device outline pane: one captured camera frame in the zoom/pan
-view, where the user draws the rectangle the histogram covers.
+view, where the user draws the rectangle the histogram covers. The
+window is non-modal, so the pane's plot keeps updating beside it; with
+Live on, it follows the region as it is drawn.
 
 - RegionPickerModel (``region.py``) — the region and the drag editing.
 - region_picker_view — the module-level View: the readout and glyphs
-  (fit, full frame, recapture) over the canvas, with OK and Cancel.
+  (live, fit, full frame, recapture) over the canvas, with OK and Cancel.
 - RegionPickerController — owns the frame and the canvas: it draws the
-  model's region, refits, and swaps in a fresh capture.
+  model's region, refits, swaps in a fresh capture, and writes the region
+  into the histogram model: as it changes while Live is on, and on OK.
+  Cancel, or closing the window, puts back the region the histogram had.
 
-Open it modally: ``RegionPickerController(model=..., image=...,
-capture_frame=...).edit_traits(view=region_picker_view, kind="livemodal")``;
-``ui.result`` is True on OK, and the model then holds the picked region.
+Open it with ``RegionPickerController(model=..., histogram=..., image=...,
+capture_frame=...).edit_traits(view=region_picker_view, kind="live")``.
 """
 
 # Enthought library imports.
 from pyface.qt.QtGui import QImage, QPixmap
-from traits.api import Callable, Instance, observe
+from traits.api import Callable, Instance, Tuple, observe
 from traitsui.api import (
     CancelButton,
     Controller,
@@ -41,13 +44,19 @@ from traitsui.api import (
 )
 
 # Microdrop style imports.
-from microdrop_style.icons.icons import ICON_FIT_SCREEN, ICON_PHOTO_CAMERA, ICON_RESTORE
+from microdrop_style.icons.icons import (
+    ICON_FIT_SCREEN,
+    ICON_PHOTO_CAMERA,
+    ICON_PLAY,
+    ICON_RESTORE,
+)
 
 # Microdrop utils imports.
-from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
+from microdrop_utils.traitsui_qt_helpers import IconButtonEditor, IconToggleEditor
 
 # Local imports.
 from ...consts import LIVE_HISTOGRAM_REGION_DIALOG_SIZE_PX
+from .model import LiveHistogramModel
 from .region import RegionPickerModel
 from .region_overlay import RegionCanvas, RegionOverlay
 
@@ -75,6 +84,14 @@ region_picker_view = View(
         HGroup(
             Item("region_text", style="readonly", label="Region"),
             spring,
+            UItem(
+                "live",
+                editor=IconToggleEditor(
+                    on_glyph=ICON_PLAY,
+                    off_glyph=ICON_PLAY,
+                    tooltip="Apply the region to the histogram as you drag it",
+                ),
+            ),
             UItem(
                 "fit",
                 editor=IconButtonEditor(
@@ -107,10 +124,16 @@ region_picker_view = View(
 
 # --------------------------- Controller --------------------------- #
 class RegionPickerController(Controller):
-    """Shows the captured frame and the model's region on the canvas, and
-    handles the frame glyphs."""
+    """Shows the captured frame and the model's region on the canvas,
+    handles the frame glyphs, and applies the region to the histogram."""
 
     model = Instance(RegionPickerModel)
+
+    #: The pane's histogram the picked region applies to.
+    histogram = Instance(LiveHistogramModel)
+
+    #: The histogram's region when the picker opened; Cancel restores it.
+    _original_region = Tuple()
 
     #: The captured frame the region is drawn on.
     image = Instance(QImage)
@@ -123,6 +146,21 @@ class RegionPickerController(Controller):
     canvas = Instance(RegionCanvas)
 
     _overlay = Instance(RegionOverlay)
+
+    def traits_init(self):
+        if self.histogram is not None:
+            self._original_region = self.histogram.region
+
+    def closed(self, info, is_ok):
+        """OK keeps the picked region; Cancel and the window's close button
+        put the original back, also after Live applied edits."""
+
+        if self.histogram is not None:
+            self.histogram.region = (
+                self.model.region if is_ok else self._original_region
+            )
+
+        super().closed(info, is_ok)
 
     def _canvas_default(self):
         canvas = RegionCanvas(QPixmap.fromImage(self.image), self.model)
@@ -137,6 +175,20 @@ class RegionPickerController(Controller):
     def _draw_region(self, event):
         if self._overlay is not None:
             self._overlay.set_region(event.new, self.canvas.frame_size())
+
+    @observe("model:region, model:live")
+    def _apply_live(self, event):
+        """While Live is on, the histogram follows every edit; turning it
+        off leaves the histogram as it was until OK."""
+
+        if self.histogram is None:
+            return
+
+        if self.model.live:
+            self.histogram.region = self.model.region
+
+        elif event.name == "live":
+            self.histogram.region = self._original_region
 
     @observe("model:fit")
     def _fit_frame(self, event):
