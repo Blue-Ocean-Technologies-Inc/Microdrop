@@ -28,6 +28,10 @@ from .palettes import dark_palette
 
 QT_THEME_NAMES = {Qt.ColorScheme.Dark: "dark", Qt.ColorScheme.Light: "light"}
 
+# Window lightness below which a palette counts as dark. Platform themes can
+# report a scheme their palette does not carry, so the palette is checked too.
+DARK_PALETTE_LIGHTNESS_THRESHOLD = 128
+
 # The scheme forced by apply_color_scheme (None follows the OS), the app
 # palette from before the first override, restored when following the OS, and
 # whether colour-scheme changes already trigger refresh_widget_palettes.
@@ -97,27 +101,38 @@ def apply_color_scheme(color_scheme):
         style_hints.setColorScheme(_requested_color_scheme)
 
     current_color_scheme = style_hints.colorScheme()
+    color_scheme_in_force = _requested_color_scheme or current_color_scheme
 
     if _requested_color_scheme is None:
         platform_applied_it = current_color_scheme != Qt.ColorScheme.Unknown
     else:
         platform_applied_it = current_color_scheme == _requested_color_scheme
 
-    if platform_applied_it:
+    palette_is_dark = (
+        QApplication.palette().window().color().lightness()
+        < DARK_PALETTE_LIGHTNESS_THRESHOLD
+    )
+    palette_matches_it = palette_is_dark == (
+        color_scheme_in_force == Qt.ColorScheme.Dark
+    )
+
+    if platform_applied_it and palette_matches_it:
         return
 
     # Platform themes without colour-scheme support (offscreen, and xcb on
     # the Pi with or without qt5ct/gtk3) ignore the request: no palette
-    # change, no signal. Swap the palette and announce the scheme ourselves;
-    # is_dark_mode() reports the override. The startup palette is light there.
-    if _requested_color_scheme == Qt.ColorScheme.Dark:
+    # change, no signal. The Pi's gnome theme instead reports the scheme but
+    # keeps its light palette. Swap the palette and announce the scheme
+    # ourselves; is_dark_mode() reports the override. The startup palette is
+    # light there.
+    if color_scheme_in_force == Qt.ColorScheme.Dark:
         QApplication.setPalette(dark_palette())
     else:
         QApplication.setPalette(_startup_palette)
 
     refresh_widget_palettes()
 
-    style_hints.colorSchemeChanged.emit(_requested_color_scheme or current_color_scheme)
+    style_hints.colorSchemeChanged.emit(color_scheme_in_force)
 
 
 def apply_dock_separator_style(color, thickness=None):

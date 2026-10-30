@@ -36,6 +36,7 @@ from microdrop_application.preferences import MicrodropPreferences
 # Microdrop style imports.
 from microdrop_style.colors import WHITE
 from microdrop_style.helpers import apply_color_scheme, is_dark_mode
+from microdrop_style.palettes import dark_palette
 
 
 def _platform_ignores_color_scheme_requests():
@@ -45,6 +46,15 @@ def _platform_ignores_color_scheme_requests():
 
 def _window_color():
     return QApplication.palette().color(QPalette.ColorRole.Window)
+
+
+def _report_color_scheme(monkeypatch, color_scheme):
+    """Make the style hints report ``color_scheme`` whatever the palette."""
+    monkeypatch.setattr(
+        type(QApplication.styleHints()),
+        "colorScheme",
+        lambda _style_hints: color_scheme,
+    )
 
 
 def _show_docked_label_window():
@@ -116,6 +126,67 @@ def test_apply_color_scheme_fallback_when_platform_ignores_requests(qapp):
         assert _window_color() == startup_window_color
     finally:
         style_hints.colorSchemeChanged.disconnect(received.append)
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_apply_color_scheme_fallback_when_platform_keeps_light_palette(
+    qapp, monkeypatch
+):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    # The Pi's gnome theme reports the dark scheme but keeps its light palette.
+    assert _window_color().lightness() >= 128
+
+    _report_color_scheme(monkeypatch, Qt.ColorScheme.Dark)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
+
+        assert is_dark_mode()
+        assert _window_color().lightness() < 128
+    finally:
+        monkeypatch.undo()
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_follow_system_fallback_when_platform_keeps_light_palette(qapp, monkeypatch):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    assert _window_color().lightness() >= 128
+
+    _report_color_scheme(monkeypatch, Qt.ColorScheme.Dark)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+        assert is_dark_mode()
+        assert _window_color().lightness() < 128
+    finally:
+        monkeypatch.undo()
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_apply_color_scheme_keeps_platform_palette_when_it_matches(qapp, monkeypatch):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    # Captures the light startup palette before a dark one is installed.
+    apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+    platform_palette = dark_palette()
+    platform_palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
+    QApplication.setPalette(platform_palette)
+    _report_color_scheme(monkeypatch, Qt.ColorScheme.Dark)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
+
+        assert is_dark_mode()
+        assert _window_color() == QColor("#202020")
+    finally:
+        monkeypatch.undo()
         apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
 
 
