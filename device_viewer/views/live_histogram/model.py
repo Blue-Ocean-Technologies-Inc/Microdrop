@@ -32,14 +32,56 @@ from traits.api import (
 # Local imports.
 from ...consts import (
     LIVE_HISTOGRAM_BINS,
+    LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS,
+    LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE,
     LIVE_HISTOGRAM_DEFAULT_RATE_HZ,
     LIVE_HISTOGRAM_LUMA_WEIGHTS,
+    LIVE_HISTOGRAM_PLOT_STYLES,
     LIVE_HISTOGRAM_RANGE_PERCENTILES,
     LIVE_HISTOGRAM_RATE_BOUNDS_HZ,
 )
 
 #: Shown by the readouts while there is no frame to describe.
 NO_READOUT = "–"
+
+
+def smoothed_density(counts):
+    """Normalise histogram ``counts`` (along the last axis) to a density and
+    smooth it with a short moving average, so it plots as a curve rather
+    than a jagged outline.
+
+    The end bins are left unsmoothed: they hold the clipped pixels, and
+    spreading a clipped spike inward would read as real levels. Edge padding
+    keeps the total mass, so the result still sums to 1 per histogram.
+
+    Parameters
+    ----------
+    counts : numpy.ndarray
+        One histogram, or a stack of them, binned along the last axis.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float densities of ``counts``' shape; all zero where a histogram is
+        empty.
+    """
+    counts = np.asarray(counts, dtype=float)
+    totals = counts.sum(axis=-1, keepdims=True)
+    density = np.divide(counts, totals, out=np.zeros_like(counts), where=totals > 0)
+
+    width = LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS
+    pad_widths = [(0, 0)] * (density.ndim - 1) + [(width // 2, width // 2)]
+    padded = np.pad(density[..., 1:-1], pad_widths, mode="edge")
+
+    cumulative = np.cumsum(padded, axis=-1)
+    cumulative = np.concatenate(
+        [np.zeros_like(cumulative[..., :1]), cumulative], axis=-1
+    )
+
+    smoothed = density.copy()
+    smoothed[..., 1:-1] = (cumulative[..., width:] - cumulative[..., :-width]) / width
+
+    return smoothed
 
 
 class LiveHistogramModel(HasTraits):
@@ -53,6 +95,9 @@ class LiveHistogramModel(HasTraits):
 
     #: Plot the luma histogram, or the three colour channels overlaid.
     channel_mode = Enum("luma", "rgb")
+
+    #: Draw filled bars per level, or just the density curve (cheaper).
+    plot_style = Enum(LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE, LIVE_HISTOGRAM_PLOT_STYLES)
 
     #: Logarithmic count axis, which lifts sparse levels into view.
     log_y = Bool(False)

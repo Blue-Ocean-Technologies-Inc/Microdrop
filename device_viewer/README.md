@@ -17,7 +17,7 @@ An exposure aid: a realtime histogram of the live camera frame, like a camera's 
 
 - `model.py`: `LiveHistogramModel`, Qt-free. `update_from_rgb(array)` bins an (H, W, 3) uint8 frame into luma (Rec. 601) and R/G/B counts and derives the readouts: clipped share at the dark and bright ends, mean, and the 1-99 % range.
 - `controller.py`: `LiveHistogramController` polls the device view's video item (`videoSink().videoFrame()`), which holds the displayed frame for QtMultimedia cameras and provider feeds alike, downscales it to `LIVE_HISTOGRAM_SAMPLE_WIDTH_PX`, and feeds the model. Its timer runs only while the pane is visible and not paused, and slows to `LIVE_HISTOGRAM_IDLE_INTERVAL_MS` without a feed.
-- `view.py` + `histogram_widget.py`: a TraitsUI `View` (Luma/RGB, log y, pause, rate, readouts) around a QPainter plot that follows the app palette and tints the end columns blue (dark) or red (bright) past `LIVE_HISTOGRAM_CLIP_WARN_PCT` clipped pixels. Standalone: `LiveHistogramModel().edit_traits(view=LiveHistogramView)`.
+- `view.py` + `histogram_widget.py`: a TraitsUI `View` (Luma/RGB, Bars/Curve, log y, pause, rate, readouts) around a QPainter plot that follows the app palette and tints the end columns blue (dark) or red (bright) past `LIVE_HISTOGRAM_CLIP_WARN_PCT` clipped pixels. The Curve style traces each channel's density (counts over pixels, 3-bin moving average, end bins left raw) as one polyline instead of 256 filled bars, which is cheaper to draw. Standalone: `LiveHistogramModel().edit_traits(view=LiveHistogramView)`.
 - `dock_pane.py`: `LiveHistogramDockPane` resolves the video item lazily from the device viewer pane, so it works whether or not a camera exists yet.
 
 The pane publishes and subscribes to nothing.

@@ -30,6 +30,15 @@ controls = HGroup(
         ),
         tooltip="Plot brightness (luma), or the red, green, and blue channels",
     ),
+    Item(
+        "plot_style",
+        label="Style",
+        style="custom",
+        editor=EnumEditor(
+            values={"bars": "1:Bars", "curve": "2:Curve"}, cols=2, format_func=str
+        ),
+        tooltip="Filled bars per level, or just the density curve (cheaper to draw)",
+    ),
     Item("log_y", label="Log", tooltip="Logarithmic count axis"),
     Item("paused", label="Pause", tooltip="Freeze the histogram"),
     Item("rate_hz", label="Hz", tooltip="Histogram updates per second"),

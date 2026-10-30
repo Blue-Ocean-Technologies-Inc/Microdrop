@@ -21,7 +21,7 @@ import numpy as np
 
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, QRectF, QSize, Qt
-from pyface.qt.QtGui import QColor, QPainter, QPalette, QPen, QPolygonF
+from pyface.qt.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen, QPolygonF
 from pyface.qt.QtWidgets import QSizePolicy, QWidget
 from traits.api import observe
 from traitsui.api import BasicEditorFactory
@@ -39,10 +39,15 @@ from ...consts import (
     LIVE_HISTOGRAM_PLOT_MARGIN_PX,
     LIVE_HISTOGRAM_PLOT_MIN_SIZE_PX,
 )
+from .model import smoothed_density
 
 #: Fill opacity of the luma histogram, and of each overlaid channel.
 LUMA_FILL_ALPHA = 200
 CHANNEL_FILL_ALPHA = 140
+
+#: Opacity and pen width (px) of the density curves.
+CURVE_ALPHA = 230
+CURVE_PEN_WIDTH_PX = 1.5
 
 #: Opacity of the clipping cues and of the 25/50/75 % grid.
 CLIP_CUE_ALPHA = 170
@@ -117,10 +122,20 @@ class LiveHistogramWidget(QWidget):
             painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y))
 
     def _paint_histograms(self, painter, plot, palette):
-        """Fill the luma histogram, or the three channels overlaid."""
-        plotted = self.model.plotted_counts().astype(float)
+        """Fill the luma histogram, or the three channels overlaid; in the
+        curve style, trace their density curves instead."""
+        counts = self.model.plotted_counts()
+        is_curve = self.model.plot_style == "curve"
 
-        if self.model.log_y:
+        if is_curve:
+            plotted = smoothed_density(counts)
+        else:
+            plotted = counts.astype(float)
+
+        # A log axis needs counts: log1p of a density (below 1) is near linear.
+        if self.model.log_y and is_curve:
+            plotted = np.log1p(plotted * counts.sum(axis=-1, keepdims=True))
+        elif self.model.log_y:
             plotted = np.log1p(plotted)
 
         # Scale to the tallest interior bin: a clipped end bin would flatten
@@ -129,12 +144,12 @@ class LiveHistogramWidget(QWidget):
         heights = np.minimum(plotted / scale, 1.0) * plot.height()
 
         if len(plotted) == 1:
-            fills = [text_color(palette, LUMA_FILL_ALPHA)]
+            fills = [text_color(palette, CURVE_ALPHA if is_curve else LUMA_FILL_ALPHA)]
         else:
             fills = [QColor(color) for color in LIVE_HISTOGRAM_CHANNEL_COLORS]
 
             for fill in fills:
-                fill.setAlpha(CHANNEL_FILL_ALPHA)
+                fill.setAlpha(CURVE_ALPHA if is_curve else CHANNEL_FILL_ALPHA)
 
             # Additive blending on a dark background, as on a camera's
             # screen: where all three channels overlap the fill turns white.
@@ -143,11 +158,18 @@ class LiveHistogramWidget(QWidget):
                     QPainter.CompositionMode.CompositionMode_Plus
                 )
 
-        painter.setPen(Qt.PenStyle.NoPen)
+        if is_curve:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
 
-        for fill, series_heights in zip(fills, heights):
-            painter.setBrush(fill)
-            painter.drawPolygon(self._step_polygon(plot, series_heights))
+            for color, series_heights in zip(fills, heights):
+                painter.setPen(QPen(color, CURVE_PEN_WIDTH_PX))
+                painter.drawPath(self._curve_path(plot, series_heights))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+
+            for fill, series_heights in zip(fills, heights):
+                painter.setBrush(fill)
+                painter.drawPolygon(self._step_polygon(plot, series_heights))
 
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
@@ -169,6 +191,21 @@ class LiveHistogramWidget(QWidget):
         points.append(QPointF(plot.right(), bottom))
 
         return QPolygonF(points)
+
+    @staticmethod
+    def _curve_path(plot, heights):
+        """A polyline through the bin centres at ``heights`` above the plot's
+        bottom edge."""
+        bin_width = plot.width() / LIVE_HISTOGRAM_BINS
+        bottom = plot.bottom()
+        lefts = plot.left() + (np.arange(LIVE_HISTOGRAM_BINS) + 0.5) * bin_width
+
+        path = QPainterPath(QPointF(lefts[0], bottom - heights[0]))
+
+        for x, height in zip(lefts[1:], heights[1:]):
+            path.lineTo(x, bottom - height)
+
+        return path
 
     def _paint_clipping_cues(self, painter, plot):
         """Tint the darkest bin's column blue and the brightest one's red
@@ -201,7 +238,7 @@ class _LiveHistogramPlotEditor(QtEditor):
     def update_editor(self):
         self._repaint()
 
-    @observe("object:[channel_counts, channel_mode, log_y, has_frame]")
+    @observe("object:[channel_counts, channel_mode, plot_style, log_y, has_frame]")
     def _repaint_on_model_change(self, event):
         self._repaint()
 

@@ -432,6 +432,14 @@ LIVE_HISTOGRAM_RANGE_PERCENTILES = (1, 99)
 # the overlaid channels add up to white on a dark background.
 LIVE_HISTOGRAM_CHANNEL_COLORS = ("#ff3b3b", "#3bd83b", "#3b7bff")
 
+# Plot styles: filled step bars per level, or the density curve (one
+# polyline per channel, cheaper to draw), and the default.
+LIVE_HISTOGRAM_PLOT_STYLES = ("bars", "curve")
+LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE = "bars"
+
+# Width (bins) of the moving average that smooths the density curve.
+LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS = 3
+
 # The plot's minimum size and its padding around the plot area (px).
 LIVE_HISTOGRAM_PLOT_MIN_SIZE_PX = (200, 110)
 LIVE_HISTOGRAM_PLOT_MARGIN_PX = 6
