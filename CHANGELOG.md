@@ -1,3 +1,33 @@
+## [v1.34.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.34.0) (2026-10-30)
+
+### Feat
+
+- **image_viewer**: x magnifier for the ROI histogram ([`74bb99a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/74bb99a397260bcaf0c48a40538ed9b5f9bc904c))
+- **image_viewer**: decouple histogram bar, fit and fill opacity ([`84d68e6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/84d68e6d6ca525ccabdb0b5a6d03171684c27a7e))
+- **device_viewer**: toggle editors for histogram controls ([`eadffd3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eadffd3c60bb1e12a0567c941b4b3754d85ce5c4))
+- **device_viewer**: density curve style for histogram ([`6f27790`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6f27790113bc64b266403eba47008fe737dd5d5e))
+- **device_viewer**: sample camera feed for live histogram ([`935327b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/935327b77c5c8daa56c6083e9371504c68e911f6))
+- **device_viewer**: live histogram model and plot view ([`cfbaa9c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cfbaa9c11e35ced3e54bd108e2065375adc415f4))
+- **device_viewer**: camera select-source request with reply and state ([`7b6cb9c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7b6cb9c963ca2d0a35d8eeadd196bff7bbe16fd5))
+
+### Fix
+
+- **microdrop_utils**: apply tooltips on switch/slider ([`fa9cbdb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fa9cbdb7477dfb8e9c14c51c3ab3b8de66f730ac))
+
+### Refactor
+
+- **image_viewer**: hide histogram-only rows outside the view ([`82bbdd6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/82bbdd66e82a3cfe4012b4db2bf508946b1d1bfa))
+
+### Docs
+
+- **device_viewer**: document the Live Histogram pane ([`710a3e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/710a3e8804944c1b922db60419a18af946cb1ac8))
+
+### Test
+
+- **image_viewer**: histogram opacity and magnifier ([`307d564`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/307d5640c5f3084873bf8e1cbac8c73edf43ffa1))
+- **device_viewer**: cover the histogram curve style ([`02b2865`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/02b28658569704b72528ed07f4a074ce2a824d9d))
+- **device_viewer**: cover live histogram model and sampling ([`d6f0a70`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d6f0a70fcfb4c49bc8772553b1b88c63e68ec3f3))
+
 ## [v1.33.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.33.0) (2026-10-29)
 
 ### Feat
