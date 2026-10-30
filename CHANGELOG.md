@@ -1,3 +1,32 @@
+## [v1.35.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.35.0) (2026-10-30)
+
+### Feat
+
+- **plugin_management**: battery icon as a managed group ([`bc3b66f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bc3b66fdee1461fea7d966b23a3add4bafd009c3))
+- **device_viewer**: live region picker for the histogram ([`b968a91`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b968a915754335a009a8bc8ea08a1c13a6cd00f9))
+- **device_viewer**: live histogram region of interest ([`8f9965e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f9965e0a4417de129245f76677f947ed52b9c6b))
+- **device_viewer**: live histogram region picker ([`f94ef03`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f94ef0332f617071a1885c0ea5f599d77f710d71))
+- **microdrop_utils**: checked look for IconButtonEditor ([`5381689`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/538168954feb564f19c52fbd01c82ab56bf68c35))
+
+### Fix
+
+- **microdrop_style**: dark fallback palette when following a dark OS ([`f8eb22e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f8eb22eb335ed41d3de26f29be2911df8201ba2e))
+- **microdrop_style**: verify the palette before trusting the scheme ([`9d091c3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9d091c33cd2d793fd7d760525941ab80a2f01e06))
+
+### Docs
+
+- **plugin_management**: built-in groups and default_enabled ([`547596a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/547596ac3bdf7b6818b8dfb2ec91e3d9895a0742))
+- **device_viewer**: non-modal live histogram region picker ([`8f93ee7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f93ee778dfb3fe7dac178313696dd6d08c07ab4))
+- **device_viewer**: live histogram region of interest ([`10ce443`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/10ce44353b90f3aa85fbb6778cffdccfabd8b6ed))
+
+### Test
+
+- **microdrop_application**: follow-system palette fallback ([`14b3866`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/14b3866941c03ceaa5f1d22d93ca236bb186d88d))
+- **microdrop_application**: color scheme palette check ([`7e3dfff`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7e3dfff1ff6c0aa51769c4caaca32dd35dedfd38))
+- **plugin_management**: built-in group defaults ([`842ebec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/842ebecd2fb573d489a4e2c1129bbf7c71278847))
+- **device_viewer**: live region picker tests ([`d762611`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d762611dec7a526d2dabcb4f51e09e489da4cf2a))
+- **device_viewer**: live histogram region tests ([`e8d5850`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e8d5850c27818d6e0d0a363b259270cfc58a6843))
+
 ## [v1.34.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.34.0) (2026-10-30)
 
 ### Feat
