@@ -209,6 +209,42 @@ def test_the_old_keys_are_dropped_on_the_next_save(tmp_path):
     assert stored["temperature_expression"] == "(x - 1.5)/0.98"
 
 
+def test_histogram_style_settings_round_trip(tmp_path):
+    session = AnalysisSession()
+    session.figure.trait_set(
+        histogram_bar_alpha=0.3,
+        histogram_bar_fill=True,
+        histogram_fit_alpha=0.8,
+        histogram_fit_fill_alpha=0.25,
+        histogram_x_magnify=0.4,
+        histogram_x_pivot_auto=False,
+        histogram_x_pivot=812.5,
+    )
+    save_session(tmp_path, session)
+
+    figure = load_session(tmp_path).figure
+
+    assert (figure.histogram_bar_alpha, figure.histogram_bar_fill) == (0.3, True)
+    assert (figure.histogram_fit_alpha, figure.histogram_fit_fill_alpha) == (
+        0.8,
+        0.25,
+    )
+    assert figure.histogram_x_magnify == 0.4
+    assert (figure.histogram_x_pivot_auto, figure.histogram_x_pivot) == (False, 812.5)
+
+
+def test_a_config_from_before_the_histogram_style_loads_the_defaults(tmp_path):
+    _write_figure(tmp_path, {"view_mode": "histogram", "histogram_marker_alpha": 0.5})
+
+    figure = load_session(tmp_path).figure
+
+    assert figure.view_mode == "histogram" and figure.histogram_marker_alpha == 0.5
+    assert (figure.histogram_bar_alpha, figure.histogram_bar_fill) == (1.0, False)
+    assert (figure.histogram_fit_alpha, figure.histogram_fit_fill_alpha) == (1.0, 0.0)
+    assert figure.histogram_x_magnify == 1.0
+    assert (figure.histogram_x_pivot_auto, figure.histogram_x_pivot) == (True, 0.0)
+
+
 def test_custom_points_round_trip(tmp_path):
     session = AnalysisSession()
     session.custom_points = [

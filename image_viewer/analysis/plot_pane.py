@@ -23,6 +23,7 @@ image failed or isn't computed."""
 import math
 import os
 import re
+from functools import partial
 from pathlib import Path
 
 os.environ.setdefault("QT_API", "pyside6")
@@ -40,6 +41,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import (
     AutoLocator,
     FuncFormatter,
+    Locator,
     MaxNLocator,
     ScalarFormatter,
 )
@@ -60,13 +62,13 @@ from traitsui.api import (
     HGroup,
     Item,
     Label,
-    RangeEditor,
     Tabbed,
     TableEditor,
     UItem,
     VGrid,
     VGroup,
     View,
+    spring,
 )
 
 from microdrop_style.icons.icons import (
@@ -86,6 +88,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconToggleEditor,
     InPlaceToggleEditor,
     ObjectColumn,
+    SteppedSliderEditor,
     install_table_clipboard,
     toggle_editor_default_style_sheet_factory,
 )
@@ -110,13 +113,14 @@ from .consts import (
     EXPECTED_METRIC_MARKERS,
     FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    HISTOGRAM_ALPHA_BOUNDS,
     HISTOGRAM_CLIP_BOUNDS_PERCENT,
     HISTOGRAM_FILTERED_BIN_ALPHA,
     HISTOGRAM_FIT_FLOOR_PIXELS,
     HISTOGRAM_FIT_LABELS,
     HISTOGRAM_FIT_MIN_PIXELS,
     HISTOGRAM_FITS,
-    HISTOGRAM_MARKER_ALPHA_BOUNDS,
+    HISTOGRAM_X_MAGNIFY_BOUNDS,
     LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
@@ -153,8 +157,12 @@ from .histogram_series import (
     histogram_counts,
     histogram_edges,
     in_range,
+    magnified,
+    magnified_ticks,
     pixels_in_bins,
+    pooled_median,
     smoothed_counts,
+    unmagnified,
 )
 from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
@@ -257,6 +265,10 @@ def _fit_method_label(key):
 #: pane allows.
 FIT_CURVE_SAMPLES = 200
 
+#: Ticks along the Histogram view's magnified x axis: matplotlib's own
+#: count for an axis of this pane's width.
+MAGNIFIED_TICK_COUNT = 9
+
 #: The corner equation box, in axes fractions: left margin, the
 #: first line's top, and the drop per further line.
 EQUATION_BOX_X = 0.02
@@ -314,14 +326,21 @@ SERIES_VIEW_MODES = tuple(
     mode for mode in VIEW_MODES if mode not in ("temperature", "histogram")
 )
 
-#: The Histogram view, as an enabled_when condition: its distribution
-#: fit, bins, clip and marker lines act only there, while the series'
-#: fit and cleanup controls are switched off there.
+#: The Histogram view, as a visible_when condition: its distribution
+#: fit, bins, clip, filters and marker lines show only there, while the
+#: series' fit and cleanup controls are switched off there.
 _HISTOGRAM_VIEW = "figure.view_mode == 'histogram'"
 _NOT_HISTOGRAM_VIEW = "figure.view_mode != 'histogram'"
 
 #: When the series fit's own controls have a fit to act on.
 _SERIES_FITTED = f"figure.fit_method != 'none' and {_NOT_HISTOGRAM_VIEW}"
+
+#: When the Histogram view draws a distribution fit to fade or shade.
+_HISTOGRAM_FITTED = "figure.histogram_fit != 'none'"
+
+#: When the Histogram view's x magnifier applies: a log axis stretches
+#: the intensities its own way, and the two do not compose.
+_HISTOGRAM_MAGNIFIABLE = "not figure.log_x"
 
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
@@ -349,9 +368,22 @@ PARAM_SPIN_W = -102
 DROPDOWN_W = -176
 STAT_DROPDOWN_W = -440
 
+#: The Histogram view's 0-1 sliders (opacities, x magnify): notches
+#: fine enough to tune by, and their readout.
+SLIDER_STEP = 0.05
+SLIDER_FORMAT = "%.2f"
+
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
+
+#: The Axes tab's x magnifier.
+HISTOGRAM_MAGNIFY_TOOLTIP = (
+    "Stretch the intensity axis around a pivot: 1 leaves it linear, "
+    "smaller values spread the bins near the pivot apart and squeeze the "
+    "tails, to show small shifts between ROIs. Tick labels keep reading "
+    "true intensities. Not on a log x axis, which stretches it its own way."
+)
 
 #: The Axes tab's temperature-calibration field.
 TEMPERATURE_EXPRESSION_TOOLTIP = (
@@ -396,7 +428,25 @@ def _filter_spin(name, filter_flag, decimals=1):
             decimals=decimals,
             step=1.0,
         ),
-        enabled_when=f"figure.{filter_flag} and {_HISTOGRAM_VIEW}",
+        enabled_when=f"figure.{filter_flag}",
+    )
+
+
+def _alpha_slider(name, label, tooltip, enabled_when=""):
+    """One of the Histogram view's opacity sliders: a track and its
+    readout, as narrow as a parameter box so the four share a row."""
+    return Item(
+        name,
+        label=label,
+        width=PARAM_SPIN_W,
+        editor=SteppedSliderEditor(
+            low=HISTOGRAM_ALPHA_BOUNDS[0],
+            high=HISTOGRAM_ALPHA_BOUNDS[1],
+            step=SLIDER_STEP,
+            format=SLIDER_FORMAT,
+        ),
+        enabled_when=enabled_when,
+        tooltip=tooltip,
     )
 
 
@@ -511,35 +561,100 @@ def _axes_tab():
                 tooltip="Show the ROI legend on the figure",
             ),
         ),
-        HGroup(
-            _toggle(
-                "figure.histogram_show_median",
-                "Median",
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: a solid vertical line at each "
-                "ROI's median — the table's, over all its pixels",
-            ),
-            _toggle(
-                "figure.histogram_show_mean",
-                "Mean",
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: a dashed vertical line at each "
-                "ROI's mean — the table's, over all its pixels",
-            ),
-            Item(
-                "figure.histogram_marker_alpha",
-                label="Line alpha",
-                width=DROPDOWN_W,
-                editor=RangeEditor(
-                    low=HISTOGRAM_MARKER_ALPHA_BOUNDS[0],
-                    high=HISTOGRAM_MARKER_ALPHA_BOUNDS[1],
-                    mode="slider",
+        VGroup(
+            HGroup(
+                _toggle(
+                    "figure.histogram_show_median",
+                    "Median",
+                    tooltip="Histogram view: a solid vertical line at each "
+                    "ROI's median — the table's, over all its pixels",
                 ),
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Opacity of the Histogram view's median and mean "
-                "lines, times each ROI's own: 0 fades them out, 1 draws "
-                "them as solid as the ROI's outline",
+                _toggle(
+                    "figure.histogram_show_mean",
+                    "Mean",
+                    tooltip="Histogram view: a dashed vertical line at each "
+                    "ROI's mean — the table's, over all its pixels",
+                ),
+                _toggle(
+                    "figure.histogram_bar_fill",
+                    "Fill bars",
+                    tooltip="Histogram view: fill each ROI's bars in its "
+                    "colour under the outline, at the Bars opacity",
+                ),
             ),
+            HGroup(
+                Label("Opacity"),
+                _alpha_slider(
+                    "figure.histogram_bar_alpha",
+                    "Bars",
+                    "Histogram view: opacity of the bars — outline and fill — "
+                    "times each ROI's alpha in the ROI table",
+                ),
+                _alpha_slider(
+                    "figure.histogram_fit_alpha",
+                    "Fit",
+                    "Histogram view: opacity of the fitted curve. Absolute: "
+                    "the ROI table's alpha does not scale it.",
+                    _HISTOGRAM_FITTED,
+                ),
+                _alpha_slider(
+                    "figure.histogram_fit_fill_alpha",
+                    "Fill",
+                    "Histogram view: opacity of the shading under the fitted "
+                    "curve; 0 draws none. Absolute: the ROI table's alpha "
+                    "does not scale it.",
+                    _HISTOGRAM_FITTED,
+                ),
+                _alpha_slider(
+                    "figure.histogram_marker_alpha",
+                    "Markers",
+                    "Histogram view: opacity of the median and mean lines, "
+                    "times each ROI's alpha in the ROI table",
+                ),
+                # The sliders keep their width; without the spring their
+                # labels soak up the row's slack and scatter them across it.
+                spring,
+            ),
+            HGroup(
+                Item(
+                    "figure.histogram_x_magnify",
+                    label="X magnify",
+                    width=DROPDOWN_W,
+                    editor=SteppedSliderEditor(
+                        low=HISTOGRAM_X_MAGNIFY_BOUNDS[0],
+                        high=HISTOGRAM_X_MAGNIFY_BOUNDS[1],
+                        step=SLIDER_STEP,
+                        format=SLIDER_FORMAT,
+                    ),
+                    enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                    tooltip=HISTOGRAM_MAGNIFY_TOOLTIP,
+                ),
+                _toggle(
+                    "figure.histogram_x_pivot_auto",
+                    "Auto pivot",
+                    enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                    tooltip="Pivot the magnifier on the median of every shown "
+                    "ROI's pixels (those the intensity range keeps), "
+                    "following the displayed image; off, on the value "
+                    "beside it. Not on a log x axis.",
+                ),
+                UItem(
+                    "figure.histogram_x_pivot",
+                    width=VALUE_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=AXIS_LIMIT_BOUNDS[0],
+                        high=AXIS_LIMIT_BOUNDS[1],
+                        decimals=1,
+                        step=1.0,
+                    ),
+                    enabled_when=f"{_HISTOGRAM_MAGNIFIABLE} "
+                    "and not figure.histogram_x_pivot_auto",
+                    tooltip="The intensity the magnifier stretches the axis "
+                    "around. Not on a log x axis.",
+                ),
+                spring,
+            ),
+            visible_when=_HISTOGRAM_VIEW,
         ),
         HGroup(
             Item(
@@ -691,7 +806,6 @@ def _fit_tab():
                         values=list(HISTOGRAM_FITS),
                         format_func=HISTOGRAM_FIT_LABELS.get,
                     ),
-                    enabled_when=_HISTOGRAM_VIEW,
                     tooltip="Histogram view: fit a distribution to each "
                     "ROI's pixels by maximum likelihood — the pixels the "
                     "clip keeps — drawn dotted in its colour over its "
@@ -699,6 +813,7 @@ def _fit_tab():
                     "μ and σ are those of ln(intensity); it needs every "
                     "pixel above zero.",
                 ),
+                visible_when=_HISTOGRAM_VIEW,
             ),
         ),
         _section(
@@ -923,75 +1038,74 @@ def _cleanup_tab():
                 "of the fit only.",
             ),
         ),
-        HGroup(
-            Item(
-                "figure.histogram_bins",
-                label="Bins",
-                width=PARAM_SPIN_W,
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: bins over the range every ROI "
-                "shares, so they compare bin for bin. Fewer smooth the "
-                "outline; more resolve a narrow peak.",
-            ),
-            Item(
-                "figure.histogram_clip_percent",
-                label="Clip %",
-                width=PARAM_SPIN_W,
-                editor=DoubleSpinBoxEditor(
-                    low=HISTOGRAM_CLIP_BOUNDS_PERCENT[0],
-                    high=HISTOGRAM_CLIP_BOUNDS_PERCENT[1],
-                    decimals=1,
-                    step=0.1,
+        VGroup(
+            HGroup(
+                Item(
+                    "figure.histogram_bins",
+                    label="Bins",
+                    width=PARAM_SPIN_W,
+                    tooltip="Histogram view: bins over the range every ROI "
+                    "shares, so they compare bin for bin. Fewer smooth the "
+                    "outline; more resolve a narrow peak.",
                 ),
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: trim this percent of the pooled "
-                "pixels off each end of the shared range before "
-                "binning, so a few hot or dead pixels do not stretch "
-                "it. Applied after the intensity range. The "
-                "distribution fits see the pixels kept; the median "
-                "and mean lines stay those of every pixel the "
-                "intensity range keeps.",
+                Item(
+                    "figure.histogram_clip_percent",
+                    label="Clip %",
+                    width=PARAM_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=HISTOGRAM_CLIP_BOUNDS_PERCENT[0],
+                        high=HISTOGRAM_CLIP_BOUNDS_PERCENT[1],
+                        decimals=1,
+                        step=0.1,
+                    ),
+                    tooltip="Histogram view: trim this percent of the pooled "
+                    "pixels off each end of the shared range before "
+                    "binning, so a few hot or dead pixels do not stretch "
+                    "it. Applied after the intensity range. The "
+                    "distribution fits see the pixels kept; the median "
+                    "and mean lines stay those of every pixel the "
+                    "intensity range keeps.",
+                ),
             ),
-        ),
-        VGrid(
-            Label(""),
-            Label("On"),
-            Label("Min"),
-            Label("Max"),
-            Label("Intensity"),
-            UItem(
-                "figure.histogram_intensity_filter",
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: keep only the pixels from Min to "
-                "Max — before the bins, the clip, the median and mean "
-                "lines and the fit — to cut away a dim background or a "
-                "saturated top. First switched on, it spans the "
-                "displayed pixels.",
+            VGrid(
+                Label(""),
+                Label("On"),
+                Label("Min"),
+                Label("Max"),
+                Label("Intensity"),
+                UItem(
+                    "figure.histogram_intensity_filter",
+                    tooltip="Histogram view: keep only the pixels from Min to "
+                    "Max — before the bins, the clip, the median and mean "
+                    "lines and the fit — to cut away a dim background or a "
+                    "saturated top. First switched on, it spans the "
+                    "displayed pixels.",
+                ),
+                _filter_spin(
+                    "figure.histogram_intensity_min", "histogram_intensity_filter"
+                ),
+                _filter_spin(
+                    "figure.histogram_intensity_max", "histogram_intensity_filter"
+                ),
+                Label("Pixels"),
+                UItem(
+                    "figure.histogram_count_filter",
+                    tooltip="Histogram view: fit the distribution only to the "
+                    "pixels in bins whose height lies from Min to Max — in "
+                    "the y axis's units: pixels, or with Normalize the "
+                    "fraction of the ROI; unsmoothed heights. Every bin is "
+                    "still drawn; those left out are faded.",
+                ),
+                _filter_spin(
+                    "figure.histogram_count_min", "histogram_count_filter", decimals=4
+                ),
+                _filter_spin(
+                    "figure.histogram_count_max", "histogram_count_filter", decimals=4
+                ),
+                columns=4,
+                show_labels=False,
             ),
-            _filter_spin(
-                "figure.histogram_intensity_min", "histogram_intensity_filter"
-            ),
-            _filter_spin(
-                "figure.histogram_intensity_max", "histogram_intensity_filter"
-            ),
-            Label("Pixels"),
-            UItem(
-                "figure.histogram_count_filter",
-                enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Histogram view: fit the distribution only to the "
-                "pixels in bins whose height lies from Min to Max — in "
-                "the y axis's units: pixels, or with Normalize the "
-                "fraction of the ROI; unsmoothed heights. Every bin is "
-                "still drawn; those left out are faded.",
-            ),
-            _filter_spin(
-                "figure.histogram_count_min", "histogram_count_filter", decimals=4
-            ),
-            _filter_spin(
-                "figure.histogram_count_max", "histogram_count_filter", decimals=4
-            ),
-            columns=4,
-            show_labels=False,
+            visible_when=_HISTOGRAM_VIEW,
         ),
         label="Cleanup",
     )
@@ -1222,6 +1336,13 @@ _PLOT_STATE = (
     "session:figure:histogram_show_median, "
     "session:figure:histogram_show_mean, "
     "session:figure:histogram_marker_alpha, "
+    "session:figure:histogram_bar_alpha, "
+    "session:figure:histogram_bar_fill, "
+    "session:figure:histogram_fit_alpha, "
+    "session:figure:histogram_fit_fill_alpha, "
+    "session:figure:histogram_x_magnify, "
+    "session:figure:histogram_x_pivot_auto, "
+    "session:figure:histogram_x_pivot, "
     "session:figure:flip_actual_expected, "
     "session:figure:compare_second_derivative_max, "
     "session:figure:compare_second_derivative_min, "
@@ -1286,6 +1407,25 @@ _TABLE_OR_STYLE_STATE = "session:figure:view_mode"
 _VIEW_RESET_STATE = (
     "session:figure:x_auto, session:figure:y_auto, session:figure:view_mode"
 )
+
+
+class MagnifiedLocator(Locator):
+    """Ticks for the Histogram view's magnified x axis, evenly spread
+    along it (see magnified_ticks) as the view zooms and pans."""
+
+    def __init__(self, pivot, exponent):
+        self._pivot = pivot
+        self._exponent = exponent
+
+    def __call__(self):
+        return self.tick_values(*self.axis.get_view_interval())
+
+    def tick_values(self, vmin, vmax):
+        low, high = sorted((vmin, vmax))
+
+        return magnified_ticks(
+            low, high, self._pivot, self._exponent, MAGNIFIED_TICK_COUNT
+        )
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -1495,6 +1635,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         super().showEvent(event)
 
     def _on_plot_state_changed(self, event):
+        # The auto pivot is the canvas's own write-back of the pivot it
+        # just drew with; redrawing for it would only repeat the frame.
+        figure_settings = self._model.session.figure
+
+        if (
+            event.name == "histogram_x_pivot"
+            and event.object is figure_settings
+            and figure_settings.histogram_x_pivot_auto
+        ):
+            return
+
         self._schedule_redraw()
 
     def _on_displayed_image_changed(self, event):
@@ -2042,6 +2193,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
+        magnify = self._apply_histogram_magnifier(samples, figure_settings)
+
         # Over the shown pixels' common range, so a bin covers the same
         # intensities in every outline — less the clipped tails, and on
         # a log axis spaced evenly in log, so no bin is a sliver there.
@@ -2101,24 +2254,20 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 # past it they fall through decades no pixel occupies,
                 # and relim() would drag the axis down after them.
                 unit = 1.0 / pixels.size if normalize else 1.0
-                floor = HISTOGRAM_FIT_FLOOR_PIXELS * unit
+                floor = (
+                    HISTOGRAM_FIT_FLOOR_PIXELS * unit if figure_settings.log_y else 0.0
+                )
                 x_values, y_values = fitted_counts(
                     fit[0],
                     edges,
                     fitted.size * unit,
                     FIT_CURVE_SAMPLES,
                     figure_settings.log_x,
-                    floor if figure_settings.log_y else 0.0,
+                    floor,
+                    magnify,
                 )
-                self._fit_artists.extend(
-                    self._axes.plot(
-                        x_values,
-                        y_values,
-                        color=style.color,
-                        alpha=style.plot_alpha,
-                        linestyle=LINE_STYLES["dotted"],
-                        label="_nolegend_",
-                    )
+                self._draw_histogram_fit(
+                    x_values, y_values, floor, style, figure_settings
                 )
 
             self._draw_histogram_markers(pixels, style, figure_settings)
@@ -2131,17 +2280,85 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # intensity on x: no time span to shade
 
+    def _apply_histogram_magnifier(self, samples, figure_settings):
+        """Stretch the x axis about the magnifier's pivot, as the
+        figure settings ask: (pivot, exponent) when it applies, None
+        when the axis stays as _refresh set it — magnify at 1, or a log
+        axis. Every artist then goes through the one scale, so bars,
+        fits, markers and limits stay aligned and the ticks read true
+        intensities.
+
+        An auto pivot is written back to the settings whether or not the
+        magnifier is on, so the spinner always shows where it would
+        pivot."""
+        if figure_settings.histogram_x_pivot_auto:
+            figure_settings.histogram_x_pivot = pooled_median(
+                [pixels for _name, pixels, _style in samples]
+            )
+
+        exponent = figure_settings.histogram_x_magnify
+
+        if figure_settings.log_x or exponent >= HISTOGRAM_X_MAGNIFY_BOUNDS[1]:
+            return None
+
+        pivot = figure_settings.histogram_x_pivot
+        self._axes.set_xscale(
+            "function",
+            functions=(
+                partial(magnified, pivot=pivot, exponent=exponent),
+                partial(unmagnified, pivot=pivot, exponent=exponent),
+            ),
+        )
+        # After the scale, which resets the locators.
+        self._axes.xaxis.set_major_locator(MagnifiedLocator(pivot, exponent))
+
+        return pivot, exponent
+
+    def _draw_histogram_fit(self, x_values, y_values, floor, style, figure_settings):
+        """One ROI's fitted curve, dotted in its colour, and the shading
+        under it down to ``floor`` — each at its own absolute opacity,
+        unweighted by the ROI's, which fades the bars and the median and
+        mean lines only. A NaN in the curve (below the log axis's floor)
+        breaks the shading with it."""
+        self._fit_artists.extend(
+            self._axes.plot(
+                x_values,
+                y_values,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_alpha,
+                linestyle=LINE_STYLES["dotted"],
+                label="_nolegend_",
+            )
+        )
+
+        if figure_settings.histogram_fit_fill_alpha <= 0:
+            return
+
+        self._fit_artists.append(
+            self._axes.fill_between(
+                x_values,
+                y_values,
+                floor,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_fill_alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        )
+
     def _draw_histogram_outline(
         self, counts, edges, selected, label, style, figure_settings
     ):
         """One ROI's ``counts`` over ``edges``: a step outline, or with
         Savitzky-Golay smoothing a line through the bin centres — a
-        smoothed count no longer belongs to one bin's flat top.
+        smoothed count no longer belongs to one bin's flat top — at the
+        bar opacity times the ROI's, and with histogram_bar_fill shaded
+        beneath at that opacity too.
 
         With the pixel-count range on — ``selected`` marks the bins it
         keeps, else None — the whole outline is faded and the kept bins
         drawn over it at full strength, carrying the legend entry, so
-        what the fit ignored stays in view."""
+        what the fit ignored stays in view. Their fill does the same."""
         # The curves' own line width: matplotlib draws a patch's
         # outline thinner than a line, and these are read as curves.
         line_width = matplotlib.rcParams["lines.linewidth"]
@@ -2153,15 +2370,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if smoothing
             else counts
         )
-        alpha = style.plot_alpha
+        centres = bin_centres(edges, figure_settings.log_x) if smoothing else None
+        fill = figure_settings.histogram_bar_fill
+        bar_alpha = figure_settings.histogram_bar_alpha * style.plot_alpha
+        alpha = bar_alpha
         base_label = label
 
         if selected is not None:
             alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
             base_label = "_nolegend_"
 
+        # Before the outline, so the outline lies on top of its fill.
+        if fill:
+            self._fill_histogram_bars(heights, edges, centres, style.color, alpha)
+
         if smoothing:
-            centres = bin_centres(edges, figure_settings.log_x)
             self._fit_artists.extend(
                 self._axes.plot(
                     centres,
@@ -2194,13 +2417,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # are drawn over the faded outline.
         kept = np.where(selected, heights, np.nan)
 
+        if fill:
+            self._fill_histogram_bars(kept, edges, centres, style.color, bar_alpha)
+
         if smoothing:
             self._fit_artists.extend(
                 self._axes.plot(
                     centres,
                     kept,
                     color=style.color,
-                    alpha=style.plot_alpha,
+                    alpha=bar_alpha,
                     linewidth=line_width,
                     label=label,
                 )
@@ -2211,11 +2437,39 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     kept,
                     edges,
                     color=style.color,
-                    alpha=style.plot_alpha,
+                    alpha=bar_alpha,
                     linewidth=line_width,
                     label=label,
                 )
             )
+
+    def _fill_histogram_bars(self, heights, edges, centres, color, alpha):
+        """Shade under one ROI's ``heights`` down to zero: the bins of
+        ``edges``, or with ``centres`` — smoothed counts — under the
+        line through them. A NaN height shades nothing. Kept out of the
+        legend, whose entry is the outline's."""
+        if centres is None:
+            artist = self._axes.stairs(
+                heights,
+                edges,
+                fill=True,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        else:
+            artist = self._axes.fill_between(
+                centres,
+                heights,
+                0.0,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+
+        self._fit_artists.append(artist)
 
     def _in_intensity_range(self, samples, figure_settings):
         """``samples`` with each ROI's pixels cut to the intensity

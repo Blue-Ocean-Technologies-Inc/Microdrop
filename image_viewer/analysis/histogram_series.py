@@ -11,8 +11,9 @@
 """The Histogram view's maths over the pixels each ROI measures: the
 shared bins (clipped, linear or logarithmic), the per-ROI counts (raw
 or as a fraction of the ROI), their Savitzky-Golay smoothing over the
-bins, and the distribution fitted to each ROI's pixels with its curve
-scaled onto the histogram. Qt-free; the plot pane only draws."""
+bins, the distribution fitted to each ROI's pixels with its curve
+scaled onto the histogram, and the x magnifier's axis mapping. Qt-free;
+the plot pane only draws."""
 
 # Standard library imports.
 import math
@@ -153,19 +154,29 @@ def fit_distribution(pixels, kind):
     return distribution, label
 
 
-def fitted_counts(distribution, edges, count, samples, log=False, floor=0.0):
+def fitted_counts(
+    distribution, edges, count, samples, log=False, floor=0.0, magnify=None
+):
     """(x, y) of ``distribution`` drawn over the histogram of ``edges``
     at ``samples`` points: the pixels a bin at x is expected to hold
     out of ``count`` — the density times the bin's width there, which
     is constant for even bins and grows with x for logarithmic ones.
     ``count`` is in the histogram's own unit: the fitted pixels, or
     their fraction of the ROI when it is normalised. Below ``floor``
-    (in that unit too) y is NaN, so the curve breaks off there."""
+    (in that unit too) y is NaN, so the curve breaks off there.
+
+    ``magnify`` — (pivot, exponent) of a magnified linear axis — spaces
+    the points evenly on that axis rather than in intensity, so the
+    stretched span about the pivot is as densely sampled as the rest."""
     bins = len(edges) - 1
 
     if log:
         x_values = np.geomspace(edges[0], edges[-1], samples)
         widths = x_values * math.log(edges[-1] / edges[0]) / bins
+    elif magnify is not None:
+        ends = magnified(edges[[0, -1]], *magnify)
+        x_values = unmagnified(np.linspace(*ends, samples), *magnify)
+        widths = (edges[-1] - edges[0]) / bins
     else:
         x_values = np.linspace(edges[0], edges[-1], samples)
         widths = (edges[-1] - edges[0]) / bins
@@ -173,3 +184,64 @@ def fitted_counts(distribution, edges, count, samples, log=False, floor=0.0):
     y_values = count * distribution.pdf(x_values) * widths
 
     return x_values, np.where(y_values >= floor, y_values, np.nan)
+
+
+def pooled_median(samples):
+    """The median of every pixel in ``samples`` (1-D pixel arrays)
+    taken together — the magnifier's automatic pivot, the middle of
+    what the shown ROIs hold rather than of any one of them."""
+    return float(np.median(np.concatenate([np.asarray(sample) for sample in samples])))
+
+
+def magnified(x_values, pivot, exponent):
+    """``x_values`` on the magnified axis: each one's distance from
+    ``pivot`` raised to ``exponent``, keeping its side. Below 1 the
+    distances near the pivot grow against those far off, so small
+    shifts there spread apart while the tails squeeze. Monotonic, so
+    the axis keeps its order; NaN stays NaN."""
+    offsets = np.asarray(x_values, dtype=float) - pivot
+
+    return pivot + np.sign(offsets) * np.abs(offsets) ** exponent
+
+
+def unmagnified(t_values, pivot, exponent):
+    """magnified()'s inverse: the intensities at ``t_values`` on the
+    magnified axis."""
+    return magnified(t_values, pivot, 1.0 / exponent)
+
+
+def magnified_ticks(low, high, pivot, exponent, count):
+    """About ``count`` tick values from ``low`` to ``high``, spread
+    evenly along the magnified axis rather than in intensity — which
+    would crowd the squeezed tails and leave the stretched span about
+    the pivot bare. Each is rounded to the 1-2-5 step below the gap to
+    its nearer neighbour, so the ticks read as round intensities: fine
+    near the pivot, coarse in the tails. Rounding can still pull two
+    ticks together on the magnified axis; the later of a pair closer
+    than half the even spacing is dropped, so no two labels overprint."""
+    if not high > low:
+        return np.array([low])
+
+    t_values = np.linspace(*magnified([low, high], pivot, exponent), count)
+    x_values = unmagnified(t_values, pivot, exponent)
+
+    # The nearer neighbour, not the mean of both: beside the pivot the
+    # far gap is several times the near one.
+    neighbour_gaps = np.diff(x_values)
+    gaps = np.minimum(
+        np.append(neighbour_gaps, np.inf), np.insert(neighbour_gaps, 0, np.inf)
+    )
+    decades = 10.0 ** np.floor(np.log10(gaps))
+    mantissas = np.select([gaps >= 5 * decades, gaps >= 2 * decades], [5.0, 2.0], 1.0)
+    steps = mantissas * decades
+
+    rounded = np.unique(np.round(x_values / steps) * steps)
+    rounded = rounded[(rounded >= low) & (rounded <= high)]
+    spacing = (t_values[-1] - t_values[0]) / (count - 1)
+    ticks = []
+
+    for tick, position in zip(rounded, magnified(rounded, pivot, exponent)):
+        if not ticks or position - ticks[-1][1] >= spacing / 2:
+            ticks.append((tick, position))
+
+    return np.array([tick for tick, _position in ticks])

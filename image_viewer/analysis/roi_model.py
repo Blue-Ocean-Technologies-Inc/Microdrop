@@ -71,13 +71,18 @@ from .consts import (
     HEATER_SENSOR_MEAN,
     HEATER_WINDOW_BOUNDS_MS,
     HEATER_WINDOW_MS,
+    HISTOGRAM_ALPHA_BOUNDS,
+    HISTOGRAM_BAR_ALPHA,
     HISTOGRAM_BINS,
     HISTOGRAM_BINS_BOUNDS,
     HISTOGRAM_CLIP_BOUNDS_PERCENT,
     HISTOGRAM_CLIP_PERCENT,
+    HISTOGRAM_FIT_ALPHA,
+    HISTOGRAM_FIT_FILL_ALPHA,
     HISTOGRAM_FITS,
     HISTOGRAM_MARKER_ALPHA,
-    HISTOGRAM_MARKER_ALPHA_BOUNDS,
+    HISTOGRAM_X_MAGNIFY,
+    HISTOGRAM_X_MAGNIFY_BOUNDS,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
     MEASURE_INSIDE_BOUNDS_PERCENT,
@@ -315,9 +320,24 @@ class FigureSettings(HasTraits):
     #: lines, and their opacity as a fraction of their ROI's own.
     histogram_show_median = Bool(True)
     histogram_show_mean = Bool(True)
-    histogram_marker_alpha = Range(
-        *HISTOGRAM_MARKER_ALPHA_BOUNDS, HISTOGRAM_MARKER_ALPHA
-    )
+    histogram_marker_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_MARKER_ALPHA)
+    #: Opacity of each ROI's bars — outline and, with histogram_bar_fill,
+    #: the fill under it — as a fraction of the ROI's own.
+    histogram_bar_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_BAR_ALPHA)
+    histogram_bar_fill = Bool(False)
+    #: Opacity of the fitted curve and of the shading under it, absolute:
+    #: the ROI's own opacity weighs the bars and the median and mean
+    #: lines, not these, so the fit can be shown over bars faded to
+    #: nothing. A shading of 0 draws none.
+    histogram_fit_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_FIT_ALPHA)
+    histogram_fit_fill_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_FIT_FILL_ALPHA)
+    #: The Histogram view's x magnifier on a linear axis: the exponent
+    #: of each intensity's distance from histogram_x_pivot (see
+    #: histogram_series.magnified). 1 is off. With the pivot on auto,
+    #: the plot canvas writes the pooled median it pivots on back here.
+    histogram_x_magnify = Range(*HISTOGRAM_X_MAGNIFY_BOUNDS, HISTOGRAM_X_MAGNIFY)
+    histogram_x_pivot_auto = Bool(True)
+    histogram_x_pivot = Float(0.0)
     #: Plot expected against actual instead of actual against expected,
     #: so the trend reads expected = slope × actual + intercept.
     flip_actual_expected = Bool(False)

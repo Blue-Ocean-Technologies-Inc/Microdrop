@@ -114,10 +114,22 @@ HISTOGRAM_FIT_MIN_PIXELS = 10
 #: pixels than this: past it a bin is expected empty, and the curve's
 #: tails would fall through decades no pixel occupies.
 HISTOGRAM_FIT_FLOOR_PIXELS = 0.5
-#: Opacity of the Histogram view's median and mean lines, as a fraction
-#: multiplied with their ROI's own plot opacity.
-HISTOGRAM_MARKER_ALPHA_BOUNDS = (0.0, 1.0)
+#: The Histogram view's opacity settings, each a 0-1 fraction. The
+#: bars (outline and fill) and the median and mean lines are faded by
+#: their ROI's own plot opacity on top; the fitted curve and the shading
+#: under it are not, so the fit can stand out over faint bars or fade
+#: behind solid ones. The shading starts off: 0 draws none.
+HISTOGRAM_ALPHA_BOUNDS = (0.0, 1.0)
+HISTOGRAM_BAR_ALPHA = 1.0
+HISTOGRAM_FIT_ALPHA = 1.0
+HISTOGRAM_FIT_FILL_ALPHA = 0.0
 HISTOGRAM_MARKER_ALPHA = 1.0
+#: The Histogram view's x magnifier: the exponent applied to each
+#: intensity's distance from the pivot. 1 leaves the axis linear;
+#: smaller spreads the bins near the pivot apart and squeezes the
+#: tails. Below 0.1 the tails collapse to a few pixels at the edges.
+HISTOGRAM_X_MAGNIFY_BOUNDS = (0.1, 1.0)
+HISTOGRAM_X_MAGNIFY = 1.0
 #: Opacity of the Histogram view's bins the pixel-count range leaves
 #: out of the distribution fit, as a fraction of their ROI's: faded,
 #: not hidden, so what the fit ignored stays in view.

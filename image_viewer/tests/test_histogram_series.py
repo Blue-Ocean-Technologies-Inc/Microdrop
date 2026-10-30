@@ -9,8 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """The Histogram view's maths: shared bins (clipped, linear or log),
-counts and their normalisation, Savitzky-Golay over the bins, and the
-distribution fits recovering known parameters."""
+counts and their normalisation, Savitzky-Golay over the bins, the
+distribution fits recovering known parameters, and the x magnifier's
+axis mapping."""
 
 # Standard library imports.
 import math
@@ -29,8 +30,12 @@ from image_viewer.analysis.histogram_series import (
     histogram_counts,
     histogram_edges,
     in_range,
+    magnified,
+    magnified_ticks,
     pixels_in_bins,
+    pooled_median,
     smoothed_counts,
+    unmagnified,
 )
 
 #: A seeded generator, so every run draws the same samples.
@@ -242,3 +247,77 @@ def test_too_few_pixels_in_the_count_range_leave_no_fit(rng):
     assert fitted.size < HISTOGRAM_FIT_MIN_PIXELS
     assert fit_distribution(fitted, "normal") is None
     assert fit_distribution(pixels_in_bins(pixels, edges, counts > 0), "normal")
+
+
+@pytest.mark.parametrize("exponent", [0.1, 0.4, 1.0])
+def test_the_magnifier_round_trips_and_keeps_the_axis_in_order(exponent):
+    x_values = np.linspace(-500.0, 3_000.0, 1_001)
+
+    t_values = magnified(x_values, 700.0, exponent)
+
+    assert np.all(np.diff(t_values) > 0)
+    assert unmagnified(t_values, 700.0, exponent) == pytest.approx(x_values)
+    assert magnified(700.0, 700.0, exponent) == 700.0
+
+
+def test_the_magnifier_spreads_the_span_about_the_pivot_apart():
+    def width(low, high, exponent):
+        return np.diff(magnified([low, high], 700.0, exponent))[0]
+
+    # Equal spans of intensity: the one at the pivot comes out far
+    # wider than one in the tail, unless the exponent is 1.
+    assert width(690.0, 710.0, 0.4) > 10.0 * width(1_690.0, 1_710.0, 0.4)
+    assert width(690.0, 710.0, 1.0) == pytest.approx(width(1_690.0, 1_710.0, 1.0))
+
+
+def test_the_magnifier_passes_nan_through():
+    t_values = magnified([np.nan, 800.0], 700.0, 0.4)
+
+    assert np.isnan(t_values[0]) and np.isfinite(t_values[1])
+    assert np.isnan(unmagnified([np.nan], 700.0, 0.4)[0])
+
+
+def test_the_auto_pivot_is_the_median_of_every_roi_pooled():
+    dim = np.array([10.0, 20.0, 30.0])
+    bright = np.array([100.0, 200.0])
+
+    assert pooled_median([dim, bright]) == 30.0
+    assert pooled_median([bright]) == 150.0
+
+
+def test_magnified_fitted_counts_sample_evenly_on_the_magnified_axis(rng):
+    pixels = rng.normal(500.0, 30.0, 50_000)
+    edges = histogram_edges([pixels], 50)
+    distribution, _label = fit_distribution(pixels, "normal")
+    magnify = (500.0, 0.4)
+
+    x_values, y_values = fitted_counts(
+        distribution, edges, pixels.size, 200, magnify=magnify
+    )
+    plain_x, _plain_y = fitted_counts(distribution, edges, pixels.size, 200)
+
+    # Same span, the same expected counts at each x, but the points
+    # crowd about the pivot where the axis stretches.
+    assert x_values[[0, -1]] == pytest.approx(edges[[0, -1]])
+    assert np.diff(magnified(x_values, *magnify)) == pytest.approx(
+        np.full(199, np.diff(magnified(x_values[:2], *magnify))[0])
+    )
+    expected = pixels.size * distribution.pdf(x_values) * np.diff(edges)[0]
+    assert y_values == pytest.approx(expected)
+    assert np.count_nonzero(np.abs(x_values - 500.0) < 10.0) > np.count_nonzero(
+        np.abs(plain_x - 500.0) < 10.0
+    )
+
+
+def test_magnified_ticks_spread_along_the_magnified_axis():
+    ticks = magnified_ticks(9_400.0, 15_600.0, 12_143.0, 0.4, 9)
+    positions = magnified(ticks, 12_143.0, 0.4)
+    spacing = np.ptp(magnified([9_400.0, 15_600.0], 12_143.0, 0.4)) / 8
+
+    # Round intensities, inside the view, none overprinting another, and
+    # several within the 300 nearest the pivot, which an even intensity
+    # grid over this span would leave with one at most.
+    assert ticks.size >= 5 and np.all(np.diff(positions) >= spacing / 2)
+    assert ticks.min() >= 9_400.0 and ticks.max() <= 15_600.0
+    assert np.all(ticks % 50 == 0)
+    assert np.count_nonzero(np.abs(ticks - 12_143.0) < 300.0) >= 3
