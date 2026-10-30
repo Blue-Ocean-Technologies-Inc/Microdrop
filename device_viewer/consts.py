@@ -396,6 +396,58 @@ CAMERA_FEED_START_TIMEOUT_MS = 3000
 CAMERA_PREVIEW_MAX_FPS = 20
 
 # ---------------------------------------------------------------------------
+# Live Histogram pane: an exposure aid sampling the live camera feed
+# ---------------------------------------------------------------------------
+# One bin per 8-bit intensity level.
+LIVE_HISTOGRAM_BINS = 256
+
+# Refresh rate (Hz) of the pane's sampling: spinner bounds and default. The
+# ceiling is the preview's, as the video item never holds more frames than
+# that per second.
+LIVE_HISTOGRAM_RATE_BOUNDS_HZ = (1, CAMERA_PREVIEW_MAX_FPS)
+LIVE_HISTOGRAM_DEFAULT_RATE_HZ = 8
+
+# Poll interval while there is no frame, or no new one, to sample.
+LIVE_HISTOGRAM_IDLE_INTERVAL_MS = 1000
+
+# A frame whose histogram has not changed for this long is reported as idle
+# (a stopped camera leaves its last frame on the video item).
+LIVE_HISTOGRAM_IDLE_AFTER_S = 2.0
+
+# Frames are downscaled to this width before binning, which keeps sampling
+# within a few ms on the GUI thread (the Pi runs it too).
+LIVE_HISTOGRAM_SAMPLE_WIDTH_PX = 320
+
+# Rec. 601 luma weights (R, G, B) scaled to sum to 256, for integer luma.
+LIVE_HISTOGRAM_LUMA_WEIGHTS = (77, 150, 29)
+
+# A clipping cue lights when more than this share (%) of the pixels sit in
+# the darkest or the brightest bin.
+LIVE_HISTOGRAM_CLIP_WARN_PCT = 0.5
+
+# Percentiles bounding the reported intensity range.
+LIVE_HISTOGRAM_RANGE_PERCENTILES = (1, 99)
+
+# Fills of the red, green, and blue channel histograms: near-primaries, so
+# the overlaid channels add up to white on a dark background.
+LIVE_HISTOGRAM_CHANNEL_COLORS = ("#ff3b3b", "#3bd83b", "#3b7bff")
+
+# Plot styles: filled step bars per level, or the density curve (one
+# polyline per channel, cheaper to draw), and the default.
+LIVE_HISTOGRAM_PLOT_STYLES = ("bars", "curve")
+LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE = "bars"
+
+# Width (bins) of the moving average that smooths the density curve.
+LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS = 3
+
+# The plot's minimum size and its padding around the plot area (px).
+LIVE_HISTOGRAM_PLOT_MIN_SIZE_PX = (200, 110)
+LIVE_HISTOGRAM_PLOT_MARGIN_PX = 6
+
+# Clipping cue columns are at least this wide (px), however narrow a bin is.
+LIVE_HISTOGRAM_CLIP_CUE_MIN_WIDTH_PX = 4
+
+# ---------------------------------------------------------------------------
 # Camera-alignment dialog (endpoint / outline panes)
 # ---------------------------------------------------------------------------
 #: QuadOverlay defaults. Colors are '#rrggbb' hex strings — the same
