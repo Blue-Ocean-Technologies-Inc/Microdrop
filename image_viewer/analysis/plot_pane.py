@@ -60,13 +60,13 @@ from traitsui.api import (
     HGroup,
     Item,
     Label,
-    RangeEditor,
     Tabbed,
     TableEditor,
     UItem,
     VGrid,
     VGroup,
     View,
+    spring,
 )
 
 from microdrop_style.icons.icons import (
@@ -86,6 +86,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconToggleEditor,
     InPlaceToggleEditor,
     ObjectColumn,
+    SteppedSliderEditor,
     install_table_clipboard,
     toggle_editor_default_style_sheet_factory,
 )
@@ -110,13 +111,13 @@ from .consts import (
     EXPECTED_METRIC_MARKERS,
     FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    HISTOGRAM_ALPHA_BOUNDS,
     HISTOGRAM_CLIP_BOUNDS_PERCENT,
     HISTOGRAM_FILTERED_BIN_ALPHA,
     HISTOGRAM_FIT_FLOOR_PIXELS,
     HISTOGRAM_FIT_LABELS,
     HISTOGRAM_FIT_MIN_PIXELS,
     HISTOGRAM_FITS,
-    HISTOGRAM_MARKER_ALPHA_BOUNDS,
     LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
@@ -323,6 +324,9 @@ _NOT_HISTOGRAM_VIEW = "figure.view_mode != 'histogram'"
 #: When the series fit's own controls have a fit to act on.
 _SERIES_FITTED = f"figure.fit_method != 'none' and {_NOT_HISTOGRAM_VIEW}"
 
+#: When the Histogram view draws a distribution fit to fade or shade.
+_HISTOGRAM_FITTED = f"figure.histogram_fit != 'none' and {_HISTOGRAM_VIEW}"
+
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
 VIOLIN_BODY_ALPHA = 0.5
@@ -348,6 +352,11 @@ VALUE_SPIN_W = -138
 PARAM_SPIN_W = -102
 DROPDOWN_W = -176
 STAT_DROPDOWN_W = -440
+
+#: The Histogram view's opacity sliders: notches
+#: fine enough to tune by, and their readout.
+SLIDER_STEP = 0.05
+SLIDER_FORMAT = "%.2f"
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
@@ -397,6 +406,24 @@ def _filter_spin(name, filter_flag, decimals=1):
             step=1.0,
         ),
         enabled_when=f"figure.{filter_flag} and {_HISTOGRAM_VIEW}",
+    )
+
+
+def _alpha_slider(name, label, enabled_when, tooltip):
+    """One of the Histogram view's opacity sliders: a track and its
+    readout, as narrow as a parameter box so the four share a row."""
+    return Item(
+        name,
+        label=label,
+        width=PARAM_SPIN_W,
+        editor=SteppedSliderEditor(
+            low=HISTOGRAM_ALPHA_BOUNDS[0],
+            high=HISTOGRAM_ALPHA_BOUNDS[1],
+            step=SLIDER_STEP,
+            format=SLIDER_FORMAT,
+        ),
+        enabled_when=enabled_when,
+        tooltip=tooltip,
     )
 
 
@@ -526,20 +553,48 @@ def _axes_tab():
                 tooltip="Histogram view: a dashed vertical line at each "
                 "ROI's mean — the table's, over all its pixels",
             ),
-            Item(
-                "figure.histogram_marker_alpha",
-                label="Line alpha",
-                width=DROPDOWN_W,
-                editor=RangeEditor(
-                    low=HISTOGRAM_MARKER_ALPHA_BOUNDS[0],
-                    high=HISTOGRAM_MARKER_ALPHA_BOUNDS[1],
-                    mode="slider",
-                ),
+            _toggle(
+                "figure.histogram_bar_fill",
+                "Fill bars",
                 enabled_when=_HISTOGRAM_VIEW,
-                tooltip="Opacity of the Histogram view's median and mean "
-                "lines, times each ROI's own: 0 fades them out, 1 draws "
-                "them as solid as the ROI's outline",
+                tooltip="Histogram view: fill each ROI's bars in its "
+                "colour under the outline, at the Bars opacity",
             ),
+        ),
+        HGroup(
+            Label("Opacity"),
+            _alpha_slider(
+                "figure.histogram_bar_alpha",
+                "Bars",
+                _HISTOGRAM_VIEW,
+                "Histogram view: opacity of the bars — outline and fill — "
+                "times each ROI's alpha in the ROI table",
+            ),
+            _alpha_slider(
+                "figure.histogram_fit_alpha",
+                "Fit",
+                _HISTOGRAM_FITTED,
+                "Histogram view: opacity of the fitted curve. Absolute: "
+                "the ROI table's alpha does not scale it.",
+            ),
+            _alpha_slider(
+                "figure.histogram_fit_fill_alpha",
+                "Fill",
+                _HISTOGRAM_FITTED,
+                "Histogram view: opacity of the shading under the fitted "
+                "curve; 0 draws none. Absolute: the ROI table's alpha "
+                "does not scale it.",
+            ),
+            _alpha_slider(
+                "figure.histogram_marker_alpha",
+                "Markers",
+                _HISTOGRAM_VIEW,
+                "Histogram view: opacity of the median and mean lines, "
+                "times each ROI's alpha in the ROI table",
+            ),
+            # The sliders keep their width; without the spring their
+            # labels soak up the row's slack and scatter them across it.
+            spring,
         ),
         HGroup(
             Item(
@@ -1222,6 +1277,10 @@ _PLOT_STATE = (
     "session:figure:histogram_show_median, "
     "session:figure:histogram_show_mean, "
     "session:figure:histogram_marker_alpha, "
+    "session:figure:histogram_bar_alpha, "
+    "session:figure:histogram_bar_fill, "
+    "session:figure:histogram_fit_alpha, "
+    "session:figure:histogram_fit_fill_alpha, "
     "session:figure:flip_actual_expected, "
     "session:figure:compare_second_derivative_max, "
     "session:figure:compare_second_derivative_min, "
@@ -2101,24 +2160,19 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 # past it they fall through decades no pixel occupies,
                 # and relim() would drag the axis down after them.
                 unit = 1.0 / pixels.size if normalize else 1.0
-                floor = HISTOGRAM_FIT_FLOOR_PIXELS * unit
+                floor = (
+                    HISTOGRAM_FIT_FLOOR_PIXELS * unit if figure_settings.log_y else 0.0
+                )
                 x_values, y_values = fitted_counts(
                     fit[0],
                     edges,
                     fitted.size * unit,
                     FIT_CURVE_SAMPLES,
                     figure_settings.log_x,
-                    floor if figure_settings.log_y else 0.0,
+                    floor,
                 )
-                self._fit_artists.extend(
-                    self._axes.plot(
-                        x_values,
-                        y_values,
-                        color=style.color,
-                        alpha=style.plot_alpha,
-                        linestyle=LINE_STYLES["dotted"],
-                        label="_nolegend_",
-                    )
+                self._draw_histogram_fit(
+                    x_values, y_values, floor, style, figure_settings
                 )
 
             self._draw_histogram_markers(pixels, style, figure_settings)
@@ -2131,17 +2185,51 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # intensity on x: no time span to shade
 
+    def _draw_histogram_fit(self, x_values, y_values, floor, style, figure_settings):
+        """One ROI's fitted curve, dotted in its colour, and the shading
+        under it down to ``floor`` — each at its own absolute opacity,
+        unweighted by the ROI's, which fades the bars and the median and
+        mean lines only. A NaN in the curve (below the log axis's floor)
+        breaks the shading with it."""
+        self._fit_artists.extend(
+            self._axes.plot(
+                x_values,
+                y_values,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_alpha,
+                linestyle=LINE_STYLES["dotted"],
+                label="_nolegend_",
+            )
+        )
+
+        if figure_settings.histogram_fit_fill_alpha <= 0:
+            return
+
+        self._fit_artists.append(
+            self._axes.fill_between(
+                x_values,
+                y_values,
+                floor,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_fill_alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        )
+
     def _draw_histogram_outline(
         self, counts, edges, selected, label, style, figure_settings
     ):
         """One ROI's ``counts`` over ``edges``: a step outline, or with
         Savitzky-Golay smoothing a line through the bin centres — a
-        smoothed count no longer belongs to one bin's flat top.
+        smoothed count no longer belongs to one bin's flat top — at the
+        bar opacity times the ROI's, and with histogram_bar_fill shaded
+        beneath at that opacity too.
 
         With the pixel-count range on — ``selected`` marks the bins it
         keeps, else None — the whole outline is faded and the kept bins
         drawn over it at full strength, carrying the legend entry, so
-        what the fit ignored stays in view."""
+        what the fit ignored stays in view. Their fill does the same."""
         # The curves' own line width: matplotlib draws a patch's
         # outline thinner than a line, and these are read as curves.
         line_width = matplotlib.rcParams["lines.linewidth"]
@@ -2153,15 +2241,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if smoothing
             else counts
         )
-        alpha = style.plot_alpha
+        centres = bin_centres(edges, figure_settings.log_x) if smoothing else None
+        fill = figure_settings.histogram_bar_fill
+        bar_alpha = figure_settings.histogram_bar_alpha * style.plot_alpha
+        alpha = bar_alpha
         base_label = label
 
         if selected is not None:
             alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
             base_label = "_nolegend_"
 
+        # Before the outline, so the outline lies on top of its fill.
+        if fill:
+            self._fill_histogram_bars(heights, edges, centres, style.color, alpha)
+
         if smoothing:
-            centres = bin_centres(edges, figure_settings.log_x)
             self._fit_artists.extend(
                 self._axes.plot(
                     centres,
@@ -2194,13 +2288,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # are drawn over the faded outline.
         kept = np.where(selected, heights, np.nan)
 
+        if fill:
+            self._fill_histogram_bars(kept, edges, centres, style.color, bar_alpha)
+
         if smoothing:
             self._fit_artists.extend(
                 self._axes.plot(
                     centres,
                     kept,
                     color=style.color,
-                    alpha=style.plot_alpha,
+                    alpha=bar_alpha,
                     linewidth=line_width,
                     label=label,
                 )
@@ -2211,11 +2308,39 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     kept,
                     edges,
                     color=style.color,
-                    alpha=style.plot_alpha,
+                    alpha=bar_alpha,
                     linewidth=line_width,
                     label=label,
                 )
             )
+
+    def _fill_histogram_bars(self, heights, edges, centres, color, alpha):
+        """Shade under one ROI's ``heights`` down to zero: the bins of
+        ``edges``, or with ``centres`` — smoothed counts — under the
+        line through them. A NaN height shades nothing. Kept out of the
+        legend, whose entry is the outline's."""
+        if centres is None:
+            artist = self._axes.stairs(
+                heights,
+                edges,
+                fill=True,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        else:
+            artist = self._axes.fill_between(
+                centres,
+                heights,
+                0.0,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+
+        self._fit_artists.append(artist)
 
     def _in_intensity_range(self, samples, figure_settings):
         """``samples`` with each ROI's pixels cut to the intensity
