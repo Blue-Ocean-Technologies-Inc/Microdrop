@@ -125,7 +125,7 @@ def apply_color_scheme(color_scheme):
     # keeps its light palette. Swap the palette and announce the scheme
     # ourselves; is_dark_mode() reports the override. The startup palette is
     # light there.
-    if _requested_color_scheme == Qt.ColorScheme.Dark:
+    if color_scheme_in_force == Qt.ColorScheme.Dark:
         QApplication.setPalette(dark_palette())
     else:
         QApplication.setPalette(_startup_palette)
