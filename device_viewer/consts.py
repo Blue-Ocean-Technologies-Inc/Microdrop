@@ -447,6 +447,32 @@ LIVE_HISTOGRAM_PLOT_MARGIN_PX = 6
 # Clipping cue columns are at least this wide (px), however narrow a bin is.
 LIVE_HISTOGRAM_CLIP_CUE_MIN_WIDTH_PX = 4
 
+# The region of the frame the histogram covers, as frame fractions (left,
+# top, right, bottom): fractions keep a region in place across camera
+# resolution and preview size changes. The whole frame until one is picked.
+LIVE_HISTOGRAM_FULL_FRAME_REGION = (0.0, 0.0, 1.0, 1.0)
+
+# A region side spans at least this share of the frame, and a fresh drag
+# shorter than it draws nothing (a stray click keeps the region).
+LIVE_HISTOGRAM_REGION_MIN_FRACTION = 0.02
+
+# Region picker: a press this close (view px) to an edge or corner grabs it.
+LIVE_HISTOGRAM_REGION_GRAB_PX = 10
+
+# Region picker look: the frame and its corner dots (the alignment tool's
+# orange, so the two pickers read alike), and the shade over the frame
+# outside the region.
+LIVE_HISTOGRAM_REGION_FRAME_COLOR_HEX = "#ffa000"
+LIVE_HISTOGRAM_REGION_FRAME_WIDTH_PX = 2
+LIVE_HISTOGRAM_REGION_HANDLE_COLOR_HEX = "#ff6400"
+LIVE_HISTOGRAM_REGION_HANDLE_RING_COLOR_HEX = "#ffffff"
+LIVE_HISTOGRAM_REGION_HANDLE_RADIUS_PX = 6
+LIVE_HISTOGRAM_REGION_SHADE_COLOR_HEX = "#000000"
+LIVE_HISTOGRAM_REGION_SHADE_ALPHA = 0.5
+
+# Region picker window's opening size (px).
+LIVE_HISTOGRAM_REGION_DIALOG_SIZE_PX = (900, 640)
+
 # ---------------------------------------------------------------------------
 # Camera-alignment dialog (endpoint / outline panes)
 # ---------------------------------------------------------------------------

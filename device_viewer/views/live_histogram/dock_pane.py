@@ -37,7 +37,9 @@ class LiveHistogramDockPane(TraitsDockPane):
 
     def _controller_default(self):
         return LiveHistogramController(
-            model=self.model, get_video_item=self._device_view_video_item
+            model=self.model,
+            get_video_item=self._device_view_video_item,
+            get_dialog_parent=lambda: self.control,
         )
 
     def _device_view_video_item(self):
@@ -56,7 +58,9 @@ class LiveHistogramDockPane(TraitsDockPane):
         self.controller.active = event.new
 
     def destroy(self):
-        """Stop sampling before the pane's widgets go."""
+        """Stop sampling and close the region picker before the pane's
+        widgets go."""
         self.controller.active = False
+        self.controller.close_region_picker()
 
         super().destroy()

@@ -1831,6 +1831,9 @@ class _IconButtonEditor(QtEditor):
     #: The tooltip synced from the factory's ``tooltip_name``, if any.
     tooltip_text = Str()
 
+    #: The checked look synced from the factory's ``checked_name``, if any.
+    checked = Bool(False)
+
     def init(self, parent):
         self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
@@ -1848,6 +1851,15 @@ class _IconButtonEditor(QtEditor):
         if self.factory.tooltip_name:
             self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
 
+        if self.factory.checked_name:
+            self.control.setCheckable(True)
+
+            if _native_style_lacks_checked_accent():
+                self.control.setStyleSheet(ICON_TOGGLE_BUTTON_STYLE_SHEET)
+
+            self.sync_value(self.factory.checked_name, "checked", "from")
+            self.control.setChecked(self.checked)
+
     @observe("tooltip_text")
     def _tooltip_text_updated(self, event):
         if self.control is None:
@@ -1855,8 +1867,20 @@ class _IconButtonEditor(QtEditor):
 
         self.control.setToolTip(event.new)
 
+    @observe("checked")
+    def _checked_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setChecked(event.new)
+
     def _on_click(self):
         self.value = True
+
+        # Qt toggles a checkable button on click; its look follows the
+        # named trait instead (the click may well have changed it).
+        if self.control is not None and self.control.isCheckable():
+            self.control.setChecked(self.checked)
 
     def update_editor(self):
         """Button/Event traits carry no state to reflect back."""
@@ -1878,6 +1902,12 @@ class IconButtonEditor(BasicEditorFactory):
     #: Extended name of a context Str trait whose value replaces
     #: ``tooltip`` live, for a tooltip that explains the button's state.
     tooltip_name = Str()
+
+    #: Extended name of a context Bool trait the button looks checked
+    #: (like an IconToggleEditor) while True — for an action button whose
+    #: result stays in effect, e.g. a crop glyph while a crop applies.
+    #: Clicking still only fires the trait.
+    checked_name = Str()
 
     #: Icon-font family the glyph comes from. Material Design Icons
     #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
