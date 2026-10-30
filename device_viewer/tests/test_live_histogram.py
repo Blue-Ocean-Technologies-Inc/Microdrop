@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 
 # Enthought library imports.
-from pyface.qt.QtGui import QColor, QImage
+from pyface.qt.QtCore import QRectF
+from pyface.qt.QtGui import QColor, QImage, QPainter
 from pyface.qt.QtWidgets import QApplication
 
 # Microdrop package imports.
@@ -26,7 +27,10 @@ from device_viewer.views.live_histogram.controller import (
     sample_rgb_array,
 )
 from device_viewer.views.live_histogram.histogram_widget import LiveHistogramWidget
-from device_viewer.views.live_histogram.model import LiveHistogramModel
+from device_viewer.views.live_histogram.model import (
+    LiveHistogramModel,
+    smoothed_density,
+)
 
 
 @pytest.fixture(scope="module")
@@ -114,10 +118,39 @@ def test_clear_drops_the_frame():
     assert model.clipping_text == "–"
 
 
+def test_smoothed_density_keeps_length_and_mass():
+    counts = np.random.default_rng(0).integers(0, 50, size=(3, LIVE_HISTOGRAM_BINS))
+    counts[:, 0] = 1000
+
+    density = smoothed_density(counts)
+
+    assert density.shape == counts.shape
+    assert np.allclose(density.sum(axis=-1), 1.0)
+
+    # The clipped end bin is not spread inward.
+    assert np.allclose(density[:, 0], counts[:, 0] / counts.sum(axis=-1))
+
+    # An empty histogram has no density, rather than NaNs.
+    assert np.all(smoothed_density(np.zeros(LIVE_HISTOGRAM_BINS)) == 0)
+
+
+def test_smoothed_density_flattens_a_spike():
+    counts = np.zeros(LIVE_HISTOGRAM_BINS)
+    counts[100] = 30
+
+    density = smoothed_density(counts)
+
+    assert np.allclose(density[99:102], 1 / 3)
+    assert density.sum() == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("plot_style", ["bars", "curve"])
 @pytest.mark.parametrize("channel_mode", ["luma", "rgb"])
 @pytest.mark.parametrize("log_y", [False, True])
-def test_plot_paints_in_every_mode(qapp, channel_mode, log_y):
-    model = LiveHistogramModel(channel_mode=channel_mode, log_y=log_y)
+def test_plot_paints_in_every_mode(qapp, plot_style, channel_mode, log_y):
+    model = LiveHistogramModel(
+        plot_style=plot_style, channel_mode=channel_mode, log_y=log_y
+    )
     widget = LiveHistogramWidget(model)
     widget.resize(300, 150)
 
@@ -130,6 +163,43 @@ def test_plot_paints_in_every_mode(qapp, channel_mode, log_y):
 
     model.update_from_rgb(np.zeros((4, 4, 3), dtype=np.uint8))
     assert not widget.grab().isNull()
+
+
+class RecordingPainter(QPainter):
+    """Count the polygons and paths the plot draws."""
+
+    def __init__(self, device):
+        super().__init__(device)
+
+        self.polygons = 0
+        self.paths = 0
+
+    def drawPolygon(self, *args, **kwargs):
+        self.polygons += 1
+
+        super().drawPolygon(*args, **kwargs)
+
+    def drawPath(self, *args, **kwargs):
+        self.paths += 1
+
+        super().drawPath(*args, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "plot_style, polygons, paths", [("bars", 3, 0), ("curve", 0, 3)]
+)
+def test_curve_style_strokes_one_path_per_channel(qapp, plot_style, polygons, paths):
+    model = LiveHistogramModel(plot_style=plot_style, channel_mode="rgb")
+    model.update_from_rgb(gradient_frame())
+    widget = LiveHistogramWidget(model)
+    image = QImage(300, 150, QImage.Format.Format_ARGB32)
+    painter = RecordingPainter(image)
+
+    widget._paint_histograms(painter, QRectF(0, 0, 300, 150), widget.palette())
+    painter.end()
+
+    assert painter.polygons == polygons
+    assert painter.paths == paths
 
 
 def test_sample_rgb_array_downscales_and_drops_row_padding(qapp):
