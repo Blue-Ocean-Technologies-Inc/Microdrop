@@ -231,52 +231,103 @@ def test_controller_bins_only_the_region(qapp):
     assert model.mean == pytest.approx(0)
 
 
-def test_pick_flow_applies_the_picked_region_on_ok_only(qapp, monkeypatch):
+def open_picker(qapp):
+    """A histogram controller on a stub feed, its picker opened (offscreen)."""
     model = LiveHistogramModel()
     controller = LiveHistogramController(
         model=model, get_video_item=lambda: StubVideoItem(bright_quadrant_image())
     )
-    shown = []
 
-    def pick(picker, image, parent):
-        shown.append((picker.region, picker.frame_size, image.size().toTuple()))
-        picker.region = (0.1, 0.2, 0.3, 0.4)
-
-        return accept
-
-    monkeypatch.setattr(controller, "edit_region", pick)
-
-    accept = False
     model.pick_region = True
 
-    assert shown == [(LIVE_HISTOGRAM_FULL_FRAME_REGION, (640, 480), (640, 480))]
+    return model, controller
+
+
+def test_picker_applies_the_region_on_ok_only_while_live_is_off(qapp):
+    model, controller = open_picker(qapp)
+    picker = controller._region_picker
+
+    assert controller.region_picker_open
+    assert picker.region == LIVE_HISTOGRAM_FULL_FRAME_REGION
+    assert picker.frame_size == (640, 480)
+
+    picker.region = (0.1, 0.2, 0.3, 0.4)
+
     assert not model.region_active
 
-    accept = True
+    controller._region_picker_ui.control.accept()
+
+    assert not controller.region_picker_open
+    assert model.region == pytest.approx((0.1, 0.2, 0.3, 0.4))
+
+    # The next picker opens on the current region.
     model.pick_region = True
+
+    assert controller._region_picker.region == pytest.approx((0.1, 0.2, 0.3, 0.4))
+
+    controller.close_region_picker()
+
+
+def test_live_picker_applies_as_it_edits_and_cancel_restores(qapp):
+    model, controller = open_picker(qapp)
+    picker = controller._region_picker
+    ui = controller._region_picker_ui
+
+    picker.region = (0.1, 0.2, 0.3, 0.4)
+    picker.live = True
 
     assert model.region == pytest.approx((0.1, 0.2, 0.3, 0.4))
 
-    # The picker opens on the current region.
+    picker.region = (0.5, 0.5, 0.9, 0.9)
+
+    assert model.region == pytest.approx((0.5, 0.5, 0.9, 0.9))
+
+    # Live off again: the histogram goes back until OK.
+    picker.live = False
+
+    assert not model.region_active
+
+    picker.live = True
+
+    # A second crop click raises the open picker rather than opening one.
     model.pick_region = True
 
-    assert shown[-1][0] == pytest.approx((0.1, 0.2, 0.3, 0.4))
+    assert controller._region_picker_ui is ui
+
+    ui.control.reject()
+
+    assert not controller.region_picker_open
+    assert model.region == LIVE_HISTOGRAM_FULL_FRAME_REGION
+
+    # The Live choice carries over to the next picker.
+    model.pick_region = True
+
+    assert controller._region_picker.live
+
+    controller._region_picker.full_frame = True
+    controller._region_picker.region = (0.0, 0.0, 0.5, 0.5)
+
+    assert model.region == pytest.approx((0.0, 0.0, 0.5, 0.5))
+
+    # Closing the window (or the pane) acts as Cancel.
+    controller.close_region_picker()
+
+    assert model.region == LIVE_HISTOGRAM_FULL_FRAME_REGION
 
 
 def test_pick_flow_warns_without_a_frame(qapp, monkeypatch):
     model = LiveHistogramModel()
     controller = LiveHistogramController(model=model, get_video_item=lambda: None)
-    warnings, shown = [], []
+    warnings = []
 
     monkeypatch.setattr(
         controller_module, "warning", lambda *args, **kwargs: warnings.append(args)
     )
-    monkeypatch.setattr(controller, "edit_region", lambda *args: shown.append(args))
 
     model.pick_region = True
 
     assert len(warnings) == 1
-    assert shown == []
+    assert not controller.region_picker_open
 
 
 def test_picker_dialog_draws_the_region_and_recaptures(qapp):
