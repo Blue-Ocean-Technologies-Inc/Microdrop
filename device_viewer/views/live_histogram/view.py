@@ -13,35 +13,80 @@ exposure readouts below. Instantiable standalone against the model:
 ``LiveHistogramModel().edit_traits(view=LiveHistogramView)``."""
 
 # Enthought library imports.
-from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
+from traitsui.api import HGroup, Item, Label, Spring, UItem, VGroup, View
+
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import (
+    InPlaceToggleEditor,
+    SlidingToggleEditor,
+    SteppedSliderEditor,
+)
 
 # Local imports.
+from ...consts import LIVE_HISTOGRAM_PLOT_STYLES, LIVE_HISTOGRAM_RATE_BOUNDS_HZ
 from .histogram_widget import LiveHistogramPlotEditor
 
 plot = UItem("counts", editor=LiveHistogramPlotEditor())
 
-controls = HGroup(
+#: Fixed width of a sliding switch (the Toggle's own size hint); stretched,
+#: it pushes the state name on its right away from it.
+SWITCH_WIDTH = -58
+
+# Each two-state choice is a sliding switch with its off state named on the
+# left and its on state on the right.
+switches = HGroup(
+    HGroup(
+        Label("Luma"),
+        UItem(
+            "channel_mode",
+            editor=SlidingToggleEditor(on_value="rgb", off_value="luma"),
+            width=SWITCH_WIDTH,
+            tooltip="Plot brightness (luma), or the red, green, and blue channels",
+        ),
+        Label("RGB"),
+    ),
+    Spring(width=24, springy=False),
+    HGroup(
+        Label("Bars"),
+        UItem(
+            "plot_style",
+            editor=SlidingToggleEditor(
+                on_value=LIVE_HISTOGRAM_PLOT_STYLES[1],
+                off_value=LIVE_HISTOGRAM_PLOT_STYLES[0],
+            ),
+            width=SWITCH_WIDTH,
+            tooltip=(
+                "Filled bars per level, or just the density curve (cheaper to draw)"
+            ),
+        ),
+        Label("Curve"),
+    ),
+    Spring(),
+)
+
+feed_controls = HGroup(
     UItem(
-        "channel_mode",
-        style="custom",
-        # str keeps "RGB": the radio editor capitalizes labels otherwise.
-        editor=EnumEditor(
-            values={"luma": "1:Luma", "rgb": "2:RGB"}, cols=2, format_func=str
-        ),
-        tooltip="Plot brightness (luma), or the red, green, and blue channels",
+        "log_y",
+        editor=InPlaceToggleEditor(on_label="Log Y", off_label="Linear Y"),
+        tooltip="Logarithmic count axis",
     ),
-    Item(
-        "plot_style",
-        label="Style",
-        style="custom",
-        editor=EnumEditor(
-            values={"bars": "1:Bars", "curve": "2:Curve"}, cols=2, format_func=str
-        ),
-        tooltip="Filled bars per level, or just the density curve (cheaper to draw)",
+    UItem(
+        "paused",
+        editor=InPlaceToggleEditor(on_label="Paused", off_label="Live"),
+        tooltip="Freeze the histogram",
     ),
-    Item("log_y", label="Log", tooltip="Logarithmic count axis"),
-    Item("paused", label="Pause", tooltip="Freeze the histogram"),
-    Item("rate_hz", label="Hz", tooltip="Histogram updates per second"),
+    UItem(
+        "rate_hz",
+        editor=SteppedSliderEditor(
+            low=LIVE_HISTOGRAM_RATE_BOUNDS_HZ[0],
+            high=LIVE_HISTOGRAM_RATE_BOUNDS_HZ[1],
+            step=1,
+            integer=True,
+            format="%d Hz",
+        ),
+        tooltip="Histogram updates per second",
+        springy=True,
+    ),
 )
 
 readouts = VGroup(
@@ -62,6 +107,6 @@ readouts = VGroup(
 )
 
 LiveHistogramView = View(
-    VGroup(plot, controls, readouts),
+    VGroup(plot, switches, feed_controls, readouts),
     resizable=True,
 )
