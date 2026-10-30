@@ -41,7 +41,6 @@ from portable_dropbot_status_and_controls.plugin import (
     PortableDropbotStatusAndControlsPlugin,
 )
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
-from rpi_battery_status.plugin import RpiBatteryStatusPlugin
 from ssh_controls.plugin import SSHControlsPlugin
 from ssh_controls_ui.plugin import SSHUIPlugin
 from user_help_plugin.plugin import UserHelpPlugin
@@ -125,9 +124,9 @@ OPENDROP_FRONTEND_PLUGINS = [OpendropStatusAndControlsPlugin]
 PORTABLE_DROPBOT_FRONTEND_PLUGINS = [
     PortableDropbotStatusAndControlsPlugin,
     PortableDropbotProtocolControlsPlugin,
-    # Status-bar battery icon; it reads the rpi-battery-monitor daemon's
-    # status file, which only the portable rig's Pi runs.
-    RpiBatteryStatusPlugin,
+    # The status-bar battery icon is the built-in "rpi_battery_ui" plugin
+    # group (plugin_management/consts.py), toggled in Manage Plugins — never
+    # list it here, see the note in FRONTEND_PLUGINS.
 ]
 
 

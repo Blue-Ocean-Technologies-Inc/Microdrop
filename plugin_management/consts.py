@@ -8,8 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop utils imports.
+from microdrop_utils.system_config import is_rpi
+
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 # Installed plugin packages advertise this entry-point group and ship this
@@ -20,13 +23,27 @@ MANIFEST_RESOURCE = "microdrop_plugin.toml"
 # The hosted conda channel Browse Plugins installs from.
 PLUGIN_CHANNEL_URL = "https://prefix.dev/microdrop-plugins"
 
-# Built-in toggleable plugin groups. EMPTY since the device stacks (heater,
-# magnet/Z-Stage) were extracted into standalone installable packages
-# (heater-microdrop-plugin, magnet-microdrop-plugin) — every group now comes
-# from an installed package's microdrop_plugin.toml manifest, discovered via
-# the microdrop.plugins entry point. The tuple stays as the seam for any
-# future group that genuinely ships inside the app itself.
-BUILTIN_PLUGIN_GROUPS = ()
+# Built-in toggleable plugin groups: groups whose code ships inside the app
+# itself. Every other group (heater, magnet/Z-Stage, ...) comes from an
+# installed package's microdrop_plugin.toml manifest, discovered via the
+# microdrop.plugins entry point. Each dict holds PluginGroup trait values; a
+# built-in gets the same Manage Plugins checkbox, persisted flag and hot
+# load/unload as a manifest group, but never lists as an installed package
+# since it cannot be uninstalled. Its plugins must not also sit in a static
+# startup list in examples/plugin_consts.py.
+BUILTIN_PLUGIN_GROUPS = (
+    # The battery icon reads the rpi-battery-monitor daemon's status file,
+    # which only the portable rig's Pi runs: on by default there, off
+    # elsewhere until ticked (e.g. to test with the
+    # MICRODROP_RPI_BATTERY_STATUS_FILE override).
+    {
+        "name": "rpi_battery_ui",
+        "label": "Battery status icon (portable rig)",
+        "plugin_specs": ["rpi_battery_status.plugin:RpiBatteryStatusPlugin"],
+        "enabled_key": "plugin_group_enabled.rpi_battery_ui",
+        "default_enabled": is_rpi(),
+    },
+)
 
 # Application-preferences node holding each group's persisted enabled flag
 # (full path: f"{GROUP_ENABLED_PREFERENCES_PATH}.{enabled_key}"). The flags

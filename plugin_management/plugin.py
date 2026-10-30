@@ -165,7 +165,7 @@ class PluginManagementPlugin(Plugin):
     @observe("application:application_initialized")
     def _restore_groups_on_launch(self, event):
         """Adopt the startup-composed group plugins, then reconcile every
-        group to its persisted enabled flag (default enabled) — so a group
+        group to its persisted enabled flag (or its default_enabled) — so a group
         toggled off in a previous session stays off. Runs exactly once."""
         if self._groups_restored:
             return
