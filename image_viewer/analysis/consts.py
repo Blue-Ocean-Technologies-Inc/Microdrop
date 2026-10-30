@@ -124,6 +124,12 @@ HISTOGRAM_BAR_ALPHA = 1.0
 HISTOGRAM_FIT_ALPHA = 1.0
 HISTOGRAM_FIT_FILL_ALPHA = 0.0
 HISTOGRAM_MARKER_ALPHA = 1.0
+#: The Histogram view's x magnifier: the exponent applied to each
+#: intensity's distance from the pivot. 1 leaves the axis linear;
+#: smaller spreads the bins near the pivot apart and squeezes the
+#: tails. Below 0.1 the tails collapse to a few pixels at the edges.
+HISTOGRAM_X_MAGNIFY_BOUNDS = (0.1, 1.0)
+HISTOGRAM_X_MAGNIFY = 1.0
 #: Opacity of the Histogram view's bins the pixel-count range leaves
 #: out of the distribution fit, as a fraction of their ROI's: faded,
 #: not hidden, so what the fit ignored stays in view.

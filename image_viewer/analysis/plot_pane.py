@@ -23,6 +23,7 @@ image failed or isn't computed."""
 import math
 import os
 import re
+from functools import partial
 from pathlib import Path
 
 os.environ.setdefault("QT_API", "pyside6")
@@ -40,6 +41,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import (
     AutoLocator,
     FuncFormatter,
+    Locator,
     MaxNLocator,
     ScalarFormatter,
 )
@@ -118,6 +120,7 @@ from .consts import (
     HISTOGRAM_FIT_LABELS,
     HISTOGRAM_FIT_MIN_PIXELS,
     HISTOGRAM_FITS,
+    HISTOGRAM_X_MAGNIFY_BOUNDS,
     LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
@@ -154,8 +157,12 @@ from .histogram_series import (
     histogram_counts,
     histogram_edges,
     in_range,
+    magnified,
+    magnified_ticks,
     pixels_in_bins,
+    pooled_median,
     smoothed_counts,
+    unmagnified,
 )
 from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
@@ -258,6 +265,10 @@ def _fit_method_label(key):
 #: pane allows.
 FIT_CURVE_SAMPLES = 200
 
+#: Ticks along the Histogram view's magnified x axis: matplotlib's own
+#: count for an axis of this pane's width.
+MAGNIFIED_TICK_COUNT = 9
+
 #: The corner equation box, in axes fractions: left margin, the
 #: first line's top, and the drop per further line.
 EQUATION_BOX_X = 0.02
@@ -327,6 +338,10 @@ _SERIES_FITTED = f"figure.fit_method != 'none' and {_NOT_HISTOGRAM_VIEW}"
 #: When the Histogram view draws a distribution fit to fade or shade.
 _HISTOGRAM_FITTED = f"figure.histogram_fit != 'none' and {_HISTOGRAM_VIEW}"
 
+#: When the Histogram view's x magnifier applies: a log axis stretches
+#: the intensities its own way, and the two do not compose.
+_HISTOGRAM_MAGNIFIABLE = f"{_HISTOGRAM_VIEW} and not figure.log_x"
+
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
 VIOLIN_BODY_ALPHA = 0.5
@@ -353,7 +368,7 @@ PARAM_SPIN_W = -102
 DROPDOWN_W = -176
 STAT_DROPDOWN_W = -440
 
-#: The Histogram view's opacity sliders: notches
+#: The Histogram view's 0-1 sliders (opacities, x magnify): notches
 #: fine enough to tune by, and their readout.
 SLIDER_STEP = 0.05
 SLIDER_FORMAT = "%.2f"
@@ -361,6 +376,14 @@ SLIDER_FORMAT = "%.2f"
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
+
+#: The Axes tab's x magnifier.
+HISTOGRAM_MAGNIFY_TOOLTIP = (
+    "Stretch the intensity axis around a pivot: 1 leaves it linear, "
+    "smaller values spread the bins near the pivot apart and squeeze the "
+    "tails, to show small shifts between ROIs. Tick labels keep reading "
+    "true intensities. Not on a log x axis, which stretches it its own way."
+)
 
 #: The Axes tab's temperature-calibration field.
 TEMPERATURE_EXPRESSION_TOOLTIP = (
@@ -594,6 +617,45 @@ def _axes_tab():
             ),
             # The sliders keep their width; without the spring their
             # labels soak up the row's slack and scatter them across it.
+            spring,
+        ),
+        HGroup(
+            Item(
+                "figure.histogram_x_magnify",
+                label="X magnify",
+                width=DROPDOWN_W,
+                editor=SteppedSliderEditor(
+                    low=HISTOGRAM_X_MAGNIFY_BOUNDS[0],
+                    high=HISTOGRAM_X_MAGNIFY_BOUNDS[1],
+                    step=SLIDER_STEP,
+                    format=SLIDER_FORMAT,
+                ),
+                enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                tooltip=HISTOGRAM_MAGNIFY_TOOLTIP,
+            ),
+            _toggle(
+                "figure.histogram_x_pivot_auto",
+                "Auto pivot",
+                enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                tooltip="Pivot the magnifier on the median of every shown "
+                "ROI's pixels (those the intensity range keeps), "
+                "following the displayed image; off, on the value "
+                "beside it. Not on a log x axis.",
+            ),
+            UItem(
+                "figure.histogram_x_pivot",
+                width=VALUE_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=AXIS_LIMIT_BOUNDS[0],
+                    high=AXIS_LIMIT_BOUNDS[1],
+                    decimals=1,
+                    step=1.0,
+                ),
+                enabled_when=f"{_HISTOGRAM_MAGNIFIABLE} "
+                "and not figure.histogram_x_pivot_auto",
+                tooltip="The intensity the magnifier stretches the axis "
+                "around. Not on a log x axis.",
+            ),
             spring,
         ),
         HGroup(
@@ -1281,6 +1343,9 @@ _PLOT_STATE = (
     "session:figure:histogram_bar_fill, "
     "session:figure:histogram_fit_alpha, "
     "session:figure:histogram_fit_fill_alpha, "
+    "session:figure:histogram_x_magnify, "
+    "session:figure:histogram_x_pivot_auto, "
+    "session:figure:histogram_x_pivot, "
     "session:figure:flip_actual_expected, "
     "session:figure:compare_second_derivative_max, "
     "session:figure:compare_second_derivative_min, "
@@ -1345,6 +1410,25 @@ _TABLE_OR_STYLE_STATE = "session:figure:view_mode"
 _VIEW_RESET_STATE = (
     "session:figure:x_auto, session:figure:y_auto, session:figure:view_mode"
 )
+
+
+class MagnifiedLocator(Locator):
+    """Ticks for the Histogram view's magnified x axis, evenly spread
+    along it (see magnified_ticks) as the view zooms and pans."""
+
+    def __init__(self, pivot, exponent):
+        self._pivot = pivot
+        self._exponent = exponent
+
+    def __call__(self):
+        return self.tick_values(*self.axis.get_view_interval())
+
+    def tick_values(self, vmin, vmax):
+        low, high = sorted((vmin, vmax))
+
+        return magnified_ticks(
+            low, high, self._pivot, self._exponent, MAGNIFIED_TICK_COUNT
+        )
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -1554,6 +1638,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         super().showEvent(event)
 
     def _on_plot_state_changed(self, event):
+        # The auto pivot is the canvas's own write-back of the pivot it
+        # just drew with; redrawing for it would only repeat the frame.
+        figure_settings = self._model.session.figure
+
+        if (
+            event.name == "histogram_x_pivot"
+            and event.object is figure_settings
+            and figure_settings.histogram_x_pivot_auto
+        ):
+            return
+
         self._schedule_redraw()
 
     def _on_displayed_image_changed(self, event):
@@ -2101,6 +2196,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
+        magnify = self._apply_histogram_magnifier(samples, figure_settings)
+
         # Over the shown pixels' common range, so a bin covers the same
         # intensities in every outline — less the clipped tails, and on
         # a log axis spaced evenly in log, so no bin is a sliver there.
@@ -2170,6 +2267,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     FIT_CURVE_SAMPLES,
                     figure_settings.log_x,
                     floor,
+                    magnify,
                 )
                 self._draw_histogram_fit(
                     x_values, y_values, floor, style, figure_settings
@@ -2184,6 +2282,40 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._apply_legend(figure_settings.show_legend)
 
         return []  # intensity on x: no time span to shade
+
+    def _apply_histogram_magnifier(self, samples, figure_settings):
+        """Stretch the x axis about the magnifier's pivot, as the
+        figure settings ask: (pivot, exponent) when it applies, None
+        when the axis stays as _refresh set it — magnify at 1, or a log
+        axis. Every artist then goes through the one scale, so bars,
+        fits, markers and limits stay aligned and the ticks read true
+        intensities.
+
+        An auto pivot is written back to the settings whether or not the
+        magnifier is on, so the spinner always shows where it would
+        pivot."""
+        if figure_settings.histogram_x_pivot_auto:
+            figure_settings.histogram_x_pivot = pooled_median(
+                [pixels for _name, pixels, _style in samples]
+            )
+
+        exponent = figure_settings.histogram_x_magnify
+
+        if figure_settings.log_x or exponent >= HISTOGRAM_X_MAGNIFY_BOUNDS[1]:
+            return None
+
+        pivot = figure_settings.histogram_x_pivot
+        self._axes.set_xscale(
+            "function",
+            functions=(
+                partial(magnified, pivot=pivot, exponent=exponent),
+                partial(unmagnified, pivot=pivot, exponent=exponent),
+            ),
+        )
+        # After the scale, which resets the locators.
+        self._axes.xaxis.set_major_locator(MagnifiedLocator(pivot, exponent))
+
+        return pivot, exponent
 
     def _draw_histogram_fit(self, x_values, y_values, floor, style, figure_settings):
         """One ROI's fitted curve, dotted in its colour, and the shading

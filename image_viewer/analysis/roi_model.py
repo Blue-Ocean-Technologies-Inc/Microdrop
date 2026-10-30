@@ -81,6 +81,8 @@ from .consts import (
     HISTOGRAM_FIT_FILL_ALPHA,
     HISTOGRAM_FITS,
     HISTOGRAM_MARKER_ALPHA,
+    HISTOGRAM_X_MAGNIFY,
+    HISTOGRAM_X_MAGNIFY_BOUNDS,
     LINE_STYLE_NAMES,
     MARKER_NAMES,
     MEASURE_INSIDE_BOUNDS_PERCENT,
@@ -329,6 +331,13 @@ class FigureSettings(HasTraits):
     #: nothing. A shading of 0 draws none.
     histogram_fit_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_FIT_ALPHA)
     histogram_fit_fill_alpha = Range(*HISTOGRAM_ALPHA_BOUNDS, HISTOGRAM_FIT_FILL_ALPHA)
+    #: The Histogram view's x magnifier on a linear axis: the exponent
+    #: of each intensity's distance from histogram_x_pivot (see
+    #: histogram_series.magnified). 1 is off. With the pivot on auto,
+    #: the plot canvas writes the pooled median it pivots on back here.
+    histogram_x_magnify = Range(*HISTOGRAM_X_MAGNIFY_BOUNDS, HISTOGRAM_X_MAGNIFY)
+    histogram_x_pivot_auto = Bool(True)
+    histogram_x_pivot = Float(0.0)
     #: Plot expected against actual instead of actual against expected,
     #: so the trend reads expected = slope × actual + intercept.
     flip_actual_expected = Bool(False)
