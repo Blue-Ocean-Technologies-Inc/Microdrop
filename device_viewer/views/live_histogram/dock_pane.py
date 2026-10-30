@@ -37,7 +37,9 @@ class LiveHistogramDockPane(TraitsDockPane):
 
     def _controller_default(self):
         return LiveHistogramController(
-            model=self.model, get_video_item=self._device_view_video_item
+            model=self.model,
+            get_video_item=self._device_view_video_item,
+            get_dialog_parent=lambda: self.control,
         )
 
     def _device_view_video_item(self):

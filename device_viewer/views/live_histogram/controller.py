@@ -13,8 +13,12 @@
 The device view's video item holds the frame on display, whatever its
 source: QtMultimedia cameras and provider feeds (e.g. the fluorescence
 plugin's ASI cameras) both push their preview frames into its sink. A timer
-reads that frame, downscales it, and bins it — only while the pane is shown
-and not paused, so a hidden pane costs nothing.
+reads that frame, crops it to the histogram's region, downscales it, and
+bins it — only while the pane is shown and not paused, so a hidden pane
+costs nothing.
+
+The controller also answers the pane's crop glyph: it captures one frame
+and opens the region picker on it.
 """
 
 # Standard library imports.
@@ -28,6 +32,9 @@ from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtGui import QImage
 from traits.api import Bool, Callable, Float, HasTraits, Instance, observe
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import warning
+
 # Local imports.
 from ...consts import (
     LIVE_HISTOGRAM_IDLE_AFTER_S,
@@ -35,6 +42,8 @@ from ...consts import (
     LIVE_HISTOGRAM_SAMPLE_WIDTH_PX,
 )
 from .model import LiveHistogramModel
+from .region import RegionPickerModel, region_in_pixels
+from .region_dialog import RegionPickerController, region_picker_view
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -73,6 +82,9 @@ class LiveHistogramController(HasTraits):
     #: viewer pane has built one. Resolved on every tick: the camera widget
     #: may come later, and the pane may go.
     get_video_item = Callable()
+
+    #: Returns the widget the region picker is parented to.
+    get_dialog_parent = Callable()
 
     #: True while the pane is shown; sampling runs only then.
     active = Bool(False)
@@ -120,10 +132,13 @@ class LiveHistogramController(HasTraits):
 
             return
 
+        frame_size = (image.width(), image.height())
+
+        if self.model.region_active:
+            image = image.copy(*region_in_pixels(self.model.region, frame_size))
+
         previous_counts = self.model.channel_counts
-        self.model.update_from_rgb(
-            sample_rgb_array(image), frame_size=(image.width(), image.height())
-        )
+        self.model.update_from_rgb(sample_rgb_array(image), frame_size=frame_size)
 
         # Live sensors are never noise-free, so an unchanged histogram means
         # an unchanged frame: a stopped camera's last one.
@@ -157,3 +172,43 @@ class LiveHistogramController(HasTraits):
             return None
 
         return None if image.isNull() else image
+
+    def capture_frame(self):
+        """ONE frame of the feed as a QImage copy, or None without one. The
+        region picker calls this at open and on every recapture click."""
+        image = self._current_image()
+
+        return None if image is None else image.copy()
+
+    @observe("model:pick_region")
+    def open_region_picker(self, event=None):
+        """Capture a frame and let the user mark the region on it; OK
+        applies the region."""
+        image = self.capture_frame()
+        parent = self.get_dialog_parent() if self.get_dialog_parent else None
+
+        if image is None:
+            warning(
+                parent,
+                "No camera frame to capture yet — start the camera, then pick "
+                "the region.",
+                title="Histogram Region",
+                cancel=False,
+            )
+
+            return
+
+        picker = RegionPickerModel(
+            region=self.model.region, frame_size=(image.width(), image.height())
+        )
+
+        if self.edit_region(picker, image, parent):
+            self.model.region = picker.region
+
+    def edit_region(self, picker, image, parent):
+        """Show the region picker modally on ``image``; True on OK."""
+        ui = RegionPickerController(
+            model=picker, image=image, capture_frame=self.capture_frame
+        ).edit_traits(view=region_picker_view, parent=parent, kind="livemodal")
+
+        return ui.result

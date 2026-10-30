@@ -8,15 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Live Histogram pane: the plot on top, its display controls, and the
-exposure readouts below. Instantiable standalone against the model:
+"""The Live Histogram pane: the plot on top, its display controls (with the
+region glyphs), and the exposure readouts below. Instantiable standalone
+against the model:
 ``LiveHistogramModel().edit_traits(view=LiveHistogramView)``."""
 
 # Enthought library imports.
 from traitsui.api import HGroup, Item, Label, Spring, UItem, VGroup, View
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_CROP, ICON_RESTORE
+
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
+    IconButtonEditor,
     InPlaceToggleEditor,
     SlidingToggleEditor,
     SteppedSliderEditor,
@@ -62,6 +67,23 @@ switches = HGroup(
         Label("Curve"),
     ),
     Spring(),
+    # The crop glyph looks pressed while a region applies, so a partial
+    # histogram never passes for the whole frame.
+    UItem(
+        "pick_region",
+        editor=IconButtonEditor(
+            glyph=ICON_CROP,
+            checked_name="region_active",
+            tooltip="Select the region of the frame the histogram covers",
+        ),
+    ),
+    UItem(
+        "clear_region",
+        editor=IconButtonEditor(
+            glyph=ICON_RESTORE, tooltip="Cover the whole frame again"
+        ),
+        enabled_when="region_active",
+    ),
 )
 
 feed_controls = HGroup(
@@ -103,6 +125,12 @@ readouts = VGroup(
         style="readonly",
         label="1–99 %",
         tooltip="Levels below which 1 % and 99 % of the pixels fall",
+    ),
+    Item(
+        "region_text",
+        style="readonly",
+        label="Region",
+        tooltip="The part of the frame the histogram covers, in camera pixels",
     ),
 )
 

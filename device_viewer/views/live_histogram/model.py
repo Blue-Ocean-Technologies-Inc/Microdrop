@@ -19,6 +19,7 @@ import numpy as np
 from traits.api import (
     Array,
     Bool,
+    Button,
     Enum,
     Float,
     HasTraits,
@@ -35,11 +36,13 @@ from ...consts import (
     LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS,
     LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE,
     LIVE_HISTOGRAM_DEFAULT_RATE_HZ,
+    LIVE_HISTOGRAM_FULL_FRAME_REGION,
     LIVE_HISTOGRAM_LUMA_WEIGHTS,
     LIVE_HISTOGRAM_PLOT_STYLES,
     LIVE_HISTOGRAM_RANGE_PERCENTILES,
     LIVE_HISTOGRAM_RATE_BOUNDS_HZ,
 )
+from .region import format_region, is_full_frame
 
 #: Shown by the readouts while there is no frame to describe.
 NO_READOUT = "–"
@@ -127,6 +130,19 @@ class LiveHistogramModel(HasTraits):
     #: (width, height) of the sampled camera frame, in camera pixels.
     frame_size = Tuple(Int(), Int())
 
+    #: The part of the frame binned, in frame fractions (left, top, right,
+    #: bottom); the whole frame by default.
+    region = Tuple(Float(0.0), Float(0.0), Float(1.0), Float(1.0))
+
+    #: True while the region leaves part of the frame out.
+    region_active = Property(Bool, observe="region")
+
+    #: Open the region picker (the controller handles it).
+    pick_region = Button()
+
+    #: Bin the whole frame again.
+    clear_region = Button()
+
     #: True once a frame was binned; False while there is no camera feed.
     has_frame = Bool(False)
 
@@ -141,6 +157,7 @@ class LiveHistogramModel(HasTraits):
     )
     mean_text = Property(Str, observe="has_frame, mean")
     range_text = Property(Str, observe="has_frame, percentile_1, percentile_99")
+    region_text = Property(Str, observe="region, frame_size")
 
     def update_from_rgb(self, rgb, frame_size=None):
         """Bin an (H, W, 3) uint8 frame and refresh every readout.
@@ -148,10 +165,10 @@ class LiveHistogramModel(HasTraits):
         Parameters
         ----------
         rgb : numpy.ndarray
-            The (downscaled) frame's pixels.
+            The (downscaled) pixels of the frame's region.
         frame_size : tuple of int, optional
-            (width, height) of the camera frame ``rgb`` was sampled from;
-            defaults to ``rgb``'s own.
+            (width, height) of the whole camera frame ``rgb`` was sampled
+            from; defaults to ``rgb``'s own.
         """
         height, width = rgb.shape[:2]
         pixel_count = height * width
@@ -219,9 +236,18 @@ class LiveHistogramModel(HasTraits):
 
         return self.counts[np.newaxis, :]
 
+    def _clear_region_fired(self):
+        self.region = LIVE_HISTOGRAM_FULL_FRAME_REGION
+
     # ------------------------------------------------------------------ #
     # Property getters                                                     #
     # ------------------------------------------------------------------ #
+    def _get_region_active(self):
+        return not is_full_frame(self.region)
+
+    def _get_region_text(self):
+        return format_region(self.region, self.frame_size)
+
     def _get_clipped_low_pct(self):
         return self._end_bin_share_pct(0)
 
