@@ -620,6 +620,8 @@ class _SteppedSliderEditor(QtEditor):
         )
 
         self._slider.valueChanged.connect(self.update_object)
+        # A label-less UItem's tooltip= reaches only the editor; apply it.
+        self.set_tooltip()
 
         if self.factory.span_name:
             self.sync_value(self.factory.span_name, "span", "from")
@@ -1566,6 +1568,8 @@ class _TwoValueToggleEditor(QtEditor):
         self.control = self._make_control()
         self.control.setChecked(self.value == self.factory.on_value)
         self.control.stateChanged.connect(self._on_state)
+        # A label-less UItem's tooltip= reaches only the editor; apply it.
+        self.set_tooltip()
 
     def _on_state(self, state):
         self.value = self.factory.on_value if state else self.factory.off_value
