@@ -78,6 +78,7 @@ _FIGURE_FIELDS = (
     "second_derivative_hline",
     "second_derivative_coords",
     "view_mode",
+    "histogram_channel_mode",
     "histogram_bins",
     "histogram_clip_percent",
     "histogram_intensity_filter",

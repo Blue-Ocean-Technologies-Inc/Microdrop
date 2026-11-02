@@ -8,12 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Histogram view's maths over the pixels each ROI measures: the
-shared bins (clipped, linear or logarithmic), the per-ROI counts (raw
-or as a fraction of the ROI), their Savitzky-Golay smoothing over the
-bins, the distribution fitted to each ROI's pixels with its curve
-scaled onto the histogram, and the x magnifier's axis mapping. Qt-free;
-the plot pane only draws."""
+"""The Histogram view's maths over the pixels each ROI measures: a
+colour ROI's split into a series per channel, the shared bins
+(clipped, linear or logarithmic), the per-ROI counts (raw or as a
+fraction of the ROI), their Savitzky-Golay smoothing over the bins,
+the distribution fitted to each ROI's pixels with its curve scaled
+onto the histogram, and the x magnifier's axis mapping. Qt-free; the
+plot pane only draws."""
 
 # Standard library imports.
 import math
@@ -23,8 +24,30 @@ import numpy as np
 from scipy import stats
 
 # Local imports.
-from .consts import HISTOGRAM_FIT_MIN_PIXELS
+from .consts import (
+    HISTOGRAM_CHANNEL_COLORS,
+    HISTOGRAM_CHANNEL_NAMES,
+    HISTOGRAM_FIT_MIN_PIXELS,
+)
 from .plot_series import smoothed_values
+
+
+def channel_samples(name, pixels, style):
+    """One ROI's (N, 3) RGB ``pixels`` as a Histogram view sample per
+    channel — (f"{name} R", its red pixels, ``style`` in red), then
+    green and blue. Each style is a copy of the ROI's with the channel's
+    colour, so its opacity and line style still apply while the ROI's
+    own colour is left as it is."""
+    return [
+        (
+            f"{name} {channel}",
+            pixels[:, index],
+            style.clone_traits().trait_set(color=color),
+        )
+        for index, (channel, color) in enumerate(
+            zip(HISTOGRAM_CHANNEL_NAMES, HISTOGRAM_CHANNEL_COLORS)
+        )
+    ]
 
 
 def histogram_edges(samples, bins, clip_percent=0.0, log=False):

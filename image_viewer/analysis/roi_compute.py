@@ -312,16 +312,29 @@ def stats_are_current(stats):
     return stats is not None and all(key in stats for key in ROI_SHAPE_KEYS)
 
 
-def _measured_frame(image_path, ball_radius_px=0, perspective=()):
+def _measured_frame(image_path, ball_radius_px=0, perspective=(), channel_mode="luma"):
     """The frame every ROI on ``image_path`` is measured on: read at its
     own depth, warped by ``perspective``, then flattened by the rolling
     ball when ``ball_radius_px`` is above 0 — warped first, because the
     ROIs are drawn on the warped frame. Raises ValueError for a file
-    cv2 cannot read."""
-    array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+    cv2 cannot read.
+
+    ``channel_mode`` "luma" reads one grey channel; "rgb" keeps a colour
+    frame's channels, as an (height, width, 3) array in RGB order, and
+    reads a mono frame as the same 2-D array "luma" does. The warp and
+    the rolling ball act on each channel alike."""
+    flags = cv2.IMREAD_ANYDEPTH | (
+        cv2.IMREAD_ANYCOLOR if channel_mode == "rgb" else cv2.IMREAD_GRAYSCALE
+    )
+    array = cv2.imread(str(image_path), flags)
 
     if array is None:
         raise ValueError("unreadable image")
+
+    # ANYCOLOR leaves a mono frame 2-D and drops any alpha channel, but
+    # hands colour over in cv2's BGR order.
+    if array.ndim == 3:
+        array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
 
     array = warp_frame(array, perspective)
 
@@ -430,6 +443,7 @@ def measured_pixels(
     perspective=(),
     negatives=(),
     inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
+    channel_mode="luma",
 ):
     """The pixel values every ROI's intensity stats are taken over on
     one image — what masked_stats reduces to the mean, median and count
@@ -441,15 +455,28 @@ def measured_pixels(
     ``gap_px``/``thickness_px`` are accepted for that alone: the ring
     is background, not part of the measured pixels.
 
-    Returns {"path", "mtime", "pixels": {roi_id: 1-D array in the
-    frame's dtype}, "error"} — an empty array for an ROI covered
-    entirely or outside the frame; a load failure fills "error" and
-    leaves "pixels" empty, as compute_image_stats does."""
-    result = {"path": str(image_path), "mtime": 0.0, "pixels": {}, "error": None}
+    ``channel_mode`` "rgb" reads a colour frame's red, green and blue
+    channels through the same mask instead of its luma; a mono frame
+    has none to split and is read as in "luma".
+
+    Returns {"path", "mtime", "pixels": {roi_id: array in the frame's
+    dtype}, "colour", "error"} — each array 1-D, or (N, 3) in RGB order
+    when "colour" is True, which it is only for a colour frame read in
+    "rgb"; an empty array for an ROI covered entirely or outside the
+    frame. A load failure fills "error" and leaves "pixels" empty, as
+    compute_image_stats does."""
+    result = {
+        "path": str(image_path),
+        "mtime": 0.0,
+        "pixels": {},
+        "colour": False,
+        "error": None,
+    }
 
     try:
         result["mtime"] = os.path.getmtime(image_path)
-        array = _measured_frame(image_path, ball_radius_px, perspective)
+        array = _measured_frame(image_path, ball_radius_px, perspective, channel_mode)
+        result["colour"] = array.ndim == 3
         excluded = negative_union(array.shape[:2], negatives)
 
         for roi_id, (kind, geometry) in effective_rois.items():

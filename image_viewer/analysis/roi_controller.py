@@ -1129,6 +1129,7 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:second_derivative_hline, "
         "analysis_model:session:figure:second_derivative_coords, "
         "analysis_model:session:figure:view_mode, "
+        "analysis_model:session:figure:histogram_channel_mode, "
         "analysis_model:session:figure:histogram_bins, "
         "analysis_model:session:figure:histogram_clip_percent, "
         "analysis_model:session:figure:histogram_intensity_filter, "

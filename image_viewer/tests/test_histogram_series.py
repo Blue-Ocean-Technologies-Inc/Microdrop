@@ -8,7 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Histogram view's maths: shared bins (clipped, linear or log),
+"""The Histogram view's maths: a colour ROI split into a series per
+channel, shared bins (clipped, linear or log),
 counts and their normalisation, Savitzky-Golay over the bins, the
 distribution fits recovering known parameters, and the x magnifier's
 axis mapping."""
@@ -21,10 +22,14 @@ import numpy as np
 import pytest
 
 # Microdrop package imports.
-from image_viewer.analysis.consts import HISTOGRAM_FIT_MIN_PIXELS
+from image_viewer.analysis.consts import (
+    HISTOGRAM_CHANNEL_COLORS,
+    HISTOGRAM_FIT_MIN_PIXELS,
+)
 from image_viewer.analysis.histogram_series import (
     bin_centres,
     bins_within,
+    channel_samples,
     fit_distribution,
     fitted_counts,
     histogram_counts,
@@ -37,6 +42,7 @@ from image_viewer.analysis.histogram_series import (
     smoothed_counts,
     unmagnified,
 )
+from image_viewer.analysis.roi_model import RoiStyle
 
 #: A seeded generator, so every run draws the same samples.
 RNG_SEED = 7
@@ -45,6 +51,32 @@ RNG_SEED = 7
 @pytest.fixture
 def rng():
     return np.random.default_rng(RNG_SEED)
+
+
+def test_a_colour_roi_splits_into_a_series_per_channel_in_its_own_style():
+    style = RoiStyle(color="#123456", line_style="dashed", alpha=40)
+    pixels = np.array([[10, 20, 30], [11, 21, 31]], dtype=np.uint8)
+
+    samples = channel_samples("Drop", pixels, style)
+
+    assert [name for name, _pixels, _style in samples] == [
+        "Drop R",
+        "Drop G",
+        "Drop B",
+    ]
+    assert [list(channel) for _name, channel, _style in samples] == [
+        [10, 11],
+        [20, 21],
+        [30, 31],
+    ]
+    assert [channel_style.color for _name, _pixels, channel_style in samples] == list(
+        HISTOGRAM_CHANNEL_COLORS
+    )
+    assert all(
+        (channel_style.line_style, channel_style.plot_alpha) == ("dashed", 0.4)
+        for _name, _pixels, channel_style in samples
+    )
+    assert style.color == "#123456"
 
 
 def test_edges_span_the_pooled_range(rng):

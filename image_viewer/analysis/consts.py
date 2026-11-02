@@ -87,6 +87,13 @@ BAR_GAP = 0.2
 #: scales them itself.
 LEGEND_FONT_SCALE = 0.833
 ANNOTATION_FONT_SCALE = 0.694
+#: What the Histogram view bins of each ROI: its luma, the one value
+#: the stats table measures, or a colour frame's red, green and blue
+#: channels as a series each, named and coloured per channel. The
+#: colours mirror the device viewer's live histogram.
+HISTOGRAM_CHANNEL_MODES = ("luma", "rgb")
+HISTOGRAM_CHANNEL_NAMES = ("R", "G", "B")
+HISTOGRAM_CHANNEL_COLORS = ("#ff3b3b", "#3bd83b", "#3b7bff")
 #: Bins of the Histogram view, spread evenly over the shared range of
 #: every ROI it shows, so the ROIs compare bin for bin. Below 8 the
 #: outline is a few blocks; past 1024 most bins of a typical ROI are
