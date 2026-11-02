@@ -75,6 +75,7 @@ from .consts import (
     HISTOGRAM_BAR_ALPHA,
     HISTOGRAM_BINS,
     HISTOGRAM_BINS_BOUNDS,
+    HISTOGRAM_CHANNEL_MODES,
     HISTOGRAM_CLIP_BOUNDS_PERCENT,
     HISTOGRAM_CLIP_PERCENT,
     HISTOGRAM_FIT_ALPHA,
@@ -291,6 +292,10 @@ class FigureSettings(HasTraits):
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
 
+    #: What the Histogram view bins of each ROI: "luma", the pixels the
+    #: stats table measures, or "rgb", a colour frame's three channels
+    #: as a series each — a mono frame has none to split and shows luma.
+    histogram_channel_mode = Enum(*HISTOGRAM_CHANNEL_MODES)
     #: The Histogram view's bins over the shared range of its ROIs.
     histogram_bins = Range(*HISTOGRAM_BINS_BOUNDS, HISTOGRAM_BINS, mode="spinner")
     #: Percent of the pooled pixels trimmed off each tail of the

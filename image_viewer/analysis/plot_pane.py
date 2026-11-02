@@ -88,6 +88,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconToggleEditor,
     InPlaceToggleEditor,
     ObjectColumn,
+    SlidingToggleEditor,
     SteppedSliderEditor,
     install_table_clipboard,
     toggle_editor_default_style_sheet_factory,
@@ -152,6 +153,7 @@ from .heater_log import heater_coverage_note
 from .histogram_series import (
     bin_centres,
     bins_within,
+    channel_samples,
     fit_distribution,
     fitted_counts,
     histogram_counts,
@@ -367,6 +369,9 @@ VALUE_SPIN_W = -138
 PARAM_SPIN_W = -102
 DROPDOWN_W = -176
 STAT_DROPDOWN_W = -440
+#: A sliding switch's own size hint, as the live histogram's; stretched,
+#: it pushes the state named on its right away from it.
+SWITCH_W = -58
 
 #: The Histogram view's 0-1 sliders (opacities, x magnify): notches
 #: fine enough to tune by, and their readout.
@@ -562,6 +567,24 @@ def _axes_tab():
             ),
         ),
         VGroup(
+            # The off state named on the switch's left, the on state on
+            # its right, as in the live histogram.
+            HGroup(
+                Label("Channels"),
+                Label("Luma"),
+                UItem(
+                    "figure.histogram_channel_mode",
+                    editor=SlidingToggleEditor(on_value="rgb", off_value="luma"),
+                    width=SWITCH_W,
+                    tooltip="Histogram view: bin each ROI's luma — the "
+                    "pixels the stats table measures — or split a colour "
+                    "capture into its red, green and blue channels, a "
+                    "series each. A mono frame has no channels to split "
+                    "and shows its luma.",
+                ),
+                Label("RGB"),
+                spring,
+            ),
             HGroup(
                 _toggle(
                     "figure.histogram_show_median",
@@ -1324,6 +1347,7 @@ _PLOT_STATE = (
     "session:figure:second_derivative_hline, "
     "session:figure:second_derivative_coords, "
     "session:figure:view_mode, "
+    "session:figure:histogram_channel_mode, "
     "session:figure:histogram_bins, "
     "session:figure:histogram_clip_percent, "
     "session:figure:histogram_intensity_filter, "
@@ -2126,7 +2150,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         smooths over the bins, and the Fit tab's distribution is drawn
         dotted over each outline, its parameters in the legend. The
         Cleanup tab's intensity range drops pixels before any of it;
-        its pixel-count range picks the bins the fit is taken over."""
+        its pixel-count range picks the bins the fit is taken over.
+
+        In the "rgb" channel mode a colour frame's ROI is drawn as three
+        series, its red, green and blue pixels, each in its channel's
+        colour; the bins, clip and auto pivot pool every series as they
+        pool every ROI. A mono frame has no channels and draws luma."""
         session = self._model.session
         image_path = self._model.current_image_path
         paths = analysed_paths(session, self._model.filtered_paths)
@@ -2152,7 +2181,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        measured = self._measured_pixels_of(image_path)
+        channel_mode = figure_settings.histogram_channel_mode
+        measured = self._measured_pixels_of(image_path, channel_mode)
 
         if measured["error"]:
             self._draw_hint(
@@ -2170,7 +2200,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             roi = session.roi_by_id(roi_id)
             pixels = measured["pixels"].get(roi_id)
 
-            if roi is not None and pixels is not None and pixels.size:
+            if roi is None or pixels is None or not pixels.size:
+                continue
+
+            if measured["colour"]:
+                samples.extend(channel_samples(name, pixels, roi.style))
+            else:
                 samples.append((name, pixels, roi.style))
 
         if not samples:
@@ -2275,7 +2310,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # Seeds the pixel-count filter's bounds the first time it is
         # switched on.
         self._model.histogram_tallest_bin = tallest_bin
-        self._note_histogram(samples, unfitted, figure_settings)
+        self._note_histogram(
+            samples,
+            unfitted,
+            figure_settings,
+            measured["colour"],
+            channel_mode == "rgb" and not measured["colour"],
+        )
         self._apply_legend(figure_settings.show_legend)
 
         return []  # intensity on x: no time span to shade
@@ -2514,11 +2555,15 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
 
-    def _note_histogram(self, samples, unfitted, figure_settings):
+    def _note_histogram(
+        self, samples, unfitted, figure_settings, per_channel, grey_frame
+    ):
         """Footnotes for what the histogram leaves out, stacked in the
-        series notes' slots: the pixels a log axis hides, the ROIs the
-        distribution could not be fitted to, and a Butterworth smoothing
-        that has no meaning over intensity bins."""
+        series notes' slots: the pixels a log axis hides, the ROIs — or,
+        ``per_channel``, the channel series — the distribution could
+        not be fitted to, a Butterworth smoothing that has no meaning
+        over intensity bins, and luma drawn in place of the channels
+        asked for on a ``grey_frame``."""
         notes = []
 
         if figure_settings.log_x:
@@ -2537,7 +2582,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if kind == "lognormal":
                 reasons = f"{reasons}, or pixels at or below zero"
 
-            noun = "ROI" if unfitted == 1 else "ROIs"
+            if per_channel:
+                noun = "series"
+            else:
+                noun = "ROI" if unfitted == 1 else "ROIs"
+
             notes.append(
                 f"No {HISTOGRAM_FIT_LABELS[kind].lower()} fit for {unfitted} "
                 f"{noun} ({reasons})"
@@ -2546,8 +2595,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.smooth_method == "butterworth":
             notes.append("Butterworth smoothing does not apply to a histogram")
 
+        if grey_frame:
+            notes.append("Grey frame: showing luma")
+
         for note, y_fraction in zip(
-            notes, (NOTE_HIDDEN_Y, NOTE_OUTLIERS_Y, NOTE_NO_TEMP_Y)
+            notes, (NOTE_HIDDEN_Y, NOTE_OUTLIERS_Y, NOTE_NO_TEMP_Y, NOTE_AREA_FIT_Y)
         ):
             self._fit_artists.append(
                 self._axes.text(
@@ -2562,18 +2614,20 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 )
             )
 
-    def _measured_pixels_of(self, image_path):
+    def _measured_pixels_of(self, image_path, channel_mode):
         """measured_pixels() of every positive ROI measured on
-        ``image_path``, called with the arguments the instant compute
-        dispatches for it (RoiAnalysisController._instant_stats: each
-        ROI's cache_key geometry, the image's correction_for), so the
-        histogram and the table's mean read one pixel set.
+        ``image_path`` in ``channel_mode``, called with the arguments
+        the instant compute dispatches for it
+        (RoiAnalysisController._instant_stats: each ROI's cache_key
+        geometry, the image's correction_for), so the luma histogram
+        and the table's mean read one pixel set.
 
         Every positive ROI, not just the visible ones, cached under
         their cache_keys — the image's path and mtime, each geometry,
-        the correction — so an eye, the legend or a zoom redraws
-        without reading the image again, while moving an ROI, editing
-        a negative mask or rewriting the file reads it afresh.
+        the correction — and the channel mode, so an eye, the legend or
+        a zoom redraws without reading the image again, while moving an
+        ROI, editing a negative mask, rewriting the file or switching
+        the channels reads it afresh.
 
         Synchronous: ~0.2 s for a 1920x1080 frame, most of it the
         decode. Should that grow, this call is the one to hand to a
@@ -2587,7 +2641,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         ]
         keys = tuple(session.cache_key(image_path, roi, stat_cache) for roi in rois)
         # The path too: with no ROI measured there is no key to carry it.
-        signature = (image_path, keys)
+        signature = (image_path, keys, channel_mode)
 
         if self._measured is None or self._measured[0] != signature:
             effective_rois = {
@@ -2599,6 +2653,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     image_path,
                     effective_rois,
                     *session.correction_for(image_path, stat_cache),
+                    channel_mode=channel_mode,
                 ),
             )
 
