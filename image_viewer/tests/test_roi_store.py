@@ -219,6 +219,7 @@ def test_histogram_style_settings_round_trip(tmp_path):
         histogram_x_magnify=0.4,
         histogram_x_pivot_auto=False,
         histogram_x_pivot=812.5,
+        histogram_channel_mode="rgb",
     )
     save_session(tmp_path, session)
 
@@ -231,6 +232,7 @@ def test_histogram_style_settings_round_trip(tmp_path):
     )
     assert figure.histogram_x_magnify == 0.4
     assert (figure.histogram_x_pivot_auto, figure.histogram_x_pivot) == (False, 812.5)
+    assert figure.histogram_channel_mode == "rgb"
 
 
 def test_a_config_from_before_the_histogram_style_loads_the_defaults(tmp_path):
@@ -243,6 +245,7 @@ def test_a_config_from_before_the_histogram_style_loads_the_defaults(tmp_path):
     assert (figure.histogram_fit_alpha, figure.histogram_fit_fill_alpha) == (1.0, 0.0)
     assert figure.histogram_x_magnify == 1.0
     assert (figure.histogram_x_pivot_auto, figure.histogram_x_pivot) == (True, 0.0)
+    assert figure.histogram_channel_mode == "luma"
 
 
 def test_custom_points_round_trip(tmp_path):
