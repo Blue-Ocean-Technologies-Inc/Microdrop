@@ -9,7 +9,18 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import Bool, Button, Enum, Int, Range, Str
+from traits.api import (
+    Bool,
+    Button,
+    Enum,
+    Float,
+    Instance,
+    Int,
+    List,
+    Range,
+    Str,
+    observe,
+)
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import MOTOR_IDS
@@ -17,11 +28,14 @@ from template_status_and_controls.base_model import BaseStatusModel
 
 # Local imports.
 from ..consts import (
+    DEFAULT_MOVE_PRESETS,
     MOTOR_MACRO_LABELS,
     MOTOR_SPEED_UM_PER_S_BOUNDS,
     MOVE_DISTANCE_MM_BOUNDS,
     PORTABLE_DROPBOT_IMAGE,
 )
+from ..preferences import PortableDropbotSettingsPreferences
+from .presets import parse_presets
 
 
 class PortableDropbotMotorsModel(BaseStatusModel):
@@ -54,6 +68,9 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     # units when published; spin boxes in the view for touch use) -------
     move_by_mm = Range(*MOVE_DISTANCE_MM_BOUNDS, 1.0)
     move_by_button = Button("Go")
+    #: Move By quick picks (mm, signed), from the Portable DropBot
+    #: Settings preferences; a tap moves by that distance at once.
+    move_presets = List(Float)
     move_to_mm = Range(*MOVE_DISTANCE_MM_BOUNDS, 0.0)
     move_to_button = Button("Go")
     #: Runtime-only per-motor run speed; reverts to the flashed
@@ -64,3 +81,24 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     #: Local Prev/Next cycle position for the filter wheel, exactly
     #: like the original pane; Home resets it.
     filter_cycle_index = Int(0)
+
+    #: Settings move_presets is parsed from; the dock pane binds it to
+    #: the application's node, so applied edits reach a running pane.
+    preferences = Instance(PortableDropbotSettingsPreferences)
+
+    def _move_presets_default(self):
+        return parse_presets(
+            DEFAULT_MOVE_PRESETS, *MOVE_DISTANCE_MM_BOUNDS, decimals=3, nonzero=True
+        )
+
+    @observe("preferences, preferences:move_presets")
+    def _parse_move_presets(self, event):
+        if self.preferences is None:
+            return
+
+        self.move_presets = parse_presets(
+            self.preferences.move_presets,
+            *MOVE_DISTANCE_MM_BOUNDS,
+            decimals=3,
+            nonzero=True,
+        )

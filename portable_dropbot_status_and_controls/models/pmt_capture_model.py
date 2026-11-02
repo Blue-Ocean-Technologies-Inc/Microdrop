@@ -32,10 +32,13 @@ from traits.api import (
     Event,
     Float,
     HasTraits,
+    Instance,
     Int,
+    List,
     Property,
     Range,
     Str,
+    observe,
 )
 
 # Microdrop package imports.
@@ -60,12 +63,15 @@ from microdrop_utils.ureg_helpers import ureg
 
 # Local imports.
 from ..consts import (
+    DEFAULT_GAIN_PRESETS,
     DEFAULT_PMT_EXPOSURE_RANGE,
     PMT_EXPOSURE_RANGES,
     PMT_LIVE_WINDOW_SAMPLES,
     PORTABLE_DROPBOT_IMAGE,
 )
+from ..preferences import PortableDropbotSettingsPreferences
 from .capture_pane_model import CapturePaneModel, CaptureRow
+from .presets import parse_presets
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -167,6 +173,11 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
     # ---- Shared live-stream / acquire settings --------------------------
     #: PMT gain (MCP41010 wiper), used by both the live stream and acquire.
     gain = Range(*PMT_GAIN_BOUNDS, DEFAULT_PMT_GAIN)
+    #: Gain quick picks, from the Portable DropBot Settings preferences.
+    gain_presets = List(Int)
+    #: Settings gain_presets is parsed from; the dock pane binds it to the
+    #: application's node, so applied edits reach a running pane.
+    preferences = Instance(PortableDropbotSettingsPreferences)
     stream_avg = Enum(
         PMT_STREAM_AVG,
         PMT_STREAM_AVG_CHOICES,
@@ -227,6 +238,18 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
 
     def _vref_display_default(self):
         return f"{PMT_VREF_V:.2f} V (nominal, untrimmed)"
+
+    def _gain_presets_default(self):
+        return parse_presets(DEFAULT_GAIN_PRESETS, *PMT_GAIN_BOUNDS)
+
+    @observe("preferences, preferences:gain_presets")
+    def _parse_gain_presets(self, event):
+        if self.preferences is None:
+            return
+
+        self.gain_presets = parse_presets(
+            self.preferences.gain_presets, *PMT_GAIN_BOUNDS
+        )
 
     def _get_busy(self):
         return self.capturing or self.streaming or self.acquiring

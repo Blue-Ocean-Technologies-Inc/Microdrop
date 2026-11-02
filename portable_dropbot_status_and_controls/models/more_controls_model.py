@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import Bool, Button, Range, Str
+from traits.api import Bool, Button, Float, Instance, Int, List, Range, Str, observe
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
@@ -23,7 +23,13 @@ from portable_dropbot_controller.consts import (
 from template_status_and_controls.base_model import BaseStatusModel
 
 # Local imports.
-from ..consts import PORTABLE_DROPBOT_IMAGE
+from ..consts import (
+    DEFAULT_GAIN_PRESETS,
+    DEFAULT_TEMPERATURE_PRESETS,
+    PORTABLE_DROPBOT_IMAGE,
+)
+from ..preferences import PortableDropbotSettingsPreferences
+from .presets import parse_presets
 
 
 class PortableDropbotMoreControlsModel(BaseStatusModel):
@@ -45,6 +51,9 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
         *TEMP_TARGET_C_BOUNDS, 37.0, desc="Heater target temperature (°C)"
     )
     set_target_button = Button("Set Target")
+    #: Target quick picks (°C), from the Portable DropBot Settings
+    #: preferences; a tap sets that target at once.
+    temperature_presets = List(Float)
     #: Requested heater-control state for the selected channel; the
     #: board does not report a per-channel on/off, so the toggle shows
     #: what was last asked for.
@@ -72,3 +81,36 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
         desc="PMT gain (MCP41010 wiper position)",
     )
     set_gain_button = Button("Set Gain")
+    #: Gain quick picks, from the Portable DropBot Settings preferences;
+    #: a tap sets that gain at once.
+    gain_presets = List(Int)
+
+    #: Settings the preset lists are parsed from; the dock pane binds it
+    #: to the application's node, so applied edits reach a running pane.
+    preferences = Instance(PortableDropbotSettingsPreferences)
+
+    def _temperature_presets_default(self):
+        return parse_presets(
+            DEFAULT_TEMPERATURE_PRESETS, *TEMP_TARGET_C_BOUNDS, decimals=1
+        )
+
+    def _gain_presets_default(self):
+        return parse_presets(DEFAULT_GAIN_PRESETS, *PMT_GAIN_BOUNDS)
+
+    @observe("preferences, preferences:temperature_presets")
+    def _parse_temperature_presets(self, event):
+        if self.preferences is None:
+            return
+
+        self.temperature_presets = parse_presets(
+            self.preferences.temperature_presets, *TEMP_TARGET_C_BOUNDS, decimals=1
+        )
+
+    @observe("preferences, preferences:gain_presets")
+    def _parse_gain_presets(self, event):
+        if self.preferences is None:
+            return
+
+        self.gain_presets = parse_presets(
+            self.preferences.gain_presets, *PMT_GAIN_BOUNDS
+        )

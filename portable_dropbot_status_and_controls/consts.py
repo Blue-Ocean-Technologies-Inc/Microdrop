@@ -193,6 +193,14 @@ MM_TO_FIRMWARE_UNITS = 1000
 #: range (negative = the other direction on relative moves).
 MOVE_DISTANCE_MM_BOUNDS = (-1000.0, 1000.0)
 
+#: Preset quick-pick buttons (Portable DropBot Settings preferences):
+#: the default comma-separated values, and the most buttons one row
+#: shows — extra values are ignored.
+DEFAULT_GAIN_PRESETS = "64, 128, 192, 255"
+DEFAULT_TEMPERATURE_PRESETS = "25, 37, 55, 95"
+DEFAULT_MOVE_PRESETS = "-10, -1, -0.1, 0.1, 1, 10"
+PRESET_SLOTS_MAX = 8
+
 #: Runtime run-speed bounds (µm/s): the driver measured ~40 mm/s as
 #: the clean ceiling (42 mm/s stalls); the vendor UI defaults to 1000.
 MOTOR_SPEED_UM_PER_S_BOUNDS = (0, 40_000)
