@@ -9,28 +9,37 @@
 # Thanks for using Microdrop open source!
 
 """The Portable DropBot Settings preferences tab: which board the status
-pane's fan toggle drives, which pogo contacts count as a chip, and the
+pane's fan toggle drives, which pogo contacts count as a chip, the magnet
+engage position with its board Read / Write / Preset to flash, and the
 preset quick-pick values for PMT gain, heater target and motor moves."""
+
+# Third-party imports.
+from pydantic import ValidationError
 
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Enum, Str, observe
-from traitsui.api import Item, VGroup, View
+from traits.api import Button, Enum, Float, Instance, Str, observe
+from traitsui.api import HGroup, Item, VGroup, View
 
 # Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULES,
     DEFAULT_CHIP_DETECT_RULE,
     DEFAULT_FAN_BOARD,
     FAN_BOARDS,
+    MAGNET_ENGAGE_PRESET,
+    MAGNET_ENGAGE_READ,
     PMT_GAIN_BOUNDS,
     PORTABLE_DROPBOT_PREFERENCES_PATH,
     TEMP_TARGET_C_BOUNDS,
+    magnet_engage_write_publisher,
 )
 
 # Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
 from microdrop_utils.traitsui_qt_helpers import HoverScrollEnumEditor
 
@@ -38,12 +47,14 @@ from microdrop_utils.traitsui_qt_helpers import HoverScrollEnumEditor
 from .consts import (
     CHIP_DETECT_RULE_LABELS,
     DEFAULT_GAIN_PRESETS,
+    DEFAULT_MAGNET_ENGAGE_MM,
     DEFAULT_MOVE_PRESETS,
     DEFAULT_TEMPERATURE_PRESETS,
     FAN_BOARD_LABELS,
     MOVE_DISTANCE_MM_BOUNDS,
     PRESET_SLOTS_MAX,
 )
+from .models.magnet_engage_model import MagnetEngageModel
 
 app_globals = get_microdrop_redis_globals_manager()
 
@@ -73,6 +84,10 @@ class PortableDropbotSettingsPreferences(PreferencesHelper):
         CHIP_DETECT_RULES,
         desc="Which pogo pad contacts count as a chip on the pad",
     )
+
+    #: Magnet engage position (mm). Kept across restarts here, but reaches
+    #: the board only through the tab's explicit Write / Preset to flash.
+    magnet_engage_mm = Float(DEFAULT_MAGNET_ENGAGE_MM)
 
     # ---- Preset quick-pick buttons -------------------------------------
     # Free text rather than typed lists: a hand-edited value can never
@@ -105,6 +120,54 @@ class PortableDropbotSettingsPreferencesPane(PreferencesPane):
 
     category = portable_dropbot_tab.id
 
+    #: The board's magnet engage replies; the plugin passes its session-long
+    #: model, and the default keeps the pane instantiable standalone.
+    magnet_engage = Instance(MagnetEngageModel, ())
+
+    read_magnet_engage = Button("Read")
+    write_magnet_engage = Button("Write")
+    preset_magnet_engage = Button("Preset to flash")
+
+    @observe("read_magnet_engage")
+    def _read_magnet_engage_from_board(self, event):
+        self.magnet_engage.status = "Reading..."
+        publish_message(topic=MAGNET_ENGAGE_READ, message="")
+
+    @observe("write_magnet_engage")
+    def _write_magnet_engage_to_ram(self, event):
+        # The unapplied edit on screen is what the user means to write.
+        engage_mm = self._model.magnet_engage_mm
+
+        try:
+            magnet_engage_write_publisher.publish({"engage_mm": engage_mm})
+        except ValidationError:
+            self.magnet_engage.status = "Engage position must be 0 mm or more"
+            return
+
+        self.magnet_engage.status = f"Writing {engage_mm:.3f} mm..."
+
+    @observe("preset_magnet_engage")
+    def _preset_magnet_engage_to_flash(self, event):
+        answer = confirm(
+            None,
+            "Persist magnet engage height to flash now? The value now in the "
+            "board's RAM (the last Write) survives reboots from then on.",
+            title="Preset to Flash",
+        )
+
+        if answer != YES:
+            return
+
+        self.magnet_engage.status = "Presetting to flash..."
+        publish_message(topic=MAGNET_ENGAGE_PRESET, message="")
+
+    @observe("magnet_engage:engage_read")
+    def _fill_magnet_engage_from_read(self, event):
+        # Into the pane's detached copy, so a read is an unapplied edit
+        # until Apply, like typing the value.
+        if self._model is not None:
+            self._model.magnet_engage_mm = event.new
+
     settings = VGroup(
         create_item_label_group(
             "fan_board",
@@ -126,6 +189,28 @@ class PortableDropbotSettingsPreferencesPane(PreferencesPane):
         ),
         Item("_"),
         label="",
+        show_border=True,
+    )
+
+    magnet = VGroup(
+        create_item_label_group(
+            "magnet_engage_mm",
+            label_text="Engage position (mm)",
+            tooltip=(
+                "Magnet Z engage height, written to the motor board's device "
+                "defaults. Write = RAM only (lost on reboot); Preset to flash "
+                "keeps it. Must not exceed the magnet-Z soft limit."
+            ),
+            format_str="%.3f",
+            width=260,
+        ),
+        HGroup(
+            Item("handler.read_magnet_engage", show_label=False),
+            Item("handler.write_magnet_engage", show_label=False),
+            Item("handler.preset_magnet_engage", show_label=False),
+        ),
+        Item("handler.magnet_engage.status", style="readonly", show_label=False),
+        label="Magnet",
         show_border=True,
     )
 
@@ -169,6 +254,7 @@ class PortableDropbotSettingsPreferencesPane(PreferencesPane):
     view = View(
         Item("_"),
         settings,
+        magnet,
         presets,
         Item("_"),
         resizable=True,

@@ -349,6 +349,10 @@ The magnet's engage height is `z_up` (µm), the first int32 of the motor board's
 - `on_magnet_engage_write_request` reads the struct back, refuses a height above the magnet-Z motor's positive soft limit (`pl_pos` of the `magnet_motor` mechanical params — above it the firmware rejects every engage), replaces only `z_up` with `round(engage_mm * 1000)`, and writes all four fields with `uart.setParams("motor", "_dp_magnet", ...)`.
 - `on_magnet_engage_preset_request` calls `uart.presetParams("motor", "_dp_magnet")`.
 
+**Frontend (`portable_dropbot_status_and_controls`, Preferences > Portable DropBot Settings > Magnet)**
+- Read / Write / Preset to flash buttons on `PortableDropbotSettingsPreferencesPane` publish the three requests; Write sends the field's unapplied value, and Preset asks for confirmation first.
+- The plugin owns `MAGNET_ENGAGE_LISTENER` (subscribed to `MAGNET_ENGAGE_UPDATED`) for the whole session: `PortableDropbotMagnetEngageMessageHandler`, made in `start()` and torn down in `stop()`, applies each reply to the plugin's `MagnetEngageModel` on the GUI thread. The plugin hands that model to every pane it contributes, so the status line updates live and a successful read fills the pane's detached copy of `magnet_engage_mm` (an unapplied edit until Apply, never the preferences node).
+
 ### Portable DropBot protocol columns: magnet + heater step execution
 
 The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
