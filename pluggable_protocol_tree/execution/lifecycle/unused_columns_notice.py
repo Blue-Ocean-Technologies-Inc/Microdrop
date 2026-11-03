@@ -18,6 +18,9 @@ information dialog whose "Do not show again" checkbox writes
 skip applies to them as well, and the notice touches no hardware.
 """
 
+# Standard library imports.
+import html
+
 # Enthought library imports.
 from traits.api import Instance
 
@@ -78,13 +81,16 @@ class UnusedColumnsNoticeHandler(BaseColumnHandler):
     @staticmethod
     def _show_notice(names):
         """Runs on the GUI thread via ctx.prompt_gui. Returns (result, checked)."""
+        items = "".join(f"<li><b>{html.escape(name)}</b></li>" for name in names)
+        message = (
+            "<p>No step in this run uses these columns, so their protocol "
+            f"start/end actions were skipped:</p><ul>{items}</ul>"
+        )
+
         return information(
             None,
             title="Protocol Columns Not Used",
-            message=(
-                "No step in this run uses these columns, so their protocol "
-                f"start/end actions were skipped: {', '.join(names)}."
-            ),
+            message=message,
             cancel=False,
             checkbox_text="Do not show again (can be undone from preferences)",
         )

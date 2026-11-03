@@ -223,7 +223,8 @@ def test_notice_lists_the_skipped_columns_by_display_name():
         h.on_pre_protocol_start(_notice_context(["flu", "routes"]))
     info.assert_called_once()
     message = info.call_args.kwargs["message"]
-    assert "Fluorescence, Electrodes / Routes" in message
+    assert message.startswith("<p>")
+    assert "<li><b>Fluorescence</b></li><li><b>Electrodes / Routes</b></li>" in message
     assert info.call_args.kwargs["checkbox_text"]
 
 
