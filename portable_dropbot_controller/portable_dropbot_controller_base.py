@@ -246,9 +246,11 @@ class PortableDropbotControllerBase(HasTraits):
     # ------------------------------------------------------------------ #
     # Status / motor snapshots                                             #
     # ------------------------------------------------------------------ #
-    #: Raw u16 status fields carried as value × 100 on the wire (the
-    #: driver's own SysStatusSignalBoard.to_dict scaling).
-    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "hv_vol", "dev_temp", "dev_hum")
+    #: Raw u16 status fields the firmware reports as value × 100 (the
+    #: driver schema's convention): temperatures and humidity. hv_vol is
+    #: excluded: it arrives in whole volts (the setpoint echoed as sent),
+    #: contrary to the schema's × 0.01, measured on DroSIG 1.0.1.28.
+    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "dev_temp", "dev_hum")
 
     def _publish_status_snapshot(self):
         """One driver status read fans out to both panes: the signal

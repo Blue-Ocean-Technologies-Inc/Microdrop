@@ -65,3 +65,19 @@ def test_chip_on_pad_needs_every_contact_bit(monkeypatch, chip_on_pad, expected)
     harness._publish_status_snapshot()
 
     assert published == [{"chip_on_pad": expected, "chip_pad_contacts": chip_on_pad}]
+
+
+def test_hv_vol_is_volts_while_temperatures_scale(monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        portable_dropbot_controller_base,
+        "publish_message",
+        lambda topic, message: published.append(json.loads(message)),
+    )
+
+    harness = _Harness()
+    harness.status = {"signal": {"hv_vol": 100, "cur_temp": 2500, "dev_hum": 4550}}
+
+    harness._publish_status_snapshot()
+
+    assert published == [{"hv_vol": 100, "cur_temp": 25.0, "dev_hum": 45.5}]
