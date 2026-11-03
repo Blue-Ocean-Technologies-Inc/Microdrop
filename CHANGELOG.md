@@ -1,3 +1,23 @@
+## [v1.36.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.36.0) (2026-11-03)
+
+### Feat
+
+- **protocol-tree**: notice for skipped column hooks ([`d553c1b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d553c1bbf3092e5420f0608e574aac39bad26ff6))
+- **protocol-tree**: bulk column-usage helpers ([`669224a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/669224ab5018bc2bdcea5c17446e157397e9d095))
+- **portable_dropbot_status_and_controls**: gain, temperature and move presets ([`75cf55c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/75cf55cf9858845e729df7eb41f3e80e0ae815ae))
+- **microdrop_utils**: preset buttons editor ([`e8bba9c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e8bba9cd6f9cd362b66923b6f4dbbb324567f834))
+
+### Fix
+
+- **protocol_tree**: list skipped columns as bullets ([`fa80b88`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fa80b8828c44d1ced2ae12846ae530217c69b7a3))
+- **executor**: skip run-level hooks of unused columns ([`f5a7124`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f5a7124aacd051c5e44333a506ad314e242532c9))
+- **style**: resync TraitsUI field colours on palette swap ([`8c57905`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8c5790547a952c05cb87bd1198ee3776ffab06a6))
+
+### Test
+
+- **portable_dropbot_status_and_controls**: presets ([`21eecf5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/21eecf57aabf07583bf474a9acb0cf582df71555))
+- **style**: cover TraitsUI field colours on fallback ([`e1ac36e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e1ac36ed3057f899bd4ee59e21186876a99c527c))
+
 ## [v1.35.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.35.0) (2026-11-02)
 
 ### Feat
