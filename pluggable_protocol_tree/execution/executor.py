@@ -30,32 +30,55 @@ GUI thread; Qt-free consumers (the status model adapter) observe with the
 default dispatch and run on the worker thread.
 """
 
+# Standard library imports.
 import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
+# Enthought library imports.
 from traits.api import (
-    Any, Bool, Callable as CallableTrait, HasTraits, Instance, Int, List,
-    Tuple, Union,
+    Any,
+    Bool,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Tuple,
+    Union,
+)
+from traits.api import (
+    Callable as CallableTrait,
 )
 
-from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
+# Microdrop package imports.
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import (
-    AbortError, StepExecutionError,
+    AbortError,
+    StepExecutionError,
 )
 from pluggable_protocol_tree.execution.listener import (
-    set_active_step, clear_active_step, warm_broker_connection,
+    clear_active_step,
+    set_active_step,
+    warm_broker_connection,
 )
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.execution.step_context import (
-    ProtocolContext, StepContext,
+    ProtocolContext,
+    StepContext,
 )
+from pluggable_protocol_tree.interfaces.i_column import IColumnHandler
+from pluggable_protocol_tree.models._compound_adapters import (
+    _CompoundFieldHandlerAdapter,
+)
+from pluggable_protocol_tree.models.column import BaseColumnHandler
+from pluggable_protocol_tree.models.compound_column import BaseCompoundColumnHandler
 from pluggable_protocol_tree.models.row_manager import RowManager
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 # Brief pause between whole-protocol repetitions so the UI repaint/clear
@@ -63,12 +86,40 @@ logger = get_logger(__name__)
 # NEXT_REP_RESTART_DELAY_MS before repeats moved into the executor).
 INTER_REP_DELAY_S = 0.05
 
+# Run-level hooks skipped for an unused column that implements any of them
+# (ProtocolContext.skipped_column_ids). Per-step and phase hooks are never
+# skipped, and neither are lifecycle handlers.
+UNUSED_COLUMN_SKIPPED_HOOKS = (
+    "on_pre_protocol_start",
+    "on_protocol_start",
+    "on_protocol_end",
+    "on_post_protocol_end",
+)
+
+
+def _has_protocol_level_hooks(handler):
+    """Return whether ``handler`` overrides any UNUSED_COLUMN_SKIPPED_HOOKS.
+
+    Only such a column is worth skipping, logging, or naming to the operator;
+    the rest inherit no-ops. A compound field shim always overrides the hooks
+    to forward them, so look through it to the compound handler.
+    """
+    base = BaseColumnHandler
+
+    if isinstance(handler, _CompoundFieldHandlerAdapter):
+        handler, base = handler.compound_handler, BaseCompoundColumnHandler
+
+    return any(
+        getattr(type(handler), hook) is not getattr(base, hook)
+        for hook in UNUSED_COLUMN_SKIPPED_HOOKS
+    )
+
 
 class ProtocolExecutor(HasTraits):
     """One executor per RowManager. Reused across runs."""
 
     row_manager = Instance(RowManager)
-    signals    = Instance(ExecutorSignals)
+    signals = Instance(ExecutorSignals)
 
     # Execution-only handlers (no column/view) whose hooks run alongside the
     # column handlers, ordered by the same priority buckets. Used for
@@ -78,13 +129,13 @@ class ProtocolExecutor(HasTraits):
     lifecycle_handlers = List(Instance(IColumnHandler))
 
     pause_event = Instance(PauseEvent)
-    stop_event  = Instance(threading.Event)
+    stop_event = Instance(threading.Event)
 
     # Internal — reset by start(); _thread liveness gates re-entry
     # (is_alive()), _error routes _emit_terminal_signal. _error stays Any
     # on purpose: it holds an arbitrary exception instance.
     _thread = Instance(threading.Thread)
-    _error  = Any
+    _error = Any
     # Optional row.path tuple — when set, run() skips frames until it
     # encounters this path, then proceeds normally. Cleared on every
     # start() so a previous "play from selected" doesn't carry over.
@@ -131,8 +182,9 @@ class ProtocolExecutor(HasTraits):
     # ------- one-shot convenience for headless / scripting callers -------
 
     @classmethod
-    def execute(cls, row_manager, blocking: bool = True,
-                timeout: float = None) -> "ProtocolExecutor":
+    def execute(
+        cls, row_manager, blocking: bool = True, timeout: float = None
+    ) -> "ProtocolExecutor":
         """Construct an executor with sensible defaults, start it, and
         optionally block until done. Returns the executor so the caller
         can pause/resume/stop or inspect signals afterwards.
@@ -239,7 +291,8 @@ class ProtocolExecutor(HasTraits):
             return
         if self._active_proto_ctx is not None:
             self._active_proto_ctx.cursor.request_seek(
-                step_path, phase_index, frame_index=frame_index)
+                step_path, phase_index, frame_index=frame_index
+            )
 
     def stop(self) -> None:
         """Set stop_event AND clear pause_event so a Stop-while-paused
@@ -272,6 +325,26 @@ class ProtocolExecutor(HasTraits):
         proto_ctx.scratch.update(self.row_manager.protocol_metadata)
         proto_started_at = time.monotonic()
         try:
+            # Unused columns that have protocol-level hooks. Decided once per
+            # run, so the end hooks skip exactly the columns the start hooks
+            # skipped even if the protocol is edited mid-run.
+            hooked_ids = {
+                column.id
+                for column in cols
+                if _has_protocol_level_hooks(column.handler)
+            }
+            proto_ctx.skipped_column_ids = [
+                col_id
+                for col_id in self.row_manager.unused_column_ids(self.run_paths)
+                if col_id in hooked_ids
+            ]
+
+            for col_id in proto_ctx.skipped_column_ids:
+                logger.info(
+                    f"Skipping {col_id} protocol hooks: no step in this run "
+                    f"uses the column"
+                )
+
             # Hide first-publish latency (Redis connect ~2s) from step 1's
             # observed duration by warming the broker connection upfront.
             warm_broker_connection()
@@ -310,8 +383,7 @@ class ProtocolExecutor(HasTraits):
                 skip_until = self._start_step_path if rep == 0 else None
                 self._run_steps(handlers, cols, proto_ctx, skip_until)
                 self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)
-                self.signals.protocol_repetition_finished = (
-                    rep + 1, self._repeats)
+                self.signals.protocol_repetition_finished = (rep + 1, self._repeats)
                 if rep + 1 < self._repeats and not self.stop_event.is_set():
                     self._interruptible_delay(INTER_REP_DELAY_S)
 
@@ -346,13 +418,14 @@ class ProtocolExecutor(HasTraits):
         finally:
             self._emit_terminal_signal()
             outcome = (
-                "errored" if self._error is not None
-                else "aborted" if self.stop_event.is_set()
+                "errored"
+                if self._error is not None
+                else "aborted"
+                if self.stop_event.is_set()
                 else "finished"
             )
             logger.info(
-                f"Protocol {outcome} in "
-                f"{time.monotonic() - proto_started_at:.2f}s"
+                f"Protocol {outcome} in {time.monotonic() - proto_started_at:.2f}s"
             )
             self._active_proto_ctx = None
             # Back to whole-protocol scope so idle-state consumers (status
@@ -410,8 +483,10 @@ class ProtocolExecutor(HasTraits):
                 # to a different step.
                 if resolved is not None and (
                     (cursor.resume_frame is not None and resolved[0] != i)
-                    or (cursor.resume_frame is None
-                        and tuple(cursor.resume_target[0]) != tuple(row.path))
+                    or (
+                        cursor.resume_frame is None
+                        and tuple(cursor.resume_target[0]) != tuple(row.path)
+                    )
                 ):
                     i, start_phase_index = resolved
                     cursor.clear_seek()
@@ -420,8 +495,9 @@ class ProtocolExecutor(HasTraits):
 
             step_index += 1
             cursor.enter_step(row.path, start_phase_index, frame_index=i)
-            self._run_one_frame(handlers, cols, proto_ctx, row, rep_chain,
-                                step_index, len(frames))
+            self._run_one_frame(
+                handlers, cols, proto_ctx, row, rep_chain, step_index, len(frames)
+            )
             start_phase_index = 0
 
             # A seek raised during the step (different step aborted the phase
@@ -434,13 +510,14 @@ class ProtocolExecutor(HasTraits):
                 continue
             i += 1
 
-    def _run_one_frame(self, handlers, cols, proto_ctx, row, rep_chain,
-                       step_index, step_total) -> None:
+    def _run_one_frame(
+        self, handlers, cols, proto_ctx, row, rep_chain, step_index, step_total
+    ) -> None:
         step_started_at = time.monotonic()
         rep_str = (
-            " | " + ", ".join(f"rep {i}/{n} of {name!r}"
-                              for name, i, n in rep_chain)
-            if rep_chain else ""
+            " | " + ", ".join(f"rep {i}/{n} of {name!r}" for name, i, n in rep_chain)
+            if rep_chain
+            else ""
         )
         logger.info(
             f"Step {step_index} started: {row.name!r} "
@@ -454,8 +531,8 @@ class ProtocolExecutor(HasTraits):
             # row-highlight fires from step_started.
             self.signals.step_repetition = rep_chain
             self.signals.step_started = (row, step_index, step_total)
-            self._run_hooks("on_pre_step",  handlers, step_ctx, row)
-            self._run_hooks("on_step",      handlers, step_ctx, row)
+            self._run_hooks("on_pre_step", handlers, step_ctx, row)
+            self._run_hooks("on_step", handlers, step_ctx, row)
             self._run_hooks("on_post_step", handlers, step_ctx, row)
             self.signals.step_finished = row
         finally:
@@ -522,12 +599,15 @@ class ProtocolExecutor(HasTraits):
         # Fresh Events per step — never reused across steps so a stale
         # `set` from a prior step can't leak in.
         step_ctx = StepContext(
-            row=row, protocol=proto_ctx,
+            row=row,
+            protocol=proto_ctx,
             phase_advance_event=threading.Event(),
             step_phases_done_event=threading.Event(),
         )
         # Detect within-bucket topic collisions before opening any boxes.
-        per_priority_topics: dict[int, dict[str, str]] = {}  # priority --> topic --> col_id
+        per_priority_topics: dict[
+            int, dict[str, str]
+        ] = {}  # priority --> topic --> col_id
         for col in cols:
             topics = col.handler.wait_for_topics or []
             bucket = per_priority_topics.setdefault(col.handler.priority, {})
@@ -545,8 +625,10 @@ class ProtocolExecutor(HasTraits):
 
     # Protocol-level hooks take (ctx); per-step hooks take (row, ctx).
     _PROTOCOL_HOOKS = (
-        "on_pre_protocol_start", "on_protocol_start",
-        "on_protocol_end", "on_post_protocol_end",
+        "on_pre_protocol_start",
+        "on_protocol_start",
+        "on_protocol_end",
+        "on_post_protocol_end",
     )
     # Teardown hooks always run every bucket (best-effort cleanup), even once
     # stop_event is set. Forward hooks instead stop launching lower-priority
@@ -570,7 +652,18 @@ class ProtocolExecutor(HasTraits):
         sibling hooks waiting on ctx.wait_for() return promptly via
         AbortError, the pool drains, and the original exception is
         re-raised out of this method.
+
+        Hooks in UNUSED_COLUMN_SKIPPED_HOOKS (``ctx`` is then the
+        ProtocolContext) skip the handlers of ``ctx.skipped_column_ids``.
         """
+        if hook_name in UNUSED_COLUMN_SKIPPED_HOOKS:
+            skipped_handlers = [
+                column.handler
+                for column in ctx.columns
+                if column.id in ctx.skipped_column_ids
+            ]
+            handlers = [h for h in handlers if h not in skipped_handlers]
+
         buckets = defaultdict(list)
         for handler in handlers:
             buckets[handler.priority].append(handler)
