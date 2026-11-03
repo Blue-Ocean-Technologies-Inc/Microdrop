@@ -24,6 +24,7 @@ from pyface.qt.QtWidgets import (
     QMainWindow,
     QWidget,
 )
+from traits.api import HasTraits, Str
 
 # Microdrop package imports.
 from microdrop_application.consts import (
@@ -35,7 +36,12 @@ from microdrop_application.preferences import MicrodropPreferences
 
 # Microdrop style imports.
 from microdrop_style.colors import WHITE
-from microdrop_style.helpers import apply_color_scheme, is_dark_mode
+from microdrop_style.helpers import (
+    TRAITSUI_DARK_ERROR_COLOR,
+    TRAITSUI_LIGHT_ERROR_COLOR,
+    apply_color_scheme,
+    is_dark_mode,
+)
 from microdrop_style.palettes import dark_palette
 
 
@@ -68,6 +74,21 @@ def _show_docked_label_window():
     window.show()
 
     return window, label
+
+
+class _TextFieldModel(HasTraits):
+    text = Str("text")
+
+
+def _text_field_ui():
+    """Show a TraitsUI view of one text field, returning the UI and its field."""
+    ui = _TextFieldModel().edit_traits(kind="live")
+
+    return ui, ui.get_editors("text")[0].control
+
+
+def _base_color(widget):
+    return widget.palette().color(QPalette.ColorRole.Base)
 
 
 def test_color_scheme_defaults_to_follow_system():
@@ -180,11 +201,15 @@ def test_apply_color_scheme_keeps_platform_palette_when_it_matches(qapp, monkeyp
     QApplication.setPalette(platform_palette)
     _report_color_scheme(monkeypatch, Qt.ColorScheme.Dark)
 
+    # Imported after the QApplication exists: importing it takes its snapshot.
+    from traitsui.qt import constants
+
     try:
         apply_color_scheme(COLOR_SCHEME_DARK)
 
         assert is_dark_mode()
         assert _window_color() == QColor("#202020")
+        assert constants.OKColor == platform_palette.color(QPalette.ColorRole.Base)
     finally:
         monkeypatch.undo()
         apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
@@ -270,4 +295,59 @@ def test_apply_color_scheme_flips_dark_mode_and_restores_system(qapp):
     finally:
         window.close()
         qapp.setStyleSheet(previous_style_sheet)
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_fallback_dark_palette_reaches_traitsui_text_fields(qapp):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    # Imported after the QApplication exists: importing it takes its snapshot.
+    from traitsui.qt import constants
+
+    assert _window_color().lightness() >= 128
+
+    dark_base = dark_palette().color(QPalette.ColorRole.Base)
+    existing_ui, existing_field = _text_field_ui()
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
+
+        assert constants.OKColor == dark_base
+        assert constants.ErrorColor == QColor(TRAITSUI_DARK_ERROR_COLOR)
+        assert _base_color(existing_field) == dark_base
+
+        new_ui, new_field = _text_field_ui()
+
+        try:
+            assert _base_color(new_field) == dark_base
+        finally:
+            new_ui.dispose()
+    finally:
+        existing_ui.dispose()
+        apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
+
+
+def test_fallback_light_palette_restores_traitsui_text_fields(qapp):
+    if not _platform_ignores_color_scheme_requests():
+        pytest.skip(f"{qapp.platformName()} platform honours colour-scheme requests")
+
+    from traitsui.qt import constants
+
+    startup_base = QApplication.palette().color(QPalette.ColorRole.Base)
+
+    try:
+        apply_color_scheme(COLOR_SCHEME_DARK)
+        apply_color_scheme(COLOR_SCHEME_LIGHT)
+
+        assert constants.OKColor == startup_base
+        assert constants.ErrorColor == QColor(TRAITSUI_LIGHT_ERROR_COLOR)
+
+        ui, field = _text_field_ui()
+
+        try:
+            assert _base_color(field) == startup_base
+        finally:
+            ui.dispose()
+    finally:
         apply_color_scheme(COLOR_SCHEME_FOLLOW_SYSTEM)
