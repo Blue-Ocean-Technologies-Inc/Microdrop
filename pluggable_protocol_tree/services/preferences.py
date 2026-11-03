@@ -89,6 +89,11 @@ class ProtocolPreferences(PreferencesHelper):
     prompt_to_restore_realtime_mode = Bool(True)
     keep_realtime_mode_after_protocol = Bool(True)
 
+    #: Hide the run-start notice listing the columns whose protocol start/end
+    #: actions a run skipped because none of its steps uses them. Set by the
+    #: notice's "Do not show again" checkbox.
+    suppress_unused_column_hooks_information = Bool(False)
+
     PROTOCOL_REPO_DIR = Directory()
 
     # Programmatic preference (no Settings-dialog item, like
@@ -259,6 +264,13 @@ class ProtocolPreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    dialog_settings = Group(
+        Item("suppress_unused_column_hooks_information"),
+        label="Dialog Settings",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
+    )
+
     ack_times_grid = Group(
         Item(
             "protocol_tree_ack_times",
@@ -286,6 +298,8 @@ class ProtocolPreferencesPane(PreferencesPane):
         general_protocol_settings_grid,
         Item("_"),
         realtime_mode_settings_grid,
+        Item("_"),
+        dialog_settings,
         Item("_"),
         ack_times_grid,
         # Separator to space this out from further contributions to the pane.
