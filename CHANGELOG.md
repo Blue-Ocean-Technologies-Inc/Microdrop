@@ -1,3 +1,15 @@
+## [v1.37.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.37.0) (2026-11-03)
+
+### Feat
+
+- **portable**: magnet engage position preference ([`8de21a3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8de21a32ce6ca719eca22a34ca9db43478bd7330))
+- **portable**: magnet engage height read/write/preset ([`48356c1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/48356c1640df6fb50bd824fa46be86b80ded4efb))
+
+### Test
+
+- **portable**: magnet engage replies on the prefs tab ([`1987842`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1987842155a840105b57199ff561cbf007023b7d))
+- **portable**: cover magnet engage read/write/preset ([`c1f76a1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c1f76a12c5da4b663211a5a6b4bf5c256516dbb1))
+
 ## [v1.36.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.36.0) (2026-11-03)
 
 ### Feat
