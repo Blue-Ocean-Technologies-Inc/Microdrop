@@ -25,6 +25,7 @@ from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULE_BOTH_POGOS,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
+    MAGNET_ENGAGE_UPDATED,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
     PMT_ADC_UPDATED,
@@ -60,6 +61,9 @@ CHIP_DETECT_RULE_LABELS = {
     CHIP_DETECT_RULE_BOTH_POGOS: "Both pogo pads touching the chip",
     CHIP_DETECT_RULE_ANY_POGO: "At least one pogo pad touching the chip",
 }
+#: Magnet engage position preference until a value is read from the board
+#: or entered (mm); the vendor's bench box engages at 14 mm.
+DEFAULT_MAGNET_ENGAGE_MM = 14.0
 
 #: Display Scale (Tools menu): slider bounds as a percentage of the
 #: panel's native scale — below 100% the interface shrinks and more
@@ -76,6 +80,9 @@ MORE_CONTROLS_LISTENER = f"{PKG}_more_controls_listener"
 ADVANCED_CONTROLS_LISTENER = f"{PKG}_advanced_controls_listener"
 PMT_CAPTURE_LISTENER = f"{PKG}_pmt_capture_listener"
 FLUORESCENCE_CAPTURE_LISTENER = f"{PKG}_fluorescence_capture_listener"
+#: Not a pane's: the plugin owns this listener for the whole session, so
+#: the preferences tab (rebuilt on every dialog open) can show replies.
+MAGNET_ENGAGE_LISTENER = f"{PKG}_magnet_engage_listener"
 
 # Topics the actors declared by this plugin subscribe to.
 ACTOR_TOPIC_DICT = {
@@ -143,6 +150,7 @@ ACTOR_TOPIC_DICT = {
         MOTOR_PARAMS_UPDATED,
         ADVANCED_MODE_CHANGE,
     ],
+    MAGNET_ENGAGE_LISTENER: [MAGNET_ENGAGE_UPDATED],
 }
 
 #: Alarms/errors kept in the status pane's Alarms box; older ones drop off.

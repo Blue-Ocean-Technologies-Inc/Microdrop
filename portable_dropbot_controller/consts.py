@@ -211,6 +211,15 @@ MOTOR_PARAM_FIELDS = (
     ("acc_rst", "i"),
 )
 
+#: The driver PARAMS friendly name of the magnet's device-defaults struct
+#: (flash key _dp_magnet), and that struct's fields in WIRE ORDER: four
+#: big-endian int32, all µm. z_up is the engage height; it must stay at or
+#: below the magnet-Z motor's positive soft limit (its pl_pos), or the
+#: firmware rejects every engage.
+MAGNET_DEFAULTS_PARAM = "magnet_defaults"
+MAGNET_DEFAULTS_FIELDS = ("z_up", "z_down", "y_0", "y_space")
+MAGNET_DEFAULTS_FORMAT = ">4i"
+
 #: Fluorescence filter wheel positions the hardware knows — 1-based; the
 #: firmware faults on position 0.
 FILTER_POSITIONS = (1, 2, 3, 4, 5)
@@ -372,6 +381,9 @@ FLUORESCENCE_CAPTURE_DONE = "portable_dropbot/signals/fluorescence_capture_done"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
+#: Magnet engage height feedback (MagnetEngageUpdated): the read-back
+#: value and write/preset outcomes, for the preferences tab.
+MAGNET_ENGAGE_UPDATED = "portable_dropbot/signals/magnet_engage_updated"
 #: Protocol-step acks: the magnet move finished / the heater channel
 #: reading is within the step's tolerance of its target.
 MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
@@ -465,6 +477,12 @@ MOTOR_PARAMS_READ = "portable_dropbot/requests/motor_params_read"
 MOTOR_PARAMS_WRITE = "portable_dropbot/requests/motor_params_write"
 MOTOR_PARAMS_PRESET = "portable_dropbot/requests/motor_params_preset"
 REBOOT_MOTOR_BOARD = "portable_dropbot/requests/reboot_motor_board"
+#: Magnet engage height in the motor board's device defaults: read it, write
+#: it to RAM (MagnetEngageWriteRequest), or preset RAM to flash. Read and
+#: preset take an empty message.
+MAGNET_ENGAGE_READ = "portable_dropbot/requests/magnet_engage_read"
+MAGNET_ENGAGE_WRITE = "portable_dropbot/requests/magnet_engage_write"
+MAGNET_ENGAGE_PRESET = "portable_dropbot/requests/magnet_engage_preset"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
 MOTOR_SET_SPEED = "portable_dropbot/requests/motor_set_speed"
@@ -832,4 +850,31 @@ class MoveTrayRequest(BaseModel):
 
 move_tray_publisher = ValidatedTopicPublisher(
     topic=MOVE_TRAY, validator_class=MoveTrayRequest
+)
+
+# --------------------------------------------------------------------- #
+# Magnet engage height message contracts (topic + schema, one unit)      #
+# --------------------------------------------------------------------- #
+
+
+class MagnetEngageWriteRequest(BaseModel):
+    """The magnet engage height to write to the board's RAM device defaults."""
+
+    engage_mm: float = Field(ge=0)
+
+
+class MagnetEngageUpdated(BaseModel):
+    """Outcome of a magnet engage request. `engage_mm` is the height a read
+    returned or a write sent; `error` is set when the request failed."""
+
+    action: Literal["read", "write", "preset"]
+    engage_mm: float | None = None
+    error: str = ""
+
+
+magnet_engage_write_publisher = ValidatedTopicPublisher(
+    topic=MAGNET_ENGAGE_WRITE, validator_class=MagnetEngageWriteRequest
+)
+magnet_engage_updated_publisher = ValidatedTopicPublisher(
+    topic=MAGNET_ENGAGE_UPDATED, validator_class=MagnetEngageUpdated
 )
