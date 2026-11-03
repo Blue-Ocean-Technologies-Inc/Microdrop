@@ -41,6 +41,10 @@ class IColumnModel(Interface):
     def set_value(self, row, value):
         """Write `value` to the column on `row`. Returns True on success."""
 
+    def cell_has_value(self, value):
+        """Return whether a cell `value` of this column counts as set (not
+        None, False, or an empty container)."""
+
     def serialize(self, value):
         """Convert a trait value to a JSON-native form."""
 

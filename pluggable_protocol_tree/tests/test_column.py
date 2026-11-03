@@ -10,12 +10,19 @@
 
 """Tests for BaseColumnModel, BaseColumnHandler, Column composite."""
 
-from traits.api import Float, Str
+# Third-party imports.
+import pytest
 
-from pluggable_protocol_tree.models.row import BaseRow, build_row_type
+# Enthought library imports.
+from traits.api import Float
+
+# Microdrop package imports.
 from pluggable_protocol_tree.models.column import (
-    BaseColumnModel, BaseColumnHandler, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
+from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
 
 def test_base_column_model_stores_metadata():
@@ -37,8 +44,10 @@ def test_base_column_model_trait_for_row_returns_any_by_default():
 
 def _fake_col(model, trait):
     """Test helper — mimics what Column does for build_row_type."""
+
     class _C:
         pass
+
     c = _C()
     c.model = model
     c.model.trait_for_row = lambda: trait
@@ -81,6 +90,7 @@ def test_base_column_handler_on_interact_delegates_to_model():
 def test_column_composite_auto_wires_model_into_view_and_handler():
     """Column.traits_init should set view.model and handler.{model,view}."""
     from pluggable_protocol_tree.views.columns.base import BaseColumnView
+
     m = BaseColumnModel(col_id="x", col_name="X", default_value=0)
     v = BaseColumnView()
     h = BaseColumnHandler()
@@ -92,7 +102,21 @@ def test_column_composite_auto_wires_model_into_view_and_handler():
 
 def test_column_composite_creates_default_handler_if_none_given():
     from pluggable_protocol_tree.views.columns.base import BaseColumnView
+
     m = BaseColumnModel(col_id="x", col_name="X", default_value=0)
     v = BaseColumnView()
     col = Column(model=m, view=v)
     assert isinstance(col.handler, BaseColumnHandler)
+
+
+@pytest.mark.parametrize("value", [None, False, "", [], {}, ()])
+def test_cell_has_value_is_false_for_an_empty_cell(value):
+    m = BaseColumnModel(col_id="x", col_name="X")
+    assert m.cell_has_value(value) is False
+
+
+@pytest.mark.parametrize("value", [0, 0.0, True, "a", [0], {"k": None}])
+def test_cell_has_value_is_true_for_any_other_value(value):
+    """Zero is a value: numeric columns (e.g. voltage) legitimately hold 0."""
+    m = BaseColumnModel(col_id="x", col_name="X")
+    assert m.cell_has_value(value) is True

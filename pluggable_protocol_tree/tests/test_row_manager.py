@@ -10,14 +10,21 @@
 
 """Tests for RowManager structure, selection, clipboard, iteration, slicing."""
 
+# Third-party imports.
+import pandas as pd
 import pytest
 
-from pluggable_protocol_tree.models.row import BaseRow, GroupRow
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
+# Microdrop package imports.
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.models.column import BaseColumnModel, Column
+from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.columns.readonly_label import (
+    ReadOnlyLabelColumnView,
+)
 
 
 @pytest.fixture
@@ -37,6 +44,7 @@ def manager(columns):
 
 # --- construction ---
 
+
 def test_row_manager_has_empty_root_on_construction(manager):
     assert manager.root is not None
     assert isinstance(manager.root, GroupRow)
@@ -52,6 +60,7 @@ def test_row_manager_builds_step_and_group_subclasses(manager):
 
 
 # --- add_step / add_group ---
+
 
 def test_add_step_at_root(manager):
     path = manager.add_step()
@@ -82,6 +91,7 @@ def test_add_step_with_values(manager):
 
 # --- remove ---
 
+
 def test_remove_single_row(manager):
     manager.add_step()
     p = manager.add_step()
@@ -99,10 +109,11 @@ def test_remove_group_removes_children(manager):
 
 # --- move ---
 
+
 def test_move_reorders_within_parent(manager):
     a = manager.add_step(values={"name": "A"})
-    b = manager.add_step(values={"name": "B"})
-    manager.move([a], target_parent_path=(), target_index=2)   # move A after B
+    manager.add_step(values={"name": "B"})
+    manager.move([a], target_parent_path=(), target_index=2)  # move A after B
     names = [r.name for r in manager.root.children]
     assert names == ["B", "A"]
 
@@ -117,6 +128,7 @@ def test_move_reparents_into_group(manager):
 
 
 # --- fold into group (#518) ---
+
 
 def _names(rows):
     return [r.name for r in rows]
@@ -176,6 +188,7 @@ def test_fold_rejects_multi_parent_and_empty(manager):
 
 # --- selection ---
 
+
 def test_select_set_replaces_selection(manager):
     a = manager.add_step()
     b = manager.add_step()
@@ -204,7 +217,7 @@ def test_select_accepts_nested_paths(manager):
     tuples. Originally declared as Tuple(Int) which validated as a
     one-element tuple and rejected nested rows like (0, 2)."""
     g = manager.add_group()
-    s = manager.add_step(parent_path=g)   # path == (0, 0)
+    s = manager.add_step(parent_path=g)  # path == (0, 0)
     manager.select([s])
     assert manager.selection == [(0, 0)]
 
@@ -218,6 +231,7 @@ def test_selected_rows_returns_row_objects(manager):
 
 
 # --- uuid lookup ---
+
 
 def test_get_row_by_uuid_returns_row(manager):
     p = manager.add_step()
@@ -237,6 +251,7 @@ def test_get_row_by_uuid_searches_nested(manager):
 
 
 # --- clipboard ---
+
 
 def test_copy_paste_round_trip_preserves_names(manager):
     a = manager.add_step(values={"name": "A", "duration_s": 2.0})
@@ -264,10 +279,10 @@ def test_copy_paste_regenerates_uuids(manager):
 
 def test_cut_removes_originals(manager):
     a = manager.add_step(values={"name": "A"})
-    b = manager.add_step(values={"name": "B"})
+    manager.add_step(values={"name": "B"})
     manager.select([a])
     payload = manager._serialize_selection()
-    manager.remove([a])   # cut = copy + remove; here we drive manually
+    manager.remove([a])  # cut = copy + remove; here we drive manually
     assert [r.name for r in manager.root.children] == ["B"]
     manager._paste_from_payload(payload, target_path=None)
     assert [r.name for r in manager.root.children] == ["B", "A"]
@@ -286,6 +301,7 @@ def test_copy_paste_includes_children_of_groups(manager):
 
 
 # --- iter_execution_steps ---
+
 
 def test_iter_execution_flat_protocol(manager):
     manager.add_step(values={"name": "A"})
@@ -349,8 +365,7 @@ def test_run_scope_roots_drops_descendants_of_selected_rows(nested_manager):
 
 
 def test_run_scope_roots_sorts_into_tree_order(nested_manager):
-    assert nested_manager.run_scope_roots([(2,), (0,), (1, 1)]) \
-        == [(0,), (1, 1), (2,)]
+    assert nested_manager.run_scope_roots([(2,), (0,), (1, 1)]) == [(0,), (1, 1), (2,)]
 
 
 def test_run_scope_roots_skips_stale_paths(nested_manager):
@@ -385,8 +400,7 @@ def test_scoped_run_covers_non_contiguous_selection_in_tree_order(nested_manager
 def test_scoped_run_reports_rep_chain_relative_to_the_selection(nested_manager):
     """The selected group is the outermost repeating scope, so it appears in
     the chain; nothing above it does."""
-    chains = [chain for _row, chain in
-              nested_manager.iter_execution_frames([(1,)])]
+    chains = [chain for _row, chain in nested_manager.iter_execution_frames([(1,)])]
     assert chains[0] == (("Wash", 1, 3),)
     assert chains[-1] == (("Wash", 3, 3),)
 
@@ -408,8 +422,6 @@ def test_scope_of_an_empty_group_yields_no_frames(manager):
 
 # --- slicing ---
 
-import pandas as pd
-
 
 def test_table_is_dataframe_indexed_by_path(manager):
     manager.add_step(values={"name": "A", "duration_s": 2.0})
@@ -422,7 +434,7 @@ def test_table_is_dataframe_indexed_by_path(manager):
 
 
 def test_table_values_correct(manager):
-    p = manager.add_step(values={"name": "X", "duration_s": 4.5})
+    manager.add_step(values={"name": "X", "duration_s": 4.5})
     df = manager.table
     # Use iloc to avoid pandas' (label,) tuple-vs-2-arg ambiguity on .loc
     assert df.iloc[0]["name"] == "X"
@@ -463,6 +475,7 @@ def test_slice_combines_rows_and_cols(manager):
 
 # --- bulk write ---
 
+
 def test_set_value_single(manager):
     p = manager.add_step()
     manager.set_value(p, "name", "Updated")
@@ -498,6 +511,7 @@ def test_apply_runs_callable_per_row(manager):
 
 # --- iter_execution_frames (rep context surface) ---
 
+
 def test_frames_step_no_reps_yields_empty_chain(manager):
     manager.add_step(values={"name": "A"})
     frames = list(manager.iter_execution_frames())
@@ -512,7 +526,9 @@ def test_frames_step_with_reps_carries_self_in_chain(manager):
     setattr(manager.get_row(s), "repetitions", 3)
     frames = list(manager.iter_execution_frames())
     assert [c for _r, c in frames] == [
-        (("A", 1, 3),), (("A", 2, 3),), (("A", 3, 3),),
+        (("A", 1, 3),),
+        (("A", 2, 3),),
+        (("A", 3, 3),),
     ]
 
 
@@ -527,8 +543,10 @@ def test_frames_group_reps_propagate_to_child_chain(manager):
     assert names == ["A", "B", "A", "B"]
     # Each child carries the group's rep context (outermost-first).
     assert chains == [
-        (("Wash", 1, 2),), (("Wash", 1, 2),),
-        (("Wash", 2, 2),), (("Wash", 2, 2),),
+        (("Wash", 1, 2),),
+        (("Wash", 1, 2),),
+        (("Wash", 2, 2),),
+        (("Wash", 2, 2),),
     ]
 
 
@@ -570,6 +588,7 @@ def test_iter_execution_steps_still_works_via_delegation(manager):
 
 # --- PPT-3: protocol_metadata ---
 
+
 def test_protocol_metadata_defaults_empty(manager):
     assert manager.protocol_metadata == {}
 
@@ -583,15 +602,17 @@ def test_protocol_metadata_holds_arbitrary_payload(manager):
 
 # --- repeat_duration_controls internal flag (route-reps split) ---
 
+
 def test_base_row_has_repeat_duration_controls_flag_default_false():
-    from pluggable_protocol_tree.models.row import BaseRow, GroupRow
+    from pluggable_protocol_tree.models.row import GroupRow
+
     assert BaseRow().repeat_duration_controls is False
     assert GroupRow().repeat_duration_controls is False
 
 
 def test_repeat_duration_controls_is_a_declared_bool_trait():
     from traits.api import Bool
-    from pluggable_protocol_tree.models.row import BaseRow
+
     trait = BaseRow.class_traits().get("repeat_duration_controls")
     assert trait is not None, "trait not declared on BaseRow"
     assert isinstance(trait.trait_type, Bool)
@@ -603,10 +624,12 @@ def test_repeat_duration_controls_is_a_declared_bool_trait():
 
 # --- seed_default_step_if_empty (issue #424: default step when no protocol) ---
 
+
 def _seed_test_manager():
-    from pluggable_protocol_tree.models.row_manager import RowManager
-    from pluggable_protocol_tree.builtins.type_column import make_type_column
     from pluggable_protocol_tree.builtins.name_column import make_name_column
+    from pluggable_protocol_tree.builtins.type_column import make_type_column
+    from pluggable_protocol_tree.models.row_manager import RowManager
+
     return RowManager(columns=[make_type_column(), make_name_column()])
 
 
@@ -624,3 +647,61 @@ def test_seed_default_step_is_noop_when_nonempty():
     assert rm.seed_default_step_if_empty() is False
     assert len(rm.root.children) == 1
     assert rm.root.children[0].name == "existing"
+
+
+# --- run-scope column usage ---
+
+
+def _usage_manager():
+    """Root: [A, Wash(reps=2){B, C}] with a "flu" column only A has a value
+    for."""
+    flu = Column(
+        model=BaseColumnModel(col_id="flu", col_name="Fluorescence"),
+        view=ReadOnlyLabelColumnView(),
+    )
+    rm = RowManager(
+        columns=[
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_duration_column(),
+            flu,
+        ]
+    )
+    rm.add_step(values={"name": "A", "flu": ["fam"]})
+    wash = rm.add_group(name="Wash")
+    setattr(rm.get_row(wash), "repetitions", 2)
+    rm.add_step(parent_path=wash, values={"name": "B"})
+    rm.add_step(parent_path=wash, values={"name": "C"})
+
+    return rm
+
+
+def test_iter_run_rows_yields_each_step_once_without_repetitions():
+    rm = _usage_manager()
+    assert [row.name for row in rm.iter_run_rows()] == ["A", "B", "C"]
+    assert [row.name for row in rm.iter_run_rows([(1,)])] == ["B", "C"]
+
+
+def test_iter_column_values_follows_the_run_scope():
+    rm = _usage_manager()
+    flu = rm.columns[-1]
+    assert list(rm.iter_column_values(flu)) == [["fam"], None, None]
+    assert list(rm.iter_column_values(flu, [(1,)])) == [None, None]
+
+
+def test_unused_column_ids_whole_protocol_counts_a_value_in_any_step():
+    rm = _usage_manager()
+    assert "flu" not in rm.unused_column_ids()
+    assert "duration_s" not in rm.unused_column_ids()
+
+
+def test_unused_column_ids_narrowed_scope_ignores_steps_outside_it():
+    rm = _usage_manager()
+    assert "flu" in rm.unused_column_ids([(1,)])
+    assert "flu" not in rm.unused_column_ids([(0,)])
+
+
+def test_unused_column_ids_empty_scope_uses_no_column():
+    rm = _usage_manager()
+    assert rm.unused_column_ids([]) == [column.id for column in rm.columns]
