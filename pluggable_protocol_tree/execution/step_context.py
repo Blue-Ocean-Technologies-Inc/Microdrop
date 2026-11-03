@@ -21,19 +21,22 @@ ProtocolContext / StepContext land in Task 6 — this task ships only the
 two primitives Mailbox depends on.
 """
 
+# Standard library imports.
 import queue
 import threading
 import time
 from typing import Callable, Optional
 
+# Enthought library imports.
 from pyface.api import GUI
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, List
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, List, Str
 
+# Microdrop package imports.
 from pluggable_protocol_tree.execution.cursor import ExecutionCursor
 from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row import BaseRow
-from pluggable_protocol_tree.execution.exceptions import AbortError
 
 
 def wait_first(events: list, timeout: float) -> Optional[threading.Event]:
@@ -52,7 +55,7 @@ def wait_first(events: list, timeout: float) -> Optional[threading.Event]:
     by the OS scheduler, not by the polling cadence.
     """
     deadline = time.monotonic() + timeout
-    poll_interval = 0.01      # 10ms
+    poll_interval = 0.01  # 10ms
     while True:
         for e in events:
             if e.is_set():
@@ -80,8 +83,9 @@ class Mailbox:
         self._queue.put(payload)
         self._wake.set()
 
-    def drain_one(self, predicate: Optional[Callable], timeout: float,
-                  stop_event: threading.Event):
+    def drain_one(
+        self, predicate: Optional[Callable], timeout: float, stop_event: threading.Event
+    ):
         """Return the first queued item satisfying ``predicate``.
 
         Discards predicate-rejected items (they are not requeued).
@@ -110,19 +114,14 @@ class Mailbox:
             self._wake.clear()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError(
-                    f"wait_for timed out after {timeout}s"
-                )
-            triggered = wait_first(
-                [self._wake, stop_event], timeout=remaining
-            )
+                raise TimeoutError(f"wait_for timed out after {timeout}s")
+            triggered = wait_first([self._wake, stop_event], timeout=remaining)
             if triggered is None:
-                raise TimeoutError(
-                    f"wait_for timed out after {timeout}s"
-                )
+                raise TimeoutError(f"wait_for timed out after {timeout}s")
             if triggered is stop_event:
                 raise AbortError("stop_event fired while waiting")
             # else self._wake fired; loop back and try to drain.
+
 
 class ProtocolContext(HasTraits):
     """Spans one protocol run.
@@ -140,19 +139,21 @@ class ProtocolContext(HasTraits):
     protocol_paused / protocol_resumed signals from a single place so
     UI state stays consistent regardless of who set the event.
     """
-    columns     = List(Instance(IColumn))
-    scratch     = Dict(Str, Any,
-                       desc="protocol-scoped scratch (cleared on each run)")
-    stop_event  = Instance(threading.Event)
+
+    columns = List(Instance(IColumn))
+    scratch = Dict(Str, Any, desc="protocol-scoped scratch (cleared on each run)")
+    stop_event = Instance(threading.Event)
     pause_event = Instance(PauseEvent)
 
     # Hooks may set UI events (e.g. droplet check setting protocol_paused
     # while it waits on a user dialog so the step timer freezes). Setting a
     # Traits Event is thread-safe; widget-touching observers run on the GUI
     # thread via dispatch="ui".
-    signals    = Any(desc="ExecutorSignals (HasTraits) — hooks may set "
-                           "protocol_paused / protocol_resumed for "
-                           "in-hook waits the UI should reflect")
+    signals = Any(
+        desc="ExecutorSignals (HasTraits) — hooks may set "
+        "protocol_paused / protocol_resumed for "
+        "in-hook waits the UI should reflect"
+    )
 
     # When True, hooks that drive hardware (e.g. publishing electrode
     # actuation requests) must skip their broker publishes and any
@@ -174,6 +175,11 @@ class ProtocolContext(HasTraits):
     # hooks via add_pre_protocol_wait(). The executor waits this long — with a
     # loading screen — after the pre-start hooks and before the first step.
     pre_protocol_wait_s = Float(0.0)
+
+    #: Ids (``Column.id``) of the unused columns that have protocol-level
+    #: hooks: no step in this run has a value for them. Filled by the executor
+    #: once, before on_pre_protocol_start; it skips those hooks for the run.
+    skipped_column_ids = List(Str)
 
     # Live execution position + pending mid-run seek (#471): one model the
     # executor and routes handler both drive (replaces the old scattered
@@ -248,7 +254,6 @@ class ProtocolContext(HasTraits):
             triggered = None
 
             while True:
-
                 # External resume (e.g. toolbar Resume cleared pause_event)
                 # — treat as "done waiting" and stop immediately.
                 if not self.pause_event.is_set():
@@ -274,9 +279,7 @@ class ProtocolContext(HasTraits):
                 time.sleep(min(poll_interval, remaining_time))
 
             if triggered is None:
-                raise TimeoutError(
-                    f"wait_for timed out after {timeout}s"
-                )
+                raise TimeoutError(f"wait_for timed out after {timeout}s")
             elif triggered is self.stop_event:
                 raise AbortError("stop_event fired while waiting")
 
@@ -285,14 +288,11 @@ class ProtocolContext(HasTraits):
                 # pause and notify the UI before handing control back.
                 self.resume()
 
-
         except TimeoutError:
             # Re-raise with a uniform message so the protocol-error dialog
             # states the wait timed out rather than surfacing the raw poll
             # internals.
-            raise TimeoutError(
-                f"Timed out after {timeout}s wait"
-            ) from None
+            raise TimeoutError(f"Timed out after {timeout}s wait") from None
 
     def sleep(self, seconds: float):
         """Stop-aware settle wait that keeps the status timers honest.
@@ -317,8 +317,7 @@ class ProtocolContext(HasTraits):
             if self.signals is not None:
                 self.signals.ack_wait_finished = True
 
-    def prompt_gui(self, gui_callable: Callable, *,
-                   timeout: float = float("inf")):
+    def prompt_gui(self, gui_callable: Callable, *, timeout: float = float("inf")):
         """Run ``gui_callable`` on the GUI thread, paused, and return its result.
 
         The dialog counterpart to :meth:`wait`. Where ``wait`` only parks the
@@ -353,7 +352,7 @@ class ProtocolContext(HasTraits):
         def _runner():
             try:
                 box["result"] = gui_callable()
-            except Exception as exc:           # surfaced on the worker below
+            except Exception as exc:  # surfaced on the worker below
                 box["error"] = exc
             finally:
                 done.set()
@@ -380,23 +379,27 @@ class StepContext(HasTraits):
     the executor before any hook runs (so a hook can publish a request
     and immediately wait for the ack without losing fast replies).
     """
-    row       = Instance(BaseRow)
-    protocol  = Instance(ProtocolContext)
-    scratch   = Dict(Str, Any,
-                     desc="step-scoped scratch (cleared per step)")
+
+    row = Instance(BaseRow)
+    protocol = Instance(ProtocolContext)
+    scratch = Dict(Str, Any, desc="step-scoped scratch (cleared per step)")
     _mailboxes = Dict(Str, Instance(Mailbox))
 
-    phase_advance_event = Instance(threading.Event,
+    phase_advance_event = Instance(
+        threading.Event,
         desc="Set by any handler to cut the current phase short. "
-             "Cleared on each phase boundary by RoutesHandler so a set "
-             "carries through to the current phase only. "
-             "RoutesHandler._cooperative_sleep wakes on it the same way "
-             "it wakes on stop_event.")
-    step_phases_done_event = Instance(threading.Event,
+        "Cleared on each phase boundary by RoutesHandler so a set "
+        "carries through to the current phase only. "
+        "RoutesHandler._cooperative_sleep wakes on it the same way "
+        "it wakes on stop_event.",
+    )
+    step_phases_done_event = Instance(
+        threading.Event,
         desc="Set by RoutesHandler once after its per-phase loop returns. "
-             "Lets sibling handlers in the same parallel bucket (notably "
-             "VolumeThresholdHandler) exit their wait loops instead of "
-             "blocking forever on a never-arriving next phase.")
+        "Lets sibling handlers in the same parallel bucket (notably "
+        "VolumeThresholdHandler) exit their wait loops instead of "
+        "blocking forever on a never-arriving next phase.",
+    )
 
     def traits_init(self):
         # Plain (non-trait) coordination state for phase-time buffering,
@@ -474,8 +477,9 @@ class StepContext(HasTraits):
         if box is not None:
             box.deposit(payload)
 
-    def wait_for(self, topic: str, timeout: float = 5.0,
-                 predicate: Optional[Callable] = None):
+    def wait_for(
+        self, topic: str, timeout: float = 5.0, predicate: Optional[Callable] = None
+    ):
         """Block until a message on ``topic`` satisfying ``predicate``
         arrives, or the timeout/stop fires.
 
