@@ -73,6 +73,7 @@ from .models.model import PortableDropbotStatusAndControlsModel
 from .models.more_controls_model import PortableDropbotMoreControlsModel
 from .models.motors_model import PortableDropbotMotorsModel
 from .models.pmt_capture_model import PortableDropbotPmtCaptureModel
+from .preferences import PortableDropbotSettingsPreferences
 from .views.advanced_controls_view import AdvancedControlsView
 from .views.calibration_view import CalibrationView
 from .views.fluorescence_capture_view import FluorescenceCaptureView
@@ -115,7 +116,20 @@ class PortableDropbotSecondaryDockPane(BaseStatusDockPane):
         a pane opts out (see the base docstring)."""
 
 
-class PortableDropbotMotorsDockPane(PortableDropbotSecondaryDockPane):
+class PortableDropbotPresetsDockPane(PortableDropbotSecondaryDockPane):
+    """Base for the panes offering preset quick-pick buttons: binds the
+    model's settings to the application's preferences node, so values
+    applied in Preferences > Portable DropBot Settings show live."""
+
+    def traits_init(self):
+        super().traits_init()
+
+        self.model.preferences = PortableDropbotSettingsPreferences(
+            preferences=self.task.window.application.preferences_helper.preferences
+        )
+
+
+class PortableDropbotMotorsDockPane(PortableDropbotPresetsDockPane):
     """Dock pane for the Portable Dropbot motor panel: mechanism
     macros plus the advanced per-motor moves."""
 
@@ -159,7 +173,7 @@ class PortableDropbotCalibrationDockPane(PortableDropbotSecondaryDockPane):
         )
 
 
-class PortableDropbotPmtCaptureDockPane(PortableDropbotSecondaryDockPane):
+class PortableDropbotPmtCaptureDockPane(PortableDropbotPresetsDockPane):
     """Dock pane for multi-spot PMT capture: the configured spots as a
     reorderable table of capture / gain / exposure and the routine that
     visits them and writes one CSV per spot, plus the shared live stream
@@ -206,7 +220,7 @@ class PortableDropbotFluorescenceCaptureDockPane(PortableDropbotSecondaryDockPan
         )
 
 
-class PortableDropbotMoreControlsDockPane(PortableDropbotSecondaryDockPane):
+class PortableDropbotMoreControlsDockPane(PortableDropbotPresetsDockPane):
     """Dock pane for everything beyond the everyday status-pane
     controls, one collapsible group per subsystem: per-channel heater
     control (with PID tuning) and the PMT power/gain (the live stream

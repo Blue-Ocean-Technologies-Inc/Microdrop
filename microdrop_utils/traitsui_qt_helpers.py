@@ -11,6 +11,7 @@
 # Standard library imports.
 import html
 import math
+from functools import partial
 
 # Third-party imports.
 from PySide6.QtWidgets import QToolButton
@@ -51,6 +52,7 @@ from pyface.qt.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QGroupBox,
+    QHBoxLayout,
     QKeySequenceEdit,
     QLabel,
     QPushButton,
@@ -68,6 +70,7 @@ from traits.api import (
     Range,
     Str,
     TraitError,
+    Union,
     observe,
 )
 from traitsui.api import (
@@ -89,7 +92,7 @@ from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
 # Microdrop style imports.
-from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.button_styles import BUTTON_MIN_HEIGHT, ICON_FONT_FAMILY
 from microdrop_style.colors import (
     ACCENT_COLOR,
     BLACK,
@@ -2002,6 +2005,127 @@ class IconModeButtonEditor(IconButtonEditor):
     #: The value of ``mode_trait`` this button represents.
     mode = Str()
     mode_trait = Str("interaction_mode")
+
+
+def format_preset(value, unit="", decimals=None, signed=False):
+    """Return the button label for a preset value: ``128``, ``37.5 °C``,
+    ``+1 mm``, ``-0.1 mm``.
+
+    Parameters
+    ----------
+    value : int or float
+        The preset value.
+    unit : str
+        Unit appended after a space; empty for a unitless value.
+    decimals : int or None
+        Digits kept after the point, trailing zeros dropped; None shows an
+        integer.
+    signed : bool
+        Prefix positive values with ``+``, for values that are offsets.
+    """
+    if decimals is None:
+        text = str(int(value))
+    else:
+        text = f"{value:.{decimals}f}"
+
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+
+    if signed and value > 0:
+        text = f"+{text}"
+
+    return f"{text} {unit}" if unit else text
+
+
+#: Horizontal room a preset button keeps around its label (px): the
+#: stylesheet's 8px side padding plus the frame.
+_PRESET_BUTTON_PADDING_PX = 20
+
+
+class _PresetButtonsEditor(QtEditor):
+    """A flat row of push buttons, one per value of a List trait. A click
+    sets the factory's ``target`` trait to that value, then fires its
+    ``fire`` trait when one is named. An empty list shows nothing; the
+    buttons follow the enabled state of whatever encloses the row."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QWidget()
+
+        layout = QHBoxLayout(self.control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        self.update_editor()
+
+    def _apply(self, value, *_):
+        setattr(self.object, self.factory.target, value)
+
+        if self.factory.fire:
+            setattr(self.object, self.factory.fire, True)
+
+    def update_editor(self):
+        """Rebuild the buttons from the current list."""
+        layout = self.control.layout()
+
+        while layout.count():
+            button = layout.takeAt(0).widget()
+            button.setParent(None)
+            button.deleteLater()
+
+        labels = [
+            format_preset(
+                value, self.factory.unit, self.factory.decimals, self.factory.signed
+            )
+            for value in self.value
+        ]
+
+        if not labels:
+            return
+
+        # The style floors a push button's width at ~80px, so a full row
+        # would force the pane wide; one width fitting the longest label
+        # keeps the row compact and even.
+        font_metrics = self.control.fontMetrics()
+        width = (
+            max(font_metrics.horizontalAdvance(label) for label in labels)
+            + _PRESET_BUTTON_PADDING_PX
+        )
+
+        for value, label in zip(self.value, labels):
+            button = QPushButton(label)
+            button.setFixedWidth(width)
+            button.setMinimumHeight(BUTTON_MIN_HEIGHT)
+            button.clicked.connect(partial(self._apply, value))
+
+            layout.addWidget(button)
+
+
+class PresetButtonsEditor(BasicEditorFactory):
+    """Factory for a List of preset values rendered as a row of quick-pick
+    buttons::
+
+        UItem("move_presets", editor=PresetButtonsEditor(
+            target="move_by_mm", fire="move_by_button",
+            unit="mm", decimals=3, signed=True))
+
+    One tap applies a preset: the value lands in ``target`` and ``fire``
+    then runs that setter's own handler, exactly as a manual entry would.
+    Labels come from :func:`format_preset`.
+    """
+
+    klass = _PresetButtonsEditor
+
+    #: Name of the trait on the edited object a click sets to the value.
+    target = Str()
+
+    #: Name of a Button/Event trait on the edited object fired after
+    #: ``target`` is set; empty (the default) only sets it.
+    fire = Str()
+
+    #: Label formatting, as format_preset's parameters.
+    unit = Str()
+    decimals = Union(None, Int)
+    signed = Bool(False)
 
 
 def _has_group_box_ancestor(layout):

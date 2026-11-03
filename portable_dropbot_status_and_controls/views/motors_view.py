@@ -23,7 +23,10 @@ from traitsui.api import (
 )
 
 # Microdrop utils imports.
-from microdrop_utils.traitsui_qt_helpers import DoubleSpinBoxEditor
+from microdrop_utils.traitsui_qt_helpers import (
+    DoubleSpinBoxEditor,
+    PresetButtonsEditor,
+)
 
 # Local imports.
 from ..consts import MOVE_DISTANCE_MM_BOUNDS
@@ -82,6 +85,20 @@ manual_move = VGroup(
     HGroup(
         Item("move_by_mm", label="Move By (mm)", editor=_mm_spin_box),
         UItem("move_by_button"),
+    ),
+    # In an HGroup: a bare item among groups gets a wrapper QWidget with
+    # Qt's default 9px margins, indenting the row.
+    HGroup(
+        UItem(
+            "move_presets",
+            editor=PresetButtonsEditor(
+                target="move_by_mm",
+                fire="move_by_button",
+                unit="mm",
+                decimals=3,
+                signed=True,
+            ),
+        ),
     ),
     HGroup(
         Item("move_to_mm", label="Move To (mm)", editor=_mm_spin_box),
