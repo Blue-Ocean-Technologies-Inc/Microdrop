@@ -13,7 +13,7 @@ import re
 
 # Enthought library imports.
 from pyface.qt.QtCore import QCoreApplication, QEvent, Qt, QTimer
-from pyface.qt.QtGui import QFont, QIcon
+from pyface.qt.QtGui import QColor, QFont, QIcon, QPalette
 from pyface.qt.QtWidgets import QApplication
 
 # Local imports.
@@ -44,6 +44,12 @@ _palette_refresh_installed = False
 DOCK_SEPARATOR_STYLE_START_MARKER = "/* dock-separator */"
 DOCK_SEPARATOR_STYLE_END_MARKER = "/* /dock-separator */"
 
+# TraitsUI's field-error colours and the Base HSV value below which it picks
+# the dark one; they mirror the literals in traitsui.qt.constants.
+TRAITSUI_DARK_BASE_VALUE_THRESHOLD = 0x80
+TRAITSUI_DARK_ERROR_COLOR = "#cf6679"
+TRAITSUI_LIGHT_ERROR_COLOR = "#ffc0c0"
+
 _DOCK_SEPARATOR_STYLE_BLOCK = re.compile(
     f"{re.escape(DOCK_SEPARATOR_STYLE_START_MARKER)}.*?"
     f"{re.escape(DOCK_SEPARATOR_STYLE_END_MARKER)}\n?",
@@ -69,6 +75,55 @@ def refresh_widget_palettes():
             QCoreApplication.sendEvent(
                 widget, QEvent(QEvent.Type.ApplicationPaletteChange)
             )
+
+
+def sync_traitsui_field_colors(palette):
+    """Re-derive TraitsUI's field colours from ``palette`` and repaint its fields.
+
+    ``traitsui.qt.constants`` snapshots the application palette at import, and
+    every text editor paints its field's Base from that snapshot. The editor
+    modules hold the colour objects themselves, so they are updated in place:
+    rebinding the module names would not reach them. Fields already painted
+    carry the old colour as an explicit widget palette, which no application
+    palette change overrides, so they are repainted too.
+    """
+    # TraitsUI snapshots these at import, before our palette override; imported
+    # here because importing it takes that snapshot and needs a QApplication.
+    from traitsui.qt import constants
+
+    base = palette.color(QPalette.ColorRole.Base)
+
+    if base.value() < TRAITSUI_DARK_BASE_VALUE_THRESHOLD:
+        error_color = QColor(TRAITSUI_DARK_ERROR_COLOR)
+    else:
+        error_color = QColor(TRAITSUI_LIGHT_ERROR_COLOR)
+
+    color_updates = [
+        (constants.OKColor, base),
+        (constants.DropColor, base),
+        (constants.ErrorColor, error_color),
+        (constants.ReadonlyColor, palette.color(QPalette.ColorRole.Window)),
+    ]
+    updated_colors = {color.rgba(): color for color, _new_color in color_updates}
+
+    for color, new_color in color_updates:
+        color.setRgba(new_color.rgba())
+
+    for widget in QApplication.allWidgets():
+        ok_color = getattr(widget, "_ok_color", None)
+
+        if ok_color is not None and ok_color.rgba() in updated_colors:
+            widget._ok_color = QColor(updated_colors[ok_color.rgba()])
+
+        if not widget.testAttribute(Qt.WidgetAttribute.WA_SetPalette):
+            continue
+
+        widget_palette = QPalette(widget.palette())
+        old_base = widget_palette.color(QPalette.ColorRole.Base).rgba()
+
+        if old_base in updated_colors:
+            widget_palette.setColor(QPalette.ColorRole.Base, updated_colors[old_base])
+            widget.setPalette(widget_palette)
 
 
 def apply_color_scheme(color_scheme):
@@ -117,6 +172,8 @@ def apply_color_scheme(color_scheme):
     )
 
     if platform_applied_it and palette_matches_it:
+        sync_traitsui_field_colors(QApplication.palette())
+
         return
 
     # Platform themes without colour-scheme support (offscreen, and xcb on
@@ -130,6 +187,7 @@ def apply_color_scheme(color_scheme):
     else:
         QApplication.setPalette(_startup_palette)
 
+    sync_traitsui_field_colors(QApplication.palette())
     refresh_widget_palettes()
 
     style_hints.colorSchemeChanged.emit(color_scheme_in_force)
