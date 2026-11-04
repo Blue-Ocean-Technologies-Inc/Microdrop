@@ -66,6 +66,19 @@ def preset_name_error(name):
     return ""
 
 
+def task_layout_for(window_layout, task_id):
+    """Return the ``TaskLayout`` a saved window layout holds for task
+    ``task_id``, or None when it has none."""
+    return next(
+        (
+            layout
+            for layout in window_layout.items
+            if not isinstance(layout, str) and layout.id == task_id
+        ),
+        None,
+    )
+
+
 def is_valid_preset_name(name):
     """Return whether ``name`` (once stripped) can name a preset."""
     return not preset_name_error(name)
