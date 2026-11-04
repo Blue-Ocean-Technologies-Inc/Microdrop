@@ -8,38 +8,43 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import html
+import logging
 import os
 import re
 from pathlib import Path
-import html
 
-from pyface.tasks.api import TraitsDockPane
+# Enthought library imports.
 from pyface.api import clipboard
-
-from microdrop_application.dialogs.pyface_wrapper import information
-
-
+from pyface.tasks.api import TraitsDockPane
+from traits.api import Button, Dict, Instance, Int, Str, observe
 from traitsui.api import (
-    View,
-    VGroup,
     HGroup,
     Item,
-    TabularEditor,
     TabularAdapter,
+    TabularEditor,
+    TextEditor,
+    VGroup,
+    View,
     spring,
 )
-from traits.api import observe, Button, Instance, Dict, Int, Str
 from traitsui.qt.tabular_editor import TabularEditorEvent
 
-from .consts import LEVEL_COLORS, COLORS, LOGGER_COLORS, PKG
-from .model import LogModel
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import information
 
-import logging
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
-
+# Microdrop utils imports.
 from microdrop_utils.file_handler import open_file
 
+# Local imports.
+from .consts import COLORS, LEVEL_COLORS, LOGGER_COLORS, PKG
+from .model import LogModel
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 COLUMNS = [
     ("Time", "time"),
@@ -49,8 +54,9 @@ COLUMNS = [
 ]
 
 
-def get_log(object, row):
-    return object.logs[row]
+def get_log(object, trait, row):
+    """Return the log at ``row`` of the list the table is bound to."""
+    return getattr(object, trait)[row]
 
 
 class LogAdapter(TabularAdapter):
@@ -60,12 +66,12 @@ class LogAdapter(TabularAdapter):
 
     # --- 2. Text Color Logic ---
     def get_text_color(self, object, trait, row, column=0):
-        level = get_log(object, row).level
+        log = get_log(object, trait, row)
         if COLUMNS[column][0] == "Level":
-            return LEVEL_COLORS[level]
+            return LEVEL_COLORS[log.level]
 
         elif COLUMNS[column][0] == "Source":
-            source = object.logs[row].source
+            source = log.source
             # Assign a color to the logger name if it doesn't have one
             if source not in self._logger_colors:
                 self._logger_colors[source] = LOGGER_COLORS[self._color_index]
@@ -83,7 +89,7 @@ class LogAdapter(TabularAdapter):
         if not COLUMNS[column][0] == "Message":
             return
 
-        log = get_log(object, row)
+        log = get_log(object, trait, row)
 
         return log.message
 
@@ -109,7 +115,7 @@ class LogPane(TraitsDockPane):
     table_style_sheet = f"""
                         QTableView {{
                             background-color: #1e1f22; /* Dark Background */
-                            color: {COLORS['RESET']}; 
+                            color: {COLORS["RESET"]};
 
                             /* Kill Selection Artifacts */
                             selection-color: white;
@@ -119,7 +125,7 @@ class LogPane(TraitsDockPane):
                         /* Ensure the header (if visible) matches or blends in */
                         QHeaderView::section {{
                             background-color: #1e1f22;
-                            color: {COLORS['WHITE']};
+                            color: {COLORS["WHITE"]};
                             padding: 4px;
                         }}
 
@@ -149,11 +155,24 @@ class LogPane(TraitsDockPane):
                 Item("object.show_info"),
                 Item("object.show_warning"),
                 Item("object.show_error"),
+                spring,
+                Item(
+                    "object.search_text",
+                    show_label=False,
+                    editor=TextEditor(placeholder="Search logs..."),
+                    tooltip="Show only logs containing this text (any case)",
+                    springy=True,
+                ),
+                Item(
+                    "object.search_scope",
+                    show_label=False,
+                    tooltip="The column the search text must appear in",
+                ),
                 label="Log Filters: ",
             ),
             # --- Middle: The Log Table ---
             Item(
-                "object.logs",
+                "object.shown_logs",
                 editor=log_records_editor,
                 show_label=False,
                 style_sheet=table_style_sheet,

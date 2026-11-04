@@ -8,34 +8,65 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import logging
-from traits.api import HasTraits, List, Str, Instance, Enum, observe, Range, Bool, Property, cached_property
-from pyface.api import GUI
-
 import re
 from datetime import datetime
 
-from logger_ui.preferences import LoggerUIPreferences
+# Enthought library imports.
+from pyface.api import GUI
+from traits.api import (
+    Bool,
+    Enum,
+    HasTraits,
+    Instance,
+    List,
+    Property,
+    Range,
+    Str,
+    cached_property,
+    observe,
+)
+
+# Local imports.
+from .consts import SEARCH_SCOPE_ALL, SEARCH_SCOPES
+from .preferences import LoggerUIPreferences
 
 # Compile the regex once at module level for performance
-ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
+
 
 def clean_ansi_text(text):
     """
     Strip ANSI codes from text
     """
-    return ANSI_ESCAPE_PATTERN.sub('', text)
+    return ANSI_ESCAPE_PATTERN.sub("", text)
+
 
 class LogMessage(HasTraits):
     """A single log entry formatted for the UI."""
+
     level = Enum("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
     time = Str()
     message = Str()
     source = Str()
 
+
 class LogModel(HasTraits):
     """Singleton model holding the list of logs."""
+
+    #: SOURCE OF TRUTH — the buffered logs of the allowed levels, newest first.
     logs = List(Instance(LogMessage))
+
+    #: The buffered logs matching the search, newest first — what the table
+    #: shows. Searching only narrows this view, so clearing it loses nothing.
+    shown_logs = List(Instance(LogMessage))
+
+    #: Case-insensitive text a log must contain to be shown; "" shows all.
+    search_text = Str()
+
+    #: Which column ``search_text`` is matched against.
+    search_scope = Enum(*SEARCH_SCOPES)
 
     buffer_size = Range(10, 100000, mode="spinner")
 
@@ -92,22 +123,56 @@ class LogModel(HasTraits):
             level=clean_ansi_text(record.levelname),
             time=time_str,
             message=clean_ansi_text(record.getMessage()),
-            source=clean_ansi_text(record.name)
+            source=clean_ansi_text(record.name),
         )
 
         # we do not update list if the log is not allowed.
-        if not msg.level in self.allowed_logs:
+        if msg.level not in self.allowed_logs:
             return
 
         self.logs.insert(0, msg)
 
-        # Ring buffer logic: trim the end of the list if we exceed buffer_size
-        if len(self.logs) > self.buffer_size:
-            self.logs = self.logs[: self.buffer_size]
+        if self._matches_search(msg):
+            self.shown_logs.insert(0, msg)
+
+        self._trim_to(self.buffer_size)
 
     def reset(self):
         """Clears all logs."""
-        self.logs.clear()
+        self.logs = []
+
+    def _trim_to(self, size):
+        """Drop the oldest logs beyond ``size``, from the shown ones too."""
+        dropped_ids = {id(log) for log in self.logs[size:]}
+
+        if not dropped_ids:
+            return
+
+        del self.logs[size:]
+
+        # The shown logs keep the buffer's order, so the dropped ones that
+        # matched are exactly at its tail.
+        while self.shown_logs and id(self.shown_logs[-1]) in dropped_ids:
+            self.shown_logs.pop()
+
+    def _matches_search(self, log):
+        """Return whether ``log`` contains the search text in the searched
+        column(s)."""
+        needle = self.search_text.strip().casefold()
+
+        if not needle:
+            return True
+
+        if self.search_scope == SEARCH_SCOPE_ALL:
+            fields = (log.source, log.message, log.level)
+        else:
+            fields = (getattr(log, self.search_scope.lower()),)
+
+        return any(needle in field.casefold() for field in fields)
+
+    @observe("logs, search_text, search_scope")
+    def _refresh_shown_logs(self, event):
+        self.shown_logs = [log for log in self.logs if self._matches_search(log)]
 
     @observe("buffer_size")
     def _buffer_size_changed(self, event):
@@ -115,8 +180,7 @@ class LogModel(HasTraits):
         Traits handler: Automatically trims the list if the user
         dynamically reduces the buffer size at runtime.
         """
-        if len(self.logs) > event.new:
-            self.logs = self.logs[:event.new]
+        self._trim_to(event.new)
 
     @observe("[buffer_size, show_debug, show_info, show_warning, show_error]")
     def _save_preferences(self, event):
@@ -127,6 +191,7 @@ class EnvisageLogHandler(logging.Handler):
     """
     Custom logging handler that pipes logs to the LogModel.
     """
+
     def __init__(self, _log_model_instance):
         super().__init__()
         self._log_model_instance = _log_model_instance
