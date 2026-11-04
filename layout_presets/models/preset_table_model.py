@@ -45,6 +45,10 @@ class PresetRow(HasTraits):
     #: The shortcut saved on disk, to tell an edit from no change.
     saved_shortcut = Str()
 
+    #: Whether Reset Layout restores this preset; at most one row is.
+    #: Kept one-hot by the owning table.
+    is_default = Bool()
+
     #: Why ``name`` cannot be used, or ""; blocks accepting the dialog.
     #: Kept by the owning table.
     name_error = Str()
@@ -73,6 +77,10 @@ class PresetTable(HasTraits):
     #: one of these names unless its row is staged for deletion.
     disk_names = List(Str)
 
+    #: The default preset saved on disk ("" for the built-in layout), to
+    #: tell a change of default from none.
+    saved_default = Str()
+
     #: Whether every row's name can be applied — gates the OK button.
     can_accept = Property(Bool, observe="rows.items.name_error")
 
@@ -88,12 +96,16 @@ class PresetTable(HasTraits):
                 saved_name=name,
                 shortcut=store.shortcut_for(name),
                 saved_shortcut=store.shortcut_for(name),
+                is_default=name == store.default_preset,
             )
             for name in store.presets
         ]
 
         return cls(
-            rows=rows, used_shortcuts=used_shortcuts, disk_names=store.saved_names()
+            rows=rows,
+            used_shortcuts=used_shortcuts,
+            disk_names=store.saved_names(),
+            saved_default=store.default_preset,
         )
 
     def delete_selected(self):
@@ -118,12 +130,33 @@ class PresetTable(HasTraits):
 
         return list(self.deleted_names), renamed, changed_shortcuts
 
+    def changed_default(self):
+        """Return the new default preset's (new) name, "" for the built-in
+        layout, or None when the default is unchanged."""
+        default_name = next(
+            (row.name.strip() for row in self.rows if row.is_default), ""
+        )
+
+        if default_name == self.saved_default:
+            return None
+
+        return default_name
+
     def _get_can_accept(self):
         return not any(row.name_error for row in self.rows)
 
     @observe("delete_button")
     def _delete_selected_row(self, event):
         self.delete_selected()
+
+    @observe("rows.items.is_default")
+    def _keep_one_default(self, event):
+        if not event.new:
+            return
+
+        for row in self.rows:
+            if row is not event.object:
+                row.is_default = False
 
     @observe("rows:items")
     def _track_deleted_rows(self, event):

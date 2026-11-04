@@ -18,7 +18,8 @@ from pathlib import Path
 from envisage.api import TASK_EXTENSIONS, Plugin
 from envisage.ui.tasks.api import TaskExtension
 from pyface.tasks.action.api import SchemaAddition
-from traits.api import Instance, List, Str
+from traits.api import Instance, List, Str, observe
+from traits.observation.api import trait
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -32,7 +33,7 @@ from .consts import (
     VIEW_MENU_PATH,
     PKG_name,
 )
-from .models.preset_store import PresetStore
+from .models.preset_store import PresetStore, task_layout_for
 
 
 class LayoutPresetsPlugin(Plugin):
@@ -66,6 +67,55 @@ class LayoutPresetsPlugin(Plugin):
             directory=str(Path(self.application.state_location) / PRESETS_DIRNAME)
         )
         self.store.refresh()
+
+    def stop(self):
+        """Hand Reset Layout back the task's built-in default layout."""
+        self.store = None
+
+        super().stop()
+
+    #### Trait change handlers ################################################
+
+    # Fires on the store too, so a hot-load start and stop resync windows.
+    @observe("store.default_preset")
+    def _apply_default_preset_to_open_windows(self, event):
+        for window in getattr(self.application, "windows", []):
+            self._apply_default_preset(window)
+
+    @observe(trait("application", notify=False).trait("window_opened", optional=True))
+    def _apply_default_preset_to_new_window(self, event):
+        self._apply_default_preset(event.new.window)
+
+    def _apply_default_preset(self, window):
+        """Make the window's Reset Layout restore the default preset's pane
+        arrangement, or the task's built-in one when there is none."""
+        task = next(
+            (
+                task
+                for task in window.tasks
+                if task.id == self.task_id_to_contribute_view
+            ),
+            None,
+        )
+
+        if task is None:
+            return
+
+        default_preset = self.store.default_preset if self.store is not None else ""
+        window_layout = self.store.load(default_preset) if default_preset else None
+        task_layout = (
+            task_layout_for(window_layout, task.id)
+            if window_layout is not None
+            else None
+        )
+
+        if task_layout is None:
+            # Deleting the override brings back the task's _default_layout_default.
+            task.reset_traits(["default_layout"])
+
+            return
+
+        task.default_layout = task_layout.clone_traits()
 
     #### Trait initializers ###################################################
 

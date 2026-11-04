@@ -118,9 +118,12 @@ def used_shortcuts(window, store, include_presets=True):
     return owners
 
 
-def apply_preset_table_changes(store, deleted_names, renamed, changed_shortcuts):
+def apply_preset_table_changes(
+    store, deleted_names, renamed, changed_shortcuts, changed_default=None
+):
     """Apply the Manage Layout Presets dialog's changes to ``store``:
-    deletions, then renames, then shortcuts (keyed by the new names)."""
+    deletions, then renames, then shortcuts and the default (keyed by the
+    new names; ``changed_default`` None leaves the default as it is)."""
     for name in deleted_names:
         store.delete(name)
 
@@ -129,6 +132,9 @@ def apply_preset_table_changes(store, deleted_names, renamed, changed_shortcuts)
 
     for name, shortcut in changed_shortcuts.items():
         store.set_shortcut(name, shortcut)
+
+    if changed_default is not None:
+        store.set_default(changed_default)
 
 
 class SaveLayoutPresetAction(TaskAction):
@@ -337,7 +343,11 @@ class ManageLayoutPresetsAction(TaskAction):
 
         try:
             apply_preset_table_changes(
-                self.store, deleted_names, renamed, changed_shortcuts
+                self.store,
+                deleted_names,
+                renamed,
+                changed_shortcuts,
+                table.changed_default(),
             )
         except (OSError, ValueError) as apply_error:
             logger.error(f"Could not update the layout presets: {apply_error}")

@@ -24,6 +24,10 @@ DEFAULT_PRESET_STEM = "preset"
 #: One JSON file beside the presets maps preset name -> key sequence.
 SHORTCUTS_FILENAME = "shortcuts.json"
 
+#: One text file beside the presets holds the name of the preset Reset
+#: Layout restores; absent or empty means the task's built-in default.
+DEFAULT_PRESET_FILENAME = "default_preset.txt"
+
 #: Default shortcuts are ``<modifier>+<key>`` for the first key, in this
 #: order, that no preset uses yet — mirroring the default name.
 DEFAULT_SHORTCUT_MODIFIER = "Alt"
