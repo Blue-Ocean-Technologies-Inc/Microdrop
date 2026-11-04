@@ -8,38 +8,42 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import html
+import logging
 import os
 import re
 from pathlib import Path
-import html
 
-from pyface.tasks.api import TraitsDockPane
+# Enthought library imports.
 from pyface.api import clipboard
-
-from microdrop_application.dialogs.pyface_wrapper import information
-
-
+from pyface.tasks.api import TraitsDockPane
+from traits.api import Button, Dict, Instance, Int, Str, observe
 from traitsui.api import (
-    View,
-    VGroup,
     HGroup,
     Item,
-    TabularEditor,
     TabularAdapter,
+    TabularEditor,
+    VGroup,
+    View,
     spring,
 )
-from traits.api import observe, Button, Instance, Dict, Int, Str
 from traitsui.qt.tabular_editor import TabularEditorEvent
 
-from .consts import LEVEL_COLORS, COLORS, LOGGER_COLORS, PKG
-from .model import LogModel
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import information
 
-import logging
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
-
+# Microdrop utils imports.
 from microdrop_utils.file_handler import open_file
 
+# Local imports.
+from .consts import COLORS, LEVEL_COLORS, LOGGER_COLORS, PKG
+from .model import LogModel
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 COLUMNS = [
     ("Time", "time"),
@@ -109,7 +113,7 @@ class LogPane(TraitsDockPane):
     table_style_sheet = f"""
                         QTableView {{
                             background-color: #1e1f22; /* Dark Background */
-                            color: {COLORS['RESET']}; 
+                            color: {COLORS["RESET"]};
 
                             /* Kill Selection Artifacts */
                             selection-color: white;
@@ -119,7 +123,7 @@ class LogPane(TraitsDockPane):
                         /* Ensure the header (if visible) matches or blends in */
                         QHeaderView::section {{
                             background-color: #1e1f22;
-                            color: {COLORS['WHITE']};
+                            color: {COLORS["WHITE"]};
                             padding: 4px;
                         }}
 
