@@ -24,6 +24,7 @@ from traitsui.api import (
     Item,
     TabularAdapter,
     TabularEditor,
+    TextEditor,
     VGroup,
     View,
     spring,
@@ -53,8 +54,9 @@ COLUMNS = [
 ]
 
 
-def get_log(object, row):
-    return object.logs[row]
+def get_log(object, trait, row):
+    """Return the log at ``row`` of the list the table is bound to."""
+    return getattr(object, trait)[row]
 
 
 class LogAdapter(TabularAdapter):
@@ -64,12 +66,12 @@ class LogAdapter(TabularAdapter):
 
     # --- 2. Text Color Logic ---
     def get_text_color(self, object, trait, row, column=0):
-        level = get_log(object, row).level
+        log = get_log(object, trait, row)
         if COLUMNS[column][0] == "Level":
-            return LEVEL_COLORS[level]
+            return LEVEL_COLORS[log.level]
 
         elif COLUMNS[column][0] == "Source":
-            source = object.logs[row].source
+            source = log.source
             # Assign a color to the logger name if it doesn't have one
             if source not in self._logger_colors:
                 self._logger_colors[source] = LOGGER_COLORS[self._color_index]
@@ -87,7 +89,7 @@ class LogAdapter(TabularAdapter):
         if not COLUMNS[column][0] == "Message":
             return
 
-        log = get_log(object, row)
+        log = get_log(object, trait, row)
 
         return log.message
 
@@ -153,11 +155,24 @@ class LogPane(TraitsDockPane):
                 Item("object.show_info"),
                 Item("object.show_warning"),
                 Item("object.show_error"),
+                spring,
+                Item(
+                    "object.search_text",
+                    show_label=False,
+                    editor=TextEditor(placeholder="Search logs..."),
+                    tooltip="Show only logs containing this text (any case)",
+                    springy=True,
+                ),
+                Item(
+                    "object.search_scope",
+                    show_label=False,
+                    tooltip="The column the search text must appear in",
+                ),
                 label="Log Filters: ",
             ),
             # --- Middle: The Log Table ---
             Item(
-                "object.logs",
+                "object.shown_logs",
                 editor=log_records_editor,
                 show_label=False,
                 style_sheet=table_style_sheet,

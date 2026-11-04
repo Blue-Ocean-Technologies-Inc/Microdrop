@@ -12,6 +12,10 @@
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
+#: Columns the console search can match; "All" means source, message or level.
+SEARCH_SCOPE_ALL = "All"
+SEARCH_SCOPES = [SEARCH_SCOPE_ALL, "Source", "Message"]
+
 COLORS = {
     "RESET": "#ABB2BF",  # Resets to default
     "RED": "#CD0000",  # Standard ANSI Red
