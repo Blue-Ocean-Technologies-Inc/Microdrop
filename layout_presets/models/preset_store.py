@@ -23,6 +23,7 @@ from traits.api import Dict, Directory, HasTraits, List, Str
 
 # Local imports.
 from ..consts import (
+    DEFAULT_PRESET_FILENAME,
     DEFAULT_PRESET_STEM,
     DEFAULT_SHORTCUT_KEYS,
     DEFAULT_SHORTCUT_MODIFIER,
@@ -66,6 +67,19 @@ def preset_name_error(name):
     return ""
 
 
+def task_layout_for(window_layout, task_id):
+    """Return the ``TaskLayout`` a saved window layout holds for task
+    ``task_id``, or None when it has none."""
+    return next(
+        (
+            layout
+            for layout in window_layout.items
+            if not isinstance(layout, str) and layout.id == task_id
+        ),
+        None,
+    )
+
+
 def is_valid_preset_name(name):
     """Return whether ``name`` (once stripped) can name a preset."""
     return not preset_name_error(name)
@@ -84,6 +98,10 @@ class PresetStore(HasTraits):
     #: listed presets that have one.
     shortcuts = Dict(Str, Str)
 
+    #: The listed preset Reset Layout restores; "" for the task's built-in
+    #: default layout.
+    default_preset = Str()
+
     def refresh(self):
         """Rescan ``directory``, listing every preset that loads."""
         names = [
@@ -98,6 +116,9 @@ class PresetStore(HasTraits):
             if name in names
         }
         self.presets = sorted(names, key=str.casefold)
+
+        default_preset = self._read_default_preset()
+        self.default_preset = default_preset if default_preset in names else ""
 
     def has_preset(self, name):
         """Return whether a preset file named ``name`` is already on disk."""
@@ -169,6 +190,10 @@ class PresetStore(HasTraits):
 
         self._path_for(name).unlink()
         self._write_shortcuts(self._saved_preset_shortcuts())
+
+        if self._read_default_preset() == name:
+            self._write_default_preset("")
+
         logger.info(f"Deleted layout preset '{name}'")
 
         self.refresh()
@@ -208,6 +233,10 @@ class PresetStore(HasTraits):
 
         os.replace(old_path, new_path)
         self._write_shortcuts(shortcuts)
+
+        if self._read_default_preset() == old_name:
+            self._write_default_preset(new_name)
+
         logger.info(f"Renamed layout preset '{old_name}' to '{new_name}'")
 
         self.refresh()
@@ -227,12 +256,47 @@ class PresetStore(HasTraits):
 
         self.refresh()
 
+    def set_default(self, name):
+        """Make preset ``name`` the one Reset Layout restores ("" restores
+        the built-in default); warn if the preset is unknown."""
+        name = name.strip()
+
+        if name and not self.has_preset(name):
+            logger.warning(f"Cannot make unknown layout preset '{name}' the default")
+
+            return
+
+        self._write_default_preset(name)
+        logger.info(f"Default layout preset: {name or 'the built-in layout'}")
+
+        self.refresh()
+
     def load(self, name):
         """Return the ``TaskWindowLayout`` saved as ``name``, or None."""
         return self._read(self._path_for(name))
 
     def _path_for(self, name):
         return Path(self.directory) / f"{name.strip()}{PRESET_FILE_SUFFIX}"
+
+    def _read_default_preset(self):
+        """Return the default preset file's name, or "" when there is none."""
+        path = Path(self.directory) / DEFAULT_PRESET_FILENAME
+
+        if not path.is_file():
+            return ""
+
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except OSError:
+            # A damaged file only costs the default, never the presets.
+            logger.exception(f"Could not read the default layout preset {path}")
+
+            return ""
+
+    def _write_default_preset(self, name):
+        _write_atomically(
+            Path(self.directory) / DEFAULT_PRESET_FILENAME, name.encode("utf-8")
+        )
 
     def _write_preset_shortcut(self, name, shortcut):
         """Record ``shortcut`` ("" for none) as preset ``name``'s."""

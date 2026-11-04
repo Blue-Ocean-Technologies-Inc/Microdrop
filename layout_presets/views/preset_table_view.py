@@ -17,7 +17,11 @@ Deleting a row only stages it; nothing changes on disk until OK."""
 from traitsui.api import Action, HGroup, TableEditor, UItem, VGroup, View, spring
 
 # Microdrop utils imports.
-from microdrop_utils.traitsui_qt_helpers import KeySequenceEditor, ObjectColumn
+from microdrop_utils.traitsui_qt_helpers import (
+    CustomCheckboxColumn,
+    KeySequenceEditor,
+    ObjectColumn,
+)
 
 # Local imports.
 from ..consts import MANAGE_LAYOUT_PRESETS_DIALOG_TITLE
@@ -34,6 +38,14 @@ presets_table = TableEditor(
             label="Shortcut",
             editor=KeySequenceEditor(),
             tooltip="Double-click and press the keys; clear for none",
+        ),
+        CustomCheckboxColumn(
+            name="is_default",
+            label="Default",
+            editable=False,
+            horizontal_alignment="center",
+            tooltip="Click to make Reset Layout restore this preset; "
+            "click again for the built-in layout",
         ),
         ObjectColumn(name="warning", label="Warning", editable=False),
     ],
@@ -70,8 +82,10 @@ if __name__ == "__main__":
                 saved_name="wide",
                 shortcut="Alt+1",
                 saved_shortcut="Alt+1",
+                is_default=True,
             ),
             PresetRow(name="tall", saved_name="tall", shortcut="Ctrl+R"),
         ],
         used_shortcuts={"Ctrl+R": "Reset Layout"},
+        saved_default="wide",
     ).configure_traits(view=preset_table_view)

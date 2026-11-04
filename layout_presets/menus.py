@@ -47,7 +47,7 @@ from .consts import (
     UNNAMED_SHORTCUT_OWNER,
 )
 from .models.preset_name_model import PresetName, preset_shortcut_owner
-from .models.preset_store import PresetStore
+from .models.preset_store import PresetStore, task_layout_for
 from .models.preset_table_model import PresetTable
 from .views.preset_name_view import preset_name_view
 from .views.preset_table_view import preset_table_view
@@ -118,9 +118,12 @@ def used_shortcuts(window, store, include_presets=True):
     return owners
 
 
-def apply_preset_table_changes(store, deleted_names, renamed, changed_shortcuts):
+def apply_preset_table_changes(
+    store, deleted_names, renamed, changed_shortcuts, changed_default=None
+):
     """Apply the Manage Layout Presets dialog's changes to ``store``:
-    deletions, then renames, then shortcuts (keyed by the new names)."""
+    deletions, then renames, then shortcuts and the default (keyed by the
+    new names; ``changed_default`` None leaves the default as it is)."""
     for name in deleted_names:
         store.delete(name)
 
@@ -129,6 +132,9 @@ def apply_preset_table_changes(store, deleted_names, renamed, changed_shortcuts)
 
     for name, shortcut in changed_shortcuts.items():
         store.set_shortcut(name, shortcut)
+
+    if changed_default is not None:
+        store.set_default(changed_default)
 
 
 class SaveLayoutPresetAction(TaskAction):
@@ -268,10 +274,11 @@ class ApplyLayoutPresetAction(TaskAction):
         missing_task_ids = [
             task_id for task_id in layout.get_tasks() if task_id not in window_task_ids
         ]
+        task_layout = task_layout_for(layout, window.active_task.id)
 
         # Mirrors envisage's _create_windows: a layout naming a task this
         # window lacks is refused whole rather than half-applied.
-        if missing_task_ids:
+        if missing_task_ids or task_layout is None:
             logger.warning(
                 f"Layout preset '{self.preset_name}' references tasks "
                 f"{missing_task_ids} this window does not have; not applied"
@@ -291,7 +298,12 @@ class ApplyLayoutPresetAction(TaskAction):
         for pane in window.dock_panes:
             pane.floating = False
 
-        window.set_window_layout(layout)
+        # A preset arranges the panes, not the window: set_window_layout would
+        # also replay the saved position, size and maximized state, which
+        # walks the window off screen (a maximized frame is saved at negative
+        # coordinates, and re-applying it to a maximized window un-maximizes
+        # it there).
+        window.set_layout(task_layout)
         logger.info(f"Applied layout preset '{self.preset_name}'")
 
 
@@ -331,7 +343,11 @@ class ManageLayoutPresetsAction(TaskAction):
 
         try:
             apply_preset_table_changes(
-                self.store, deleted_names, renamed, changed_shortcuts
+                self.store,
+                deleted_names,
+                renamed,
+                changed_shortcuts,
+                table.changed_default(),
             )
         except (OSError, ValueError) as apply_error:
             logger.error(f"Could not update the layout presets: {apply_error}")
