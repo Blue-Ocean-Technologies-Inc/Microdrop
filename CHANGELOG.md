@@ -1,3 +1,18 @@
+## [v1.38.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.38.0) (2026-11-04)
+
+### Feat
+
+- **layout_presets**: pick the preset Reset Layout restores ([`61cb697`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/61cb6973756c177ab798b42ffc9b9e7430b395c2))
+- **logger_ui**: search filter for console logs ([`32d2cf8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/32d2cf8df4009edf144c172354ebfbaba7ea1c69))
+
+### Fix
+
+- **layout_presets**: keep the window on screen on apply ([`5b61839`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5b61839056e6682615bd8ab5c5fd8874969582ff))
+
+### Style
+
+- **logger_ui**: bring console log pane ruff-clean ([`554afee`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/554afeec806fce6be31753df540dfb7b22fcae75))
+
 ## [v1.37.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.37.0) (2026-11-03)
 
 ### Feat
