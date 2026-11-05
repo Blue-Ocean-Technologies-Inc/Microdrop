@@ -19,7 +19,11 @@ from PySide6.QtCore import QObject, Signal
 from traits.api import Bool, Instance, List
 
 # Microdrop package imports.
-from device_viewer.consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
+from device_viewer.consts import (
+    FILLER_CAPACITANCE_KEY,
+    LIQUID_CAPACITANCE_KEY,
+    VolumeEstimateMessage,
+)
 from dropbot_controller.consts import RETRY_CONNECTION
 from template_status_and_controls.base_message_handler import BaseMessageHandler
 
@@ -175,6 +179,11 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             self.model.c_device = ureg(f"{c_device_value:.4f} pF/mm^2")
         else:
             self.model.c_device = ureg("nan pF/mm^2")
+
+    def _on_volume_estimate_triggered(self, body):
+        """Show the device viewer's live volume readout; it publishes only
+        changes above reading noise, so every message is worth showing."""
+        self.model.volume_estimate = VolumeEstimateMessage.model_validate_json(body)
 
     # def _on_shorts_detected_triggered(self, shorts_dict):
     #     data = json.loads(shorts_dict)

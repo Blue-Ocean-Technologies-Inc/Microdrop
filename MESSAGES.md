@@ -92,6 +92,7 @@ Receiving: (Via handlers)
 - CHIP_NOT_INSERTED "dropbot/signals/chip_not_inserted"
 - CHIP_INSERTED "dropbot/signals/chip_inserted"
 - NO_POWER "dropbot/signals/warnings/no_power"
+- DEVICE_VIEWER_VOLUME_ESTIMATE "ui/device_viewer/volume_estimate" (see the droplet readouts flow below)
 
 There is also a handler for "dropbot/signals/warnings/*" called _on_show_warning_triggered (in widget.py) that is assigned in dramatiq_dropbot_status_controller.py
 
@@ -113,6 +114,7 @@ Sending: (Via publish_method)
 - PHASE_NAVIGATION_STATE "ui/device_viewer/phase_navigation_state" (via route_execution_service)
 - DEVICE_VIEWER_CAMERA_SOURCE_SELECTED "ui/device_viewer/camera/source_selected" (reply to select_source)
 - DEVICE_VIEWER_CAMERA_STATE "ui/device_viewer/camera/state" (camera selection / on-off, on every change)
+- DEVICE_VIEWER_VOLUME_ESTIMATE "ui/device_viewer/volume_estimate" (live volume readout, on changes above reading noise)
 
 ### image_viewer
 
@@ -193,6 +195,23 @@ that only the device viewer has.
 
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_geometry_changed` keeps them on `electrode_centroids` / `electrode_neighbours` and hands them to `services.phase_math.set_device_lattice`, the module-level lattice every phase-math caller reads. A step asking for a wide slug before any lattice is known runs one electrode wide and logs an error.
+
+### Device Viewer → DropBot status: droplet readouts
+
+The device viewer turns the live capacitance into a droplet volume, fill and
+covered area (`VolumeEstimateModel`); the DropBot status pane shows them.
+
+**Topic**
+- `DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"` — defined in `device_viewer/consts.py`; publish through `volume_estimate_publisher`.
+
+**Payload schema**
+- Pydantic `VolumeEstimateMessage` at `device_viewer/models/messages.py`: `status_message` ("" when there is an estimate), `volume_ul`, `fill_fraction`, `covered_area_mm2`.
+
+**Publisher side (device_viewer)**
+- `device_viewer/controllers/device_viewer_publish_controller.py` — `_publish_volume_estimate` fires on `VolumeEstimateModel.shown_values_updated`: once per readout change, never for capacitance noise under `VOLUME_READOUT_NOISE_UL`.
+
+**Subscriber side (dropbot_status_and_controls)**
+- `message_handler.py` — `_on_volume_estimate_triggered` stores the message on `model.volume_estimate`; the panel's dropdown picks which readout shows, its tooltip and the Droplet Readouts dialog list them all with c_device.
 
 ### Device Viewer ↔ Protocol Tree: idle phase navigation (#493)
 

@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import observe
+from traits.api import Instance, observe
+from traitsui.api import UI
 
 # Microdrop package imports.
 from dropbot_controller.consts import SET_FREQUENCY, SET_VOLTAGE
@@ -21,6 +22,7 @@ from microdrop_utils.decorators import debounce
 
 # Local imports.
 from .consts import DIELECTRIC_MATERIAL_KEY
+from .view import droplet_readouts_view
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -40,6 +42,9 @@ class ControlsController(BaseStatusController):
       - message_dict, _publish_or_queue(), publish_queued_messages()
       - realtime_mode_setattr(), _on_realtime_mode_changed()
     """
+
+    #: The open droplet readouts dialog, if any.
+    _droplet_readouts_ui = Instance(UI)
 
     # ------------------------------------------------------------------ #
     # Debounced setattr                                                    #
@@ -73,3 +78,19 @@ class ControlsController(BaseStatusController):
         report). The dock pane assigning ``model.preferences`` is the startup
         write: the material's default is read from those preferences."""
         app_globals[DIELECTRIC_MATERIAL_KEY] = self.model.dielectric_material
+
+    @observe("model:show_droplet_readouts")
+    def _open_droplet_readouts(self, event):
+        """Show every droplet readout in a non-modal window, raising the one
+        already open instead of stacking another."""
+
+        if self._droplet_readouts_ui is not None and self._droplet_readouts_ui.control:
+            self._droplet_readouts_ui.control.raise_()
+            self._droplet_readouts_ui.control.activateWindow()
+
+            return
+
+        parent = self.info.ui.control if self.info and self.info.ui else None
+        self._droplet_readouts_ui = self.model.edit_traits(
+            view=droplet_readouts_view, kind="live", parent=parent
+        )
