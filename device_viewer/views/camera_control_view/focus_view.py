@@ -67,7 +67,6 @@ camera_focus_view = View(
                 format_str="%.2f",
             ),
             enabled_when="available and not auto",
-            springy=True,
         ),
         HGroup(
             UItem(
@@ -90,6 +89,8 @@ camera_focus_view = View(
                 springy=True,
             ),
         ),
+        # Hidden for a camera with image controls but no focus.
+        visible_when="available",
     ),
     # Resizable, or TraitsUI fixes the panel at its build-time size, before
     # the sidebar's text-button style makes the Autofocus button taller.
