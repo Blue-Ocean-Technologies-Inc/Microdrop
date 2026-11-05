@@ -63,6 +63,7 @@ from .calibration import CalibrationModel
 from .electrodes import Electrodes
 from .perspective import PerspectiveModel
 from .route import RouteLayerManager
+from .volume_estimate import VolumeEstimateModel
 from .zones import ZoneLayerManager, ZoneType
 
 # Logger import.
@@ -81,6 +82,9 @@ class DeviceViewMainModel(HasTraits):
     electrodes = Instance(Electrodes)
     preferences = Instance(DeviceViewerPreferences)
     calibration = Instance(CalibrationModel)
+
+    #: Live droplet volume from the capacitance reading and actuated area.
+    volume_estimate = Instance(VolumeEstimateModel, ())
 
     # add services
     route_execution_service = Instance(IRouteExecutionService)
@@ -287,6 +291,7 @@ class DeviceViewMainModel(HasTraits):
             ]
 
         self._seed_zone_types_from_preferences()
+        self._sync_volume_estimate()
 
     @observe("preferences:max_slug_width", post_init=True)
     def _max_slug_width_changed(self, event):
@@ -653,6 +658,25 @@ class DeviceViewMainModel(HasTraits):
         self.preferences.preferences.set(f"calibration.{event.name}", str(event.new))
 
         logger.info(f"Preferences: {event.name} changed to {event.new}")
+
+    @observe(
+        "calibration:[last_capacitance, liquid_capacitance_over_area, "
+        "filler_capacitance_over_area]",
+        post_init=True,
+    )
+    @observe("electrodes:actuated_channels.items", post_init=True)
+    @observe("electrode_scale, preferences:gap_height_um", post_init=True)
+    def _sync_volume_estimate(self, event=None):
+        """Feed the volume estimate the latest reading, area and calibration."""
+        self.volume_estimate.trait_set(
+            capacitance_pf=self.calibration.last_capacitance,
+            actuated_area_mm2=self.electrodes.get_activated_electrode_area_mm2(),
+            liquid_capacitance_over_area=self.liquid_capacitance_over_area,
+            filler_capacitance_over_area=self.filler_capacitance_over_area,
+        )
+
+        if self.preferences is not None:
+            self.volume_estimate.gap_um = self.preferences.gap_height_um
 
     @observe("protocol_running")
     def _protocol_running_changed(self, event=None):

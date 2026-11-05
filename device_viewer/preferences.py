@@ -69,11 +69,14 @@ from .consts import (
     ALIGNMENT_SNAP_RADIUS_PX,
     ALPHA_VIEW_MIN_HEIGHT,
     AUTO_FIT_MARGIN_SCALE,
+    DEFAULT_GAP_HEIGHT_UM,
     DEVICE_VIEWER_SIDEBAR_WIDTH,
     GAMEPAD_DROPPED_PREFERENCE_KEYS,
     GAMEPAD_MOVED_PREFERENCE_KEYS,
     GAMEPAD_PLUGIN_PREFERENCES_PATH,
     GAMEPAD_PREFERENCES_MOVED_KEY,
+    GAP_HEIGHT_UM_MAX,
+    GAP_HEIGHT_UM_MIN,
     LAYERS_VIEW_MIN_HEIGHT,
     MASTER_SVG_FILE,
     MAX_SLUG_WIDTH,
@@ -183,6 +186,14 @@ class DeviceViewerPreferences(PreferencesHelper):
     # Widest slug the route sidebar's lane sliders allow, route electrode
     # included.
     max_slug_width = Range(value=MAX_SLUG_WIDTH, low=1, high=21, mode="spinner")
+
+    #: Plate gap the live volume readout multiplies the covered area by, µm.
+    gap_height_um = Range(
+        value=DEFAULT_GAP_HEIGHT_UM,
+        low=GAP_HEIGHT_UM_MIN,
+        high=GAP_HEIGHT_UM_MAX,
+        mode="spinner",
+    )
 
     # getters for processed values from int set in spinner
     _auto_fit_margin_scale = Property(observe="AUTO_FIT_MARGIN_SCALE")
@@ -390,6 +401,22 @@ path_settings = Group(
 )
 
 
+########## Volume readout settings ###########################
+volume_readout_settings = Group(
+    create_item_label_group(
+        "gap_height_um",
+        label_text="Plate gap (µm)",
+        item_tooltip="Distance between the top and bottom plates the droplet "
+        "fills. The live volume readout is the liquid-covered area times this "
+        "gap.",
+    ),
+    label="Volume Readout",
+    show_labels=False,
+    show_border=True,
+    style_sheet=preferences_group_style_sheet,
+)
+
+
 class DeviceViewerPreferencesPane(PreferencesPane):
     """Device Viewer preferences pane.
 
@@ -412,6 +439,8 @@ class DeviceViewerPreferencesPane(PreferencesPane):
         sidebar_settings_grid,
         Item("_"),  # Separator
         path_settings,
+        Item("_"),  # Separator
+        volume_readout_settings,
         Item("_"),  # Separator
         resizable=True,
     )

@@ -12,7 +12,11 @@
 import os
 
 # Microdrop package imports.
-from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
+from device_viewer.consts import (
+    DEVICE_VIEWER_VOLUME_ESTIMATE,
+    PROTOCOL_GRID_DISPLAY_STATE,
+    PROTOCOL_RUNNING,
+)
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 # Microdrop style imports.
@@ -32,6 +36,7 @@ ACTOR_TOPIC_DICT = {
         "dropbot/signals/#",
         "hardware/signals/#",
         "ui/calibration_data",
+        DEVICE_VIEWER_VOLUME_ESTIMATE,
         PROTOCOL_RUNNING,
         PROTOCOL_GRID_DISPLAY_STATE,
         VOLTAGE_FREQUENCY_RANGE_CHANGED,
@@ -46,6 +51,13 @@ DROPBOT_CHIP_INSERTED_IMAGE = os.path.join(
 )
 
 NUM_CAPACITANCE_READINGS_AVERAGED = 5
+
+# Droplet readouts (from the device viewer's live volume estimate) the main
+# panel can show; the dialog and the tooltip show them all, plus c_device.
+VOLUME_READOUT = "Volume"
+FILL_READOUT = "Fill"
+COVERED_AREA_READOUT = "Covered area"
+DROPLET_READOUTS = [VOLUME_READOUT, FILL_READOUT, COVERED_AREA_READOUT]
 
 # Dielectric materials and their relative permittivity values.
 # Used to calculate dielectric thickness from device capacitance via:
