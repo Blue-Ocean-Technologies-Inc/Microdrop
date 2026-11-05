@@ -98,6 +98,20 @@ class StubCamera(HasTraits):
         return self.distance
 
 
+#: ``v4l2-ctl --list-ctrls`` of a UVC camera with continuous auto focus on.
+UVC_FOCUS_CONTROLS = (
+    "focus_absolute 0x009a090a (int) : min=0 max=1000 step=1 value=250\n"
+    "focus_automatic_continuous 0x009a090c (bool) : default=1 value=1\n"
+)
+
+#: ``v4l2-ctl --list-ctrls`` of a Pi CSI camera's lens sub-device (dw9807):
+#: focus_absolute only, no auto focus.
+LENS_FOCUS_CONTROLS = (
+    "focus_absolute 0x009a090a (int) : min=0 max=1023 step=1 default=480 "
+    "value=455 flags=has-min-max\n"
+)
+
+
 class Recorder:
     """Stands in for a publisher or an actor; records its calls."""
 
@@ -569,25 +583,36 @@ def test_no_manual_exposure_answers_not_ok(controller, published):
     }
 
 
-def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
-    controller, published, monkeypatch
-):
-    calls = []
+@pytest.fixture
+def v4l2_focus(monkeypatch):
+    """Fake v4l2 focus device: ``controls`` is its ``--list-ctrls`` text,
+    ``position`` its focus_absolute; writes are recorded in ``calls``."""
+    device = {"controls": UVC_FOCUS_CONTROLS, "position": 250, "calls": []}
+    monkeypatch.setattr(
+        camera_controller, "list_v4l2_controls", lambda path: device["controls"]
+    )
     monkeypatch.setattr(
         camera_controller,
         "set_v4l2_controls",
-        lambda path, **controls: calls.append((path, controls)) or True,
+        lambda path, **controls: device["calls"].append((path, controls)) or True,
     )
     monkeypatch.setattr(
-        camera_controller, "get_v4l2_control_range", lambda path, name: (0, 1000)
+        camera_controller, "get_v4l2_control", lambda path, name: device["position"]
     )
-    monkeypatch.setattr(camera_controller, "get_v4l2_control", lambda path, name: 250)
+
+    return device
+
+
+def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
+    controller, published, v4l2_focus
+):
     controller.camera.manual_focus_supported = False
     controller.model.v4l2_device_path = "/dev/video2"
+    controller.model.v4l2_focus_device_path = "/dev/video2"
 
     controller.apply_camera_controls({"request_id": "r6", "focus_distance": 0.25})
 
-    assert calls == [
+    assert v4l2_focus["calls"] == [
         ("/dev/video2", {"auto_exposure": 3}),
         ("/dev/video2", {"focus_automatic_continuous": 0, "focus_absolute": 250}),
     ]
@@ -598,6 +623,113 @@ def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
     assert published[0]["focus_distance"] == 0.25
     assert controller.model.v4l2_focus_path == "/dev/video2"
     assert controller.model.v4l2_auto_exposure_path == "/dev/video2"
+
+
+def test_lens_without_auto_focus_writes_only_focus_absolute(
+    controller, published, v4l2_focus
+):
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    controller.camera.manual_focus_supported = False
+    controller.model.v4l2_focus_device_path = "/dev/v4l-subdev3"
+
+    assert controller.model.v4l2_focus_range == (0, 1023)
+    assert not controller.model.v4l2_focus_has_auto
+
+    controller.apply_camera_controls({"request_id": "r8", "focus_distance": 0.5})
+
+    assert v4l2_focus["calls"] == [("/dev/v4l-subdev3", {"focus_absolute": 512})]
+    assert controller.model.v4l2_focus_path == "/dev/v4l-subdev3"
+
+    # Auto only releases the lens: there is no auto focus to write.
+    controller.apply_camera_controls({"request_id": "r9"})
+
+    assert len(v4l2_focus["calls"]) == 1
+    assert controller.model.v4l2_focus_path is None
+    assert published[1]["ok"] is True
+    assert published[1]["focus_distance"] is None
+
+
+def test_camera_left_on_manual_focus_is_read_back_at_selection(controller, v4l2_focus):
+    v4l2_focus["controls"] = UVC_FOCUS_CONTROLS.replace("value=1", "value=0")
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+
+    assert controller.model.v4l2_focus_path == "/dev/video8"
+    assert not controller.model.focus.auto
+    assert controller.model.focus.distance == 0.25
+
+
+# --------------------------------------------------------------------------- #
+# Focus row (CameraFocusModel)                                                 #
+# --------------------------------------------------------------------------- #
+def test_focus_row_shows_lens_position_without_auto(controller, v4l2_focus):
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    v4l2_focus["position"] = 455
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("imx708", v4l2_focus_device_path="/dev/v4l-subdev3")
+    focus = controller.model.focus
+
+    assert focus.available
+    assert not focus.auto_available
+    assert not focus.auto
+    assert focus.raw_position == 455
+    assert focus.distance == pytest.approx(455 / 1023)
+
+
+def test_focus_row_edits_drive_uvc_focus_and_auto(controller, v4l2_focus):
+    controller.camera.manual_focus_supported = False
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+    focus = controller.model.focus
+
+    assert focus.available and focus.auto_available and focus.auto
+
+    controller.set_focus(0.25)
+
+    assert v4l2_focus["calls"][-1] == (
+        "/dev/video8",
+        {"focus_automatic_continuous": 0, "focus_absolute": 250},
+    )
+    assert not focus.auto
+    assert focus.raw_position == 250
+
+    controller.set_focus(None)
+
+    assert v4l2_focus["calls"][-1] == (
+        "/dev/video8",
+        {"focus_automatic_continuous": 1},
+    )
+    assert focus.auto
+
+
+def test_focus_row_follows_qt_focus(controller):
+    controller.select_source("Cam A")
+    focus = controller.model.focus
+
+    assert focus.available and focus.auto_available and focus.auto
+    assert focus.raw_position is None
+
+    controller.set_focus(0.75)
+
+    assert not focus.auto
+    assert focus.distance == 0.75
+
+
+def test_focus_row_unavailable_without_a_focusable_camera(controller):
+    controller.camera.manual_focus_supported = False
+    controller.select_source("Cam A")
+
+    assert not controller.model.focus.available
+
+    controller.camera.manual_focus_supported = True
+    controller.select_source("ASI: ZWO ASI183MM", provider=True)
+
+    assert not controller.model.focus.available
+
+    controller.select_source("")
+
+    assert not controller.model.focus.available
 
 
 def test_no_manual_focus_without_v4l2_answers_not_ok(controller, published):

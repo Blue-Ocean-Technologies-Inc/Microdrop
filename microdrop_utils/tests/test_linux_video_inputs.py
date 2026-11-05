@@ -84,6 +84,7 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
     )
     monkeypatch.setattr(v4l2, "get_real_linux_nodes", lambda: [8])
     monkeypatch.setattr(v4l2, "get_v4l2_all_fps", lambda device_path: {})
+    monkeypatch.setattr(v4l2, "find_v4l2_focus_subdevice", lambda: "/dev/v4l-subdev3")
 
     cameras = v4l2.get_linux_video_inputs()
 
@@ -92,3 +93,8 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
         "DH Camera",
     ]
     assert [camera.device_path for camera in cameras] == [None, "/dev/video8"]
+    # The libcamera camera's focus goes through its lens sub-device.
+    assert [camera.focus_device_path for camera in cameras] == [
+        "/dev/v4l-subdev3",
+        "/dev/video8",
+    ]

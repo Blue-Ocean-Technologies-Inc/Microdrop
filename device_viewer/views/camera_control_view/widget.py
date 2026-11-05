@@ -667,6 +667,9 @@ class CameraControlWidget(QWidget):
                 label,
                 remembered_as=self._get_camera_description(camera),
                 v4l2_device_path=container.device_path if container else None,
+                v4l2_focus_device_path=(
+                    container.focus_device_path if container else None
+                ),
             )
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)

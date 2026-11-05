@@ -38,7 +38,9 @@ from microdrop_utils.v4l2_fps_getter import (
     V4L2_FOCUS_ABSOLUTE,
     V4L2_FOCUS_AUTO,
     get_v4l2_control,
-    get_v4l2_control_range,
+    list_v4l2_controls,
+    parse_v4l2_control_range,
+    parse_v4l2_control_value,
     set_v4l2_controls,
 )
 
@@ -143,13 +145,20 @@ class CameraController(HasTraits):
         return 0
 
     def select_source(
-        self, label, remembered_as="", provider=False, v4l2_device_path=None
+        self,
+        label,
+        remembered_as="",
+        provider=False,
+        v4l2_device_path=None,
+        v4l2_focus_device_path=None,
     ):
         """Record the selected source.
 
         ``remembered_as`` is saved as the preferred camera — a provider's
         label, a QCamera's Qt description; empty for "<No Camera>", which
-        leaves the preference alone.
+        leaves the preference alone. ``v4l2_device_path`` is the camera's
+        ``/dev/videoN`` node, ``v4l2_focus_device_path`` the node its focus
+        fallback drives (see CameraModel).
         """
 
         if remembered_as:
@@ -158,6 +167,9 @@ class CameraController(HasTraits):
         self.model.selected_camera = label
         self.model.provider_selected = provider
         self.model.v4l2_device_path = v4l2_device_path
+        self.model.v4l2_focus_device_path = v4l2_focus_device_path
+
+        self.refresh_focus()
 
     @staticmethod
     def match_source_label(labels, label):
@@ -435,6 +447,7 @@ class CameraController(HasTraits):
                 focus_distance=self._focus_distance_readback(),
             )
 
+        self.refresh_focus()
         camera_controls_applied_publisher.publish(reply)
 
     def _apply_exposure(self, exposure_ms):
@@ -476,6 +489,75 @@ class CameraController(HasTraits):
 
         self.camera.set_manual_exposure(float(exposure_ms))
 
+    @observe("model:v4l2_focus_device_path")
+    def _read_v4l2_focus_controls(self, event):
+        """Cache the focus device's ``focus_absolute`` range and whether it
+        has continuous auto focus, from one ``v4l2-ctl`` query."""
+        model = self.model
+        path = event.new
+        controls = list_v4l2_controls(path) if path else ""
+        auto_focus = parse_v4l2_control_value(controls, V4L2_FOCUS_AUTO)
+
+        model.v4l2_focus_range = parse_v4l2_control_range(controls, V4L2_FOCUS_ABSOLUTE)
+        model.v4l2_focus_has_auto = auto_focus is not None
+
+        # A camera left on manual focus (auto off) is the fallback's to
+        # drive and to read back from the start.
+        if model.v4l2_focus_range is not None and auto_focus == 0:
+            model.v4l2_focus_path = path
+        else:
+            model.v4l2_focus_path = None
+
+    def set_focus(self, focus_distance):
+        """Apply the camera panel's focus edit: ``focus_distance`` from 0.0
+        (near) to 1.0 (far), or None for continuous auto focus."""
+        try:
+            self._apply_focus(focus_distance)
+        except RuntimeError as error:
+            logger.error(f"Focus not applied: {error}")
+
+        self.refresh_focus()
+
+    @observe("model:camera_active")
+    def refresh_focus(self, event=None):
+        """Mirror the selected camera's focus into ``model.focus``: on every
+        source selection, camera on/off (Qt reports focus support only for
+        a started camera) and focus change."""
+        model = self.model
+        focus = model.focus
+        qcamera_selected = (
+            bool(model.selected_camera)
+            and not model.provider_selected
+            and self.camera.has_camera()
+        )
+        qt_focus = qcamera_selected and self.camera.supports_manual_focus()
+        v4l2_focus = (
+            qcamera_selected and not qt_focus and model.v4l2_focus_range is not None
+        )
+
+        focus.available = qt_focus or v4l2_focus
+        focus.auto_available = qt_focus or (v4l2_focus and model.v4l2_focus_has_auto)
+
+        if v4l2_focus:
+            # A lens without auto focus holds a position even while no
+            # manual focus is applied, so its position is always shown.
+            distance = self._v4l2_focus_distance(model.v4l2_focus_device_path)
+            focus.auto = model.v4l2_focus_has_auto and model.v4l2_focus_path is None
+        elif qt_focus:
+            distance = self.camera.focus_distance()
+            focus.auto = not self.camera.focus_is_manual()
+        else:
+            distance = None
+            focus.auto = False
+
+        if distance is None:
+            focus.raw_position = None
+
+            return
+
+        focus.distance = distance
+        focus.raw_position = self._v4l2_focus_raw(distance) if v4l2_focus else None
+
     def _apply_focus(self, focus_distance):
         model = self.model
 
@@ -484,13 +566,18 @@ class CameraController(HasTraits):
 
             # Restore continuous auto focus on the v4l2 side too, if the
             # fallback below was last driving this camera's focus.
-            if model.v4l2_focus_path is not None:
+            if model.v4l2_focus_path is not None and model.v4l2_focus_has_auto:
                 if not set_v4l2_controls(model.v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}):
                     logger.warning(
                         f"v4l2 auto focus restore failed for {model.v4l2_focus_path}"
                     )
+            elif model.v4l2_focus_path is not None:
+                logger.info(
+                    f"{model.v4l2_focus_path} has no auto focus; the lens stays "
+                    f"where manual focus left it"
+                )
 
-                model.v4l2_focus_path = None
+            model.v4l2_focus_path = None
 
             return
 
@@ -502,30 +589,42 @@ class CameraController(HasTraits):
 
         # GStreamer backend (Portable Pi): QCamera reports no manual focus
         # support although the camera's v4l2 focus_absolute control works.
-        path = model.v4l2_device_path
+        path = model.v4l2_focus_device_path
 
         if path is None:
             raise RuntimeError("this camera has no manual focus")
-
-        if path != model.v4l2_focus_path or model.v4l2_focus_range is None:
-            model.v4l2_focus_range = get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE)
 
         if model.v4l2_focus_range is None:
             raise RuntimeError(
                 "this camera has no manual focus (no v4l2 focus_absolute control)"
             )
 
-        lo, hi = model.v4l2_focus_range
-        raw = round(lo + float(focus_distance) * (hi - lo))
+        raw = self._v4l2_focus_raw(float(focus_distance))
+        controls = {V4L2_FOCUS_ABSOLUTE: raw}
 
         # Auto off first — focus_absolute is inactive while auto is on.
-        if not set_v4l2_controls(
-            path, **{V4L2_FOCUS_AUTO: 0, V4L2_FOCUS_ABSOLUTE: raw}
-        ):
+        if model.v4l2_focus_has_auto:
+            controls = {V4L2_FOCUS_AUTO: 0, **controls}
+
+        if not set_v4l2_controls(path, **controls):
             raise RuntimeError("v4l2 focus set failed")
 
         model.v4l2_focus_path = path
         logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
+
+    def _v4l2_focus_raw(self, focus_distance):
+        """``focus_absolute`` position of a focus distance (0.0 to 1.0)."""
+        lo, hi = self.model.v4l2_focus_range
+
+        return round(lo + focus_distance * (hi - lo))
+
+    def _v4l2_focus_distance(self, path):
+        """Focus distance (0.0 to 1.0) of ``path``'s ``focus_absolute``, or
+        None when it cannot be read."""
+        lo, hi = self.model.v4l2_focus_range
+        raw = get_v4l2_control(path, V4L2_FOCUS_ABSOLUTE)
+
+        return (raw - lo) / (hi - lo) if raw is not None else None
 
     def _hold_auto_exposure(self):
         """Switch to manual exposure at the time auto last chose."""
@@ -566,10 +665,7 @@ class CameraController(HasTraits):
         model = self.model
 
         if model.v4l2_focus_path is not None:
-            lo, hi = model.v4l2_focus_range
-            raw = get_v4l2_control(model.v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
-
-            return (raw - lo) / (hi - lo) if raw is not None else None
+            return self._v4l2_focus_distance(model.v4l2_focus_path)
 
         if not self.camera.focus_is_manual():
             return None

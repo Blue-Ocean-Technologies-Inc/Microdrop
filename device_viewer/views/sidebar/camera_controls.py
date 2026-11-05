@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 
-"""Sidebar section: camera feed controls, camera alignment, layer opacity."""
+"""Sidebar section: camera feed controls, focus, camera alignment, layer
+opacity."""
 
 # Enthought library imports.
 from pyface.qt.QtWidgets import QHBoxLayout, QPushButton, QWidget
@@ -21,6 +22,7 @@ from microdrop_style.button_styles import TEXT_BUTTON_STYLE
 
 # Local imports.
 from ..alpha_view.alpha_table import alpha_table_view
+from ..camera_control_view.focus_view import CameraFocusHandler, camera_focus_view
 from ..camera_control_view.widget import CameraControlWidget
 from .section import SidebarSection, stack_widgets
 
@@ -30,6 +32,9 @@ class CameraControlsSection(SidebarSection):
 
     #: Camera feed, capture, and recording controls.
     camera_control_widget = Instance(CameraControlWidget)
+
+    #: The selected camera's focus row.
+    focus_ui = Instance(UI)
 
     #: Layer opacity table UI; the pane sizes it from preferences.
     alpha_view_ui = Instance(UI)
@@ -69,6 +74,11 @@ def build_camera_controls(
         source_providers=source_providers,
     )
 
+    focus_ui = camera_control_widget.camera_model.focus.edit_traits(
+        view=camera_focus_view,
+        handler=CameraFocusHandler(controller=camera_control_widget.controller),
+    )
+
     # Camera Alignment: the manual per-device endpoint workflow.
     # Lives right under the camera-control button grid.
     alignment_widget = QWidget()
@@ -96,12 +106,18 @@ def build_camera_controls(
         alignment_layout.addWidget(action_button, 1)
 
     widget = stack_widgets(
-        [camera_control_widget, alignment_widget, alpha_view_ui.control]
+        [
+            camera_control_widget,
+            focus_ui.control,
+            alignment_widget,
+            alpha_view_ui.control,
+        ]
     )
 
     # Same side margins and gap as the camera-control button rows so
     # the two buttons line up with the four above (each spans a pair);
-    # the bottom margin separates them from the alpha table below.
+    # the bottom margin separates them from the alpha table below. The
+    # focus row takes the same side margins.
     # Read only now: Qt's default layout margin is wider for a widget
     # that is still a window than for a child, so it settles once the
     # camera widget sits inside the stack.
@@ -111,10 +127,14 @@ def build_camera_controls(
         _camera_margins.left(), 0, _camera_margins.right(), 12
     )
     alignment_layout.setSpacing(_camera_layout.spacing())
+    focus_ui.control.layout().setContentsMargins(
+        _camera_margins.left(), 0, _camera_margins.right(), 0
+    )
 
     return CameraControlsSection(
         title="Camera Controls",
         widget=widget,
         camera_control_widget=camera_control_widget,
+        focus_ui=focus_ui,
         alpha_view_ui=alpha_view_ui,
     )
