@@ -1,3 +1,26 @@
+## [v1.39.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.39.0) (2026-11-05)
+
+### Feat
+
+- **camera**: Camera Properties popout window ([`e9372cc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e9372cc0f02ba12d33aa6d19a06ae81decef7650))
+- **camera**: Windows focus and image controls ([`46fe4c4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/46fe4c43cb536377bd534965e806ce4d9c18600f))
+- **camera**: DirectShow and v4l2 camera controls ([`05f22e5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/05f22e59930e164fa29c3b6650deb2f62e17093b))
+- **camera**: collapsible Camera Properties for focus ([`c2c79ae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c2c79aedd1a9e8ed7e84ef9b2acd4a625f4b31dd))
+- **camera**: lens-mapped focus, live drag, autofocus ([`b866e05`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b866e05e645f06e5bcf60d946e61fba34c6aa60c))
+- **camera**: focus row with Pi CSI lens control ([`171d25e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/171d25ed89723c986394761005bff12616561ba1))
+
+### Fix
+
+- **camera**: stop clipping the Autofocus button ([`cfde633`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cfde633c51326b9c8de2dee5a82bcbb12d1b198e))
+- **camera**: style Autofocus like the sidebar buttons ([`ed8cb63`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ed8cb63cb841687a3ceb77aaf56f153eec7b3546))
+- **camera**: disable libcamera AF so lens writes stick ([`3b11c61`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3b11c61a17b287efe2a667363cbc217098b2f9a6))
+- **camera**: NV12 for libcamera, never YV12 on a Pi ([`983566a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/983566a26176e9dd0346b1974156642ea3c01a1b))
+- **camera**: hide Pi ISP nodes, pair libcamera cams ([`32201cb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/32201cba19cf10231e9e2d00b7732f31a6f186d1))
+
+### Test
+
+- **camera**: give select_source fixture a stub camera ([`266275a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/266275a1516890ccaba1ea164e69303f70698f2a))
+
 ## [v1.38.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.38.0) (2026-11-04)
 
 ### Feat
