@@ -28,7 +28,11 @@ from device_viewer.consts import CAMERA_FEED_START_TIMEOUT_MS, NO_CAMERA_LABEL
 from device_viewer.controllers import camera_controller
 from device_viewer.controllers.camera_controller import CameraController
 from device_viewer.models.camera import CameraModel
-from device_viewer.tests.test_camera_controller import Recorder, StubPreferences
+from device_viewer.tests.test_camera_controller import (
+    Recorder,
+    StubCamera,
+    StubPreferences,
+)
 from device_viewer.views.camera_control_view import widget as widget_module
 from device_viewer.views.camera_control_view.widget import CameraControlWidget
 
@@ -85,8 +89,11 @@ def widget(published):
     entry on opens a new _StubFeed, as a provider source does."""
     QApplication.instance() or QApplication([])
 
+    # The focus row reads the bound camera on every source selection.
     controller = CameraController(
-        model=CameraModel(), preferences=StubPreferences(preferences=Preferences())
+        model=CameraModel(),
+        preferences=StubPreferences(preferences=Preferences()),
+        camera=StubCamera(),
     )
     combo = QComboBox()
     combo.addItems(["Cam A", ASI, NO_CAMERA_LABEL])
