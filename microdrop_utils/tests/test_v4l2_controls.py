@@ -89,6 +89,52 @@ def test_get_v4l2_control_range_missing_tool_returns_none(monkeypatch):
     assert v4l2.get_v4l2_control_range("/dev/video2", "focus_absolute") is None
 
 
+# --- parse_v4l2_control_value -----------------------------------------------------
+
+
+def test_parse_v4l2_control_value_reads_bool_and_int_controls():
+    assert v4l2.parse_v4l2_control_value(LIST_CTRLS_OUTPUT, "focus_absolute") == 450
+    assert (
+        v4l2.parse_v4l2_control_value(LIST_CTRLS_OUTPUT, "focus_automatic_continuous")
+        == 1
+    )
+    assert v4l2.parse_v4l2_control_value(LIST_CTRLS_OUTPUT, "zoom_absolute") is None
+
+
+# --- find_v4l2_focus_subdevice -----------------------------------------------------
+
+
+def test_find_v4l2_focus_subdevice_returns_the_lens(monkeypatch):
+    lens_controls = (
+        "focus_absolute 0x009a090a (int) : min=0 max=1023 step=1 default=480 "
+        "value=455 flags=has-min-max"
+    )
+    controls = {"/dev/v4l-subdev3": lens_controls, "/dev/v4l-subdev12": lens_controls}
+    queried = []
+
+    def _fake_list_controls(path):
+        queried.append(path)
+
+        return controls.get(path, "")
+
+    monkeypatch.setattr(
+        v4l2.glob,
+        "glob",
+        lambda pattern: [f"/dev/v4l-subdev{n}" for n in (12, 0, 3, 2, 1)],
+    )
+    monkeypatch.setattr(v4l2, "list_v4l2_controls", _fake_list_controls)
+
+    assert v4l2.find_v4l2_focus_subdevice() == "/dev/v4l-subdev3"
+    assert queried == [f"/dev/v4l-subdev{n}" for n in range(4)]
+
+
+def test_find_v4l2_focus_subdevice_none_without_a_lens(monkeypatch):
+    monkeypatch.setattr(v4l2.glob, "glob", lambda pattern: ["/dev/v4l-subdev0"])
+    monkeypatch.setattr(v4l2, "list_v4l2_controls", lambda path: "")
+
+    assert v4l2.find_v4l2_focus_subdevice() is None
+
+
 # --- set_v4l2_controls -------------------------------------------------------------
 
 

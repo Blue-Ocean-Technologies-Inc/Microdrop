@@ -14,13 +14,16 @@ set_controls handshake with its v4l2 fallbacks, and the select_source
 reply plus camera-state publishing. No Qt camera, no Redis."""
 
 # Standard library imports.
+import math
 from pathlib import Path
 
 # Third-party imports.
+import numpy as np
 import pytest
 
 # Enthought library imports.
 from apptools.preferences.api import Preferences, PreferencesHelper
+from pyface.qt.QtWidgets import QApplication
 from traits.api import Bool, Float, HasTraits, Str, provides
 
 # Microdrop package imports.
@@ -97,6 +100,27 @@ class StubCamera(HasTraits):
     def focus_distance(self):
         return self.distance
 
+    def image_control_ranges(self):
+        return []
+
+
+#: ``v4l2-ctl --list-ctrls`` of a UVC camera with continuous auto focus on.
+UVC_FOCUS_CONTROLS = (
+    "focus_absolute 0x009a090a (int) : min=0 max=1000 step=1 value=250\n"
+    "focus_automatic_continuous 0x009a090c (bool) : default=1 value=1\n"
+)
+
+#: ``v4l2-ctl --list-ctrls`` of a Pi CSI camera's lens sub-device (dw9807):
+#: focus_absolute only, no auto focus.
+LENS_FOCUS_CONTROLS = (
+    "focus_absolute 0x009a090a (int) : min=0 max=1023 step=1 default=480 "
+    "value=455 flags=has-min-max\n"
+)
+
+#: The imx708 lens's calibration from its tuning file: 0 dioptres
+#: (infinity) at 420, 35 dioptres (nearest) at 920.
+IMX708_LENS_MAP = ((0.0, 420), (35.0, 920))
+
 
 class Recorder:
     """Stands in for a publisher or an actor; records its calls."""
@@ -150,6 +174,7 @@ def controller(tmp_path, monkeypatch):
     monkeypatch.setattr(
         camera_controller, "get_current_experiment_directory", lambda: tmp_path
     )
+    monkeypatch.setattr(camera_controller, "is_rpi", lambda: False)
     camera = StubCamera()
 
     def turn_camera_on():
@@ -222,6 +247,51 @@ def test_rank_formats_strict_mode_drops_other_pixel_formats(controller):
 
     assert controller.rank_formats(formats) == [1]
     assert controller.rank_formats(formats, allow_strict_mode=False) == [0, 1]
+
+
+def test_rank_formats_never_offers_yv12_on_a_pi(controller, monkeypatch):
+    monkeypatch.setattr(camera_controller, "is_rpi", lambda: True)
+    formats = [
+        (1920, 1080, "PixelFormat.Format_YV12", 30.0),
+        (1920, 1080, "PixelFormat.Format_Y8", 30.0),
+        (640, 480, "Format_YV12", 30.0),
+    ]
+
+    assert controller.rank_formats(formats) == [1]
+
+
+def test_libcamera_prefers_nv12_without_strict_mode(controller):
+    controller.preferences.preferred_video_format = "JPEG"
+    controller.preferences.strict_video_format = True
+    formats = [
+        (1920, 1080, "PixelFormat.Format_Y8", 30.0),
+        (1920, 1080, "PixelFormat.Format_NV12", 30.0),
+        (640, 480, "PixelFormat.Format_YUYV", 30.0),
+    ]
+
+    assert not controller.strict_format_mode(libcamera=True)
+    assert controller.rank_formats(formats, libcamera=True) == [1, 2]
+
+
+def test_rank_formats_falls_back_in_a_fixed_pixel_format_order(controller):
+    controller.preferences.preferred_video_format = "JPEG"
+    formats = [
+        (1920, 1080, "Format_Y8", 30.0),
+        (1920, 1080, "Format_BGRX8888", 30.0),
+        (1920, 1080, "Format_YUYV", 30.0),
+        (1920, 1080, "Format_YUV420P", 30.0),
+        (640, 480, "Format_Y16", 30.0),
+        (640, 480, "Format_RGBX8888", 30.0),
+    ]
+
+    assert controller.rank_formats(formats) == [3, 5]
+
+
+def test_rank_formats_prefers_frame_rate_over_fallback_order(controller):
+    controller.preferences.preferred_video_format = "NV12"
+    formats = [(1920, 1080, "Format_YUYV", 5.0), (1920, 1080, "Format_Jpeg", 30.0)]
+
+    assert controller.rank_formats(formats) == [1]
 
 
 def test_saved_resolution_is_restored_else_middle(controller):
@@ -523,25 +593,36 @@ def test_no_manual_exposure_answers_not_ok(controller, published):
     }
 
 
-def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
-    controller, published, monkeypatch
-):
-    calls = []
+@pytest.fixture
+def v4l2_focus(monkeypatch):
+    """Fake v4l2 focus device: ``controls`` is its ``--list-ctrls`` text,
+    ``position`` its focus_absolute; writes are recorded in ``calls``."""
+    device = {"controls": UVC_FOCUS_CONTROLS, "position": 250, "calls": []}
+    monkeypatch.setattr(
+        camera_controller, "list_v4l2_controls", lambda path: device["controls"]
+    )
     monkeypatch.setattr(
         camera_controller,
         "set_v4l2_controls",
-        lambda path, **controls: calls.append((path, controls)) or True,
+        lambda path, **controls: device["calls"].append((path, controls)) or True,
     )
     monkeypatch.setattr(
-        camera_controller, "get_v4l2_control_range", lambda path, name: (0, 1000)
+        camera_controller, "get_v4l2_control", lambda path, name: device["position"]
     )
-    monkeypatch.setattr(camera_controller, "get_v4l2_control", lambda path, name: 250)
+
+    return device
+
+
+def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
+    controller, published, v4l2_focus
+):
     controller.camera.manual_focus_supported = False
     controller.model.v4l2_device_path = "/dev/video2"
+    controller.model.v4l2_focus_device_path = "/dev/video2"
 
     controller.apply_camera_controls({"request_id": "r6", "focus_distance": 0.25})
 
-    assert calls == [
+    assert v4l2_focus["calls"] == [
         ("/dev/video2", {"auto_exposure": 3}),
         ("/dev/video2", {"focus_automatic_continuous": 0, "focus_absolute": 250}),
     ]
@@ -554,6 +635,113 @@ def test_v4l2_fallbacks_drive_focus_and_auto_exposure(
     assert controller.model.v4l2_auto_exposure_path == "/dev/video2"
 
 
+def test_lens_without_auto_focus_writes_only_focus_absolute(
+    controller, published, v4l2_focus
+):
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    controller.camera.manual_focus_supported = False
+    controller.model.v4l2_focus_device_path = "/dev/v4l-subdev3"
+
+    assert controller.model.v4l2_focus_span == (0, 1023)
+    assert not controller.model.v4l2_focus_has_auto
+
+    controller.apply_camera_controls({"request_id": "r8", "focus_distance": 0.5})
+
+    assert v4l2_focus["calls"] == [("/dev/v4l-subdev3", {"focus_absolute": 512})]
+    assert controller.model.v4l2_focus_path == "/dev/v4l-subdev3"
+
+    # Auto only releases the lens: there is no auto focus to write.
+    controller.apply_camera_controls({"request_id": "r9"})
+
+    assert len(v4l2_focus["calls"]) == 1
+    assert controller.model.v4l2_focus_path is None
+    assert published[1]["ok"] is True
+    assert published[1]["focus_distance"] is None
+
+
+def test_camera_left_on_manual_focus_is_read_back_at_selection(controller, v4l2_focus):
+    v4l2_focus["controls"] = UVC_FOCUS_CONTROLS.replace("value=1", "value=0")
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+
+    assert controller.model.v4l2_focus_path == "/dev/video8"
+    assert not controller.model.focus.auto
+    assert controller.model.focus.distance == 0.25
+
+
+# --------------------------------------------------------------------------- #
+# Focus row (CameraFocusModel)                                                 #
+# --------------------------------------------------------------------------- #
+def test_focus_row_shows_lens_position_without_auto(controller, v4l2_focus):
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    v4l2_focus["position"] = 455
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("imx708", v4l2_focus_device_path="/dev/v4l-subdev3")
+    focus = controller.model.focus
+
+    assert focus.available
+    assert not focus.auto_available
+    assert not focus.auto
+    assert focus.raw_position == 455
+    assert focus.distance == pytest.approx(455 / 1023)
+
+
+def test_focus_row_edits_drive_uvc_focus_and_auto(controller, v4l2_focus):
+    controller.camera.manual_focus_supported = False
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+    focus = controller.model.focus
+
+    assert focus.available and focus.auto_available and focus.auto
+
+    controller.set_focus(0.25)
+
+    assert v4l2_focus["calls"][-1] == (
+        "/dev/video8",
+        {"focus_automatic_continuous": 0, "focus_absolute": 250},
+    )
+    assert not focus.auto
+    assert focus.raw_position == 250
+
+    controller.set_focus(None)
+
+    assert v4l2_focus["calls"][-1] == (
+        "/dev/video8",
+        {"focus_automatic_continuous": 1},
+    )
+    assert focus.auto
+
+
+def test_focus_row_follows_qt_focus(controller):
+    controller.select_source("Cam A")
+    focus = controller.model.focus
+
+    assert focus.available and focus.auto_available and focus.auto
+    assert focus.raw_position is None
+
+    controller.set_focus(0.75)
+
+    assert not focus.auto
+    assert focus.distance == 0.75
+
+
+def test_focus_row_unavailable_without_a_focusable_camera(controller):
+    controller.camera.manual_focus_supported = False
+    controller.select_source("Cam A")
+
+    assert not controller.model.focus.available
+
+    controller.camera.manual_focus_supported = True
+    controller.select_source("ASI: ZWO ASI183MM", provider=True)
+
+    assert not controller.model.focus.available
+
+    controller.select_source("")
+
+    assert not controller.model.focus.available
+
+
 def test_no_manual_focus_without_v4l2_answers_not_ok(controller, published):
     controller.camera.manual_focus_supported = False
 
@@ -561,3 +749,222 @@ def test_no_manual_focus_without_v4l2_answers_not_ok(controller, published):
 
     assert published[0]["ok"] is False
     assert published[0]["error"] == "this camera has no manual focus"
+
+
+# --------------------------------------------------------------------------- #
+# Calibrated lens: direction and useful range from the tuning file's map       #
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def imx708(controller, v4l2_focus):
+    """The Pi CSI camera selected, its lens calibrated by IMX708_LENS_MAP."""
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    v4l2_focus["position"] = 670
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source(
+        "imx708",
+        v4l2_focus_device_path="/dev/v4l-subdev3",
+        v4l2_focus_lens_map=IMX708_LENS_MAP,
+    )
+
+    return controller
+
+
+def test_lens_map_gives_the_span_near_first(imx708):
+    assert imx708.model.v4l2_focus_span == (920, 420)
+
+
+@pytest.mark.parametrize("distance, raw", [(0.0, 920), (0.5, 670), (1.0, 420)])
+def test_calibrated_lens_maps_near_to_the_high_position(
+    imx708, v4l2_focus, distance, raw
+):
+    imx708.set_focus(distance)
+
+    assert v4l2_focus["calls"][-1] == ("/dev/v4l-subdev3", {"focus_absolute": raw})
+
+
+def test_calibrated_lens_reads_back_round_trip(imx708, v4l2_focus):
+    focus = imx708.model.focus
+
+    assert focus.distance == pytest.approx(0.5)
+    assert focus.raw_position == 670
+    assert focus.position_label == "670 (≈ 6 cm)"
+
+    v4l2_focus["position"] = 545
+    imx708.refresh_focus()
+
+    assert imx708._v4l2_focus_raw(focus.distance) == 545
+
+
+def test_readback_beyond_the_span_is_clamped(imx708, v4l2_focus):
+    focus = imx708.model.focus
+
+    # Below the infinity position: farther than far.
+    v4l2_focus["position"] = 100
+    imx708.refresh_focus()
+
+    assert focus.distance == 1.0
+    assert focus.raw_position == 100
+    assert focus.position_label == "100 (∞)"
+
+    v4l2_focus["position"] = 1023
+    imx708.refresh_focus()
+
+    assert focus.distance == 0.0
+
+
+def test_uncalibrated_lens_keeps_the_control_range(controller, v4l2_focus):
+    v4l2_focus["controls"] = LENS_FOCUS_CONTROLS
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("imx708", v4l2_focus_device_path="/dev/v4l-subdev3")
+
+    assert controller.model.v4l2_focus_span == (0, 1023)
+    assert controller.model.focus.position_label == "250"
+
+
+def test_uvc_camera_keeps_the_control_range(controller, v4l2_focus):
+    controller.camera.manual_focus_supported = False
+
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+
+    assert controller.model.v4l2_focus_span == (0, 1000)
+
+
+# --------------------------------------------------------------------------- #
+# Live slider: coalesced focus writes                                          #
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def qapp():
+    """The Qt application the controller's pyface timers need."""
+    return QApplication.instance() or QApplication([])
+
+
+def test_slider_drag_is_coalesced_into_the_latest_write(qapp, imx708, v4l2_focus):
+    writes_before = len(v4l2_focus["calls"])
+
+    for distance in (0.1, 0.2, 0.3, 0.4):
+        imx708.request_focus(distance)
+
+    assert len(v4l2_focus["calls"]) == writes_before
+    assert imx708.focus_edits.pending
+
+    imx708.focus_edits.flush()
+
+    assert v4l2_focus["calls"][writes_before:] == [
+        ("/dev/v4l-subdev3", {"focus_absolute": 720})
+    ]
+    assert imx708.model.focus.raw_position == 720
+
+
+def test_auto_toggle_drops_a_pending_drag_write(qapp, controller, v4l2_focus):
+    controller.camera.manual_focus_supported = False
+    controller.select_source("DH Camera", v4l2_focus_device_path="/dev/video8")
+    controller.set_focus(0.25)
+
+    controller.request_focus(0.4)
+    controller.set_focus(None)
+    controller.focus_edits.flush()
+
+    assert v4l2_focus["calls"][1:] == [
+        ("/dev/video8", {"focus_automatic_continuous": 1})
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# One-shot autofocus                                                           #
+# --------------------------------------------------------------------------- #
+#: The synthetic scene is sharpest at this focus distance.
+SHARPEST_DISTANCE = 0.37
+
+
+@pytest.fixture
+def sweeping(qapp, imx708, monkeypatch):
+    """imx708 streaming, each frame as sharp as the lens's focus distance
+    is close to SHARPEST_DISTANCE."""
+    focus = imx708.model.focus
+
+    def sharpness(grey):
+        return 100.0 * math.exp(-(((focus.distance - SHARPEST_DISTANCE) / 0.1) ** 2))
+
+    monkeypatch.setattr(camera_controller, "laplacian_variance", sharpness)
+    imx708.model.camera_active = True
+
+    return imx708
+
+
+def _run_frames(controller, frames=500):
+    for _ in range(frames):
+        if not controller.model.focus.autofocusing:
+            break
+
+        controller.autofocus_frame(np.zeros((4, 4), np.uint8))
+
+
+def test_autofocus_settles_on_the_sharpest_position(sweeping, v4l2_focus):
+    focus = sweeping.model.focus
+
+    assert focus.autofocus_available
+
+    focus.autofocus_button = True
+
+    assert focus.autofocusing
+    assert focus.autofocus_label == "Focusing…"
+
+    _run_frames(sweeping)
+
+    assert not focus.autofocusing
+    assert focus.autofocus_label == "Autofocus"
+    assert focus.distance == pytest.approx(SHARPEST_DISTANCE, abs=0.02)
+    assert v4l2_focus["calls"][-1] == (
+        "/dev/v4l-subdev3",
+        {"focus_absolute": sweeping._v4l2_focus_raw(focus.distance)},
+    )
+    assert len(sweeping.autofocus.scores) == 20
+
+
+def test_autofocus_waits_for_a_streaming_camera(qapp, imx708, v4l2_focus):
+    writes_before = len(v4l2_focus["calls"])
+
+    imx708.model.focus.autofocus_button = True
+
+    assert not imx708.model.focus.autofocusing
+    assert len(v4l2_focus["calls"]) == writes_before
+
+
+@pytest.mark.parametrize(
+    "interrupt",
+    [
+        lambda controller: setattr(controller.model, "camera_active", False),
+        lambda controller: controller.request_focus(0.2),
+        lambda controller: controller.set_focus(None),
+        lambda controller: controller.select_source("Cam A"),
+    ],
+    ids=["camera stopped", "slider edit", "auto toggled", "camera changed"],
+)
+def test_autofocus_is_cancelled_cleanly(sweeping, interrupt):
+    focus = sweeping.model.focus
+    focus.autofocus_button = True
+
+    _run_frames(sweeping, frames=10)
+    interrupt(sweeping)
+
+    assert not focus.autofocusing
+    assert not sweeping.autofocus.running
+
+    # Frames still arriving change nothing.
+    distance = focus.distance
+    sweeping.autofocus_frame(np.zeros((4, 4), np.uint8))
+
+    assert focus.distance == distance
+
+
+def test_failed_lens_write_cancels_autofocus(sweeping, monkeypatch):
+    focus = sweeping.model.focus
+    monkeypatch.setattr(
+        camera_controller, "set_v4l2_controls", lambda path, **controls: False
+    )
+
+    focus.autofocus_button = True
+
+    assert not focus.autofocusing

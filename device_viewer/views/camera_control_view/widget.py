@@ -61,6 +61,7 @@ from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
+from ...utils.frame_luma import frame_centre_luma
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
@@ -506,6 +507,10 @@ class CameraControlWidget(QWidget):
     def _forward_preview_frame(self, frame):
         self.camera_device.forward_preview_frame(frame)
 
+        # A running autofocus sweep measures every frame, not the preview's.
+        if self.camera_model.focus.autofocusing:
+            self.controller.autofocus_frame(frame_centre_luma(frame))
+
     def _forward_preview_image(self, image):
         self.camera_device.forward_preview_image(image)
 
@@ -529,10 +534,14 @@ class CameraControlWidget(QWidget):
         """Return a human-readable identifier for a camera device.
 
         LinuxCameraDeviceContainer returns the /dev/videoN path (unique on Linux),
-        while QCameraDevice returns the Qt-provided description string.
+        while QCameraDevice — and a container without a node, e.g. a libcamera
+        device — returns the Qt-provided description string.
         """
         if isinstance(selected_device, LinuxCameraDeviceContainer):
-            return selected_device.device_path
+            if selected_device.device_path:
+                return selected_device.device_path
+
+            selected_device = selected_device.camera_device
 
         return selected_device.description()
 
@@ -663,6 +672,10 @@ class CameraControlWidget(QWidget):
                 label,
                 remembered_as=self._get_camera_description(camera),
                 v4l2_device_path=container.device_path if container else None,
+                v4l2_focus_device_path=(
+                    container.focus_device_path if container else None
+                ),
+                v4l2_focus_lens_map=container.focus_lens_map if container else (),
             )
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)
@@ -681,9 +694,9 @@ class CameraControlWidget(QWidget):
         """Populate the resolution combo box from the current camera's formats.
 
         One entry per resolution, best first (see
-        CameraController.rank_formats); under the strict-format preference,
-        if no format matches, retry once without it. Then restore the saved
-        resolution, falling back to the middle entry.
+        CameraController.rank_formats); under the controller's strict format
+        mode, if no format matches, retry once without it. Then restore the
+        saved resolution, falling back to the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -695,6 +708,7 @@ class CameraControlWidget(QWidget):
             return
 
         formats = self.camera_device.video_formats()
+        libcamera = self.camera_device.is_libcamera()
         format_summaries = [
             (
                 fmt.resolution().width(),
@@ -705,7 +719,9 @@ class CameraControlWidget(QWidget):
             for fmt in formats
         ]
 
-        for index in self.controller.rank_formats(format_summaries, allow_strict_mode):
+        for index in self.controller.rank_formats(
+            format_summaries, allow_strict_mode, libcamera
+        ):
             fmt = formats[index]
             w, h = fmt.resolution().width(), fmt.resolution().height()
             fps = self._get_camera_resolution_max_framerate(fmt=fmt)
@@ -724,7 +740,7 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.setCurrentIndex(
                 self.controller.choose_resolution_index(labels)
             )
-        elif self.preferences.strict_video_format:
+        elif self.controller.strict_format_mode(allow_strict_mode, libcamera):
             # No formats survived strict filtering — retry without it
             warning_message = (
                 f"Preferred format "

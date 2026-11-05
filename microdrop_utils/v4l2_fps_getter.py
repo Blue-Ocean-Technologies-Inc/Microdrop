@@ -10,12 +10,16 @@
 
 # Standard library imports.
 import argparse
+import glob
 import platform
 import re
 import subprocess
 
 # Enthought library imports.
 from pyface.qt.QtMultimedia import QCameraDevice, QMediaDevices
+
+# Microdrop utils imports.
+from microdrop_utils.libcamera_tuning import read_lens_map
 
 os_name = platform.system()
 
@@ -25,6 +29,26 @@ V4L2_FOCUS_AUTO = "focus_automatic_continuous"
 V4L2_EXPOSURE_AUTO = "auto_exposure"
 V4L2_EXPOSURE_AUTO_MANUAL = 1
 V4L2_EXPOSURE_AUTO_ON = 3
+
+#: Raspberry Pi ISP, CSI-receiver and codec nodes. V4L2 lists them as video
+#: devices (and Qt's GStreamer backend as cameras), but they yield no usable
+#: image — a Pi CSI camera is reached through libcamera instead.
+PI_INTERNAL_VIDEO_NODE_NAMES = (
+    "rp1-cfe",
+    "unicam",
+    "pispbe",
+    "bcm2835-isp",
+    "bcm2835-codec",
+    "rpivid",
+    "hevc",
+)
+
+#: libcamera camera ids, which Qt also reports as their description, are
+#: device-tree paths (e.g. "/base/axi/pcie@1000120000/rp1/i2c@80000/imx708@1a").
+LIBCAMERA_ID_PREFIX = "/base/"
+
+#: V4L2 sub-device nodes; a Pi CSI camera's lens (VCM) is one of these.
+V4L2_SUBDEVICE_GLOB = "/dev/v4l-subdev*"
 
 
 def get_v4l2_fps(
@@ -172,12 +196,47 @@ def parse_v4l2_control_range(
     return None
 
 
-def get_v4l2_control_range(device_path: str, name: str) -> tuple[int, int] | None:
-    """Query a device's (min, max) for one v4l2 control via ``v4l2-ctl``.
+def parse_v4l2_control_value(list_ctrls_output: str, name: str) -> int | None:
+    """Extract a control's current value from ``v4l2-ctl --list-ctrls`` text.
+
+    Returns ``None`` if the control is not present, so this doubles as a
+    presence check for controls without a range (e.g. ``(bool)`` ones).
+    """
+    for line in list_ctrls_output.splitlines():
+        stripped = line.strip()
+
+        if not stripped.startswith(f"{name} "):
+            continue
+
+        value_match = re.search(r"\bvalue=(-?\d+)", stripped)
+
+        return int(value_match.group(1)) if value_match else None
+
+    return None
+
+
+def parse_v4l2_control_fields(list_ctrls_output: str, name: str) -> dict | None:
+    """Extract a control's ``key=value`` integer fields (min, max, step,
+    default, value, ...) from ``v4l2-ctl --list-ctrls`` text, or None if the
+    control is not present."""
+    for line in list_ctrls_output.splitlines():
+        stripped = line.strip()
+
+        if not stripped.startswith(f"{name} "):
+            continue
+
+        return {
+            key: int(value) for key, value in re.findall(r"\b(\w+)=(-?\d+)", stripped)
+        }
+
+    return None
+
+
+def list_v4l2_controls(device_path: str) -> str:
+    """A device's ``v4l2-ctl --list-ctrls`` text, or "" if the query fails.
 
     Args:
         device_path: Device node path (e.g. ``"/dev/video0"``).
-        name: Control name to find (e.g. ``"focus_absolute"``).
     """
     try:
         result = subprocess.run(
@@ -188,12 +247,45 @@ def get_v4l2_control_range(device_path: str, name: str) -> tuple[int, int] | Non
         )
     except FileNotFoundError:
         print("Error: v4l2-utils is not installed. Run: sudo apt install v4l-utils")
-        return None
+
+        return ""
     except subprocess.CalledProcessError as e:
         print(f"Failed to query controls for {device_path}: {e}")
-        return None
 
-    return parse_v4l2_control_range(result.stdout, name)
+        return ""
+
+    return result.stdout
+
+
+def get_v4l2_control_range(device_path: str, name: str) -> tuple[int, int] | None:
+    """Query a device's (min, max) for one v4l2 control via ``v4l2-ctl``.
+
+    Args:
+        device_path: Device node path (e.g. ``"/dev/video0"``).
+        name: Control name to find (e.g. ``"focus_absolute"``).
+    """
+    return parse_v4l2_control_range(list_v4l2_controls(device_path), name)
+
+
+def find_v4l2_focus_subdevice() -> str | None:
+    """The ``/dev/v4l-subdevN`` node with a ``focus_absolute`` control, or None.
+
+    A Raspberry Pi CSI camera has no ``/dev/videoN`` node of its own; its
+    lens (VCM, e.g. ``dw9807``) is a separate V4L2 sub-device. Linux only:
+    elsewhere no sub-device nodes exist and this returns None.
+    """
+    # Natural order, so v4l-subdev10 comes after v4l-subdev2. With several
+    # CSI cameras the first lens wins: pairing a lens with its sensor needs
+    # the media graph's ancillary links, which v4l2-ctl does not report.
+    subdevices = sorted(
+        glob.glob(V4L2_SUBDEVICE_GLOB), key=lambda path: (len(path), path)
+    )
+
+    for path in subdevices:
+        if get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE) is not None:
+            return path
+
+    return None
 
 
 def set_v4l2_controls(device_path: str, **controls) -> bool:
@@ -256,6 +348,25 @@ def get_v4l2_control(device_path: str, name: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def is_pi_internal_video_node(name: str) -> bool:
+    """Whether a V4L2 device header or Qt camera description names one of
+    the PI_INTERNAL_VIDEO_NODE_NAMES."""
+    name = name.lower()
+
+    return any(node_name in name for node_name in PI_INTERNAL_VIDEO_NODE_NAMES)
+
+
+def is_libcamera_device(camera_device) -> bool:
+    """Whether a QCameraDevice is served by libcamera (a Raspberry Pi CSI
+    camera), which has no ``/dev/videoN`` node of its own."""
+    camera_id = bytes(camera_device.id()).decode(errors="replace")
+
+    return any(
+        name.startswith(LIBCAMERA_ID_PREFIX)
+        for name in (camera_device.description(), camera_id)
+    )
+
+
 def get_real_linux_nodes() -> list[int]:
     """Query V4L2 for the primary video capture nodes, bypassing Qt.
 
@@ -264,8 +375,8 @@ def get_real_linux_nodes() -> list[int]:
     ``v4l2-ctl --list-devices`` directly to discover the real ``/dev/videoN``
     nodes and returns them as ``[0, 2, ...]``.
 
-    Internal Pi ISP/codec devices (``pispbe``, ``hevc``) are filtered out so
-    only actual cameras appear.
+    Pi-internal ISP/CSI/codec devices (PI_INTERNAL_VIDEO_NODE_NAMES) are
+    filtered out so only actual cameras appear.
 
     Returns:
         Ordered list of primary node numbers, e.g. ``[0, 2]``.
@@ -285,11 +396,7 @@ def get_real_linux_nodes() -> list[int]:
                 current_cam = line.strip()
             elif current_cam:
                 # First indented line under a header = primary /dev/videoN node.
-                # Skip Pi-internal ISP and codec devices.
-                if (
-                    "pispbe" not in current_cam.lower()
-                    and "hevc" not in current_cam.lower()
-                ):
+                if not is_pi_internal_video_node(current_cam):
                     node_num = line.strip().split("video")[-1]
                     real_nodes.append(int(node_num))
 
@@ -315,9 +422,23 @@ class LinuxCameraDeviceContainer:
     empty, and the camera behaves identically to a regular ``QCamera``.
     """
 
-    def __init__(self, camera_device, linux_node_id=None):
+    def __init__(
+        self,
+        camera_device,
+        linux_node_id=None,
+        focus_device_path=None,
+        focus_lens_map=(),
+    ):
         self.camera_device = camera_device
         self.linux_node_id = linux_node_id
+
+        # Node the v4l2 focus fallback drives: a libcamera camera's lens
+        # sub-device, else the camera's own /dev/videoN node.
+        self.focus_device_path = focus_device_path or self.device_path
+
+        # A libcamera lens's calibration from the sensor's tuning file
+        # (see libcamera_tuning.lens_map_from_tuning); () when unknown.
+        self.focus_lens_map = focus_lens_map
 
         # {(width, height): [fps, ...]} — populated from V4L2 on Linux
         if self.device_path:
@@ -344,14 +465,40 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     On Linux, queries V4L2 for the real ``/dev/videoN`` node IDs and
     attaches them to each camera.  On other platforms, ``linux_node_id``
     is set to ``None``.
+
+    Pi-internal nodes are dropped. libcamera devices get no node, so the
+    real nodes pair by index with the remaining (V4L2) cameras only; their
+    focus is driven through the lens sub-device instead (see
+    find_v4l2_focus_subdevice), calibrated by the sensor's tuning file
+    (see libcamera_tuning.read_lens_map).
     """
-    qt_cameras = QMediaDevices.videoInputs()
-    node_ids = get_real_linux_nodes()
+    qt_cameras = [
+        cam_device
+        for cam_device in QMediaDevices.videoInputs()
+        if not is_pi_internal_video_node(cam_device.description())
+    ]
+    node_ids = iter(get_real_linux_nodes())
 
     cameras = []
-    for i, cam_device in enumerate(qt_cameras):
-        node_id = node_ids[i] if i < len(node_ids) else None
-        cameras.append(LinuxCameraDeviceContainer(cam_device, linux_node_id=node_id))
+
+    for cam_device in qt_cameras:
+        focus_lens_map = ()
+
+        if is_libcamera_device(cam_device):
+            node_id = None
+            focus_device_path = find_v4l2_focus_subdevice()
+
+            if focus_device_path is not None:
+                focus_lens_map = read_lens_map()
+        else:
+            node_id = next(node_ids, None)
+            focus_device_path = None
+
+        cameras.append(
+            LinuxCameraDeviceContainer(
+                cam_device, node_id, focus_device_path, focus_lens_map
+            )
+        )
 
     return cameras
 
