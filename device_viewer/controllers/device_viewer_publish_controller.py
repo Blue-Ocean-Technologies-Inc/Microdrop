@@ -45,6 +45,7 @@ from ..consts import (
     FILLER_CAPACITANCE_KEY,
     LIQUID_CAPACITANCE_KEY,
     PHASE_NAVIGATION_MODE,
+    volume_estimate_publisher,
 )
 from ..models.alpha import AlphaValue
 from ..models.main_model import DeviceViewMainModel
@@ -368,3 +369,18 @@ class DeviceViewerPublishController(HasTraits):
         """
         self.publish_calibration_message()
         logger.info("Calibration message published")
+
+    # ------------------------------------------------------- volume readout
+    @observe("model:volume_estimate:shown_values_updated")
+    def _publish_volume_estimate(self, event):
+        """Send the new volume readout snapshot to the DropBot status pane."""
+        estimate = self.model.volume_estimate
+
+        volume_estimate_publisher.publish(
+            {
+                "status_message": estimate.shown_status_message,
+                "volume_ul": estimate.shown_volume_ul,
+                "fill_fraction": estimate.shown_fill_fraction,
+                "covered_area_mm2": estimate.shown_covered_area_mm2,
+            }
+        )

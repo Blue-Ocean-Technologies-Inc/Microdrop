@@ -53,6 +53,9 @@ from device_viewer.models.messages import (
 from device_viewer.models.messages import (
     GeometryChangedMessage as GeometryChangedMessage,
 )
+from device_viewer.models.messages import (
+    VolumeEstimateMessage as VolumeEstimateMessage,
+)
 from device_viewer.models.step_params_commit import (
     StepParamsCommitMessage as StepParamsCommitMessage,
 )
@@ -104,6 +107,9 @@ DEVICE_VIEWER_CAMERA_SET_CONTROLS = "ui/device_viewer/camera/set_controls"
 DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED = "ui/device_viewer/camera/controls_applied"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
+# The live volume readout (VolumeEstimateMessage), shown by the DropBot
+# status pane; published only on changes above reading noise.
+DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"
 # Sidebar route preview/playback is running (payload "True"/"False"). Published
 # by device_viewer's RouteExecutionService. Canonical home moved here from the
 # deleted protocol_grid.consts in PPT-9 (#371).
@@ -236,6 +242,9 @@ camera_source_selected_publisher = ValidatedTopicPublisher(
 )
 camera_state_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_CAMERA_STATE, validator_class=CameraState
+)
+volume_estimate_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_VOLUME_ESTIMATE, validator_class=VolumeEstimateMessage
 )
 
 APP_GLOBALS_KEYS = [
@@ -806,3 +815,20 @@ ZONE_TREE_COLOR_COLUMN_WIDTH_PX = 60
 # the icon font's line height to size the two glyph columns.
 ZONE_TREE_SWATCH_INSET_PX = 4
 ZONE_TREE_GLYPH_COLUMN_PADDING_PX = 8
+
+# ---------------------------------------------------------------------------
+# Live volume readout (VolumeEstimateModel)
+# ---------------------------------------------------------------------------
+# Top-plate to bottom-plate gap the droplet fills, in µm. Placeholder until
+# measured for the chip in use; set it in the Device Viewer preferences.
+DEFAULT_GAP_HEIGHT_UM = 254
+GAP_HEIGHT_UM_MIN = 1
+GAP_HEIGHT_UM_MAX = 2000
+
+# mm² × µm = 1e-3 mm³, and 1 mm³ is 1 µL.
+UM_MM2_PER_UL = 1000
+
+# Volume change (µL) a new capacitance reading must make before the live
+# readout shows it; smaller moves are reading noise. Matches the readout's
+# 0.1 µL resolution, like the DropBot status pane's capacitance threshold.
+VOLUME_READOUT_NOISE_UL = 0.1
