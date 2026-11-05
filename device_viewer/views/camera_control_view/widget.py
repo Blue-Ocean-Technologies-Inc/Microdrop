@@ -61,6 +61,7 @@ from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
+from ...utils.frame_luma import frame_centre_luma
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
@@ -506,6 +507,10 @@ class CameraControlWidget(QWidget):
     def _forward_preview_frame(self, frame):
         self.camera_device.forward_preview_frame(frame)
 
+        # A running autofocus sweep measures every frame, not the preview's.
+        if self.camera_model.focus.autofocusing:
+            self.controller.autofocus_frame(frame_centre_luma(frame))
+
     def _forward_preview_image(self, image):
         self.camera_device.forward_preview_image(image)
 
@@ -670,6 +675,7 @@ class CameraControlWidget(QWidget):
                 v4l2_focus_device_path=(
                     container.focus_device_path if container else None
                 ),
+                v4l2_focus_lens_map=container.focus_lens_map if container else (),
             )
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)

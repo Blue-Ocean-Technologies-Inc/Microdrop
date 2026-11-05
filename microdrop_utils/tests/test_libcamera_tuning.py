@@ -105,3 +105,48 @@ def test_two_sensors_change_nothing(pi, monkeypatch, tmp_path):
 
     assert tuning_module.disable_libcamera_autofocus(cache_dir=pi) is None
     assert "LIBCAMERA_RPI_TUNING_FILE" not in tuning_module.os.environ
+
+
+def test_lens_map_pairs_dioptres_with_positions():
+    assert tuning_module.lens_map_from_tuning(TUNING) == ((0.0, 420), (35.0, 920))
+
+
+def test_lens_map_is_sorted_by_dioptres():
+    tuning = {"algorithms": [{"rpi.af": {"map": [35.0, 920.0, 0.0, 420.0]}}]}
+
+    assert tuning_module.lens_map_from_tuning(tuning) == ((0.0, 420), (35.0, 920))
+
+
+def test_no_lens_map_without_rpi_af():
+    assert tuning_module.lens_map_from_tuning({"algorithms": []}) == ()
+
+
+def test_focus_span_is_near_then_far():
+    lens_map = ((0.0, 420), (35.0, 920))
+
+    assert tuning_module.lens_focus_span(lens_map) == (920, 420)
+    assert tuning_module.lens_focus_span(((0.0, 420),)) is None
+
+
+def test_lens_dioptres_interpolate_and_hold_at_the_ends():
+    lens_map = ((0.0, 420), (35.0, 920))
+
+    assert tuning_module.lens_dioptres(lens_map, 670) == pytest.approx(17.5)
+    assert tuning_module.lens_dioptres(lens_map, 100) == 0.0
+    assert tuning_module.lens_dioptres(lens_map, 1023) == 35.0
+
+
+def test_lens_map_is_read_from_the_original_not_the_af_less_copy(pi):
+    # Once auto focus is disabled, libcamera reads the copy, which has no map.
+    copy = tuning_module.disable_libcamera_autofocus(cache_dir=pi)
+
+    assert tuning_module.os.environ["LIBCAMERA_RPI_TUNING_FILE"] == str(copy)
+    assert tuning_module.read_lens_map() == ((0.0, 420), (35.0, 920))
+
+
+def test_no_lens_map_without_a_single_sensor(pi, tmp_path):
+    second = tmp_path / "sys" / "v4l-subdev4"
+    second.mkdir()
+    (second / "name").write_text("imx708_wide_noir 11-001a\n")
+
+    assert tuning_module.read_lens_map() == ()

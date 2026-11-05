@@ -85,6 +85,7 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
     monkeypatch.setattr(v4l2, "get_real_linux_nodes", lambda: [8])
     monkeypatch.setattr(v4l2, "get_v4l2_all_fps", lambda device_path: {})
     monkeypatch.setattr(v4l2, "find_v4l2_focus_subdevice", lambda: "/dev/v4l-subdev3")
+    monkeypatch.setattr(v4l2, "read_lens_map", lambda: ((0.0, 420), (35.0, 920)))
 
     cameras = v4l2.get_linux_video_inputs()
 
@@ -97,4 +98,9 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
     assert [camera.focus_device_path for camera in cameras] == [
         "/dev/v4l-subdev3",
         "/dev/video8",
+    ]
+    # Only the lens is calibrated by the sensor's tuning file.
+    assert [camera.focus_lens_map for camera in cameras] == [
+        ((0.0, 420), (35.0, 920)),
+        (),
     ]

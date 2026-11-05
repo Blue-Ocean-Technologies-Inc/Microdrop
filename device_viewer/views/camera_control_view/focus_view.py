@@ -8,15 +8,28 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The camera panel's focus row: a manual focus slider with the lens's raw
-position, and an Auto toggle where the camera has continuous auto focus.
+"""The camera panel's focus row: a manual focus slider applied live while
+dragged, the lens's raw position (with its approximate focused distance
+when calibrated), an Auto toggle where the camera has continuous auto
+focus, and a one-shot Autofocus button.
 
 Views a CameraFocusModel; standalone it only edits the model, while
-CameraFocusHandler applies the edits through the camera controller."""
+CameraFocusHandler applies the edits through the camera controller, which
+also observes the Autofocus button."""
 
 # Enthought library imports.
 from traits.api import Instance
-from traitsui.api import Handler, HGroup, Item, RangeEditor, UItem, View
+from traitsui.api import (
+    ButtonEditor,
+    Handler,
+    HGroup,
+    Item,
+    RangeEditor,
+    UItem,
+    VGroup,
+    View,
+    spring,
+)
 
 # Local imports.
 from ...controllers.camera_controller import CameraController
@@ -34,7 +47,7 @@ class CameraFocusHandler(Handler):
 
     def distance_setattr(self, info, focus, name, value):
         super().setattr(info, focus, name, value)
-        self.controller.set_focus(value)
+        self.controller.request_focus(value)
 
     def auto_setattr(self, info, focus, name, value):
         super().setattr(info, focus, name, value)
@@ -42,15 +55,14 @@ class CameraFocusHandler(Handler):
 
 
 camera_focus_view = View(
-    HGroup(
+    VGroup(
         Item(
             "distance",
             label="Focus",
-            # Applied on release, not while dragging: a v4l2 focus write
-            # runs a v4l2-ctl process.
+            # Live while dragging; the controller coalesces the writes, as
+            # a v4l2 focus write runs a v4l2-ctl process.
             editor=RangeEditor(
                 mode="slider",
-                auto_set=False,
                 low_label="Near",
                 high_label="Far",
                 format_str="%.2f",
@@ -58,17 +70,26 @@ camera_focus_view = View(
             enabled_when="available and not auto",
             springy=True,
         ),
-        UItem(
-            "raw_position",
-            style="readonly",
-            visible_when="raw_position is not None",
-            tooltip="Raw lens position (v4l2 focus_absolute)",
-        ),
-        Item(
-            "auto",
-            label="Auto",
-            visible_when="auto_available",
-            tooltip="Continuous auto focus",
+        HGroup(
+            UItem(
+                "position_label",
+                style="readonly",
+                visible_when="raw_position is not None",
+                tooltip="Raw lens position (v4l2 focus_absolute)",
+            ),
+            Item(
+                "auto",
+                label="Auto",
+                visible_when="auto_available",
+                tooltip="Continuous auto focus",
+            ),
+            spring,
+            UItem(
+                "autofocus_button",
+                editor=ButtonEditor(label_value="autofocus_label"),
+                enabled_when="autofocus_available and not auto and not autofocusing",
+                tooltip="Focus once on the centre of the image (contrast sweep)",
+            ),
         ),
     ),
 )

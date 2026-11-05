@@ -17,15 +17,21 @@ layer; these models hold only what the controller decides on.
 # Enthought library imports.
 from traits.api import (
     Bool,
+    Button,
     Float,
     HasTraits,
     Instance,
     Int,
+    List,
+    Property,
     Range,
     Str,
     Tuple,
     Union,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.libcamera_tuning import lens_dioptres
 
 
 class RecordingModel(HasTraits):
@@ -65,6 +71,55 @@ class CameraFocusModel(HasTraits):
     #: Raw ``focus_absolute`` position under the v4l2 fallback; None while
     #: Qt drives the focus.
     raw_position = Union(None, Int)
+
+    #: The lens's (dioptres, raw position) calibration, for the approximate
+    #: focused distance; empty when unknown.
+    lens_map = List(Tuple(Float, Int))
+
+    #: The raw position, with the approximate focused distance when the
+    #: lens is calibrated (e.g. "650 (≈ 4 cm)").
+    position_label = Property(Str, observe="raw_position, lens_map")
+
+    #: A one-shot autofocus sweep can run: focus is available and the
+    #: camera is streaming.
+    autofocus_available = Bool(False)
+
+    #: An autofocus sweep is running.
+    autofocusing = Bool(False)
+
+    #: Starts a one-shot autofocus sweep.
+    autofocus_button = Button()
+
+    #: The autofocus button's text, which shows a running sweep.
+    autofocus_label = Property(Str, observe="autofocusing")
+
+    def _get_position_label(self):
+        if self.raw_position is None:
+            return ""
+
+        if not self.lens_map:
+            return str(self.raw_position)
+
+        dioptres = lens_dioptres(self.lens_map, self.raw_position)
+
+        return f"{self.raw_position} ({_approximate_distance(dioptres)})"
+
+    def _get_autofocus_label(self):
+        return "Focusing…" if self.autofocusing else "Autofocus"
+
+
+def _approximate_distance(dioptres):
+    """The distance a lens focused at ``dioptres`` is sharp at, roughly."""
+
+    if dioptres <= 0.0:
+        return "∞"
+
+    metres = 1.0 / dioptres
+
+    if metres < 1.0:
+        return f"≈ {metres * 100:.0f} cm"
+
+    return f"≈ {metres:.1f} m"
 
 
 class CameraModel(HasTraits):
@@ -113,8 +168,15 @@ class CameraModel(HasTraits):
     #: continuous auto focus) drives the focus.
     v4l2_focus_path = Union(None, Str)
 
-    #: Cached ``focus_absolute`` (min, max) of ``v4l2_focus_device_path``.
-    v4l2_focus_range = Union(None, Tuple(Int(), Int()))
+    #: A libcamera lens's (dioptres, raw position) calibration from the
+    #: sensor's tuning file; empty for other cameras.
+    v4l2_focus_lens_map = List(Tuple(Float, Int))
+
+    #: ``focus_absolute`` positions of ``v4l2_focus_device_path`` at focus
+    #: distance 0.0 (near) and 1.0 (far): the ends of
+    #: ``v4l2_focus_lens_map`` (where near is the higher position), else
+    #: the control's (min, max).
+    v4l2_focus_span = Union(None, Tuple(Int(), Int()))
 
     #: ``v4l2_focus_device_path`` has continuous auto focus
     #: (``focus_automatic_continuous``); a bare lens sub-device does not.

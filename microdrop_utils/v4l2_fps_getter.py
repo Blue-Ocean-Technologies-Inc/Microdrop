@@ -18,6 +18,9 @@ import subprocess
 # Enthought library imports.
 from pyface.qt.QtMultimedia import QCameraDevice, QMediaDevices
 
+# Microdrop utils imports.
+from microdrop_utils.libcamera_tuning import read_lens_map
+
 os_name = platform.system()
 
 V4L2_FOCUS_ABSOLUTE = "focus_absolute"
@@ -402,13 +405,23 @@ class LinuxCameraDeviceContainer:
     empty, and the camera behaves identically to a regular ``QCamera``.
     """
 
-    def __init__(self, camera_device, linux_node_id=None, focus_device_path=None):
+    def __init__(
+        self,
+        camera_device,
+        linux_node_id=None,
+        focus_device_path=None,
+        focus_lens_map=(),
+    ):
         self.camera_device = camera_device
         self.linux_node_id = linux_node_id
 
         # Node the v4l2 focus fallback drives: a libcamera camera's lens
         # sub-device, else the camera's own /dev/videoN node.
         self.focus_device_path = focus_device_path or self.device_path
+
+        # A libcamera lens's calibration from the sensor's tuning file
+        # (see libcamera_tuning.lens_map_from_tuning); () when unknown.
+        self.focus_lens_map = focus_lens_map
 
         # {(width, height): [fps, ...]} — populated from V4L2 on Linux
         if self.device_path:
@@ -439,7 +452,8 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     Pi-internal nodes are dropped. libcamera devices get no node, so the
     real nodes pair by index with the remaining (V4L2) cameras only; their
     focus is driven through the lens sub-device instead (see
-    find_v4l2_focus_subdevice).
+    find_v4l2_focus_subdevice), calibrated by the sensor's tuning file
+    (see libcamera_tuning.read_lens_map).
     """
     qt_cameras = [
         cam_device
@@ -451,15 +465,22 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     cameras = []
 
     for cam_device in qt_cameras:
+        focus_lens_map = ()
+
         if is_libcamera_device(cam_device):
             node_id = None
             focus_device_path = find_v4l2_focus_subdevice()
+
+            if focus_device_path is not None:
+                focus_lens_map = read_lens_map()
         else:
             node_id = next(node_ids, None)
             focus_device_path = None
 
         cameras.append(
-            LinuxCameraDeviceContainer(cam_device, node_id, focus_device_path)
+            LinuxCameraDeviceContainer(
+                cam_device, node_id, focus_device_path, focus_lens_map
+            )
         )
 
     return cameras

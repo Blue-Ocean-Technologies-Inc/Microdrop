@@ -407,6 +407,32 @@ FALLBACK_PIXEL_FORMATS = ("NV12", "YUV420P", "YUYV", "BGRX8888", "RGBX8888")
 RPI_UNSUPPORTED_PIXEL_FORMATS = ("YV12",)
 
 # ---------------------------------------------------------------------------
+# Camera focus
+# ---------------------------------------------------------------------------
+# While the focus slider is dragged, its latest position is written at most
+# this often (s): a v4l2 focus write runs a v4l2-ctl process.
+FOCUS_WRITE_INTERVAL_S = 0.1
+
+# Autofocus contrast sweep: positions of the coarse pass across the whole
+# focus range, then new positions of the fine pass between the best coarse
+# position's neighbours.
+AUTOFOCUS_COARSE_STEPS = 12
+AUTOFOCUS_FINE_STEPS = 8
+
+# Camera frames dropped after each lens move before measuring (pipeline
+# latency plus lens settling), and frames averaged per position.
+AUTOFOCUS_SETTLE_FRAMES = 4
+AUTOFOCUS_SAMPLES_PER_POSITION = 2
+
+# Sharpness is measured on the frame's centre half, downscaled to at most
+# this width, which keeps a measurement within a few ms on the GUI thread.
+AUTOFOCUS_SAMPLE_WIDTH_PX = 320
+
+# A sweep that has not finished by then is cancelled (the camera stopped
+# delivering frames); a full sweep takes a few seconds.
+AUTOFOCUS_TIMEOUT_S = 30.0
+
+# ---------------------------------------------------------------------------
 # Live Histogram pane: an exposure aid sampling the live camera feed
 # ---------------------------------------------------------------------------
 # One bin per 8-bit intensity level.

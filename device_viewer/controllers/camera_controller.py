@@ -13,23 +13,27 @@
 Owns the decisions the camera widget used to make inline: which source and
 format to select, where captures and recordings are written, the recording
 and capture bookkeeping (and what it publishes), exposure/focus requests
-with their v4l2 fallbacks for the Portable Pi's GStreamer backend, and the
+with their v4l2 fallbacks for the Portable Pi's GStreamer backend, the
+focus row's live slider writes and one-shot autofocus sweep, and the
 camera's selection/on-off state with the replies to select_source
 requests. The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
 the view, which calls in here and acts on the answers.
 """
 
 # Standard library imports.
+import time
 from pathlib import Path
 
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Callable, HasTraits, Instance, observe
+from pyface.timer.api import CallbackTimer
+from traits.api import Callable, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
 
 # Microdrop utils imports.
+from microdrop_utils.libcamera_tuning import lens_focus_span
 from microdrop_utils.system_config import is_rpi
 from microdrop_utils.v4l2_fps_getter import (
     V4L2_EXPOSURE_AUTO,
@@ -46,8 +50,10 @@ from microdrop_utils.v4l2_fps_getter import (
 
 # Local imports.
 from ..consts import (
+    AUTOFOCUS_TIMEOUT_S,
     CAPTURES_DIR_NAME,
     FALLBACK_PIXEL_FORMATS,
+    FOCUS_WRITE_INTERVAL_S,
     LIBCAMERA_PIXEL_FORMAT,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
@@ -61,10 +67,12 @@ from ..consts import (
     recording_state_model,
 )
 from ..interfaces.i_camera_device import ICameraDevice
+from ..models.autofocus import ContrastAutofocus, laplacian_variance
 from ..models.camera import CameraModel
 from ..models.media import MediaType
 from ..services.media_capture_cache import _cache_media_capture
 from ..utils.capture import media_filename
+from ..utils.latest_value_throttle import LatestValueThrottle
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -95,6 +103,28 @@ class CameraController(HasTraits):
     #: Switch the camera on — the view's routine, which also syncs its
     #: toggle button; set_controls turns an idle camera on first.
     turn_camera_on = Callable()
+
+    #: Coalesces the focus slider's drag into focus writes.
+    focus_edits = Instance(LatestValueThrottle)
+
+    #: The one-shot autofocus sweep, fed live frames while it runs.
+    autofocus = Instance(ContrastAutofocus, ())
+
+    #: Cancels a sweep that stops getting frames.
+    _autofocus_timeout = Instance(CallbackTimer)
+
+    #: monotonic() time the running sweep started.
+    _autofocus_started = Float()
+
+    def _focus_edits_default(self):
+        return LatestValueThrottle(
+            interval=FOCUS_WRITE_INTERVAL_S, callback=self._write_focus
+        )
+
+    def __autofocus_timeout_default(self):
+        return CallbackTimer(
+            interval=AUTOFOCUS_TIMEOUT_S, callback=self._autofocus_timed_out
+        )
 
     @observe("model:camera_active")
     def _remember_camera_state(self, event):
@@ -151,6 +181,7 @@ class CameraController(HasTraits):
         provider=False,
         v4l2_device_path=None,
         v4l2_focus_device_path=None,
+        v4l2_focus_lens_map=(),
     ):
         """Record the selected source.
 
@@ -158,8 +189,11 @@ class CameraController(HasTraits):
         label, a QCamera's Qt description; empty for "<No Camera>", which
         leaves the preference alone. ``v4l2_device_path`` is the camera's
         ``/dev/videoN`` node, ``v4l2_focus_device_path`` the node its focus
-        fallback drives (see CameraModel).
+        fallback drives and ``v4l2_focus_lens_map`` that lens's calibration
+        (see CameraModel).
         """
+        self.cancel_autofocus("camera changed")
+        self.focus_edits.cancel()
 
         if remembered_as:
             self.preferences.selected_camera = remembered_as
@@ -167,6 +201,9 @@ class CameraController(HasTraits):
         self.model.selected_camera = label
         self.model.provider_selected = provider
         self.model.v4l2_device_path = v4l2_device_path
+
+        # Before the focus device, whose change reads the focus span.
+        self.model.v4l2_focus_lens_map = list(v4l2_focus_lens_map)
         self.model.v4l2_focus_device_path = v4l2_focus_device_path
 
         self.refresh_focus()
@@ -429,6 +466,9 @@ class CameraController(HasTraits):
         if not self.camera.is_active():
             self.turn_camera_on()
 
+        self.cancel_autofocus("focus set by a camera controls request")
+        self.focus_edits.cancel()
+
         try:
             if request.get("hold_auto_exposure"):
                 self._hold_auto_exposure()
@@ -491,32 +531,50 @@ class CameraController(HasTraits):
 
     @observe("model:v4l2_focus_device_path")
     def _read_v4l2_focus_controls(self, event):
-        """Cache the focus device's ``focus_absolute`` range and whether it
-        has continuous auto focus, from one ``v4l2-ctl`` query."""
+        """Cache the focus device's focus span and whether it has
+        continuous auto focus, from one ``v4l2-ctl`` query."""
         model = self.model
         path = event.new
         controls = list_v4l2_controls(path) if path else ""
         auto_focus = parse_v4l2_control_value(controls, V4L2_FOCUS_AUTO)
+        control_range = parse_v4l2_control_range(controls, V4L2_FOCUS_ABSOLUTE)
+        lens_span = lens_focus_span(model.v4l2_focus_lens_map)
 
-        model.v4l2_focus_range = parse_v4l2_control_range(controls, V4L2_FOCUS_ABSOLUTE)
+        # A calibrated lens focuses only within its map (on the Pi's
+        # imx708 lens, 420-920 of 0-1023), and nearer at higher positions.
+        if control_range is not None and lens_span is not None:
+            model.v4l2_focus_span = lens_span
+        else:
+            model.v4l2_focus_span = control_range
+
         model.v4l2_focus_has_auto = auto_focus is not None
 
         # A camera left on manual focus (auto off) is the fallback's to
         # drive and to read back from the start.
-        if model.v4l2_focus_range is not None and auto_focus == 0:
+        if model.v4l2_focus_span is not None and auto_focus == 0:
             model.v4l2_focus_path = path
         else:
             model.v4l2_focus_path = None
 
     def set_focus(self, focus_distance):
-        """Apply the camera panel's focus edit: ``focus_distance`` from 0.0
-        (near) to 1.0 (far), or None for continuous auto focus."""
+        """Apply the camera panel's focus edit now: ``focus_distance`` from
+        0.0 (near) to 1.0 (far), or None for continuous auto focus."""
+        self.cancel_autofocus("focus edited")
+        self.focus_edits.cancel()
+
         try:
             self._apply_focus(focus_distance)
         except RuntimeError as error:
             logger.error(f"Focus not applied: {error}")
 
         self.refresh_focus()
+
+    def request_focus(self, focus_distance):
+        """Apply a focus slider drag's ``focus_distance`` (0.0 near to 1.0
+        far) live, coalesced into at most one write per
+        FOCUS_WRITE_INTERVAL_S that always ends on the latest value."""
+        self.cancel_autofocus("focus edited")
+        self.focus_edits.submit(focus_distance)
 
     @observe("model:camera_active")
     def refresh_focus(self, event=None):
@@ -532,16 +590,22 @@ class CameraController(HasTraits):
         )
         qt_focus = qcamera_selected and self.camera.supports_manual_focus()
         v4l2_focus = (
-            qcamera_selected and not qt_focus and model.v4l2_focus_range is not None
+            qcamera_selected and not qt_focus and model.v4l2_focus_span is not None
         )
 
         focus.available = qt_focus or v4l2_focus
         focus.auto_available = qt_focus or (v4l2_focus and model.v4l2_focus_has_auto)
+        focus.autofocus_available = focus.available and model.camera_active
+        focus.lens_map = model.v4l2_focus_lens_map if v4l2_focus else []
+        raw_position = None
 
         if v4l2_focus:
             # A lens without auto focus holds a position even while no
             # manual focus is applied, so its position is always shown.
-            distance = self._v4l2_focus_distance(model.v4l2_focus_device_path)
+            raw_position = get_v4l2_control(
+                model.v4l2_focus_device_path, V4L2_FOCUS_ABSOLUTE
+            )
+            distance = self._v4l2_focus_distance(raw_position)
             focus.auto = model.v4l2_focus_has_auto and model.v4l2_focus_path is None
         elif qt_focus:
             distance = self.camera.focus_distance()
@@ -550,13 +614,112 @@ class CameraController(HasTraits):
             distance = None
             focus.auto = False
 
-        if distance is None:
-            focus.raw_position = None
+        focus.raw_position = raw_position
 
+        if distance is not None:
+            focus.distance = distance
+
+    # ------------------------------------------------------------------ #
+    # Autofocus (one-shot contrast sweep)                                  #
+    # ------------------------------------------------------------------ #
+    @observe("model:focus:autofocus_button")
+    def start_autofocus(self, event=None):
+        """Start a one-shot contrast sweep; live frames then drive it (see
+        autofocus_frame)."""
+        focus = self.model.focus
+
+        if self.autofocus.running or not focus.autofocus_available:
             return
 
-        focus.distance = distance
-        focus.raw_position = self._v4l2_focus_raw(distance) if v4l2_focus else None
+        self.focus_edits.cancel()
+        self._autofocus_started = time.monotonic()
+        logger.info("Autofocus sweep started")
+
+        if self._write_focus(self.autofocus.start()):
+            self._autofocus_timeout.repeat = 1
+            self._autofocus_timeout.start()
+
+    def autofocus_frame(self, grey):
+        """Advance the running sweep by one live frame: ``grey`` is its
+        centre as a 2-D greyscale array, None when it could not be read."""
+
+        if not self.autofocus.running or grey is None:
+            return
+
+        distance = self.autofocus.feed(laplacian_variance(grey))
+
+        if distance is None:
+            return
+
+        # A failed write cancels the sweep (logged there).
+        written = self._write_focus(distance)
+
+        if self.autofocus.running:
+            return
+
+        self._autofocus_timeout.stop()
+
+        if not written:
+            return
+
+        autofocus = self.autofocus
+        elapsed_s = time.monotonic() - self._autofocus_started
+
+        logger.info(
+            f"Autofocus: best focus distance {autofocus.best_distance:.3f} "
+            f"(raw {self.model.focus.raw_position}, sharpness "
+            f"{autofocus.scores[autofocus.best_distance]:.1f}), "
+            f"{len(autofocus.scores)} positions in {elapsed_s:.1f} s"
+        )
+
+    def cancel_autofocus(self, reason):
+        """Stop a running sweep, leaving the lens where it is."""
+
+        if not self.autofocus.running:
+            return
+
+        self.autofocus.cancel()
+        self._autofocus_timeout.stop()
+        logger.info(f"Autofocus cancelled: {reason}")
+
+    @observe("autofocus:running")
+    def _show_autofocus_running(self, event):
+        self.model.focus.autofocusing = event.new
+
+    @observe("model:camera_active")
+    def _cancel_autofocus_when_stopped(self, event):
+        if not event.new:
+            self.cancel_autofocus("camera stopped")
+
+    def _autofocus_timed_out(self):
+        if self.autofocus.running:
+            logger.warning(
+                f"Autofocus got too few frames within {AUTOFOCUS_TIMEOUT_S:.0f} s"
+            )
+            self.cancel_autofocus("timed out")
+
+    def _write_focus(self, focus_distance):
+        """Apply a manual ``focus_distance`` and show it without reading
+        it back, for slider drags and sweep steps; returns whether it was
+        applied."""
+        focus = self.model.focus
+
+        try:
+            self._apply_focus(focus_distance)
+        except RuntimeError as error:
+            logger.error(f"Focus not applied: {error}")
+            self.cancel_autofocus("focus write failed")
+            self.refresh_focus()
+
+            return False
+
+        focus.distance = focus_distance
+        focus.auto = False
+
+        if self.model.v4l2_focus_path is not None:
+            focus.raw_position = self._v4l2_focus_raw(focus_distance)
+
+        return True
 
     def _apply_focus(self, focus_distance):
         model = self.model
@@ -594,7 +757,7 @@ class CameraController(HasTraits):
         if path is None:
             raise RuntimeError("this camera has no manual focus")
 
-        if model.v4l2_focus_range is None:
+        if model.v4l2_focus_span is None:
             raise RuntimeError(
                 "this camera has no manual focus (no v4l2 focus_absolute control)"
             )
@@ -610,21 +773,27 @@ class CameraController(HasTraits):
             raise RuntimeError("v4l2 focus set failed")
 
         model.v4l2_focus_path = path
-        logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
+        logger.debug(f"Set v4l2 focus_absolute={raw} on {path}")
 
     def _v4l2_focus_raw(self, focus_distance):
         """``focus_absolute`` position of a focus distance (0.0 to 1.0)."""
-        lo, hi = self.model.v4l2_focus_range
+        near, far = self.model.v4l2_focus_span
 
-        return round(lo + focus_distance * (hi - lo))
+        return round(near + focus_distance * (far - near))
 
-    def _v4l2_focus_distance(self, path):
-        """Focus distance (0.0 to 1.0) of ``path``'s ``focus_absolute``, or
-        None when it cannot be read."""
-        lo, hi = self.model.v4l2_focus_range
-        raw = get_v4l2_control(path, V4L2_FOCUS_ABSOLUTE)
+    def _v4l2_focus_distance(self, raw):
+        """Focus distance (0.0 to 1.0) of a ``focus_absolute`` position, or
+        None for None; a position beyond the span is clamped into it."""
 
-        return (raw - lo) / (hi - lo) if raw is not None else None
+        if raw is None:
+            return None
+
+        near, far = self.model.v4l2_focus_span
+
+        if near == far:
+            return 0.0
+
+        return min(max((raw - near) / (far - near), 0.0), 1.0)
 
     def _hold_auto_exposure(self):
         """Switch to manual exposure at the time auto last chose."""
@@ -665,7 +834,9 @@ class CameraController(HasTraits):
         model = self.model
 
         if model.v4l2_focus_path is not None:
-            return self._v4l2_focus_distance(model.v4l2_focus_path)
+            return self._v4l2_focus_distance(
+                get_v4l2_control(model.v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
+            )
 
         if not self.camera.focus_is_manual():
             return None

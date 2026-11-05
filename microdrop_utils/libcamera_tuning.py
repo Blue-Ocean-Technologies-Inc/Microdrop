@@ -15,6 +15,10 @@ While libcamera streams, its Raspberry Pi IPA's auto-focus algorithm
 focus written to the lens sub-device. Qt's GStreamer backend exposes no
 libcamera focus control either, so nothing is lost by pointing libcamera at
 a copy of the sensor's tuning file without ``rpi.af``.
+
+The sensor's own tuning file also calibrates the lens: the ``rpi.af`` map
+pairs focus distances (in dioptres) with lens positions, which gives the
+lens's useful travel and its direction.
 """
 
 # Standard library imports.
@@ -48,6 +52,10 @@ PISP_FRONT_END_NAME = "pisp-fe"
 #: The IPA algorithm that drives the lens.
 LIBCAMERA_AF_ALGORITHM = "rpi.af"
 
+#: The ``rpi.af`` lens calibration: a flat list of dioptres, lens position
+#: pairs.
+LIBCAMERA_AF_LENS_MAP = "map"
+
 #: Where the AF-less tuning copies go, under ETSConfig.application_home.
 LIBCAMERA_TUNING_CACHE_DIRNAME = ".libcamera_tuning"
 
@@ -70,6 +78,41 @@ def _v4l2_subdevice_names():
     return names
 
 
+def find_csi_sensor_tuning_file():
+    """The tuning file libcamera ships for the CSI camera sensor, or None
+    unless there is exactly one sensor with a tuning file.
+
+    This is always the installed original, never the AF-less copy that
+    LIBCAMERA_TUNING_FILE_ENV may point at.
+    """
+    subdevice_names = _v4l2_subdevice_names()
+    pipeline = "pisp" if PISP_FRONT_END_NAME in subdevice_names else "vc4"
+    tuning_dir = LIBCAMERA_TUNING_DIR / pipeline
+    sensors = [
+        name for name in subdevice_names if (tuning_dir / f"{name}.json").is_file()
+    ]
+
+    if len(sensors) != 1:
+        logger.info(
+            f"Expected one CSI camera sensor with a {pipeline} tuning file, found "
+            f"{sensors or 'none'}"
+        )
+
+        return None
+
+    return tuning_dir / f"{sensors[0]}.json"
+
+
+def _read_tuning(tuning_file):
+    """The parsed tuning file, or None (logged) when it cannot be read."""
+    try:
+        return json.loads(tuning_file.read_text())
+    except (OSError, ValueError) as error:
+        logger.error(f"Cannot read libcamera tuning file {tuning_file}: {error}")
+
+        return None
+
+
 def strip_autofocus_algorithm(tuning):
     """``tuning`` (a parsed libcamera tuning file) without its ``rpi.af``
     algorithm, or None when it has none. ``algorithms`` holds one
@@ -83,6 +126,78 @@ def strip_autofocus_algorithm(tuning):
         return None
 
     return {**tuning, "algorithms": kept}
+
+
+def lens_map_from_tuning(tuning):
+    """The lens calibration in ``tuning``'s ``rpi.af`` algorithm, as
+    ``((dioptres, lens position), ...)`` in ascending dioptres; () when it
+    has none."""
+    for algorithm in tuning.get("algorithms", []):
+        autofocus = algorithm.get(LIBCAMERA_AF_ALGORITHM)
+
+        if autofocus is None:
+            continue
+
+        flat_map = autofocus.get(LIBCAMERA_AF_LENS_MAP, [])
+        pairs = zip(flat_map[0::2], flat_map[1::2])
+
+        return tuple(
+            sorted((float(dioptres), round(position)) for dioptres, position in pairs)
+        )
+
+    return ()
+
+
+def read_lens_map():
+    """The CSI camera's lens calibration (see lens_map_from_tuning) from
+    the sensor's own tuning file; () when it is unknown."""
+    tuning_file = find_csi_sensor_tuning_file()
+
+    if tuning_file is None:
+        return ()
+
+    tuning = _read_tuning(tuning_file)
+
+    if tuning is None:
+        return ()
+
+    try:
+        return lens_map_from_tuning(tuning)
+    except (AttributeError, TypeError, ValueError) as error:
+        logger.error(f"Malformed {LIBCAMERA_AF_ALGORITHM} in {tuning_file}: {error}")
+
+        return ()
+
+
+def lens_focus_span(lens_map):
+    """The lens positions focused nearest and farthest, as ``(near,
+    far)``: the map's positions at its largest and smallest dioptres. None
+    for a map of fewer than two points.
+
+    On the Pi's lenses near is the higher position: the imx708 map pairs 0
+    dioptres (infinity) with 420 and 35 dioptres with 920.
+    """
+    if len(lens_map) < 2:
+        return None
+
+    return lens_map[-1][1], lens_map[0][1]
+
+
+def lens_dioptres(lens_map, position):
+    """Dioptres the lens focuses at in ``position``: linear between the
+    map's points, held at its end points beyond them."""
+    points = sorted(lens_map, key=lambda point: point[1])
+
+    if position <= points[0][1]:
+        return points[0][0]
+
+    for (low_dioptres, low), (high_dioptres, high) in zip(points, points[1:]):
+        if position <= high:
+            fraction = (position - low) / (high - low)
+
+            return low_dioptres + fraction * (high_dioptres - low_dioptres)
+
+    return points[-1][0]
 
 
 def disable_libcamera_autofocus(cache_dir=None):
@@ -114,28 +229,22 @@ def disable_libcamera_autofocus(cache_dir=None):
 
         return None
 
-    subdevice_names = _v4l2_subdevice_names()
-    pipeline = "pisp" if PISP_FRONT_END_NAME in subdevice_names else "vc4"
-    tuning_dir = LIBCAMERA_TUNING_DIR / pipeline
-    sensors = [
-        name for name in subdevice_names if (tuning_dir / f"{name}.json").is_file()
-    ]
+    source = find_csi_sensor_tuning_file()
 
-    if len(sensors) != 1:
-        logger.info(
-            f"Expected one CSI camera sensor with a {pipeline} tuning file, found "
-            f"{sensors or 'none'}; libcamera auto focus left on"
-        )
+    if source is None:
+        logger.info("libcamera auto focus left on")
 
         return None
 
-    sensor = sensors[0]
-    source = tuning_dir / f"{sensor}.json"
+    tuning = _read_tuning(source)
+
+    if tuning is None:
+        return None
 
     try:
-        tuning = strip_autofocus_algorithm(json.loads(source.read_text()))
-    except (OSError, ValueError, AttributeError) as error:
-        logger.error(f"Cannot read libcamera tuning file {source}: {error}")
+        tuning = strip_autofocus_algorithm(tuning)
+    except AttributeError as error:
+        logger.error(f"Malformed libcamera tuning file {source}: {error}")
 
         return None
 
@@ -147,7 +256,7 @@ def disable_libcamera_autofocus(cache_dir=None):
     if cache_dir is None:
         cache_dir = Path(ETSConfig.application_home) / LIBCAMERA_TUNING_CACHE_DIRNAME
 
-    target = Path(cache_dir) / f"{sensor}_noaf.json"
+    target = Path(cache_dir) / f"{source.stem}_noaf.json"
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -159,7 +268,7 @@ def disable_libcamera_autofocus(cache_dir=None):
 
     os.environ[LIBCAMERA_TUNING_FILE_ENV] = str(target)
     logger.info(
-        f"libcamera auto focus disabled for {sensor}: "
+        f"libcamera auto focus disabled for {source.stem}: "
         f"{LIBCAMERA_TUNING_FILE_ENV}={target}"
     )
 
