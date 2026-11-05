@@ -26,6 +26,23 @@ V4L2_EXPOSURE_AUTO = "auto_exposure"
 V4L2_EXPOSURE_AUTO_MANUAL = 1
 V4L2_EXPOSURE_AUTO_ON = 3
 
+#: Raspberry Pi ISP, CSI-receiver and codec nodes. V4L2 lists them as video
+#: devices (and Qt's GStreamer backend as cameras), but they yield no usable
+#: image — a Pi CSI camera is reached through libcamera instead.
+PI_INTERNAL_VIDEO_NODE_NAMES = (
+    "rp1-cfe",
+    "unicam",
+    "pispbe",
+    "bcm2835-isp",
+    "bcm2835-codec",
+    "rpivid",
+    "hevc",
+)
+
+#: libcamera camera ids, which Qt also reports as their description, are
+#: device-tree paths (e.g. "/base/axi/pcie@1000120000/rp1/i2c@80000/imx708@1a").
+LIBCAMERA_ID_PREFIX = "/base/"
+
 
 def get_v4l2_fps(
     device_path: str, width: int, height: int, pixel_format: str = "JPEG"
@@ -256,6 +273,25 @@ def get_v4l2_control(device_path: str, name: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def is_pi_internal_video_node(name: str) -> bool:
+    """Whether a V4L2 device header or Qt camera description names one of
+    the PI_INTERNAL_VIDEO_NODE_NAMES."""
+    name = name.lower()
+
+    return any(node_name in name for node_name in PI_INTERNAL_VIDEO_NODE_NAMES)
+
+
+def is_libcamera_device(camera_device) -> bool:
+    """Whether a QCameraDevice is served by libcamera (a Raspberry Pi CSI
+    camera), which has no ``/dev/videoN`` node of its own."""
+    camera_id = bytes(camera_device.id()).decode(errors="replace")
+
+    return any(
+        name.startswith(LIBCAMERA_ID_PREFIX)
+        for name in (camera_device.description(), camera_id)
+    )
+
+
 def get_real_linux_nodes() -> list[int]:
     """Query V4L2 for the primary video capture nodes, bypassing Qt.
 
@@ -264,8 +300,8 @@ def get_real_linux_nodes() -> list[int]:
     ``v4l2-ctl --list-devices`` directly to discover the real ``/dev/videoN``
     nodes and returns them as ``[0, 2, ...]``.
 
-    Internal Pi ISP/codec devices (``pispbe``, ``hevc``) are filtered out so
-    only actual cameras appear.
+    Pi-internal ISP/CSI/codec devices (PI_INTERNAL_VIDEO_NODE_NAMES) are
+    filtered out so only actual cameras appear.
 
     Returns:
         Ordered list of primary node numbers, e.g. ``[0, 2]``.
@@ -285,11 +321,7 @@ def get_real_linux_nodes() -> list[int]:
                 current_cam = line.strip()
             elif current_cam:
                 # First indented line under a header = primary /dev/videoN node.
-                # Skip Pi-internal ISP and codec devices.
-                if (
-                    "pispbe" not in current_cam.lower()
-                    and "hevc" not in current_cam.lower()
-                ):
+                if not is_pi_internal_video_node(current_cam):
                     node_num = line.strip().split("video")[-1]
                     real_nodes.append(int(node_num))
 
@@ -344,13 +376,25 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     On Linux, queries V4L2 for the real ``/dev/videoN`` node IDs and
     attaches them to each camera.  On other platforms, ``linux_node_id``
     is set to ``None``.
+
+    Pi-internal nodes are dropped. libcamera devices get no node, so the
+    real nodes pair by index with the remaining (V4L2) cameras only.
     """
-    qt_cameras = QMediaDevices.videoInputs()
-    node_ids = get_real_linux_nodes()
+    qt_cameras = [
+        cam_device
+        for cam_device in QMediaDevices.videoInputs()
+        if not is_pi_internal_video_node(cam_device.description())
+    ]
+    node_ids = iter(get_real_linux_nodes())
 
     cameras = []
-    for i, cam_device in enumerate(qt_cameras):
-        node_id = node_ids[i] if i < len(node_ids) else None
+
+    for cam_device in qt_cameras:
+        if is_libcamera_device(cam_device):
+            node_id = None
+        else:
+            node_id = next(node_ids, None)
+
         cameras.append(LinuxCameraDeviceContainer(cam_device, linux_node_id=node_id))
 
     return cameras

@@ -529,10 +529,14 @@ class CameraControlWidget(QWidget):
         """Return a human-readable identifier for a camera device.
 
         LinuxCameraDeviceContainer returns the /dev/videoN path (unique on Linux),
-        while QCameraDevice returns the Qt-provided description string.
+        while QCameraDevice — and a container without a node, e.g. a libcamera
+        device — returns the Qt-provided description string.
         """
         if isinstance(selected_device, LinuxCameraDeviceContainer):
-            return selected_device.device_path
+            if selected_device.device_path:
+                return selected_device.device_path
+
+            selected_device = selected_device.camera_device
 
         return selected_device.description()
 
