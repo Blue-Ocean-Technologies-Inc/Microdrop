@@ -8,11 +8,18 @@
 #
 # Thanks for using Microdrop open source!
 
-from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
-from microdrop_utils.traitsui_qt_helpers import StatusIconEditorFactory, HoverScrollEnumEditor
-from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
+# Enthought library imports.
+from traitsui.api import HGroup, Item, Spring, UItem, VGrid, VGroup, View
 
-from traitsui.api import View, Item, UItem, HGroup, VGroup, Spring, VGrid
+# Microdrop package imports.
+from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
+
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import (
+    HoverScrollEnumEditor,
+    InPlaceToggleEditor,
+    StatusIconEditorFactory,
+)
 
 # 1. Add label, id, and dock='tab' to the left group
 left = HGroup(
@@ -32,7 +39,9 @@ left = HGroup(
         UItem(
             "realtime_mode",
             style="custom",
-            editor=InPlaceToggleEditor(on_label="Realtime On", off_label="Realtime Off"),
+            editor=InPlaceToggleEditor(
+                on_label="Realtime On", off_label="Realtime Off"
+            ),
             enabled_when="connected and not halted and not protocol_running",
         ),
         Spring("10"),
@@ -45,14 +54,21 @@ grid = VGrid(
     Item("voltage_readback_display", style="readonly", label="Voltage"),
     UItem("voltage", enabled_when="free_mode and not protocol_running and not halted"),
     Item("frequency_display", label="Frequency", style="readonly"),
-    UItem("frequency", enabled_when="free_mode and not protocol_running and not halted"),
+    UItem(
+        "frequency", enabled_when="free_mode and not protocol_running and not halted"
+    ),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
     Item("c_device_display", style="readonly", label="c_device"),
     UItem(""),
     Item("force_display", style="readonly", label="Force"),
     UItem(""),
-    Item("dielectric_thickness_display", style="readonly", label="Dielectric", visible_when="show_dielectric_info"),
+    Item(
+        "dielectric_thickness_display",
+        style="readonly",
+        label="Dielectric",
+        visible_when="show_dielectric_info",
+    ),
     UItem(
         "dielectric_material",
         editor=HoverScrollEnumEditor(
@@ -65,6 +81,10 @@ grid = VGrid(
 
 # 3. Wrap in a split layout and set a View ID
 UnifiedView = View(
-    HGroup(left, "15", grid,),
+    HGroup(
+        left,
+        "15",
+        grid,
+    ),
     resizable=True,
 )
