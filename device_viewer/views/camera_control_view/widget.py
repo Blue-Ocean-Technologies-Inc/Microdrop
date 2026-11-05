@@ -685,9 +685,9 @@ class CameraControlWidget(QWidget):
         """Populate the resolution combo box from the current camera's formats.
 
         One entry per resolution, best first (see
-        CameraController.rank_formats); under the strict-format preference,
-        if no format matches, retry once without it. Then restore the saved
-        resolution, falling back to the middle entry.
+        CameraController.rank_formats); under the controller's strict format
+        mode, if no format matches, retry once without it. Then restore the
+        saved resolution, falling back to the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -699,6 +699,7 @@ class CameraControlWidget(QWidget):
             return
 
         formats = self.camera_device.video_formats()
+        libcamera = self.camera_device.is_libcamera()
         format_summaries = [
             (
                 fmt.resolution().width(),
@@ -709,7 +710,9 @@ class CameraControlWidget(QWidget):
             for fmt in formats
         ]
 
-        for index in self.controller.rank_formats(format_summaries, allow_strict_mode):
+        for index in self.controller.rank_formats(
+            format_summaries, allow_strict_mode, libcamera
+        ):
             fmt = formats[index]
             w, h = fmt.resolution().width(), fmt.resolution().height()
             fps = self._get_camera_resolution_max_framerate(fmt=fmt)
@@ -728,7 +731,7 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.setCurrentIndex(
                 self.controller.choose_resolution_index(labels)
             )
-        elif self.preferences.strict_video_format:
+        elif self.controller.strict_format_mode(allow_strict_mode, libcamera):
             # No formats survived strict filtering — retry without it
             warning_message = (
                 f"Preferred format "

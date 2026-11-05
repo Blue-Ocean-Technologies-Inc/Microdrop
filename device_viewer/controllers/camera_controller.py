@@ -30,6 +30,7 @@ from traits.api import Callable, HasTraits, Instance, observe
 from microdrop_application.helpers import get_current_experiment_directory
 
 # Microdrop utils imports.
+from microdrop_utils.system_config import is_rpi
 from microdrop_utils.v4l2_fps_getter import (
     V4L2_EXPOSURE_AUTO,
     V4L2_EXPOSURE_AUTO_MANUAL,
@@ -44,9 +45,12 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ..consts import (
     CAPTURES_DIR_NAME,
+    FALLBACK_PIXEL_FORMATS,
+    LIBCAMERA_PIXEL_FORMAT,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
     RECORDINGS_DIR_NAME,
+    RPI_UNSUPPORTED_PIXEL_FORMATS,
     camera_controls_applied_publisher,
     camera_source_selected_publisher,
     camera_state_publisher,
@@ -64,6 +68,14 @@ from ..utils.capture import media_filename
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def _pixel_format_name(pixel_format):
+    """Qt's pixel format name without its prefixes, upper-cased:
+    "PixelFormat.Format_YV12" and "Format_YV12" are both "YV12"."""
+    name = str(pixel_format).rsplit(".", 1)[-1].upper()
+
+    return name.removeprefix("FORMAT_")
 
 
 class CameraController(HasTraits):
@@ -216,35 +228,62 @@ class CameraController(HasTraits):
 
         self._publish_camera_state()
 
-    def rank_formats(self, formats, allow_strict_mode=True):
+    def strict_format_mode(self, allow_strict_mode=True, libcamera=False):
+        """Whether only the preferred pixel format may be offered: under the
+        strict-format preference, unless lifted by ``allow_strict_mode`` or
+        for a libcamera source, which never offers the preferred JPEG."""
+        return (
+            self.preferences.strict_video_format and allow_strict_mode and not libcamera
+        )
+
+    def rank_formats(self, formats, allow_strict_mode=True, libcamera=False):
         """Indices of the formats to offer, best first, one per resolution.
 
         ``formats`` holds ``(width, height, pixel_format, frame_rate)`` per
         camera format. Larger resolutions come first; within a resolution
-        the preferred pixel format, then the higher frame rate, wins. Under
-        the strict-format preference (and ``allow_strict_mode``) only the
-        preferred pixel format is offered.
+        the preferred pixel format wins, then the higher frame rate, then
+        FALLBACK_PIXEL_FORMATS in order. Under strict_format_mode only the
+        preferred pixel format is offered. A ``libcamera`` source prefers
+        LIBCAMERA_PIXEL_FORMAT instead, and a Raspberry Pi never offers
+        RPI_UNSUPPORTED_PIXEL_FORMATS.
         """
-        preferred_format = self.preferences.preferred_video_format.upper()
-        strict_mode = self.preferences.strict_video_format and allow_strict_mode
+        if libcamera:
+            preferred_format = LIBCAMERA_PIXEL_FORMAT
+        else:
+            preferred_format = self.preferences.preferred_video_format.upper()
+
+        strict_mode = self.strict_format_mode(allow_strict_mode, libcamera)
+        unsupported_formats = RPI_UNSUPPORTED_PIXEL_FORMATS if is_rpi() else ()
 
         def sort_key(index):
             width, height, pixel_format, frame_rate = formats[index]
+            name = _pixel_format_name(pixel_format)
+
+            if name in FALLBACK_PIXEL_FORMATS:
+                fallback_rank = FALLBACK_PIXEL_FORMATS.index(name)
+            else:
+                fallback_rank = len(FALLBACK_PIXEL_FORMATS)
 
             return (
-                width,
-                height,
-                preferred_format in pixel_format.upper(),
-                frame_rate,
+                -width,
+                -height,
+                name != preferred_format,
+                -frame_rate,
+                fallback_rank,
+                name,
             )
 
         ranked = []
         seen_resolutions = set()
 
-        for index in sorted(range(len(formats)), key=sort_key, reverse=True):
+        for index in sorted(range(len(formats)), key=sort_key):
             width, height, pixel_format, _ = formats[index]
+            name = _pixel_format_name(pixel_format)
 
-            if strict_mode and preferred_format not in pixel_format.upper():
+            if name in unsupported_formats:
+                continue
+
+            if strict_mode and name != preferred_format:
                 continue
 
             if (width, height) in seen_resolutions:

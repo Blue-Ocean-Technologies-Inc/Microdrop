@@ -31,7 +31,10 @@ from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from traits.api import Float, HasTraits, Instance, provides
 
 # Microdrop utils imports.
-from microdrop_utils.v4l2_fps_getter import LinuxCameraDeviceContainer
+from microdrop_utils.v4l2_fps_getter import (
+    LinuxCameraDeviceContainer,
+    is_libcamera_device,
+)
 
 # Local imports.
 from ...consts import CAMERA_PREVIEW_MAX_FPS
@@ -116,6 +119,9 @@ class QtCameraDevice(HasTraits):
 
     def video_formats(self):
         return self.camera.cameraDevice().videoFormats()
+
+    def is_libcamera(self):
+        return is_libcamera_device(self.camera.cameraDevice())
 
     def set_format(self, camera_format):
         self.camera.setCameraFormat(camera_format)

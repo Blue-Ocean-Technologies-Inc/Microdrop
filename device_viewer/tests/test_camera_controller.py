@@ -150,6 +150,7 @@ def controller(tmp_path, monkeypatch):
     monkeypatch.setattr(
         camera_controller, "get_current_experiment_directory", lambda: tmp_path
     )
+    monkeypatch.setattr(camera_controller, "is_rpi", lambda: False)
     camera = StubCamera()
 
     def turn_camera_on():
@@ -222,6 +223,51 @@ def test_rank_formats_strict_mode_drops_other_pixel_formats(controller):
 
     assert controller.rank_formats(formats) == [1]
     assert controller.rank_formats(formats, allow_strict_mode=False) == [0, 1]
+
+
+def test_rank_formats_never_offers_yv12_on_a_pi(controller, monkeypatch):
+    monkeypatch.setattr(camera_controller, "is_rpi", lambda: True)
+    formats = [
+        (1920, 1080, "PixelFormat.Format_YV12", 30.0),
+        (1920, 1080, "PixelFormat.Format_Y8", 30.0),
+        (640, 480, "Format_YV12", 30.0),
+    ]
+
+    assert controller.rank_formats(formats) == [1]
+
+
+def test_libcamera_prefers_nv12_without_strict_mode(controller):
+    controller.preferences.preferred_video_format = "JPEG"
+    controller.preferences.strict_video_format = True
+    formats = [
+        (1920, 1080, "PixelFormat.Format_Y8", 30.0),
+        (1920, 1080, "PixelFormat.Format_NV12", 30.0),
+        (640, 480, "PixelFormat.Format_YUYV", 30.0),
+    ]
+
+    assert not controller.strict_format_mode(libcamera=True)
+    assert controller.rank_formats(formats, libcamera=True) == [1, 2]
+
+
+def test_rank_formats_falls_back_in_a_fixed_pixel_format_order(controller):
+    controller.preferences.preferred_video_format = "JPEG"
+    formats = [
+        (1920, 1080, "Format_Y8", 30.0),
+        (1920, 1080, "Format_BGRX8888", 30.0),
+        (1920, 1080, "Format_YUYV", 30.0),
+        (1920, 1080, "Format_YUV420P", 30.0),
+        (640, 480, "Format_Y16", 30.0),
+        (640, 480, "Format_RGBX8888", 30.0),
+    ]
+
+    assert controller.rank_formats(formats) == [3, 5]
+
+
+def test_rank_formats_prefers_frame_rate_over_fallback_order(controller):
+    controller.preferences.preferred_video_format = "NV12"
+    formats = [(1920, 1080, "Format_YUYV", 5.0), (1920, 1080, "Format_Jpeg", 30.0)]
+
+    assert controller.rank_formats(formats) == [1]
 
 
 def test_saved_resolution_is_restored_else_middle(controller):

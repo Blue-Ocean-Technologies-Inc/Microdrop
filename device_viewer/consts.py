@@ -395,6 +395,17 @@ CAMERA_FEED_START_TIMEOUT_MS = 3000
 # recorder taps the capture session's own sink at full rate).
 CAMERA_PREVIEW_MAX_FPS = 20
 
+# Camera pixel formats, as Qt names them without the "Format_" prefix.
+#: Ranked in place of the preferred video format for a libcamera source
+#: (Raspberry Pi CSI camera), which never offers JPEG.
+LIBCAMERA_PIXEL_FORMAT = "NV12"
+#: Within a resolution, the order the non-preferred pixel formats are
+#: offered in; any other format (e.g. Y8 greyscale) comes after these.
+FALLBACK_PIXEL_FORMATS = ("NV12", "YUV420P", "YUYV", "BGRX8888", "RGBX8888")
+#: Never offered on a Raspberry Pi: libcamera's PiSP pipeline asserts on
+#: YVU420, aborting the whole process.
+RPI_UNSUPPORTED_PIXEL_FORMATS = ("YV12",)
+
 # ---------------------------------------------------------------------------
 # Live Histogram pane: an exposure aid sampling the live camera feed
 # ---------------------------------------------------------------------------
