@@ -215,6 +215,23 @@ def parse_v4l2_control_value(list_ctrls_output: str, name: str) -> int | None:
     return None
 
 
+def parse_v4l2_control_fields(list_ctrls_output: str, name: str) -> dict | None:
+    """Extract a control's ``key=value`` integer fields (min, max, step,
+    default, value, ...) from ``v4l2-ctl --list-ctrls`` text, or None if the
+    control is not present."""
+    for line in list_ctrls_output.splitlines():
+        stripped = line.strip()
+
+        if not stripped.startswith(f"{name} "):
+            continue
+
+        return {
+            key: int(value) for key, value in re.findall(r"\b(\w+)=(-?\d+)", stripped)
+        }
+
+    return None
+
+
 def list_v4l2_controls(device_path: str) -> str:
     """A device's ``v4l2-ctl --list-ctrls`` text, or "" if the query fails.
 
