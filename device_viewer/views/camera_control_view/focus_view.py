@@ -28,7 +28,6 @@ from traitsui.api import (
     UItem,
     VGroup,
     View,
-    spring,
 )
 
 # Local imports.
@@ -83,12 +82,12 @@ camera_focus_view = View(
                 visible_when="auto_available",
                 tooltip="Continuous auto focus",
             ),
-            spring,
             UItem(
                 "autofocus_button",
                 editor=ButtonEditor(label_value="autofocus_label"),
                 enabled_when="autofocus_available and not auto and not autofocusing",
                 tooltip="Focus once on the centre of the image (contrast sweep)",
+                springy=True,
             ),
         ),
     ),

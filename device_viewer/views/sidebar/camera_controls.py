@@ -79,6 +79,10 @@ def build_camera_controls(
         handler=CameraFocusHandler(controller=camera_control_widget.controller),
     )
 
+    # Its Autofocus button carries a real word, like the alignment buttons
+    # below, so it too needs the text-button font override.
+    focus_ui.control.setStyleSheet(TEXT_BUTTON_STYLE)
+
     # Camera Alignment: the manual per-device endpoint workflow.
     # Lives right under the camera-control button grid.
     alignment_widget = QWidget()
