@@ -122,6 +122,36 @@ def _approximate_distance(dioptres):
     return f"≈ {metres:.1f} m"
 
 
+class CameraImageSetting(HasTraits):
+    """One of the selected camera's image controls (brightness, contrast,
+    ...), as the camera panel shows it."""
+
+    #: The control's v4l2 name (see IMAGE_CONTROL_LABELS).
+    name = Str()
+
+    #: Display name, e.g. "Balance".
+    label = Str()
+
+    low = Int()
+
+    high = Int()
+
+    #: The camera's default value.
+    default = Int()
+
+    value = Range(low="low", high="high")
+
+    #: ``value`` in real units (e.g. "0.49 ms" for exposure); empty when the
+    #: raw value says it.
+    value_text = Str()
+
+    #: The control has an automatic mode (exposure, white balance, gain).
+    has_auto = Bool(False)
+
+    #: The automatic mode drives the control.
+    auto = Bool(False)
+
+
 class CameraModel(HasTraits):
     """Selected source, live state, format and exposure/focus fallbacks."""
 
@@ -184,6 +214,13 @@ class CameraModel(HasTraits):
 
     #: The selected camera's focus, for the camera panel.
     focus = Instance(CameraFocusModel, ())
+
+    #: The selected camera's image controls, for the camera panel; empty
+    #: for a camera without any.
+    image_settings = List(Instance(CameraImageSetting))
+
+    #: Puts every image control back to the camera's default.
+    reset_image_settings = Button("Defaults")
 
     #: v4l2 node the auto-exposure fallback last switched to auto; None while
     #: Qt (or manual exposure) drives the camera's exposure.

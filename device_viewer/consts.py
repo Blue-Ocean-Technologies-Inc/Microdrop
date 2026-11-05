@@ -395,6 +395,12 @@ CAMERA_FEED_START_TIMEOUT_MS = 3000
 # recorder taps the capture session's own sink at full rate).
 CAMERA_PREVIEW_MAX_FPS = 20
 
+# Cameras whose descriptions contain one of these never get the native
+# (DirectShow/v4l2) camera properties: the fluorescence plugin drives ZWO ASI
+# cameras through their own SDK and dock pane, and ZWO's optional DirectShow
+# driver would otherwise list them as webcams too.
+NATIVE_CAMERA_PROPERTIES_EXCLUDED = ("ZWO",)
+
 # Camera pixel formats, as Qt names them without the "Format_" prefix.
 #: Ranked in place of the preferred video format for a libcamera source
 #: (Raspberry Pi CSI camera), which never offers JPEG.

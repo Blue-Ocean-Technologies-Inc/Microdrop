@@ -100,6 +100,9 @@ class StubCamera(HasTraits):
     def focus_distance(self):
         return self.distance
 
+    def image_control_ranges(self):
+        return []
+
 
 #: ``v4l2-ctl --list-ctrls`` of a UVC camera with continuous auto focus on.
 UVC_FOCUS_CONTROLS = (

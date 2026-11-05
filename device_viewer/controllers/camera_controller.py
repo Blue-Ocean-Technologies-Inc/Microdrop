@@ -14,7 +14,8 @@ Owns the decisions the camera widget used to make inline: which source and
 format to select, where captures and recordings are written, the recording
 and capture bookkeeping (and what it publishes), exposure/focus requests
 with their v4l2 fallbacks for the Portable Pi's GStreamer backend, the
-focus row's live slider writes and one-shot autofocus sweep, and the
+focus row's live slider writes and one-shot autofocus sweep, the image
+controls (brightness, contrast, ...) Qt has no API for, and the
 camera's selection/on-off state with the replies to select_source
 requests. The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
 the view, which calls in here and acts on the answers.
@@ -33,6 +34,10 @@ from traits.api import Callable, Float, HasTraits, Instance, observe
 from microdrop_application.helpers import get_current_experiment_directory
 
 # Microdrop utils imports.
+from microdrop_utils.camera_image_controls import (
+    EXPOSURE_CONTROL,
+    IMAGE_CONTROL_LABELS,
+)
 from microdrop_utils.libcamera_tuning import lens_focus_span
 from microdrop_utils.system_config import is_rpi
 from microdrop_utils.v4l2_fps_getter import (
@@ -68,7 +73,7 @@ from ..consts import (
 )
 from ..interfaces.i_camera_device import ICameraDevice
 from ..models.autofocus import ContrastAutofocus, laplacian_variance
-from ..models.camera import CameraModel
+from ..models.camera import CameraImageSetting, CameraModel
 from ..models.media import MediaType
 from ..services.media_capture_cache import _cache_media_capture
 from ..utils.capture import media_filename
@@ -207,6 +212,7 @@ class CameraController(HasTraits):
         self.model.v4l2_focus_device_path = v4l2_focus_device_path
 
         self.refresh_focus()
+        self.refresh_image_settings()
 
     @staticmethod
     def match_source_label(labels, label):
@@ -488,6 +494,7 @@ class CameraController(HasTraits):
             )
 
         self.refresh_focus()
+        self.refresh_image_settings()
         camera_controls_applied_publisher.publish(reply)
 
     def _apply_exposure(self, exposure_ms):
@@ -583,11 +590,7 @@ class CameraController(HasTraits):
         a started camera) and focus change."""
         model = self.model
         focus = model.focus
-        qcamera_selected = (
-            bool(model.selected_camera)
-            and not model.provider_selected
-            and self.camera.has_camera()
-        )
+        qcamera_selected = self._qcamera_selected()
         qt_focus = qcamera_selected and self.camera.supports_manual_focus()
         v4l2_focus = (
             qcamera_selected and not qt_focus and model.v4l2_focus_span is not None
@@ -618,6 +621,84 @@ class CameraController(HasTraits):
 
         if distance is not None:
             focus.distance = distance
+
+    def _qcamera_selected(self):
+        """Whether the selected source is a bound QCamera (not a provider
+        feed or "<No Camera>")."""
+        model = self.model
+
+        return (
+            bool(model.selected_camera)
+            and not model.provider_selected
+            and self.camera.has_camera()
+        )
+
+    # ------------------------------------------------------------------ #
+    # Image controls (brightness, contrast, ...)                           #
+    # ------------------------------------------------------------------ #
+    def refresh_image_settings(self):
+        """Mirror the selected camera's image controls into
+        ``model.image_settings``, on every source selection."""
+        settings = []
+
+        if self._qcamera_selected():
+            for control in self.camera.image_control_ranges():
+                try:
+                    value, auto = self.camera.image_control(control.name)
+                except RuntimeError as error:
+                    logger.error(f"Camera {control.name} not read: {error}")
+
+                    continue
+
+                value = min(max(value, control.low), control.high)
+
+                settings.append(
+                    CameraImageSetting(
+                        name=control.name,
+                        label=IMAGE_CONTROL_LABELS[control.name],
+                        low=control.low,
+                        high=control.high,
+                        default=control.default,
+                        value=value,
+                        value_text=self.camera.describe_image_control(
+                            control.name, value
+                        ),
+                        has_auto=control.has_auto,
+                        auto=auto,
+                    )
+                )
+
+        self.model.image_settings = settings
+
+    @observe("model:image_settings:items:[value,auto]")
+    def _apply_image_setting(self, event):
+        """Write a panel edit of an image control to the camera."""
+        setting = event.object
+        setting.value_text = self.camera.describe_image_control(
+            setting.name, setting.value
+        )
+
+        try:
+            self.camera.set_image_control(setting.name, setting.value, setting.auto)
+        except RuntimeError as error:
+            logger.error(f"Camera {setting.label} not applied: {error}")
+
+            return
+
+        # Keep the exposure fallback's record of who switched v4l2 auto
+        # exposure on, so a later manual-exposure request switches it off.
+        if setting.name == EXPOSURE_CONTROL and self.model.v4l2_device_path:
+            self.model.v4l2_auto_exposure_path = (
+                self.model.v4l2_device_path if setting.auto else None
+            )
+
+    @observe("model:reset_image_settings")
+    def reset_image_settings(self, event=None):
+        """Put every image control back to the camera's default, automatic
+        where the control has an automatic mode."""
+
+        for setting in self.model.image_settings:
+            setting.trait_set(value=setting.default, auto=setting.has_auto)
 
     # ------------------------------------------------------------------ #
     # Autofocus (one-shot contrast sweep)                                  #

@@ -58,3 +58,19 @@ class ICameraDevice(Interface):
 
     def focus_distance(self):
         """Return the camera's focus distance (0.0 near, 1.0 far)."""
+
+    def image_control_ranges(self):
+        """Return the ImageControlRange of each image control (brightness,
+        contrast, ...) the camera has; empty when it has none."""
+
+    def image_control(self, name):
+        """Return image control ``name``'s ``(value, auto)``; raises
+        RuntimeError when it cannot be read."""
+
+    def set_image_control(self, name, value, auto=False):
+        """Set image control ``name`` to ``value``, or to its automatic
+        mode; raises RuntimeError when it cannot be set."""
+
+    def describe_image_control(self, name, value):
+        """Return ``value`` of image control ``name`` in real units (e.g.
+        "0.49 ms" for exposure), or "" when the raw value says it."""

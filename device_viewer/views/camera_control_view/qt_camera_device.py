@@ -14,6 +14,10 @@ QCamera and QMediaCaptureSession are Qt objects that must live on the GUI
 thread next to the video item they feed, so they stay in the view layer —
 owned by the camera widget — rather than in the Qt-free model or
 controller. The controller drives them through ICameraDevice only.
+
+Where Qt has no API for a camera's controls, this adapter fills in from the
+platform: lens focus over DirectShow on Windows, and image controls
+(brightness, contrast, ...) over DirectShow or v4l2.
 """
 
 # Standard library imports.
@@ -31,13 +35,21 @@ from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from traits.api import Float, HasTraits, Instance, provides
 
 # Microdrop utils imports.
+from microdrop_utils.camera_image_controls import (
+    ICameraImageControls,
+    V4l2ImageControls,
+)
+from microdrop_utils.directshow_camera_controls import (
+    DirectShowCameraControls,
+    open_directshow_camera_controls,
+)
 from microdrop_utils.v4l2_fps_getter import (
     LinuxCameraDeviceContainer,
     is_libcamera_device,
 )
 
 # Local imports.
-from ...consts import CAMERA_PREVIEW_MAX_FPS
+from ...consts import CAMERA_PREVIEW_MAX_FPS, NATIVE_CAMERA_PROPERTIES_EXCLUDED
 from ...interfaces.i_camera_device import ICameraDevice
 
 # Logger import.
@@ -63,6 +75,13 @@ class QtCameraDevice(HasTraits):
     #: The bound camera; None until a camera is selected.
     camera = Instance(QCamera)
 
+    #: The bound camera's DirectShow controls (Windows); None elsewhere or
+    #: for a camera without any.
+    directshow_controls = Instance(DirectShowCameraControls)
+
+    #: The bound camera's image controls; None for a camera without any.
+    image_controls = Instance(ICameraImageControls)
+
     #: monotonic() time of the last frame forwarded to the display item.
     _last_preview_frame_time = Float(0.0)
 
@@ -81,10 +100,41 @@ class QtCameraDevice(HasTraits):
         the session without a camera."""
         self.camera = self._camera_from_device(selected_device)
         self.session.setCamera(self.camera)
+        self._bind_native_controls(selected_device)
 
     def unbind(self):
         self.camera = None
         self.session.setCamera(None)
+        self.directshow_controls = None
+        self.image_controls = None
+
+    def _bind_native_controls(self, selected_device):
+        """Bind the platform controls Qt has no API for (see the module
+        docstring)."""
+        self.directshow_controls = None
+        self.image_controls = None
+
+        if self.camera is None:
+            return
+
+        description = self.camera.cameraDevice().description()
+
+        if any(name in description for name in NATIVE_CAMERA_PROPERTIES_EXCLUDED):
+            logger.info(f"No native camera properties for {description}")
+
+            return
+
+        directshow = open_directshow_camera_controls(self.camera.cameraDevice().id())
+        self.directshow_controls = directshow
+
+        if directshow is not None:
+            self.image_controls = directshow
+        elif isinstance(selected_device, LinuxCameraDeviceContainer) and (
+            selected_device.device_path
+        ):
+            self.image_controls = V4l2ImageControls(
+                device_path=selected_device.device_path
+            )
 
     @staticmethod
     def _camera_from_device(selected_device):
@@ -172,18 +222,87 @@ class QtCameraDevice(HasTraits):
     def manual_exposure_time_ms(self):
         return self.camera.manualExposureTime() * 1000.0
 
+    def _directshow_focus(self):
+        """The DirectShow focus control when Qt has no manual focus for the
+        camera (Qt's Windows backend has none for any), else None."""
+        directshow = self.directshow_controls
+
+        if directshow is None or directshow.focus_span is None:
+            return None
+
+        if self.camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual):
+            return None
+
+        return directshow
+
     def supports_manual_focus(self):
-        return self.camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual)
+        return self._directshow_focus() is not None or (
+            self.camera.isFocusModeSupported(QCamera.FocusMode.FocusModeManual)
+        )
 
     def set_auto_focus(self):
+        directshow = self._directshow_focus()
+
+        if directshow is not None:
+            directshow.set_auto_focus()
+
+            return
+
         self.camera.setFocusMode(QCamera.FocusMode.FocusModeAuto)
 
     def set_manual_focus(self, focus_distance):
+        directshow = self._directshow_focus()
+
+        if directshow is not None:
+            directshow.set_focus_distance(focus_distance)
+
+            return
+
         self.camera.setFocusMode(QCamera.FocusMode.FocusModeManual)
         self.camera.setFocusDistance(focus_distance)
 
     def focus_is_manual(self):
-        return self.camera.focusMode() == QCamera.FocusMode.FocusModeManual
+        directshow = self._directshow_focus()
+
+        if directshow is None:
+            return self.camera.focusMode() == QCamera.FocusMode.FocusModeManual
+
+        # Read on every focus-row refresh, so an unplugged camera is logged
+        # rather than raised into the observer.
+        try:
+            return not directshow.focus_is_auto()
+        except RuntimeError as error:
+            logger.error(f"Focus mode not read: {error}")
+
+            return False
 
     def focus_distance(self):
-        return self.camera.focusDistance()
+        directshow = self._directshow_focus()
+
+        if directshow is None:
+            return self.camera.focusDistance()
+
+        try:
+            return directshow.focus_distance()
+        except RuntimeError as error:
+            logger.error(f"Focus distance not read: {error}")
+
+            return self.camera.focusDistance()
+
+    # ------------------------------------------------------------------ #
+    # Image controls (ICameraDevice)                                       #
+    # ------------------------------------------------------------------ #
+    def image_control_ranges(self):
+        if self.image_controls is None:
+            return []
+
+        return self.image_controls.ranges()
+
+    def image_control(self, name):
+        return self.image_controls.get(name)
+
+    def set_image_control(self, name, value, auto=False):
+        self.image_controls.set(name, value, auto)
+
+    def describe_image_control(self, name, value):
+        return self.image_controls.describe(name, value)
