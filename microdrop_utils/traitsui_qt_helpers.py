@@ -1335,14 +1335,24 @@ class _HtmlLabelEditor(QtEditor):
     ``template`` (an HTML snippet with a single ``{}`` placeholder), so the view
     controls colour/weight/style/size via inline CSS without a web engine."""
 
+    #: The tooltip synced from the factory's ``tooltip_name``, if any.
+    tooltip_text = Str()
+
     def init(self, parent):
         self.control = QLabel()
         self.control.setTextFormat(Qt.TextFormat.RichText)
         self.control.setWordWrap(self.factory.word_wrap)
         self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.control.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+
+        # A single line centres on its row's widgets (a dropdown beside it);
+        # wrapped text reads from the top.
+        vertical_alignment = (
+            Qt.AlignmentFlag.AlignTop
+            if self.factory.word_wrap
+            else Qt.AlignmentFlag.AlignVCenter
         )
+        self.control.setAlignment(Qt.AlignmentFlag.AlignLeft | vertical_alignment)
+
         if self.factory.word_wrap:
             # A word-wrapped QLabel needs the layout to honour heightForWidth, or
             # it gets one line's height and clips the rest. Ask for that and let
@@ -1351,12 +1361,23 @@ class _HtmlLabelEditor(QtEditor):
             policy.setHeightForWidth(True)
             policy.setVerticalPolicy(QSizePolicy.Policy.Minimum)
             self.control.setSizePolicy(policy)
+
+        if self.factory.tooltip_name:
+            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+
         self.update_editor()
 
     def update_editor(self):
         if self.control is not None:
             value = "" if self.value is None else str(self.value)
             self.control.setText(self.factory.template.format(html.escape(value)))
+
+    @observe("tooltip_text")
+    def _tooltip_text_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setToolTip(event.new)
 
 
 class HtmlLabelEditor(BasicEditorFactory):
@@ -1374,6 +1395,9 @@ class HtmlLabelEditor(BasicEditorFactory):
     #: HTML wrapper; ``{}`` is the (escaped) trait value.
     template = Str("{}")
     word_wrap = Bool(True)
+
+    #: Extended name of a context Str trait shown, live, as the tooltip.
+    tooltip_name = Str()
 
 
 class Toggle(QCheckBox):
