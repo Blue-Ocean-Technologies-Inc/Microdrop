@@ -91,4 +91,7 @@ camera_focus_view = View(
             ),
         ),
     ),
+    # Resizable, or TraitsUI fixes the panel at its build-time size, before
+    # the sidebar's text-button style makes the Autofocus button taller.
+    resizable=True,
 )
