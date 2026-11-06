@@ -1,3 +1,21 @@
+## [v1.41.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.41.0) (2026-11-06)
+
+### Feat
+
+- **portable_dropbot_status**: droplet readouts in the status pane ([`b67f00f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b67f00f3799ed57b9ec63bcb170ac6c0d8137b38))
+- **portable_dropbot**: publish chip capacitance readings ([`80f7768`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/80f776882f366ef9fe0adce127cf93264fb2c191))
+- **portable_dropbot_status**: droplet baseline calibrate row ([`f9d4977`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f9d49777876fc02f2f3b813e48d6c1f1108672ab))
+- **portable_dropbot_controller**: droplet detection ([`b6bda13`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b6bda133b559abe59bc85ba4f1630ed2b95dacc6))
+
+### Refactor
+
+- **status**: share the droplet readouts between panes ([`93f455b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/93f455b1cca70960f5b34952f80e46d58d40be6f))
+- **electrode_controller**: re-export the channels request schema ([`00a829a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/00a829a63d1b83a598b49f9e6fcc36773872e6ee))
+
+### Docs
+
+- **messages**: droplet readouts on the portable ([`2eea6ef`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2eea6efb53c757799f20d6f7d886c48965b748d3))
+
 ## [v1.40.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.40.0) (2026-11-06)
 
 ### Feat
