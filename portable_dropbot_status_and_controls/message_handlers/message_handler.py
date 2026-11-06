@@ -16,6 +16,7 @@ from datetime import datetime
 from traits.api import Instance
 
 # Microdrop package imports.
+from device_viewer.consts import VolumeEstimateMessage
 from portable_dropbot_controller.consts import (
     FLUORESCENCE_LED_RAW_MAX,
     DropletBaselineUpdated,
@@ -77,6 +78,11 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
     def _on_advanced_mode_change_triggered(self, body):
         self.model.advanced_mode = str(body).lower() == "true"
+
+    def _on_volume_estimate_triggered(self, body):
+        """Show the device viewer's live volume readout; it publishes only
+        changes above reading noise, so every message is worth showing."""
+        self.model.volume_estimate = VolumeEstimateMessage.model_validate_json(body)
 
     def _on_ports_updated_triggered(self, body):
         ports = [str(port) for port in json.loads(str(body))]

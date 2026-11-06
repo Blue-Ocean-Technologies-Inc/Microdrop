@@ -33,6 +33,9 @@ from portable_dropbot_controller.consts import (
 from template_status_and_controls.base_controller import (
     BaseStatusController,
 )
+from template_status_and_controls.droplet_readouts import (
+    DropletReadoutsControllerMixin,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.decorators import debounce
@@ -47,7 +50,9 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class PortableDropbotStatusAndControlsController(BaseStatusController):
+class PortableDropbotStatusAndControlsController(
+    DropletReadoutsControllerMixin, BaseStatusController
+):
     """Portable Dropbot controls controller: voltage and frequency
     edits publish to the portable backend (queued while realtime mode
     is off, exactly as the DropBot pane does)."""

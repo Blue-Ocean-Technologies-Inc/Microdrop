@@ -32,6 +32,9 @@ from traitsui.api import (
     View,
 )
 
+# Microdrop package imports.
+from template_status_and_controls.droplet_readouts import droplet_readout_items
+
 # Microdrop style imports.
 from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
@@ -197,28 +200,34 @@ left = VGroup(
 )
 
 # The actuation essentials stay in sight; everything else lives in
-# the chevron-collapsed groups below.
-grid = VGrid(
+# the chevron-collapsed groups below. Label | value | control rows, with
+# Label items rather than Item labels so the droplet readout row can put
+# its dropdown in the label column.
+grid = VGroup(
+    Label("Voltage", show_label=False),
     # Realtime mode is the HV master enable: with it off the reported
     # amplitude still wanders, but none of it reaches the pogo pins,
     # so grey the readback out rather than show a misleading live number.
-    Item(
+    UItem(
         "voltage_readback_display",
         style="readonly",
-        label="Voltage",
         enabled_when="realtime_mode",
     ),
     UItem("voltage", enabled_when="connected and free_mode and not protocol_running"),
-    Item("frequency_display", style="readonly", label="Frequency"),
+    Label("Frequency", show_label=False),
+    UItem("frequency_display", style="readonly"),
     UItem("frequency", enabled_when="connected and free_mode and not protocol_running"),
-    Item("light_display", style="readonly", label="Light"),
+    Label("Light", show_label=False),
+    UItem("light_display", style="readonly"),
     UItem("light_intensity", enabled_when="connected and light_on"),
-    Item("capacitance_display", style="readonly", label="Capacitance"),
+    Label("Capacitance", show_label=False),
+    UItem("capacitance_display", style="readonly"),
     UItem(""),
-    Item(
+    *droplet_readout_items(),
+    Label("Droplet Baseline", show_label=False),
+    UItem(
         "droplet_baseline_display",
         style="readonly",
-        label="Droplet Baseline",
         tooltip="Per-channel capacitance that Find liquid and the droplet "
         "checks compare against",
     ),
@@ -228,6 +237,7 @@ grid = VGrid(
         tooltip="Measure every channel with the chip dry (no liquid loaded); "
         "a channel later reading 5 pF above it counts as holding liquid",
     ),
+    columns=3,
     id="data_grid",
 )
 

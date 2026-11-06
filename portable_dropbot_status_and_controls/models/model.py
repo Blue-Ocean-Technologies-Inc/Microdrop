@@ -30,6 +30,7 @@ from portable_dropbot_controller.consts import (
     VOLTAGE_BOUNDS,
 )
 from template_status_and_controls.base_model import BaseStatusModel
+from template_status_and_controls.droplet_readouts import DropletReadoutsModelMixin
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
@@ -40,11 +41,12 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ..consts import DROPLET_BASELINE_NOT_CALIBRATED, PORTABLE_DROPBOT_IMAGE
 
 
-class PortableDropbotStatusAndControlsModel(BaseStatusModel):
+class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatusModel):
     """Model for the Portable Dropbot status display and controls.
 
-    Connection/mode/icon traits and their observers are inherited;
-    this adds the HV setpoints and the portable-specific readouts.
+    Connection/mode/icon traits and their observers are inherited, as are
+    the droplet readouts; this adds the HV setpoints and the
+    portable-specific readouts.
     """
 
     DEFAULT_ICON_PATH = PORTABLE_DROPBOT_IMAGE
