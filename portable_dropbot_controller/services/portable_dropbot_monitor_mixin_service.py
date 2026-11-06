@@ -61,6 +61,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
     #: of re-acquiring the board on the next tick; any connect/retry
     #: request clears it.
     _user_disconnected = Bool(False)
+    #: Why the last connect attempt failed (exception type and
+    #: message), reported instead of the generic handshake text;
+    #: cleared by a successful connect.
+    _last_connect_error = Str()
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
         if self.portable_dropbot_connection_active and self.proxy is not None:
@@ -185,10 +189,12 @@ class PortableDropbotMonitorMixinService(HasTraits):
                         f"on {port_name}."
                     )
             else:
-                self._publish_error(
-                    f"connect to {port_name}",
-                    "no Portable Dropbot answered the login handshake",
+                reason = (
+                    self._last_connect_error
+                    or "no Portable Dropbot answered the login handshake"
                 )
+                logger.warning(f"Connect to {port_name} failed: {reason}")
+                self._publish_error(f"connect to {port_name}", reason)
         finally:
             self._probing = False
 
@@ -323,6 +329,8 @@ class PortableDropbotMonitorMixinService(HasTraits):
             self._publish_status_snapshot()
             logger.info(f"Connected to Portable Dropbot on {port_name}")
             self._error_shown = False
+            self._last_connect_error = ""
+
             return True
         except Exception as exc:
             if session is not None:
@@ -332,6 +340,8 @@ class PortableDropbotMonitorMixinService(HasTraits):
                     pass
             self.proxy = None
             self.portable_dropbot_connection_active = False
+            self._last_connect_error = f"{type(exc).__name__}: {exc}"
+
             if not self._error_shown:
                 logger.debug(f"Connection attempt failed on {port_name}: {exc}")
                 self._error_shown = True
