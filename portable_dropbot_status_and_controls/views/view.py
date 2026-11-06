@@ -215,6 +215,19 @@ grid = VGrid(
     UItem("light_intensity", enabled_when="connected and light_on"),
     Item("capacitance_display", style="readonly", label="Capacitance"),
     UItem(""),
+    Item(
+        "droplet_baseline_display",
+        style="readonly",
+        label="Droplet Baseline",
+        tooltip="Per-channel capacitance that Find liquid and the droplet "
+        "checks compare against",
+    ),
+    UItem(
+        "calibrate_droplet_baseline_button",
+        enabled_when="connected and not protocol_running",
+        tooltip="Measure every channel with the chip dry (no liquid loaded); "
+        "a channel later reading 5 pF above it counts as holding liquid",
+    ),
     id="data_grid",
 )
 

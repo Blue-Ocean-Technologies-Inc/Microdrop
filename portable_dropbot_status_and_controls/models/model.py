@@ -37,7 +37,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Local imports.
-from ..consts import PORTABLE_DROPBOT_IMAGE
+from ..consts import DROPLET_BASELINE_NOT_CALIBRATED, PORTABLE_DROPBOT_IMAGE
 
 
 class PortableDropbotStatusAndControlsModel(BaseStatusModel):
@@ -135,6 +135,21 @@ class PortableDropbotStatusAndControlsModel(BaseStatusModel):
     @observe("magnet_engaged_reported")
     def _sync_magnet_toggle(self, event):
         self.magnet_engaged = bool(event.new)
+
+    # ---- Droplet detection baseline ----------------------------------
+    #: Measures every channel, with the chip dry, as the baseline droplet
+    #: detection (Find liquid, droplet checks) compares against.
+    calibrate_droplet_baseline_button = Button("Calibrate")
+
+    #: Not calibrated, calibrating, or the last calibration's outcome.
+    droplet_baseline_display = Str(DROPLET_BASELINE_NOT_CALIBRATED)
+
+    @observe("connected")
+    def _forget_droplet_baseline(self, event):
+        """The backend's baseline goes with its session on a disconnect."""
+
+        if not event.new:
+            self.droplet_baseline_display = DROPLET_BASELINE_NOT_CALIBRATED
 
     # ---- Readouts written by the message handler ---------------------
     # Named like the DropBot pane's displays so the two panes read the
