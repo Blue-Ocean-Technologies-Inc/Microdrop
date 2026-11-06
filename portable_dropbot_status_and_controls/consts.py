@@ -156,6 +156,10 @@ ACTOR_TOPIC_DICT = {
 #: Alarms/errors kept in the status pane's Alarms box; older ones drop off.
 ALARM_LOG_LENGTH = 20
 
+#: Droplet Baseline readout before a calibration, and while one runs.
+DROPLET_BASELINE_NOT_CALIBRATED = "Not calibrated"
+DROPLET_BASELINE_CALIBRATING = "Calibrating..."
+
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000
 
