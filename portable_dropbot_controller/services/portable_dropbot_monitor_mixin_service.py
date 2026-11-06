@@ -22,6 +22,7 @@ from apscheduler.schedulers.base import (
     STATE_STOPPED,
 )
 from apscheduler.triggers.interval import IntervalTrigger
+from dropbot_portable import DropBotSession
 from serial.tools import list_ports
 
 # Enthought library imports.
@@ -35,7 +36,6 @@ from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
-from ..session import PortableDropbotSession
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -271,7 +271,7 @@ class PortableDropbotMonitorMixinService(HasTraits):
     def _attempt_connect(self, port_name: str, autodetect: bool = False) -> bool:
         session = None
         try:
-            session = PortableDropbotSession()
+            session = DropBotSession()
             if not session.connect(
                 port=port_name,
                 baudrate=int(self.preferences.baud_rate),
