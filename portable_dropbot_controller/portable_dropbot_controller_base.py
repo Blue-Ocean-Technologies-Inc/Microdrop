@@ -11,13 +11,17 @@
 # Standard library imports.
 import json
 import threading
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 
 # Third-party imports.
 import dramatiq
 
 # Enthought library imports.
 from traits.api import Any, Bool, HasTraits, Instance, Int, Str, provides
+
+# Microdrop package imports.
+from dropbot_controller.consts import CAPACITANCE_UPDATED
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
@@ -274,6 +278,7 @@ class PortableDropbotControllerBase(HasTraits):
                 self.on_disconnected_signal("")
             return
         self._status_failures = 0
+        self._publish_capacitance(status.get("signal", {}))
         signal = dict(status.get("signal", {}))
         for field in self._SCALED_STATUS_FIELDS:
             if field in signal:
@@ -288,6 +293,37 @@ class PortableDropbotControllerBase(HasTraits):
             )
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
         self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
+
+    @staticmethod
+    def _publish_capacitance(board_signal):
+        """Publish the chip capacitance on the DropBot's CAPACITANCE_UPDATED,
+        so the device viewer's volume estimate and calibration, the volume
+        threshold column and the run log work on the portable too.
+
+        ``chip_cap`` is the actuated electrodes' summed capacitance, the
+        quantity the DropBot reports; ``board_signal`` is the driver's
+        status dict, already in pF and V.
+        """
+        chip_cap = board_signal.get("chip_cap")
+
+        if chip_cap is None:
+            return
+
+        publish_message(
+            topic=CAPACITANCE_UPDATED,
+            message=json.dumps(
+                {
+                    "capacitance": f"{chip_cap:.4g} pF",
+                    "voltage": f"{board_signal.get('hv_vol', 0.0):.3g} V",
+                    # The status reply carries no instrument clock: a host
+                    # monotonic microsecond counter, wrapping like the
+                    # DropBot's uint32 one, keeps the run log's rollover
+                    # correction honest.
+                    "instrument_time_us": int(time.monotonic() * 1e6) % 2**32,
+                    "reception_time": datetime.now(UTC).timestamp(),
+                }
+            ),
+        )
 
     def _publish_motors(self, mechanisms=None, poll=True):
         """Publish the motor picture on MOTORS_UPDATED.
