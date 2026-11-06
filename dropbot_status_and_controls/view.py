@@ -12,16 +12,17 @@
 from traitsui.api import HGroup, Item, Label, Spring, UItem, VGroup, View
 
 # Microdrop package imports.
-from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS, DROPLET_READOUTS
-
-# Microdrop style imports.
-from microdrop_style.icons.icons import ICON_OPEN_IN_NEW
+from dropbot_status_and_controls.consts import DIELECTRIC_MATERIALS
+from template_status_and_controls.droplet_readouts import (
+    COVERED_AREA_READOUT,
+    FILL_READOUT,
+    VOLUME_READOUT,
+    droplet_readout_items,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor,
-    HtmlLabelEditor,
-    IconButtonEditor,
     InPlaceToggleEditor,
     StatusIconEditorFactory,
 )
@@ -69,24 +70,7 @@ grid = VGroup(
     Label("Capacitance", show_label=False),
     UItem("capacitance_display", style="readonly"),
     UItem(""),
-    UItem(
-        "droplet_readout",
-        editor=HoverScrollEnumEditor(values=DROPLET_READOUTS),
-        width=120,
-        tooltip="Droplet readout to show; hover the value for all of them",
-    ),
-    UItem(
-        "droplet_readout_display",
-        editor=HtmlLabelEditor(
-            word_wrap=False, tooltip_name="droplet_readouts_tooltip"
-        ),
-    ),
-    UItem(
-        "show_droplet_readouts",
-        editor=IconButtonEditor(
-            glyph=ICON_OPEN_IN_NEW, tooltip="Show all droplet readouts"
-        ),
-    ),
+    *droplet_readout_items(),
     Label("Force", show_label=False),
     UItem("force_display", style="readonly"),
     UItem(""),
@@ -110,9 +94,9 @@ grid = VGroup(
 # Non-modal dialog with every droplet readout, plus c_device.
 droplet_readouts_view = View(
     VGroup(
-        Item("volume_display", style="readonly", label="Volume"),
-        Item("fill_display", style="readonly", label="Fill"),
-        Item("covered_area_display", style="readonly", label="Covered area"),
+        Item("volume_display", style="readonly", label=VOLUME_READOUT),
+        Item("fill_display", style="readonly", label=FILL_READOUT),
+        Item("covered_area_display", style="readonly", label=COVERED_AREA_READOUT),
         Item("c_device_display", style="readonly", label="c_device"),
         UItem(
             "volume_status_message",

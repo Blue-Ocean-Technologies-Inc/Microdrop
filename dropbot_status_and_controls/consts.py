@@ -52,13 +52,6 @@ DROPBOT_CHIP_INSERTED_IMAGE = os.path.join(
 
 NUM_CAPACITANCE_READINGS_AVERAGED = 5
 
-# Droplet readouts (from the device viewer's live volume estimate) the main
-# panel can show; the dialog and the tooltip show them all, plus c_device.
-VOLUME_READOUT = "Volume"
-FILL_READOUT = "Fill"
-COVERED_AREA_READOUT = "Covered area"
-DROPLET_READOUTS = [VOLUME_READOUT, FILL_READOUT, COVERED_AREA_READOUT]
-
 # Dielectric materials and their relative permittivity values.
 # Used to calculate dielectric thickness from device capacitance via:
 #   d = epsilon * epsilon_0 / C_device

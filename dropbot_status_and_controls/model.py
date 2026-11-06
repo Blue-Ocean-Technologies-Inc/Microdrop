@@ -15,10 +15,9 @@ import math
 import pint
 
 # Enthought library imports.
-from traits.api import Bool, Button, Enum, Instance, Property, Str, observe
+from traits.api import Bool, Enum, Instance, Property, Str, observe
 
 # Microdrop package imports.
-from device_viewer.consts import VolumeEstimateMessage
 from dropbot_preferences_ui.consts import (
     UI_DEFAULT_FREQUENCY,
     UI_DEFAULT_MAX_FREQUENCY,
@@ -34,6 +33,7 @@ from dropbot_preferences_ui.consts import (
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from template_status_and_controls.base_model import BaseStatusModel
+from template_status_and_controls.droplet_readouts import DropletReadoutsModelMixin
 
 # Microdrop utils imports.
 from microdrop_utils.force_math_helpers import force_for_step
@@ -42,13 +42,9 @@ from microdrop_utils.ureg_helpers import ureg
 
 # Local imports.
 from .consts import (
-    COVERED_AREA_READOUT,
     DIELECTRIC_MATERIALS,
     DROPBOT_CHIP_INSERTED_IMAGE,
     DROPBOT_IMAGE,
-    DROPLET_READOUTS,
-    FILL_READOUT,
-    VOLUME_READOUT,
     connected_color,
     connected_no_device_color,
     disconnected_color,
@@ -65,7 +61,7 @@ app_globals = get_microdrop_redis_globals_manager()
 N_DISPLAY_DIGITS = 3
 
 
-class DropbotStatusAndControlsModel(BaseStatusModel):
+class DropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatusModel):
     """Model for DropBot status display and controls.
 
     Extends BaseStatusModel with DropBot-specific controls and sensor readings.
@@ -123,31 +119,8 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     c_device = Instance(pint.Quantity, desc="Capacitance density / c_device (pF/mm²)")
     force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
 
-    # ---- Droplet readouts ----------------------------------------------
-    #: The device viewer's live volume estimate; None until it publishes.
-    volume_estimate = Instance(VolumeEstimateMessage)
-
-    #: The droplet readout the main panel shows; the rest are in its
-    #: tooltip and the readouts dialog.
-    droplet_readout = Enum(*DROPLET_READOUTS)
-
-    #: Opens the non-modal dialog listing every droplet readout.
-    show_droplet_readouts = Button()
-
-    volume_display = Property(Str, observe="volume_estimate")
-    fill_display = Property(Str, observe="volume_estimate")
-    covered_area_display = Property(Str, observe="volume_estimate")
-
-    #: Why there is no droplet estimate, or "" when there is one.
-    volume_status_message = Property(Str, observe="volume_estimate")
-
-    #: The picked droplet readout's value, for the main panel.
-    droplet_readout_display = Property(
-        Str,
-        observe="droplet_readout, volume_display, fill_display, covered_area_display",
-    )
-
-    #: Every droplet readout plus c_device, for the main panel's tooltip.
+    # ---- Droplet readouts (DropletReadoutsModelMixin) -------------------
+    #: Every droplet readout plus c_device, for the readings grid's tooltip.
     droplet_readouts_tooltip = Property(
         Str,
         observe=(
@@ -211,52 +184,17 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     # Droplet readouts                                                     #
     # ------------------------------------------------------------------ #
 
-    def _get_volume_status_message(self):
-        if self.volume_estimate is None:
-            return "No volume estimate from the device viewer yet."
-
-        return self.volume_estimate.status_message
-
-    def _get_volume_display(self):
-        if self.volume_status_message:
-            return "-"
-
-        return f"{self.volume_estimate.volume_ul:.1f} µL"
-
-    def _get_fill_display(self):
-        if self.volume_status_message:
-            return "-"
-
-        return f"{self.volume_estimate.fill_fraction:.0%}"
-
-    def _get_covered_area_display(self):
-        if self.volume_status_message:
-            return "-"
-
-        return f"{self.volume_estimate.covered_area_mm2:.1f} mm²"
-
-    def _get_droplet_readout_display(self):
-        displays = {
-            VOLUME_READOUT: self.volume_display,
-            FILL_READOUT: self.fill_display,
-            COVERED_AREA_READOUT: self.covered_area_display,
-        }
-
-        return displays[self.droplet_readout]
-
     def _get_droplet_readouts_tooltip(self):
-        lines = [
-            f"{VOLUME_READOUT}: {self.volume_display}",
-            f"{FILL_READOUT}: {self.fill_display} of actuated area",
-            f"{COVERED_AREA_READOUT}: {self.covered_area_display}",
+        # Traits binds a Property's getter from the class that declares it,
+        # and this class redeclares the tooltip to observe c_device too.
+        return super()._get_droplet_readouts_tooltip()
+
+    def _droplet_readout_lines(self):
+        # Rich text, since c_device_display carries <sup> markup.
+        return [
+            *super()._droplet_readout_lines(),
             f"c_device: {self.c_device_display}",
         ]
-
-        if self.volume_status_message:
-            lines.append(self.volume_status_message)
-
-        # Rich text, since c_device_display carries <sup> markup.
-        return "<br>".join(lines)
 
     # ------------------------------------------------------------------ #
     # Observers                                                            #
