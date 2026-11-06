@@ -19,6 +19,11 @@ from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
 )
+from dropbot_controller.consts import DETECT_DROPLETS
+from dropbot_controller.consts import (
+    # The shared reply topic, re-exported for this plugin's services.
+    DROPLETS_DETECTED as DROPLETS_DETECTED,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -357,6 +362,8 @@ MOTORS_UPDATED = "portable_dropbot/signals/motors_updated"
 #: Calibration pane feedback: macro stage progress, gain/cal-caps
 #: readbacks, ML-path state.
 CALIBRATION_UPDATED = "portable_dropbot/signals/calibration_updated"
+#: Outcome of a droplet-baseline calibration (DropletBaselineUpdated).
+DROPLET_BASELINE_UPDATED = "portable_dropbot/signals/droplet_baseline_updated"
 #: Temp pane feedback: per-channel readings and PID readbacks.
 TEMP_UPDATED = "portable_dropbot/signals/temp_updated"
 #: PMT pane feedback: power state, gain, acquire results.
@@ -430,6 +437,9 @@ SET_ELECTRODE_GAIN = "portable_dropbot/requests/set_electrode_gain"
 READ_ELECTRODE_GAIN = "portable_dropbot/requests/read_electrode_gain"
 SET_CAL_CAPS = "portable_dropbot/requests/set_cal_caps"
 READ_CAL_CAPS = "portable_dropbot/requests/read_cal_caps"
+# Droplet detection (see the droplet detection mixin service). Detection
+# itself answers the shared DETECT_DROPLETS request, like the DropBot.
+CALIBRATE_DROPLET_BASELINE = "portable_dropbot/requests/calibrate_droplet_baseline"
 # Heater temperature control (per channel).
 TEMP_SET_TARGET = "portable_dropbot/requests/temp_set_target"
 TEMP_CONTROL = "portable_dropbot/requests/temp_control"
@@ -497,6 +507,8 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "portable_dropbot/requests/#",
         "hardware/requests/#",
+        # Find liquid and the droplet-check columns use the DropBot's topic.
+        DETECT_DROPLETS,
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
         DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
@@ -877,4 +889,37 @@ magnet_engage_write_publisher = ValidatedTopicPublisher(
 )
 magnet_engage_updated_publisher = ValidatedTopicPublisher(
     topic=MAGNET_ENGAGE_UPDATED, validator_class=MagnetEngageUpdated
+)
+
+# --------------------------------------------------------------------- #
+# Droplet detection                                                      #
+# --------------------------------------------------------------------- #
+
+#: Capacitance (pF) a channel must read above its dry-chip baseline to
+#: count as holding liquid (the driver's detect_drops default).
+DROPLET_DETECTION_THRESHOLD_PF = 5.0
+
+#: Per-channel settle time of the full-channel capacitance scan (ms).
+DROPLET_SCAN_SWITCH_TIME_MS = 20
+
+
+class CalibrateDropletBaselineRequest(BaseModel):
+    """Measure the dry-chip droplet baseline."""
+
+    switch_time_ms: int = Field(DROPLET_SCAN_SWITCH_TIME_MS, gt=0)
+
+
+class DropletBaselineUpdated(BaseModel):
+    """Outcome of a droplet-baseline calibration: how many channels it
+    measured, or the error when it failed."""
+
+    channels: int = 0
+    error: str = ""
+
+
+calibrate_droplet_baseline_publisher = ValidatedTopicPublisher(
+    topic=CALIBRATE_DROPLET_BASELINE, validator_class=CalibrateDropletBaselineRequest
+)
+droplet_baseline_updated_publisher = ValidatedTopicPublisher(
+    topic=DROPLET_BASELINE_UPDATED, validator_class=DropletBaselineUpdated
 )

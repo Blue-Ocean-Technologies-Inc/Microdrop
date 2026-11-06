@@ -28,6 +28,9 @@ from .preferences import PortableDropbotPreferences
 from .services.portable_dropbot_calibration_mixin_service import (
     PortableDropbotCalibrationMixinService,
 )
+from .services.portable_dropbot_droplet_detection_mixin_service import (
+    PortableDropbotDropletDetectionMixinService,
+)
 from .services.portable_dropbot_electrodes_mixin_service import (
     PortableDropbotElectrodesMixinService,
 )
@@ -90,6 +93,10 @@ class PortableDropbotControllerPlugin(Plugin):
             ),
             ServiceOffer(
                 protocol=IPortableDropbotControlMixinService,
+                factory=self._create_droplet_detection_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
                 factory=self._create_temp_service,
             ),
             ServiceOffer(
@@ -125,6 +132,10 @@ class PortableDropbotControllerPlugin(Plugin):
     @staticmethod
     def _create_calibration_service(*args, **kwargs):
         return PortableDropbotCalibrationMixinService
+
+    @staticmethod
+    def _create_droplet_detection_service(*args, **kwargs):
+        return PortableDropbotDropletDetectionMixinService
 
     @staticmethod
     def _create_temp_service(*args, **kwargs):
