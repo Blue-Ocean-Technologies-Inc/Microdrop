@@ -1,3 +1,20 @@
+## [v1.40.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.40.0) (2026-11-06)
+
+### Feat
+
+- **dropbot_status**: droplet readouts in the status pane ([`e78d3bd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e78d3bda406ef34836c7d6e1aa06a41da634edd1))
+- **microdrop_utils**: live tooltip and centring for HtmlLabelEditor ([`8b65fe1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8b65fe1ab3d12d8fe059ccf8d68a5f2055e89d85))
+- **device_viewer**: publish a live droplet volume estimate ([`41bfbad`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/41bfbadc189f2ce3db67644e85e1310f9a855c81))
+
+### Fix
+
+- **portable_dropbot_controller**: report the real connect error ([`aa1d0bc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aa1d0bc51685ef9ee5d3471cc063decbef350eb1))
+- **portable_dropbot_controller**: drop the session subclass ([`70e745c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/70e745c5a94399ff94a7d0c6dfbf5d46340b2fdd))
+
+### Chore
+
+- **dropbot_status**: ruff-clean view and message handler ([`e0026c1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e0026c13d704e43248c8681a04b0c5dbfe0d7e17))
+
 ## [v1.39.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.39.0) (2026-11-05)
 
 ### Feat
