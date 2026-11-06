@@ -15,6 +15,7 @@ import os
 from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
+    DEVICE_VIEWER_VOLUME_ESTIMATE,
     PROTOCOL_GRID_DISPLAY_STATE,
     PROTOCOL_RUNNING,
 )
@@ -89,6 +90,8 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "portable_dropbot/signals/#",
         "hardware/signals/#",
+        #: The readings grid's droplet readouts (volume, fill, covered area).
+        DEVICE_VIEWER_VOLUME_ESTIMATE,
         PROTOCOL_RUNNING,
         PROTOCOL_GRID_DISPLAY_STATE,
         #: The connect row shows only in Advanced Mode.

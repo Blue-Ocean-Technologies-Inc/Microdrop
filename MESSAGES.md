@@ -196,10 +196,14 @@ that only the device viewer has.
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_geometry_changed` keeps them on `electrode_centroids` / `electrode_neighbours` and hands them to `services.phase_math.set_device_lattice`, the module-level lattice every phase-math caller reads. A step asking for a wide slug before any lattice is known runs one electrode wide and logs an error.
 
-### Device Viewer → DropBot status: droplet readouts
+### Device Viewer → DropBot / Portable DropBot status: droplet readouts
 
 The device viewer turns the live capacitance into a droplet volume, fill and
-covered area (`VolumeEstimateModel`); the DropBot status pane shows them.
+covered area (`VolumeEstimateModel`); the DropBot and Portable DropBot status
+panes show them.
+
+**Capacitance source**
+- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it from every status poll (`PortableDropbotControllerBase._publish_capacitance`, every `MONITOR_INTERVAL_S`), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
 
 **Topic**
 - `DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"` — defined in `device_viewer/consts.py`; publish through `volume_estimate_publisher`.
@@ -210,8 +214,8 @@ covered area (`VolumeEstimateModel`); the DropBot status pane shows them.
 **Publisher side (device_viewer)**
 - `device_viewer/controllers/device_viewer_publish_controller.py` — `_publish_volume_estimate` fires on `VolumeEstimateModel.shown_values_updated`: once per readout change, never for capacitance noise under `VOLUME_READOUT_NOISE_UL`.
 
-**Subscriber side (dropbot_status_and_controls)**
-- `message_handler.py` — `_on_volume_estimate_triggered` stores the message on `model.volume_estimate`; the panel's dropdown picks which readout shows, its tooltip and the Droplet Readouts dialog list them all with c_device.
+**Subscriber side (dropbot_status_and_controls, portable_dropbot_status_and_controls)**
+- Each pane's message handler — `_on_volume_estimate_triggered` stores the message on `model.volume_estimate`. The readout traits, grid row, dialog and the controller that opens it are shared from `template_status_and_controls/droplet_readouts.py`: the dropdown picks which readout shows, its tooltip and the Droplet Readouts dialog list them all (the DropBot pane adds c_device).
 
 ### Device Viewer ↔ Protocol Tree: idle phase navigation (#493)
 
