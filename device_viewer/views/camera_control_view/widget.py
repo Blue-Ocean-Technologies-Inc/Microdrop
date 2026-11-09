@@ -812,7 +812,7 @@ class CameraControlWidget(QWidget):
     def _toggle_resolution_list(self):
         """Switch between the common and the full resolution list, keeping
         the selected format."""
-        selected = self.model.resolution
+        selected = self.camera_model.resolution
         self._show_all_resolutions = not self._show_all_resolutions
         self.populate_resolutions()
 
