@@ -38,7 +38,6 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     warning,
 )
-from microdrop_application.helpers import is_advanced_mode
 
 # Microdrop style imports.
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
@@ -55,7 +54,6 @@ from microdrop_utils.v4l2_fps_getter import (
 from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
     CAMERA_MIN_RESOLUTION,
-    MAX_RECORDING_RESOLUTION,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
 )
@@ -65,7 +63,6 @@ from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
 from ...utils.frame_luma import frame_centre_luma
-from ...utils.recording.base import fit_recording_resolution
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
@@ -1021,7 +1018,7 @@ class CameraControlWidget(QWidget):
         if self.recorder.is_recording:
             self.video_record_stop()
         else:
-            self.video_record_start(interactive=True)
+            self.video_record_start()
 
     @Slot()
     def video_record_start(
@@ -1030,11 +1027,7 @@ class CameraControlWidget(QWidget):
         step_description=None,
         step_id=None,
         show_status_message=True,
-        interactive=False,
     ):
-        """Start recording the camera feed. ``interactive`` is True only for
-        the record button: protocol/message-driven starts never pop dialogs
-        that would stall a run."""
         logger.info("Starting video recorder...")
 
         # A rebuild while recording would orphan the active recorder.
@@ -1085,22 +1078,10 @@ class CameraControlWidget(QWidget):
             directory, step_description, step_id, show_status_message, camera_was_on
         )
 
-        _stream_resolution = (
+        _resolution = (
             _current_fmt.resolution().width(),
             _current_fmt.resolution().height(),
         )
-        _resolution = fit_recording_resolution(*_stream_resolution)
-
-        # Advanced Mode lifts the full-HD cap: the operator takes on the file
-        # size and memory cost knowingly.
-        if is_advanced_mode():
-            _resolution = _stream_resolution
-
-        if _resolution != _stream_resolution:
-            logger.info(
-                f"Recording {_stream_resolution[0]}x{_stream_resolution[1]} stream "
-                f"at {_resolution[0]}x{_resolution[1]} (capped at full HD)"
-            )
 
         # Rebuild from current preferences so backend/container/bitrate
         # changes apply without a restart, with the bitrate class matched
@@ -1120,47 +1101,9 @@ class CameraControlWidget(QWidget):
         if self.camera_device.rebuild_pending:
             self.camera_device.after_rebuild(lambda: start_recorder(sync_button=True))
 
-        else:
-            start_recorder()
-
-        # Shown once the recording is under way, so the notice never holds
-        # up its start.
-        if interactive and _resolution != _stream_resolution:
-            self._warn_recording_resolution_capped(_stream_resolution, _resolution)
-
-    def _warn_recording_resolution_capped(self, stream_resolution, resolution):
-        """Tell the user the recording is downscaled by the full-HD cap,
-        unless they asked not to be told again."""
-        if self.preferences.suppress_recording_cap_warning:
             return
 
-        stream_width, stream_height = stream_resolution
-        max_width, max_height = MAX_RECORDING_RESOLUTION
-
-        _, dont_show_again = warning(
-            None,
-            title="Recording resolution capped",
-            message=(
-                f"The camera streams at {stream_width}x{stream_height}, but "
-                f"recordings are capped at {max_width}x{max_height} to keep "
-                f"file size and memory bounded. The recording will be "
-                f"downscaled to {resolution[0]}x{resolution[1]}; the preview "
-                f"and image captures keep the full resolution."
-            ),
-            cancel=False,
-            checkbox_text="Don't show this again (can be undone from "
-            "Preferences › Video Settings)",
-        )
-
-        if not dont_show_again:
-            return
-
-        self.preferences.suppress_recording_cap_warning = True
-
-        try:
-            self.preferences.preferences.flush()
-        except OSError as error:
-            logger.error(f"Could not save camera preferences: {error}")
+        start_recorder()
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")

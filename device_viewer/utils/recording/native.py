@@ -133,11 +133,11 @@ class NativeVideoRecorder(VideoRecorderBase):
 
     def start(self, output_path, resolution, fps):
         """Start recording the RAW camera stream. ``resolution`` is the
-        output size — the selected camera format's size, capped by the
-        caller (see fit_recording_resolution) — pinned on the recorder,
-        which scales the stream to it (e.g. a 1920x1080 format records a
-        1920x1080 file, a 4608x2592 one capped to 1920x1080 is downscaled).
-        ``fps`` is left to the camera's real delivery rate."""
+        selected camera format's size — pinned on the recorder so the
+        output is guaranteed full resolution (e.g. a 1920x1080 format
+        records a 1920x1080 file); the backend already records the active
+        format by default, this makes it explicit. ``fps`` is left to the
+        camera's real delivery rate."""
         if self.is_recording:
             return
         if resolution:

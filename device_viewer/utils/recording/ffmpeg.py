@@ -155,8 +155,6 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         self._queue = queue.Queue(maxsize=RAW_RECORDER_QUEUE_MAX_FRAMES)
         self._layout = None
         self._frame_payload_bytes = 0
-        #: Requested output (width, height); larger frames are scaled down.
-        self._resolution = None
         self._fps = 30.0
         #: Per recording: frames written to ffmpeg, frames dropped because
         #: the encoder fell behind, and when the first frame arrived.
@@ -200,9 +198,6 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             return None
 
         self._output_path = output_path
-        self._resolution = (
-            tuple(int(side) for side in resolution) if resolution else None
-        )
         self._fps = float(fps) if fps else 30.0
         # Deferred until the first frame reveals the pixel format/size.
         self._process = None
@@ -287,22 +282,6 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         self._frame_payload_bytes = sum(
             row_bytes * rows for row_bytes, rows in self._layout
         )
-
-        # The raw input stays at the frame's native size; only a frame
-        # larger than the requested resolution is scaled down (fast_bilinear
-        # keeps the scaler cheap on the Pi's CPU).
-        output_width, output_height = width, height
-        scale_args = []
-
-        if self._resolution and (
-            width > self._resolution[0] or height > self._resolution[1]
-        ):
-            output_width, output_height = self._resolution
-            scale_args = [
-                "-vf",
-                f"scale={output_width}:{output_height}:flags=fast_bilinear",
-            ]
-
         command = [
             self.ffmpeg_binary,
             "-y",
@@ -322,7 +301,6 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             *RAW_RECORDER_TIMESTAMP_ARGS,
             "-i",
             "-",
-            *scale_args,
             *RAW_RECORDER_FPS_MODE_ARGS,
             "-c:v",
             self.video_codec,
@@ -357,8 +335,7 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         self._io_thread.start()
         logger.info(
             f"Raw pipeline: {width}x{height} {pix_fmt} "
-            f"@ {self._fps} fps -> {output_width}x{output_height} "
-            f"{self.video_codec} "
+            f"@ {self._fps} fps -> {self.video_codec} "
             f"(preset {self.preset}, crf {self.crf}"
             + (
                 f", extra args {self.extra_output_args!r}"
