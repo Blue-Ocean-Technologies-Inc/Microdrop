@@ -28,11 +28,21 @@ Constraints:
 
 - The hook only sees elements created after it is installed, so install it
   before the QCamera exists (Qt creates the element when the camera joins
-  its capture session).
-- Two GLib copies share the process (the environment's and the system
-  GStreamer's), so the libraries are loaded by soname only, and strings
-  GStreamer returns are never ``g_free``d — freeing one from the wrong
-  copy aborts the process. Nothing here needs to read such a string.
+  its capture session), but after Qt's GStreamer backend has loaded (it
+  does as the cameras are listed).
+- The environment ships its own GLib, newer than the system one the
+  system GStreamer is bound to, and the interpreter's RPATH finds the
+  environment's first. Loaded by soname, libgobject (or libgstreamer's
+  dependencies, were it loaded here first) would come from the wrong copy
+  and fail against the libglib already in the process (undefined
+  ``g_string_copy``). So nothing is loaded here: libgstreamer and the
+  libgobject it is bound to are opened by the exact paths
+  ``/proc/self/maps`` shows Qt's backend mapped, preferring the libgobject
+  in libgstreamer's directory when two are. Without ``/proc/self/maps``,
+  or before the backend has loaded, the hook is unavailable.
+- Strings GStreamer returns are never ``g_free``d: freeing one with
+  another GLib copy aborts the process. Nothing here needs to read such a
+  string.
 """
 
 # Standard library imports.
@@ -59,9 +69,13 @@ logger = get_logger(__name__)
 #: GType name of the element Qt builds for a libcamera camera.
 LIBCAMERA_SRC_TYPE_NAME = b"GstLibcameraSrc"
 
-#: Loaded by soname, so the copies already in the process are reused.
-GOBJECT_LIBRARY = "libgobject-2.0.so.0"
-GSTREAMER_LIBRARY = "libgstreamer-1.0.so.0"
+#: File-name prefixes of libgstreamer and the libgobject it is bound to, as
+#: /proc/self/maps lists them (e.g. libgobject-2.0.so.0.8400.4).
+GSTREAMER_FILE_PREFIX = "libgstreamer-1.0.so"
+GOBJECT_FILE_PREFIX = "libgobject-2.0.so"
+
+#: The process's memory map, one mapped file per line's last field.
+PROC_SELF_MAPS = "/proc/self/maps"
 
 #: Qt Multimedia's backend selector; only its GStreamer backend builds a
 #: libcamerasrc.
@@ -88,6 +102,52 @@ G_TYPE_DOUBLE = 60
 #: GSignalEmissionHook: (ihint, n_param_values, param_values, data) ->
 #: keep the hook installed.
 _EMISSION_HOOK = ctypes.CFUNCTYPE(c_int, c_void_p, c_uint, c_void_p, c_void_p)
+
+
+def _mapped_library_paths(file_prefix):
+    """Paths of the mapped shared objects whose file name starts with
+    ``file_prefix``, in map order; OSError without /proc/self/maps."""
+    paths = []
+
+    with open(PROC_SELF_MAPS) as maps:
+        for line in maps:
+            fields = line.split()
+
+            if len(fields) < 6:
+                continue
+
+            path = fields[5]
+
+            if os.path.basename(path).startswith(file_prefix) and path not in paths:
+                paths.append(path)
+
+    return paths
+
+
+def _gstreamer_library_paths():
+    """The mapped libgstreamer's path and that of the libgobject it is bound
+    to (see the module docstring), or None before Qt's GStreamer backend
+    has loaded; OSError without /proc/self/maps."""
+    gstreamer_paths = _mapped_library_paths(GSTREAMER_FILE_PREFIX)
+    gobject_paths = _mapped_library_paths(GOBJECT_FILE_PREFIX)
+
+    if not gstreamer_paths or not gobject_paths:
+        return None
+
+    gstreamer_path = gstreamer_paths[0]
+    beside_gstreamer = [
+        path
+        for path in gobject_paths
+        if os.path.dirname(path) == os.path.dirname(gstreamer_path)
+    ]
+    gobject_path = (beside_gstreamer or gobject_paths)[0]
+
+    if len(gobject_paths) > 1:
+        logger.warning(
+            f"Several libgobject copies mapped {gobject_paths}; using {gobject_path}"
+        )
+
+    return gstreamer_path, gobject_path
 
 
 def _declare(library, name, restype, *argtypes):
@@ -120,17 +180,29 @@ class _LibcameraElementHook:
         if self.attempted:
             return self.installed
 
-        self.attempted = True
-
         if platform.system() != "Linux":
+            self.attempted = True
+
             return False
 
         if os.environ.get(QT_MEDIA_BACKEND_ENV) != GSTREAMER_MEDIA_BACKEND:
+            self.attempted = True
+
             return False
 
         try:
-            self._load()
+            library_paths = _gstreamer_library_paths()
+
+            # Left for a later call: the backend loads as cameras are listed.
+            if library_paths is None:
+                logger.info("libcamera image controls wait for GStreamer to load")
+
+                return False
+
+            self.attempted = True
+            self._load(*library_paths)
         except (OSError, AttributeError) as error:
+            self.attempted = True
             logger.warning(f"libcamera image controls unavailable: {error}")
 
             return False
@@ -151,9 +223,10 @@ class _LibcameraElementHook:
 
         return True
 
-    def _load(self):
-        gobject = ctypes.CDLL(GOBJECT_LIBRARY)
-        gstreamer = ctypes.CDLL(GSTREAMER_LIBRARY)
+    def _load(self, gstreamer_path, gobject_path):
+        # Both already mapped: these return the loaded copies, loading none.
+        gstreamer = ctypes.CDLL(gstreamer_path)
+        gobject = ctypes.CDLL(gobject_path)
         gtype = c_size_t
 
         self.gst_is_initialized = _declare(gstreamer, "gst_is_initialized", c_int)
@@ -238,6 +311,7 @@ class _LibcameraElementHook:
             ):
                 self._hold(self.g_object_ref(element))
                 self._write_properties()
+                logger.info(f"libcamerasrc captured ({len(self.properties)} set)")
         except Exception as error:
             logger.error(f"libcamerasrc element hook failed: {error}")
 
@@ -347,8 +421,8 @@ _hook = _LibcameraElementHook()
 
 def install_libcamera_element_hook():
     """Start watching for libcamerasrc elements; idempotent. Returns whether
-    the hook is installed: never off Linux, nor off Qt's GStreamer
-    backend."""
+    the hook is installed: never off Linux, nor off Qt's GStreamer backend,
+    and not yet before that backend has loaded."""
 
     return _hook.install()
 

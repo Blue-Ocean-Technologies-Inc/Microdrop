@@ -89,10 +89,6 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-# Before any QCamera exists, so the libcamerasrc Qt builds for a Pi CSI
-# camera is seen; a no-op off Linux and Qt's GStreamer backend.
-libcamera_gst_element.install_libcamera_element_hook()
-
 
 @provides(ICameraDevice)
 class QtCameraDevice(HasTraits):
@@ -249,8 +245,11 @@ class QtCameraDevice(HasTraits):
 
         if directshow is not None:
             self.image_controls = directshow
-        elif libcamera_gst_element.is_available() and description.startswith(
-            LIBCAMERA_ID_PREFIX
+        # The hook goes in here, before this device's QCamera exists and
+        # after the camera listing loaded Qt's GStreamer backend (see
+        # libcamera_gst_element).
+        elif description.startswith(LIBCAMERA_ID_PREFIX) and (
+            libcamera_gst_element.install_libcamera_element_hook()
         ):
             self.image_controls = LibcameraImageControls()
         elif isinstance(selected_device, LinuxCameraDeviceContainer) and (
