@@ -17,7 +17,7 @@ pair lives in QtCameraDevice, owned here because it is Qt."""
 from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import QThreadPool, QTimer, Signal, Slot
 from pyface.qt.QtGui import QImage
-from pyface.qt.QtMultimedia import QCameraFormat, QVideoSink
+from pyface.qt.QtMultimedia import QCameraFormat
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -53,6 +53,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
+    CAMERA_MIN_RESOLUTION,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
 )
@@ -142,9 +143,8 @@ class CameraControlWidget(QWidget):
         # (every frame under the electrodes is a full-scene composite, and
         # the preview doesn't need camera rate to be useful).
         self.camera_device = QtCameraDevice(
-            video_item=self.video_item, sink=QVideoSink(self)
+            video_item=self.video_item, preview_receiver=self._forward_preview_frame
         )
-        self.camera_device.sink.videoFrameChanged.connect(self._forward_preview_frame)
         self.camera_model = CameraModel()
         self.controller = CameraController(
             model=self.camera_model,
@@ -707,7 +707,13 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.blockSignals(False)
             return
 
-        formats = self.camera_device.video_formats()
+        min_width, min_height = CAMERA_MIN_RESOLUTION
+        formats = [
+            fmt
+            for fmt in self.camera_device.video_formats()
+            if fmt.resolution().width() >= min_width
+            and fmt.resolution().height() >= min_height
+        ]
         libcamera = self.camera_device.is_libcamera()
         format_summaries = [
             (
@@ -765,13 +771,7 @@ class CameraControlWidget(QWidget):
             return
 
         camera_format = self.combo_resolutions.itemData(index)
-        was_running = self.camera_device.is_active()
-
-        if was_running:
-            self.camera_device.stop()
-            QApplication.processEvents()
-
-        self.camera_device.set_format(camera_format)
+        self.camera_device.apply_format(camera_format)
 
         resolution = (
             camera_format.resolution().width(),
@@ -783,9 +783,6 @@ class CameraControlWidget(QWidget):
             self._get_camera_resolution_max_framerate(fmt=camera_format),
         )
         self.model.camera_perspective.camera_resolution = resolution
-
-        if was_running:
-            self.camera_device.start()
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #
@@ -1083,9 +1080,23 @@ class CameraControlWidget(QWidget):
         # Rebuild from current preferences so backend/container/bitrate
         # changes apply without a restart, with the bitrate class matched
         # to the actual camera resolution and frame rate.
-        self.recorder = self._build_recorder(_resolution, fps)
-        self.recorder.start(recording_path, _resolution, fps)
-        self.controller.recording_started()
+        def start_recorder(sync_button=False):
+            self.recorder = self._build_recorder(_resolution, fps)
+            self.recorder.start(recording_path, _resolution, fps)
+            self.controller.recording_started()
+
+            # on_recording_active synced the button before a deferred start.
+            if sync_button:
+                self.record_toggle_button.setChecked(self.recorder.is_recording)
+
+        # A libcamera camera switched off moments ago gets a new session and
+        # sink on the next event-loop pass: record into those, not the old.
+        if self.camera_device.rebuild_pending:
+            self.camera_device.after_rebuild(lambda: start_recorder(sync_button=True))
+
+            return
+
+        start_recorder()
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")

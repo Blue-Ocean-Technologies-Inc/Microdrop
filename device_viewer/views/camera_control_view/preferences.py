@@ -8,18 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import platform
 
-from envisage.ui.tasks.api import PreferencesPane, PreferencesCategory
-from traitsui.api import View, Item, Group, EnumEditor
+# Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Str, Bool, Enum, List, Range, observe
+from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
+from traits.api import Bool, Enum, List, Range, Str, observe
+from traitsui.api import EnumEditor, Group, Item, View
 
-from device_viewer.utils.camera import supported_qt_video_codec_names
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
-
+# Microdrop package imports.
 from device_viewer.consts import (
     FFMPEG_CONTAINERS,
     FFMPEG_DEFAULT_CRF,
@@ -34,8 +32,18 @@ from device_viewer.consts import (
     RECORDING_BITRATE_CLASSES,
     RECORDING_BITRATE_TIERS,
 )
+from device_viewer.utils.camera import supported_qt_video_codec_names
+
+# Microdrop style imports.
 from microdrop_style.text_styles import preferences_group_style_sheet
+
+# Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 os_name = platform.system()
 
@@ -60,8 +68,7 @@ def _bitrate_tier_label(tier: str, mbps: float) -> str:
     """Dropdown entry text: the tier with its bitrate and one-minute file
     size, so the size estimate is always in sight and can never go stale."""
     megabytes_per_minute = mbps * 60 / 8
-    return (f"{tier} — {mbps:g} Mbps "
-            f"(≈ {megabytes_per_minute:,.0f} MB per minute)")
+    return f"{tier} — {mbps:g} Mbps (≈ {megabytes_per_minute:,.0f} MB per minute)"
 
 
 class CameraPreferences(PreferencesHelper):
@@ -126,8 +133,9 @@ class CameraPreferences(PreferencesHelper):
     def _refresh_qt_supported_video_codecs(self, event=None):
         codec_names = supported_qt_video_codec_names(self.qt_video_format)
         self.qt_supported_video_codecs_ = codec_names
-        logger.debug(f"Video codecs supported for {self.qt_video_format}: "
-                    f"{codec_names}")
+        logger.debug(
+            f"Video codecs supported for {self.qt_video_format}: {codec_names}"
+        )
         if codec_names and self.qt_video_codec not in codec_names:
             if "H264" in codec_names:
                 fallback = "H264"
@@ -136,9 +144,11 @@ class CameraPreferences(PreferencesHelper):
             else:
                 fallback = codec_names[0]
 
-            logger.info(f"Video codec {self.qt_video_codec!r} not supported "
-                        f"for {self.qt_video_format}; resetting to "
-                        f"{fallback!r}")
+            logger.info(
+                f"Video codec {self.qt_video_codec!r} not supported "
+                f"for {self.qt_video_format}; resetting to "
+                f"{fallback!r}"
+            )
             self.qt_video_codec = fallback
 
     def _preferred_video_format_default(self):
@@ -155,22 +165,18 @@ class CameraPreferences(PreferencesHelper):
         QMediaFormat as well)."""
         if self.recorder_backend == RECORDER_BACKEND_FFMPEG:
             return f".{self.ffmpeg_container}"
-        return (".mkv" if self.qt_video_format == QT_RECORDER_FORMAT_MKV
-                else ".mp4")
+        return ".mkv" if self.qt_video_format == QT_RECORDER_FORMAT_MKV else ".mp4"
 
     def recording_bitrate_class(self, height: int, fps: float) -> str:
         """Nearest configured resolution class for an actual camera format."""
         if height >= RECORDING_4K_MIN_HEIGHT:
-            return ("4K @ 60 fps" if fps >= RECORDING_60FPS_MIN_FPS
-                    else "4K @ 24/30 fps")
-        return ("1080p @ 60 fps" if fps >= RECORDING_60FPS_MIN_FPS
-                else "1080p @ 30 fps")
+            return "4K @ 60 fps" if fps >= RECORDING_60FPS_MIN_FPS else "4K @ 24/30 fps"
+        return "1080p @ 60 fps" if fps >= RECORDING_60FPS_MIN_FPS else "1080p @ 30 fps"
 
     def recording_bitrate_bps(self, resolution, fps) -> int | None:
         """Configured bitrate (bits/s) for the Qt recorder, or None when the
         Qt encoder should pick (MP4 format, or format/rate unknown)."""
-        if (self.qt_video_format != QT_RECORDER_FORMAT_MKV
-                or not resolution or not fps):
+        if self.qt_video_format != QT_RECORDER_FORMAT_MKV or not resolution or not fps:
             return None
         class_label = self.recording_bitrate_class(resolution[1], fps)
         tier_trait, tier_mbps = RECORDING_BITRATE_CLASSES[class_label]
@@ -246,12 +252,15 @@ bitrate_tier_items = [
     Item(
         tier_trait,
         show_label=False,
-        editor=EnumEditor(values={tier: _bitrate_tier_label(tier, mbps)
-                                  for tier, mbps in tier_mbps.items()}),
+        editor=EnumEditor(
+            values={
+                tier: _bitrate_tier_label(tier, mbps)
+                for tier, mbps in tier_mbps.items()
+            }
+        ),
         visible_when=f'qt_bitrate_resolution_class == "{class_label}"',
     )
-    for class_label, (tier_trait, tier_mbps) in
-    RECORDING_BITRATE_CLASSES.items()
+    for class_label, (tier_trait, tier_mbps) in RECORDING_BITRATE_CLASSES.items()
 ]
 
 qt_recorder_settings_group = Group(
@@ -305,8 +314,9 @@ video_settings_tab = PreferencesCategory(
     name="Video Settings",
 )
 
+
 class CameraPreferencesPane(PreferencesPane):
-    """Device Viewer preferences pane based on enthought envisage's The preferences pane for the Attractors application."""
+    """The Video Settings preferences pane (after Envisage's Attractors example)."""
 
     #### 'PreferencesPane' interface ##########################################
 
