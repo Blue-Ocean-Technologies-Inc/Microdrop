@@ -62,6 +62,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
+    LIBCAMERA_REBUILD_DELAY_MS,
     NATIVE_CAMERA_PROPERTIES_EXCLUDED,
     PENDING_FORMAT_DELAY_MS,
 )
@@ -266,9 +267,12 @@ class QtCameraDevice(HasTraits):
         self._start_after_rebuild = False
         self.rebuild_pending = True
 
-        # Inside the stop's own callback the teardown aborts too. The video
-        # item as context drops the rebuild if the panel is destroyed first.
-        QTimer.singleShot(0, self.video_item, self._rebuild_libcamera_stack)
+        # The stopped stream must drain before the teardown (see the delay's
+        # note in consts). The video item as context drops the rebuild if
+        # the panel is destroyed first.
+        QTimer.singleShot(
+            LIBCAMERA_REBUILD_DELAY_MS, self.video_item, self._rebuild_libcamera_stack
+        )
 
     def _rebuild_libcamera_stack(self):
         """Discard the stopped libcamera camera with its session and sink,
