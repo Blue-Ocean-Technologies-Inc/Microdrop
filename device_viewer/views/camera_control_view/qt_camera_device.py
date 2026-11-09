@@ -17,7 +17,8 @@ controller. The controller drives them through ICameraDevice only.
 
 Where Qt has no API for a camera's controls, this adapter fills in from the
 platform: lens focus over DirectShow on Windows, and image controls
-(brightness, contrast, ...) over DirectShow or v4l2.
+(brightness, contrast, ...) over DirectShow, v4l2, or a Raspberry Pi CSI
+camera's libcamerasrc element.
 
 A libcamera camera (a Raspberry Pi CSI camera) needs that no QVideoFrame of
 its previous stream exists when the next QCamera starts: libcamerasrc's
@@ -25,7 +26,8 @@ buffers pin the libcamera Camera, whose completion slot still points at the
 destroyed element. So a stop blanks the preview, discards camera, session and
 sink on the next event-loop pass, and builds a fresh stack once Qt has
 destroyed them. Its format may change only while streaming; one chosen while
-it is off is applied shortly after the next start.
+it is off is applied shortly after the next start. Its image controls apply
+only as it starts, so a change restarts it once the changes settle.
 """
 
 # Standard library imports.
@@ -43,11 +45,22 @@ from pyface.qt.QtMultimedia import (
 )
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import QApplication
-from traits.api import Bool, Callable, Float, HasTraits, Instance, List, provides
+from traits.api import (
+    Bool,
+    Callable,
+    Float,
+    HasTraits,
+    Instance,
+    List,
+    observe,
+    provides,
+)
 
 # Microdrop utils imports.
+from microdrop_utils import libcamera_gst_element
 from microdrop_utils.camera_image_controls import (
     ICameraImageControls,
+    LibcameraImageControls,
     V4l2ImageControls,
 )
 from microdrop_utils.directshow_camera_controls import (
@@ -55,6 +68,7 @@ from microdrop_utils.directshow_camera_controls import (
     open_directshow_camera_controls,
 )
 from microdrop_utils.v4l2_fps_getter import (
+    LIBCAMERA_ID_PREFIX,
     LinuxCameraDeviceContainer,
     is_libcamera_device,
 )
@@ -62,6 +76,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
+    LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS,
     LIBCAMERA_FIRST_FRAME_TIMEOUT_MS,
     LIBCAMERA_REBUILD_GAP_MS,
     NATIVE_CAMERA_PROPERTIES_EXCLUDED,
@@ -112,6 +127,10 @@ class QtCameraDevice(HasTraits):
     #: sink are replaced (see the module docstring).
     rebuild_pending = Bool(False)
 
+    #: While True (a recording is running), the restart that applies
+    #: libcamera image-control changes is deferred until the hold lifts.
+    hold_restarts = Bool(False)
+
     #: monotonic() time of the last frame forwarded to the display item.
     _last_preview_frame_time = Float(0.0)
 
@@ -135,6 +154,13 @@ class QtCameraDevice(HasTraits):
 
     #: Called once the pending rebuild is done (see after_rebuild).
     _after_rebuild_callbacks = List(Callable)
+
+    #: Single-shot debounce of the restart that applies libcamera image
+    #: control changes (see _schedule_control_restart).
+    _control_restart_timer = Instance(QTimer)
+
+    #: A control restart was deferred by hold_restarts.
+    _restart_due = Bool(False)
 
     def traits_init(self):
         self._wire_session()
@@ -175,11 +201,19 @@ class QtCameraDevice(HasTraits):
 
             return
 
-        self.camera = None if self.device is None else QCamera(self.device)
-        self.session.setCamera(self.camera)
+        # Qt builds a libcamera camera's libcamerasrc in here.
+        with libcamera_gst_element.capture_new_elements():
+            self.camera = None if self.device is None else QCamera(self.device)
+            self.session.setCamera(self.camera)
 
     def unbind(self):
         self.device = None
+
+        self._restart_due = False
+
+        if self._control_restart_timer is not None:
+            self._control_restart_timer.stop()
+
         self._pending_format = None
         self.directshow_controls = None
         self.image_controls = None
@@ -213,6 +247,12 @@ class QtCameraDevice(HasTraits):
 
         if directshow is not None:
             self.image_controls = directshow
+        # Loaded here, after the camera listing loaded Qt's GStreamer
+        # backend (see libcamera_gst_element).
+        elif description.startswith(LIBCAMERA_ID_PREFIX) and (
+            libcamera_gst_element.load_libcamera_element_hook()
+        ):
+            self.image_controls = LibcameraImageControls()
         elif isinstance(selected_device, LinuxCameraDeviceContainer) and (
             selected_device.device_path
         ):
@@ -340,7 +380,6 @@ class QtCameraDevice(HasTraits):
         self._wire_session()
 
         if self.device is not None:
-            self.camera = QCamera(self.device)
             camera_format = self._rebuild_format
 
             # A camera that never had a format (a newly bound device) takes
@@ -348,10 +387,14 @@ class QtCameraDevice(HasTraits):
             if camera_format is None or camera_format.isNull():
                 camera_format, self._pending_format = self._pending_format, None
 
-            if camera_format is not None and not camera_format.isNull():
-                self.camera.setCameraFormat(camera_format)
+            # Qt builds the libcamerasrc in here.
+            with libcamera_gst_element.capture_new_elements():
+                self.camera = QCamera(self.device)
 
-            self.session.setCamera(self.camera)
+                if camera_format is not None and not camera_format.isNull():
+                    self.camera.setCameraFormat(camera_format)
+
+                self.session.setCamera(self.camera)
 
             if self._start_after_rebuild:
                 self._start_camera()
@@ -560,7 +603,58 @@ class QtCameraDevice(HasTraits):
         return self.image_controls.get(name)
 
     def set_image_control(self, name, value, auto=False):
+        if not self.is_libcamera():
+            self.image_controls.set(name, value, auto)
+
+            return
+
+        previous_value, previous_auto = self.image_controls.get(name)
         self.image_controls.set(name, value, auto)
+
+        # Under auto the value is the algorithm's: only the mode counts.
+        changed = auto != previous_auto or (not auto and value != previous_value)
+
+        # A pending rebuild's new element takes the stored values anyway.
+        if changed and self.is_active() and not self.rebuild_pending:
+            self._schedule_control_restart()
+
+    def _schedule_control_restart(self):
+        """Restart the camera once a burst of image-control changes has
+        settled (see LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS)."""
+
+        if self._control_restart_timer is None:
+            # Parented to the video item, so a destroyed panel drops it.
+            timer = QTimer(self.video_item)
+            timer.setSingleShot(True)
+            timer.setInterval(LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS)
+            timer.timeout.connect(self._restart_for_image_controls)
+            self._control_restart_timer = timer
+
+        self._control_restart_timer.start()
+
+    def _restart_for_image_controls(self):
+        """Stop and start the camera: the rebuilt libcamerasrc takes the
+        stored control values as it starts."""
+
+        # A restart replaces the session and sink a recording writes from.
+        if self.hold_restarts:
+            self._restart_due = True
+
+            return
+
+        if self.is_active():
+            self.stop()
+            self.start()
+
+    @observe("hold_restarts")
+    def _restart_after_hold(self, event):
+        """Run a control restart deferred while the hold was on."""
+
+        if self.hold_restarts or not self._restart_due:
+            return
+
+        self._restart_due = False
+        self._schedule_control_restart()
 
     def describe_image_control(self, name, value):
         return self.image_controls.describe(name, value)

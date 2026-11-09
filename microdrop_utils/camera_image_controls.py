@@ -10,16 +10,23 @@
 
 """A camera's image controls (exposure, brightness, contrast, ...) behind
 one interface, for the backends Qt Multimedia has no API for: DirectShow on
-Windows (see directshow_camera_controls) and v4l2 controls on Linux (here).
+Windows (see directshow_camera_controls), and on Linux v4l2 controls and a
+Raspberry Pi CSI camera's libcamera controls (here).
 
 Controls are named as v4l2 names them; IMAGE_CONTROL_LABELS lists the ones
 offered, in display order.
 """
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Int, Interface, Str, provides
+from traits.api import Bool, Float, HasTraits, Int, Interface, Str, provides
 
 # Local imports.
+from .libcamera_gst_element import (
+    get_element_property,
+    has_element,
+    set_element_property,
+    stored_element_property,
+)
 from .v4l2_fps_getter import (
     V4L2_EXPOSURE_AUTO,
     V4L2_EXPOSURE_AUTO_MANUAL,
@@ -59,6 +66,10 @@ V4L2_IMAGE_CONTROL_AUTOS = {
     ),
     "gain": (("gain_automatic", 1, 0), ("autogain", 1, 0)),
 }
+
+#: libcamerasrc's ``*-mode`` enum nicks.
+LIBCAMERA_MODE_AUTO = "auto"
+LIBCAMERA_MODE_MANUAL = "manual"
 
 
 def format_exposure_ms(exposure_ms):
@@ -187,3 +198,141 @@ class V4l2ImageControls(HasTraits):
                 return auto
 
         return None
+
+
+class LibcameraImageControl(HasTraits):
+    """How one image control maps onto a libcamerasrc property: the panel's
+    integer slider runs over the property's value times ``scale``."""
+
+    #: The libcamerasrc property, e.g. "analogue-gain".
+    property_name = Str()
+
+    #: Its ``*-mode`` enum property (auto / manual); "" when it has none.
+    mode_property_name = Str()
+
+    #: libcamera's range and default, in the property's own units.
+    low = Float()
+
+    high = Float()
+
+    default = Float()
+
+    #: Slider steps per property unit.
+    scale = Int(1)
+
+    def slider_value(self, value):
+        return round(value * self.scale)
+
+    def property_value(self, slider_value):
+        return slider_value / self.scale
+
+    def control_range(self, name):
+        return ImageControlRange(
+            name=name,
+            low=self.slider_value(self.low),
+            high=self.slider_value(self.high),
+            default=self.slider_value(self.default),
+            has_auto=bool(self.mode_property_name),
+        )
+
+
+#: The libcamerasrc image controls offered, by v4l2 name. The element's own
+#: ranges are unbounded, so these are libcamera's ControlInfo limits, with
+#: contrast, saturation and sharpness trimmed to their useful span.
+#: libcamerasrc has no colour temperature, so white balance is left to AWB.
+LIBCAMERA_IMAGE_CONTROLS = {
+    EXPOSURE_CONTROL: LibcameraImageControl(
+        property_name="exposure-time",
+        mode_property_name="exposure-time-mode",
+        low=1,
+        high=66666,
+        default=20000,
+    ),
+    "gain": LibcameraImageControl(
+        property_name="analogue-gain",
+        mode_property_name="analogue-gain-mode",
+        low=1.0,
+        high=16.0,
+        default=1.0,
+        scale=100,
+    ),
+    "brightness": LibcameraImageControl(
+        property_name="brightness", low=-1.0, high=1.0, default=0.0, scale=100
+    ),
+    "contrast": LibcameraImageControl(
+        property_name="contrast", low=0.0, high=2.0, default=1.0, scale=100
+    ),
+    "saturation": LibcameraImageControl(
+        property_name="saturation", low=0.0, high=2.0, default=1.0, scale=100
+    ),
+    "sharpness": LibcameraImageControl(
+        property_name="sharpness", low=0.0, high=4.0, default=1.0, scale=100
+    ),
+}
+
+
+@provides(ICameraImageControls)
+class LibcameraImageControls(HasTraits):
+    """A Raspberry Pi CSI camera's image controls, as properties of the
+    libcamerasrc element Qt's GStreamer backend builds for it.
+
+    libcamerasrc applies its properties only as the camera starts, so a
+    value set here takes effect at the camera's next start, and is kept for
+    every camera started after (see libcamera_gst_element)."""
+
+    def ranges(self):
+        return [
+            LIBCAMERA_IMAGE_CONTROLS[name].control_range(name)
+            for name in IMAGE_CONTROL_LABELS
+            if name in LIBCAMERA_IMAGE_CONTROLS
+        ]
+
+    def get(self, name):
+        control = self._control(name)
+        auto = bool(control.mode_property_name) and (
+            stored_element_property(control.mode_property_name, LIBCAMERA_MODE_AUTO)
+            == LIBCAMERA_MODE_AUTO
+        )
+        value = stored_element_property(control.property_name, control.default)
+
+        # Under auto, libcamera's algorithms drive the control; the element
+        # reports the value in use from the frames' metadata.
+        if auto and has_element():
+            live = get_element_property(control.property_name)
+
+            if live > 0:
+                value = live
+
+        return control.slider_value(value), auto
+
+    def set(self, name, value, auto=False):
+        control = self._control(name)
+
+        # The value only applies while the mode is manual. ae-enable is no
+        # substitute: switching it back on leaves the modes manual.
+        if control.mode_property_name:
+            mode = LIBCAMERA_MODE_AUTO if auto else LIBCAMERA_MODE_MANUAL
+            set_element_property(control.mode_property_name, mode)
+
+        if not auto:
+            set_element_property(control.property_name, control.property_value(value))
+
+    def describe(self, name, value):
+        control = LIBCAMERA_IMAGE_CONTROLS.get(name)
+
+        if control is None:
+            return ""
+
+        if name == EXPOSURE_CONTROL:
+            return format_exposure_ms(control.property_value(value) / 1000)
+
+        return f"{control.property_value(value):.2f}"
+
+    @staticmethod
+    def _control(name):
+        control = LIBCAMERA_IMAGE_CONTROLS.get(name)
+
+        if control is None:
+            raise RuntimeError(f"libcamera has no {name} control")
+
+        return control

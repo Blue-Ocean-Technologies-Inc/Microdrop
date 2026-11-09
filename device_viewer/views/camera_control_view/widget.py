@@ -1083,6 +1083,7 @@ class CameraControlWidget(QWidget):
         def start_recorder(sync_button=False):
             self.recorder = self._build_recorder(_resolution, fps)
             self.recorder.start(recording_path, _resolution, fps)
+            self.camera_device.hold_restarts = True
             self.controller.recording_started()
 
             # on_recording_active synced the button before a deferred start.
@@ -1105,6 +1106,7 @@ class CameraControlWidget(QWidget):
     @Slot(str)
     def handle_recording_error(self, error_msg):
         logger.error(f"Recording Error: {error_msg}")
+        self.camera_device.hold_restarts = False
         self.controller.recording_ended()
         error(
             self,
@@ -1116,6 +1118,7 @@ class CameraControlWidget(QWidget):
 
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
+        self.camera_device.hold_restarts = False
         turn_camera_off = self.controller.recording_ended()
 
         if turn_camera_off and self.camera_device.is_active():
