@@ -55,6 +55,7 @@ from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
     CAMERA_MIN_RESOLUTION,
     COMMON_RESOLUTION_NAMES,
+    HIGH_RESOLUTION_WARNING_THRESHOLD,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
     SHOW_ALL_RESOLUTIONS_LABEL,
@@ -791,7 +792,9 @@ class CameraControlWidget(QWidget):
         # Ensure the model always has a resolution set (e.g. when the combo
         # index didn't change and on_resolution_changed was never triggered).
         if not self.model.camera_perspective.camera_resolution:
-            self.on_resolution_changed(self.combo_resolutions.currentIndex())
+            self.on_resolution_changed(
+                self.combo_resolutions.currentIndex(), interactive=False
+            )
 
     @staticmethod
     def _resolution_name(fmt):
@@ -824,11 +827,16 @@ class CameraControlWidget(QWidget):
             if fmt is not None and (
                 (fmt.resolution().width(), fmt.resolution().height()) == selected
             ):
+                self.combo_resolutions.blockSignals(True)
                 self.combo_resolutions.setCurrentIndex(index)
+                self.combo_resolutions.blockSignals(False)
 
                 return
 
-    def on_resolution_changed(self, index):
+    def on_resolution_changed(self, index, interactive=True):
+        """Apply the combo's format at ``index``. ``interactive`` is False for
+        the restore at start-up, which never shows the high-resolution
+        notice."""
         if self.combo_resolutions.count() == 0 or index < 0:
             return
 
@@ -846,12 +854,51 @@ class CameraControlWidget(QWidget):
             camera_format.resolution().width(),
             camera_format.resolution().height(),
         )
+
+        if interactive:
+            self._warn_high_resolution(resolution)
         self.controller.select_resolution(
             self.combo_resolutions.itemText(index),
             *resolution,
             self._get_camera_resolution_max_framerate(fmt=camera_format),
         )
         self.model.camera_perspective.camera_resolution = resolution
+
+    def _warn_high_resolution(self, resolution):
+        """Tell the user a size above Full HD can slow the app down, unless
+        they asked not to be told again."""
+        max_width, max_height = HIGH_RESOLUTION_WARNING_THRESHOLD
+        width, height = resolution
+
+        if width <= max_width and height <= max_height:
+            return
+
+        if self.preferences.suppress_high_resolution_warning:
+            return
+
+        _, dont_show_again = warning(
+            None,
+            title="High resolution selected",
+            message=(
+                f"{width}x{height} is above Full HD ({max_width}x{max_height}). "
+                f"Streaming, recording and image analysis at this size put "
+                f"more load on the camera pipeline and can slow the app down, "
+                f"especially on the portable instrument."
+            ),
+            cancel=False,
+            checkbox_text="Don't show this again (can be undone from "
+            "Preferences \u203a Video Settings)",
+        )
+
+        if not dont_show_again:
+            return
+
+        self.preferences.suppress_high_resolution_warning = True
+
+        try:
+            self.preferences.preferences.flush()
+        except OSError as error:
+            logger.error(f"Could not save camera preferences: {error}")
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #

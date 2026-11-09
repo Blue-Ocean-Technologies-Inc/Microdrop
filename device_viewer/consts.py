@@ -444,6 +444,10 @@ COMMON_RESOLUTION_NAMES = {
 SHOW_ALL_RESOLUTIONS_LABEL = "Show all resolutions\u2026"
 SHOW_COMMON_RESOLUTIONS_LABEL = "Show common resolutions\u2026"
 
+# Picking a size wider or taller than this (Full HD) warns once that it can
+# slow the app down; the warning can be suppressed from the preferences.
+HIGH_RESOLUTION_WARNING_THRESHOLD = (1920, 1080)
+
 # Cameras whose descriptions contain one of these never get the native
 # (DirectShow/v4l2) camera properties: the fluorescence plugin drives ZWO ASI
 # cameras through their own SDK and dock pane, and ZWO's optional DirectShow
