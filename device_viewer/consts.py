@@ -404,11 +404,13 @@ CAMERA_FEED_START_TIMEOUT_MS = 3000
 # recorder taps the capture session's own sink at full rate).
 CAMERA_PREVIEW_MAX_FPS = 20
 
-# Delay between stopping a libcamera camera and discarding its pipeline for
-# a fresh one: the stopped stream's in-flight requests must finish first,
-# which at full-sensor sizes (about 14 fps) takes far more than one
-# event-loop pass.
-LIBCAMERA_REBUILD_DELAY_MS = 1000
+# Gap between discarding a stopped libcamera camera's stack and building
+# the new one, so Qt has destroyed the old sink (and its last frame) first.
+LIBCAMERA_REBUILD_GAP_MS = 50
+
+# Time a started libcamera camera has to deliver its first frame before the
+# stall is logged (it is not retried: a retry against a leaked camera crashes).
+LIBCAMERA_FIRST_FRAME_TIMEOUT_MS = 3000
 
 # Delay after a libcamera camera starts streaming before a format chosen
 # while it was off is applied: libcamerasrc aborts on a format change

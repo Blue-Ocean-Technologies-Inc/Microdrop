@@ -19,13 +19,13 @@ Where Qt has no API for a camera's controls, this adapter fills in from the
 platform: lens focus over DirectShow on Windows, and image controls
 (brightness, contrast, ...) over DirectShow or v4l2.
 
-A libcamera camera (a Raspberry Pi CSI camera) aborts the process when it is
-started again after a stop, with or without a format change in between, and
-when its session or sink outlive the stop, and it may change format only
-while streaming. So its format changes are applied to the running camera (one
-chosen while it is off waits for the next start), and a stop discards camera,
-session and sink on the next event-loop pass and builds a fresh stack for the
-next start.
+A libcamera camera (a Raspberry Pi CSI camera) needs that no QVideoFrame of
+its previous stream exists when the next QCamera starts: libcamerasrc's
+buffers pin the libcamera Camera, whose completion slot still points at the
+destroyed element. So a stop blanks the preview, discards camera, session and
+sink on the next event-loop pass, and builds a fresh stack once Qt has
+destroyed them. Its format may change only while streaming; one chosen while
+it is off is applied shortly after the next start.
 """
 
 # Standard library imports.
@@ -62,7 +62,8 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
-    LIBCAMERA_REBUILD_DELAY_MS,
+    LIBCAMERA_FIRST_FRAME_TIMEOUT_MS,
+    LIBCAMERA_REBUILD_GAP_MS,
     NATIVE_CAMERA_PROPERTIES_EXCLUDED,
     PENDING_FORMAT_DELAY_MS,
 )
@@ -107,12 +108,16 @@ class QtCameraDevice(HasTraits):
     #: The bound camera's image controls; None for a camera without any.
     image_controls = Instance(ICameraImageControls)
 
-    #: True from a libcamera camera's stop until the next event-loop pass
-    #: has replaced its camera, session and sink (see the module docstring).
+    #: True from a libcamera camera's stop until its camera, session and
+    #: sink are replaced (see the module docstring).
     rebuild_pending = Bool(False)
 
     #: monotonic() time of the last frame forwarded to the display item.
     _last_preview_frame_time = Float(0.0)
+
+    #: Whether a frame has arrived since the camera's last start (see
+    #: _check_first_frame).
+    _frame_since_start = Bool(False)
 
     #: The stopped libcamera camera, kept alive until the rebuild discards
     #: it (an unbind or rebind may already have replaced ``camera``).
@@ -239,17 +244,39 @@ class QtCameraDevice(HasTraits):
     def _start_camera(self):
         """Start the camera; a held libcamera format follows once the
         stream has settled (see _apply_pending_format)."""
+        self._frame_since_start = False
         self.camera.start()
+        camera = self.camera
 
         # Armed from the start, not from a frame: a camera started on a
         # format its output cannot play never delivers one.
         if self._pending_format is not None:
-            camera = self.camera
             QTimer.singleShot(
                 PENDING_FORMAT_DELAY_MS,
                 self.video_item,
                 lambda: self._apply_pending_format(camera),
             )
+
+        if self.is_libcamera():
+            QTimer.singleShot(
+                LIBCAMERA_FIRST_FRAME_TIMEOUT_MS,
+                self.video_item,
+                lambda: self._check_first_frame(camera),
+            )
+
+    def _check_first_frame(self, camera):
+        """Log a started ``camera`` that has delivered no frame."""
+        if camera is not self.camera or not camera.isActive():
+            return
+
+        if self._frame_since_start:
+            return
+
+        logger.error(
+            f"No frames from {self.device.description()} "
+            f"{LIBCAMERA_FIRST_FRAME_TIMEOUT_MS / 1000:g} s after start; "
+            f"the camera must be re-selected"
+        )
 
     def stop(self):
         if self.rebuild_pending:
@@ -267,33 +294,50 @@ class QtCameraDevice(HasTraits):
         self._start_after_rebuild = False
         self.rebuild_pending = True
 
-        # The stopped stream must drain before the teardown (see the delay's
-        # note in consts). The video item as context drops the rebuild if
-        # the panel is destroyed first.
-        QTimer.singleShot(
-            LIBCAMERA_REBUILD_DELAY_MS, self.video_item, self._rebuild_libcamera_stack
-        )
+        # Releases the stream's last frame, and blanks the preview.
+        self._clear_preview_frame()
 
-    def _rebuild_libcamera_stack(self):
-        """Discard the stopped libcamera camera with its session and sink,
-        and build a fresh stack for the selected device, started if a start
-        was requested meanwhile."""
+        # Torn down on the next event-loop pass: inside the stop's own
+        # callback the teardown aborts. The video item as context drops the
+        # teardown and rebuild if the panel is destroyed first.
+        QTimer.singleShot(0, self.video_item, self._teardown_libcamera_stack)
+
+    def _clear_preview_frame(self):
+        self.video_item.videoSink().setVideoFrame(QVideoFrame())
+
+    def _teardown_libcamera_stack(self):
+        """Discard the stopped libcamera camera with its session and sink;
+        the new stack is built once Qt has destroyed them."""
         if not self.rebuild_pending:
             return
 
-        stale_objects = (self._stopped_camera, self.session, self.sink)
         self.session.setCamera(None)
 
-        for stale_object in stale_objects:
+        for stale_object in (self._stopped_camera, self.session, self.sink):
             stale_object.deleteLater()
 
         # Recorders must not hold the old session or sink across this; the
         # widget builds a new recorder at every recording start.
         self._stopped_camera = None
+        self.session = None
+        self.sink = None
+
+        QTimer.singleShot(
+            LIBCAMERA_REBUILD_GAP_MS, self.video_item, self._rebuild_libcamera_stack
+        )
+
+    def _rebuild_libcamera_stack(self):
+        """Build a fresh stack for the selected device, started if a start
+        was requested meanwhile."""
+        if not self.rebuild_pending:
+            return
+
+        # A frame queued from the capture thread may have landed after the
+        # stop.
+        self._clear_preview_frame()
         self.sink = QVideoSink()
         self.session = QMediaCaptureSession()
         self._wire_session()
-        self.rebuild_pending = False
 
         if self.device is not None:
             self.camera = QCamera(self.device)
@@ -312,8 +356,10 @@ class QtCameraDevice(HasTraits):
             if self._start_after_rebuild:
                 self._start_camera()
 
+        # Cleared before the callbacks, which may stop or start the camera.
         self._rebuild_format = None
         self._start_after_rebuild = False
+        self.rebuild_pending = False
         callbacks, self._after_rebuild_callbacks = self._after_rebuild_callbacks, []
 
         for callback in callbacks:
@@ -397,6 +443,13 @@ class QtCameraDevice(HasTraits):
         return True
 
     def forward_preview_frame(self, frame):
+        # A late frame of a stopped libcamera stream must not be kept (see
+        # the module docstring).
+        if self.rebuild_pending:
+            return
+
+        self._frame_since_start = True
+
         if self._preview_frame_due():
             self.video_item.videoSink().setVideoFrame(frame)
 
