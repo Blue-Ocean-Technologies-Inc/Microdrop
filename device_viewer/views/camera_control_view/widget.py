@@ -63,6 +63,7 @@ from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
 from ...utils.frame_luma import frame_centre_luma
+from ...utils.recording.base import fit_recording_resolution
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
@@ -1072,10 +1073,17 @@ class CameraControlWidget(QWidget):
             directory, step_description, step_id, show_status_message, camera_was_on
         )
 
-        _resolution = (
+        _stream_resolution = (
             _current_fmt.resolution().width(),
             _current_fmt.resolution().height(),
         )
+        _resolution = fit_recording_resolution(*_stream_resolution)
+
+        if _resolution != _stream_resolution:
+            logger.info(
+                f"Recording {_stream_resolution[0]}x{_stream_resolution[1]} stream "
+                f"at {_resolution[0]}x{_resolution[1]} (capped at full HD)"
+            )
 
         # Rebuild from current preferences so backend/container/bitrate
         # changes apply without a restart, with the bitrate class matched
