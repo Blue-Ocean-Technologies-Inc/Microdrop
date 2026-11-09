@@ -8,14 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Tools -> Touch Assist menu: three independent checkbox
+"""The Tools -> Touch Assist menu: four independent checkbox
 actions, one per floating tool. No mode switch and no detection —
 the user decides what is on screen."""
+
+# Enthought library imports.
 from pyface.action.api import Action
 from pyface.tasks.action.api import SMenu
 from traits.api import Str
 
-from .consts import PKG, TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
+# Local imports.
+from .consts import PKG, TOOL_DPAD, TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
 from .manager import touch_assist_manager
 
 
@@ -38,11 +41,18 @@ def touch_assist_menu():
     """The Touch Assist submenu, built fresh per menu bar (pyface
     actions bind to the window that renders them)."""
     return SMenu(
-        TouchAssistAction(id=f"{PKG}.virtual_numpad",
-                          name="Virtual &Numpad", tool=TOOL_NUMPAD),
-        TouchAssistAction(id=f"{PKG}.virtual_keyboard",
-                          name="Virtual &Keyboard", tool=TOOL_KEYBOARD),
-        TouchAssistAction(id=f"{PKG}.virtual_mouse",
-                          name="Virtual &Mouse", tool=TOOL_MOUSE),
-        id="TouchAssist", name="Touch &Assist",
+        TouchAssistAction(
+            id=f"{PKG}.virtual_numpad", name="Virtual &Numpad", tool=TOOL_NUMPAD
+        ),
+        TouchAssistAction(
+            id=f"{PKG}.virtual_keyboard", name="Virtual &Keyboard", tool=TOOL_KEYBOARD
+        ),
+        TouchAssistAction(
+            id=f"{PKG}.virtual_dpad", name="Virtual &D-pad", tool=TOOL_DPAD
+        ),
+        TouchAssistAction(
+            id=f"{PKG}.virtual_mouse", name="Virtual &Mouse", tool=TOOL_MOUSE
+        ),
+        id="TouchAssist",
+        name="Touch &Assist",
     )
