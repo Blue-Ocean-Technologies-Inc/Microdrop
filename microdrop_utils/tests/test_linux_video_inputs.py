@@ -20,6 +20,7 @@ from types import SimpleNamespace
 
 # Microdrop utils imports.
 import microdrop_utils.v4l2_fps_getter as v4l2
+from microdrop_utils.libcamera_sensor_modes import SensorMode
 
 LIBCAMERA_IMX708 = "/base/axi/pcie@1000120000/rp1/i2c@80000/imx708@1a"
 
@@ -86,6 +87,14 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
     monkeypatch.setattr(v4l2, "get_v4l2_all_fps", lambda device_path: {})
     monkeypatch.setattr(v4l2, "find_v4l2_focus_subdevice", lambda: "/dev/v4l-subdev3")
     monkeypatch.setattr(v4l2, "read_lens_map", lambda: ((0.0, 420), (35.0, 920)))
+    monkeypatch.setattr(
+        v4l2,
+        "sensor_modes_for_device",
+        lambda camera_id: [
+            SensorMode(1536, 864, 120.13),
+            SensorMode(2304, 1296, 56.03),
+        ],
+    )
 
     cameras = v4l2.get_linux_video_inputs()
 
@@ -104,3 +113,6 @@ def test_linux_video_inputs_hide_internal_nodes_and_pair_v4l2_cameras(monkeypatc
         ((0.0, 420), (35.0, 920)),
         (),
     ]
+    # The libcamera camera's fps come from its sensor modes, for any size.
+    assert cameras[0].get_fps(1920, 1080) == 56.03
+    assert cameras[1].get_fps(1920, 1080) == 0.0

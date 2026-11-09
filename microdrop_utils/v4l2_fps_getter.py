@@ -19,6 +19,10 @@ import subprocess
 from pyface.qt.QtMultimedia import QCameraDevice, QMediaDevices
 
 # Microdrop utils imports.
+from microdrop_utils.libcamera_sensor_modes import (
+    libcamera_fps_for,
+    sensor_modes_for_device,
+)
 from microdrop_utils.libcamera_tuning import read_lens_map
 
 os_name = platform.system()
@@ -356,15 +360,22 @@ def is_pi_internal_video_node(name: str) -> bool:
     return any(node_name in name for node_name in PI_INTERNAL_VIDEO_NODE_NAMES)
 
 
+def libcamera_camera_id(camera_device) -> str:
+    """A libcamera QCameraDevice's libcamera camera id: whichever of its id
+    and description is the device-tree path, else its id."""
+    camera_id = bytes(camera_device.id()).decode(errors="replace")
+
+    for name in (camera_id, camera_device.description()):
+        if name.startswith(LIBCAMERA_ID_PREFIX):
+            return name
+
+    return camera_id
+
+
 def is_libcamera_device(camera_device) -> bool:
     """Whether a QCameraDevice is served by libcamera (a Raspberry Pi CSI
     camera), which has no ``/dev/videoN`` node of its own."""
-    camera_id = bytes(camera_device.id()).decode(errors="replace")
-
-    return any(
-        name.startswith(LIBCAMERA_ID_PREFIX)
-        for name in (camera_device.description(), camera_id)
-    )
+    return libcamera_camera_id(camera_device).startswith(LIBCAMERA_ID_PREFIX)
 
 
 def get_real_linux_nodes() -> list[int]:
@@ -416,7 +427,8 @@ class LinuxCameraDeviceContainer:
 
     On init, queries V4L2 for the real fps values at every supported
     resolution.  Use ``get_fps(width, height)`` to look up the max fps
-    for a specific resolution.
+    for a specific resolution. A libcamera device has no node to query;
+    its fps come from its sensor modes instead (see libcamera_sensor_modes).
 
     On non-Linux platforms ``linux_node_id`` is ``None``, ``fps_map`` is
     empty, and the camera behaves identically to a regular ``QCamera``.
@@ -428,6 +440,7 @@ class LinuxCameraDeviceContainer:
         linux_node_id=None,
         focus_device_path=None,
         focus_lens_map=(),
+        sensor_modes=(),
     ):
         self.camera_device = camera_device
         self.linux_node_id = linux_node_id
@@ -439,6 +452,10 @@ class LinuxCameraDeviceContainer:
         # A libcamera lens's calibration from the sensor's tuning file
         # (see libcamera_tuning.lens_map_from_tuning); () when unknown.
         self.focus_lens_map = focus_lens_map
+
+        # A libcamera camera's sensor modes, which answer get_fps for any
+        # output size; () for a V4L2 camera.
+        self.sensor_modes = sensor_modes
 
         # {(width, height): [fps, ...]} — populated from V4L2 on Linux
         if self.device_path:
@@ -455,7 +472,11 @@ class LinuxCameraDeviceContainer:
 
     def get_fps(self, width: int, height: int) -> float:
         """Return the max fps for a resolution, or 0.0 if unknown."""
+        if self.sensor_modes and not self.fps_map:
+            return libcamera_fps_for(width, height, self.sensor_modes)
+
         fps_list = self.fps_map.get((width, height), [])
+
         return max(fps_list) if fps_list else 0.0
 
 
@@ -470,7 +491,8 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
     real nodes pair by index with the remaining (V4L2) cameras only; their
     focus is driven through the lens sub-device instead (see
     find_v4l2_focus_subdevice), calibrated by the sensor's tuning file
-    (see libcamera_tuning.read_lens_map).
+    (see libcamera_tuning.read_lens_map), and their fps come from the
+    sensor's modes (see libcamera_sensor_modes.sensor_modes_for_device).
     """
     qt_cameras = [
         cam_device
@@ -483,10 +505,12 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
 
     for cam_device in qt_cameras:
         focus_lens_map = ()
+        sensor_modes = ()
 
         if is_libcamera_device(cam_device):
             node_id = None
             focus_device_path = find_v4l2_focus_subdevice()
+            sensor_modes = sensor_modes_for_device(libcamera_camera_id(cam_device))
 
             if focus_device_path is not None:
                 focus_lens_map = read_lens_map()
@@ -496,7 +520,7 @@ def get_linux_video_inputs() -> list[LinuxCameraDeviceContainer]:
 
         cameras.append(
             LinuxCameraDeviceContainer(
-                cam_device, node_id, focus_device_path, focus_lens_map
+                cam_device, node_id, focus_device_path, focus_lens_map, sensor_modes
             )
         )
 

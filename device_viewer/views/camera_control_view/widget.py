@@ -551,7 +551,8 @@ class CameraControlWidget(QWidget):
         On most platforms Qt's QCameraFormat.maxFrameRate() returns the correct
         value.  On Linux, however, it often reports 0 because the GStreamer
         backend does not populate this field.  In that case we fall back to
-        V4L2 data stored in the LinuxCameraDeviceContainer for this camera.
+        V4L2 data stored in the LinuxCameraDeviceContainer for this camera
+        (for a libcamera camera, its sensor modes).
 
         Args:
             w: Resolution width (used when ``fmt`` is not provided).
@@ -1048,7 +1049,12 @@ class CameraControlWidget(QWidget):
         _current_fmt = self.combo_resolutions.currentData()
         fps = self._get_camera_resolution_max_framerate(fmt=_current_fmt)
 
-        if not self.controller.recording_frame_rate_supported(fps):
+        # An unknown rate is no reason to refuse: the recorders fall back to
+        # a default or the camera's delivery rate.
+        if not fps:
+            logger.warning("Camera frame rate unknown; recording anyway")
+
+        elif not self.controller.recording_frame_rate_supported(fps):
             disclaimer(
                 parent=None,
                 title="Recording Not Supported",
