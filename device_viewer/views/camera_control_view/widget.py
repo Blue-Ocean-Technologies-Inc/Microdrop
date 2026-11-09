@@ -771,9 +771,13 @@ class CameraControlWidget(QWidget):
         self.combo_resolutions.blockSignals(False)
 
         if labels:
-            self.combo_resolutions.setCurrentIndex(
-                self.controller.choose_resolution_index(labels)
-            )
+            # Restored, not picked: apply the format without the signal, so
+            # the high-resolution notice cannot interrupt start-up.
+            index = self.controller.choose_resolution_index(labels)
+            self.combo_resolutions.blockSignals(True)
+            self.combo_resolutions.setCurrentIndex(index)
+            self.combo_resolutions.blockSignals(False)
+            self.on_resolution_changed(index, interactive=False)
         elif self.controller.strict_format_mode(allow_strict_mode, libcamera):
             # No formats survived strict filtering — retry without it
             warning_message = (
@@ -786,15 +790,6 @@ class CameraControlWidget(QWidget):
                 warning(None, warning_message)
 
             self.populate_resolutions(allow_strict_mode=False)
-
-            return
-
-        # Ensure the model always has a resolution set (e.g. when the combo
-        # index didn't change and on_resolution_changed was never triggered).
-        if not self.model.camera_perspective.camera_resolution:
-            self.on_resolution_changed(
-                self.combo_resolutions.currentIndex(), interactive=False
-            )
 
     @staticmethod
     def _resolution_name(fmt):
