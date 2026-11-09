@@ -60,7 +60,11 @@ from microdrop_utils.v4l2_fps_getter import (
 )
 
 # Local imports.
-from ...consts import CAMERA_PREVIEW_MAX_FPS, NATIVE_CAMERA_PROPERTIES_EXCLUDED
+from ...consts import (
+    CAMERA_PREVIEW_MAX_FPS,
+    NATIVE_CAMERA_PROPERTIES_EXCLUDED,
+    PENDING_FORMAT_DELAY_MS,
+)
 from ...interfaces.i_camera_device import ICameraDevice
 
 # Logger import.
@@ -117,7 +121,7 @@ class QtCameraDevice(HasTraits):
     _rebuild_format = Instance(QCameraFormat)
 
     #: A format chosen while a libcamera camera was not streaming, applied
-    #: in flight once it is (see forward_preview_frame).
+    #: in flight once it is (see _start_camera).
     _pending_format = Instance(QCameraFormat)
 
     #: Whether the rebuilt camera starts: a start was requested meanwhile.
@@ -229,7 +233,22 @@ class QtCameraDevice(HasTraits):
 
             return
 
+        self._start_camera()
+
+    def _start_camera(self):
+        """Start the camera; a held libcamera format follows once the
+        stream has settled (see _apply_pending_format)."""
         self.camera.start()
+
+        # Armed from the start, not from a frame: a camera started on a
+        # format its output cannot play never delivers one.
+        if self._pending_format is not None:
+            camera = self.camera
+            QTimer.singleShot(
+                PENDING_FORMAT_DELAY_MS,
+                self.video_item,
+                lambda: self._apply_pending_format(camera),
+            )
 
     def stop(self):
         if self.rebuild_pending:
@@ -287,7 +306,7 @@ class QtCameraDevice(HasTraits):
             self.session.setCamera(self.camera)
 
             if self._start_after_rebuild:
-                self.camera.start()
+                self._start_camera()
 
         self._rebuild_format = None
         self._start_after_rebuild = False
@@ -344,6 +363,20 @@ class QtCameraDevice(HasTraits):
 
         self._pending_format = camera_format
 
+    def _apply_pending_format(self, camera):
+        """Apply the held format once ``camera``'s stream has settled, as a
+        user switching resolution while streaming would."""
+        # A stop meanwhile replaced the camera or left it off: the format
+        # stays held for the next start.
+        if self._pending_format is None or camera is not self.camera:
+            return
+
+        if not camera.isActive():
+            return
+
+        camera.setCameraFormat(self._pending_format)
+        self._pending_format = None
+
     # ------------------------------------------------------------------ #
     # Preview                                                              #
     # ------------------------------------------------------------------ #
@@ -360,11 +393,6 @@ class QtCameraDevice(HasTraits):
         return True
 
     def forward_preview_frame(self, frame):
-        # Runs on the GUI thread for every frame of a streaming camera.
-        if self._pending_format is not None and self.camera.isActive():
-            self.camera.setCameraFormat(self._pending_format)
-            self._pending_format = None
-
         if self._preview_frame_due():
             self.video_item.videoSink().setVideoFrame(frame)
 

@@ -404,6 +404,16 @@ CAMERA_FEED_START_TIMEOUT_MS = 3000
 # recorder taps the capture session's own sink at full rate).
 CAMERA_PREVIEW_MAX_FPS = 20
 
+# Delay after a libcamera camera starts streaming before a format chosen
+# while it was off is applied: libcamerasrc aborts on a format change
+# before its stream has settled.
+PENDING_FORMAT_DELAY_MS = 2000
+
+# Smallest (width, height) offered in the resolution combo: libcamera
+# advertises placeholder sizes such as 32x32 that the GStreamer video
+# output cannot start on.
+CAMERA_MIN_RESOLUTION = (320, 240)
+
 # Cameras whose descriptions contain one of these never get the native
 # (DirectShow/v4l2) camera properties: the fluorescence plugin drives ZWO ASI
 # cameras through their own SDK and dock pane, and ZWO's optional DirectShow
