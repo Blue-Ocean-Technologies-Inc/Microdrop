@@ -38,6 +38,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     warning,
 )
+from microdrop_application.helpers import is_advanced_mode
 
 # Microdrop style imports.
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
@@ -1083,6 +1084,11 @@ class CameraControlWidget(QWidget):
             _current_fmt.resolution().height(),
         )
         _resolution = fit_recording_resolution(*_stream_resolution)
+
+        # Advanced Mode lifts the full-HD cap: the operator takes on the file
+        # size and memory cost knowingly.
+        if is_advanced_mode():
+            _resolution = _stream_resolution
 
         if _resolution != _stream_resolution:
             logger.info(
