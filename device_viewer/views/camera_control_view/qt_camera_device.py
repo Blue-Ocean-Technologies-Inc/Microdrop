@@ -17,7 +17,8 @@ controller. The controller drives them through ICameraDevice only.
 
 Where Qt has no API for a camera's controls, this adapter fills in from the
 platform: lens focus over DirectShow on Windows, and image controls
-(brightness, contrast, ...) over DirectShow or v4l2.
+(brightness, contrast, ...) over DirectShow, v4l2, or a Raspberry Pi CSI
+camera's libcamerasrc element.
 
 A libcamera camera (a Raspberry Pi CSI camera) needs that no QVideoFrame of
 its previous stream exists when the next QCamera starts: libcamerasrc's
@@ -46,8 +47,10 @@ from pyface.qt.QtWidgets import QApplication
 from traits.api import Bool, Callable, Float, HasTraits, Instance, List, provides
 
 # Microdrop utils imports.
+from microdrop_utils import libcamera_gst_element
 from microdrop_utils.camera_image_controls import (
     ICameraImageControls,
+    LibcameraImageControls,
     V4l2ImageControls,
 )
 from microdrop_utils.directshow_camera_controls import (
@@ -55,6 +58,7 @@ from microdrop_utils.directshow_camera_controls import (
     open_directshow_camera_controls,
 )
 from microdrop_utils.v4l2_fps_getter import (
+    LIBCAMERA_ID_PREFIX,
     LinuxCameraDeviceContainer,
     is_libcamera_device,
 )
@@ -73,6 +77,10 @@ from ...interfaces.i_camera_device import ICameraDevice
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+# Before any QCamera exists, so the libcamerasrc Qt builds for a Pi CSI
+# camera is seen; a no-op off Linux and Qt's GStreamer backend.
+libcamera_gst_element.install_libcamera_element_hook()
 
 
 @provides(ICameraDevice)
@@ -213,6 +221,10 @@ class QtCameraDevice(HasTraits):
 
         if directshow is not None:
             self.image_controls = directshow
+        elif libcamera_gst_element.is_available() and description.startswith(
+            LIBCAMERA_ID_PREFIX
+        ):
+            self.image_controls = LibcameraImageControls()
         elif isinstance(selected_device, LinuxCameraDeviceContainer) and (
             selected_device.device_path
         ):
