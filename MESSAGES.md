@@ -376,21 +376,16 @@ The magnet's engage height is `z_up` (µm), the first int32 of the motor board's
 - Read / Write / Preset to flash buttons on `PortableDropbotSettingsPreferencesPane` publish the three requests; Write sends the field's unapplied value, and Preset asks for confirmation first.
 - The plugin owns `MAGNET_ENGAGE_LISTENER` (subscribed to `MAGNET_ENGAGE_UPDATED`) for the whole session: `PortableDropbotMagnetEngageMessageHandler`, made in `start()` and torn down in `stop()`, applies each reply to the plugin's `MagnetEngageModel` on the GUI thread. The plugin hands that model to every pane it contributes, so the status line updates live and a successful read fills the pane's detached copy of `magnet_engage_mm` (an unapplied edit until Apply, never the preferences node).
 
-### Portable DropBot droplet detection: dry-chip baseline + DETECT_DROPLETS
+### Portable DropBot droplet detection: absolute-threshold DETECT_DROPLETS
 
-The portable driver's `calibrate_baseline()` measures every channel's capacitance (pF) with the chip dry; `detect_drops()` then flags channels reading at least `DROPLET_DETECTION_THRESHOLD_PF` (5 pF) above that baseline. The baseline lives on the driver session, so a reconnect discards it.
+The portable answers `DETECT_DROPLETS` with an absolute-threshold scan, as the DropBot does: the driver's `measure_capacitance()` reads every requested channel's capacitance (pF), and channels reading at least `DROPLET_DETECTION_THRESHOLD_PF` (10 pF, the DropBot's default) count as holding liquid. There is no dry-chip baseline to calibrate.
 
 **Topics**
-- `CALIBRATE_DROPLET_BASELINE = "portable_dropbot/requests/calibrate_droplet_baseline"` — `CalibrateDropletBaselineRequest {switch_time_ms: int > 0}`, published through `calibrate_droplet_baseline_publisher`.
-- `DROPLET_BASELINE_UPDATED = "portable_dropbot/signals/droplet_baseline_updated"` — `DropletBaselineUpdated {channels: int, error: str}`, published through `droplet_baseline_updated_publisher`; `error` empty means it succeeded.
 - `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = all); reply `{"success", "detected_channels", "error"}`.
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_droplet_detection_mixin_service.py`)**
-- `on_calibrate_droplet_baseline_request` runs `calibrate_baseline`; `on_detect_droplets_request` runs `detect_drops`, or replies with an error when the session has no baseline yet.
-- Both scans switch every channel and drive HV themselves (on a 200-channel board HV is enabled for the scan), so afterwards the service re-applies V/F and, in realtime mode, HV plus the last requested electrodes (`LAST_CHANNEL_STATES_REQUESTED_KEY`); outside realtime mode it clears the electrodes and disables HV.
-
-**Frontend (`portable_dropbot_status_and_controls`, main status pane)**
-- The Droplet Baseline row's Calibrate button publishes the request and shows "Calibrating..."; `_on_droplet_baseline_updated_triggered` shows the channel count and time, or the error. A disconnect resets it to "Not calibrated".
+- `on_detect_droplets_request` runs `measure_capacitance` and replies with the sorted channels at or above the threshold; an empty scan result replies with an error.
+- The scan switches every channel and drives HV itself (on a 200-channel board HV is enabled for the scan), so afterwards the service re-applies V/F and, in realtime mode, HV plus the last requested electrodes (`LAST_CHANNEL_STATES_REQUESTED_KEY`); outside realtime mode it clears the electrodes and disables HV.
 
 ### Portable DropBot protocol columns: magnet + heater step execution
 

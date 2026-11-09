@@ -27,7 +27,6 @@ from portable_dropbot_controller.consts import (
     SET_LIGHT_ON,
     SET_RGB_LIGHT,
     SET_VOLTAGE,
-    calibrate_droplet_baseline_publisher,
     move_tray_publisher,
 )
 from template_status_and_controls.base_controller import (
@@ -40,9 +39,6 @@ from template_status_and_controls.droplet_readouts import (
 # Microdrop utils imports.
 from microdrop_utils.decorators import debounce
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
-# Local imports.
-from ..consts import DROPLET_BASELINE_CALIBRATING
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -66,11 +62,6 @@ class PortableDropbotStatusAndControlsController(
     @observe("model:refresh_ports_button")
     def _on_refresh_ports(self, event):
         publish_message(topic=REFRESH_PORTS, message="")
-
-    @observe("model:calibrate_droplet_baseline_button")
-    def _on_calibrate_droplet_baseline(self, event):
-        self.model.droplet_baseline_display = DROPLET_BASELINE_CALIBRATING
-        calibrate_droplet_baseline_publisher.publish({})
 
     @observe("model:connect_toggle")
     def _on_connect_toggle_changed(self, event):

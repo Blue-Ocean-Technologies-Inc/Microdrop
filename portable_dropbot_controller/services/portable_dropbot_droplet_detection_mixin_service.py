@@ -8,15 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Droplet detection: a per-channel capacitance baseline measured on a dry
-chip, then the shared DETECT_DROPLETS request answered by comparing a fresh
-scan against it (the driver's calibrate_baseline / detect_drops)."""
+"""Droplet detection: the shared DETECT_DROPLETS request answered from a
+per-channel capacitance scan, flagging every channel that reads at least an
+absolute threshold, as the DropBot does."""
 
 # Standard library imports.
 import json
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Str, observe, provides
+from traits.api import HasTraits, Str, provides
 
 # Microdrop package imports.
 from electrode_controller.consts import ElectrodeChannelsRequest
@@ -31,8 +31,6 @@ from ..consts import (
     DROPLET_SCAN_SWITCH_TIME_MS,
     DROPLETS_DETECTED,
     LAST_CHANNEL_STATES_REQUESTED_KEY,
-    CalibrateDropletBaselineRequest,
-    droplet_baseline_updated_publisher,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -53,76 +51,41 @@ SCAN_FAILED_MESSAGE = "The capacitance scan failed; see the log."
 
 @provides(IPortableDropbotControlMixinService)
 class PortableDropbotDropletDetectionMixinService(HasTraits):
-    """Droplet detection against a dry-chip baseline. The baseline lives on
-    the driver session, so a reconnect discards it."""
+    """Droplet detection against an absolute capacitance threshold, with no
+    dry-chip baseline to calibrate first."""
 
     id = Str("portable_dropbot_droplet_detection_mixin_service")
     name = Str("Portable Dropbot Droplet Detection Mixin")
-
-    #: Whether the current session holds a droplet baseline.
-    _has_droplet_baseline = Bool(False)
-
-    @observe("proxy")
-    def _forget_droplet_baseline(self, event):
-        """A new (or no) driver session has no baseline."""
-        self._has_droplet_baseline = False
 
     # ------------------------------------------------------------------ #
     # Requests                                                             #
     # ------------------------------------------------------------------ #
 
-    def on_calibrate_droplet_baseline_request(self, message):
-        """Measure every channel, with the chip dry, as the reference that
-        droplet detection compares against."""
-        request = CalibrateDropletBaselineRequest.model_validate_json(str(message))
-        ok, baseline = self._run_channel_scan(
-            "droplet baseline",
-            lambda: self.proxy.calibrate_baseline(
-                switch_time_ms=request.switch_time_ms
-            ),
-        )
-
-        if not ok or not baseline:
-            logger.warning("Portable Dropbot droplet baseline FAILED")
-            droplet_baseline_updated_publisher.publish({"error": SCAN_FAILED_MESSAGE})
-
-            return
-
-        self._has_droplet_baseline = True
-        droplet_baseline_updated_publisher.publish({"channels": len(baseline)})
-        logger.info(f"Portable Dropbot droplet baseline: {len(baseline)} channels")
-
     def on_detect_droplets_request(self, message):
         """Answer DETECT_DROPLETS as the DropBot does: the requested
         channels (every channel when the list is empty) that read at least
-        DROPLET_DETECTION_THRESHOLD_PF above their baseline."""
-
-        if not self._has_droplet_baseline:
-            self._publish_droplets_detected(
-                error="No droplet baseline: calibrate it from the status pane "
-                "with the chip dry."
-            )
-
-            return
-
+        DROPLET_DETECTION_THRESHOLD_PF."""
         channels = json.loads(str(message) or "[]")
-        ok, drops = self._run_channel_scan(
+        ok, capacitances = self._run_channel_scan(
             "droplet detection",
-            lambda: self.proxy.detect_drops(
+            lambda: self.proxy.measure_capacitance(
                 channels=channels or None,
-                threshold_pf=DROPLET_DETECTION_THRESHOLD_PF,
                 switch_time_ms=DROPLET_SCAN_SWITCH_TIME_MS,
             ),
         )
 
         # An empty result means the scan returned nothing, not "no liquid":
-        # every scanned channel gets an entry either way.
-        if not ok or not drops:
+        # every scanned channel gets a reading either way.
+        if not ok or not capacitances:
             self._publish_droplets_detected(error=SCAN_FAILED_MESSAGE)
 
             return
 
-        detected = sorted(channel for channel, has_drop in drops.items() if has_drop)
+        detected = sorted(
+            channel
+            for channel, capacitance in capacitances.items()
+            if capacitance >= DROPLET_DETECTION_THRESHOLD_PF
+        )
         self._publish_droplets_detected(detected_channels=detected)
         logger.info(f"Portable Dropbot droplets detected on channels {detected}")
 
