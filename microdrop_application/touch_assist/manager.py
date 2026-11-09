@@ -12,17 +12,20 @@
 first show, shows/hides on menu toggles, and pushes a widget's own
 close button back into the menu checkbox so the two never disagree.
 GUI-thread only; no Redis or dramatiq involvement."""
+
+# Enthought library imports.
 from traits.api import Dict, HasTraits, Str
 
-from logger.logger_service import get_logger
+# Local imports.
+from .consts import TOOL_DPAD, TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
 
-from .consts import TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 class TouchAssistManager(HasTraits):
-
     #: tool name -> the created widget (absent until first shown).
     _widgets = Dict(Str)
 
@@ -46,8 +49,7 @@ class TouchAssistManager(HasTraits):
         widget.setVisible(visible)
         if visible:
             widget.raise_()
-        logger.info(f"Touch Assist {tool}: "
-                    f"{'shown' if visible else 'hidden'}")
+        logger.info(f"Touch Assist {tool}: {'shown' if visible else 'hidden'}")
 
     def widget_closed(self, tool):
         """The widget's own close button: mirror it into the menu."""
@@ -58,11 +60,15 @@ class TouchAssistManager(HasTraits):
     def _create(self, tool):
         # Imported here so headless code paths (backend, tests) never
         # pay for Qt widget imports they will not show.
-        from .input_pads import VirtualKeyboard, VirtualNumpad
+        from .input_pads import VirtualDpad, VirtualKeyboard, VirtualNumpad
         from .virtual_mouse import VirtualMouse
-        factories = {TOOL_NUMPAD: VirtualNumpad,
-                     TOOL_KEYBOARD: VirtualKeyboard,
-                     TOOL_MOUSE: VirtualMouse}
+
+        factories = {
+            TOOL_NUMPAD: VirtualNumpad,
+            TOOL_KEYBOARD: VirtualKeyboard,
+            TOOL_DPAD: VirtualDpad,
+            TOOL_MOUSE: VirtualMouse,
+        }
         factory = factories.get(tool)
         if factory is None:
             logger.warning(f"Unknown Touch Assist tool: {tool}")
