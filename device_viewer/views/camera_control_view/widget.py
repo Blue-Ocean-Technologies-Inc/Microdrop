@@ -704,10 +704,11 @@ class CameraControlWidget(QWidget):
         One entry per resolution, best first (see
         CameraController.rank_formats); under the controller's strict format
         mode, if no format matches, retry once without it. By default only
-        the common sizes (COMMON_RESOLUTION_NAMES) are listed, named, with a
-        last entry that switches to the full list; the full list ends with
-        the entry that switches back. Then restore the saved resolution,
-        falling back to the middle entry.
+        the common sizes (COMMON_RESOLUTION_NAMES) are listed, named, plus
+        the saved size when it is not one of them, with a last entry that
+        switches to the full list; the full list ends with the entry that
+        switches back. Then restore the saved resolution, falling back to
+        the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -741,23 +742,22 @@ class CameraControlWidget(QWidget):
                 format_summaries, allow_strict_mode, libcamera
             )
         ]
-        common = [fmt for fmt in ranked if self._resolution_name(fmt)]
-        all_labels = [self._resolution_label(fmt) for fmt in ranked]
-        common_labels = [self._resolution_label(fmt) for fmt in common]
         saved_resolution = self.preferences.resolution
 
-        # The full list when asked for, when the camera has none of the
-        # common sizes, or when the saved resolution is only in there.
-        show_all = (
-            self._show_all_resolutions
-            or not common
-            or (
-                saved_resolution in all_labels and saved_resolution not in common_labels
-            )
-        )
-        labels = all_labels if show_all else common_labels
+        # The condensed list: the common sizes, plus the saved size when it is
+        # not one of them, so a saved pick still restores. The full list only
+        # when asked for or when the camera has none of the common sizes.
+        common = [
+            fmt
+            for fmt in ranked
+            if self._resolution_name(fmt)
+            or self._resolution_label(fmt) == saved_resolution
+        ]
+        show_all = self._show_all_resolutions or not common
+        listed = ranked if show_all else common
+        labels = [self._resolution_label(fmt) for fmt in listed]
 
-        for fmt, label in zip(ranked if show_all else common, labels):
+        for fmt, label in zip(listed, labels):
             self.combo_resolutions.addItem(label, userData=fmt)
 
         if ranked:
