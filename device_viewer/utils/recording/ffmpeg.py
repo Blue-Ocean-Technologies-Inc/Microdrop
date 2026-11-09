@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 
 # Third-party imports.
 import numpy as np
@@ -31,14 +32,29 @@ from device_viewer.consts import FFMPEG_DEFAULT_CRF, FFMPEG_PRESETS, FFMPEG_VIDE
 from .base import VideoRecorderBase
 
 # Logger import.
-from logger.logger_service import debug_throttled, get_logger
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 #: Bound on frames buffered between the GUI thread and the raw recorder's
-#: ffmpeg encoder (~2 s at 30 fps); when the encoder falls behind, new
-#: frames are dropped so the GUI thread never stalls.
-RAW_RECORDER_QUEUE_MAX_FRAMES = 60
+#: ffmpeg encoder (~1/3 s at 30 fps); when the encoder falls behind, new
+#: frames are dropped so the GUI thread never stalls. Kept short because
+#: ffmpeg stamps each frame when it reads it (RAW_RECORDER_TIMESTAMP_ARGS):
+#: a backlog drained in a burst would bunch those stamps together.
+RAW_RECORDER_QUEUE_MAX_FRAMES = 10
+
+#: Input options stamping each raw frame with the wall-clock time ffmpeg
+#: reads it from the pipe. A camera's declared rate is only its maximum
+#: (a Pi camera at 1920x1080 declares 56 fps and delivers ~26 in room
+#: light), so timing by it would play recordings back too fast.
+RAW_RECORDER_TIMESTAMP_ARGS = ("-use_wallclock_as_timestamps", "1")
+
+#: Output options keeping those stamps (a variable-frame-rate file).
+#: ``vfr`` rather than ``passthrough``: the stamps are quantised to the
+#: rawvideo time base (1/fps), so two frames read in one tick share a stamp,
+#: which passthrough hands on to the muxer and ``vfr`` drops. ``-fps_mode``
+#: needs ffmpeg >= 5.1 (the Pi has 7.1, the pixi env 8.0).
+RAW_RECORDER_FPS_MODE_ARGS = ("-fps_mode", "vfr")
 
 
 #: QVideoFrameFormat.PixelFormat -> ffmpeg rawvideo pix_fmt for the camera
@@ -142,6 +158,11 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         #: Requested output (width, height); larger frames are scaled down.
         self._resolution = None
         self._fps = 30.0
+        #: Per recording: frames written to ffmpeg, frames dropped because
+        #: the encoder fell behind, and when the first frame arrived.
+        self._frames_written = 0
+        self._frames_dropped = 0
+        self._first_frame_time = None
 
     @property
     def is_recording(self) -> bool:
@@ -187,6 +208,9 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         self._process = None
         self._layout = None
         self._queue = queue.Queue(maxsize=RAW_RECORDER_QUEUE_MAX_FRAMES)
+        self._frames_written = 0
+        self._frames_dropped = 0
+        self._first_frame_time = None
 
         self._recording_active = True
         self._frame_sink.videoFrameChanged.connect(self._on_frame_arrived)
@@ -205,11 +229,8 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             return
 
         if self._queue.full():
-            debug_throttled(
-                logger,
-                "raw_recorder_queue_full",
-                "Raw recorder encoder behind; dropping frame",
-            )
+            self._frames_dropped += 1
+
             return
 
         if not frame.map(QVideoFrame.MapMode.ReadOnly):
@@ -240,11 +261,7 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
         try:
             self._queue.put_nowait(payload)
         except queue.Full:
-            debug_throttled(
-                logger,
-                "raw_recorder_queue_full",
-                "Raw recorder encoder behind; dropping frame",
-            )
+            self._frames_dropped += 1
 
     def _disconnect_frame_sink(self):
         try:
@@ -264,6 +281,7 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             )
             return False
 
+        self._first_frame_time = time.monotonic()
         width, height = frame.width(), frame.height()
         self._layout = _plane_layout(pix_fmt, width, height)
         self._frame_payload_bytes = sum(
@@ -297,11 +315,15 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             pix_fmt,
             "-s",
             f"{width}x{height}",
-            "-r",
+            # The rawvideo demuxer's nominal rate; unlike an input -r, it
+            # does not override the wall-clock stamps.
+            "-framerate",
             f"{self._fps}",
+            *RAW_RECORDER_TIMESTAMP_ARGS,
             "-i",
             "-",
             *scale_args,
+            *RAW_RECORDER_FPS_MODE_ARGS,
             "-c:v",
             self.video_codec,
             "-pix_fmt",
@@ -365,11 +387,14 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
                 logger.info("Raw recorder ffmpeg pipe closed")
                 break
 
+            self._frames_written += 1
+
     def stop(self):
         if not self.is_recording:
             return
 
         self._recording_active = False
+        stop_time = time.monotonic()
 
         if self._frame_sink:
             self._disconnect_frame_sink()
@@ -386,5 +411,23 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
             logger.warning("Raw recording stopped with no frames")
             self.recording_stopped.emit("")
 
-        logger.info(f"Raw recording stopped: {path}")
+        if self._frames_dropped:
+            logger.warning(
+                f"Raw recorder dropped {self._frames_dropped} frames: the encoder "
+                f"fell behind"
+            )
+
+        logger.info(f"Raw recording stopped: {path}{self._delivery_summary(stop_time)}")
         self._output_path = None
+
+    def _delivery_summary(self, stop_time):
+        """`` — N frames in S s (R fps delivered)`` for the stop log line;
+        "" when no frame arrived."""
+        if self._first_frame_time is None:
+            return ""
+
+        seconds = stop_time - self._first_frame_time
+        written = self._frames_written
+        rate = written / seconds if seconds > 0 else 0.0
+
+        return f" — {written} frames in {seconds:.1f} s ({rate:.1f} fps delivered)"
