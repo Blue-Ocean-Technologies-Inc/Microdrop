@@ -385,9 +385,6 @@ RECORDING_4K_MIN_HEIGHT = 1600  # frames at least this tall use the 4K classes
 RECORDING_60FPS_MIN_FPS = 45  # at least this fps uses the 60 fps classes
 #: Recording is refused for camera formats slower than this.
 MIN_RECORDING_FPS = 20
-#: Recordings are capped at full HD: larger streams downscale, so file size
-#: and memory stay bounded on the Pi.
-MAX_RECORDING_RESOLUTION = (1920, 1080)
 
 # ---------------------------------------------------------------------------
 # Camera preview

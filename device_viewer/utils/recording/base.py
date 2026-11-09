@@ -17,10 +17,7 @@ from pyface.qt.QtCore import QObject, Signal
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 
 # Microdrop package imports.
-from device_viewer.consts import (
-    MAX_RECORDING_RESOLUTION,
-    RECORDING_TRANSFORM_SIDECAR_SUFFIX,
-)
+from device_viewer.consts import RECORDING_TRANSFORM_SIDECAR_SUFFIX
 from device_viewer.models.media import MediaType
 from device_viewer.services.media_capture_cache import _cache_media_capture
 
@@ -31,21 +28,6 @@ from ..qt_geometry_serialization import qtransform_serialize
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-def fit_recording_resolution(width, height):
-    """The (width, height) a ``width`` x ``height`` stream records at: scaled
-    down to fit inside MAX_RECORDING_RESOLUTION with its aspect ratio kept
-    and both sides even (encoders need even sizes), or unchanged when it
-    already fits."""
-    max_width, max_height = MAX_RECORDING_RESOLUTION
-
-    if width <= max_width and height <= max_height:
-        return width, height
-
-    scale = min(max_width / width, max_height / height)
-
-    return 2 * round(width * scale / 2), 2 * round(height * scale / 2)
 
 
 class VideoRecorderBase(QObject):
