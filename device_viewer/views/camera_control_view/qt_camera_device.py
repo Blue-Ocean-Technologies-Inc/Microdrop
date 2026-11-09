@@ -45,7 +45,16 @@ from pyface.qt.QtMultimedia import (
 )
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import QApplication
-from traits.api import Bool, Callable, Float, HasTraits, Instance, List, provides
+from traits.api import (
+    Bool,
+    Callable,
+    Float,
+    HasTraits,
+    Instance,
+    List,
+    observe,
+    provides,
+)
 
 # Microdrop utils imports.
 from microdrop_utils import libcamera_gst_element
@@ -122,6 +131,10 @@ class QtCameraDevice(HasTraits):
     #: sink are replaced (see the module docstring).
     rebuild_pending = Bool(False)
 
+    #: While True (a recording is running), the restart that applies
+    #: libcamera image-control changes is deferred until the hold lifts.
+    hold_restarts = Bool(False)
+
     #: monotonic() time of the last frame forwarded to the display item.
     _last_preview_frame_time = Float(0.0)
 
@@ -149,6 +162,9 @@ class QtCameraDevice(HasTraits):
     #: Single-shot debounce of the restart that applies libcamera image
     #: control changes (see _schedule_control_restart).
     _control_restart_timer = Instance(QTimer)
+
+    #: A control restart was deferred by hold_restarts.
+    _restart_due = Bool(False)
 
     def traits_init(self):
         self._wire_session()
@@ -194,6 +210,8 @@ class QtCameraDevice(HasTraits):
 
     def unbind(self):
         self.device = None
+
+        self._restart_due = False
 
         if self._control_restart_timer is not None:
             self._control_restart_timer.stop()
@@ -615,9 +633,25 @@ class QtCameraDevice(HasTraits):
         """Stop and start the camera: the rebuilt libcamerasrc takes the
         stored control values as it starts."""
 
+        # A restart replaces the session and sink a recording writes from.
+        if self.hold_restarts:
+            self._restart_due = True
+
+            return
+
         if self.is_active():
             self.stop()
             self.start()
+
+    @observe("hold_restarts")
+    def _restart_after_hold(self, event):
+        """Run a control restart deferred while the hold was on."""
+
+        if self.hold_restarts or not self._restart_due:
+            return
+
+        self._restart_due = False
+        self._schedule_control_restart()
 
     def describe_image_control(self, name, value):
         return self.image_controls.describe(name, value)
