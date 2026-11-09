@@ -54,8 +54,11 @@ from microdrop_utils.v4l2_fps_getter import (
 from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
     CAMERA_MIN_RESOLUTION,
+    COMMON_RESOLUTION_NAMES,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
+    SHOW_ALL_RESOLUTIONS_LABEL,
+    SHOW_COMMON_RESOLUTIONS_LABEL,
 )
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
@@ -195,6 +198,9 @@ class CameraControlWidget(QWidget):
         self.combo_cameras = MarqueeComboBox()
         self.camera_label = QLabel("Camera:")
         self.combo_resolutions = MarqueeComboBox()
+        # Whether the combo lists every camera format or only the common
+        # sizes (see populate_resolutions).
+        self._show_all_resolutions = False
         self.resolution_label = QLabel("Resolution: ")
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)
@@ -696,8 +702,11 @@ class CameraControlWidget(QWidget):
 
         One entry per resolution, best first (see
         CameraController.rank_formats); under the controller's strict format
-        mode, if no format matches, retry once without it. Then restore the
-        saved resolution, falling back to the middle entry.
+        mode, if no format matches, retry once without it. By default only
+        the common sizes (COMMON_RESOLUTION_NAMES) are listed, named, with a
+        last entry that switches to the full list; the full list ends with
+        the entry that switches back. Then restore the saved resolution,
+        falling back to the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -725,23 +734,40 @@ class CameraControlWidget(QWidget):
             )
             for fmt in formats
         ]
+        ranked = [
+            formats[index]
+            for index in self.controller.rank_formats(
+                format_summaries, allow_strict_mode, libcamera
+            )
+        ]
+        common = [fmt for fmt in ranked if self._resolution_name(fmt)]
+        all_labels = [self._resolution_label(fmt) for fmt in ranked]
+        common_labels = [self._resolution_label(fmt) for fmt in common]
+        saved_resolution = self.preferences.resolution
 
-        for index in self.controller.rank_formats(
-            format_summaries, allow_strict_mode, libcamera
-        ):
-            fmt = formats[index]
-            w, h = fmt.resolution().width(), fmt.resolution().height()
-            fps = self._get_camera_resolution_max_framerate(fmt=fmt)
-            pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
-            label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+        # The full list when asked for, when the camera has none of the
+        # common sizes, or when the saved resolution is only in there.
+        show_all = (
+            self._show_all_resolutions
+            or not common
+            or (
+                saved_resolution in all_labels and saved_resolution not in common_labels
+            )
+        )
+        labels = all_labels if show_all else common_labels
+
+        for fmt, label in zip(ranked if show_all else common, labels):
             self.combo_resolutions.addItem(label, userData=fmt)
 
-        self.combo_resolutions.blockSignals(False)
+        if ranked:
+            self.combo_resolutions.addItem(
+                SHOW_COMMON_RESOLUTIONS_LABEL
+                if show_all
+                else SHOW_ALL_RESOLUTIONS_LABEL
+            )
 
-        labels = [
-            self.combo_resolutions.itemText(i)
-            for i in range(self.combo_resolutions.count())
-        ]
+        self._show_all_resolutions = show_all
+        self.combo_resolutions.blockSignals(False)
 
         if labels:
             self.combo_resolutions.setCurrentIndex(
@@ -767,11 +793,53 @@ class CameraControlWidget(QWidget):
         if not self.model.camera_perspective.camera_resolution:
             self.on_resolution_changed(self.combo_resolutions.currentIndex())
 
+    @staticmethod
+    def _resolution_name(fmt):
+        """The common name of a format's size ("FHD"), or None."""
+        return COMMON_RESOLUTION_NAMES.get(
+            (fmt.resolution().width(), fmt.resolution().height())
+        )
+
+    def _resolution_label(self, fmt):
+        """The combo label of a format: its common name when it has one,
+        then the size, pixel format and frame rate."""
+        w, h = fmt.resolution().width(), fmt.resolution().height()
+        fps = self._get_camera_resolution_max_framerate(fmt=fmt)
+        pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+        name = self._resolution_name(fmt)
+        size = f"{name} ({w}x{h})" if name else f"{w}x{h}"
+
+        return f"{size} [{pix_name}] @ {fps:.0f} fps"
+
+    def _toggle_resolution_list(self):
+        """Switch between the common and the full resolution list, keeping
+        the selected format."""
+        selected = self.model.resolution
+        self._show_all_resolutions = not self._show_all_resolutions
+        self.populate_resolutions()
+
+        for index in range(self.combo_resolutions.count()):
+            fmt = self.combo_resolutions.itemData(index)
+
+            if fmt is not None and (
+                (fmt.resolution().width(), fmt.resolution().height()) == selected
+            ):
+                self.combo_resolutions.setCurrentIndex(index)
+
+                return
+
     def on_resolution_changed(self, index):
         if self.combo_resolutions.count() == 0 or index < 0:
             return
 
         camera_format = self.combo_resolutions.itemData(index)
+
+        # The list-switching entry carries no format.
+        if camera_format is None:
+            self._toggle_resolution_list()
+
+            return
+
         self.camera_device.apply_format(camera_format)
 
         resolution = (
