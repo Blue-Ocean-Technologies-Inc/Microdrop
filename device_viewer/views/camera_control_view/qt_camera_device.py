@@ -18,21 +18,30 @@ controller. The controller drives them through ICameraDevice only.
 Where Qt has no API for a camera's controls, this adapter fills in from the
 platform: lens focus over DirectShow on Windows, and image controls
 (brightness, contrast, ...) over DirectShow or v4l2.
+
+A libcamera camera (a Raspberry Pi CSI camera) aborts the process when it is
+started again after a stop, with or without a format change in between, and
+when its session or sink outlive the stop. So its format changes are applied
+to the running camera, and a stop discards camera, session and sink on the
+next event-loop pass and builds a fresh stack for the next start.
 """
 
 # Standard library imports.
 import time
 
 # Enthought library imports.
+from pyface.qt.QtCore import QTimer
 from pyface.qt.QtMultimedia import (
     QCamera,
     QCameraDevice,
+    QCameraFormat,
     QMediaCaptureSession,
     QVideoFrame,
     QVideoSink,
 )
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
-from traits.api import Float, HasTraits, Instance, provides
+from pyface.qt.QtWidgets import QApplication
+from traits.api import Bool, Callable, Float, HasTraits, Instance, List, provides
 
 # Microdrop utils imports.
 from microdrop_utils.camera_image_controls import (
@@ -65,15 +74,24 @@ class QtCameraDevice(HasTraits):
     #: Display item the (rate-capped) preview frames are forwarded to.
     video_item = Instance(QGraphicsVideoItem)
 
+    #: Receiver of every sink frame. Must be a bound method of a QObject:
+    #: frames arrive on the capture thread, and only a QObject receiver gets
+    #: them queued onto the GUI thread.
+    preview_receiver = Callable
+
     #: The session's own sink: frames arrive here at full camera rate, which
     #: is what the FFmpeg recorder taps.
-    sink = Instance(QVideoSink)
+    sink = Instance(QVideoSink, ())
 
     #: The capture session the camera and the Qt recorder are attached to.
     session = Instance(QMediaCaptureSession, ())
 
     #: The bound camera; None until a camera is selected.
     camera = Instance(QCamera)
+
+    #: The selected camera's device; it leads ``camera`` while a libcamera
+    #: rebuild is pending (the rebuild builds the camera for it).
+    device = Instance(QCameraDevice)
 
     #: The bound camera's DirectShow controls (Windows); None elsewhere or
     #: for a camera without any.
@@ -82,14 +100,36 @@ class QtCameraDevice(HasTraits):
     #: The bound camera's image controls; None for a camera without any.
     image_controls = Instance(ICameraImageControls)
 
+    #: True from a libcamera camera's stop until the next event-loop pass
+    #: has replaced its camera, session and sink (see the module docstring).
+    rebuild_pending = Bool(False)
+
     #: monotonic() time of the last frame forwarded to the display item.
     _last_preview_frame_time = Float(0.0)
 
+    #: The stopped libcamera camera, kept alive until the rebuild discards
+    #: it (an unbind or rebind may already have replaced ``camera``).
+    _stopped_camera = Instance(QCamera)
+
+    #: The format the rebuilt camera gets; None leaves Qt's default.
+    _rebuild_format = Instance(QCameraFormat)
+
+    #: Whether the rebuilt camera starts: a start was requested meanwhile.
+    _start_after_rebuild = Bool(False)
+
+    #: Called once the pending rebuild is done (see after_rebuild).
+    _after_rebuild_callbacks = List(Callable)
+
     def traits_init(self):
-        # The sink's videoFrameChanged is connected by the owning widget, not
-        # here: frames arrive on the capture thread, and only a QObject
-        # receiver gets them queued onto the GUI thread.
+        self._wire_session()
+
+    def _wire_session(self):
+        """Feed the session to the sink, and the sink's frames to the
+        preview receiver."""
         self.session.setVideoSink(self.sink)
+
+        if self.preview_receiver is not None:
+            self.sink.videoFrameChanged.connect(self.preview_receiver)
 
     # ------------------------------------------------------------------ #
     # Binding                                                              #
@@ -98,15 +138,36 @@ class QtCameraDevice(HasTraits):
         """Bind a camera built from a LinuxCameraDeviceContainer (which
         carries V4L2 metadata) or a QCameraDevice; unknown devices leave
         the session without a camera."""
-        self.camera = self._camera_from_device(selected_device)
-        self.session.setCamera(self.camera)
+        self.device = _qt_camera_device(selected_device)
         self._bind_native_controls(selected_device)
 
+        if self.device is None:
+            logger.warning(
+                "Failed to create camera. Need to get camera from available devices"
+            )
+
+        # The session of a stopped libcamera camera takes no other camera:
+        # the pending rebuild builds the new stack for this device.
+        if self.rebuild_pending:
+            self._rebuild_format = None
+
+            return
+
+        self.camera = None if self.device is None else QCamera(self.device)
+        self.session.setCamera(self.camera)
+
     def unbind(self):
-        self.camera = None
-        self.session.setCamera(None)
+        self.device = None
         self.directshow_controls = None
         self.image_controls = None
+
+        # A pending rebuild builds an empty session instead.
+        if self.rebuild_pending:
+            self._start_after_rebuild = False
+        else:
+            self.session.setCamera(None)
+
+        self.camera = None
 
     def _bind_native_controls(self, selected_device):
         """Bind the platform controls Qt has no API for (see the module
@@ -114,17 +175,17 @@ class QtCameraDevice(HasTraits):
         self.directshow_controls = None
         self.image_controls = None
 
-        if self.camera is None:
+        if self.device is None:
             return
 
-        description = self.camera.cameraDevice().description()
+        description = self.device.description()
 
         if any(name in description for name in NATIVE_CAMERA_PROPERTIES_EXCLUDED):
             logger.info(f"No native camera properties for {description}")
 
             return
 
-        directshow = open_directshow_camera_controls(self.camera.cameraDevice().id())
+        directshow = open_directshow_camera_controls(self.device.id())
         self.directshow_controls = directshow
 
         if directshow is not None:
@@ -136,22 +197,6 @@ class QtCameraDevice(HasTraits):
                 device_path=selected_device.device_path
             )
 
-    @staticmethod
-    def _camera_from_device(selected_device):
-        device = selected_device
-
-        if isinstance(selected_device, LinuxCameraDeviceContainer):
-            device = selected_device.camera_device
-
-        if isinstance(device, QCameraDevice):
-            return QCamera(selected_device)
-
-        logger.warning(
-            "Failed to create camera. Need to get camera from available devices"
-        )
-
-        return None
-
     # ------------------------------------------------------------------ #
     # Streaming and formats                                                #
     # ------------------------------------------------------------------ #
@@ -159,22 +204,114 @@ class QtCameraDevice(HasTraits):
         return bool(self.camera)
 
     def is_active(self):
+        # Until the rebuild, the requested state stands in for the camera's.
+        if self.rebuild_pending:
+            return self._start_after_rebuild
+
         return self.has_camera() and self.camera.isActive()
 
     def start(self):
+        if self.rebuild_pending:
+            self._start_after_rebuild = True
+
+            return
+
         self.camera.start()
 
     def stop(self):
+        if self.rebuild_pending:
+            self._start_after_rebuild = False
+
+            return
+
         self.camera.stop()
 
+        if not self.is_libcamera():
+            return
+
+        self._stopped_camera = self.camera
+        self._rebuild_format = self.camera.cameraFormat()
+        self._start_after_rebuild = False
+        self.rebuild_pending = True
+
+        # Inside the stop's own callback the teardown aborts too. The video
+        # item as context drops the rebuild if the panel is destroyed first.
+        QTimer.singleShot(0, self.video_item, self._rebuild_libcamera_stack)
+
+    def _rebuild_libcamera_stack(self):
+        """Discard the stopped libcamera camera with its session and sink,
+        and build a fresh stack for the selected device, started if a start
+        was requested meanwhile."""
+        if not self.rebuild_pending:
+            return
+
+        stale_objects = (self._stopped_camera, self.session, self.sink)
+        self.session.setCamera(None)
+
+        for stale_object in stale_objects:
+            stale_object.deleteLater()
+
+        # Recorders must not hold the old session or sink across this; the
+        # widget builds a new recorder at every recording start.
+        self._stopped_camera = None
+        self.sink = QVideoSink()
+        self.session = QMediaCaptureSession()
+        self._wire_session()
+        self.rebuild_pending = False
+
+        if self.device is not None:
+            self.camera = QCamera(self.device)
+
+            if self._rebuild_format is not None and not self._rebuild_format.isNull():
+                self.camera.setCameraFormat(self._rebuild_format)
+
+            self.session.setCamera(self.camera)
+
+            if self._start_after_rebuild:
+                self.camera.start()
+
+        self._rebuild_format = None
+        self._start_after_rebuild = False
+        callbacks, self._after_rebuild_callbacks = self._after_rebuild_callbacks, []
+
+        for callback in callbacks:
+            callback()
+
+    def after_rebuild(self, callback):
+        """Call ``callback`` once the pending libcamera rebuild has built
+        the new session and sink."""
+        self._after_rebuild_callbacks.append(callback)
+
     def video_formats(self):
-        return self.camera.cameraDevice().videoFormats()
+        return self.device.videoFormats()
 
     def is_libcamera(self):
-        return is_libcamera_device(self.camera.cameraDevice())
+        return is_libcamera_device(self.device)
 
-    def set_format(self, camera_format):
+    def apply_format(self, camera_format):
+        """Switch the camera to ``camera_format``: a libcamera camera takes
+        it while streaming (see the module docstring), any other camera is
+        stopped around the change."""
+        if self.rebuild_pending:
+            self._rebuild_format = camera_format
+
+            return
+
+        if self.is_libcamera():
+            self.camera.setCameraFormat(camera_format)
+
+            return
+
+        was_running = self.is_active()
+
+        if was_running:
+            self.camera.stop()
+            QApplication.processEvents()
+
         self.camera.setCameraFormat(camera_format)
+
+        if was_running:
+            self.camera.start()
 
     # ------------------------------------------------------------------ #
     # Preview                                                              #
@@ -306,3 +443,14 @@ class QtCameraDevice(HasTraits):
 
     def describe_image_control(self, name, value):
         return self.image_controls.describe(name, value)
+
+
+def _qt_camera_device(selected_device):
+    """The QCameraDevice ``selected_device`` stands for, or None."""
+    if isinstance(selected_device, LinuxCameraDeviceContainer):
+        selected_device = selected_device.camera_device
+
+    if isinstance(selected_device, QCameraDevice):
+        return selected_device
+
+    return None
