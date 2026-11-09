@@ -23,6 +23,7 @@ from device_viewer.consts import (
     FFMPEG_DEFAULT_CRF,
     FFMPEG_PRESETS,
     FFMPEG_VIDEO_CODECS,
+    MAX_RECORDING_RESOLUTION,
     QT_RECORDER_FORMAT_MKV,
     QT_RECORDER_FORMAT_MP4,
     RECORDER_BACKEND_FFMPEG,
@@ -120,6 +121,10 @@ class CameraPreferences(PreferencesHelper):
     qt_bitrate_4k30_tier = Enum(*RECORDING_BITRATE_TIERS)
     qt_bitrate_4k60_tier = Enum(*RECORDING_BITRATE_TIERS)
 
+    #: Skip the notice shown when a record-button recording is downscaled by
+    #: the full-HD cap (MAX_RECORDING_RESOLUTION).
+    suppress_recording_cap_warning = Bool(False)
+
     def _qt_video_codec_default(self):
         if self.qt_video_format == QT_RECORDER_FORMAT_MP4:
             return "H264"
@@ -193,6 +198,17 @@ recorder_backend_item = create_item_label_group(
         "pipeline — zero per-frame Python work, lowest CPU use.\n\n"
         "FFmpeg process: raw camera frames piped to an external ffmpeg — "
         "full control over the encoder at higher CPU cost."
+    ),
+)
+
+suppress_recording_cap_warning_item = create_item_label_group(
+    "suppress_recording_cap_warning",
+    label_text="Hide Recording Resolution Cap Warning",
+    item_tooltip=(
+        f"Recordings are capped at full HD ({MAX_RECORDING_RESOLUTION[0]}x"
+        f"{MAX_RECORDING_RESOLUTION[1]}). When checked, no "
+        "notice is shown when a higher-resolution camera stream is "
+        "downscaled for recording."
     ),
 )
 
@@ -347,6 +363,7 @@ class CameraPreferencesPane(PreferencesPane):
             recorder_backend_item,
             ffmpeg_settings_group,
             qt_recorder_settings_group,
+            suppress_recording_cap_warning_item,
             label="Video Recording",
             show_labels=False,
             show_border=True,
