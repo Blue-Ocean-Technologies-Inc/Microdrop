@@ -201,8 +201,10 @@ class QtCameraDevice(HasTraits):
 
             return
 
-        self.camera = None if self.device is None else QCamera(self.device)
-        self.session.setCamera(self.camera)
+        # Qt builds a libcamera camera's libcamerasrc in here.
+        with libcamera_gst_element.capture_new_elements():
+            self.camera = None if self.device is None else QCamera(self.device)
+            self.session.setCamera(self.camera)
 
     def unbind(self):
         self.device = None
@@ -245,11 +247,10 @@ class QtCameraDevice(HasTraits):
 
         if directshow is not None:
             self.image_controls = directshow
-        # The hook goes in here, before this device's QCamera exists and
-        # after the camera listing loaded Qt's GStreamer backend (see
-        # libcamera_gst_element).
+        # Loaded here, after the camera listing loaded Qt's GStreamer
+        # backend (see libcamera_gst_element).
         elif description.startswith(LIBCAMERA_ID_PREFIX) and (
-            libcamera_gst_element.install_libcamera_element_hook()
+            libcamera_gst_element.load_libcamera_element_hook()
         ):
             self.image_controls = LibcameraImageControls()
         elif isinstance(selected_device, LinuxCameraDeviceContainer) and (
@@ -379,7 +380,6 @@ class QtCameraDevice(HasTraits):
         self._wire_session()
 
         if self.device is not None:
-            self.camera = QCamera(self.device)
             camera_format = self._rebuild_format
 
             # A camera that never had a format (a newly bound device) takes
@@ -387,10 +387,14 @@ class QtCameraDevice(HasTraits):
             if camera_format is None or camera_format.isNull():
                 camera_format, self._pending_format = self._pending_format, None
 
-            if camera_format is not None and not camera_format.isNull():
-                self.camera.setCameraFormat(camera_format)
+            # Qt builds the libcamerasrc in here.
+            with libcamera_gst_element.capture_new_elements():
+                self.camera = QCamera(self.device)
 
-            self.session.setCamera(self.camera)
+                if camera_format is not None and not camera_format.isNull():
+                    self.camera.setCameraFormat(camera_format)
+
+                self.session.setCamera(self.camera)
 
             if self._start_after_rebuild:
                 self._start_camera()

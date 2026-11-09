@@ -26,10 +26,15 @@ next time the camera starts.
 
 Constraints:
 
-- The hook only sees elements created after it is installed, so install it
-  before the QCamera exists (Qt creates the element when the camera joins
-  its capture session), but after Qt's GStreamer backend has loaded (it
-  does as the cameras are listed).
+- The hook is in place only while a camera is attached
+  (capture_new_elements, around the QCamera joining its capture session,
+  where Qt creates the element on the calling thread). Left in place, it
+  runs Python, so takes the GIL, for every element any GStreamer thread
+  adds to any bin, and the app hung at camera start: a streaming thread
+  waited for the GIL in the hook while the GUI thread held it, waiting on
+  that thread.
+- The libraries are loaded after Qt's GStreamer backend (it loads as the
+  cameras are listed), before the QCamera exists.
 - The environment ships its own GLib, newer than the system one the
   system GStreamer is bound to, and the interpreter's RPATH finds the
   environment's first. Loaded by soname, libgobject (or libgstreamer's
@@ -46,6 +51,7 @@ Constraints:
 """
 
 # Standard library imports.
+import contextlib
 import ctypes
 import os
 import platform
@@ -159,11 +165,17 @@ def _declare(library, name, restype, *argtypes):
 
 
 class _LibcameraElementHook:
-    """The installed hook and the libcamerasrc it last saw."""
+    """The emission hook and the libcamerasrc it last saw."""
 
     def __init__(self):
         self.attempted = False
-        self.installed = False
+
+        #: The libraries are loaded and the element-added signal found.
+        self.ready = False
+
+        #: element-added's signal id, and the hook's id while it is in place.
+        self.signal_id = 0
+        self.hook_id = 0
 
         #: Newest libcamerasrc (a held reference), or None.
         self.element = None
@@ -176,9 +188,9 @@ class _LibcameraElementHook:
         # Kept alive here: GObject calls it for as long as the process runs.
         self.callback = _EMISSION_HOOK(self._on_element_added)
 
-    def install(self):
+    def load(self):
         if self.attempted:
-            return self.installed
+            return self.ready
 
         if platform.system() != "Linux":
             self.attempted = True
@@ -210,18 +222,36 @@ class _LibcameraElementHook:
         if not self.gst_is_initialized():
             self.gst_init(None, None)
 
-        signal_id = self.g_signal_lookup(ELEMENT_ADDED_SIGNAL, self.gst_bin_get_type())
+        self.signal_id = self.g_signal_lookup(
+            ELEMENT_ADDED_SIGNAL, self.gst_bin_get_type()
+        )
 
-        if not signal_id:
+        if not self.signal_id:
             logger.warning("libcamera image controls unavailable: no element-added")
 
             return False
 
-        self.g_signal_add_emission_hook(signal_id, 0, self.callback, None, None)
-        self.installed = True
-        logger.info("libcamerasrc element hook installed")
+        self.ready = True
+        logger.info("libcamerasrc element hook ready")
 
         return True
+
+    @contextlib.contextmanager
+    def capture_new_elements(self):
+        if not self.ready:
+            yield
+
+            return
+
+        self.hook_id = self.g_signal_add_emission_hook(
+            self.signal_id, 0, self.callback, None, None
+        )
+
+        try:
+            yield
+        finally:
+            self.g_signal_remove_emission_hook(self.signal_id, self.hook_id)
+            self.hook_id = 0
 
     def _load(self, gstreamer_path, gobject_path):
         # Both already mapped: these return the loaded copies, loading none.
@@ -245,6 +275,9 @@ class _LibcameraElementHook:
             _EMISSION_HOOK,
             c_void_p,
             c_void_p,
+        )
+        self.g_signal_remove_emission_hook = _declare(
+            gobject, "g_signal_remove_emission_hook", None, c_uint, c_ulong
         )
         self.g_value_get_object = _declare(
             gobject, "g_value_get_object", c_void_p, c_void_p
@@ -302,7 +335,7 @@ class _LibcameraElementHook:
 
     def _on_element_added(self, _hint, _n_values, values, _data):
         # Called from C: an exception here would only be printed, so it is
-        # logged instead, and the hook always stays installed.
+        # logged instead, and the hook stays in place until removed.
         try:
             element = self.g_value_get_object(values + GVALUE_SIZE)
 
@@ -338,7 +371,7 @@ class _LibcameraElementHook:
             self.g_object_unref(previous)
 
     def release(self):
-        if self.installed:
+        if self.ready:
             self._hold(None)
 
     # ------------------------------------------------------------------ #
@@ -419,19 +452,27 @@ class _LibcameraElementHook:
 _hook = _LibcameraElementHook()
 
 
-def install_libcamera_element_hook():
-    """Start watching for libcamerasrc elements; idempotent. Returns whether
-    the hook is installed: never off Linux, nor off Qt's GStreamer backend,
-    and not yet before that backend has loaded."""
+def load_libcamera_element_hook():
+    """Load what the hook needs; idempotent. Returns whether it is ready:
+    never off Linux, nor off Qt's GStreamer backend, and not yet before
+    that backend has loaded."""
 
-    return _hook.install()
+    return _hook.load()
 
 
 def is_available():
-    """Whether the hook is installed, so libcamerasrc properties can be
-    reached once Qt builds the element."""
+    """Whether the hook is ready, so libcamerasrc properties can be reached
+    once Qt builds the element."""
 
-    return _hook.installed
+    return _hook.ready
+
+
+def capture_new_elements():
+    """Context manager: keep a libcamerasrc Qt creates inside it on this
+    thread (see the module docstring); a no-op while the hook is not
+    ready."""
+
+    return _hook.capture_new_elements()
 
 
 def has_element():
