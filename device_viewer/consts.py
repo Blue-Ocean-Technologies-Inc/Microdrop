@@ -427,6 +427,27 @@ LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS = 400
 # output cannot start on.
 CAMERA_MIN_RESOLUTION = (320, 240)
 
+# The resolutions the combo shows by default, by their common names; every
+# other size the camera offers sits behind the "Show all" entry.
+COMMON_RESOLUTION_NAMES = {
+    (640, 480): "SD",
+    (1280, 720): "HD",
+    (1920, 1080): "FHD",
+    (2048, 1080): "2K",
+    (2560, 1440): "QHD",
+    (3840, 2160): "4K",
+    (4096, 2160): "4K DCI",
+}
+
+# Combo entries that switch between the common and the full resolution list;
+# they carry no camera format.
+SHOW_ALL_RESOLUTIONS_LABEL = "Show all resolutions\u2026"
+SHOW_COMMON_RESOLUTIONS_LABEL = "Show common resolutions\u2026"
+
+# Picking a size wider or taller than this (Full HD) warns once that it can
+# slow the app down; the warning can be suppressed from the preferences.
+HIGH_RESOLUTION_WARNING_THRESHOLD = (1920, 1080)
+
 # Cameras whose descriptions contain one of these never get the native
 # (DirectShow/v4l2) camera properties: the fluorescence plugin drives ZWO ASI
 # cameras through their own SDK and dock pane, and ZWO's optional DirectShow

@@ -86,6 +86,8 @@ class CameraPreferences(PreferencesHelper):
     preferred_video_format = Enum("NV12", "JPEG")
     strict_video_format = Bool
     resolution = Str
+    #: Skip the notice shown when a resolution above Full HD is picked.
+    suppress_high_resolution_warning = Bool(False)
 
     #### Recording preferences ################################################
     recorder_backend = Enum(RECORDER_BACKEND_QT, RECORDER_BACKEND_FFMPEG)
@@ -332,11 +334,23 @@ class CameraPreferencesPane(PreferencesPane):
     strict_video_format_item = create_item_label_group(
         "strict_video_format", label_text="Strictly Use Only Preferred Video Format?"
     )
+    suppress_high_resolution_warning_item = create_item_label_group(
+        "suppress_high_resolution_warning",
+        label_text="Hide High Resolution Warning",
+        item_tooltip=(
+            "When checked, no notice is shown when a resolution above Full HD "
+            "(1920x1080) is selected."
+        ),
+    )
 
     view = View(
         Item("_"),  # Separator
         Group(
-            [video_format_item, strict_video_format_item],
+            [
+                video_format_item,
+                strict_video_format_item,
+                suppress_high_resolution_warning_item,
+            ],
             label="Video Format",
             show_labels=False,
             show_border=True,

@@ -54,8 +54,12 @@ from microdrop_utils.v4l2_fps_getter import (
 from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
     CAMERA_MIN_RESOLUTION,
+    COMMON_RESOLUTION_NAMES,
+    HIGH_RESOLUTION_WARNING_THRESHOLD,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
+    SHOW_ALL_RESOLUTIONS_LABEL,
+    SHOW_COMMON_RESOLUTIONS_LABEL,
 )
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
@@ -195,6 +199,9 @@ class CameraControlWidget(QWidget):
         self.combo_cameras = MarqueeComboBox()
         self.camera_label = QLabel("Camera:")
         self.combo_resolutions = MarqueeComboBox()
+        # Whether the combo lists every camera format or only the common
+        # sizes (see populate_resolutions).
+        self._show_all_resolutions = False
         self.resolution_label = QLabel("Resolution: ")
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)
@@ -696,8 +703,12 @@ class CameraControlWidget(QWidget):
 
         One entry per resolution, best first (see
         CameraController.rank_formats); under the controller's strict format
-        mode, if no format matches, retry once without it. Then restore the
-        saved resolution, falling back to the middle entry.
+        mode, if no format matches, retry once without it. By default only
+        the common sizes (COMMON_RESOLUTION_NAMES) are listed, named, plus
+        the saved size when it is not one of them, with a last entry that
+        switches to the full list; the full list ends with the entry that
+        switches back. Then restore the saved resolution, falling back to
+        the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -725,28 +736,48 @@ class CameraControlWidget(QWidget):
             )
             for fmt in formats
         ]
+        ranked = [
+            formats[index]
+            for index in self.controller.rank_formats(
+                format_summaries, allow_strict_mode, libcamera
+            )
+        ]
+        saved_resolution = self.preferences.resolution
 
-        for index in self.controller.rank_formats(
-            format_summaries, allow_strict_mode, libcamera
-        ):
-            fmt = formats[index]
-            w, h = fmt.resolution().width(), fmt.resolution().height()
-            fps = self._get_camera_resolution_max_framerate(fmt=fmt)
-            pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
-            label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+        # The condensed list: the common sizes, plus the saved size when it is
+        # not one of them, so a saved pick still restores. The full list only
+        # when asked for or when the camera has none of the common sizes.
+        common = [
+            fmt
+            for fmt in ranked
+            if self._resolution_name(fmt)
+            or self._resolution_label(fmt) == saved_resolution
+        ]
+        show_all = self._show_all_resolutions or not common
+        listed = ranked if show_all else common
+        labels = [self._resolution_label(fmt) for fmt in listed]
+
+        for fmt, label in zip(listed, labels):
             self.combo_resolutions.addItem(label, userData=fmt)
 
+        if ranked:
+            self.combo_resolutions.addItem(
+                SHOW_COMMON_RESOLUTIONS_LABEL
+                if show_all
+                else SHOW_ALL_RESOLUTIONS_LABEL
+            )
+
+        self._show_all_resolutions = show_all
         self.combo_resolutions.blockSignals(False)
 
-        labels = [
-            self.combo_resolutions.itemText(i)
-            for i in range(self.combo_resolutions.count())
-        ]
-
         if labels:
-            self.combo_resolutions.setCurrentIndex(
-                self.controller.choose_resolution_index(labels)
-            )
+            # Restored, not picked: apply the format without the signal, so
+            # the high-resolution notice cannot interrupt start-up.
+            index = self.controller.choose_resolution_index(labels)
+            self.combo_resolutions.blockSignals(True)
+            self.combo_resolutions.setCurrentIndex(index)
+            self.combo_resolutions.blockSignals(False)
+            self.on_resolution_changed(index, interactive=False)
         elif self.controller.strict_format_mode(allow_strict_mode, libcamera):
             # No formats survived strict filtering — retry without it
             warning_message = (
@@ -760,30 +791,109 @@ class CameraControlWidget(QWidget):
 
             self.populate_resolutions(allow_strict_mode=False)
 
-            return
+    @staticmethod
+    def _resolution_name(fmt):
+        """The common name of a format's size ("FHD"), or None."""
+        return COMMON_RESOLUTION_NAMES.get(
+            (fmt.resolution().width(), fmt.resolution().height())
+        )
 
-        # Ensure the model always has a resolution set (e.g. when the combo
-        # index didn't change and on_resolution_changed was never triggered).
-        if not self.model.camera_perspective.camera_resolution:
-            self.on_resolution_changed(self.combo_resolutions.currentIndex())
+    def _resolution_label(self, fmt):
+        """The combo label of a format: its common name when it has one,
+        then the size, pixel format and frame rate."""
+        w, h = fmt.resolution().width(), fmt.resolution().height()
+        fps = self._get_camera_resolution_max_framerate(fmt=fmt)
+        pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+        name = self._resolution_name(fmt)
+        size = f"{name} ({w}x{h})" if name else f"{w}x{h}"
 
-    def on_resolution_changed(self, index):
+        return f"{size} [{pix_name}] @ {fps:.0f} fps"
+
+    def _toggle_resolution_list(self):
+        """Switch between the common and the full resolution list, keeping
+        the selected format."""
+        selected = self.camera_model.resolution
+        self._show_all_resolutions = not self._show_all_resolutions
+        self.populate_resolutions()
+
+        for index in range(self.combo_resolutions.count()):
+            fmt = self.combo_resolutions.itemData(index)
+
+            if fmt is not None and (
+                (fmt.resolution().width(), fmt.resolution().height()) == selected
+            ):
+                self.combo_resolutions.blockSignals(True)
+                self.combo_resolutions.setCurrentIndex(index)
+                self.combo_resolutions.blockSignals(False)
+
+                return
+
+    def on_resolution_changed(self, index, interactive=True):
+        """Apply the combo's format at ``index``. ``interactive`` is False for
+        the restore at start-up, which never shows the high-resolution
+        notice."""
         if self.combo_resolutions.count() == 0 or index < 0:
             return
 
         camera_format = self.combo_resolutions.itemData(index)
+
+        # The list-switching entry carries no format.
+        if camera_format is None:
+            self._toggle_resolution_list()
+
+            return
+
         self.camera_device.apply_format(camera_format)
 
         resolution = (
             camera_format.resolution().width(),
             camera_format.resolution().height(),
         )
+
+        if interactive:
+            self._warn_high_resolution(resolution)
         self.controller.select_resolution(
             self.combo_resolutions.itemText(index),
             *resolution,
             self._get_camera_resolution_max_framerate(fmt=camera_format),
         )
         self.model.camera_perspective.camera_resolution = resolution
+
+    def _warn_high_resolution(self, resolution):
+        """Tell the user a size above Full HD can slow the app down, unless
+        they asked not to be told again."""
+        max_width, max_height = HIGH_RESOLUTION_WARNING_THRESHOLD
+        width, height = resolution
+
+        if width <= max_width and height <= max_height:
+            return
+
+        if self.preferences.suppress_high_resolution_warning:
+            return
+
+        _, dont_show_again = warning(
+            None,
+            title="High resolution selected",
+            message=(
+                f"{width}x{height} is above Full HD ({max_width}x{max_height}). "
+                f"Streaming, recording and image analysis at this size put "
+                f"more load on the camera pipeline and can slow the app down, "
+                f"especially on the portable instrument."
+            ),
+            cancel=False,
+            checkbox_text="Don't show this again (can be undone from "
+            "Preferences \u203a Video Settings)",
+        )
+
+        if not dont_show_again:
+            return
+
+        self.preferences.suppress_high_resolution_warning = True
+
+        try:
+            self.preferences.preferences.flush()
+        except OSError as error:
+            logger.error(f"Could not save camera preferences: {error}")
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #
