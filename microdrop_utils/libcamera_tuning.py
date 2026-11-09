@@ -60,7 +60,7 @@ LIBCAMERA_AF_LENS_MAP = "map"
 LIBCAMERA_TUNING_CACHE_DIRNAME = ".libcamera_tuning"
 
 
-def _v4l2_subdevice_names():
+def v4l2_subdevice_names():
     """Each V4L2 sub-device's name without its bus address
     (``"dw9807 11-000c"`` is ``"dw9807"``)."""
     names = []
@@ -85,7 +85,7 @@ def find_csi_sensor_tuning_file():
     This is always the installed original, never the AF-less copy that
     LIBCAMERA_TUNING_FILE_ENV may point at.
     """
-    subdevice_names = _v4l2_subdevice_names()
+    subdevice_names = v4l2_subdevice_names()
     pipeline = "pisp" if PISP_FRONT_END_NAME in subdevice_names else "vc4"
     tuning_dir = LIBCAMERA_TUNING_DIR / pipeline
     sensors = [
