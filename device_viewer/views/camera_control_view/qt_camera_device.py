@@ -21,9 +21,11 @@ platform: lens focus over DirectShow on Windows, and image controls
 
 A libcamera camera (a Raspberry Pi CSI camera) aborts the process when it is
 started again after a stop, with or without a format change in between, and
-when its session or sink outlive the stop. So its format changes are applied
-to the running camera, and a stop discards camera, session and sink on the
-next event-loop pass and builds a fresh stack for the next start.
+when its session or sink outlive the stop, and it may change format only
+while streaming. So its format changes are applied to the running camera (one
+chosen while it is off waits for the next start), and a stop discards camera,
+session and sink on the next event-loop pass and builds a fresh stack for the
+next start.
 """
 
 # Standard library imports.
@@ -114,6 +116,10 @@ class QtCameraDevice(HasTraits):
     #: The format the rebuilt camera gets; None leaves Qt's default.
     _rebuild_format = Instance(QCameraFormat)
 
+    #: A format chosen while a libcamera camera was not streaming, applied
+    #: in flight once it is (see forward_preview_frame).
+    _pending_format = Instance(QCameraFormat)
+
     #: Whether the rebuilt camera starts: a start was requested meanwhile.
     _start_after_rebuild = Bool(False)
 
@@ -138,7 +144,13 @@ class QtCameraDevice(HasTraits):
         """Bind a camera built from a LinuxCameraDeviceContainer (which
         carries V4L2 metadata) or a QCameraDevice; unknown devices leave
         the session without a camera."""
-        self.device = _qt_camera_device(selected_device)
+        device = _qt_camera_device(selected_device)
+
+        # A format chosen for the previous device does not carry over.
+        if device != self.device:
+            self._pending_format = None
+
+        self.device = device
         self._bind_native_controls(selected_device)
 
         if self.device is None:
@@ -158,6 +170,7 @@ class QtCameraDevice(HasTraits):
 
     def unbind(self):
         self.device = None
+        self._pending_format = None
         self.directshow_controls = None
         self.image_controls = None
 
@@ -261,9 +274,15 @@ class QtCameraDevice(HasTraits):
 
         if self.device is not None:
             self.camera = QCamera(self.device)
+            camera_format = self._rebuild_format
 
-            if self._rebuild_format is not None and not self._rebuild_format.isNull():
-                self.camera.setCameraFormat(self._rebuild_format)
+            # A camera that never had a format (a newly bound device) takes
+            # the chosen one before its start: Qt's default can abort it.
+            if camera_format is None or camera_format.isNull():
+                camera_format, self._pending_format = self._pending_format, None
+
+            if camera_format is not None and not camera_format.isNull():
+                self.camera.setCameraFormat(camera_format)
 
             self.session.setCamera(self.camera)
 
@@ -293,12 +312,12 @@ class QtCameraDevice(HasTraits):
         it while streaming (see the module docstring), any other camera is
         stopped around the change."""
         if self.rebuild_pending:
-            self._rebuild_format = camera_format
+            self._pending_format = camera_format
 
             return
 
         if self.is_libcamera():
-            self.camera.setCameraFormat(camera_format)
+            self._apply_libcamera_format(camera_format)
 
             return
 
@@ -312,6 +331,18 @@ class QtCameraDevice(HasTraits):
 
         if was_running:
             self.camera.start()
+
+    def _apply_libcamera_format(self, camera_format):
+        """Set ``camera_format`` while the camera streams, or on a camera
+        that never had a format; otherwise hold it for the next start (see
+        the module docstring)."""
+        if self.camera.isActive() or self.camera.cameraFormat().isNull():
+            self._pending_format = None
+            self.camera.setCameraFormat(camera_format)
+
+            return
+
+        self._pending_format = camera_format
 
     # ------------------------------------------------------------------ #
     # Preview                                                              #
@@ -329,6 +360,11 @@ class QtCameraDevice(HasTraits):
         return True
 
     def forward_preview_frame(self, frame):
+        # Runs on the GUI thread for every frame of a streaming camera.
+        if self._pending_format is not None and self.camera.isActive():
+            self.camera.setCameraFormat(self._pending_format)
+            self._pending_format = None
+
         if self._preview_frame_due():
             self.video_item.videoSink().setVideoFrame(frame)
 
