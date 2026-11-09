@@ -53,6 +53,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_FEED_START_TIMEOUT_MS,
+    CAMERA_MIN_RESOLUTION,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
 )
@@ -706,7 +707,13 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.blockSignals(False)
             return
 
-        formats = self.camera_device.video_formats()
+        min_width, min_height = CAMERA_MIN_RESOLUTION
+        formats = [
+            fmt
+            for fmt in self.camera_device.video_formats()
+            if fmt.resolution().width() >= min_width
+            and fmt.resolution().height() >= min_height
+        ]
         libcamera = self.camera_device.is_libcamera()
         format_summaries = [
             (
