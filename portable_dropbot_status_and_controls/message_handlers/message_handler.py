@@ -17,10 +17,7 @@ from traits.api import Instance
 
 # Microdrop package imports.
 from device_viewer.consts import VolumeEstimateMessage
-from portable_dropbot_controller.consts import (
-    FLUORESCENCE_LED_RAW_MAX,
-    DropletBaselineUpdated,
-)
+from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
@@ -90,18 +87,6 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         if self.model.selected_port not in ports:
             self.model.selected_port = ports[0] if ports else ""
-
-    def _on_droplet_baseline_updated_triggered(self, body):
-        update = DropletBaselineUpdated.model_validate_json(str(body))
-
-        if update.error:
-            self.model.droplet_baseline_display = f"Failed: {update.error}"
-
-            return
-
-        self.model.droplet_baseline_display = (
-            f"{update.channels} channels at {datetime.now():%H:%M}"
-        )
 
     def _on_status_updated_triggered(self, body):
         data = json.loads(str(body))

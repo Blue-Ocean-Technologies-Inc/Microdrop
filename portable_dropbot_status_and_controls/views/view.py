@@ -224,19 +224,6 @@ grid = VGroup(
     UItem("capacitance_display", style="readonly"),
     UItem(""),
     *droplet_readout_items(),
-    Label("Droplet Baseline", show_label=False),
-    UItem(
-        "droplet_baseline_display",
-        style="readonly",
-        tooltip="Per-channel capacitance that Find liquid and the droplet "
-        "checks compare against",
-    ),
-    UItem(
-        "calibrate_droplet_baseline_button",
-        enabled_when="connected and not protocol_running",
-        tooltip="Measure every channel with the chip dry (no liquid loaded); "
-        "a channel later reading 5 pF above it counts as holding liquid",
-    ),
     columns=3,
     id="data_grid",
 )
