@@ -420,6 +420,11 @@ LIBCAMERA_FIRST_FRAME_TIMEOUT_MS = 3000
 # before its stream has settled.
 PENDING_FORMAT_DELAY_MS = 2000
 
+# Quiet time after a libcamera image-control change before the camera is
+# restarted to apply it: libcamerasrc applies control changes only when it
+# starts, so a burst of changes coalesces into one restart.
+LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS = 400
+
 # Smallest (width, height) offered in the resolution combo: libcamera
 # advertises placeholder sizes such as 32x32 that the GStreamer video
 # output cannot start on.

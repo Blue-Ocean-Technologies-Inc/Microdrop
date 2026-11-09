@@ -26,7 +26,8 @@ buffers pin the libcamera Camera, whose completion slot still points at the
 destroyed element. So a stop blanks the preview, discards camera, session and
 sink on the next event-loop pass, and builds a fresh stack once Qt has
 destroyed them. Its format may change only while streaming; one chosen while
-it is off is applied shortly after the next start.
+it is off is applied shortly after the next start. Its image controls apply
+only as it starts, so a change restarts it once the changes settle.
 """
 
 # Standard library imports.
@@ -66,6 +67,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ...consts import (
     CAMERA_PREVIEW_MAX_FPS,
+    LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS,
     LIBCAMERA_FIRST_FRAME_TIMEOUT_MS,
     LIBCAMERA_REBUILD_GAP_MS,
     NATIVE_CAMERA_PROPERTIES_EXCLUDED,
@@ -144,6 +146,10 @@ class QtCameraDevice(HasTraits):
     #: Called once the pending rebuild is done (see after_rebuild).
     _after_rebuild_callbacks = List(Callable)
 
+    #: Single-shot debounce of the restart that applies libcamera image
+    #: control changes (see _schedule_control_restart).
+    _control_restart_timer = Instance(QTimer)
+
     def traits_init(self):
         self._wire_session()
 
@@ -188,6 +194,10 @@ class QtCameraDevice(HasTraits):
 
     def unbind(self):
         self.device = None
+
+        if self._control_restart_timer is not None:
+            self._control_restart_timer.stop()
+
         self._pending_format = None
         self.directshow_controls = None
         self.image_controls = None
@@ -572,7 +582,42 @@ class QtCameraDevice(HasTraits):
         return self.image_controls.get(name)
 
     def set_image_control(self, name, value, auto=False):
+        if not self.is_libcamera():
+            self.image_controls.set(name, value, auto)
+
+            return
+
+        previous_value, previous_auto = self.image_controls.get(name)
         self.image_controls.set(name, value, auto)
+
+        # Under auto the value is the algorithm's: only the mode counts.
+        changed = auto != previous_auto or (not auto and value != previous_value)
+
+        # A pending rebuild's new element takes the stored values anyway.
+        if changed and self.is_active() and not self.rebuild_pending:
+            self._schedule_control_restart()
+
+    def _schedule_control_restart(self):
+        """Restart the camera once a burst of image-control changes has
+        settled (see LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS)."""
+
+        if self._control_restart_timer is None:
+            # Parented to the video item, so a destroyed panel drops it.
+            timer = QTimer(self.video_item)
+            timer.setSingleShot(True)
+            timer.setInterval(LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS)
+            timer.timeout.connect(self._restart_for_image_controls)
+            self._control_restart_timer = timer
+
+        self._control_restart_timer.start()
+
+    def _restart_for_image_controls(self):
+        """Stop and start the camera: the rebuilt libcamerasrc takes the
+        stored control values as it starts."""
+
+        if self.is_active():
+            self.stop()
+            self.start()
 
     def describe_image_control(self, name, value):
         return self.image_controls.describe(name, value)
