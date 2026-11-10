@@ -27,6 +27,7 @@ from pyface.qt.QtCore import Qt
 # Microdrop package imports.
 from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
     DEVICE_VIEWER_SCREEN_CAPTURE,
 )
@@ -98,16 +99,18 @@ def _capture_manager():
 # --- model ----------------------------------------------------------------
 
 
-def test_field_specs_capture_then_capture_at_then_lead():
+def test_field_specs_capture_then_capture_at_then_lead_then_settings():
     specs = CaptureCompoundModel().field_specs()
     assert [(s.field_id, s.col_name) for s in specs] == [
         ("capture", "Capture"),
         ("capture_at", "Capture At"),
         ("capture_lead_ms", "Camera Lead (ms)"),
+        ("capture_camera_settings", "Camera Settings"),
     ]
     assert specs[0].default_value is False
     assert specs[1].default_value == StepTime.START
     assert specs[2].default_value == 0
+    assert specs[3].default_value is None
 
 
 def test_capture_at_default_follows_model_default():
@@ -149,7 +152,10 @@ def test_handler_priority_and_capture_ack():
     # One bucket after Video (10), so the lead counts from after the
     # camera-on request.
     assert handler.priority == 11
-    assert list(handler.wait_for_topics) == [DEVICE_VIEWER_MEDIA_CAPTURED]
+    assert list(handler.wait_for_topics) == [
+        DEVICE_VIEWER_MEDIA_CAPTURED,
+        DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
+    ]
     assert handler.ack_time_s == 15.0
 
 
