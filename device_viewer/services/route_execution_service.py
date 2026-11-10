@@ -464,7 +464,19 @@ class RouteExecutionService(HasTraits):
 
         # Keep only user-toggled channels; clear path-driven ones
         self.model.electrodes.actuated_channels = self._user_toggled_channels
-        electrode_state_change_publisher.publish(self._user_toggled_channels)
+
+        # With a step selected while idle the viewer does not drive the device
+        # outside playback, so the run leaves it switched off rather than
+        # holding the step's electrodes on.
+        step_selected_idle = not (
+            self.model.free_mode
+            or self.model.phase_navigation_mode
+            or self.model.protocol_running
+        )
+
+        electrode_state_change_publisher.publish(
+            set() if step_selected_idle else self._user_toggled_channels
+        )
 
         self._last_set_channels = set()
         self._user_toggled_channels = set()
