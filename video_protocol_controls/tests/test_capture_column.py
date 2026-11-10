@@ -272,6 +272,7 @@ def test_round_trip_preserves_per_step_capture_at(qapp):
         "capture",
         "capture_at",
         "capture_lead_ms",
+        "capture_camera_settings",
     ]
 
 
