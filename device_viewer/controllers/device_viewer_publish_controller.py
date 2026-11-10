@@ -245,10 +245,17 @@ class DeviceViewerPublishController(HasTraits):
         if self._disable_state_messages:
             return
 
+        # Idle, sidebar route playback actuates with a step selected too, so
+        # the step's routes can be run on the device; its phases never reach
+        # the step (model_change_handler_with_message skips playback).
         if self.model.realtime_mode and self.model.connected:
             if (
                 not self.model.protocol_running
-                and (self.model.free_mode or self.model.phase_navigation_mode)
+                and (
+                    self.model.free_mode
+                    or self.model.phase_navigation_mode
+                    or self.model.route_execution_service_executing
+                )
             ) or (self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
@@ -273,7 +280,8 @@ class DeviceViewerPublishController(HasTraits):
             reason += "Protocol running; "
 
         if not self.model.free_mode and not self.model.phase_navigation_mode:
-            reason += "Not in free mode or phase navigation; "
+            reason += "Not in free mode or phase navigation (route playback still "
+            reason += "actuates); "
 
         if not self.model.realtime_mode:
             reason += "Realtime mode; "
