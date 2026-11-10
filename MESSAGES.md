@@ -103,6 +103,7 @@ Receiving: (Via handlers)
 - PHASE_NAVIGATION_MODE "ui/phase_navigation_mode" (** also self-published)
 - PHASE_NAVIGATION_REQUEST "ui/device_viewer/phase_navigation_request"
 - DEVICE_VIEWER_CAMERA_SELECT_SOURCE "ui/device_viewer/camera/select_source" (see the camera source selection flow below)
+- DEVICE_VIEWER_CAMERA_APPLY_SETTINGS "ui/device_viewer/camera/apply_settings" (a step's capture setup; see the per-step capture camera settings flow below)
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
@@ -114,6 +115,8 @@ Sending: (Via publish_method)
 - PHASE_NAVIGATION_STATE "ui/device_viewer/phase_navigation_state" (via route_execution_service)
 - DEVICE_VIEWER_CAMERA_SOURCE_SELECTED "ui/device_viewer/camera/source_selected" (reply to select_source)
 - DEVICE_VIEWER_CAMERA_STATE "ui/device_viewer/camera/state" (camera selection / on-off, on every change)
+- DEVICE_VIEWER_CAMERA_SETTINGS "ui/device_viewer/camera/settings" (capture setup snapshot, on user edits and source selection)
+- DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED "ui/device_viewer/camera/settings_applied" (reply to apply_settings)
 - DEVICE_VIEWER_VOLUME_ESTIMATE "ui/device_viewer/volume_estimate" (live volume readout, on changes above reading noise)
 
 ### image_viewer
@@ -501,6 +504,24 @@ Lets a plugin column (the fluorescence plugin's, in its own repo) show a given c
 5. Run end: the column restores the saved state with another `select_source {label: <saved selected_camera>, active: <saved active>}`, which releases the lease; best sent from `on_post_protocol_end`, after the Video column's `on_protocol_end` camera-off (ignored if it arrives first, applied if Dramatiq delivers it after the restore). `PROTOCOL_RUNNING` `"False"` releases the lease if no restore came.
 
 **Ownership** — the Video column stays the only publisher of `DEVICE_VIEWER_CAMERA_ACTIVE` during steps; `select_source` is a run-start/run-end request, and its `active=true` lease outranks the Video column's camera-off (see `video_protocol_controls/protocol_columns/capture_column.py`'s header).
+
+### Protocol Capture column ↔ Device Viewer: per-step capture camera settings
+
+Each capturing step stores the resolution and camera properties it captures with (the Capture compound's display-only `capture_camera_settings` cell, a `CameraSettings` dict or `None`), so they vary from step to step instead of staying whatever the camera panel last had. Payload models live in `device_viewer/models/media.py`, re-exported from `device_viewer/consts.py`.
+
+**Topics (`device_viewer/consts.py`)**
+- `DEVICE_VIEWER_CAMERA_SETTINGS = "ui/device_viewer/camera/settings"` — `CameraSettingsSnapshot {camera, resolution, image_controls, focus, user_edit}`: `resolution` is `[w, h]` (`None`, with no controls, unless a QCamera is selected), `image_controls` maps v4l2 control names to `{value, auto}`, `focus` is `{auto, distance}` or `None`. Published by `CameraController` through a 0.3 s throttle (`CAMERA_SETTINGS_PUBLISH_INTERVAL_S`): `user_edit=true` after a resolution pick, an image-control edit, a focus edit or an autofocus sweep; `false` after a source selection, a restored format or an applied request.
+- `DEVICE_VIEWER_CAMERA_APPLY_SETTINGS = "ui/device_viewer/camera/apply_settings"` — `CameraSettingsRequest {camera, resolution, image_controls, focus, request_id, context}` (extra fields rejected); `context` names the asker for the user's warnings ("Step 1.2 · Wash").
+- `DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED = "ui/device_viewer/camera/settings_applied"` — `CameraSettingsApplied {request_id, ok, warnings, error}`. `ok=false` when nothing applied (no QCamera selected, invalid payload, no camera widget); `warnings` lists what the camera could not take while the rest applied.
+
+**Device viewer side** — `_on_apply_settings_triggered` validates and emits `camera_settings_signal`; `CameraControlWidget.apply_camera_settings` (GUI thread) switches to the best format of the resolution (via the saved-resolution restore, so it shows in the condensed list and skips the high-resolution notice), then `CameraController.apply_settings` sets each image control (a missing one skipped, an out-of-range value clamped, an `auto` without an automatic mode applied manual) and the focus. While the camera is off the request is kept and applied again when it starts (Qt reports focus support only for a started camera, and some cameras reset their controls on open). Each warning is logged and shown once per camera selection in a deferred `pyface_wrapper.warning`, so steps sharing an unsupported setup warn once.
+
+**Protocol side (`video_protocol_controls/services/camera_settings_sync.py`, `CameraSettingsSync` actor)** — subscribes to `DEVICE_VIEWER_CAMERA_SETTINGS`, `PROTOCOL_TREE_ROW_SELECTED` and `PROTOCOL_RUNNING`; idle only:
+1. A `user_edit` snapshot is written over `PROTOCOL_TREE_SET_CELL` into the current step when it captures, and into every other selected step with `only_if_set=true` (only those already holding a setup).
+2. A capturing step without a setup gets the latest snapshot on selection (or on the next snapshot).
+3. Selecting a step holding a setup publishes `apply_settings` for it (skipped when it is the setup last synced, so the tree's rebroadcast of our own write is not applied back); a snapshot naming a different camera re-applies it, so the new camera's warnings show.
+
+**Run time** — `CaptureHandler.on_pre_step` (capture ticked, setup stored) publishes `apply_settings` before the camera lead starts and waits for the `settings_applied` carrying its `request_id` (the Capture ack time; 0 = fire-and-forget). `ok=false` and warnings are logged; the capture always goes ahead.
 
 ### Voltage/frequency range preferences: app_globals owner-publishes (#610)
 
