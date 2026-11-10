@@ -1,3 +1,56 @@
+## [v1.42.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.42.0) (2026-11-10)
+
+### Feat
+
+- **video_protocol_controls**: store capture camera settings per step ([`b52f2ec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b52f2ecd73f663b2c39a07efa76002934c45ff58))
+- **device_viewer**: publish and apply camera capture settings ([`c7f3fb2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c7f3fb2517f43bad38bc46d7994e74c37371a255))
+- **device_viewer**: actuate sidebar route runs with a step selected ([`026375f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/026375f5fe9acac153fa56d16a181ade495b7948))
+- **device_viewer**: add rotate and lock to the alignment endpoint pane ([`6ef64f7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6ef64f7c37ad7082a3ca893599c028f021516f4c))
+- **camera**: warn once when a resolution above Full HD is picked ([`5f71654`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5f71654c6ec79bacb8778ad4ce53631f81c6110e))
+- **camera**: condense the resolution list to named common sizes ([`650f6e4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/650f6e448addc71b53bd16a9905b2e2356dc4493))
+- **camera**: sensor-mode frame rates for libcamera cameras ([`5753614`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/57536145d21d9964b416be2f1af8a8e99c464e10))
+- **camera**: hold the control restart while recording ([`7b2d042`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7b2d04208a37ffd28879b19509aa03159eecce9b))
+- **camera**: restart the Pi camera on an image-control change ([`e00e000`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e00e00074ec741619aab6336a4f758a308e24ec3))
+- **camera**: libcamera image controls for the Pi camera ([`217f95a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/217f95a318a51290c7f0ed680a45203b640526cc))
+- **camera**: reach Qt's libcamerasrc element from Python ([`96cb354`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/96cb354656dc03df91e41a016662d4f1367ccfe9))
+- **portable**: detect droplets with an absolute threshold ([`b1fcb6f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b1fcb6f0af581ddc8f326cecc8784ba31666c6d5))
+- **touch-assist**: add virtual D-pad for arrow shortcuts ([`80b2b1c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/80b2b1c03641e9188cfdda57dc5aa50a1bdc091f))
+- **camera**: lift the recording cap in Advanced Mode ([`3e1e89b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3e1e89b55fa33839235275147873f91bf9d89b12))
+- **camera**: warn once when a recording is capped at full HD ([`d9d88b0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d9d88b0db09cd989eea421db0168a8658482bfa2))
+- **camera**: cap video recordings at full HD ([`9ff31c4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9ff31c43c8fd27968de8fad4a6dcec0cfea03f54))
+
+### Fix
+
+- **camera**: read the selected size from the camera model on list switch ([`78f4271`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/78f427120693b56ed8bd09245029651486611c14))
+- **camera**: keep the resolution notice out of start-up ([`1d65b87`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1d65b8771350801b2dc7fb165418f0d89848ba08))
+- **camera**: always open on the condensed resolution list ([`f59645e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f59645efd5844442aa911ae6a9beb1426f48db9b))
+- **camera**: stamp raw recordings with wall-clock time ([`e563482`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5634822209b4a71144e659dd7076e96103d71e2))
+- **camera**: record with the Pi camera's real frame rate ([`f3e5e4c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3e5e4ce911315636d7bfe8745c156c52a3e6882))
+- **camera**: attach the element hook only around camera creation ([`64bbf12`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/64bbf1208d48b3e402588b3c0d9ddb419d8d7fee))
+- **camera**: resolve GLib from the GStreamer the app loaded ([`605d17d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/605d17d45358f40f5e23735989532fdc37acafdd))
+- **camera**: release the last preview frame before a libcamera rebuild ([`16709f8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/16709f876ebce2ce7a2f8ee82dea574f2aab37d0))
+- **camera**: let a stopped libcamera stream drain before rebuilding ([`97bdf4f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97bdf4f948597d8f0ea3181b79acf8d7cc2389f5))
+- **camera**: drop placeholder sizes from the resolution list ([`bafe81e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bafe81e21894b7e5c951d6da93ea1a8638a89822))
+- **camera**: apply a held libcamera format 2 s after start ([`ce8da88`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ce8da88e52e080507b7380525db835487a62f16a))
+- **camera**: change libcamera format only while streaming ([`509436c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/509436cd2048ce3746279df715e6f059f16b92d9))
+- **camera**: never restart a stopped libcamera QCamera ([`d00a5bc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d00a5bceff9e3f61d02b3f23bb29a1aed94d5bfd))
+
+### Docs
+
+- **messages**: document per-step capture camera settings flow ([`03d4b3a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/03d4b3a179d0c645aadc8fa74a0e0ef5e9b0585d))
+
+### Test
+
+- **video_protocol_controls**: expect the camera settings field on save ([`7e9dfd4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7e9dfd44839348d569d436aff66366252c270fe0))
+
+### Chore
+
+- **camera**: bring camera preferences ruff-clean ([`5c5bc53`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5c5bc53554be9db8844e9256566caf812137154a))
+
+### Revert
+
+- **camera**: drop the full-HD recording cap and its notice ([`eea73f6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eea73f68fad4cbcc5e396ec114a1eacdfa58abb7))
+
 ## [v1.41.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.41.0) (2026-11-06)
 
 ### Feat
