@@ -38,12 +38,20 @@ from device_viewer.models.media import (
     CameraControlsApplied,
     CameraControlsRequest,
     CameraSelectSourceRequest,
+    CameraSettingsApplied,
+    CameraSettingsRequest,
+    CameraSettingsSnapshot,
     CameraSourceSelected,
     CameraState,
     MediaCaptureEventModel,
     MediaCaptureMessageModel,
     RecordingStateModel,
     RecordingStatePublisher,
+)
+from device_viewer.models.media import (
+    # Re-exported (``X as X``) so a step-settings owner can validate a
+    # stored capture setup without importing device_viewer.models.
+    CameraSettings as CameraSettings,
 )
 from device_viewer.models.messages import (
     # Topic payload schemas are re-exported (``X as X``) so sibling plugins
@@ -105,6 +113,13 @@ DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 # DropBot's fluorescence capture drives these per filter position.
 DEVICE_VIEWER_CAMERA_SET_CONTROLS = "ui/device_viewer/camera/set_controls"
 DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED = "ui/device_viewer/camera/controls_applied"
+# The camera panel's capture setup (resolution + camera properties) as
+# CameraSettingsSnapshot, on every user edit and source selection; another
+# plugin applies a stored setup with CameraSettingsRequest and gets
+# CameraSettingsApplied back — the Capture protocol column keeps one per step.
+DEVICE_VIEWER_CAMERA_SETTINGS = "ui/device_viewer/camera/settings"
+DEVICE_VIEWER_CAMERA_APPLY_SETTINGS = "ui/device_viewer/camera/apply_settings"
+DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED = "ui/device_viewer/camera/settings_applied"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
 # The live volume readout (VolumeEstimateMessage), shown by the DropBot
@@ -167,6 +182,7 @@ ACTOR_TOPIC_DICT = {
         CAPACITANCE_UPDATED,
         DEVICE_VIEWER_SCREEN_CAPTURE,
         DEVICE_VIEWER_CAMERA_SET_CONTROLS,
+        DEVICE_VIEWER_CAMERA_APPLY_SETTINGS,
         DEVICE_VIEWER_CAMERA_ACTIVE,
         DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
         DEVICE_VIEWER_SCREEN_RECORDING,
@@ -228,6 +244,16 @@ camera_controls_publisher = ValidatedTopicPublisher(
 camera_controls_applied_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     validator_class=CameraControlsApplied,
+)
+camera_settings_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SETTINGS, validator_class=CameraSettingsSnapshot
+)
+camera_apply_settings_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_APPLY_SETTINGS, validator_class=CameraSettingsRequest
+)
+camera_settings_applied_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
+    validator_class=CameraSettingsApplied,
 )
 media_captured_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_MEDIA_CAPTURED, validator_class=MediaCaptureMessageModel
@@ -421,6 +447,11 @@ PENDING_FORMAT_DELAY_MS = 2000
 # restarted to apply it: libcamerasrc applies control changes only when it
 # starts, so a burst of changes coalesces into one restart.
 LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS = 400
+
+# Quiet time after a user edit of the camera settings (a dragged image
+# control or focus slider) before the snapshot is published, so a drag
+# stores one setup into the selected protocol steps, not one per frame.
+CAMERA_SETTINGS_PUBLISH_INTERVAL_S = 0.3
 
 # Smallest (width, height) offered in the resolution combo: libcamera
 # advertises placeholder sizes such as 32x32 that the GStreamer video

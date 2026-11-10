@@ -17,7 +17,9 @@ with their v4l2 fallbacks for the Portable Pi's GStreamer backend, the
 focus row's live slider writes and one-shot autofocus sweep, the image
 controls (brightness, contrast, ...) Qt has no API for, and the
 camera's selection/on-off state with the replies to select_source
-requests. The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
+requests, and the capture setup (resolution + camera properties) a protocol
+step stores: its snapshot on every user edit, and applying a stored one.
+The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
 the view, which calls in here and acts on the answers.
 """
 
@@ -28,7 +30,7 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from pyface.timer.api import CallbackTimer
-from traits.api import Callable, Float, HasTraits, Instance, observe
+from traits.api import Any, Bool, Callable, Float, HasTraits, Instance, Set, observe
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
@@ -56,6 +58,7 @@ from microdrop_utils.v4l2_fps_getter import (
 # Local imports.
 from ..consts import (
     AUTOFOCUS_TIMEOUT_S,
+    CAMERA_SETTINGS_PUBLISH_INTERVAL_S,
     CAPTURES_DIR_NAME,
     FALLBACK_PIXEL_FORMATS,
     FOCUS_WRITE_INTERVAL_S,
@@ -65,6 +68,8 @@ from ..consts import (
     RECORDINGS_DIR_NAME,
     RPI_UNSUPPORTED_PIXEL_FORMATS,
     camera_controls_applied_publisher,
+    camera_settings_applied_publisher,
+    camera_settings_publisher,
     camera_source_selected_publisher,
     camera_state_publisher,
     device_viewer_recording_state_publisher,
@@ -121,9 +126,33 @@ class CameraController(HasTraits):
     #: monotonic() time the running sweep started.
     _autofocus_started = Float()
 
+    #: Coalesces capture-setup changes into one CameraSettingsSnapshot.
+    settings_edits = Instance(LatestValueThrottle)
+
+    #: The pending snapshot carries a user edit (see settings_edited).
+    _settings_user_edit = Bool(False)
+
+    #: A CameraSettingsRequest is being applied: its writes are no user edit.
+    _applying_settings = Bool(False)
+
+    #: The CameraSettingsRequest applied while the camera was off, applied
+    #: again once it starts — a camera may reset its controls on open, and
+    #: Qt reports focus support only for a started camera.
+    _settings_awaiting_start = Any()
+
+    #: (camera, warning) pairs already shown to the user for the selected
+    #: camera; cleared on every source selection.
+    _shown_settings_warnings = Set()
+
     def _focus_edits_default(self):
         return LatestValueThrottle(
             interval=FOCUS_WRITE_INTERVAL_S, callback=self._write_focus
+        )
+
+    def _settings_edits_default(self):
+        return LatestValueThrottle(
+            interval=CAMERA_SETTINGS_PUBLISH_INTERVAL_S,
+            callback=self._publish_settings,
         )
 
     def __autofocus_timeout_default(self):
@@ -199,6 +228,8 @@ class CameraController(HasTraits):
         """
         self.cancel_autofocus("camera changed")
         self.focus_edits.cancel()
+        self._settings_awaiting_start = None
+        self._shown_settings_warnings = set()
 
         if remembered_as:
             self.preferences.selected_camera = remembered_as
@@ -364,11 +395,17 @@ class CameraController(HasTraits):
 
         return len(labels) // 2
 
-    def select_resolution(self, label, width, height, frame_rate):
-        """Record the selected camera format."""
+    def select_resolution(self, label, width, height, frame_rate, user_edit=False):
+        """Record the selected camera format; ``user_edit`` when the user
+        picked it."""
         self.preferences.resolution = label
         self.model.resolution = (width, height)
         self.model.frame_rate = frame_rate
+
+        if user_edit:
+            self.settings_edited()
+        else:
+            self.announce_settings()
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #
@@ -575,6 +612,7 @@ class CameraController(HasTraits):
             logger.error(f"Focus not applied: {error}")
 
         self.refresh_focus()
+        self.settings_edited()
 
     def request_focus(self, focus_distance):
         """Apply a focus slider drag's ``focus_distance`` (0.0 near to 1.0
@@ -582,6 +620,7 @@ class CameraController(HasTraits):
         FOCUS_WRITE_INTERVAL_S that always ends on the latest value."""
         self.cancel_autofocus("focus edited")
         self.focus_edits.submit(focus_distance)
+        self.settings_edited()
 
     @observe("model:camera_active")
     def refresh_focus(self, event=None):
@@ -590,7 +629,7 @@ class CameraController(HasTraits):
         a started camera) and focus change."""
         model = self.model
         focus = model.focus
-        qcamera_selected = self._qcamera_selected()
+        qcamera_selected = self.qcamera_selected()
         qt_focus = qcamera_selected and self.camera.supports_manual_focus()
         v4l2_focus = (
             qcamera_selected and not qt_focus and model.v4l2_focus_span is not None
@@ -622,7 +661,7 @@ class CameraController(HasTraits):
         if distance is not None:
             focus.distance = distance
 
-    def _qcamera_selected(self):
+    def qcamera_selected(self):
         """Whether the selected source is a bound QCamera (not a provider
         feed or "<No Camera>")."""
         model = self.model
@@ -641,7 +680,7 @@ class CameraController(HasTraits):
         ``model.image_settings``, on every source selection."""
         settings = []
 
-        if self._qcamera_selected():
+        if self.qcamera_selected():
             for control in self.camera.image_control_ranges():
                 try:
                     value, auto = self.camera.image_control(control.name)
@@ -669,6 +708,7 @@ class CameraController(HasTraits):
                 )
 
         self.model.image_settings = settings
+        self.announce_settings()
 
     @observe("model:image_settings:items:[value,auto]")
     def _apply_image_setting(self, event):
@@ -692,6 +732,8 @@ class CameraController(HasTraits):
                 self.model.v4l2_device_path if setting.auto else None
             )
 
+        self.settings_edited()
+
     @observe("model:reset_image_settings")
     def reset_image_settings(self, event=None):
         """Put every image control back to the camera's default, automatic
@@ -699,6 +741,197 @@ class CameraController(HasTraits):
 
         for setting in self.model.image_settings:
             setting.trait_set(value=setting.default, auto=setting.has_auto)
+
+    # ------------------------------------------------------------------ #
+    # Capture setup (CameraSettingsSnapshot / CameraSettingsRequest)       #
+    # ------------------------------------------------------------------ #
+    def current_settings(self):
+        """The panel's capture setup as a CameraSettings dict: no resolution,
+        image controls or focus unless a QCamera is selected."""
+        model = self.model
+        settings = {
+            "camera": model.selected_camera,
+            "resolution": None,
+            "image_controls": {},
+            "focus": None,
+        }
+
+        if not self.qcamera_selected() or not all(model.resolution):
+            return settings
+
+        focus = model.focus
+        settings["resolution"] = list(model.resolution)
+        settings["image_controls"] = {
+            setting.name: {"value": setting.value, "auto": setting.auto}
+            for setting in model.image_settings
+        }
+
+        if focus.available:
+            settings["focus"] = {"auto": focus.auto, "distance": focus.distance}
+
+        return settings
+
+    def settings_edited(self):
+        """The user changed the capture setup: publish the snapshot, marked
+        as a user edit, once the edits settle. Writes of an applied
+        CameraSettingsRequest are no edit."""
+
+        if self._applying_settings:
+            return
+
+        self._settings_user_edit = True
+        self.settings_edits.submit(None)
+
+    def announce_settings(self):
+        """Publish the snapshot once pending changes settle — after a source
+        selection or a restored format, so a listener always holds the
+        current setup."""
+
+        if self._applying_settings:
+            return
+
+        self.settings_edits.submit(None)
+
+    def _publish_settings(self, _value=None):
+        user_edit = self._settings_user_edit
+        self._settings_user_edit = False
+
+        camera_settings_publisher.publish(
+            {**self.current_settings(), "user_edit": user_edit}
+        )
+
+    def begin_applying_settings(self):
+        """Start applying a CameraSettingsRequest: a user edit still waiting
+        to be published is dropped, so it cannot be stored into the step
+        whose setup is now being applied."""
+        self.settings_edits.cancel()
+        self._settings_user_edit = False
+        self._applying_settings = True
+
+    def apply_settings(self, request):
+        """Apply a CameraSettingsRequest dict's image controls and focus to
+        the selected QCamera, after the view has applied its resolution
+        (see begin_applying_settings); returns the warnings for what the
+        camera could not take. A control the camera lacks is skipped, a
+        value outside its range clamped. While the camera is off, focus
+        waits for its start, and the controls are applied again then."""
+        warnings = []
+        camera = self.model.selected_camera
+        settings_by_name = {
+            setting.name: setting for setting in self.model.image_settings
+        }
+
+        for name, wanted in request["image_controls"].items():
+            label = IMAGE_CONTROL_LABELS.get(name, name)
+            setting = settings_by_name.get(name)
+
+            if setting is None:
+                warnings.append(f"{label} is not available on {camera}")
+
+                continue
+
+            auto = wanted["auto"] and setting.has_auto
+            value = min(max(wanted["value"], setting.low), setting.high)
+
+            if wanted["auto"] and not setting.has_auto:
+                warnings.append(
+                    f"{label} has no automatic mode on {camera}; set to {value}"
+                )
+            elif not auto and value != wanted["value"]:
+                warnings.append(
+                    f"{label} {wanted['value']} is outside {camera}'s range "
+                    f"({setting.low} to {setting.high}); set to {value}"
+                )
+
+            setting.trait_set(value=value, auto=auto)
+
+        if not self.model.camera_active:
+            self._settings_awaiting_start = request
+        elif request["focus"] is not None:
+            warnings.extend(self._apply_settings_focus(request["focus"], camera))
+
+        return warnings
+
+    def _apply_settings_focus(self, focus, camera):
+        """Apply a CameraSettingsRequest's focus; returns its warnings."""
+
+        if not self.model.focus.available:
+            return [f"Focus is not adjustable on {camera}"]
+
+        if focus["auto"] and not self.model.focus.auto_available:
+            return [f"{camera} has no auto focus; the focus stays as it is"]
+
+        self.cancel_autofocus("focus set by a capture setup")
+        self.focus_edits.cancel()
+
+        try:
+            self._apply_focus(None if focus["auto"] else focus["distance"])
+        except RuntimeError as error:
+            return [f"Focus not applied on {camera}: {error}"]
+        finally:
+            self.refresh_focus()
+
+        return []
+
+    def settings_applied(self, request, warnings=(), error=""):
+        """Finish a CameraSettingsRequest: log what the camera could not
+        take, publish the snapshot (not a user edit) and answer the
+        requester on DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED."""
+        self._applying_settings = False
+        context = f"{request['context']}: " if request["context"] else ""
+
+        for text in warnings:
+            logger.warning(f"Capture setup {context}{text}")
+
+        if error:
+            logger.warning(f"Capture setup {context}not applied: {error}")
+        else:
+            self.announce_settings()
+
+        camera_settings_applied_publisher.publish(
+            {
+                "request_id": request["request_id"],
+                "ok": not error,
+                "warnings": list(warnings),
+                "error": error,
+            }
+        )
+
+    def unseen_settings_warnings(self, warnings):
+        """The ``warnings`` not yet shown to the user for the selected camera,
+        now marked as shown — so browsing steps, or a run's steps, that share
+        a setup the camera cannot take warn once, not once per step."""
+        camera = self.model.selected_camera
+        unseen = [
+            text
+            for text in warnings
+            if (camera, text) not in self._shown_settings_warnings
+        ]
+        self._shown_settings_warnings.update((camera, text) for text in unseen)
+
+        return unseen
+
+    @observe("model:camera_active")
+    def _apply_settings_awaiting_start(self, event):
+        """Apply again the capture setup that arrived while the camera was off
+        (see _settings_awaiting_start); what it cannot take was reported
+        then, so it is only logged now."""
+        request = self._settings_awaiting_start
+
+        if not event.new or request is None:
+            return
+
+        self._settings_awaiting_start = None
+        self._applying_settings = True
+
+        # The camera is on now, so this applies the focus as well.
+        try:
+            warnings = self.apply_settings(request)
+        finally:
+            self._applying_settings = False
+
+        for text in warnings:
+            logger.warning(f"Capture setup on camera start: {text}")
 
     # ------------------------------------------------------------------ #
     # Autofocus (one-shot contrast sweep)                                  #
@@ -752,6 +985,7 @@ class CameraController(HasTraits):
             f"{autofocus.scores[autofocus.best_distance]:.1f}), "
             f"{len(autofocus.scores)} positions in {elapsed_s:.1f} s"
         )
+        self.settings_edited()
 
     def cancel_autofocus(self, reason):
         """Stop a running sweep, leaving the lens where it is."""

@@ -92,6 +92,10 @@ class CameraControlWidget(QWidget):
     #: handler (a Dramatiq worker thread) and applied on the GUI thread.
     camera_select_source_signal = Signal(object)
 
+    #: A CameraSettingsRequest dict, emitted by the dock pane's topic
+    #: handler (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_settings_signal = Signal(object)
+
     def __init__(
         self,
         model,
@@ -169,6 +173,7 @@ class CameraControlWidget(QWidget):
         self.screen_recording_signal.connect(self.on_recording_active)
         self.camera_controls_signal.connect(self.apply_camera_controls)
         self.camera_select_source_signal.connect(self.apply_select_source)
+        self.camera_settings_signal.connect(self.apply_camera_settings)
 
         # UI Initialization
         self._init_ui()
@@ -719,29 +724,8 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.blockSignals(False)
             return
 
-        min_width, min_height = CAMERA_MIN_RESOLUTION
-        formats = [
-            fmt
-            for fmt in self.camera_device.video_formats()
-            if fmt.resolution().width() >= min_width
-            and fmt.resolution().height() >= min_height
-        ]
         libcamera = self.camera_device.is_libcamera()
-        format_summaries = [
-            (
-                fmt.resolution().width(),
-                fmt.resolution().height(),
-                str(fmt.pixelFormat()),
-                fmt.maxFrameRate(),
-            )
-            for fmt in formats
-        ]
-        ranked = [
-            formats[index]
-            for index in self.controller.rank_formats(
-                format_summaries, allow_strict_mode, libcamera
-            )
-        ]
+        ranked = self._ranked_formats(allow_strict_mode)
         saved_resolution = self.preferences.resolution
 
         # The condensed list: the common sizes, plus the saved size when it is
@@ -790,6 +774,31 @@ class CameraControlWidget(QWidget):
                 warning(None, warning_message)
 
             self.populate_resolutions(allow_strict_mode=False)
+
+    def _ranked_formats(self, allow_strict_mode=True):
+        """The bound camera's formats of at least CAMERA_MIN_RESOLUTION, one
+        per resolution, best first (see CameraController.rank_formats)."""
+        min_width, min_height = CAMERA_MIN_RESOLUTION
+        formats = [
+            fmt
+            for fmt in self.camera_device.video_formats()
+            if fmt.resolution().width() >= min_width
+            and fmt.resolution().height() >= min_height
+        ]
+        format_summaries = [
+            (
+                fmt.resolution().width(),
+                fmt.resolution().height(),
+                str(fmt.pixelFormat()),
+                fmt.maxFrameRate(),
+            )
+            for fmt in formats
+        ]
+        ranked_indices = self.controller.rank_formats(
+            format_summaries, allow_strict_mode, self.camera_device.is_libcamera()
+        )
+
+        return [formats[index] for index in ranked_indices]
 
     @staticmethod
     def _resolution_name(fmt):
@@ -856,6 +865,7 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.itemText(index),
             *resolution,
             self._get_camera_resolution_max_framerate(fmt=camera_format),
+            user_edit=interactive,
         )
         self.model.camera_perspective.camera_resolution = resolution
 
@@ -1019,6 +1029,101 @@ class CameraControlWidget(QWidget):
         """Apply a CameraControlsRequest dict on the GUI thread; the
         controller answers DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED."""
         self.controller.apply_camera_controls(request)
+
+    # ------------------------------------------------------------------ #
+    # Capture setup by request (CameraSettingsRequest)                     #
+    # ------------------------------------------------------------------ #
+    @Slot(object)
+    def apply_camera_settings(self, request):
+        """Apply a CameraSettingsRequest dict — a protocol step's capture
+        setup — to the selected QCamera: its resolution here, the camera
+        properties through the controller, which answers
+        DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED. What the camera cannot take
+        is skipped and the user warned, once per camera and warning."""
+        if not self.controller.qcamera_selected():
+            self.controller.settings_applied(request, error="no QCamera is selected")
+
+            return
+
+        self.controller.begin_applying_settings()
+        warnings = []
+
+        try:
+            if request["resolution"] is not None:
+                warnings.extend(
+                    self._apply_requested_resolution(tuple(request["resolution"]))
+                )
+
+            warnings.extend(self.controller.apply_settings(request))
+        except Exception as e:
+            logger.error(f"Capture setup not applied: {e}", exc_info=True)
+            self.controller.settings_applied(request, warnings, error=str(e))
+
+            return
+
+        self.controller.settings_applied(request, warnings)
+        self._warn_unsupported_settings(
+            request["context"], self.controller.unseen_settings_warnings(warnings)
+        )
+
+    def _apply_requested_resolution(self, resolution):
+        """Switch to the best format of ``resolution`` — selected as if
+        restored, so it shows in the combo even when it is not a common
+        size; returns the warnings (the size is not supported)."""
+        if self.camera_model.resolution == resolution:
+            return []
+
+        ranked = self._ranked_formats() or self._ranked_formats(allow_strict_mode=False)
+        match = next(
+            (
+                fmt
+                for fmt in ranked
+                if (fmt.resolution().width(), fmt.resolution().height()) == resolution
+            ),
+            None,
+        )
+
+        if match is None:
+            width, height = resolution
+            current_width, current_height = self.camera_model.resolution
+
+            return [
+                f"{width}x{height} is not supported by "
+                f"{self.camera_model.selected_camera}; capturing at "
+                f"{current_width}x{current_height} instead"
+            ]
+
+        # The condensed list always holds the saved size, and the restore
+        # applies the format without the high-resolution notice.
+        self.preferences.resolution = self._resolution_label(match)
+        self.populate_resolutions()
+
+        return []
+
+    def _warn_unsupported_settings(self, context, warnings):
+        """Tell the user what of a step's capture setup the camera could not
+        take, so the step can be changed to settings it supports. Deferred
+        out of the request's slot: the dialog is modal."""
+        if not warnings:
+            return
+
+        where = f" for {context}" if context else ""
+        message = (
+            f"The camera cannot apply all of the capture settings{where}:<br><br>"
+            + "<br>".join(f"\u2022 {text}" for text in warnings)
+            + "<br><br>Select the step and pick settings this camera supports "
+            "in the camera panel to update it."
+        )
+
+        QTimer.singleShot(
+            0,
+            lambda: warning(
+                None,
+                title="Capture settings not supported",
+                message=message,
+                cancel=False,
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     # Source selection by request (CameraSelectSourceRequest)              #
