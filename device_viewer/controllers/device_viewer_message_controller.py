@@ -45,10 +45,15 @@ from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 from ..consts import (
     PKG_name,
     camera_controls_applied_publisher,
+    camera_settings_applied_publisher,
     camera_source_selected_publisher,
     listener_name,
 )
-from ..models.media import CameraControlsRequest, CameraSelectSourceRequest
+from ..models.media import (
+    CameraControlsRequest,
+    CameraSelectSourceRequest,
+    CameraSettingsRequest,
+)
 from ..models.messages import DeviceViewerMessageModel
 from ..utils.message_utils import gui_models_to_message_model
 
@@ -69,20 +74,33 @@ def parse_camera_controls_request(message):
     request_id is recovered from the raw payload when possible, so the
     requester still gets matched even on a failed validation.
     """
+    return _parse_camera_request(message, CameraControlsRequest, "camera controls")
+
+
+def parse_camera_settings_request(message):
+    """Parse and validate a DEVICE_VIEWER_CAMERA_APPLY_SETTINGS payload into
+    a ``(request, reply)`` pair like parse_camera_controls_request, the
+    failure reply being a ``CameraSettingsApplied`` payload."""
+    return _parse_camera_request(message, CameraSettingsRequest, "capture settings")
+
+
+def _parse_camera_request(message, validator_class, description):
+    """``(request dict, None)`` for a valid ``validator_class`` payload,
+    else ``(None, {request_id, ok=False, error})``."""
 
     try:
         raw = json.loads(message) if message and message.strip() else {}
     except (json.JSONDecodeError, TypeError) as error:
-        logger.warning(f"Unparseable camera controls request: {message!r}")
+        logger.warning(f"Unparseable {description} request: {message!r}")
 
         return None, {"request_id": "", "ok": False, "error": str(error)}
 
     request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
 
     try:
-        request = CameraControlsRequest.model_validate(raw)
+        request = validator_class.model_validate(raw)
     except ValidationError as error:
-        logger.warning(f"Invalid camera controls request: {message!r} ({error})")
+        logger.warning(f"Invalid {description} request: {message!r} ({error})")
 
         # Name the field and the reason ("exposure_ms: Input should be
         # greater than 0"), not pydantic's "1 validation error for ..." header.
@@ -389,6 +407,27 @@ class DeviceViewerMessageController(HasTraits):
             return
 
         self.pane.camera_control_widget.camera_controls_signal.emit(request)
+
+    def _on_apply_settings_triggered(self, message):
+        """Another plugin's CameraSettingsRequest (a protocol step's capture
+        setup); applied on the GUI thread by the camera widget, which
+        answers the applied signal itself. An invalid request, or one
+        arriving with no camera widget, is answered ok=False here instead."""
+        request, reply = parse_camera_settings_request(message)
+
+        if reply is None and not self.pane.camera_control_widget:
+            reply = {
+                "request_id": request["request_id"],
+                "ok": False,
+                "error": "Device viewer camera is not available",
+            }
+
+        if reply is not None:
+            camera_settings_applied_publisher.publish(reply)
+
+            return
+
+        self.pane.camera_control_widget.camera_settings_signal.emit(request)
 
     def _on_screen_recording_triggered(self, message):
         """Forward a JSON screen-recording command to the camera widget."""

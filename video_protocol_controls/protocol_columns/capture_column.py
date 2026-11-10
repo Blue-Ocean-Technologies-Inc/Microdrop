@@ -8,10 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Capture compound column — one-shot screen capture per step. Three
+"""Capture compound column — one-shot screen capture per step. Four
 coupled cells (capture Bool, capture_at Step Start / Step End choice,
-capture_lead_ms camera lead time) sharing one model + one handler via
-the PPT-11 compound framework (#396).
+capture_lead_ms camera lead time, capture_camera_settings camera setup)
+sharing one model + one handler via the PPT-11 compound framework (#396).
+
+Camera setup: each capturing step stores the resolution and camera
+properties it captures with (a device_viewer CameraSettings dict), so they
+may vary from step to step. The cell is display-only — the setup is taken
+from the device viewer's camera panel: a user edit there is stored into
+the selected capturing steps, and selecting such a step applies its setup
+to the camera (services/camera_settings_sync.py). At run time the handler
+applies the step's setup at step start, before the camera lead and the
+capture; what the camera cannot take (an unsupported resolution, a missing
+or out-of-range property) is skipped, the device viewer warning the user,
+and the capture goes ahead with the camera's own values.
 
 Timing is PER STEP: each row picks start-of-step or end-of-step capture
 independently; newly added steps start at Step Start.
@@ -62,14 +73,21 @@ import json
 import time
 import uuid
 
+# Third-party imports.
+from pydantic import ValidationError
+
 # Enthought library imports.
 from pyface.qt.QtCore import Qt
-from traits.api import Bool, Enum, Int, List, Str
+from traits.api import Any, Bool, Enum, Int, List, Str
 
 # Microdrop package imports.
 from device_viewer.consts import (
+    COMMON_RESOLUTION_NAMES,
+    DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
     DEVICE_VIEWER_SCREEN_CAPTURE,
+    CameraSettings,
+    camera_apply_settings_publisher,
 )
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models.compound_column import (
@@ -78,13 +96,25 @@ from pluggable_protocol_tree.models.compound_column import (
     CompoundColumn,
     DictCompoundColumnView,
 )
+from pluggable_protocol_tree.views.columns.base import BaseColumnView
 from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.combobox import ComboBoxColumnView
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
-from video_protocol_controls.consts import EXPERIMENT_DIR_SCRATCH_KEY, StepTime
+from video_protocol_controls.consts import (
+    CAPTURE_CAMERA_SETTINGS_FIELD_ID,
+    CAPTURE_FIELD_ID,
+    EXPERIMENT_DIR_SCRATCH_KEY,
+    StepTime,
+)
 
 # Microdrop utils imports.
+from microdrop_utils.camera_image_controls import IMAGE_CONTROL_LABELS
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #: The selectable capture moments, in display order — the single
 #: definition; the default/per-row trait validation and the
@@ -97,8 +127,32 @@ CHOICES = (StepTime.START, StepTime.END)
 CAMERA_ON_AT_SCRATCH_KEY = "video_protocol_controls.capture_camera_on_at"
 
 
+def normalize_camera_settings(raw):
+    """A stored camera setup as a JSON-native CameraSettings dict, or None
+    for no setup — also for a stale or hand-edited one, which must never
+    fail a protocol load."""
+    if not raw:
+        return None
+
+    try:
+        return CameraSettings.model_validate(raw).model_dump(mode="json")
+    except ValidationError as error:
+        logger.warning(f"Dropped an invalid capture camera setup {raw!r}: {error}")
+
+        return None
+
+
+def resolution_text(resolution):
+    """'FHD (1920x1080)', or '1920x1080' for a size without a common name."""
+    width, height = resolution
+    name = COMMON_RESOLUTION_NAMES.get((width, height))
+    size = f"{width}x{height}"
+
+    return f"{name} ({size})" if name else size
+
+
 class CaptureCompoundModel(BaseCompoundColumnModel):
-    """Three coupled fields. base_id 'capture' appears as compound_id on
+    """Four coupled fields. base_id 'capture' appears as compound_id on
     each field's column entry in JSON (PPT-11 framework)."""
 
     base_id = "capture"
@@ -112,6 +166,7 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
             FieldSpec("capture", "Capture", False),
             FieldSpec("capture_at", "Capture At", self.default_capture_at),
             FieldSpec("capture_lead_ms", "Camera Lead (ms)", 0),
+            FieldSpec(CAPTURE_CAMERA_SETTINGS_FIELD_ID, "Camera Settings", None),
         ]
 
     def trait_for_field(self, field_id):
@@ -128,7 +183,16 @@ class CaptureCompoundModel(BaseCompoundColumnModel):
         if field_id == "capture_lead_ms":
             return Int(0, desc="Milliseconds the camera is on before the capture fires")
 
+        if field_id == CAPTURE_CAMERA_SETTINGS_FIELD_ID:
+            return Any(None, desc="Camera resolution and properties of the capture")
+
         raise KeyError(field_id)
+
+    def deserialize(self, field_id, raw):
+        if field_id == CAPTURE_CAMERA_SETTINGS_FIELD_ID:
+            return normalize_camera_settings(raw)
+
+        return super().deserialize(field_id, raw)
 
 
 class CaptureAtComboBoxView(ComboBoxColumnView):
@@ -187,6 +251,60 @@ class CaptureLeadSpinBoxView(IntSpinBoxColumnView):
         return super().format_display(value, row)
 
 
+class CaptureCameraSettingsView(BaseColumnView):
+    """Display-only summary of the step's camera setup — its resolution,
+    the properties in the tooltip; blank while row.capture is False. The
+    device viewer's camera panel authors the setup (see the module
+    docstring), so the cell has no editor."""
+
+    #: The setup is written over PROTOCOL_TREE_SET_CELL (bypassing setData),
+    #: and the display is a function of row.capture too.
+    depends_on_row_traits = List(
+        Str, value=[CAPTURE_FIELD_ID, CAPTURE_CAMERA_SETTINGS_FIELD_ID]
+    )
+
+    def format_display(self, value, row):
+        if not getattr(row, CAPTURE_FIELD_ID, False) or not value:
+            return ""
+
+        if value["resolution"] is None:
+            return "Camera defaults"
+
+        return resolution_text(value["resolution"])
+
+    def get_tooltip(self, row):
+        settings = getattr(row, CAPTURE_CAMERA_SETTINGS_FIELD_ID, None)
+
+        if not getattr(row, CAPTURE_FIELD_ID, False):
+            return None
+
+        if not settings:
+            return (
+                "No camera settings yet: they are taken from the device "
+                "viewer's camera panel"
+            )
+
+        lines = [f"Camera: {settings['camera'] or 'any'}"]
+
+        if settings["resolution"] is not None:
+            lines.append(f"Resolution: {resolution_text(settings['resolution'])}")
+
+        for name, control in settings["image_controls"].items():
+            value = "auto" if control["auto"] else control["value"]
+            lines.append(f"{IMAGE_CONTROL_LABELS.get(name, name)}: {value}")
+
+        focus = settings["focus"]
+
+        if focus is not None:
+            value = "auto" if focus["auto"] else f"{focus['distance']:.2f}"
+            lines.append(f"Focus: {value}")
+
+        return "\n".join(lines)
+
+    def create_editor(self, parent, context):
+        return None
+
+
 class CaptureHandler(BaseCompoundColumnHandler):
     """Publishes a single image-capture event per step where row.capture
     is True, at the row's chosen moment (row.capture_at), after the
@@ -206,7 +324,10 @@ class CaptureHandler(BaseCompoundColumnHandler):
     """
 
     priority = 11
-    wait_for_topics = [DEVICE_VIEWER_MEDIA_CAPTURED]
+    wait_for_topics = [
+        DEVICE_VIEWER_MEDIA_CAPTURED,
+        DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
+    ]
     default_ack_time_s = 15.0
 
     def on_pre_step(self, row, ctx):
@@ -218,6 +339,9 @@ class CaptureHandler(BaseCompoundColumnHandler):
         """
         if not getattr(row, "capture", False):
             return
+
+        # Before the lead clock starts: a new resolution restarts the stream.
+        self._apply_camera_settings(row, ctx)
 
         lead_ms = getattr(row, "capture_lead_ms", 0)
 
@@ -245,6 +369,44 @@ class CaptureHandler(BaseCompoundColumnHandler):
 
         self._wait_out_lead(getattr(row, "capture_lead_ms", 0), ctx)
         self._fire_capture(row, ctx)
+
+    def _apply_camera_settings(self, row, ctx):
+        """Apply the step's camera setup, if it has one, and wait for the
+        device viewer's answer. Nothing the camera cannot take stops the
+        step: the device viewer warns the user and the capture goes ahead,
+        so it is only logged here."""
+        settings = getattr(row, CAPTURE_CAMERA_SETTINGS_FIELD_ID, None)
+
+        if not settings:
+            return
+
+        request_id = uuid.uuid4().hex
+        context = f"Step {row.dotted_path()} · {row.name}"
+
+        camera_apply_settings_publisher.publish(
+            {**settings, "request_id": request_id, "context": context}
+        )
+
+        if self.ack_time_s <= 0:
+            return
+
+        reply = json.loads(
+            ctx.wait_for(
+                DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
+                timeout=self.ack_time_s,
+                predicate=lambda message: (
+                    json.loads(message).get("request_id") == request_id
+                ),
+            )
+        )
+
+        if not reply.get("ok"):
+            logger.warning(
+                f"{context}: camera settings not applied: {reply.get('error')}"
+            )
+
+        for text in reply.get("warnings", []):
+            logger.warning(f"{context}: {text}")
 
     def _wait_out_lead(self, lead_ms, ctx):
         """Sleep until the camera has been on for lead_ms (stop-aware)."""
@@ -290,7 +452,7 @@ class CaptureHandler(BaseCompoundColumnHandler):
 
 def make_capture_column():
     """Return a fresh Capture compound column (capture, capture_at,
-    capture_lead_ms)."""
+    capture_lead_ms, capture_camera_settings)."""
     return CompoundColumn(
         model=CaptureCompoundModel(),
         view=DictCompoundColumnView(
@@ -298,6 +460,7 @@ def make_capture_column():
                 "capture": CheckboxColumnView(),
                 "capture_at": CaptureAtComboBoxView(),
                 "capture_lead_ms": CaptureLeadSpinBoxView(),
+                CAPTURE_CAMERA_SETTINGS_FIELD_ID: CaptureCameraSettingsView(),
             }
         ),
         handler=CaptureHandler(),

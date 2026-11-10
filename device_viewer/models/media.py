@@ -83,6 +83,73 @@ class CameraControlsApplied(BaseModel):
     error: str = ""
 
 
+class CameraImageControlSetting(BaseModel):
+    """One image control's value (see IMAGE_CONTROL_LABELS for the names)."""
+
+    value: int
+    #: The control's automatic mode drives it; ``value`` is then ignored.
+    auto: bool = False
+
+
+class CameraFocusSetting(BaseModel):
+    """The camera's focus: continuous auto focus, or a manual distance."""
+
+    auto: bool = False
+    #: QCamera focus distance, 0.0 (near) to 1.0 (far).
+    distance: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class CameraSettings(BaseModel):
+    """What a capture is taken with: the camera format's resolution and the
+    camera properties. A protocol step stores this as its own capture
+    setup, so the settings may change from step to step."""
+
+    #: Dropdown label of the camera the settings were taken from, for
+    #: context only — any QCamera can be asked to apply them.
+    camera: str = ""
+    #: (width, height) of the camera format; None leaves the format as is.
+    resolution: tuple[int, int] | None = None
+    #: Image controls by v4l2 name; controls missing here are left as is.
+    image_controls: dict[str, CameraImageControlSetting] = {}
+    #: None when the camera has no adjustable focus.
+    focus: CameraFocusSetting | None = None
+
+
+class CameraSettingsSnapshot(CameraSettings):
+    """The camera panel's current settings, published on
+    DEVICE_VIEWER_CAMERA_SETTINGS."""
+
+    #: The user changed a setting in the panel (resolution, an image
+    #: control, focus); False for a snapshot after a source selection or an
+    #: applied settings request, which must not be stored back into a step.
+    user_edit: bool = False
+
+
+class CameraSettingsRequest(CameraSettings):
+    """Apply a step's CameraSettings to the selected QCamera; answered on
+    DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED."""
+
+    #: A misspelt field would otherwise be dropped silently and a setting
+    #: left as it was — reject it so the requester is told.
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = ""
+    #: Who asks, for the user's warnings — e.g. "Step 1.2 · Wash".
+    context: str = ""
+
+
+class CameraSettingsApplied(BaseModel):
+    """The outcome of a CameraSettingsRequest, echoing its request_id.
+    ok=False carries why nothing was applied (no QCamera selected);
+    ``warnings`` lists what the camera could not take (an unsupported
+    resolution, a missing or out-of-range control) while the rest applied."""
+
+    request_id: str = ""
+    ok: bool
+    warnings: list[str] = []
+    error: str = ""
+
+
 class CameraSelectSourceRequest(BaseModel):
     """Select a camera source by its dropdown label, optionally turning the
     camera on or off as well."""
