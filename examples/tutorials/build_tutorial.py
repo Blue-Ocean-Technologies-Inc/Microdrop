@@ -522,6 +522,14 @@ class _SourceRewriter(HTMLParser):
         kept = []
 
         for name, value in attrs:
+            # A link is never a network load, so the reference check would
+            # pass a network href: refuse it here.
+            if name == "href" and value and NETWORK_URL_PATTERN.match(value):
+                raise TutorialBuildError(
+                    f"Media file {value} must be a relative path inside "
+                    f"{self.media_folder}/"
+                )
+
             if not value or NETWORK_URL_PATTERN.match(value):
                 kept.append((name, value))
             elif name in ("src", "href"):
