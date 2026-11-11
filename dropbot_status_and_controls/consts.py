@@ -10,6 +10,7 @@
 
 # Standard library imports.
 import os
+from pathlib import Path
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -82,3 +83,8 @@ disconnected_color = GREY["lighter"]
 connected_no_device_color = WARNING_COLOR
 connected_color = SUCCESS_COLOR
 halted_color = ERROR_COLOR
+
+#: Help > Tutorials page, built from resources/dropbot_status.src.html.
+DROPBOT_STATUS_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "dropbot_status.html"
+)

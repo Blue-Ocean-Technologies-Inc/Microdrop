@@ -13,12 +13,11 @@ import webbrowser
 from pathlib import Path
 
 # Enthought library imports.
-from pyface.action.api import Action
+from pyface.action.api import Action, Group, MenuManager
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, Int, Str
+from traits.api import Any, Bool, HasTraits, Instance, Int, List, Str, observe
 
 # Microdrop package imports.
-from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
@@ -34,6 +33,7 @@ from .consts import (
     MICRODROP_LAUNCHER_README_URL,
     SCIBOTS_URL,
     SUPPORT_EMAIL,
+    TutorialEntry,
 )
 
 # Logger import.
@@ -174,7 +174,51 @@ class ContactSupportAction(Action):
         webbrowser.open(f"mailto:{self.email}")
 
 
-def menu_factory():
+class TutorialCatalog(HasTraits):
+    """The tutorials contributed to the TUTORIALS extension point."""
+
+    #: Contributed entries, sorted by title (kept so by UserHelpPlugin).
+    entries = List(Instance(TutorialEntry))
+
+
+class TutorialsMenuManager(MenuManager):
+    """Help > Tutorials: one entry per catalog entry, rebuilt when it changes."""
+
+    id = "tutorials_submenu"
+    name = "&Tutorials"
+
+    catalog = Instance(TutorialCatalog, ())
+
+    @observe("catalog.entries")
+    def _rebuild(self, event):
+        group = self.find_group("tutorials")
+
+        if group is None:
+            group = Group(id="tutorials")
+            self.append(group)
+
+        group.clear()
+
+        for entry in self.catalog.entries:
+            group.append(tutorial_action(entry))
+
+        self.enabled = bool(self.catalog.entries)
+        self.changed = True
+
+
+def tutorial_action(entry):
+    """Return the action opening one tutorial page."""
+    return OpenWebViewDialogAction(
+        # A single & is a Qt mnemonic marker; && shows one.
+        name=f"{entry.title.replace('&', '&&')}...",
+        tooltip=f"Open the {entry.title}",
+        source=entry.path,
+        window_title=entry.title,
+    )
+
+
+def menu_factory(tutorial_catalog=None):
+    """Help-menu group; Tutorials lists ``tutorial_catalog``'s entries."""
     contact_submenu = SMenu(
         ContactSupportAction(
             name="&Technical Support",
@@ -208,12 +252,7 @@ def menu_factory():
             source=CHANGELOG_PATH,
             window_title="MicroDrop Changelog",
         ),
-        OpenWebViewDialogAction(
-            name="&Image Analysis Tutorial...",
-            tooltip="Plain-language guide to the ROI analysis terms and settings",
-            source=ANALYSIS_HELP_HTML_PATH,
-            window_title="Image Analysis Tutorial",
-        ),
+        TutorialsMenuManager(catalog=tutorial_catalog or TutorialCatalog()),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
             tooltip="Learn about MicroDrop's architecture and capabilities",

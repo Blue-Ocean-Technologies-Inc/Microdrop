@@ -23,9 +23,16 @@ from traits.api import Instance, List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, IMAGE_FILTERS, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    ANALYSIS_HELP_HTML_PATH,
+    IMAGE_FILTERS,
+    PKG,
+    PKG_name,
+)
 
 
 class ImageViewerPlugin(Plugin):
@@ -45,6 +52,14 @@ class ImageViewerPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    #: Help > Tutorials entries for this plugin's panes.
+    tutorials = List(contributes_to=TUTORIALS)
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(title="Image Analysis Tutorial", path=ANALYSIS_HELP_HTML_PATH)
+        ]
 
     def _contributed_task_extensions_default(self):
         from pyface.action.schema.api import SchemaAddition

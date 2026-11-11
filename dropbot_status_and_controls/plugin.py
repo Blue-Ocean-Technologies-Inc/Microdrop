@@ -8,13 +8,21 @@
 #
 # Thanks for using Microdrop open source!
 
-# from pyface.action.schema.schema_addition import SchemaAddition
-
-from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
+# Enthought library imports.
+from envisage.api import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from traits.api import List
 
+# Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
+
+# Local imports.
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    DROPBOT_STATUS_TUTORIAL_HTML_PATH,
+    PKG,
+    PKG_name,
+)
 
 
 class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
@@ -26,8 +34,12 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
+    #: Help > Tutorials entries for this plugin's pane.
+    tutorials = List(contributes_to=TUTORIALS)
+
     def _get_dock_pane_class(self):
         from .dock_pane import DropbotStatusAndControlsDockPane
+
         return DropbotStatusAndControlsDockPane
 
     def _get_actor_topic_dict(self) -> dict:
@@ -35,11 +47,21 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     def _preferences_panes_default(self):
         from .preferences import DropbotStatusAndControlsPreferencesPane
+
         return [DropbotStatusAndControlsPreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import dropbot_status_and_controls_tab
+
         return [dropbot_status_and_controls_tab]
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(
+                title="Dropbot Status & Controls Tutorial",
+                path=DROPBOT_STATUS_TUTORIAL_HTML_PATH,
+            )
+        ]
 
     # def _get_menu_additions(self) -> list:
     #     from .menus import menu_factory

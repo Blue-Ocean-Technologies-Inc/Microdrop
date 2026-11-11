@@ -8,13 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
+"""Register font files with Qt's font database."""
+
+# Standard library imports.
 from pathlib import Path
-from PySide6.QtGui import QFontDatabase
+
 
 def load_font_family(font_path):
-    if Path(font_path).exists():
-        id_ = QFontDatabase.addApplicationFont(str(font_path))
-        families = QFontDatabase.applicationFontFamilies(id_)
-        if families:            
-            return families[0]
-    return None
+    """Register ``font_path`` with Qt; return its first family, or None."""
+    # Qt is imported here, not at module level, so importing the font
+    # registry does not load Qt for tools that never draw (tutorial --check).
+    from pyface.qt.QtGui import QFontDatabase
+
+    if not Path(font_path).exists():
+        return None
+
+    font_id = QFontDatabase.addApplicationFont(str(font_path))
+    families = QFontDatabase.applicationFontFamilies(font_id)
+
+    return families[0] if families else None
