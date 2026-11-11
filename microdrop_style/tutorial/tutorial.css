@@ -28,6 +28,24 @@
   --radius: 10px;
   --toc-w: 250px;
   --icon-on: #A94DC1;
+  /* Chip player: a chip under the camera looks the same in either theme, so
+     these stay put. Electrode, route and slug colours are the Device
+     Viewer's (device_viewer/default_settings.py, microdrop_style/colors.py);
+     the green dye is sampled from a camera capture of a real droplet. */
+  --chip-plate: #cfd2d4;
+  --electrode-edge: #8592B1;
+  --electrode-on: #546692;
+  --route: #57B66C;
+  --route-selected: #ffff00;
+  --route-cw: orange;
+  --route-ccw: red;
+  --slug-1: #2F80ED;
+  --slug-2: #C2185B;
+  --slug-3: #00A3B4;
+  --drop-green: #4e9a63;
+  --drop-blue: #2a6fb0;
+  --drop-pink: #c2306f;
+  --drop-yellow: #d9a400;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -260,6 +278,50 @@ svg .axis { stroke: var(--line); stroke-width: 1; }
 svg .gridline { stroke: var(--grid); stroke-width: 1; }
 svg .plotbg { fill: var(--plot-bg); }
 
+/* Chip player (Tutorial.chip). */
+figure.demo svg.chip { max-height: 560px; }
+svg.chip .chip-plate { fill: var(--chip-plate); }
+svg.chip .electrode { fill: #ffffff; fill-opacity: .3; stroke: var(--electrode-edge); stroke-width: .35; transition: fill-opacity .2s; }
+svg.chip.on-photo .electrode { fill-opacity: 0; }
+svg.chip .electrode.on, svg.chip.on-photo .electrode.on { fill: var(--electrode-on); fill-opacity: .62; }
+svg.chip .chip-area { fill-opacity: .35; stroke: none; }
+svg.chip .chip-slug { fill: none; stroke-width: .9; stroke-dasharray: 1.6 .8; }
+svg.chip .chip-shine { fill: #ffffff; opacity: .45; }
+svg.chip .chip-route path { stroke-width: .8; stroke-linejoin: round; stroke-linecap: round; }
+svg.chip .chip-route .chip-route-arrow { fill: none; stroke-width: .7; }
+svg.chip .chip-route .chip-route-end { stroke: none; }
+svg.chip .chip-click { fill: none; stroke: #1d2328; stroke-width: .6; }
+svg.chip .chip-pointer { fill: #ffffff; stroke: #000000; stroke-width: .35; stroke-linejoin: round; }
+svg.chip .chip-numbers text { fill: #ffffff; stroke: rgba(29, 35, 40, .55); stroke-width: .5; paint-order: stroke; font-weight: 600; }
+svg.chip text { font-size: 4px; fill: #1d2328; }
+.chip-controls .chip-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+p.chip-caption { margin: 4px 0 0; min-height: 3.2em; font-size: .92rem; }
+
+/* Real clips (<video data-clip>, sidecar files). */
+figure.clip { margin: 10px 0 4px; }
+figure.clip video { display: block; max-width: 100%; height: auto; border-radius: 6px; background: #000; }
+figure.clip figcaption { font-size: .88rem; color: var(--muted); margin-top: 4px; max-width: 60ch; }
+figure.clip figcaption strong { color: var(--ink); }
+p.clip-note { font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+/* A sidecar still (<img data-media>) whose media folder is missing. */
+.still-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 4.5em;
+  padding: 12px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.4;
+}
+.still-missing .still-alt { color: var(--ink); font-size: .92rem; }
+
 .pulse { animation: pulse 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
 @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
@@ -371,4 +433,5 @@ figure.step-panel svg text { fill: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .pulse { animation: none; }
+  svg.chip .electrode { transition: none; }
 }
