@@ -912,6 +912,10 @@
     anchors.forEach(function (a) {
       var href = a.getAttribute("href") || "";
 
+      /* The in-app Help viewer opens followed links in the system browser,
+         but opens no new windows: there a target would swallow the click. */
+      if (/QtWebEngine/.test(navigator.userAgent)) { a.removeAttribute("target"); }
+
       if (href.indexOf("data:") !== 0) { return; }
 
       a.addEventListener("click", function (event) {
