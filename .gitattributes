@@ -1,0 +1,3 @@
+# Real documents shipped beside a tutorial (an example run report) are kept
+# byte for byte, line endings included.
+*_media/*.html -text
