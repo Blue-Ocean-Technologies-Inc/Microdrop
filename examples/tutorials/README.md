@@ -105,6 +105,8 @@ these elements explicitly):
 | `<i data-glyph="ICON_X">` or `<i data-glyph="ligature">` | a toolbar button showing that glyph; add `data-on` for the switched-on look, `data-inline` for text size, `data-label="…"` to announce it |
 | `<img src="figure.svg">`, `.png` | inlined as a data URI; `data-inline` on an SVG pastes its markup instead, so it can use the theme colours |
 | `<style>` / `<script>` | moved after the kit's CSS / JS; a `<style>` with attributes (`media="print"`) keeps its own element. Scripts must be inline: `<script src>` fails the build |
+| `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined |
+| `<img data-media src="<slug>_media/still.webp" alt="…">` | a large still, left as a sidecar file instead of inlined (see *Clips* below) |
 
 Raw SVG can reuse a glyph with `<use href="#ic-<id>">`; the build includes
 every glyph referenced that way. A glyph id is the `ICON_*` name without the
@@ -138,10 +140,69 @@ Scope element lookups to the figure (`figure.querySelector`).
   attribute's CSS `url()`, and no `@import`. The build fails on one. A plain
   link (`<a href="https://â€¦">`) loads nothing and is allowed.
 - Under ~300 KB built (the build fails above that). Schematics as inline SVG,
-  not screenshots.
+  not screenshots. Clips and `data-media` stills are the exception: sidecar
+  files, with their own budget (see *Clips*).
 - Light and dark both work through the theme variables; never hard-code a
   text or background colour.
 - Respect `prefers-reduced-motion`; the kit stops `.pulse` and smooth scroll.
+
+### Clips
+
+Video is not inlined: it would not fit the page budget (nor would a large
+screenshot, see `data-media` below). A clip ships as a sidecar file in a folder named after the page, beside it:
+`<slug>.src.html` plays clips from `<slug>_media/`.
+
+```html
+<figure class="clip">
+<video data-clip muted loop playsinline controls preload="metadata"
+       poster="getting_started_media/split.webp" aria-label="…">
+<source src="getting_started_media/split.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> What to watch for.</figcaption>
+</figure>
+```
+
+- A `<video>` or `<source>` `src` must be a relative path inside that folder,
+  and the file must exist; anything else, including a network URL, fails the
+  build. The `poster` is inlined like an image, so the still shows even when
+  only the HTML file is sent.
+- Each media file stays under `MEDIA_CLIP_BUDGET_BYTES` (1.2 MB) and the
+  whole folder, every file in it counted, under `MEDIA_FOLDER_BUDGET_BYTES`
+  (8 MB); the build fails above either, as it does for the page.
+- AV1 (or VP9) in WebM with no audio: QtWebEngine builds normally lack H.264,
+  so no MP4. The pixi environment's `ffmpeg` has `libaom-av1`; encode with a
+  constant quality (`-c:v libaom-av1 -crf 28 -b:v 0`), which keeps UI text
+  sharp at a few hundred KB. Crop to the part of the window where the action
+  is, at a scale where the text the reader must read is at least about 11 px
+  tall, rather than shrinking the whole screen; keep posters small (a third of
+  the clip's size is enough), since they are inlined into the page.
+- The kit plays a `data-clip` only while it is on screen, never on its own
+  under `prefers-reduced-motion`, and when the folder is missing it keeps the
+  poster and says where the clip ships.
+
+A large screenshot that would blow the page budget can ship the same way:
+mark the `<img>` with `data-media` and point its `src` into the folder.
+
+```html
+<img data-media src="getting_started_media/chip.webp" width="960" height="540"
+     alt="The chip seated in the DropBot, contact pads facing the pins">
+```
+
+- The `src` follows the clip rules above (a relative path inside the folder,
+  the file present, within the per-file budget, counted in the folder's) and
+  the build leaves the tag as written, `data-media` included. An `<img>`
+  without `data-media` is inlined as before.
+- Use it only for pictures too big to inline. A clip's poster stays inlined
+  so the page still shows something on its own; a `data-media` still does
+  not, so give it `alt` text that carries its meaning, and `width` /
+  `height` so the page keeps its shape.
+- When the folder is missing, the kit replaces the picture with a box of the
+  same shape, capped to the column, showing the `alt` text and a note saying
+  where the picture ships (`data-missing="…"` overrides the note). In a
+  `.still-wrap`, the annotation `<svg>` over the picture is hidden with it.
+
+Ship the folder with the page: commit it beside the source and the built
+page, and keep it in the plugin's package data.
 
 ## Checklist for a good tutorial
 

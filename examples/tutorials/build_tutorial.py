@@ -52,6 +52,17 @@ logger = get_logger(__name__)
 SOURCE_SUFFIX = ".src.html"
 #: Built pages above this size fail the build; the reference guide is ~260 KB.
 SIZE_BUDGET_BYTES = 300_000
+#: Video clips and ``<img data-media>`` stills are not inlined: they ship in a
+#: ``<slug>_media`` folder beside the page, each file and the folder as a
+#: whole kept within these budgets.
+MEDIA_FOLDER_SUFFIX = "_media"
+MEDIA_CLIP_BUDGET_BYTES = 1_200_000
+MEDIA_FOLDER_BUDGET_BYTES = 8_000_000
+#: Elements whose ``src`` is a sidecar clip; a ``<video>``'s ``poster`` is
+#: inlined so the still shows even without the folder.
+MEDIA_TAGS = {"video", "source"}
+#: Marks an ``<img>`` whose ``src`` is a sidecar still rather than inlined.
+MEDIA_IMAGE_ATTRIBUTE = "data-media"
 
 #: Attributes whose URL the page fetches at load time.
 FETCHING_ATTRIBUTES = {
@@ -206,9 +217,12 @@ class _SourceRewriter(HTMLParser):
     rewritten elements must be closed explicitly.
     """
 
-    def __init__(self, base_dir):
+    def __init__(self, base_dir, media_folder):
         super().__init__(convert_charrefs=False)
         self.base_dir = base_dir
+        self.media_folder = media_folder
+        #: Sidecar clips and stills the page loads, as paths.
+        self.media = []
         self.out = []
         self.header_comments = []
         self.title = None
@@ -328,10 +342,18 @@ class _SourceRewriter(HTMLParser):
 
             return
 
+        if tag == "img" and MEDIA_IMAGE_ATTRIBUTE in names:
+            self._emit(f"<img{_attrs_markup(self._media_attrs(attrs))}>")
+
+            return
+
         if tag == "img":
             self._emit(self._inline_image(attrs))
 
             return
+
+        if tag in MEDIA_TAGS:
+            markup = f"<{tag}{_attrs_markup(self._media_attrs(attrs))}>"
 
         if self_closing or tag in VOID_TAGS:
             self._emit(markup)
@@ -485,6 +507,67 @@ class _SourceRewriter(HTMLParser):
             f'<use href="#ic-{symbol}"/></svg></span>'
         )
 
+    def _media_attrs(self, attrs):
+        """A ``<video>`` / ``<source>`` / ``<img data-media>``'s attributes
+        with its ``src`` checked to be a sidecar file and a ``poster``
+        inlined; network URLs are left for the reference check to fail."""
+        kept = []
+
+        for name, value in attrs:
+            if not value or NETWORK_URL_PATTERN.match(value):
+                kept.append((name, value))
+            elif name == "src":
+                self.media.append(self._media_path(value))
+                kept.append((name, value))
+            elif name == "poster":
+                kept.append((name, _data_uri(self._local_file(value))))
+            else:
+                kept.append((name, value))
+
+        return kept
+
+    def _media_path(self, source):
+        """The file a clip or still URL names; it must lie in the media
+        folder."""
+        folder = (self.base_dir / self.media_folder).resolve()
+        parts = source.split("/")
+
+        if (
+            parts[0] != self.media_folder
+            or len(parts) < 2
+            or ".." in parts
+            or "\\" in source
+            or re.match(r"[a-z][a-z0-9+.-]*:", source, re.IGNORECASE)
+        ):
+            raise TutorialBuildError(
+                f"Media file {source} must be a relative path inside "
+                f"{self.media_folder}/"
+            )
+
+        path = (self.base_dir / source).resolve()
+
+        if folder not in path.parents:
+            raise TutorialBuildError(
+                f"Media file {source} is outside {self.media_folder}/"
+            )
+
+        if not path.is_file():
+            raise TutorialBuildError(f"Media file not found: {source}")
+
+        return path
+
+    def _local_file(self, source):
+        """The local file a poster names."""
+        if re.match(r"(?:[a-z]+:)?//|data:", source, re.IGNORECASE):
+            raise TutorialBuildError(f"Poster must be a local image: {source}")
+
+        path = (self.base_dir / source).resolve()
+
+        if not path.is_file():
+            raise TutorialBuildError(f"Poster not found: {source}")
+
+        return path
+
     def _inline_image(self, attrs):
         """Inline a local ``<img>``: SVG markup with ``data-inline``, else a
         data URI. Network sources are left for the reference check to fail."""
@@ -505,11 +588,50 @@ class _SourceRewriter(HTMLParser):
 
             return _label_svg(svg, names.get("class"), names.get("alt"), source)
 
-        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         kept = [(n, v) for n, v in attrs if n not in ("src", "data-inline")]
 
-        return f'<img src="data:{mime};base64,{encoded}"{_attrs_markup(kept)}>'
+        return f'<img src="{_data_uri(path)}"{_attrs_markup(kept)}>'
+
+
+def _data_uri(path):
+    """A local file as a ``data:`` URI."""
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+
+    return f"data:{mime};base64,{encoded}"
+
+
+def media_folder_name(source_name):
+    """``<slug>.src.html`` -> ``<slug>_media``, the folder its media ship in."""
+    if source_name.endswith(SOURCE_SUFFIX):
+        slug = source_name[: -len(SOURCE_SUFFIX)]
+    else:
+        slug = Path(source_name).stem
+
+    return f"{slug}{MEDIA_FOLDER_SUFFIX}"
+
+
+def _check_media(base_dir, media_folder, media):
+    """Fail the build when a media file, or the media folder, is over budget."""
+    for path in media:
+        size = path.stat().st_size
+
+        if size > MEDIA_CLIP_BUDGET_BYTES:
+            raise TutorialBuildError(
+                f"Media file {path.name} is {size} bytes, over the "
+                f"{MEDIA_CLIP_BUDGET_BYTES}-byte budget"
+            )
+
+    folder = base_dir / media_folder
+
+    if media and folder.is_dir():
+        total = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file())
+
+        if total > MEDIA_FOLDER_BUDGET_BYTES:
+            raise TutorialBuildError(
+                f"{media_folder}/ holds {total} bytes, over the "
+                f"{MEDIA_FOLDER_BUDGET_BYTES}-byte budget"
+            )
 
 
 def _contents_markup(parts):
@@ -648,7 +770,8 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
     ``glyph_cache`` maps glyph id to its traced ``{"text", "d", "viewBox"}``;
     the returned cache holds exactly the glyphs the page uses.
     """
-    parser = _SourceRewriter(base_dir)
+    media_folder = media_folder_name(source_name)
+    parser = _SourceRewriter(Path(base_dir), media_folder)
     parser.feed(source_text.replace("\r\n", "\n"))
     parser.close()
 
@@ -658,6 +781,8 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
 
     if not parser.title:
         raise TutorialBuildError("The source needs a <title>")
+
+    _check_media(Path(base_dir), media_folder, parser.media)
 
     body = "".join(parser.out).strip("\n")
     scripts = "".join(
