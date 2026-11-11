@@ -8,6 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import multiprocessing
 import os
 import shutil
@@ -15,8 +16,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
 
+# Logger import.
 from logger.logger_service import get_logger, init_logger
 
 logger = get_logger(__name__)
@@ -143,17 +146,6 @@ def microdrop_runner_setup():
 
     Must be called before importing any modules that use dramatiq.get_broker().
     """
-    # Microdrop uses SDL (via pygame) only for gamepad input, but a bare
-    # pygame.init() also brings up SDL audio — and on a half-broken Linux
-    # audio session that blocks the GUI thread for ~30 s before SDL gives
-    # up. Measured on the portable rig: the PipeWire pulse socket answers,
-    # but wireplumber (the session manager) is down, so SDL's device
-    # negotiation waits on a reply that never comes. Windows never stalls
-    # (WASAPI is an in-process API, no daemon handshake). Nothing plays SDL
-    # audio, so opt every runner out up front; setdefault keeps an explicit
-    # override possible.
-    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
-
     configure_dramatiq_broker()
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))

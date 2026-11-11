@@ -13,10 +13,36 @@ from pyface.action.api import Action
 from pyface.action.schema.api import SGroup
 from traits.api import Str
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import (
+    YES,
+    confirm,
+    error,
+    information,
+)
+
+# Microdrop utils imports.
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
+
 # Local imports.
 from .ai_install import install_ai_support
 from .analysis.roi_model import roi_analysis_model
 from .analysis.sam_detect import sam_available
+from .consts import PRUNE_EXPERIMENTS_DESCRIPTION, TRASH_FEATURE, TRASH_PACKAGE
+from .discovery import (
+    TrashUnavailableError,
+    prunable_experiments,
+    prune_experiments,
+)
+from .view import show_image_viewer_shortcuts
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class InstallAiSupportAction(Action):
@@ -32,6 +58,96 @@ class InstallAiSupportAction(Action):
             roi_analysis_model.ai_available = sam_available()
 
 
+class KeyboardShortcutsAction(Action):
+    name = Str("Image Viewer &Keyboard Shortcuts…")
+    tooltip = "List the keys the image view answers to while it has focus"
+
+    def perform(self, event):
+        show_image_viewer_shortcuts()
+
+
+class PruneExperimentsAction(Action):
+    name = Str("Prune Experiments…")
+    tooltip = PRUNE_EXPERIMENTS_DESCRIPTION
+    description = PRUNE_EXPERIMENTS_DESCRIPTION
+
+    def perform(self, event):
+        # The viewer's discovery poll drops the pruned folders from its
+        # Experiments list on its next rescan; nothing to refresh here.
+        targets = prunable_experiments()
+
+        if not targets:
+            information(
+                None,
+                "No experiments to prune: every experiment folder holds "
+                "captures or other data.",
+                title="Prune Experiments",
+                cancel=False,
+            )
+
+            return
+
+        result = confirm(
+            parent=None,
+            message=f"Delete {len(targets)} experiment folder(s) that hold only logs?",
+            title="Prune Experiments",
+            informative="The folders are moved to the Recycle Bin (Trash on "
+            "macOS/Linux), where they can be restored.",
+            detail="\n".join(path.name for path in targets),
+        )
+
+        if result != YES:
+            return
+
+        self._prune(targets, event)
+
+    def _prune(self, targets, event, retry=True):
+        """Move the confirmed ``targets`` to the trash and say how many went.
+        Without send2trash, offer the environment update and, when it makes
+        the package available, try once more."""
+        try:
+            removed = prune_experiments(targets)
+        except TrashUnavailableError:
+            window = getattr(getattr(event, "task", None), "window", None)
+            application = getattr(window, "application", None)
+
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=application
+            ):
+                self._prune(targets, event, retry=False)
+
+            return
+        except OSError as e:
+            logger.exception(f"Failed to prune experiments: {e}")
+            error(
+                None,
+                f"Pruning stopped, could not move an experiment folder to the "
+                f"trash: {e}",
+                title="Prune Experiments",
+            )
+
+            return
+
+        information(
+            None,
+            f"Moved {len(removed)} experiment folder(s) to the trash.",
+            title="Prune Experiments",
+            cancel=False,
+        )
+
+
 def help_menu_factory():
-    """Help-menu group: the optional AI ROI support installer."""
-    return SGroup(InstallAiSupportAction(), id="image_viewer_help_actions")
+    """Help-menu group: the keyboard shortcut sheet and the optional AI ROI
+    support installer."""
+    return SGroup(
+        KeyboardShortcutsAction(),
+        InstallAiSupportAction(),
+        id="image_viewer_help_actions",
+    )
+
+
+def prune_menu_factory():
+    """File-menu group: bulk removal of experiments holding only logs."""
+    return SGroup(PruneExperimentsAction(), id="image_viewer_prune_actions")

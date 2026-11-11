@@ -24,6 +24,13 @@ Owns:
   - the unsaved-free-mode confirm dialog and the
     'Insert as new step' RowManager.add_step call
 
+Multi-selection write-back: the viewer shows the current row (the primary)
+and its step-scoped edits (DEVICE_VIEWER_STATE_CHANGED electrodes/routes,
+STEP_PARAMS_COMMIT params) are written to every selected step
+(``write_back_targets``) — only the columns the edit changed on the
+primary, so an unchanged echo copies nothing. The display label says how
+many steps an edit reaches, e.g. 'Step 1.2 (+2 selected)'.
+
 The worker-thread dramatiq listener sets per-topic trait Events; @observe
 handlers consume them (dispatch="ui" for the ones that mutate rows, so
 cell_changed -> QtTreeModel.dataChanged runs on the GUI thread). This replaces
@@ -77,6 +84,7 @@ from microdrop_application.helpers import is_advanced_mode
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS,
     ELECTRODE_TO_CHANNEL_KEY,
+    ELECTRODES_COL_ID,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_STATE,
     PROTOCOL_TREE_ADD_STEP,
@@ -253,6 +261,27 @@ def _selected_step_uuids(row_manager):
     return uuids
 
 
+def write_back_targets(row_manager, primary_uuid):
+    """Paths, in tree order, of the steps a device-viewer edit of step
+    ``primary_uuid`` is written to: every selected step (a selected group
+    contributes its direct child steps, as Bulk Set does) when the primary
+    is among them, else the primary alone; [] when it is not a step."""
+    primary = row_manager.get_row_by_uuid(primary_uuid)
+
+    if primary is None or isinstance(primary, GroupRow):
+        return []
+
+    primary_path = tuple(primary.path)
+    selected = sorted(
+        row_manager.steps_under([tuple(path) for path in row_manager.selection])
+    )
+
+    if primary_path not in selected:
+        return [primary_path]
+
+    return selected
+
+
 class DeviceViewerSyncController(HasTraits):
     row_manager = Instance(RowManager)
     parent_widget = Instance(QWidget, allow_none=True)
@@ -384,7 +413,35 @@ class DeviceViewerSyncController(HasTraits):
             "PROTOCOL TREE (Device Sync): Updating metadata. Electrode Channels "
             f"Change: {event.new}"
         )
-        self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = event.new
+        self._write_channel_map_to_metadata()
+
+    @observe("row_manager:protocol_metadata")
+    def _reseed_channel_map_into_metadata(self, event):
+        """Carry the live device's channel map into replaced protocol metadata.
+
+        A new protocol or a loaded file replaces the dict wholesale, dropping
+        the map or bringing a stale one from another device. Once a device
+        has published, it is the source of truth; until then a loaded file's
+        map is kept.
+        """
+        if not self.electrode_ids_channels_map:
+            return
+
+        logger.info(
+            "PROTOCOL TREE (Device Sync): Protocol metadata replaced. Re-seeding "
+            "the live device's electrode channel map."
+        )
+        self._write_channel_map_to_metadata()
+
+    def _write_channel_map_to_metadata(self):
+        """Store the live electrode-to-channel map in the protocol metadata.
+
+        An item write, so the protocol_metadata reassignment observer above
+        does not fire again.
+        """
+        self.row_manager.protocol_metadata[ELECTRODE_TO_CHANNEL_KEY] = dict(
+            self.electrode_ids_channels_map
+        )
 
     @observe("row_manager:cell_changed")
     def _republish_on_param_cell_change(self, event):
@@ -394,7 +451,9 @@ class DeviceViewerSyncController(HasTraits):
         execution-param cell additionally republish display state so the
         DV sidebar reloads + rebaselines - protocol values supersede
         whatever the sidebar holds. DV-originated writes (the commit
-        handler) suppress this and publish once at the end instead."""
+        handler) suppress this and publish once at the end instead.
+        Edits to the electrodes (e.g. Fill Pattern) re-actuate their
+        channels and republish display state too."""
         if self._suppress_publish or not self._last_selected_uuid:
             return
         try:
@@ -404,12 +463,29 @@ class DeviceViewerSyncController(HasTraits):
         if isinstance(row, GroupRow) or row.uuid != self._last_selected_uuid:
             return
         self._publish_row_selected(row)
-        if event.new.get("col_id") not in DV_EXECUTION_PARAM_COL_IDS:
+        col_id = event.new.get("col_id")
+
+        if col_id not in DV_EXECUTION_PARAM_COL_IDS and col_id != ELECTRODES_COL_ID:
             return
         if self._free_mode_stash is not None:
             # Never let a cell edit trigger the leave-free-mode prompt
             # inside _publish_for_row; the next selection change handles it.
             return
+
+        if col_id == ELECTRODES_COL_ID:
+            channels = {
+                self.electrode_ids_channels_map[electrode_id]
+                for electrode_id in row.electrodes
+                if electrode_id in self.electrode_ids_channels_map
+            }
+
+            # The viewer's own write-back (_on_dv_state) already set these
+            # channels; echoing display state back to it would be redundant.
+            if channels == self.actuated_channels:
+                return
+
+            self.actuated_channels = channels
+
         self._publish_for_row(row)
 
     def _get_channels_electrode_ids_map(self):
@@ -579,42 +655,56 @@ class DeviceViewerSyncController(HasTraits):
             row = self.row_manager.get_row_by_uuid(dv_msg.step_id)
             if row is None or isinstance(row, GroupRow):
                 return
-            path = tuple(row.path)
 
             # trigger actuations if possible
             self.actuated_channels = set(dv_msg.channels_activated)
 
-            # During a run (Advanced Mode keeps the viewer editable, #434) the
-            # viewer only shows the CURRENT PHASE's electrodes, which for a
-            # route/multi-phase step is a subset of the step's full set.
-            # Writing that subset back would clobber the rest of the step, so
-            # restrict the live write-back to routeless (static) steps, where
-            # the actuated set IS the whole step. Editing geometry/routes of a
-            # route step is an idle-only operation.
-            if self._protocol_running and (row.routes or routes):
-                logger.info(
-                    f"Skipping live electrode write-back for route step "
-                    f"{dv_msg.step_id} during a run; actuation reflected to "
-                    f"hardware only."
-                )
-                return
+            # Only what the viewer changed on its own step is written back,
+            # then to every selected step. An unchanged message is an echo
+            # of the step's stored state (e.g. idle phase navigation
+            # republishing after a selection) and must not copy the
+            # primary's electrodes or routes onto the other selected steps.
+            electrodes_changed = set(row.electrodes or []) != electrodes
+            routes_changed = list(row.routes or []) != routes
 
-            # Direct trait writes bypass both QtTreeModel.setData and
-            # the delegate, so fire cell_changed for each column the
-            # user actually changed — the protocol state tracker uses
-            # this for O(1) incremental dirty bookkeeping.
-            if list(row.electrodes or []) != electrodes:
-                row.electrodes = list(electrodes)
-                self.row_manager.cell_changed = {
-                    "path": path,
-                    "col_id": "electrodes",
-                }
-            if list(row.routes or []) != routes:
-                row.routes = routes
-                self.row_manager.cell_changed = {
-                    "path": path,
-                    "col_id": "routes",
-                }
+            for target in self._write_back_rows(row):
+                # During a run (Advanced Mode keeps the viewer editable,
+                # #434) the viewer only shows the CURRENT PHASE's
+                # electrodes, which for a route/multi-phase step is a subset
+                # of the step's full set. Writing that subset back would
+                # clobber the rest of the step, so restrict the live
+                # write-back to routeless (static) steps, where the actuated
+                # set IS the whole step. Editing geometry/routes of a route
+                # step is an idle-only operation.
+                if self._protocol_running and (target.routes or routes):
+                    logger.info(
+                        f"Skipping live electrode write-back for route step "
+                        f"{target.uuid} during a run; actuation reflected to "
+                        f"hardware only."
+                    )
+                    continue
+
+                target_path = tuple(target.path)
+
+                # Direct trait writes bypass both QtTreeModel.setData and
+                # the delegate, so fire cell_changed for each column the
+                # user actually changed — the protocol state tracker uses
+                # this for O(1) incremental dirty bookkeeping. Each row
+                # gets its own list objects.
+                if electrodes_changed and set(target.electrodes or []) != electrodes:
+                    target.electrodes = list(electrodes)
+                    self.row_manager.cell_changed = {
+                        "path": target_path,
+                        "col_id": ELECTRODES_COL_ID,
+                    }
+
+                if routes_changed and list(target.routes or []) != routes:
+                    target.routes = [list(route) for route in routes]
+                    self.row_manager.cell_changed = {
+                        "path": target_path,
+                        "col_id": "routes",
+                    }
+
             return
 
         self.free_mode = True
@@ -650,11 +740,19 @@ class DeviceViewerSyncController(HasTraits):
                 f"step-params commit for unknown step {commit_msg.step_id!r} dropped"
             )
             return
-        path = tuple(row.path)
-
         new_values = _col_values_from_execution_params(
             commit_msg.model_dump(exclude={"step_id"})
         )
+
+        # The params the commit changes on its own step are written to every
+        # selected step; the others' remaining params are left alone.
+        changed_values = {
+            col_id: value
+            for col_id, value in new_values.items()
+            if getattr(row, col_id, None) != value
+        }
+        targets = self._write_back_rows(row)
+
         # Direct trait writes bypass QtTreeModel.setData and the delegate,
         # so fire cell_changed per changed column — it drives both the
         # dirty tracker and the pane's repeat-duration reconciliation.
@@ -663,15 +761,25 @@ class DeviceViewerSyncController(HasTraits):
         # echo intermediate states — one publish at the end instead.
         self._suppress_publish = True
         try:
-            for col_id, value in new_values.items():
-                if getattr(row, col_id, None) == value:
-                    continue
-                setattr(row, col_id, value)
-                self.row_manager.cell_changed = {"path": path, "col_id": col_id}
+            for target in targets:
+                target_path = tuple(target.path)
+
+                for col_id, value in changed_values.items():
+                    if getattr(target, col_id, None) == value:
+                        continue
+
+                    setattr(target, col_id, value)
+                    self.row_manager.cell_changed = {
+                        "path": target_path,
+                        "col_id": col_id,
+                    }
         finally:
             self._suppress_publish = False
 
-        logger.info(f"DV step-params commit applied to Step {row.dotted_path()}")
+        logger.info(
+            f"DV step-params commit from Step {row.dotted_path()} applied to "
+            f"{len(targets)} step(s)"
+        )
         # Echo the final (post-reconciliation) state back so the DV
         # rebaselines its commit button on what the tree actually stored.
         if row.uuid == self._last_selected_uuid:
@@ -736,6 +844,19 @@ class DeviceViewerSyncController(HasTraits):
             _insert_step_from_message(self.row_manager, msg)
         finally:
             self._suppress_publish = False
+
+    def _write_back_rows(self, row):
+        """The step rows a device-viewer edit of step ``row`` is written to:
+        every selected step while ``row`` is the current row of a
+        multi-step selection, else ``row`` alone (e.g. a late message for a
+        step the selection has already left)."""
+        if row.uuid != self._last_selected_uuid:
+            return [row]
+
+        return [
+            self.row_manager.get_row(path)
+            for path in write_back_targets(self.row_manager, row.uuid)
+        ]
 
     def _row_selected_key(self, row):
         """(step_id, group_id, selected_step_ids) a row_selected broadcast
@@ -823,11 +944,18 @@ class DeviceViewerSyncController(HasTraits):
             # so the DV's status bar shows e.g. "Editing: Step 1.2"
             # rather than the bare row name (which defaults to "Step").
             dotted_id = row.dotted_path()
+            step_label = f"Step {dotted_id}"
+            write_back_count = len(write_back_targets(self.row_manager, row.uuid))
+
+            # Viewer edits land on every selected step; say so.
+            if write_back_count > 1:
+                step_label += f" (+{write_back_count - 1} selected)"
+
             msg = ProtocolTreeDisplayMessage(
                 electrodes=list(row.electrodes or []),
                 routes=list(row.routes or []),
                 step_id=row.uuid,
-                step_label=f"Step {dotted_id}",
+                step_label=step_label,
                 free_mode=False,
                 editable=editable,
                 execution_params=_execution_params_for_row(row),

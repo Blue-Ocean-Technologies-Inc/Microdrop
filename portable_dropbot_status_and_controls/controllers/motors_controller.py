@@ -8,13 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import observe
 from traitsui.api import Controller
 
-from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+# Microdrop package imports.
 from portable_dropbot_controller.consts import (
     FILTER_POSITIONS,
     HOME_ALL,
@@ -23,11 +24,18 @@ from portable_dropbot_controller.consts import (
     MOTOR_MOVE,
     MOTOR_SET_SPEED,
     MOVE_MAGNET,
-    MOVE_TRAY,
     SET_FILTER,
+    move_tray_publisher,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Local imports.
 from ..consts import MM_TO_FIRMWARE_UNITS, MOTOR_MACRO_LABELS
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -40,9 +48,9 @@ class MotorsController(Controller):
 
     @observe("model:selected_motor")
     def _update_macro_labels(self, event):
-        (self.model.macro_button_1_label,
-         self.model.macro_button_2_label) = \
+        (self.model.macro_button_1_label, self.model.macro_button_2_label) = (
             MOTOR_MACRO_LABELS[self.model.selected_motor]
+        )
 
     # ------------------------------------------------------------------ #
     # Macros                                                               #
@@ -50,8 +58,9 @@ class MotorsController(Controller):
     @observe("model:macro_button_1")
     def _macro_1(self, event):
         motor = self.model.selected_motor
+
         if motor == "tray":
-            publish_message(topic=MOVE_TRAY, message="in")
+            self._move_tray("in")
         elif motor == "magnet":
             publish_message(topic=MOVE_MAGNET, message="engage")
         elif motor == "filter":
@@ -62,8 +71,9 @@ class MotorsController(Controller):
     @observe("model:macro_button_2")
     def _macro_2(self, event):
         motor = self.model.selected_motor
+
         if motor == "tray":
-            publish_message(topic=MOVE_TRAY, message="out")
+            self._move_tray("out")
         elif motor == "magnet":
             publish_message(topic=MOVE_MAGNET, message="disengage")
         elif motor == "filter":
@@ -71,20 +81,27 @@ class MotorsController(Controller):
         elif motor in ("pogo_left", "pogo_right"):
             publish_message(topic=LOCK_CHIP, message="False")
 
+    def _move_tray(self, direction):
+        move_tray_publisher.publish(
+            {"direction": direction, "actuate_pogos": not self.model.tray_only}
+        )
+
     def _cycle_filter(self, step):
-        self.model.filter_cycle_index = \
-            (self.model.filter_cycle_index + step) % len(FILTER_POSITIONS)
+        self.model.filter_cycle_index = (self.model.filter_cycle_index + step) % len(
+            FILTER_POSITIONS
+        )
         publish_message(
             topic=SET_FILTER,
-            message=str(FILTER_POSITIONS[self.model.filter_cycle_index]))
+            message=str(FILTER_POSITIONS[self.model.filter_cycle_index]),
+        )
 
     @observe("model:home_button")
     def _home(self, event):
         if self.model.selected_motor == "filter":
             self.model.filter_cycle_index = 0
+
         logger.info(f"Homing {self.model.selected_motor}...")
-        publish_message(topic=MOTOR_HOME,
-                        message=self.model.selected_motor)
+        publish_message(topic=MOTOR_HOME, message=self.model.selected_motor)
 
     @observe("model:home_all_button")
     def _home_all(self, event):
@@ -100,25 +117,38 @@ class MotorsController(Controller):
     # ------------------------------------------------------------------ #
     @observe("model:move_by_button")
     def _move_by(self, event):
-        publish_message(topic=MOTOR_MOVE, message=json.dumps({
-            "motor": self.model.selected_motor,
-            "mode": "relative",
-            "value": int(round(self.model.move_by_mm
-                               * MM_TO_FIRMWARE_UNITS)),
-        }))
+        publish_message(
+            topic=MOTOR_MOVE,
+            message=json.dumps(
+                {
+                    "motor": self.model.selected_motor,
+                    "mode": "relative",
+                    "value": int(round(self.model.move_by_mm * MM_TO_FIRMWARE_UNITS)),
+                }
+            ),
+        )
 
     @observe("model:move_to_button")
     def _move_to(self, event):
-        publish_message(topic=MOTOR_MOVE, message=json.dumps({
-            "motor": self.model.selected_motor,
-            "mode": "absolute",
-            "value": int(round(self.model.move_to_mm
-                               * MM_TO_FIRMWARE_UNITS)),
-        }))
+        publish_message(
+            topic=MOTOR_MOVE,
+            message=json.dumps(
+                {
+                    "motor": self.model.selected_motor,
+                    "mode": "absolute",
+                    "value": int(round(self.model.move_to_mm * MM_TO_FIRMWARE_UNITS)),
+                }
+            ),
+        )
 
     @observe("model:set_speed_button")
     def _set_speed(self, event):
-        publish_message(topic=MOTOR_SET_SPEED, message=json.dumps({
-            "motor": self.model.selected_motor,
-            "value": int(self.model.speed_um_per_s),
-        }))
+        publish_message(
+            topic=MOTOR_SET_SPEED,
+            message=json.dumps(
+                {
+                    "motor": self.model.selected_motor,
+                    "value": int(self.model.speed_um_per_s),
+                }
+            ),
+        )

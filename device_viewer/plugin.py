@@ -22,6 +22,7 @@ from traits.api import Callable, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
@@ -63,7 +64,7 @@ class DeviceViewerPlugin(Plugin):
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     #: Status-bar widgets contributed at runtime: the device-viewer dock
-    #: pane extends this list (joystick + recording icons); the
+    #: pane extends this list (the recording icon); the
     #: microdrop_status_bar plugin places, spaces, and removes them.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
@@ -89,8 +90,13 @@ class DeviceViewerPlugin(Plugin):
     )
 
     def start(self):
-        """Follow layer contributions that change while the app runs."""
+        """Move legacy gamepad settings, then follow layer contributions."""
         super().start()
+
+        # Before any pane, or the gamepad plugin's layer, reads a node.
+        from .preferences import migrate_gamepad_preferences
+
+        migrate_gamepad_preferences(self.application.preferences)
 
         # Opt-in, and only possible once attached to the application: the
         # ``_items`` handler below fires only after this connects it.
@@ -154,19 +160,26 @@ class DeviceViewerPlugin(Plugin):
         return [device_viewer_tab, video_settings_tab]
 
     def _contributed_task_extensions_default(self):
+        from pluggable_protocol_tree.consts import PROTOCOL_MENU_ID
+
         from .menus import tools_menu_factory
         from .views.device_view_dock_pane import DeviceViewerDockPane
+        from .views.live_histogram.dock_pane import LiveHistogramDockPane
         from .views.video_viewer.dock_pane import VideoViewerDockPane
 
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
-                dock_pane_factories=[DeviceViewerDockPane, VideoViewerDockPane],
+                dock_pane_factories=[
+                    DeviceViewerDockPane,
+                    VideoViewerDockPane,
+                    LiveHistogramDockPane,
+                ],
                 actions=[
                     SchemaAddition(
                         factory=tools_menu_factory,
-                        path="MenuBar/File",
-                        before="Exit",
+                        path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}",
+                        after=PROTOCOL_MENU_ID,
                     ),
                 ],
             )

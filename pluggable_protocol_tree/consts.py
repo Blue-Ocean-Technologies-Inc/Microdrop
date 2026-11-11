@@ -62,6 +62,12 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # sanctioned constants-only cross-import), not the category object.
 PROTOCOL_TREE_PREFERENCES_TAB_ID = "microdrop.protocol_tree.preferences"
 
+# File > Experiments submenu id; other plugins add experiment actions to it.
+EXPERIMENTS_MENU_ID = f"{PKG}.experiments_menu"
+
+# File > Protocol submenu id; other plugins order their submenus after it.
+PROTOCOL_MENU_ID = f"{PKG}.protocol_menu"
+
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
@@ -123,6 +129,15 @@ DV_EXECUTION_PARAM_COL_IDS = frozenset(
 # electrode-id -> channel map (written by the DV sync controller, read
 # by phase publishers).
 ELECTRODE_TO_CHANNEL_KEY = "electrode_to_channel"
+
+# Run-scratch keys marking channel-map problems already logged this run, so
+# the routes handler reports them once instead of on every phase: a flag for
+# a missing map, and the set of electrode ids a partial map does not cover.
+MISSING_CHANNEL_MAP_REPORTED_KEY = "_missing_channel_map_reported"
+UNMAPPED_ELECTRODES_REPORTED_KEY = "_unmapped_electrodes_reported"
+
+# Builtin step column holding the ids of the electrodes actuated for the step.
+ELECTRODES_COL_ID = "electrodes"
 
 # Persistence schema version
 PERSISTENCE_SCHEMA_VERSION = 1

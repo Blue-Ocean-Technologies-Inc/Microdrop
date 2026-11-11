@@ -26,8 +26,11 @@ from traits.api import Any, List
 # Microdrop package imports.
 from device_viewer.consts import (
     ACTOR_TOPIC_DICT,
+    DEVICE_VIEWER_CAMERA_ACTIVE,
+    DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
     DISABLED_CHANNELS_CHANGED,
     PHASE_NAVIGATION_MODE,
+    PROTOCOL_RUNNING,
     REALTIME_MODE_UPDATED,
     listener_name,
 )
@@ -44,6 +47,7 @@ class _StubPane(TraitsDockPane):
     model = Any()
     device_view = Any()
     device_viewer_advanced_preferences = Any()
+    camera_control_widget = Any()
 
     #: Values passed to apply_phase_navigation_mode, in call order.
     applied_phase_navigation_modes = List()
@@ -156,3 +160,163 @@ def test_handler_error_is_logged_not_raised(controller_and_actor_factory):
         _dispatch(controller, DISABLED_CHANNELS_CHANGED, "not json")
 
     dispatch_logger.error.assert_called()
+
+
+# --------------------------------------------------------------------------- #
+# Camera select_source requests                                                #
+# --------------------------------------------------------------------------- #
+class _StubSignal:
+    def __init__(self):
+        self.emitted = []
+
+    def emit(self, payload):
+        self.emitted.append(payload)
+
+
+@pytest.fixture
+def camera_widget():
+    return SimpleNamespace(
+        camera_model=SimpleNamespace(camera_active=True, camera_leased=False),
+        camera_select_source_signal=_StubSignal(),
+        camera_active_signal=_StubSignal(),
+    )
+
+
+@pytest.fixture
+def select_source_replies():
+    with patch(f"{CONTROLLER_MODULE}.camera_source_selected_publisher") as publisher:
+        yield publisher.publish
+
+
+def test_select_source_request_is_handed_to_the_camera_widget(
+    controller_and_actor_factory, camera_widget, select_source_replies
+):
+    controller, _ = controller_and_actor_factory
+    controller.pane.camera_control_widget = camera_widget
+
+    _dispatch(
+        controller,
+        DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
+        json.dumps({"label": "ASI: ZWO ASI183MM", "active": True, "request_id": "r1"}),
+    )
+
+    assert camera_widget.camera_select_source_signal.emitted == [
+        {"label": "ASI: ZWO ASI183MM", "active": True, "request_id": "r1"}
+    ]
+    select_source_replies.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "body, request_id, label, error",
+    [
+        ("not json", "", "", "Expecting value"),
+        (json.dumps({"request_id": "r2"}), "r2", "", "label: Field required"),
+        (
+            json.dumps({"label": "Cam A", "activ": True, "request_id": "r3"}),
+            "r3",
+            "Cam A",
+            "activ: Extra inputs are not permitted",
+        ),
+    ],
+)
+def test_invalid_select_source_request_is_answered_not_ok(
+    controller_and_actor_factory,
+    camera_widget,
+    select_source_replies,
+    body,
+    request_id,
+    label,
+    error,
+):
+    controller, _ = controller_and_actor_factory
+    controller.pane.camera_control_widget = camera_widget
+
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_SELECT_SOURCE, body)
+
+    (reply,), _ = select_source_replies.call_args
+
+    assert camera_widget.camera_select_source_signal.emitted == []
+    assert reply["request_id"] == request_id
+    assert reply["label"] == label
+    assert reply["ok"] is False
+    assert error in reply["error"]
+    assert reply["active"] is True
+
+
+def test_select_source_without_a_camera_widget_is_answered_not_ok(
+    controller_and_actor_factory, select_source_replies
+):
+    controller, _ = controller_and_actor_factory
+
+    _dispatch(
+        controller,
+        DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
+        json.dumps({"label": "Cam A", "request_id": "r4"}),
+    )
+
+    select_source_replies.assert_called_once_with(
+        {
+            "request_id": "r4",
+            "label": "Cam A",
+            "ok": False,
+            "error": "Device viewer camera is not available",
+            "active": False,
+        }
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Camera lease                                                                 #
+# --------------------------------------------------------------------------- #
+def _select(controller, active):
+    _dispatch(
+        controller,
+        DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
+        json.dumps({"label": "ASI: ZWO ASI183MM", "active": active}),
+    )
+
+
+def test_leased_camera_ignores_camera_off_but_not_on(
+    controller_and_actor_factory, camera_widget, select_source_replies
+):
+    controller, _ = controller_and_actor_factory
+    controller.pane.camera_control_widget = camera_widget
+
+    _select(controller, True)
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_ACTIVE, "false")
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_ACTIVE, "true")
+
+    assert camera_widget.camera_model.camera_leased is True
+    assert camera_widget.camera_active_signal.emitted == [True]
+
+
+def test_next_select_source_releases_the_lease(
+    controller_and_actor_factory, camera_widget, select_source_replies
+):
+    controller, _ = controller_and_actor_factory
+    controller.pane.camera_control_widget = camera_widget
+
+    _select(controller, True)
+    _select(controller, None)
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_ACTIVE, "false")
+
+    assert camera_widget.camera_model.camera_leased is False
+    assert camera_widget.camera_active_signal.emitted == [False]
+
+
+def test_protocol_end_releases_the_lease(
+    controller_and_actor_factory, camera_widget, select_source_replies
+):
+    controller, _ = controller_and_actor_factory
+    controller.pane.camera_control_widget = camera_widget
+
+    _select(controller, True)
+    _dispatch(controller, PROTOCOL_RUNNING, "True")
+
+    assert camera_widget.camera_model.camera_leased is True
+
+    _dispatch(controller, PROTOCOL_RUNNING, "False")
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_ACTIVE, "false")
+
+    assert camera_widget.camera_model.camera_leased is False
+    assert camera_widget.camera_active_signal.emitted == [False]

@@ -8,8 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from functools import partial
+
 # Enthought library imports.
-from traits.api import observe
+from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
+from traits.api import Instance, List, observe
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
@@ -24,6 +28,27 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     id = PKG + ".plugin"
     name = f"{PKG_name} Plugin"
+
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    #: Magnet engage height replies, kept for the session and handed to
+    #: every Portable DropBot Settings pane the preferences dialog builds.
+    magnet_engage_model = Instance(
+        "portable_dropbot_status_and_controls.models.magnet_engage_model."
+        "MagnetEngageModel"
+    )
+
+    #: Feeds MAGNET_ENGAGE_UPDATED to magnet_engage_model; made in start().
+    magnet_engage_message_handler = Instance(
+        "portable_dropbot_status_and_controls.message_handlers."
+        "magnet_engage_message_handler.PortableDropbotMagnetEngageMessageHandler"
+    )
+
+    def _magnet_engage_model_default(self):
+        from .models.magnet_engage_model import MagnetEngageModel
+
+        return MagnetEngageModel()
 
     def _get_dock_pane_class(self):
         from .dock_panes import PortableDropbotStatusAndControls
@@ -52,6 +77,21 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 
+    def _preferences_panes_default(self):
+        from .preferences import PortableDropbotSettingsPreferencesPane
+
+        return [
+            partial(
+                PortableDropbotSettingsPreferencesPane,
+                magnet_engage=self.magnet_engage_model,
+            )
+        ]
+
+    def _preferences_categories_default(self):
+        from .preferences import portable_dropbot_tab
+
+        return [portable_dropbot_tab]
+
     def _get_menu_additions(self) -> list:
         from pyface.action.schema.schema_addition import SchemaAddition
 
@@ -71,8 +111,22 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         from .controllers.display_scale_controller import apply_persisted_scale
 
         apply_persisted_scale()
-        self._widen_dock_separators_on_rpi()
         self._enable_long_press_right_click_on_rpi()
+
+        from .message_handlers.magnet_engage_message_handler import (
+            PortableDropbotMagnetEngageMessageHandler,
+        )
+
+        self.magnet_engage_message_handler = PortableDropbotMagnetEngageMessageHandler(
+            model=self.magnet_engage_model
+        )
+
+    def stop(self):
+        if self.magnet_engage_message_handler is not None:
+            self.magnet_engage_message_handler.teardown()
+            self.magnet_engage_message_handler = None
+
+        super().stop()
 
     @observe("application:application_initialized")
     def _on_application_initialized(self, event):
@@ -100,9 +154,9 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
     def _go_fullscreen_on_rpi(window):
         """Kiosk mode: on the portable rig's touchscreen, fullscreen covers
         the taskbar and removes the title bar (no close/minimize buttons) so
-        the instrument doesn't look like a desktop PC — the sidebar's Exit
-        button is then the only way back to the desktop. Other platforms
-        keep a normal, titled window."""
+        the instrument doesn't look like a desktop PC — File > Minimize and
+        the sidebar's Exit button are then the only ways back to the desktop.
+        Other platforms keep a normal, titled window."""
         from microdrop_utils.system_config import is_rpi
 
         if not is_rpi():
@@ -167,24 +221,3 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
         # Parented to the app so the filter outlives this call.
         app.installEventFilter(TouchLongPressRightClickFilter(app))
-
-    @staticmethod
-    def _widen_dock_separators_on_rpi():
-        """The portable rig is a touchscreen — dock-pane resize handles
-        must be finger-sized. Other platforms keep the native handle."""
-        from microdrop_utils.system_config import is_rpi
-
-        if not is_rpi():
-            return
-
-        from pyface.qt.QtWidgets import QApplication
-
-        app = QApplication.instance()
-        if app is None:
-            return
-
-        from microdrop_style.dock_separator_style import get_dock_separator_style
-        from microdrop_style.helpers import is_dark_mode
-
-        theme = "dark" if is_dark_mode() else "light"
-        app.setStyleSheet(app.styleSheet() + get_dock_separator_style(theme))

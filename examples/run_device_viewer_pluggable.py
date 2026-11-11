@@ -50,12 +50,16 @@ logger = get_logger(__name__)
 
 from microdrop_style.helpers import style_app  # noqa: E402
 
+from microdrop_utils.libcamera_tuning import disable_libcamera_autofocus  # noqa: E402
 from microdrop_utils.system_config import is_rpi  # noqa: E402
 
 # Set environment variables for Qt for pi
 if is_rpi():
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
     print("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
+
+    # Before any camera opens: the camera panel drives the CSI camera's lens.
+    disable_libcamera_autofocus()
 
 
 def stop_app(app, signum, frame):

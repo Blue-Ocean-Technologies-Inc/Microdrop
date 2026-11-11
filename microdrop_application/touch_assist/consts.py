@@ -9,23 +9,24 @@
 # Thanks for using Microdrop open source!
 
 """Constants for the Touch Assist tools (virtual numpad, keyboard,
-mouse — floating helpers for touchscreen benches with no physical
+D-pad, mouse — floating helpers for touchscreen benches with no physical
 mouse or keyboard)."""
 
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 
-#: The three tools, as the manager and the menu actions name them.
+#: The four tools, as the manager and the menu actions name them.
 TOOL_NUMPAD = "numpad"
 TOOL_KEYBOARD = "keyboard"
+TOOL_DPAD = "dpad"
 TOOL_MOUSE = "mouse"
 
 #: Pad buttons are finger targets, not mouse targets.
 PAD_KEY_SIZE_PX = 44
 PAD_KEY_SPACING_PX = 4
 
-#: Held-key auto-repeat (the numpad's ▲/▼): how long a hold waits
-#: before repeating, then the repeat cadence — a spinbox climbs
-#: steadily without racing away.
+#: Held-key auto-repeat (the numpad's ▲/▼, the D-pad's arrows): how
+#: long a hold waits before repeating, then the repeat cadence — a
+#: spinbox climbs steadily without racing away.
 PAD_KEY_REPEAT_DELAY_MS = 400
 PAD_KEY_REPEAT_INTERVAL_MS = 80
 

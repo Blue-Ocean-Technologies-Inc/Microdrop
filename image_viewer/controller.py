@@ -41,26 +41,47 @@ from pyface.api import OK, DirectoryDialog
 from traits.api import Any, Bool, Callable, Instance, Int, observe
 from traitsui.api import Controller
 
+# Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error, warning
+
 # Microdrop utils imports.
+from microdrop_utils.environment_update_dialog import (
+    offer_environment_update,
+    report_package_still_missing,
+)
 from microdrop_utils.file_handler import open_file
 
 # Local imports.
-from .consts import DISCOVERY_POLL_INTERVAL_MS, IMAGE_CACHE_FRAMES
+from .consts import (
+    DISCOVERY_POLL_INTERVAL_MS,
+    IMAGE_CACHE_FRAMES,
+    TRASH_FEATURE,
+    TRASH_PACKAGE,
+)
 from .discovery import (
     CaptureFolderWatch,
     CaptureReadiness,
+    TrashUnavailableError,
     current_captures_directory,
+    delete_experiment,
     discover_experiments,
     file_signature,
 )
 from .display import load_image_array, render_display_frame
 from .latest_wins_worker import LatestWinsWorker
+from .metadata import (
+    NO_METADATA_TEXT,
+    format_metadata_html,
+    read_file_info,
+    read_png_text,
+)
 from .model import (
     BURST_FILTER_ALL,
     IMAGE_FILTER_ALL,
     IMAGE_GROUP_ALL,
     ImageViewerModel,
 )
+from .view import metadata_window_view
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -79,6 +100,10 @@ class ImageViewerController(Controller):
     #: Zero-arg callable returning the contributed IMAGE_FILTERS; resolved
     #: on every rescan so a hot-loaded plugin's filter shows up live.
     image_filters_source = Callable(lambda: [])
+
+    #: The running Envisage application, exited cleanly when an environment
+    #: update relaunches the app; None outside a running app.
+    application = Any(None)
 
     #: One-shot "what to show" hint consumed by the burst-selection
     #: observer ("first"/"last"/"keep"); set by rescan / home / folder
@@ -112,6 +137,10 @@ class ImageViewerController(Controller):
     #: loads once the file changes, so each rescan retries it then.
     _failed_load = Any(None)
 
+    #: Set while a delete moves the experiment selection off a folder the
+    #: viewer was not showing, so the move leaves the viewer where it is.
+    _keep_directory = Bool(False)
+
     #: Keeps files still being written out of discovery.
     _capture_readiness = Instance(CaptureReadiness)
 
@@ -136,6 +165,10 @@ class ImageViewerController(Controller):
     #: them once the hold ends.
     _follow_deferred = Bool(False)
 
+    #: The metadata pop-out window's UI (None until first opened; its
+    #: ``control`` goes None once the user closes it).
+    _metadata_window = Any(None)
+
     def __pending_load_lock_default(self):
         return threading.Lock()
 
@@ -148,6 +181,10 @@ class ImageViewerController(Controller):
     # ------------------------------------------------------------------ #
     # Toolbar events                                                       #
     # ------------------------------------------------------------------ #
+    @observe("model:toggle_sidebar_button")
+    def _toggle_sidebar(self, event):
+        self.model.show_sidebar = not self.model.show_sidebar
+
     @observe("model:directory_button")
     def _pick_directory(self, event):
         # Start in the Experiments root (captures -> experiment -> root).
@@ -216,10 +253,13 @@ class ImageViewerController(Controller):
         repoint the viewer at that experiment's captures — the
         ``directory`` observer then rescans and jumps to the first burst."""
         names = self.model.experiment_names
+
         if event.new in names:
             self.model.experiment_index = names.index(event.new)
+
         captures = self.model.experiment_captures(event.new)
-        if captures is not None:
+
+        if captures is not None and not self._keep_directory:
             self.model.directory = str(captures)
 
     @observe("model:experiment_index")
@@ -247,6 +287,107 @@ class ImageViewerController(Controller):
     @observe("model:next_button")
     def _next(self, event):
         self.step(1)
+
+    @observe("model:previous_experiment_button")
+    def _previous_experiment(self, event):
+        self._step_experiment(-1)
+
+    @observe("model:next_experiment_button")
+    def _next_experiment(self, event):
+        self._step_experiment(1)
+
+    def _step_experiment(self, step):
+        """Move the experiment seek by ``step``, staying within the list."""
+        target = self.model.experiment_index + step
+
+        if 0 <= target < len(self.model.experiments):
+            self.model.experiment_index = target
+
+    @observe("model:delete_experiment_button")
+    def _delete_experiment(self, event):
+        """Delete the selected experiment's folder — behind a warning the
+        user can turn off — then select its neighbour."""
+        name = self.model.selected_experiment
+        captures = self.model.experiment_captures(name)
+
+        if captures is None:
+            return
+
+        preferences = self.model.preferences
+
+        if preferences.confirm_experiment_delete:
+            result, dont_ask_again = confirm(
+                parent=None,
+                message=f"Delete experiment '{name}' and everything in its folder?",
+                title="Delete experiment",
+                informative="The folder is moved to the Recycle Bin (Trash on "
+                "macOS/Linux), where it can be restored.",
+                checkbox_text="Don't ask again (you can turn this warning back on "
+                "under Preferences › Image Viewer)",
+            )
+
+            if result != YES:
+                return
+
+            if dont_ask_again:
+                preferences.confirm_experiment_delete = False
+
+        self._trash_experiment(name, captures)
+
+    def _trash_experiment(self, name, captures, retry=True):
+        """Move the confirmed experiment's folder to the trash, then select
+        its neighbour. Without send2trash, offer the environment update and,
+        when it makes the package available, try once more."""
+        try:
+            removed = delete_experiment(captures)
+        except ValueError as e:
+            warning(None, str(e), title="Delete experiment", cancel=False)
+
+            return
+        except TrashUnavailableError:
+            if not retry:
+                report_package_still_missing(TRASH_PACKAGE)
+            elif offer_environment_update(
+                TRASH_FEATURE, TRASH_PACKAGE, application=self.application
+            ):
+                self._trash_experiment(name, captures, retry=False)
+
+            return
+        except OSError as e:
+            logger.exception(f"Failed to delete experiment '{name}': {e}")
+            error(
+                None,
+                f"Could not delete experiment '{name}': {e}",
+                title="Delete experiment",
+            )
+
+            return
+
+        self._select_neighbour_of_deleted(removed)
+
+    def _select_neighbour_of_deleted(self, removed):
+        """Refresh the experiment list and select the deleted experiment's
+        newer neighbour, else the older one. The viewer moves with the
+        selection only when it was showing the ``removed`` folder."""
+        index = self.model.experiment_index
+        directory = self.model.directory
+        following = bool(directory) and Path(directory).is_relative_to(removed)
+
+        self.rescan()
+        names = self.model.experiment_names
+
+        if not names:
+            return
+
+        # Selecting by name also covers an unchanged index (the newer
+        # neighbour slides into the deleted one's slot), which
+        # ``experiment_index`` alone would not announce.
+        self._keep_directory = not following
+
+        try:
+            self.model.selected_experiment = names[min(index, len(names) - 1)]
+        finally:
+            self._keep_directory = False
 
     def step(self, step):
         """Show the adjacent image, traversing the WHOLE Image Group: within
@@ -407,6 +548,41 @@ class ImageViewerController(Controller):
     def _load_current_path(self, event):
         self._failed_load = None
         self._render_current_path()
+
+    @observe("model:current_path")
+    def _read_current_metadata(self, event):
+        """Show the new image's file facts and text chunks. Header-only
+        (no pixel decode), so it stays on the GUI thread, off the loader."""
+        path = event.new
+
+        if not path:
+            self.model.metadata_text = NO_METADATA_TEXT
+            return
+
+        self.model.metadata_text = format_metadata_html(
+            read_file_info(path), read_png_text(path)
+        )
+
+    @observe("model:metadata_popout_button")
+    def _pop_out_metadata(self, event):
+        """Open the metadata in its own live window, or raise the one
+        already open rather than stacking a second."""
+        window = self._metadata_window
+
+        if window is not None and window.control is not None:
+            window.control.raise_()
+            window.control.activateWindow()
+            return
+
+        self._metadata_window = self.model.edit_traits(view=metadata_window_view)
+
+    def close_metadata_window(self):
+        """Close the metadata pop-out if it is open (the pane is going
+        away, and the window is not parented to it)."""
+        window = self._metadata_window
+
+        if window is not None and window.control is not None:
+            window.dispose()
 
     @observe(
         "model:auto_contrast, model:window_min, model:window_max, "

@@ -18,12 +18,13 @@ import os
 from datetime import datetime, timedelta
 
 # Microdrop package imports.
-from image_viewer.analysis.consts import HEATER_LOGS_DIR_NAME
+from image_viewer.analysis.consts import HEATER_LOGS_DIR_NAME, HEATER_SENSOR_MEAN
 from image_viewer.analysis.heater_log import (
     describe_heater_coverage,
     heater_coverage_note,
     heater_log_span,
     resolve_heater_samples,
+    sensor_trace,
     sibling_heater_log_folders,
 )
 from image_viewer.analysis.roi_model import AnalysisSession
@@ -256,3 +257,24 @@ def test_coverage_note_keeps_a_sibling_stand_in_visible_when_complete():
         "using logs from b — searched a"
     )
     assert heater_coverage_note(0, "searched a", False) == ""
+
+
+def test_a_sensor_trace_keeps_its_readings_inside_the_span():
+    samples = [
+        (0.0, {"t1": 20.0, "t2": 30.0}),
+        (10.0, {"t1": 21.0}),
+        (20.0, {}),
+        (30.0, {"t1": 23.0, "t2": 33.0}),
+        (40.0, {"t1": 24.0, "t2": 34.0}),
+    ]
+
+    assert sensor_trace(samples, "t1", 5.0, 30.0) == ([10.0, 30.0], [21.0, 23.0])
+    # A sample without the sensor is left out, not a NaN.
+    assert sensor_trace(samples, "t2", 0.0, 40.0) == (
+        [0.0, 30.0, 40.0],
+        [30.0, 33.0, 34.0],
+    )
+    assert sensor_trace(samples, HEATER_SENSOR_MEAN, 0.0, 10.0) == (
+        [0.0, 10.0],
+        [25.0, 21.0],
+    )

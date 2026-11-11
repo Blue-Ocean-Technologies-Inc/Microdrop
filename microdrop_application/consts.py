@@ -27,6 +27,40 @@ ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
 # Topics published
 ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 
+# File-menu skeleton: the shell fixes two sections, the plugins' submenus
+# then Exit. Plugins add into the first via
+# SchemaAddition(path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}") and
+# declare their submenu's order within it with after= hints. Pyface matches
+# a hint against the other additions' id=, so an addition that others
+# order against sets id= to its menu id.
+FILE_MENU_SUBMENUS_GROUP_ID = "SubmenusGroup"
+FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
+
+
+# App-wide colour-scheme override (MicrodropPreferences.color_scheme). The
+# light/dark values match microdrop_style.helpers.QT_THEME_NAMES, which maps
+# them onto Qt.ColorScheme; follow_system defers to the OS.
+COLOR_SCHEME_FOLLOW_SYSTEM = "follow_system"
+COLOR_SCHEME_LIGHT = "light"
+COLOR_SCHEME_DARK = "dark"
+
+# TraitsUI's EnumEditor sorts dict labels and strips a shared "n:" prefix,
+# which is what orders the dropdown.
+COLOR_SCHEME_LABELS = {
+    COLOR_SCHEME_FOLLOW_SYSTEM: "1:Follow system",
+    COLOR_SCHEME_LIGHT: "2:Light",
+    COLOR_SCHEME_DARK: "3:Dark",
+}
+
+# Dock-separator colour (MicrodropPreferences.dock_separator_color_mode): the
+# colour-scheme modes pick that theme's separator grey, custom uses
+# MicrodropPreferences.dock_separator_color.
+DOCK_SEPARATOR_COLOR_CUSTOM = "custom"
+
+DOCK_SEPARATOR_COLOR_LABELS = {
+    **COLOR_SCHEME_LABELS,
+    DOCK_SEPARATOR_COLOR_CUSTOM: "4:Custom",
+}
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"

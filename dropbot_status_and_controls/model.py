@@ -15,7 +15,7 @@ import math
 import pint
 
 # Enthought library imports.
-from traits.api import Bool, Enum, Instance, Str, observe
+from traits.api import Bool, Enum, Instance, Property, Str, observe
 
 # Microdrop package imports.
 from dropbot_preferences_ui.consts import (
@@ -33,6 +33,7 @@ from dropbot_preferences_ui.consts import (
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from template_status_and_controls.base_model import BaseStatusModel
+from template_status_and_controls.droplet_readouts import DropletReadoutsModelMixin
 
 # Microdrop utils imports.
 from microdrop_utils.force_math_helpers import force_for_step
@@ -60,7 +61,7 @@ app_globals = get_microdrop_redis_globals_manager()
 N_DISPLAY_DIGITS = 3
 
 
-class DropbotStatusAndControlsModel(BaseStatusModel):
+class DropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatusModel):
     """Model for DropBot status display and controls.
 
     Extends BaseStatusModel with DropBot-specific controls and sensor readings.
@@ -118,6 +119,16 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
     c_device = Instance(pint.Quantity, desc="Capacitance density / c_device (pF/mm²)")
     force = Instance(pint.Quantity, desc="Calculated force (mN/m)")
 
+    # ---- Droplet readouts (DropletReadoutsModelMixin) -------------------
+    #: Every droplet readout plus c_device, for the readings grid's tooltip.
+    droplet_readouts_tooltip = Property(
+        Str,
+        observe=(
+            "volume_display, fill_display, covered_area_display, "
+            "volume_status_message, c_device_display"
+        ),
+    )
+
     # ---- Dielectric ----------------------------------
     dielectric_material = Enum(
         *list(DIELECTRIC_MATERIALS.keys()),
@@ -168,6 +179,22 @@ class DropbotStatusAndControlsModel(BaseStatusModel):
 
     def _update_chip_display(self, inserted: bool) -> None:
         self.chip_status_text = "Present" if inserted else "Absent"
+
+    # ------------------------------------------------------------------ #
+    # Droplet readouts                                                     #
+    # ------------------------------------------------------------------ #
+
+    def _get_droplet_readouts_tooltip(self):
+        # Traits binds a Property's getter from the class that declares it,
+        # and this class redeclares the tooltip to observe c_device too.
+        return super()._get_droplet_readouts_tooltip()
+
+    def _droplet_readout_lines(self):
+        # Rich text, since c_device_display carries <sup> markup.
+        return [
+            *super()._droplet_readout_lines(),
+            f"c_device: {self.c_device_display}",
+        ]
 
     # ------------------------------------------------------------------ #
     # Observers                                                            #

@@ -11,6 +11,7 @@
 # Standard library imports.
 import html
 import math
+from functools import partial
 
 # Third-party imports.
 from PySide6.QtWidgets import QToolButton
@@ -51,6 +52,8 @@ from pyface.qt.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QGroupBox,
+    QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -66,6 +69,8 @@ from traits.api import (
     Property,
     Range,
     Str,
+    TraitError,
+    Union,
     observe,
 )
 from traitsui.api import (
@@ -82,11 +87,12 @@ from traitsui.api import (
 from traitsui.api import (
     TableColumn as TableColumn_,
 )
+from traitsui.qt.color_editor import ToolkitEditorFactory as QtColorEditor
 from traitsui.qt.editor import Editor as QtEditor
 from traitsui.qt.table_editor import TableDelegate
 
 # Microdrop style imports.
-from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.button_styles import BUTTON_MIN_HEIGHT, ICON_FONT_FAMILY
 from microdrop_style.colors import (
     ACCENT_COLOR,
     BLACK,
@@ -228,6 +234,22 @@ class ColorColumn(ObjectColumn):
         # Color/QColor trait (whose str() QColor cannot parse) becomes one.
         if self.format_func is None:
             self.format_func = lambda value: QColor(value).name()
+
+
+class HexColorEditor(QtColorEditor):
+    """Color editor for a Str trait holding a hex colour ("#1f77b4"), the
+    way the analysis styles store theirs: the picker opens on that colour
+    and writes the chosen one back as hex rather than as a QColor. As a
+    ColorColumn's ``editor``, double-clicking a swatch cell opens it."""
+
+    def to_qt_color(self, editor):
+        return QColor(getattr(editor.object, editor.name))
+
+    def from_qt_color(self, color):
+        return color.name()
+
+    def str_color(self, color):
+        return color if isinstance(color, str) else QColor(color).name()
 
 
 class CustomCheckboxColumn(ObjectColumn):
@@ -601,6 +623,8 @@ class _SteppedSliderEditor(QtEditor):
         )
 
         self._slider.valueChanged.connect(self.update_object)
+        # A label-less UItem's tooltip= reaches only the editor; apply it.
+        self.set_tooltip()
 
         if self.factory.span_name:
             self.sync_value(self.factory.span_name, "span", "from")
@@ -739,6 +763,32 @@ class DoubleSpinBoxEditor(BasicEditorFactory):
     high = Float(100.0)
     decimals = Int(1)
     step = Float(0.1)  # How much it increments when arrows are clicked
+
+
+class _KeySequenceEditor(QtEditor):
+    """A QKeySequenceEdit recording one key chord into a ``Str`` trait as
+    Qt's portable text ("Ctrl+Shift+1"); an empty string means none."""
+
+    def init(self, parent):
+        self.control = QKeySequenceEdit()
+        self.control.setMaximumSequenceLength(1)
+        self.control.setClearButtonEnabled(True)
+
+        self.control.keySequenceChanged.connect(self.update_object)
+
+    def update_object(self, sequence):
+        """Sync the recorded chord back to the trait."""
+        self.value = sequence.toString()
+
+    def update_editor(self):
+        """Show the trait's key sequence."""
+        self.control.setKeySequence(QKeySequence(self.value))
+
+
+class KeySequenceEditor(BasicEditorFactory):
+    """Edit a ``Str`` trait holding a key sequence by pressing the keys."""
+
+    klass = _KeySequenceEditor
 
 
 class _SentinelDoubleSpinBox(QDoubleSpinBox):
@@ -1003,6 +1053,147 @@ def ensure_min_column_width(editor, width):
     editor.table_view.horizontalHeader().setMinimumSectionSize(width)
 
 
+def table_cells_text(cells):
+    """Tab-separated text of ``cells``, (row, column, text) each: a line
+    per row, each row's cells in column order — the layout spreadsheets
+    copy and paste."""
+    rows = {}
+
+    for row, _column, text in sorted(cells):
+        rows.setdefault(row, []).append(text)
+
+    return "\n".join("\t".join(texts) for texts in rows.values())
+
+
+def parse_table_text(text):
+    """Split tab-separated clipboard text into rows of cell texts; the
+    newline a spreadsheet ends a copied block with adds no empty row."""
+    return [line.split("\t") for line in text.splitlines()]
+
+
+def _paste_table_cell(editor, index, text):
+    """Write pasted ``text`` into the TableEditor cell at the view
+    ``index`` when that cell is editable.
+
+    TraitsUI's TableModel has no setData — its delegates edit through
+    the columns — so this sets the value through the column as well,
+    which hands it to the trait raw: text bound for a float cell is
+    converted first, a blank one to NaN (shown blank, as copied)."""
+    if not index.isValid() or not index.flags() & Qt.ItemIsEditable:
+        return
+
+    source_index = editor.model.mapToSource(index)
+    obj = editor.items()[source_index.row()]
+    column = editor.columns[source_index.column()]
+
+    try:
+        if isinstance(column.get_raw_value(obj), float):
+            column.set_value(obj, float(text) if text.strip() else math.nan)
+        else:
+            column.set_value(obj, text)
+
+    except (ValueError, TraitError) as error:
+        logger.warning(f"Skipped pasting {text!r} into {column.get_label()}: {error}")
+
+
+class _TableClipboardFilter(QObject):
+    """Event filter giving a TraitsUI TableEditor's view spreadsheet-style
+    Ctrl+C / Ctrl+V of a block of cells.
+
+    A filter rather than QShortcuts: it claims the keys' ShortcutOverride,
+    so no application-wide Copy / Paste shortcut beats it, and it sees the
+    KeyPress before QAbstractItemView's own Copy, which copies only the
+    current cell."""
+
+    def __init__(self, editor):
+        super().__init__(editor.table_view)
+        self._editor = editor
+        self._table_view = editor.table_view
+
+    def eventFilter(self, watched, event):
+        event_type = event.type()
+
+        if event_type not in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
+            return False
+
+        # An open cell editor keeps its own line-edit copy / paste.
+        if self._table_view.state() == QtWidgets.QAbstractItemView.State.EditingState:
+            return False
+
+        if event.matches(QKeySequence.StandardKey.Copy):
+            action = self.copy
+        elif event.matches(QKeySequence.StandardKey.Paste):
+            action = self.paste
+        else:
+            return False
+
+        # Accepting the override delivers the key to the view as a
+        # KeyPress instead of to a shortcut elsewhere.
+        if event_type == QEvent.Type.ShortcutOverride:
+            event.accept()
+        else:
+            action()
+
+        return True
+
+    def copy(self):
+        """Put the selected cells' displayed text on the clipboard as
+        tab-separated rows."""
+        indexes = self._table_view.selectionModel().selectedIndexes()
+
+        if not indexes:
+            return
+
+        cells = [
+            (index.row(), index.column(), index.data(Qt.DisplayRole) or "")
+            for index in indexes
+        ]
+
+        QtWidgets.QApplication.clipboard().setText(table_cells_text(cells))
+
+    def paste(self):
+        """Write the clipboard's rows into the table from the top-left
+        selected cell, the current cell when none is selected."""
+        rows = parse_table_text(QtWidgets.QApplication.clipboard().text())
+        indexes = self._table_view.selectionModel().selectedIndexes()
+        anchor = (
+            min(indexes, key=lambda index: (index.row(), index.column()))
+            if indexes
+            else self._table_view.currentIndex()
+        )
+
+        if not rows or not anchor.isValid():
+            return
+
+        view_model = self._table_view.model()
+
+        for row_offset, texts in enumerate(rows):
+            for column_offset, text in enumerate(texts):
+                index = view_model.index(
+                    anchor.row() + row_offset, anchor.column() + column_offset
+                )
+
+                _paste_table_cell(self._editor, index, text)
+
+
+def install_table_clipboard(editor):
+    """Give a TraitsUI TableEditor spreadsheet-style Ctrl+C / Ctrl+V of a
+    block of cells, which TraitsUI's tables lack — so, say, a column of
+    expected values can be copied out to a spreadsheet and pasted back.
+
+    Copy puts the selected cells' displayed text on the clipboard as
+    tab-separated rows. Paste writes the clipboard's rows into the
+    table from the top-left selected cell (the current cell when none
+    is selected), skipping cells past the table's edge and read-only
+    ones. Neither runs while a cell editor is open. Returns the event
+    filter installed on the editor's view, for the caller to keep a
+    reference to."""
+    clipboard_filter = _TableClipboardFilter(editor)
+    editor.table_view.installEventFilter(clipboard_filter)
+
+    return clipboard_filter
+
+
 class SafeCancelTableHandler(Handler):
     """
     In tables, we want the cancel event not to close the view. Instead it
@@ -1144,14 +1335,24 @@ class _HtmlLabelEditor(QtEditor):
     ``template`` (an HTML snippet with a single ``{}`` placeholder), so the view
     controls colour/weight/style/size via inline CSS without a web engine."""
 
+    #: The tooltip synced from the factory's ``tooltip_name``, if any.
+    tooltip_text = Str()
+
     def init(self, parent):
         self.control = QLabel()
         self.control.setTextFormat(Qt.TextFormat.RichText)
         self.control.setWordWrap(self.factory.word_wrap)
         self.control.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        self.control.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+
+        # A single line centres on its row's widgets (a dropdown beside it);
+        # wrapped text reads from the top.
+        vertical_alignment = (
+            Qt.AlignmentFlag.AlignTop
+            if self.factory.word_wrap
+            else Qt.AlignmentFlag.AlignVCenter
         )
+        self.control.setAlignment(Qt.AlignmentFlag.AlignLeft | vertical_alignment)
+
         if self.factory.word_wrap:
             # A word-wrapped QLabel needs the layout to honour heightForWidth, or
             # it gets one line's height and clips the rest. Ask for that and let
@@ -1160,12 +1361,23 @@ class _HtmlLabelEditor(QtEditor):
             policy.setHeightForWidth(True)
             policy.setVerticalPolicy(QSizePolicy.Policy.Minimum)
             self.control.setSizePolicy(policy)
+
+        if self.factory.tooltip_name:
+            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+
         self.update_editor()
 
     def update_editor(self):
         if self.control is not None:
             value = "" if self.value is None else str(self.value)
             self.control.setText(self.factory.template.format(html.escape(value)))
+
+    @observe("tooltip_text")
+    def _tooltip_text_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setToolTip(event.new)
 
 
 class HtmlLabelEditor(BasicEditorFactory):
@@ -1183,6 +1395,9 @@ class HtmlLabelEditor(BasicEditorFactory):
     #: HTML wrapper; ``{}`` is the (escaped) trait value.
     template = Str("{}")
     word_wrap = Bool(True)
+
+    #: Extended name of a context Str trait shown, live, as the tooltip.
+    tooltip_name = Str()
 
 
 class Toggle(QCheckBox):
@@ -1380,6 +1595,8 @@ class _TwoValueToggleEditor(QtEditor):
         self.control = self._make_control()
         self.control.setChecked(self.value == self.factory.on_value)
         self.control.stateChanged.connect(self._on_state)
+        # A label-less UItem's tooltip= reaches only the editor; apply it.
+        self.set_tooltip()
 
     def _on_state(self, state):
         self.value = self.factory.on_value if state else self.factory.off_value
@@ -1638,6 +1855,12 @@ class _IconButtonEditor(QtEditor):
     default push-button minimum width would otherwise inflate toolbars)
     that fires a Button/Event trait on click."""
 
+    #: The tooltip synced from the factory's ``tooltip_name``, if any.
+    tooltip_text = Str()
+
+    #: The checked look synced from the factory's ``checked_name``, if any.
+    checked = Bool(False)
+
     def init(self, parent):
         self.control = QToolButton()
         self.control.setCursor(Qt.PointingHandCursor)
@@ -1646,12 +1869,45 @@ class _IconButtonEditor(QtEditor):
         font.setPointSize(self.factory.point_size)
         self.control.setFont(font)
         self.control.setText(self.factory.glyph)
+
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
+
         self.control.clicked.connect(self._on_click)
+
+        if self.factory.tooltip_name:
+            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+
+        if self.factory.checked_name:
+            self.control.setCheckable(True)
+
+            if _native_style_lacks_checked_accent():
+                self.control.setStyleSheet(ICON_TOGGLE_BUTTON_STYLE_SHEET)
+
+            self.sync_value(self.factory.checked_name, "checked", "from")
+            self.control.setChecked(self.checked)
+
+    @observe("tooltip_text")
+    def _tooltip_text_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setToolTip(event.new)
+
+    @observe("checked")
+    def _checked_updated(self, event):
+        if self.control is None:
+            return
+
+        self.control.setChecked(event.new)
 
     def _on_click(self):
         self.value = True
+
+        # Qt toggles a checkable button on click; its look follows the
+        # named trait instead (the click may well have changed it).
+        if self.control is not None and self.control.isCheckable():
+            self.control.setChecked(self.checked)
 
     def update_editor(self):
         """Button/Event traits carry no state to reflect back."""
@@ -1669,6 +1925,16 @@ class IconButtonEditor(BasicEditorFactory):
     #: Material Symbols ligature (or codepoint) shown on the button.
     glyph = Str()
     tooltip = Str()
+
+    #: Extended name of a context Str trait whose value replaces
+    #: ``tooltip`` live, for a tooltip that explains the button's state.
+    tooltip_name = Str()
+
+    #: Extended name of a context Bool trait the button looks checked
+    #: (like an IconToggleEditor) while True — for an action button whose
+    #: result stays in effect, e.g. a crop glyph while a crop applies.
+    #: Clicking still only fires the trait.
+    checked_name = Str()
 
     #: Icon-font family the glyph comes from. Material Design Icons
     #: (Pictogrammers) has no ligatures — pass \U000Fxxxx codepoints.
@@ -1765,6 +2031,127 @@ class IconModeButtonEditor(IconButtonEditor):
     mode_trait = Str("interaction_mode")
 
 
+def format_preset(value, unit="", decimals=None, signed=False):
+    """Return the button label for a preset value: ``128``, ``37.5 °C``,
+    ``+1 mm``, ``-0.1 mm``.
+
+    Parameters
+    ----------
+    value : int or float
+        The preset value.
+    unit : str
+        Unit appended after a space; empty for a unitless value.
+    decimals : int or None
+        Digits kept after the point, trailing zeros dropped; None shows an
+        integer.
+    signed : bool
+        Prefix positive values with ``+``, for values that are offsets.
+    """
+    if decimals is None:
+        text = str(int(value))
+    else:
+        text = f"{value:.{decimals}f}"
+
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+
+    if signed and value > 0:
+        text = f"+{text}"
+
+    return f"{text} {unit}" if unit else text
+
+
+#: Horizontal room a preset button keeps around its label (px): the
+#: stylesheet's 8px side padding plus the frame.
+_PRESET_BUTTON_PADDING_PX = 20
+
+
+class _PresetButtonsEditor(QtEditor):
+    """A flat row of push buttons, one per value of a List trait. A click
+    sets the factory's ``target`` trait to that value, then fires its
+    ``fire`` trait when one is named. An empty list shows nothing; the
+    buttons follow the enabled state of whatever encloses the row."""
+
+    def init(self, parent):
+        self.control = QtWidgets.QWidget()
+
+        layout = QHBoxLayout(self.control)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        self.update_editor()
+
+    def _apply(self, value, *_):
+        setattr(self.object, self.factory.target, value)
+
+        if self.factory.fire:
+            setattr(self.object, self.factory.fire, True)
+
+    def update_editor(self):
+        """Rebuild the buttons from the current list."""
+        layout = self.control.layout()
+
+        while layout.count():
+            button = layout.takeAt(0).widget()
+            button.setParent(None)
+            button.deleteLater()
+
+        labels = [
+            format_preset(
+                value, self.factory.unit, self.factory.decimals, self.factory.signed
+            )
+            for value in self.value
+        ]
+
+        if not labels:
+            return
+
+        # The style floors a push button's width at ~80px, so a full row
+        # would force the pane wide; one width fitting the longest label
+        # keeps the row compact and even.
+        font_metrics = self.control.fontMetrics()
+        width = (
+            max(font_metrics.horizontalAdvance(label) for label in labels)
+            + _PRESET_BUTTON_PADDING_PX
+        )
+
+        for value, label in zip(self.value, labels):
+            button = QPushButton(label)
+            button.setFixedWidth(width)
+            button.setMinimumHeight(BUTTON_MIN_HEIGHT)
+            button.clicked.connect(partial(self._apply, value))
+
+            layout.addWidget(button)
+
+
+class PresetButtonsEditor(BasicEditorFactory):
+    """Factory for a List of preset values rendered as a row of quick-pick
+    buttons::
+
+        UItem("move_presets", editor=PresetButtonsEditor(
+            target="move_by_mm", fire="move_by_button",
+            unit="mm", decimals=3, signed=True))
+
+    One tap applies a preset: the value lands in ``target`` and ``fire``
+    then runs that setter's own handler, exactly as a manual entry would.
+    Labels come from :func:`format_preset`.
+    """
+
+    klass = _PresetButtonsEditor
+
+    #: Name of the trait on the edited object a click sets to the value.
+    target = Str()
+
+    #: Name of a Button/Event trait on the edited object fired after
+    #: ``target`` is set; empty (the default) only sets it.
+    fire = Str()
+
+    #: Label formatting, as format_preset's parameters.
+    unit = Str()
+    decimals = Union(None, Int)
+    signed = Bool(False)
+
+
 def _has_group_box_ancestor(layout):
     """True if ``layout`` lives inside a QGroupBox (i.e. it lays out a section's
     contents rather than arranging the section boxes themselves)."""
@@ -1811,7 +2198,13 @@ class _HoverScrollEnumEditor(QtEditor):
     ``format_func`` label never leaks back into the trait.
     """
 
+    #: (object, trait name) the factory's ``values_name`` resolves to.
+    _values_source = Any()
+
     def init(self, parent):
+        if self.factory.values_name:
+            self._values_source = self._resolve_values_source()
+
         self.control = MarqueeComboBox()
 
         self.control.setSizeAdjustPolicy(
@@ -1821,20 +2214,44 @@ class _HoverScrollEnumEditor(QtEditor):
         self.control.currentIndexChanged.connect(self.update_object)
 
         if self.factory.values_name:
-            self.object.observe(self._on_values_changed, self.factory.values_name)
+            source, name = self._values_source
+            source.observe(self._on_values_changed, name)
 
         self._repopulate()
 
     def dispose(self):
         if self.factory.values_name:
-            self.object.observe(
-                self._on_values_changed, self.factory.values_name, remove=True
-            )
+            source, name = self._values_source
+            source.observe(self._on_values_changed, name, remove=True)
 
         super().dispose()
 
+    def _resolve_values_source(self):
+        """The object and trait ``values_name`` names: a bare name lives on
+        the edited object, ``"context.trait"`` on that UI context object."""
+        context_name, _, trait_name = self.factory.values_name.partition(".")
+
+        if trait_name:
+            return self.ui.context[context_name], trait_name
+
+        return self.object, context_name
+
+    def _values(self):
+        """The current choices: the static list, or the named trait's value."""
+        if not self.factory.values_name:
+            return self.factory.values
+
+        source, name = self._values_source
+
+        return getattr(source, name)
+
     def _label(self, value):
         """The display text for a raw choice value."""
+        values = self._values()
+
+        if isinstance(values, dict):
+            return values.get(value, str(value))
+
         format_func = self.factory.format_func
 
         return str(value) if format_func is None else format_func(value)
@@ -1857,16 +2274,10 @@ class _HoverScrollEnumEditor(QtEditor):
         view.setMinimumWidth(label_width + chrome_width + 2 * view.frameWidth())
 
     def _repopulate(self):
-        values = (
-            getattr(self.object, self.factory.values_name)
-            if self.factory.values_name
-            else self.factory.values
-        )
-
         self.control.blockSignals(True)
         self.control.clear()
 
-        for value in values:
+        for value in self._values():
             self.control.addItem(self._label(value), value)
 
         self._select_value()
@@ -1903,17 +2314,19 @@ class _HoverScrollEnumEditor(QtEditor):
 class HoverScrollEnumEditor(BasicEditorFactory):
     """Factory for an Enum combo box that marquee-scrolls overflow text on
     hover. Choices come from the static ``values`` list, or live from the
-    edited object's List trait named by ``values_name`` (repopulated on
-    change)."""
+    trait named by ``values_name`` (repopulated when it is reassigned)."""
 
     klass = Property
 
     values = List(Str)
-    #: Name of a List(Str) trait on the edited object supplying the choices
-    #: dynamically (takes precedence over ``values``).
+    #: Name of a trait supplying the choices dynamically (takes precedence
+    #: over ``values``): a List(Str) of values, or a Dict(Str, Str) mapping
+    #: each value to its label, in display order. A bare name is a trait
+    #: of the edited object, ``"context.trait"`` one of that UI context
+    #: object — as TraitsUI's ``EnumEditor(name=...)`` resolves it.
     values_name = Str()
     #: Maps a raw value to its display text, as in TraitsUI's ``EnumEditor``;
-    #: None shows ``str(value)``.
+    #: None shows ``str(value)``. A Dict of choices carries its own labels.
     format_func = Callable()
 
     def _get_klass(self):

@@ -12,23 +12,36 @@
 
 Owns the decisions the camera widget used to make inline: which source and
 format to select, where captures and recordings are written, the recording
-and capture bookkeeping (and what it publishes), and exposure/focus requests
-with their v4l2 fallbacks for the Portable Pi's GStreamer backend. The Qt
-side (QCamera, recorders, frame grabs, dialogs) stays in the view, which
-calls in here and acts on the answers.
+and capture bookkeeping (and what it publishes), exposure/focus requests
+with their v4l2 fallbacks for the Portable Pi's GStreamer backend, the
+focus row's live slider writes and one-shot autofocus sweep, the image
+controls (brightness, contrast, ...) Qt has no API for, and the
+camera's selection/on-off state with the replies to select_source
+requests, and the capture setup (resolution + camera properties) a protocol
+step stores: its snapshot on every user edit, and applying a stored one.
+The Qt side (QCamera, recorders, frame grabs, dialogs) stays in
+the view, which calls in here and acts on the answers.
 """
 
 # Standard library imports.
+import time
 from pathlib import Path
 
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Callable, HasTraits, Instance, observe
+from pyface.timer.api import CallbackTimer
+from traits.api import Any, Bool, Callable, Float, HasTraits, Instance, Set, observe
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
 
 # Microdrop utils imports.
+from microdrop_utils.camera_image_controls import (
+    EXPOSURE_CONTROL,
+    IMAGE_CONTROL_LABELS,
+)
+from microdrop_utils.libcamera_tuning import lens_focus_span
+from microdrop_utils.system_config import is_rpi
 from microdrop_utils.v4l2_fps_getter import (
     V4L2_EXPOSURE_AUTO,
     V4L2_EXPOSURE_AUTO_MANUAL,
@@ -36,30 +49,53 @@ from microdrop_utils.v4l2_fps_getter import (
     V4L2_FOCUS_ABSOLUTE,
     V4L2_FOCUS_AUTO,
     get_v4l2_control,
-    get_v4l2_control_range,
+    list_v4l2_controls,
+    parse_v4l2_control_range,
+    parse_v4l2_control_value,
     set_v4l2_controls,
 )
 
 # Local imports.
 from ..consts import (
+    AUTOFOCUS_TIMEOUT_S,
+    CAMERA_SETTINGS_PUBLISH_INTERVAL_S,
     CAPTURES_DIR_NAME,
+    FALLBACK_PIXEL_FORMATS,
+    FOCUS_WRITE_INTERVAL_S,
+    LIBCAMERA_PIXEL_FORMAT,
     MIN_RECORDING_FPS,
+    NO_CAMERA_LABEL,
     RECORDINGS_DIR_NAME,
+    RPI_UNSUPPORTED_PIXEL_FORMATS,
     camera_controls_applied_publisher,
+    camera_settings_applied_publisher,
+    camera_settings_publisher,
+    camera_source_selected_publisher,
+    camera_state_publisher,
     device_viewer_recording_state_publisher,
     media_capture_event_model,
     recording_state_model,
 )
 from ..interfaces.i_camera_device import ICameraDevice
-from ..models.camera import CameraModel
+from ..models.autofocus import ContrastAutofocus, laplacian_variance
+from ..models.camera import CameraImageSetting, CameraModel
 from ..models.media import MediaType
 from ..services.media_capture_cache import _cache_media_capture
 from ..utils.capture import media_filename
+from ..utils.latest_value_throttle import LatestValueThrottle
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def _pixel_format_name(pixel_format):
+    """Qt's pixel format name without its prefixes, upper-cased:
+    "PixelFormat.Format_YV12" and "Format_YV12" are both "YV12"."""
+    name = str(pixel_format).rsplit(".", 1)[-1].upper()
+
+    return name.removeprefix("FORMAT_")
 
 
 class CameraController(HasTraits):
@@ -78,9 +114,68 @@ class CameraController(HasTraits):
     #: toggle button; set_controls turns an idle camera on first.
     turn_camera_on = Callable()
 
+    #: Coalesces the focus slider's drag into focus writes.
+    focus_edits = Instance(LatestValueThrottle)
+
+    #: The one-shot autofocus sweep, fed live frames while it runs.
+    autofocus = Instance(ContrastAutofocus, ())
+
+    #: Cancels a sweep that stops getting frames.
+    _autofocus_timeout = Instance(CallbackTimer)
+
+    #: monotonic() time the running sweep started.
+    _autofocus_started = Float()
+
+    #: Coalesces capture-setup changes into one CameraSettingsSnapshot.
+    settings_edits = Instance(LatestValueThrottle)
+
+    #: The pending snapshot carries a user edit (see settings_edited).
+    _settings_user_edit = Bool(False)
+
+    #: A CameraSettingsRequest is being applied: its writes are no user edit.
+    _applying_settings = Bool(False)
+
+    #: The CameraSettingsRequest applied while the camera was off, applied
+    #: again once it starts — a camera may reset its controls on open, and
+    #: Qt reports focus support only for a started camera.
+    _settings_awaiting_start = Any()
+
+    #: (camera, warning) pairs already shown to the user for the selected
+    #: camera; cleared on every source selection.
+    _shown_settings_warnings = Set()
+
+    def _focus_edits_default(self):
+        return LatestValueThrottle(
+            interval=FOCUS_WRITE_INTERVAL_S, callback=self._write_focus
+        )
+
+    def _settings_edits_default(self):
+        return LatestValueThrottle(
+            interval=CAMERA_SETTINGS_PUBLISH_INTERVAL_S,
+            callback=self._publish_settings,
+        )
+
+    def __autofocus_timeout_default(self):
+        return CallbackTimer(
+            interval=AUTOFOCUS_TIMEOUT_S, callback=self._autofocus_timed_out
+        )
+
     @observe("model:camera_active")
     def _remember_camera_state(self, event):
         self.preferences.camera_state = event.new
+
+    @observe("model:selected_camera, model:camera_active, model:camera_leased")
+    def _publish_camera_state(self, event=None):
+        """Publish the selection, on/off and lease state on
+        DEVICE_VIEWER_CAMERA_STATE — on every change, including the panel's
+        first source selection."""
+        camera_state_publisher.publish(
+            {
+                "selected_camera": self.model.selected_camera,
+                "active": self.model.camera_active,
+                "leased": self.model.camera_leased,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # Source and format selection                                          #
@@ -114,14 +209,27 @@ class CameraController(HasTraits):
         return 0
 
     def select_source(
-        self, label, remembered_as="", provider=False, v4l2_device_path=None
+        self,
+        label,
+        remembered_as="",
+        provider=False,
+        v4l2_device_path=None,
+        v4l2_focus_device_path=None,
+        v4l2_focus_lens_map=(),
     ):
         """Record the selected source.
 
         ``remembered_as`` is saved as the preferred camera — a provider's
         label, a QCamera's Qt description; empty for "<No Camera>", which
-        leaves the preference alone.
+        leaves the preference alone. ``v4l2_device_path`` is the camera's
+        ``/dev/videoN`` node, ``v4l2_focus_device_path`` the node its focus
+        fallback drives and ``v4l2_focus_lens_map`` that lens's calibration
+        (see CameraModel).
         """
+        self.cancel_autofocus("camera changed")
+        self.focus_edits.cancel()
+        self._settings_awaiting_start = None
+        self._shown_settings_warnings = set()
 
         if remembered_as:
             self.preferences.selected_camera = remembered_as
@@ -130,35 +238,138 @@ class CameraController(HasTraits):
         self.model.provider_selected = provider
         self.model.v4l2_device_path = v4l2_device_path
 
-    def rank_formats(self, formats, allow_strict_mode=True):
+        # Before the focus device, whose change reads the focus span.
+        self.model.v4l2_focus_lens_map = list(v4l2_focus_lens_map)
+        self.model.v4l2_focus_device_path = v4l2_focus_device_path
+
+        self.refresh_focus()
+        self.refresh_image_settings()
+
+    @staticmethod
+    def match_source_label(labels, label):
+        """Index in ``labels`` (the dropdown, in order) of the entry ``label``
+        names, or None: the exact label, else a case-insensitive match; ""
+        names "<No Camera>", which CameraState reports as ""."""
+        wanted = label or NO_CAMERA_LABEL
+
+        if wanted in labels:
+            return labels.index(wanted)
+
+        folded = [entry.casefold() for entry in labels]
+
+        if wanted.casefold() in folded:
+            return folded.index(wanted.casefold())
+
+        return None
+
+    def find_requested_source(self, request, labels):
+        """Index in ``labels`` of the entry a CameraSelectSourceRequest dict
+        names; when it names none, answer the request ok=False and return
+        None."""
+        index = self.match_source_label(labels, request["label"])
+
+        if index is None:
+            self._answer_select_source(
+                request,
+                request["label"],
+                f"unknown camera source {request['label']!r} "
+                f"(available: {', '.join(labels)})",
+            )
+
+        return index
+
+    def source_selected(self, request, error=""):
+        """Answer a CameraSelectSourceRequest dict whose source is now
+        selected: ok unless ``error`` or the camera was asked on and is
+        not."""
+        label = self.model.selected_camera
+
+        if not error and request["active"] and not self.model.camera_active:
+            if not label:
+                error = "no camera source is selected"
+            elif self.model.provider_selected and self.model.feed_error:
+                error = (
+                    f"camera source {label!r} failed to start: {self.model.feed_error}"
+                )
+            else:
+                error = f"camera source {label!r} failed to start (see the log)"
+
+        self._answer_select_source(request, label, error)
+
+    def _answer_select_source(self, request, label, error):
+        """Publish the CameraSourceSelected reply, then the camera state, so
+        a requester also learns the state it may restore later."""
+        if error:
+            logger.error(f"Camera select_source not applied: {error}")
+
+        camera_source_selected_publisher.publish(
+            {
+                "request_id": request["request_id"],
+                "label": label,
+                "ok": not error,
+                "error": error,
+                "active": self.model.camera_active,
+            }
+        )
+
+        self._publish_camera_state()
+
+    def strict_format_mode(self, allow_strict_mode=True, libcamera=False):
+        """Whether only the preferred pixel format may be offered: under the
+        strict-format preference, unless lifted by ``allow_strict_mode`` or
+        for a libcamera source, which never offers the preferred JPEG."""
+        return (
+            self.preferences.strict_video_format and allow_strict_mode and not libcamera
+        )
+
+    def rank_formats(self, formats, allow_strict_mode=True, libcamera=False):
         """Indices of the formats to offer, best first, one per resolution.
 
         ``formats`` holds ``(width, height, pixel_format, frame_rate)`` per
         camera format. Larger resolutions come first; within a resolution
-        the preferred pixel format, then the higher frame rate, wins. Under
-        the strict-format preference (and ``allow_strict_mode``) only the
-        preferred pixel format is offered.
+        the preferred pixel format wins, then the higher frame rate, then
+        FALLBACK_PIXEL_FORMATS in order. Under strict_format_mode only the
+        preferred pixel format is offered. A ``libcamera`` source prefers
+        LIBCAMERA_PIXEL_FORMAT instead, and a Raspberry Pi never offers
+        RPI_UNSUPPORTED_PIXEL_FORMATS.
         """
-        preferred_format = self.preferences.preferred_video_format.upper()
-        strict_mode = self.preferences.strict_video_format and allow_strict_mode
+        if libcamera:
+            preferred_format = LIBCAMERA_PIXEL_FORMAT
+        else:
+            preferred_format = self.preferences.preferred_video_format.upper()
+
+        strict_mode = self.strict_format_mode(allow_strict_mode, libcamera)
+        unsupported_formats = RPI_UNSUPPORTED_PIXEL_FORMATS if is_rpi() else ()
 
         def sort_key(index):
             width, height, pixel_format, frame_rate = formats[index]
+            name = _pixel_format_name(pixel_format)
+
+            if name in FALLBACK_PIXEL_FORMATS:
+                fallback_rank = FALLBACK_PIXEL_FORMATS.index(name)
+            else:
+                fallback_rank = len(FALLBACK_PIXEL_FORMATS)
 
             return (
-                width,
-                height,
-                preferred_format in pixel_format.upper(),
-                frame_rate,
+                -width,
+                -height,
+                name != preferred_format,
+                -frame_rate,
+                fallback_rank,
+                name,
             )
 
         ranked = []
         seen_resolutions = set()
 
-        for index in sorted(range(len(formats)), key=sort_key, reverse=True):
+        for index in sorted(range(len(formats)), key=sort_key):
             width, height, pixel_format, _ = formats[index]
+            name = _pixel_format_name(pixel_format)
 
-            if strict_mode and preferred_format not in pixel_format.upper():
+            if name in unsupported_formats:
+                continue
+
+            if strict_mode and name != preferred_format:
                 continue
 
             if (width, height) in seen_resolutions:
@@ -184,11 +395,17 @@ class CameraController(HasTraits):
 
         return len(labels) // 2
 
-    def select_resolution(self, label, width, height, frame_rate):
-        """Record the selected camera format."""
+    def select_resolution(self, label, width, height, frame_rate, user_edit=False):
+        """Record the selected camera format; ``user_edit`` when the user
+        picked it."""
         self.preferences.resolution = label
         self.model.resolution = (width, height)
         self.model.frame_rate = frame_rate
+
+        if user_edit:
+            self.settings_edited()
+        else:
+            self.announce_settings()
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #
@@ -292,6 +509,9 @@ class CameraController(HasTraits):
         if not self.camera.is_active():
             self.turn_camera_on()
 
+        self.cancel_autofocus("focus set by a camera controls request")
+        self.focus_edits.cancel()
+
         try:
             if request.get("hold_auto_exposure"):
                 self._hold_auto_exposure()
@@ -310,6 +530,8 @@ class CameraController(HasTraits):
                 focus_distance=self._focus_distance_readback(),
             )
 
+        self.refresh_focus()
+        self.refresh_image_settings()
         camera_controls_applied_publisher.publish(reply)
 
     def _apply_exposure(self, exposure_ms):
@@ -351,6 +573,469 @@ class CameraController(HasTraits):
 
         self.camera.set_manual_exposure(float(exposure_ms))
 
+    @observe("model:v4l2_focus_device_path")
+    def _read_v4l2_focus_controls(self, event):
+        """Cache the focus device's focus span and whether it has
+        continuous auto focus, from one ``v4l2-ctl`` query."""
+        model = self.model
+        path = event.new
+        controls = list_v4l2_controls(path) if path else ""
+        auto_focus = parse_v4l2_control_value(controls, V4L2_FOCUS_AUTO)
+        control_range = parse_v4l2_control_range(controls, V4L2_FOCUS_ABSOLUTE)
+        lens_span = lens_focus_span(model.v4l2_focus_lens_map)
+
+        # A calibrated lens focuses only within its map (on the Pi's
+        # imx708 lens, 420-920 of 0-1023), and nearer at higher positions.
+        if control_range is not None and lens_span is not None:
+            model.v4l2_focus_span = lens_span
+        else:
+            model.v4l2_focus_span = control_range
+
+        model.v4l2_focus_has_auto = auto_focus is not None
+
+        # A camera left on manual focus (auto off) is the fallback's to
+        # drive and to read back from the start.
+        if model.v4l2_focus_span is not None and auto_focus == 0:
+            model.v4l2_focus_path = path
+        else:
+            model.v4l2_focus_path = None
+
+    def set_focus(self, focus_distance):
+        """Apply the camera panel's focus edit now: ``focus_distance`` from
+        0.0 (near) to 1.0 (far), or None for continuous auto focus."""
+        self.cancel_autofocus("focus edited")
+        self.focus_edits.cancel()
+
+        try:
+            self._apply_focus(focus_distance)
+        except RuntimeError as error:
+            logger.error(f"Focus not applied: {error}")
+
+        self.refresh_focus()
+        self.settings_edited()
+
+    def request_focus(self, focus_distance):
+        """Apply a focus slider drag's ``focus_distance`` (0.0 near to 1.0
+        far) live, coalesced into at most one write per
+        FOCUS_WRITE_INTERVAL_S that always ends on the latest value."""
+        self.cancel_autofocus("focus edited")
+        self.focus_edits.submit(focus_distance)
+        self.settings_edited()
+
+    @observe("model:camera_active")
+    def refresh_focus(self, event=None):
+        """Mirror the selected camera's focus into ``model.focus``: on every
+        source selection, camera on/off (Qt reports focus support only for
+        a started camera) and focus change."""
+        model = self.model
+        focus = model.focus
+        qcamera_selected = self.qcamera_selected()
+        qt_focus = qcamera_selected and self.camera.supports_manual_focus()
+        v4l2_focus = (
+            qcamera_selected and not qt_focus and model.v4l2_focus_span is not None
+        )
+
+        focus.available = qt_focus or v4l2_focus
+        focus.auto_available = qt_focus or (v4l2_focus and model.v4l2_focus_has_auto)
+        focus.autofocus_available = focus.available and model.camera_active
+        focus.lens_map = model.v4l2_focus_lens_map if v4l2_focus else []
+        raw_position = None
+
+        if v4l2_focus:
+            # A lens without auto focus holds a position even while no
+            # manual focus is applied, so its position is always shown.
+            raw_position = get_v4l2_control(
+                model.v4l2_focus_device_path, V4L2_FOCUS_ABSOLUTE
+            )
+            distance = self._v4l2_focus_distance(raw_position)
+            focus.auto = model.v4l2_focus_has_auto and model.v4l2_focus_path is None
+        elif qt_focus:
+            distance = self.camera.focus_distance()
+            focus.auto = not self.camera.focus_is_manual()
+        else:
+            distance = None
+            focus.auto = False
+
+        focus.raw_position = raw_position
+
+        if distance is not None:
+            focus.distance = distance
+
+    def qcamera_selected(self):
+        """Whether the selected source is a bound QCamera (not a provider
+        feed or "<No Camera>")."""
+        model = self.model
+
+        return (
+            bool(model.selected_camera)
+            and not model.provider_selected
+            and self.camera.has_camera()
+        )
+
+    # ------------------------------------------------------------------ #
+    # Image controls (brightness, contrast, ...)                           #
+    # ------------------------------------------------------------------ #
+    def refresh_image_settings(self):
+        """Mirror the selected camera's image controls into
+        ``model.image_settings``, on every source selection."""
+        settings = []
+
+        if self.qcamera_selected():
+            for control in self.camera.image_control_ranges():
+                try:
+                    value, auto = self.camera.image_control(control.name)
+                except RuntimeError as error:
+                    logger.error(f"Camera {control.name} not read: {error}")
+
+                    continue
+
+                value = min(max(value, control.low), control.high)
+
+                settings.append(
+                    CameraImageSetting(
+                        name=control.name,
+                        label=IMAGE_CONTROL_LABELS[control.name],
+                        low=control.low,
+                        high=control.high,
+                        default=control.default,
+                        value=value,
+                        value_text=self.camera.describe_image_control(
+                            control.name, value
+                        ),
+                        has_auto=control.has_auto,
+                        auto=auto,
+                    )
+                )
+
+        self.model.image_settings = settings
+        self.announce_settings()
+
+    @observe("model:image_settings:items:[value,auto]")
+    def _apply_image_setting(self, event):
+        """Write a panel edit of an image control to the camera."""
+        setting = event.object
+        setting.value_text = self.camera.describe_image_control(
+            setting.name, setting.value
+        )
+
+        try:
+            self.camera.set_image_control(setting.name, setting.value, setting.auto)
+        except RuntimeError as error:
+            logger.error(f"Camera {setting.label} not applied: {error}")
+
+            return
+
+        # Keep the exposure fallback's record of who switched v4l2 auto
+        # exposure on, so a later manual-exposure request switches it off.
+        if setting.name == EXPOSURE_CONTROL and self.model.v4l2_device_path:
+            self.model.v4l2_auto_exposure_path = (
+                self.model.v4l2_device_path if setting.auto else None
+            )
+
+        self.settings_edited()
+
+    @observe("model:reset_image_settings")
+    def reset_image_settings(self, event=None):
+        """Put every image control back to the camera's default, automatic
+        where the control has an automatic mode."""
+
+        for setting in self.model.image_settings:
+            setting.trait_set(value=setting.default, auto=setting.has_auto)
+
+    # ------------------------------------------------------------------ #
+    # Capture setup (CameraSettingsSnapshot / CameraSettingsRequest)       #
+    # ------------------------------------------------------------------ #
+    def current_settings(self):
+        """The panel's capture setup as a CameraSettings dict: no resolution,
+        image controls or focus unless a QCamera is selected."""
+        model = self.model
+        settings = {
+            "camera": model.selected_camera,
+            "resolution": None,
+            "image_controls": {},
+            "focus": None,
+        }
+
+        if not self.qcamera_selected() or not all(model.resolution):
+            return settings
+
+        focus = model.focus
+        settings["resolution"] = list(model.resolution)
+        settings["image_controls"] = {
+            setting.name: {"value": setting.value, "auto": setting.auto}
+            for setting in model.image_settings
+        }
+
+        if focus.available:
+            settings["focus"] = {"auto": focus.auto, "distance": focus.distance}
+
+        return settings
+
+    def settings_edited(self):
+        """The user changed the capture setup: publish the snapshot, marked
+        as a user edit, once the edits settle. Writes of an applied
+        CameraSettingsRequest are no edit."""
+
+        if self._applying_settings:
+            return
+
+        self._settings_user_edit = True
+        self.settings_edits.submit(None)
+
+    def announce_settings(self):
+        """Publish the snapshot once pending changes settle — after a source
+        selection or a restored format, so a listener always holds the
+        current setup."""
+
+        if self._applying_settings:
+            return
+
+        self.settings_edits.submit(None)
+
+    def _publish_settings(self, _value=None):
+        user_edit = self._settings_user_edit
+        self._settings_user_edit = False
+
+        camera_settings_publisher.publish(
+            {**self.current_settings(), "user_edit": user_edit}
+        )
+
+    def begin_applying_settings(self):
+        """Start applying a CameraSettingsRequest: a user edit still waiting
+        to be published is dropped, so it cannot be stored into the step
+        whose setup is now being applied."""
+        self.settings_edits.cancel()
+        self._settings_user_edit = False
+        self._applying_settings = True
+
+    def apply_settings(self, request):
+        """Apply a CameraSettingsRequest dict's image controls and focus to
+        the selected QCamera, after the view has applied its resolution
+        (see begin_applying_settings); returns the warnings for what the
+        camera could not take. A control the camera lacks is skipped, a
+        value outside its range clamped. While the camera is off, focus
+        waits for its start, and the controls are applied again then."""
+        warnings = []
+        camera = self.model.selected_camera
+        settings_by_name = {
+            setting.name: setting for setting in self.model.image_settings
+        }
+
+        for name, wanted in request["image_controls"].items():
+            label = IMAGE_CONTROL_LABELS.get(name, name)
+            setting = settings_by_name.get(name)
+
+            if setting is None:
+                warnings.append(f"{label} is not available on {camera}")
+
+                continue
+
+            auto = wanted["auto"] and setting.has_auto
+            value = min(max(wanted["value"], setting.low), setting.high)
+
+            if wanted["auto"] and not setting.has_auto:
+                warnings.append(
+                    f"{label} has no automatic mode on {camera}; set to {value}"
+                )
+            elif not auto and value != wanted["value"]:
+                warnings.append(
+                    f"{label} {wanted['value']} is outside {camera}'s range "
+                    f"({setting.low} to {setting.high}); set to {value}"
+                )
+
+            setting.trait_set(value=value, auto=auto)
+
+        if not self.model.camera_active:
+            self._settings_awaiting_start = request
+        elif request["focus"] is not None:
+            warnings.extend(self._apply_settings_focus(request["focus"], camera))
+
+        return warnings
+
+    def _apply_settings_focus(self, focus, camera):
+        """Apply a CameraSettingsRequest's focus; returns its warnings."""
+
+        if not self.model.focus.available:
+            return [f"Focus is not adjustable on {camera}"]
+
+        if focus["auto"] and not self.model.focus.auto_available:
+            return [f"{camera} has no auto focus; the focus stays as it is"]
+
+        self.cancel_autofocus("focus set by a capture setup")
+        self.focus_edits.cancel()
+
+        try:
+            self._apply_focus(None if focus["auto"] else focus["distance"])
+        except RuntimeError as error:
+            return [f"Focus not applied on {camera}: {error}"]
+        finally:
+            self.refresh_focus()
+
+        return []
+
+    def settings_applied(self, request, warnings=(), error=""):
+        """Finish a CameraSettingsRequest: log what the camera could not
+        take, publish the snapshot (not a user edit) and answer the
+        requester on DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED."""
+        self._applying_settings = False
+        context = f"{request['context']}: " if request["context"] else ""
+
+        for text in warnings:
+            logger.warning(f"Capture setup {context}{text}")
+
+        if error:
+            logger.warning(f"Capture setup {context}not applied: {error}")
+        else:
+            self.announce_settings()
+
+        camera_settings_applied_publisher.publish(
+            {
+                "request_id": request["request_id"],
+                "ok": not error,
+                "warnings": list(warnings),
+                "error": error,
+            }
+        )
+
+    def unseen_settings_warnings(self, warnings):
+        """The ``warnings`` not yet shown to the user for the selected camera,
+        now marked as shown — so browsing steps, or a run's steps, that share
+        a setup the camera cannot take warn once, not once per step."""
+        camera = self.model.selected_camera
+        unseen = [
+            text
+            for text in warnings
+            if (camera, text) not in self._shown_settings_warnings
+        ]
+        self._shown_settings_warnings.update((camera, text) for text in unseen)
+
+        return unseen
+
+    @observe("model:camera_active")
+    def _apply_settings_awaiting_start(self, event):
+        """Apply again the capture setup that arrived while the camera was off
+        (see _settings_awaiting_start); what it cannot take was reported
+        then, so it is only logged now."""
+        request = self._settings_awaiting_start
+
+        if not event.new or request is None:
+            return
+
+        self._settings_awaiting_start = None
+        self._applying_settings = True
+
+        # The camera is on now, so this applies the focus as well.
+        try:
+            warnings = self.apply_settings(request)
+        finally:
+            self._applying_settings = False
+
+        for text in warnings:
+            logger.warning(f"Capture setup on camera start: {text}")
+
+    # ------------------------------------------------------------------ #
+    # Autofocus (one-shot contrast sweep)                                  #
+    # ------------------------------------------------------------------ #
+    @observe("model:focus:autofocus_button")
+    def start_autofocus(self, event=None):
+        """Start a one-shot contrast sweep; live frames then drive it (see
+        autofocus_frame)."""
+        focus = self.model.focus
+
+        if self.autofocus.running or not focus.autofocus_available:
+            return
+
+        self.focus_edits.cancel()
+        self._autofocus_started = time.monotonic()
+        logger.info("Autofocus sweep started")
+
+        if self._write_focus(self.autofocus.start()):
+            self._autofocus_timeout.repeat = 1
+            self._autofocus_timeout.start()
+
+    def autofocus_frame(self, grey):
+        """Advance the running sweep by one live frame: ``grey`` is its
+        centre as a 2-D greyscale array, None when it could not be read."""
+
+        if not self.autofocus.running or grey is None:
+            return
+
+        distance = self.autofocus.feed(laplacian_variance(grey))
+
+        if distance is None:
+            return
+
+        # A failed write cancels the sweep (logged there).
+        written = self._write_focus(distance)
+
+        if self.autofocus.running:
+            return
+
+        self._autofocus_timeout.stop()
+
+        if not written:
+            return
+
+        autofocus = self.autofocus
+        elapsed_s = time.monotonic() - self._autofocus_started
+
+        logger.info(
+            f"Autofocus: best focus distance {autofocus.best_distance:.3f} "
+            f"(raw {self.model.focus.raw_position}, sharpness "
+            f"{autofocus.scores[autofocus.best_distance]:.1f}), "
+            f"{len(autofocus.scores)} positions in {elapsed_s:.1f} s"
+        )
+        self.settings_edited()
+
+    def cancel_autofocus(self, reason):
+        """Stop a running sweep, leaving the lens where it is."""
+
+        if not self.autofocus.running:
+            return
+
+        self.autofocus.cancel()
+        self._autofocus_timeout.stop()
+        logger.info(f"Autofocus cancelled: {reason}")
+
+    @observe("autofocus:running")
+    def _show_autofocus_running(self, event):
+        self.model.focus.autofocusing = event.new
+
+    @observe("model:camera_active")
+    def _cancel_autofocus_when_stopped(self, event):
+        if not event.new:
+            self.cancel_autofocus("camera stopped")
+
+    def _autofocus_timed_out(self):
+        if self.autofocus.running:
+            logger.warning(
+                f"Autofocus got too few frames within {AUTOFOCUS_TIMEOUT_S:.0f} s"
+            )
+            self.cancel_autofocus("timed out")
+
+    def _write_focus(self, focus_distance):
+        """Apply a manual ``focus_distance`` and show it without reading
+        it back, for slider drags and sweep steps; returns whether it was
+        applied."""
+        focus = self.model.focus
+
+        try:
+            self._apply_focus(focus_distance)
+        except RuntimeError as error:
+            logger.error(f"Focus not applied: {error}")
+            self.cancel_autofocus("focus write failed")
+            self.refresh_focus()
+
+            return False
+
+        focus.distance = focus_distance
+        focus.auto = False
+
+        if self.model.v4l2_focus_path is not None:
+            focus.raw_position = self._v4l2_focus_raw(focus_distance)
+
+        return True
+
     def _apply_focus(self, focus_distance):
         model = self.model
 
@@ -359,13 +1044,18 @@ class CameraController(HasTraits):
 
             # Restore continuous auto focus on the v4l2 side too, if the
             # fallback below was last driving this camera's focus.
-            if model.v4l2_focus_path is not None:
+            if model.v4l2_focus_path is not None and model.v4l2_focus_has_auto:
                 if not set_v4l2_controls(model.v4l2_focus_path, **{V4L2_FOCUS_AUTO: 1}):
                     logger.warning(
                         f"v4l2 auto focus restore failed for {model.v4l2_focus_path}"
                     )
+            elif model.v4l2_focus_path is not None:
+                logger.info(
+                    f"{model.v4l2_focus_path} has no auto focus; the lens stays "
+                    f"where manual focus left it"
+                )
 
-                model.v4l2_focus_path = None
+            model.v4l2_focus_path = None
 
             return
 
@@ -377,30 +1067,48 @@ class CameraController(HasTraits):
 
         # GStreamer backend (Portable Pi): QCamera reports no manual focus
         # support although the camera's v4l2 focus_absolute control works.
-        path = model.v4l2_device_path
+        path = model.v4l2_focus_device_path
 
         if path is None:
             raise RuntimeError("this camera has no manual focus")
 
-        if path != model.v4l2_focus_path or model.v4l2_focus_range is None:
-            model.v4l2_focus_range = get_v4l2_control_range(path, V4L2_FOCUS_ABSOLUTE)
-
-        if model.v4l2_focus_range is None:
+        if model.v4l2_focus_span is None:
             raise RuntimeError(
                 "this camera has no manual focus (no v4l2 focus_absolute control)"
             )
 
-        lo, hi = model.v4l2_focus_range
-        raw = round(lo + float(focus_distance) * (hi - lo))
+        raw = self._v4l2_focus_raw(float(focus_distance))
+        controls = {V4L2_FOCUS_ABSOLUTE: raw}
 
         # Auto off first — focus_absolute is inactive while auto is on.
-        if not set_v4l2_controls(
-            path, **{V4L2_FOCUS_AUTO: 0, V4L2_FOCUS_ABSOLUTE: raw}
-        ):
+        if model.v4l2_focus_has_auto:
+            controls = {V4L2_FOCUS_AUTO: 0, **controls}
+
+        if not set_v4l2_controls(path, **controls):
             raise RuntimeError("v4l2 focus set failed")
 
         model.v4l2_focus_path = path
-        logger.info(f"Set v4l2 focus_absolute={raw} on {path}")
+        logger.debug(f"Set v4l2 focus_absolute={raw} on {path}")
+
+    def _v4l2_focus_raw(self, focus_distance):
+        """``focus_absolute`` position of a focus distance (0.0 to 1.0)."""
+        near, far = self.model.v4l2_focus_span
+
+        return round(near + focus_distance * (far - near))
+
+    def _v4l2_focus_distance(self, raw):
+        """Focus distance (0.0 to 1.0) of a ``focus_absolute`` position, or
+        None for None; a position beyond the span is clamped into it."""
+
+        if raw is None:
+            return None
+
+        near, far = self.model.v4l2_focus_span
+
+        if near == far:
+            return 0.0
+
+        return min(max((raw - near) / (far - near), 0.0), 1.0)
 
     def _hold_auto_exposure(self):
         """Switch to manual exposure at the time auto last chose."""
@@ -441,10 +1149,9 @@ class CameraController(HasTraits):
         model = self.model
 
         if model.v4l2_focus_path is not None:
-            lo, hi = model.v4l2_focus_range
-            raw = get_v4l2_control(model.v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
-
-            return (raw - lo) / (hi - lo) if raw is not None else None
+            return self._v4l2_focus_distance(
+                get_v4l2_control(model.v4l2_focus_path, V4L2_FOCUS_ABSOLUTE)
+            )
 
         if not self.camera.focus_is_manual():
             return None

@@ -8,25 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
-from PySide6.QtCore import QPointF
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsSceneContextMenuEvent
+# Enthought library imports.
+from pyface.qt.QtCore import QPointF
+from pyface.qt.QtGui import QKeyEvent
+from pyface.qt.QtWidgets import QGraphicsScene, QGraphicsSceneContextMenuEvent
 
-from logger.logger_service import get_logger
-from ...services.electrode_interaction_service import ElectrodeInteractionControllerService
+# Local imports.
+from ...services.electrode_interaction_service import (
+    ElectrodeInteractionControllerService,
+)
 from .electrodes_view_base import EditableChannelTextItem
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+
 class ElectrodeScene(QGraphicsScene):
     """
-    Class to handle electrode view scene using elements contained in the electrode layer.
-    Handles identifying mouse action across the scene.
+    Class to handle electrode view scene using elements contained in the electrode
+    layer. Handles identifying mouse action across the scene.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._interaction_service: 'ElectrodeInteractionControllerService' = None
+        self._interaction_service: "ElectrodeInteractionControllerService" = None
 
     @property
     def interaction_service(self):
@@ -34,31 +41,55 @@ class ElectrodeScene(QGraphicsScene):
         return self._interaction_service
 
     @interaction_service.setter
-    def interaction_service(self, interaction_service: ElectrodeInteractionControllerService):
+    def interaction_service(
+        self, interaction_service: ElectrodeInteractionControllerService
+    ):
         self._interaction_service = interaction_service
 
     def get_item_under_mouse(self, coordinates: QPointF, object_type):
-        '''
-        Searches for an object with type object_type in the scene at coordinates. This will be able to find items at lower z indexes. 
-        '''
-        # Because QGraphicsScene is so primitive, we need to manually get item under the mouse click via coordinates since we can't use signals (QGraphicsItem is not a QObject)
-        # Event bubbling (using the mousePressEvent from the ElectrodeView) has some strange behaviour, so this approach is used instead
+        """
+        Searches for an object with type object_type in the scene at coordinates.
+        This will be able to find items at lower z indexes.
+        """
+        # Because QGraphicsScene is so primitive, we need to manually get item
+        # under the mouse click via coordinates since we can't use signals
+        # (QGraphicsItem is not a QObject). Event bubbling (using the
+        # mousePressEvent from the ElectrodeView) has some strange behaviour,
+        # so this approach is used instead.
         items = self.items(coordinates, deviceTransform=self.views()[0].transform())
+
         for item in items:
             if isinstance(item, object_type):
                 return item
+
         return None
+
+    def _is_editing_channel_label(self):
+        focus_item = self.focusItem()
+
+        return isinstance(focus_item, EditableChannelTextItem) and focus_item.editing
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         # While a channel label is being edited, let the focused text item
         # consume keys instead of the global electrode key handler (which would
         # otherwise step electrodes, toggle pan on Space, etc.).
-        focus_item = self.focusItem()
-        if isinstance(focus_item, EditableChannelTextItem) and focus_item.editing:
+        if self._is_editing_channel_label():
             super().keyPressEvent(event)
             return
-        self.interaction_service.handle_key_press_event(event)
+
+        if self.interaction_service.handle_key_press_event(event):
+            event.accept()
+            return
+
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent) -> None:
+        if self._is_editing_channel_label():
+            super().keyReleaseEvent(event)
+            return
+
+        self.interaction_service.handle_key_release_event(event)
+        super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event):
         """Handle the start of a mouse click event."""
@@ -68,9 +99,11 @@ class ElectrodeScene(QGraphicsScene):
         # the field already being edited fall through to Qt for caret/drag.
         started_edit = self.interaction_service.handle_channel_label_press(event)
         self.interaction_service.handle_mouse_press_event(event)
+
         if started_edit:
             event.accept()
             return
+
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):

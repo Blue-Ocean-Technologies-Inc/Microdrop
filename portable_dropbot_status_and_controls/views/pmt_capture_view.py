@@ -52,6 +52,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     LinkColumn,
+    PresetButtonsEditor,
 )
 
 # Local imports.
@@ -176,6 +177,18 @@ live = VGroup(
                 "stream_osr",
                 label="OSR",
                 editor=EnumEditor(values=_stream_osr_labels),
+                enabled_when=(
+                    "connected and not capturing and not acquiring "
+                    "and not protocol_running"
+                ),
+            ),
+        ),
+        # No fire: setting gain already live-updates a running stream. In an
+        # HGroup, as a bare item among groups gets a 9px-margin wrapper.
+        HGroup(
+            UItem(
+                "gain_presets",
+                editor=PresetButtonsEditor(target="gain"),
                 enabled_when=(
                     "connected and not capturing and not acquiring "
                     "and not protocol_running"

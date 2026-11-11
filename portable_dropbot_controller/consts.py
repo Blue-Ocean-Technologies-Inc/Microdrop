@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from typing import Literal
+
 # Third-party imports.
 from pydantic import BaseModel, Field, field_validator
 
@@ -15,6 +18,11 @@ from pydantic import BaseModel, Field, field_validator
 from device_viewer.consts import (
     DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     DEVICE_VIEWER_MEDIA_CAPTURED,
+)
+from dropbot_controller.consts import DETECT_DROPLETS
+from dropbot_controller.consts import (
+    # The shared reply topic, re-exported for this plugin's services.
+    DROPLETS_DETECTED as DROPLETS_DETECTED,
 )
 
 # Microdrop utils imports.
@@ -163,6 +171,17 @@ MOTOR_IDS = {
     "pogo_right": 5,
 }
 
+#: CHIP_CABIN_CTRL action code the motor board takes per tray direction.
+TRAY_ACTION_CODES = {"in": 0, "out": 1}
+#: CHIP_CABIN_CTRL flags value for a tray-only move: skip the pogo
+#: pushpad release/press around it (the firmware still drops the magnet
+#: out of the way as a safety interlock).
+CHIP_CABIN_TRAY_ONLY_FLAG = 1
+#: The CHIP_CABIN_CTRL reply's status byte, and the value it reads on a
+#: board error.
+CHIP_CABIN_STATUS_INDEX = 11
+CHIP_CABIN_STATUS_ERROR = 0xFF
+
 #: Motor name -> the driver PARAMS friendly name whose EasyFlash blob
 #: holds that motor's mechanical tuning struct.
 MOTOR_PARAM_NAMES = {
@@ -196,6 +215,15 @@ MOTOR_PARAM_FIELDS = (
     ("acc_run", "i"),
     ("acc_rst", "i"),
 )
+
+#: The driver PARAMS friendly name of the magnet's device-defaults struct
+#: (flash key _dp_magnet), and that struct's fields in WIRE ORDER: four
+#: big-endian int32, all µm. z_up is the engage height; it must stay at or
+#: below the magnet-Z motor's positive soft limit (its pl_pos), or the
+#: firmware rejects every engage.
+MAGNET_DEFAULTS_PARAM = "magnet_defaults"
+MAGNET_DEFAULTS_FIELDS = ("z_up", "z_down", "y_0", "y_space")
+MAGNET_DEFAULTS_FORMAT = ">4i"
 
 #: Fluorescence filter wheel positions the hardware knows — 1-based; the
 #: firmware faults on position 0.
@@ -257,8 +285,32 @@ MONITOR_INTERVAL_S = 2
 STATUS_FAILURE_DISCONNECT_LIMIT = 3
 
 #: chip_on_pad status bits: bit0 debounced presence, bit1/bit2 raw left/right
-#: pogo contact. A chip counts as on the pad only with all three set.
+#: pogo contact. Under the both-pogos rule a chip counts as on the pad only
+#: with all three set.
 CHIP_ON_PAD_SEATED_MASK = 0b111
+#: The debounced presence bit every chip-detect rule requires.
+CHIP_ON_PAD_PRESENCE_BIT = 0b001
+#: The left/right pogo contact bits; the any-pogo rule needs one of them.
+CHIP_ON_PAD_POGO_BITS = 0b110
+
+#: Chip-detect rules (Portable DropBot Settings preference): which contact
+#: masks the backend reports as a chip on the pad.
+CHIP_DETECT_RULE_BOTH_POGOS = "both_pogos"
+CHIP_DETECT_RULE_ANY_POGO = "any_pogo"
+CHIP_DETECT_RULES = (CHIP_DETECT_RULE_BOTH_POGOS, CHIP_DETECT_RULE_ANY_POGO)
+DEFAULT_CHIP_DETECT_RULE = CHIP_DETECT_RULE_BOTH_POGOS
+
+#: Boards whose fans the driver's setFan(on, board=...) drives, by the
+#: driver's own names: the MCU (signal) board fan or the motor board fans.
+FAN_BOARDS = ("signal", "motor")
+#: The board the status pane's fan toggle drives unless the Portable
+#: DropBot Settings preference says otherwise.
+DEFAULT_FAN_BOARD = "signal"
+
+#: The ETS preferences node both the backend's PortableDropbotPreferences and
+#: the frontend's settings pane bind to, so the frontend never imports the
+#: backend class (same shape as VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH).
+PORTABLE_DROPBOT_PREFERENCES_PATH = "microdrop.portable_dropbot_settings"
 
 # ---------------------------------------------------------------------------
 # app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
@@ -272,6 +324,8 @@ PORT_HINT_KEY = "port_hint"
 DEFAULT_VOLTAGE_KEY = "default_voltage"
 DEFAULT_FREQUENCY_KEY = "default_frequency"
 DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
+FAN_BOARD_KEY = "fan_board"
+CHIP_DETECT_RULE_KEY = "chip_detect_rule"
 
 PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     BAUD_RATE_KEY,
@@ -279,6 +333,8 @@ PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     DEFAULT_VOLTAGE_KEY,
     DEFAULT_FREQUENCY_KEY,
     DEFAULT_LIGHT_INTENSITY_KEY,
+    FAN_BOARD_KEY,
+    CHIP_DETECT_RULE_KEY,
 )
 
 # Last applied electrodes_state_change request.
@@ -330,6 +386,9 @@ FLUORESCENCE_CAPTURE_DONE = "portable_dropbot/signals/fluorescence_capture_done"
 #: Motor-params pane feedback: read-back field values, write/preset/
 #: reboot outcomes.
 MOTOR_PARAMS_UPDATED = "portable_dropbot/signals/motor_params_updated"
+#: Magnet engage height feedback (MagnetEngageUpdated): the read-back
+#: value and write/preset outcomes, for the preferences tab.
+MAGNET_ENGAGE_UPDATED = "portable_dropbot/signals/magnet_engage_updated"
 #: Protocol-step acks: the magnet move finished / the heater channel
 #: reading is within the step's tolerance of its target.
 MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
@@ -349,6 +408,8 @@ REFRESH_PORTS = "portable_dropbot/requests/refresh_ports"
 DISCONNECT = "portable_dropbot/requests/disconnect"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
+#: Move the chip tray (MoveTrayRequest). A legacy bare "in"/"out"/"toggle"
+#: string is still accepted and runs the pogo pushpad macro.
 MOVE_TRAY = "portable_dropbot/requests/move_tray"
 MOVE_MAGNET = "portable_dropbot/requests/move_magnet"
 #: Protocol-step magnet: JSON {"on": bool, "height_mm": float}; acks
@@ -411,6 +472,8 @@ FLUORESCENCE_CAPTURE = "portable_dropbot/requests/fluorescence_capture"
 #: publish_message with an empty message, exactly like PMT_CAPTURE_ABORT.
 FLUORESCENCE_CAPTURE_ABORT = "portable_dropbot/requests/fluorescence_capture_abort"
 # Power system (advanced): fan and buzzer only.
+#: JSON {"on": bool, "board"?: one of FAN_BOARDS}; board is optional and
+#: defaults to the fan-board preference (PortableDropbotPreferences.fan_board).
 SET_FAN = "portable_dropbot/requests/set_fan"
 SET_BUZZER = "portable_dropbot/requests/set_buzzer"
 # Motor mechanical params (advanced): RAM write, flash preset, and
@@ -419,6 +482,12 @@ MOTOR_PARAMS_READ = "portable_dropbot/requests/motor_params_read"
 MOTOR_PARAMS_WRITE = "portable_dropbot/requests/motor_params_write"
 MOTOR_PARAMS_PRESET = "portable_dropbot/requests/motor_params_preset"
 REBOOT_MOTOR_BOARD = "portable_dropbot/requests/reboot_motor_board"
+#: Magnet engage height in the motor board's device defaults: read it, write
+#: it to RAM (MagnetEngageWriteRequest), or preset RAM to flash. Read and
+#: preset take an empty message.
+MAGNET_ENGAGE_READ = "portable_dropbot/requests/magnet_engage_read"
+MAGNET_ENGAGE_WRITE = "portable_dropbot/requests/magnet_engage_write"
+MAGNET_ENGAGE_PRESET = "portable_dropbot/requests/magnet_engage_preset"
 HOME_ALL = "portable_dropbot/requests/home_all"
 MOTOR_MOVE = "portable_dropbot/requests/motor_move"
 MOTOR_SET_SPEED = "portable_dropbot/requests/motor_set_speed"
@@ -433,6 +502,8 @@ ACTOR_TOPIC_DICT = {
     f"{PKG}_listener": [
         "portable_dropbot/requests/#",
         "hardware/requests/#",
+        # Find liquid and the droplet-check columns use the DropBot's topic.
+        DETECT_DROPLETS,
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
         DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
@@ -768,3 +839,60 @@ fluorescence_capture_progress_publisher = ValidatedTopicPublisher(
 fluorescence_capture_done_publisher = ValidatedTopicPublisher(
     topic=FLUORESCENCE_CAPTURE_DONE, validator_class=FluorescenceCaptureDone
 )
+
+# --------------------------------------------------------------------- #
+# Mechanism message contracts (topic + schema, one importable unit)      #
+# --------------------------------------------------------------------- #
+
+
+class MoveTrayRequest(BaseModel):
+    """A chip tray move; "toggle" moves it opposite to where the motor
+    STATUS reports it."""
+
+    direction: Literal["in", "out", "toggle"]
+    #: True runs the firmware macro that releases the pogo pushpads before
+    #: the move and presses them after; False moves the tray only.
+    actuate_pogos: bool = True
+
+
+move_tray_publisher = ValidatedTopicPublisher(
+    topic=MOVE_TRAY, validator_class=MoveTrayRequest
+)
+
+# --------------------------------------------------------------------- #
+# Magnet engage height message contracts (topic + schema, one unit)      #
+# --------------------------------------------------------------------- #
+
+
+class MagnetEngageWriteRequest(BaseModel):
+    """The magnet engage height to write to the board's RAM device defaults."""
+
+    engage_mm: float = Field(ge=0)
+
+
+class MagnetEngageUpdated(BaseModel):
+    """Outcome of a magnet engage request. `engage_mm` is the height a read
+    returned or a write sent; `error` is set when the request failed."""
+
+    action: Literal["read", "write", "preset"]
+    engage_mm: float | None = None
+    error: str = ""
+
+
+magnet_engage_write_publisher = ValidatedTopicPublisher(
+    topic=MAGNET_ENGAGE_WRITE, validator_class=MagnetEngageWriteRequest
+)
+magnet_engage_updated_publisher = ValidatedTopicPublisher(
+    topic=MAGNET_ENGAGE_UPDATED, validator_class=MagnetEngageUpdated
+)
+
+# --------------------------------------------------------------------- #
+# Droplet detection                                                      #
+# --------------------------------------------------------------------- #
+
+#: Absolute capacitance (pF) a channel must read to count as holding
+#: liquid, like the DropBot's droplet detection threshold.
+DROPLET_DETECTION_THRESHOLD_PF = 10.0
+
+#: Per-channel settle time of the full-channel capacitance scan (ms).
+DROPLET_SCAN_SWITCH_TIME_MS = 20

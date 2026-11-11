@@ -52,8 +52,32 @@ or never-enabled plugin is inert until someone tries to enable it.
 Each resulting `PluginGroup` carries a `dist_name` (the owning Python distribution). The
 manager uses this to classify **installed** plugins (distribution is NOT the app's own
 `microdrop_py`) from **bundled** ones (distribution IS `microdrop_py`, disable-only). The
-magnet peripheral is bundled this way: its entry point is declared on `microdrop_py` and its
-`microdrop_plugin.toml` lives in `peripheral_controller/`.
+magnet and heater stacks are standalone conda packages (`magnet-microdrop-plugin`,
+`heater-microdrop-plugin`), discovered through their own entry points like any installed
+plugin.
+
+**Built-in groups.** A group whose code ships inside the app itself needs no manifest or
+entry point: it is a dict of `PluginGroup` trait values in `BUILTIN_PLUGIN_GROUPS`
+(`plugin_management/consts.py`), registered ahead of the discovered groups. It gets the
+same Manage Plugins checkbox, persisted flag and hot load/unload, but never lists as an
+installed package (it has no `dist_name`) and cannot be uninstalled. The example is the
+portable rig's status-bar battery icon:
+
+```python
+BUILTIN_PLUGIN_GROUPS = (
+    {
+        "name": "rpi_battery_ui",
+        "label": "Battery status icon (portable rig)",
+        "plugin_specs": ["rpi_battery_status.plugin:RpiBatteryStatusPlugin"],
+        "enabled_key": "plugin_group_enabled.rpi_battery_ui",
+        "default_enabled": is_rpi(),
+    },
+)
+```
+
+`default_enabled` makes it load out of the box on the Pi only; anyone can still tick it on.
+Like every managed group, its plugins must stay out of the static startup lists in
+`examples/plugin_consts.py`, or they load twice.
 
 ### 1.4 Install (`Tools → Install Plugin…`)
 
@@ -119,8 +143,8 @@ A relaunch dialog is offered; the package is no longer importable after the rela
 `PluginManagementPlugin._restore_groups_on_launch` (observing
 `application.application_initialized`) runs once the app is up: it ADOPTS the
 startup-composed group plugins, then reconciles every group to its persisted
-enabled flag (default enabled) — so the Manage Plugins checkboxes match
-what's actually loaded after a relaunch.
+enabled flag, or to the group's `default_enabled` when the user never toggled it — so
+the Manage Plugins checkboxes match what's actually loaded after a relaunch.
 
 ### 1.8 The three things Envisage/Pyface don't self-heal
 
@@ -205,6 +229,7 @@ Field reference:
 | `groups[].label` | no | Shown in Manage Plugins (defaults to `name`). |
 | `groups[].plugins` | yes | Ordered `"module:Class"` strings — the Envisage `Plugin` classes, imported lazily on enable, started in this order (stopped in reverse). |
 | `groups[].enabled_key` | yes | Key persisting the on/off state in the application preferences file (e.g. `"microdrop.<x>_enabled"`). |
+| `groups[].default_enabled` | no | Whether the group loads at startup while the user has never toggled it (defaults to `true`). Set `false` for groups that only make sense on some rigs. |
 | `groups[].post_enable_publish_topic` | no | A pub/sub topic published (empty message) right after enable — e.g. to start hardware monitoring. |
 
 **Grouping & order tips:** list groups in **enable order** (backend before UI, so services/
@@ -290,8 +315,8 @@ it via **Tools → Install Plugin… → Browse Plugins** dialog.
   lives in `src/`). Add a `[project.entry-points."microdrop.plugins"]` entry to the **main**
   `microdrop-py/pyproject.toml` and ship `microdrop_plugin.toml` inside the importable
   package. Discovered at startup, shown in Manage Plugins — can be **disabled but not
-  uninstalled**. This is how magnet ships (`microdrop_plugin.toml` in `peripheral_controller/`,
-  entry point on `microdrop_py`).
+  uninstalled**. No plugin ships this way today; an in-tree group is simpler as a built-in
+  group (§1.3).
 - **Installed:** built into a `.conda` artifact and installed at runtime via `pixi add`;
   `dist_name` is NOT `microdrop_py`, so it is fully uninstallable via Uninstall Plugin….
 

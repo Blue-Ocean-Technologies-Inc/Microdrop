@@ -16,23 +16,27 @@ tests exercise them with a real ProtocolContext (prompt_gui runs inline when
 signals is None) and patched app_globals / publish_message — no Qt, no Redis.
 """
 
+# Standard library imports.
 import threading
 from unittest.mock import patch
 
-from pluggable_protocol_tree.execution.events import PauseEvent
-from pluggable_protocol_tree.execution.step_context import ProtocolContext
-from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
-    RealtimeModeHandler, _RESTORE_REALTIME_SCRATCH_KEY,
-)
-from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES
+from pluggable_protocol_tree.execution.events import PauseEvent
+from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
+    _RESTORE_REALTIME_SCRATCH_KEY,
+    RealtimeModeHandler,
+)
+from pluggable_protocol_tree.execution.step_context import ProtocolContext
+from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 
 _RT = "pluggable_protocol_tree.execution.lifecycle.realtime_mode"
 
 
 def _proto(preview=False):
-    return ProtocolContext(stop_event=threading.Event(),
-                           pause_event=PauseEvent(), preview_mode=preview)
+    return ProtocolContext(
+        stop_event=threading.Event(), pause_event=PauseEvent(), preview_mode=preview
+    )
 
 
 def _prefs(**overrides):
@@ -43,6 +47,7 @@ def _prefs(**overrides):
 
 
 # --- RealtimeModeHandler ---------------------------------------------------
+
 
 def test_realtime_preview_contributes_nothing():
     h = RealtimeModeHandler(preferences=_prefs())
@@ -58,23 +63,26 @@ def test_realtime_off_enables_and_contributes_settle():
     h = RealtimeModeHandler(preferences=_prefs(realtime_mode_settling_time_s=2.0))
     ctx = _proto()
     with patch(f"{_RT}.app_globals") as ag, patch(f"{_RT}.publish_message") as pub:
-        ag.get.return_value = False               # realtime currently OFF
+        ag.get.return_value = False  # realtime currently OFF
         h.on_pre_protocol_start(ctx)
-    pub.assert_called_once()                       # turned it on
-    assert ctx.pre_protocol_wait_s == 2.0          # settle contributed
+    pub.assert_called_once()  # turned it on
+    assert ctx.pre_protocol_wait_s == 2.0  # settle contributed
     assert ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY] is False  # restore=off
 
 
 def test_realtime_on_prompt_disabled_follows_preference():
-    h = RealtimeModeHandler(preferences=_prefs(
-        prompt_to_restore_realtime_mode=False,
-        keep_realtime_mode_after_protocol=True,
-        realtime_mode_settling_time_s=1.0))
+    h = RealtimeModeHandler(
+        preferences=_prefs(
+            prompt_to_restore_realtime_mode=False,
+            keep_realtime_mode_after_protocol=True,
+            realtime_mode_settling_time_s=1.0,
+        )
+    )
     ctx = _proto()
     with patch(f"{_RT}.app_globals") as ag, patch(f"{_RT}.publish_message") as pub:
-        ag.get.return_value = True                 # already ON
+        ag.get.return_value = True  # already ON
         h.on_pre_protocol_start(ctx)
-    pub.assert_not_called()                        # already on -> no enable
+    pub.assert_not_called()  # already on -> no enable
     assert ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY] is True
     assert ctx.pre_protocol_wait_s == 1.0
 
@@ -82,8 +90,11 @@ def test_realtime_on_prompt_disabled_follows_preference():
 def test_realtime_on_prompt_keeps_per_dialog_answer():
     h = RealtimeModeHandler(preferences=_prefs(prompt_to_restore_realtime_mode=True))
     ctx = _proto()
-    with patch(f"{_RT}.app_globals") as ag, patch(f"{_RT}.publish_message"), \
-         patch(f"{_RT}.confirm", return_value=(YES, False)):
+    with (
+        patch(f"{_RT}.app_globals") as ag,
+        patch(f"{_RT}.publish_message"),
+        patch(f"{_RT}.confirm", return_value=(YES, False)),
+    ):
         ag.get.return_value = True
         h.on_pre_protocol_start(ctx)
     assert ctx.scratch[_RESTORE_REALTIME_SCRATCH_KEY] is True
@@ -92,7 +103,7 @@ def test_realtime_on_prompt_keeps_per_dialog_answer():
 def test_realtime_post_noop_when_pre_never_ran():
     """Cancelled-before-prep (or preview): no scratch entry -> no restore."""
     h = RealtimeModeHandler(preferences=_prefs())
-    ctx = _proto()                                  # scratch empty
+    ctx = _proto()  # scratch empty
     with patch(f"{_RT}.publish_message") as pub:
         h.on_post_protocol_end(ctx)
     pub.assert_not_called()
@@ -118,17 +129,20 @@ def test_realtime_post_keeps_on_when_keeping():
 
 # --- LoggingHandler --------------------------------------------------------
 
+
 def _logging_controller():
     from pluggable_protocol_tree.services.logging.controller import (
         ProtocolLoggingController,
     )
+
     return ProtocolLoggingController(
-        settling_provider=lambda: 0.0, flush_scheduler=lambda c: None)
+        settling_provider=lambda: 0.0, flush_scheduler=lambda c: None
+    )
 
 
 def test_logging_handler_starts_logging_with_built_context(tmp_path):
-    from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
     import pluggable_protocol_tree.services.logging.listener as L
+    from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
 
     controller = _logging_controller()
     handler = LoggingHandler(
@@ -161,3 +175,78 @@ def test_logging_handler_preview_is_noop(tmp_path):
     ctx = _proto(preview=True)
     handler.on_pre_protocol_start(ctx)
     assert controller._ingestion is None
+
+
+# --- UnusedColumnsNoticeHandler ----------------------------------------------
+
+_NOTICE = "pluggable_protocol_tree.execution.lifecycle.unused_columns_notice"
+
+
+def _notice_handler(suppress=False):
+    from pluggable_protocol_tree.execution.lifecycle.unused_columns_notice import (
+        UnusedColumnsNoticeHandler,
+    )
+
+    # Explicit: a bare ProtocolPreferences shares the default node across tests.
+    return UnusedColumnsNoticeHandler(
+        preferences=_prefs(suppress_unused_column_hooks_information=suppress)
+    )
+
+
+def _notice_context(skipped_column_ids):
+    from pluggable_protocol_tree.models.column import BaseColumnModel, Column
+    from pluggable_protocol_tree.views.columns.readonly_label import (
+        ReadOnlyLabelColumnView,
+    )
+
+    columns = [
+        Column(
+            model=BaseColumnModel(col_id="flu", col_name="Fluorescence"),
+            view=ReadOnlyLabelColumnView(),
+        ),
+        Column(
+            model=BaseColumnModel(col_id="routes", col_name="Routes"),
+            view=ReadOnlyLabelColumnView(),
+            preference_display_name="Electrodes / Routes",
+        ),
+    ]
+    ctx = _proto()
+    ctx.columns = columns
+    ctx.skipped_column_ids = skipped_column_ids
+
+    return ctx
+
+
+def test_notice_lists_the_skipped_columns_by_display_name():
+    h = _notice_handler()
+    with patch(f"{_NOTICE}.information", return_value=(None, False)) as info:
+        h.on_pre_protocol_start(_notice_context(["flu", "routes"]))
+    info.assert_called_once()
+    message = info.call_args.kwargs["message"]
+    assert message.startswith("<p>")
+    assert "<li><b>Fluorescence</b></li><li><b>Electrodes / Routes</b></li>" in message
+    assert info.call_args.kwargs["checkbox_text"]
+
+
+def test_notice_not_shown_when_no_column_is_skipped():
+    h = _notice_handler()
+    with patch(f"{_NOTICE}.information") as info:
+        h.on_pre_protocol_start(_notice_context([]))
+    info.assert_not_called()
+
+
+def test_notice_not_shown_when_suppressed():
+    h = _notice_handler(suppress=True)
+    with patch(f"{_NOTICE}.information") as info:
+        h.on_pre_protocol_start(_notice_context(["flu"]))
+    info.assert_not_called()
+
+
+def test_notice_checkbox_writes_the_suppress_preference():
+    h = _notice_handler()
+    try:
+        with patch(f"{_NOTICE}.information", return_value=(None, True)):
+            h.on_pre_protocol_start(_notice_context(["flu"]))
+        assert h.preferences.suppress_unused_column_hooks_information is True
+    finally:
+        h.preferences.suppress_unused_column_hooks_information = False

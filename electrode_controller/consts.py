@@ -15,6 +15,11 @@ from electrode_controller.models import (
     ElectrodeDisableRequestPublisher,
     ElectrodeStateChangePublisher,
 )
+from electrode_controller.models import (
+    # The state-change payload schema, re-exported so sibling plugins
+    # import it from this module, never from electrode_controller.models.
+    ElectrodeChannelsRequest as ElectrodeChannelsRequest,
+)
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])

@@ -20,8 +20,12 @@ from traits.api import Callable, HasTraits, Instance
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error, information
+from pluggable_protocol_tree.consts import ELECTRODE_TO_CHANNEL_KEY
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.models.step_pattern_model import StepPatternModel
+from pluggable_protocol_tree.services.device_electrodes import (
+    active_device_electrode_channels,
+)
 from pluggable_protocol_tree.services.step_pattern import (
     apply_pattern_to_steps,
     discover_pattern_fields,
@@ -96,9 +100,20 @@ class StepPatternController(HasTraits):
 
         return StepPatternModel(
             current_values=current_values,
+            electrode_channels=self._electrode_channels(fields),
             fit_count=len(step_paths),
             fields=fields,
         )
+
+    def _electrode_channels(self, fields):
+        """The protocol's electrode-id -> channel map, else the active device
+        SVG's; {} when no field is filled by channel."""
+        if not any(field.is_channels for field in fields):
+            return {}
+
+        metadata = self.manager.protocol_metadata.get(ELECTRODE_TO_CHANNEL_KEY)
+
+        return dict(metadata or {}) or active_device_electrode_channels()
 
     def _apply(self, model, step_paths):
         if model.is_fit:

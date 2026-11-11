@@ -45,6 +45,7 @@ from ..consts import (
     FILLER_CAPACITANCE_KEY,
     LIQUID_CAPACITANCE_KEY,
     PHASE_NAVIGATION_MODE,
+    volume_estimate_publisher,
 )
 from ..models.alpha import AlphaValue
 from ..models.main_model import DeviceViewMainModel
@@ -244,10 +245,17 @@ class DeviceViewerPublishController(HasTraits):
         if self._disable_state_messages:
             return
 
+        # Idle, sidebar route playback actuates with a step selected too, so
+        # the step's routes can be run on the device; its phases never reach
+        # the step (model_change_handler_with_message skips playback).
         if self.model.realtime_mode and self.model.connected:
             if (
                 not self.model.protocol_running
-                and (self.model.free_mode or self.model.phase_navigation_mode)
+                and (
+                    self.model.free_mode
+                    or self.model.phase_navigation_mode
+                    or self.model.route_execution_service_executing
+                )
             ) or (self.model.protocol_running and self.model.editable):
                 logger.info(
                     f"DEVICE VIEWER: "
@@ -272,7 +280,8 @@ class DeviceViewerPublishController(HasTraits):
             reason += "Protocol running; "
 
         if not self.model.free_mode and not self.model.phase_navigation_mode:
-            reason += "Not in free mode or phase navigation; "
+            reason += "Not in free mode or phase navigation (route playback still "
+            reason += "actuates); "
 
         if not self.model.realtime_mode:
             reason += "Realtime mode; "
@@ -368,3 +377,18 @@ class DeviceViewerPublishController(HasTraits):
         """
         self.publish_calibration_message()
         logger.info("Calibration message published")
+
+    # ------------------------------------------------------- volume readout
+    @observe("model:volume_estimate:shown_values_updated")
+    def _publish_volume_estimate(self, event):
+        """Send the new volume readout snapshot to the DropBot status pane."""
+        estimate = self.model.volume_estimate
+
+        volume_estimate_publisher.publish(
+            {
+                "status_message": estimate.shown_status_message,
+                "volume_ul": estimate.shown_volume_ul,
+                "fill_fraction": estimate.shown_fill_fraction,
+                "covered_area_mm2": estimate.shown_covered_area_mm2,
+            }
+        )

@@ -1,0 +1,355 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+"""The Histogram view's maths: a colour ROI split into a series per
+channel, shared bins (clipped, linear or log),
+counts and their normalisation, Savitzky-Golay over the bins, the
+distribution fits recovering known parameters, and the x magnifier's
+axis mapping."""
+
+# Standard library imports.
+import math
+
+# Third-party imports.
+import numpy as np
+import pytest
+
+# Microdrop package imports.
+from image_viewer.analysis.consts import (
+    HISTOGRAM_CHANNEL_COLORS,
+    HISTOGRAM_FIT_MIN_PIXELS,
+)
+from image_viewer.analysis.histogram_series import (
+    bin_centres,
+    bins_within,
+    channel_samples,
+    fit_distribution,
+    fitted_counts,
+    histogram_counts,
+    histogram_edges,
+    in_range,
+    magnified,
+    magnified_ticks,
+    pixels_in_bins,
+    pooled_median,
+    smoothed_counts,
+    unmagnified,
+)
+from image_viewer.analysis.roi_model import RoiStyle
+
+#: A seeded generator, so every run draws the same samples.
+RNG_SEED = 7
+
+
+@pytest.fixture
+def rng():
+    return np.random.default_rng(RNG_SEED)
+
+
+def test_a_colour_roi_splits_into_a_series_per_channel_in_its_own_style():
+    style = RoiStyle(color="#123456", line_style="dashed", alpha=40)
+    pixels = np.array([[10, 20, 30], [11, 21, 31]], dtype=np.uint8)
+
+    samples = channel_samples("Drop", pixels, style)
+
+    assert [name for name, _pixels, _style in samples] == [
+        "Drop R",
+        "Drop G",
+        "Drop B",
+    ]
+    assert [list(channel) for _name, channel, _style in samples] == [
+        [10, 11],
+        [20, 21],
+        [30, 31],
+    ]
+    assert [channel_style.color for _name, _pixels, channel_style in samples] == list(
+        HISTOGRAM_CHANNEL_COLORS
+    )
+    assert all(
+        (channel_style.line_style, channel_style.plot_alpha) == ("dashed", 0.4)
+        for _name, _pixels, channel_style in samples
+    )
+    assert style.color == "#123456"
+
+
+def test_edges_span_the_pooled_range(rng):
+    first = rng.normal(100.0, 5.0, 500)
+    second = rng.normal(300.0, 5.0, 200)
+
+    edges = histogram_edges([first, second], 64)
+
+    assert len(edges) == 65
+    assert edges[0] == pytest.approx(min(first.min(), second.min()))
+    assert edges[-1] == pytest.approx(max(first.max(), second.max()))
+    assert np.allclose(np.diff(edges), np.diff(edges)[0])
+
+
+def test_clip_trims_hot_pixels_off_the_range(rng):
+    pixels = np.concatenate([rng.normal(500.0, 10.0, 10_000), [60_000.0, 65_000.0]])
+
+    edges = histogram_edges([pixels], 32, clip_percent=1.0)
+
+    assert edges[0] == pytest.approx(np.percentile(pixels, 1.0))
+    assert edges[-1] == pytest.approx(np.percentile(pixels, 99.0))
+    assert edges[-1] < 1_000.0
+    assert in_range(pixels, edges[0], edges[-1]).size < pixels.size
+
+
+def test_log_edges_are_geometric_over_the_positive_pixels():
+    pixels = np.array([-5.0, 0.0, 1.0, 10.0, 100.0])
+
+    edges = histogram_edges([pixels], 2, log=True)
+
+    assert edges == pytest.approx([1.0, 10.0, 100.0])
+    assert bin_centres(edges, log=True) == pytest.approx(
+        [math.sqrt(10.0), math.sqrt(1000.0)]
+    )
+    assert histogram_edges([np.array([-1.0, 0.0])], 8, log=True) is None
+
+
+def test_a_single_value_still_gets_bins_with_width():
+    edges = histogram_edges([np.full(20, 7.0)], 4)
+
+    assert edges[0] < 7.0 < edges[-1]
+    assert histogram_counts(np.full(20, 7.0), edges).sum() == 20
+
+
+def test_no_pixels_means_no_edges():
+    assert histogram_edges([np.array([])], 16) is None
+
+
+def test_normalize_turns_counts_into_fractions_of_the_roi(rng):
+    pixels = rng.normal(200.0, 20.0, 4_000)
+    edges = histogram_edges([pixels], 40)
+
+    counts = histogram_counts(pixels, edges)
+    fractions = histogram_counts(pixels, edges, normalize=True)
+
+    assert counts.sum() == pixels.size
+    assert fractions.sum() == pytest.approx(1.0)
+    assert fractions == pytest.approx(counts / pixels.size)
+
+
+def test_normalized_fractions_count_clipped_tails_in_the_whole(rng):
+    pixels = rng.normal(200.0, 20.0, 4_000)
+    edges = histogram_edges([pixels], 40, clip_percent=5.0)
+
+    fractions = histogram_counts(pixels, edges, normalize=True)
+
+    assert fractions.sum() == pytest.approx(
+        in_range(pixels, edges[0], edges[-1]).size / pixels.size
+    )
+    assert fractions.sum() < 1.0
+
+
+def test_savgol_over_bins_keeps_the_shape_and_roughly_the_sum(rng):
+    pixels = rng.normal(200.0, 20.0, 2_000)
+    counts = histogram_counts(pixels, histogram_edges([pixels], 60))
+
+    smoothed = smoothed_counts(counts, 9, 2)
+
+    assert smoothed.shape == counts.shape
+    assert smoothed.min() >= 0.0
+    assert smoothed.sum() == pytest.approx(counts.sum(), rel=0.05)
+    # Smoother: the bin-to-bin jitter shrinks.
+    assert np.abs(np.diff(smoothed)).sum() < np.abs(np.diff(counts)).sum()
+
+
+def test_savgol_leaves_a_run_too_short_for_its_window_alone():
+    counts = np.array([1.0, 4.0])
+
+    assert smoothed_counts(counts, 9, 2) == pytest.approx(counts)
+
+
+def test_normal_fit_recovers_its_parameters(rng):
+    pixels = rng.normal(812.0, 21.0, 20_000)
+
+    distribution, label = fit_distribution(pixels, "normal")
+
+    assert distribution.mean() == pytest.approx(812.0, rel=0.01)
+    assert distribution.std() == pytest.approx(21.0, rel=0.05)
+    assert label.startswith("N(μ=")
+
+
+def test_lognormal_fit_recovers_its_parameters(rng):
+    pixels = rng.lognormal(mean=6.5, sigma=0.3, size=20_000)
+
+    distribution, label = fit_distribution(pixels, "lognormal")
+
+    assert math.log(distribution.median()) == pytest.approx(6.5, rel=0.01)
+    assert distribution.kwds["s"] == pytest.approx(0.3, rel=0.05)
+    assert label.startswith("logN(μ=")
+
+
+@pytest.mark.parametrize(
+    "pixels, kind",
+    [
+        (np.arange(HISTOGRAM_FIT_MIN_PIXELS - 1, dtype=float) + 1.0, "normal"),
+        (np.full(50, 9.0), "normal"),
+        (np.linspace(0.0, 10.0, 50), "lognormal"),
+        (np.linspace(-1.0, 10.0, 50), "lognormal"),
+        (np.linspace(1.0, 10.0, 50), "unknown"),
+    ],
+)
+def test_a_fit_that_cannot_be_made_returns_none(pixels, kind):
+    assert fit_distribution(pixels, kind) is None
+
+
+def test_fitted_counts_match_the_histogram_they_are_drawn_over(rng):
+    pixels = rng.normal(500.0, 30.0, 50_000)
+    edges = histogram_edges([pixels], 50)
+    counts = histogram_counts(pixels, edges)
+    distribution, _label = fit_distribution(pixels, "normal")
+
+    x_values, y_values = fitted_counts(distribution, edges, pixels.size, 200)
+
+    # The curve's peak is the tallest bin's height, near enough.
+    assert x_values[0] == pytest.approx(edges[0])
+    assert x_values[-1] == pytest.approx(edges[-1])
+    assert y_values.max() == pytest.approx(counts.max(), rel=0.1)
+
+
+def test_fitted_counts_on_log_bins_scale_with_the_bin_width(rng):
+    pixels = rng.lognormal(mean=6.0, sigma=0.5, size=50_000)
+    edges = histogram_edges([pixels], 50, log=True)
+    counts = histogram_counts(pixels, edges)
+    distribution, _label = fit_distribution(pixels, "lognormal")
+
+    _x_values, y_values = fitted_counts(distribution, edges, pixels.size, 400, log=True)
+
+    assert y_values.max() == pytest.approx(counts.max(), rel=0.1)
+
+
+def test_fitted_counts_break_off_below_the_floor():
+    distribution, _label = fit_distribution(np.linspace(-3.0, 3.0, 1_001), "normal")
+    edges = np.linspace(-20.0, 20.0, 41)
+
+    _x_values, y_values = fitted_counts(distribution, edges, 1_000.0, 101, floor=0.5)
+
+    assert np.isnan(y_values[0]) and np.isnan(y_values[-1])
+    assert np.nanmin(y_values) >= 0.5
+
+
+def test_the_intensity_range_drops_pixels_before_binning(rng):
+    background = rng.normal(50.0, 5.0, 3_000)
+    droplet = rng.normal(800.0, 20.0, 1_000)
+    pixels = np.concatenate([background, droplet])
+
+    kept = in_range(pixels, 400.0, 2_000.0)
+    edges = histogram_edges([kept], 32)
+
+    assert kept.size == 1_000
+    assert edges[0] > 400.0
+    assert histogram_counts(kept, edges).sum() == kept.size
+    assert histogram_counts(kept, edges, normalize=True).sum() == pytest.approx(1.0)
+
+
+def test_the_count_range_selects_the_pixels_of_the_bins_it_keeps():
+    # Bin heights 1, 3, 5 and 2 over the bins [0, 1), [1, 2), [2, 3), [3, 4].
+    pixels = np.array([0.5, 1.2, 1.5, 1.8, 2.1, 2.3, 2.5, 2.7, 2.9, 3.4, 4.0])
+    edges = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    counts = histogram_counts(pixels, edges)
+
+    selected = bins_within(counts, 2.0, 4.0)
+    fitted = pixels_in_bins(pixels, edges, selected)
+
+    assert counts == pytest.approx([1.0, 3.0, 5.0, 2.0])
+    assert selected.tolist() == [False, True, False, True]
+    # The right edge belongs to the last bin, as np.histogram has it.
+    assert fitted.tolist() == [1.2, 1.5, 1.8, 3.4, 4.0]
+    assert pixels_in_bins(np.array([-1.0, 5.0]), edges, selected).size == 0
+
+
+def test_too_few_pixels_in_the_count_range_leave_no_fit(rng):
+    pixels = rng.normal(500.0, 30.0, 5_000)
+    edges = histogram_edges([pixels], 64)
+    counts = histogram_counts(pixels, edges)
+
+    # Only the sparsest tail bins, a handful of pixels between them.
+    selected = bins_within(counts, 1.0, 1.0)
+    fitted = pixels_in_bins(pixels, edges, selected)
+
+    assert fitted.size < HISTOGRAM_FIT_MIN_PIXELS
+    assert fit_distribution(fitted, "normal") is None
+    assert fit_distribution(pixels_in_bins(pixels, edges, counts > 0), "normal")
+
+
+@pytest.mark.parametrize("exponent", [0.1, 0.4, 1.0])
+def test_the_magnifier_round_trips_and_keeps_the_axis_in_order(exponent):
+    x_values = np.linspace(-500.0, 3_000.0, 1_001)
+
+    t_values = magnified(x_values, 700.0, exponent)
+
+    assert np.all(np.diff(t_values) > 0)
+    assert unmagnified(t_values, 700.0, exponent) == pytest.approx(x_values)
+    assert magnified(700.0, 700.0, exponent) == 700.0
+
+
+def test_the_magnifier_spreads_the_span_about_the_pivot_apart():
+    def width(low, high, exponent):
+        return np.diff(magnified([low, high], 700.0, exponent))[0]
+
+    # Equal spans of intensity: the one at the pivot comes out far
+    # wider than one in the tail, unless the exponent is 1.
+    assert width(690.0, 710.0, 0.4) > 10.0 * width(1_690.0, 1_710.0, 0.4)
+    assert width(690.0, 710.0, 1.0) == pytest.approx(width(1_690.0, 1_710.0, 1.0))
+
+
+def test_the_magnifier_passes_nan_through():
+    t_values = magnified([np.nan, 800.0], 700.0, 0.4)
+
+    assert np.isnan(t_values[0]) and np.isfinite(t_values[1])
+    assert np.isnan(unmagnified([np.nan], 700.0, 0.4)[0])
+
+
+def test_the_auto_pivot_is_the_median_of_every_roi_pooled():
+    dim = np.array([10.0, 20.0, 30.0])
+    bright = np.array([100.0, 200.0])
+
+    assert pooled_median([dim, bright]) == 30.0
+    assert pooled_median([bright]) == 150.0
+
+
+def test_magnified_fitted_counts_sample_evenly_on_the_magnified_axis(rng):
+    pixels = rng.normal(500.0, 30.0, 50_000)
+    edges = histogram_edges([pixels], 50)
+    distribution, _label = fit_distribution(pixels, "normal")
+    magnify = (500.0, 0.4)
+
+    x_values, y_values = fitted_counts(
+        distribution, edges, pixels.size, 200, magnify=magnify
+    )
+    plain_x, _plain_y = fitted_counts(distribution, edges, pixels.size, 200)
+
+    # Same span, the same expected counts at each x, but the points
+    # crowd about the pivot where the axis stretches.
+    assert x_values[[0, -1]] == pytest.approx(edges[[0, -1]])
+    assert np.diff(magnified(x_values, *magnify)) == pytest.approx(
+        np.full(199, np.diff(magnified(x_values[:2], *magnify))[0])
+    )
+    expected = pixels.size * distribution.pdf(x_values) * np.diff(edges)[0]
+    assert y_values == pytest.approx(expected)
+    assert np.count_nonzero(np.abs(x_values - 500.0) < 10.0) > np.count_nonzero(
+        np.abs(plain_x - 500.0) < 10.0
+    )
+
+
+def test_magnified_ticks_spread_along_the_magnified_axis():
+    ticks = magnified_ticks(9_400.0, 15_600.0, 12_143.0, 0.4, 9)
+    positions = magnified(ticks, 12_143.0, 0.4)
+    spacing = np.ptp(magnified([9_400.0, 15_600.0], 12_143.0, 0.4)) / 8
+
+    # Round intensities, inside the view, none overprinting another, and
+    # several within the 300 nearest the pivot, which an even intensity
+    # grid over this span would leave with one at most.
+    assert ticks.size >= 5 and np.all(np.diff(positions) >= spacing / 2)
+    assert ticks.min() >= 9_400.0 and ticks.max() <= 15_600.0
+    assert np.all(ticks % 50 == 0)
+    assert np.count_nonzero(np.abs(ticks - 12_143.0) < 300.0) >= 3

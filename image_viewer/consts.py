@@ -80,6 +80,18 @@ DISCOVERY_POLL_INTERVAL_MS = 2_000
 #: no folder's mtime moved: some filesystems (FAT, some network shares)
 #: never update a folder's mtime when files land in it (s).
 DISCOVERY_FULL_WALK_INTERVAL_S = 30.0
+#: The folder the logger plugin writes into every experiment, the only
+#: content a pruned experiment may hold (discovery.prunable_experiments).
+EXPERIMENT_LOGS_DIR_NAME = "logs"
+#: What File › Prune Experiments does: its tooltip and status-bar text.
+PRUNE_EXPERIMENTS_DESCRIPTION = (
+    "Move every experiment folder that holds only a logs directory and no "
+    "captures or other data to the Recycle Bin / Trash"
+)
+#: The feature and package named when an out-of-date environment lacks
+#: send2trash (microdrop_utils.environment_update_dialog).
+TRASH_FEATURE = "Sending experimental folders to the Trash"
+TRASH_PACKAGE = "send2trash"
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 
@@ -87,6 +99,18 @@ SLIDESHOW_INTERVAL_MS = 1_500
 #: (discovery.utc_stamp writes it; discovery.capture_timestamp parses it
 #: back).
 CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
+
+#: PNG text-chunk key of the JSON capture details the fluorescence
+#: plugin embeds in every capture, and the field in it naming the
+#: protocol step the capture was taken in (e.g. "1.2"; null in free
+#: mode). Mirrors CAPTURE_METADATA_KEY in the fluorescence plugin's
+#: fluorescence_controls_ui/consts.py, which the viewer cannot import.
+CAPTURE_METADATA_KEY = "CaptureDetails"
+CAPTURE_STEP_ID_FIELD = "step_dotted_id"
+
+#: Capture files whose protocol step is remembered at once, keyed by
+#: (path, mtime) — comfortably more than one experiment's captures.
+CAPTURE_STEP_CACHE_SIZE = 8192
 
 #: Decoded frames kept in the viewer's navigation cache. Full 16-bit
 #: frames run ~20 MB decoded, so this bounds the cache near 160 MB while
@@ -115,3 +139,65 @@ PERSISTED_DEVICE_OUTLINE_TRAITS = {
     "alpha": "device_outline_alpha",
     "color": "device_outline_color",
 }
+
+# ---------------------------------------------------------------------------
+# Keyboard shortcuts: the one table the image view's key dispatch, the
+# toolbar tooltips and the cheat sheet all read. They act while the image
+# view has keyboard focus.
+# ---------------------------------------------------------------------------
+
+#: Cheat sheet sections, in display order, and its window title.
+KEYBOARD_SHORTCUT_GROUPS = ("Draw", "Modes", "Images", "Actions", "View", "Help")
+KEYBOARD_SHORTCUTS_TITLE = "Image Viewer Keyboard Shortcuts"
+
+#: (key sequence, action, description, group) rows; sequences are unique,
+#: so a second key for one action gets an "_alt" / "_equal" action of its
+#: own. Esc is the canvas layer's (it puts an armed draw tool away) and is
+#: listed for the cheat sheet only.
+KEYBOARD_SHORTCUTS = (
+    ("O", "draw_ellipse", "Draw ellipse tool (O for oval)", "Draw"),
+    ("B", "draw_box", "Draw box tool", "Draw"),
+    ("C", "draw_capsule", "Draw capsule tool", "Draw"),
+    ("P", "draw_polygon", "Draw polygon (contour) tool", "Draw"),
+    ("M", "toggle_negative_mode", "Toggle negative-mask mode", "Draw"),
+    ("E", "toggle_edit_mode", "Toggle Edit mode", "Modes"),
+    ("V", "toggle_show_rois", "Show / hide the ROI overlay", "Modes"),
+    ("Esc", "escape", "Put the draw tool away", "Modes"),
+    ("Right", "next_image", "Next image", "Images"),
+    ("Left", "previous_image", "Previous image", "Images"),
+    ("Shift+Right", "next_experiment", "Next experiment", "Images"),
+    ("Shift+Left", "previous_experiment", "Previous experiment", "Images"),
+    (
+        "X",
+        "toggle_exclude_image",
+        "Toggle excluding the shown image from analysis",
+        "Images",
+    ),
+    ("Ctrl+C", "copy_roi", "Copy the selected ROI", "Actions"),
+    ("Ctrl+V", "paste_roi", "Paste the copied ROI", "Actions"),
+    ("Del", "delete_roi", "Delete the selected ROI from the shown image", "Actions"),
+    ("Ctrl+Z", "undo", "Undo", "Actions"),
+    ("Ctrl+Y", "redo", "Redo", "Actions"),
+    ("Ctrl+Shift+Z", "redo_alt", "Redo", "Actions"),
+    ("Ctrl+Return", "calculate", "Calculate (run the batch)", "Actions"),
+    ("Ctrl++", "zoom_in", "Zoom in", "View"),
+    ("Ctrl+=", "zoom_in_equal", "Zoom in", "View"),
+    ("Ctrl+-", "zoom_out", "Zoom out", "View"),
+    ("Ctrl+0", "fit_view", "Fit the image to the pane", "View"),
+    ("F1", "show_shortcuts", "Show keyboard shortcuts", "Help"),
+    ("Ctrl+/", "show_shortcuts_alt", "Show keyboard shortcuts", "Help"),
+)
+
+#: The draw and mode keys, which do nothing while a contour is being
+#: traced: switching tool or mode there would abandon or recolour it.
+SHORTCUTS_INERT_WHILE_TRACING = frozenset(
+    {
+        "draw_ellipse",
+        "draw_box",
+        "draw_capsule",
+        "draw_polygon",
+        "toggle_negative_mode",
+        "toggle_edit_mode",
+        "toggle_show_rois",
+    }
+)

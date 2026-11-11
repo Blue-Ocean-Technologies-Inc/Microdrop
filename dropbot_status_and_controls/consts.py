@@ -13,7 +13,11 @@ import os
 from pathlib import Path
 
 # Microdrop package imports.
-from device_viewer.consts import PROTOCOL_GRID_DISPLAY_STATE, PROTOCOL_RUNNING
+from device_viewer.consts import (
+    DEVICE_VIEWER_VOLUME_ESTIMATE,
+    PROTOCOL_GRID_DISPLAY_STATE,
+    PROTOCOL_RUNNING,
+)
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
 
 # Microdrop style imports.
@@ -33,6 +37,7 @@ ACTOR_TOPIC_DICT = {
         "dropbot/signals/#",
         "hardware/signals/#",
         "ui/calibration_data",
+        DEVICE_VIEWER_VOLUME_ESTIMATE,
         PROTOCOL_RUNNING,
         PROTOCOL_GRID_DISPLAY_STATE,
         VOLTAGE_FREQUENCY_RANGE_CHANGED,
@@ -64,6 +69,14 @@ DIELECTRIC_MATERIALS = {
     "Si3N4": 7.5,
     "Kapton": 3.4,
 }
+
+# ---------------------------------------------------------------------------
+# app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)
+# ---------------------------------------------------------------------------
+# The DIELECTRIC_MATERIALS name picked in the status pane.
+DIELECTRIC_MATERIAL_KEY = "dropbot.dielectric_material"
+
+APP_GLOBALS_KEYS = [DIELECTRIC_MATERIAL_KEY]
 
 # Status colors
 disconnected_color = GREY["lighter"]

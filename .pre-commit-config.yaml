@@ -35,6 +35,14 @@ repos:
       - id: forbid-scratch-files
   - repo: local
     hooks:
+      - id: forbid-local-agent-docs
+        name: forbid agent specs/plans (docs/superpowers, docs/plans)
+        # These directories are .gitignore'd, so a staged file here was
+        # force-added or dragged in by an IDE; the shared forbid-scratch-files
+        # hook only covers the .superpowers/ state directory.
+        entry: docs/superpowers/ and docs/plans/ stay local; never commit them
+        language: fail
+        files: ^docs/(superpowers|plans)/
       - id: import-linter
         name: import-linter (plugin decoupling contract)
         # Whole-graph check against .importlinter at the repo root; a single

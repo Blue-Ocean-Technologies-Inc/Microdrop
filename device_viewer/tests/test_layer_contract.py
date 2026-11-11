@@ -10,18 +10,37 @@
 
 """Tests for the device viewer layer contract (#650)."""
 
+# Third-party imports.
+import pytest
+
 # Enthought library imports.
-from traits.api import List
+from traits.api import HasTraits, List, TraitError
 
 # Microdrop package imports.
 from device_viewer.consts import (
     LAYER_CONTRACT_VERSION,
     BaseDeviceViewerLayer,
     IDeviceViewerLayer,
+    IElectrodeStepping,
     LayerContext,
     SidebarSection,
 )
+from device_viewer.services.electrode_stepping_service import (
+    ElectrodeSteppingService,
+)
 from device_viewer.views.sidebar.section import SidebarSection as SidebarSectionView
+
+#: What a layer may drive through ``LayerContext.stepping`` (the gamepad
+#: calls every one of them).
+STEPPING_METHODS = {
+    "map_direction_for_device_rotation",
+    "get_active_electrode_ids",
+    "step_active_electrodes",
+    "extend_active_electrodes",
+    "shrink_active_electrodes",
+    "split_step",
+    "reset_split_state",
+}
 
 
 class LifecycleOnlyLayer(BaseDeviceViewerLayer):
@@ -85,3 +104,30 @@ def test_attach_keeps_the_context_until_detach():
 
     assert layer.context is None
     assert layer.calls == ["attach", "detach"]
+
+
+def test_the_stepping_interface_names_what_layers_drive():
+    declared = {
+        name
+        for name, value in vars(IElectrodeStepping).items()
+        if callable(value) and not name.startswith("_")
+    }
+
+    assert declared == STEPPING_METHODS
+
+
+def test_the_stepping_service_provides_the_interface():
+    stepping = ElectrodeSteppingService()
+
+    assert isinstance(stepping, IElectrodeStepping)
+    assert all(callable(getattr(stepping, name)) for name in STEPPING_METHODS)
+
+
+def test_the_context_takes_only_a_stepping_provider():
+    with pytest.raises(TraitError):
+        LayerContext(stepping=HasTraits())
+
+
+def test_the_contract_is_at_0_2_0_and_layers_start_undeclared():
+    assert LAYER_CONTRACT_VERSION == "0.2.0"
+    assert LifecycleOnlyLayer(id="gamepad").contract_version == ""

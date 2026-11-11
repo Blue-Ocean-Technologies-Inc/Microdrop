@@ -8,21 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from pathlib import Path
 
+# Third-party imports.
 from PySide6.QtGui import QColor
 
-from apptools.preferences.api import PreferencesHelper
-
 # Enthought library imports.
+from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Bool, Directory, Range, Str
+from traits.api import Bool, Directory, Enum, Range, Str
 from traits.etsconfig.api import ETSConfig
-from traitsui.api import Color, Group, Item, RangeEditor, VGroup, View
+from traitsui.api import Color, EnumEditor, Group, Item, RangeEditor, VGroup, View
 
+# Microdrop style imports.
+from microdrop_style.colors import GREY
 from microdrop_style.text_styles import preferences_group_style_sheet
 
+# Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
+
+# Local imports.
+from .consts import (
+    COLOR_SCHEME_LABELS,
+    DOCK_SEPARATOR_COLOR_CUSTOM,
+    DOCK_SEPARATOR_COLOR_LABELS,
+)
 
 
 class MicrodropPreferences(PreferencesHelper):
@@ -45,6 +56,17 @@ class MicrodropPreferences(PreferencesHelper):
     always_use_default_layout = Bool
 
     EXPERIMENTS_DIR = Directory()
+
+    #: App-wide colour scheme: follow the OS (the default, listed first) or
+    #: force light/dark. Applied by MicrodropApplication.
+    color_scheme = Enum(*COLOR_SCHEME_LABELS)
+
+    #: Dock-pane separator colour: the follow_system/light/dark theme grey, or
+    #: dock_separator_color when custom. Applied by MicrodropApplication.
+    dock_separator_color_mode = Enum(*DOCK_SEPARATOR_COLOR_LABELS)
+
+    #: Separator colour used when dock_separator_color_mode is custom.
+    dock_separator_color = Color(GREY["light"])
 
     # dialogs:
     suppress_no_shorts_information = Bool(False)
@@ -91,8 +113,8 @@ microdrop_tab = PreferencesCategory(
 
 
 class MicrodropPreferencesPane(PreferencesPane):
-    """Microdrop General preferences pane — hosts app-startup and canvas-
-    background groups.
+    """Microdrop General preferences pane — hosts appearance, app-startup and
+    canvas-background groups.
     """
 
     #### 'PreferencesPane' interface ##########################################
@@ -103,6 +125,31 @@ class MicrodropPreferencesPane(PreferencesPane):
     category = microdrop_tab.id
 
     #### 'MicrodropPreferencesPane' interface ################################
+
+    appearance_settings = (
+        VGroup(
+            Item(
+                "color_scheme",
+                label="Color Scheme",
+                editor=EnumEditor(values=COLOR_SCHEME_LABELS),
+            ),
+            Item(
+                "dock_separator_color_mode",
+                label="Dock Separator Color",
+                editor=EnumEditor(values=DOCK_SEPARATOR_COLOR_LABELS),
+            ),
+            Item(
+                "dock_separator_color",
+                label="Custom Separator Color (hex)",
+                enabled_when=(
+                    f"dock_separator_color_mode == {DOCK_SEPARATOR_COLOR_CUSTOM!r}"
+                ),
+            ),
+            label="Appearance",
+            show_border=True,
+            style_sheet=preferences_group_style_sheet,
+        ),
+    )
 
     app_startup_settings = (
         VGroup(
@@ -143,6 +190,8 @@ class MicrodropPreferencesPane(PreferencesPane):
 
     view = View(
         Item("_"),  # Separator
+        appearance_settings,
+        Item("_"),
         app_startup_settings,
         Item("_"),
         canvas_settings,

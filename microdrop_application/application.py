@@ -31,12 +31,24 @@ from traits.etsconfig.api import ETSConfig
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
 
+# Microdrop style imports.
+from microdrop_style.helpers import (
+    apply_color_scheme,
+    apply_dock_separator_style,
+    is_dark_mode,
+)
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.system_config import is_rpi
+from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
 
 # Local imports.
 from .consts import CHANGELOG_PATH, EXPERIMENT_DIR
-from .helpers import get_microdrop_redis_globals_manager
+from .helpers import (
+    get_microdrop_redis_globals_manager,
+    resolve_dock_separator_style,
+)
 from .preferences import MicrodropPreferences
 
 # Logger import.
@@ -111,34 +123,6 @@ def _show_whats_new():
     cache.write_text(current_changelog, encoding="utf-8")
 
 
-def describe_dock_widgets(main_window):
-    """Describe every dock widget's geometry, for a window pyface refused to save.
-
-    Runs during application shutdown, so it must never raise itself; any
-    failure while introspecting the window is returned as text instead.
-    """
-    try:
-        lines = []
-
-        for widget in main_window.findChildren(QtWidgets.QDockWidget):
-            geometry = widget.geometry()
-            tabified_titles = [
-                tabbed.windowTitle()
-                for tabbed in main_window.tabifiedDockWidgets(widget)
-            ]
-            lines.append(
-                f"{widget.windowTitle()!r} visible={widget.isVisible()} "
-                f"area={main_window.dockWidgetArea(widget)} "
-                f"geometry={geometry.x()},{geometry.y()} "
-                f"{geometry.width()}x{geometry.height()} "
-                f"floating={widget.isFloating()} tabified_with={tabified_titles}"
-            )
-
-        return "\n".join(lines)
-    except Exception as error:
-        return f"Could not describe dock widgets: {error}"
-
-
 class MicrodropApplication(TasksApplication):
     """Device Viewer application based on enthought envisage's tasks application."""
 
@@ -180,6 +164,9 @@ class MicrodropApplication(TasksApplication):
     extra_plugins_loaded = Event(
         desc="Trigger if extra plugins are loaded post app initialization"
     )
+
+    #: Whether the dock separators already re-style on colour-scheme changes.
+    _dock_separator_follows_color_scheme = Bool(False)
 
     ###########################################################################
     # Private interface.
@@ -292,6 +279,39 @@ class MicrodropApplication(TasksApplication):
         self._get_current_experiment_directory().mkdir(parents=True, exist_ok=True)
 
         self.experiment_changed = True
+
+    @observe("started, preferences_helper:color_scheme")
+    def _apply_color_scheme_preference(self, event):
+        """Apply the colour-scheme preference once plugins have started (before
+        the first window is created) and again whenever it changes.
+        """
+        apply_color_scheme(self.preferences_helper.color_scheme)
+
+    @observe(
+        "started, preferences_helper:dock_separator_color_mode, "
+        "preferences_helper:dock_separator_color"
+    )
+    def _apply_dock_separator_preference(self, event):
+        """Style the dock separators from the preference, and again whenever it
+        or the colour scheme changes (Qt passes the scheme as ``event``).
+        """
+        if not self._dock_separator_follows_color_scheme:
+            style_hints = QtWidgets.QApplication.styleHints()
+            style_hints.colorSchemeChanged.connect(
+                self._apply_dock_separator_preference
+            )
+            self._dock_separator_follows_color_scheme = True
+
+        preferences = self.preferences_helper
+
+        apply_dock_separator_style(
+            *resolve_dock_separator_style(
+                preferences.dock_separator_color_mode,
+                preferences.dock_separator_color.name(),
+                is_dark_mode(),
+                is_rpi(),
+            )
+        )
 
     @observe("application_initialized")
     def _on_application_initialized(self, event):

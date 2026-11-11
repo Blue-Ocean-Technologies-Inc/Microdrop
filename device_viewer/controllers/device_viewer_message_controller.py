@@ -42,8 +42,18 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
 # Local imports.
-from ..consts import PKG_name, camera_controls_applied_publisher, listener_name
-from ..models.media import CameraControlsRequest
+from ..consts import (
+    PKG_name,
+    camera_controls_applied_publisher,
+    camera_settings_applied_publisher,
+    camera_source_selected_publisher,
+    listener_name,
+)
+from ..models.media import (
+    CameraControlsRequest,
+    CameraSelectSourceRequest,
+    CameraSettingsRequest,
+)
 from ..models.messages import DeviceViewerMessageModel
 from ..utils.message_utils import gui_models_to_message_model
 
@@ -64,20 +74,33 @@ def parse_camera_controls_request(message):
     request_id is recovered from the raw payload when possible, so the
     requester still gets matched even on a failed validation.
     """
+    return _parse_camera_request(message, CameraControlsRequest, "camera controls")
+
+
+def parse_camera_settings_request(message):
+    """Parse and validate a DEVICE_VIEWER_CAMERA_APPLY_SETTINGS payload into
+    a ``(request, reply)`` pair like parse_camera_controls_request, the
+    failure reply being a ``CameraSettingsApplied`` payload."""
+    return _parse_camera_request(message, CameraSettingsRequest, "capture settings")
+
+
+def _parse_camera_request(message, validator_class, description):
+    """``(request dict, None)`` for a valid ``validator_class`` payload,
+    else ``(None, {request_id, ok=False, error})``."""
 
     try:
         raw = json.loads(message) if message and message.strip() else {}
     except (json.JSONDecodeError, TypeError) as error:
-        logger.warning(f"Unparseable camera controls request: {message!r}")
+        logger.warning(f"Unparseable {description} request: {message!r}")
 
         return None, {"request_id": "", "ok": False, "error": str(error)}
 
     request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
 
     try:
-        request = CameraControlsRequest.model_validate(raw)
+        request = validator_class.model_validate(raw)
     except ValidationError as error:
-        logger.warning(f"Invalid camera controls request: {message!r} ({error})")
+        logger.warning(f"Invalid {description} request: {message!r} ({error})")
 
         # Name the field and the reason ("exposure_ms: Input should be
         # greater than 0"), not pydantic's "1 validation error for ..." header.
@@ -86,6 +109,43 @@ def parse_camera_controls_request(message):
 
         return None, {
             "request_id": request_id,
+            "ok": False,
+            "error": f"{field}: {first['msg']}",
+        }
+
+    return request.model_dump(), None
+
+
+def parse_camera_select_source_request(message):
+    """Parse and validate a DEVICE_VIEWER_CAMERA_SELECT_SOURCE payload.
+
+    Returns a ``(request, reply)`` pair like parse_camera_controls_request:
+    the validated ``CameraSelectSourceRequest`` as a plain dict and None, or
+    None and a ``CameraSourceSelected`` failure payload lacking only
+    ``active`` (the camera's state, which the caller knows). The request_id
+    and label are recovered from the raw payload when possible.
+    """
+
+    try:
+        raw = json.loads(message) if message and message.strip() else {}
+    except (json.JSONDecodeError, TypeError) as error:
+        logger.warning(f"Unparseable camera select_source request: {message!r}")
+
+        return None, {"request_id": "", "label": "", "ok": False, "error": str(error)}
+
+    raw_fields = raw if isinstance(raw, dict) else {}
+
+    try:
+        request = CameraSelectSourceRequest.model_validate(raw)
+    except ValidationError as error:
+        logger.warning(f"Invalid camera select_source request: {message!r} ({error})")
+
+        first = error.errors()[0]
+        field = ".".join(str(part) for part in first["loc"]) or "request"
+
+        return None, {
+            "request_id": str(raw_fields.get("request_id", "")),
+            "label": str(raw_fields.get("label", "")),
             "ok": False,
             "error": f"{field}: {first['msg']}",
         }
@@ -173,16 +233,6 @@ class DeviceViewerMessageController(HasTraits):
             service.goto_phase(index)
         else:
             logger.warning(f"Unknown phase-navigation action: {action!r}")
-
-    def _on_gamepad_capture_request_triggered(self, message):
-        """Relay a Gamepad-prefs remap request to the live gamepad service."""
-        if self.pane.gamepad_service is not None:
-            self.pane.gamepad_service.begin_button_capture(message)
-
-    def _on_gamepad_reconnect_request_triggered(self, message):
-        """Relay a manual gamepad-reconnect request to the gamepad service."""
-        if self.pane.gamepad_service is not None:
-            self.pane.gamepad_service.reconnect_gamepad()
 
     def _on_load_svg_request_triggered(self, message):
         """Load the SVG at ``message`` (a file path) into the device view.
@@ -287,8 +337,18 @@ class DeviceViewerMessageController(HasTraits):
     def _on_protocol_running_triggered(self, message):
         logger.debug(f"Protocol running is {message}")
 
+        running = message.lower() == "true"
+
         if self.pane.model:
-            self.pane.model.protocol_running = message.lower() == "true"
+            self.pane.model.protocol_running = running
+
+        widget = self.pane.camera_control_widget
+
+        # A run that ended without its restore request (a crash, a failed
+        # pre-start) must not leave the camera leased.
+        if not running and widget and widget.camera_model.camera_leased:
+            logger.info("Protocol ended: camera lease released")
+            widget.camera_model.camera_leased = False
 
     def _on_advanced_mode_change_triggered(self, message):
         """Operator toggled Advanced Mode. While a protocol is running, this
@@ -348,6 +408,27 @@ class DeviceViewerMessageController(HasTraits):
 
         self.pane.camera_control_widget.camera_controls_signal.emit(request)
 
+    def _on_apply_settings_triggered(self, message):
+        """Another plugin's CameraSettingsRequest (a protocol step's capture
+        setup); applied on the GUI thread by the camera widget, which
+        answers the applied signal itself. An invalid request, or one
+        arriving with no camera widget, is answered ok=False here instead."""
+        request, reply = parse_camera_settings_request(message)
+
+        if reply is None and not self.pane.camera_control_widget:
+            reply = {
+                "request_id": request["request_id"],
+                "ok": False,
+                "error": "Device viewer camera is not available",
+            }
+
+        if reply is not None:
+            camera_settings_applied_publisher.publish(reply)
+
+            return
+
+        self.pane.camera_control_widget.camera_settings_signal.emit(request)
+
     def _on_screen_recording_triggered(self, message):
         """Forward a JSON screen-recording command to the camera widget."""
         logger.info(f"Screen recording triggered: {message}")
@@ -367,13 +448,56 @@ class DeviceViewerMessageController(HasTraits):
             self.pane.camera_control_widget.screen_recording_signal.emit(recording_data)
 
     def _on_camera_active_triggered(self, message):
-        """Forward a camera on/off request to the camera widget."""
+        """Forward a camera on/off request to the camera widget. While a
+        protocol run leases the camera (see _on_select_source_triggered),
+        "false" is ignored and "true" still applies."""
         logger.debug(f"Camera activation triggered: {message}")
 
-        if self.pane.model and self.pane.camera_control_widget:
-            self.pane.camera_control_widget.camera_active_signal.emit(
-                message.lower() == "true"
-            )
+        widget = self.pane.camera_control_widget
+
+        if not (self.pane.model and widget):
+            return
+
+        active = message.lower() == "true"
+
+        if not active and widget.camera_model.camera_leased:
+            logger.info("Camera kept on: leased by a protocol run")
+            return
+
+        widget.camera_active_signal.emit(active)
+
+    def _on_select_source_triggered(self, message):
+        """Another plugin's CameraSelectSourceRequest; applied on the GUI
+        thread by the camera widget, whose controller answers
+        DEVICE_VIEWER_CAMERA_SOURCE_SELECTED and then publishes the camera
+        state. An invalid request, or one arriving with no camera widget,
+        is answered ok=False here, so a waiting requester fails fast.
+
+        Every valid request sets the camera lease: active=True takes it (the
+        run holds the camera on against camera_active "false"), anything
+        else releases it — so the run-end restore releases it whatever it
+        carries. Set here on receipt rather than on the GUI thread, so a
+        camera_active "false" handled after this request cannot slip in
+        before the selection is applied."""
+        request, reply = parse_camera_select_source_request(message)
+        widget = self.pane.camera_control_widget
+
+        if reply is None and not widget:
+            reply = {
+                "request_id": request["request_id"],
+                "label": request["label"],
+                "ok": False,
+                "error": "Device viewer camera is not available",
+            }
+
+        if reply is not None:
+            reply["active"] = bool(widget and widget.camera_model.camera_active)
+            camera_source_selected_publisher.publish(reply)
+
+            return
+
+        widget.camera_model.camera_leased = request["active"] is True
+        widget.camera_select_source_signal.emit(request)
 
     def _on_drops_detected_triggered(self, message):
         detected_channels = json.loads(message).get("detected_channels") or []

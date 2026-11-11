@@ -60,7 +60,9 @@ class VideoColumnModel(BaseColumnModel):
 class VideoHandler(BaseColumnHandler):
     """Publishes camera on/off only when camera_wanted(row) flips between
     steps — the one publisher of camera state during a run, covering both
-    the Video checkbox and a Capture camera lead.
+    the Video checkbox and a Capture camera lead. Choosing the camera
+    source at run start/end over DEVICE_VIEWER_CAMERA_SELECT_SOURCE is
+    left to other columns (see capture_column's header for the sequence).
 
     Priority 10 — runs in the earliest bucket so the camera is on
     before V/F (priority 20) or RoutesHandler (priority 30). Fire and

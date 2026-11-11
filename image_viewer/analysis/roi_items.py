@@ -33,6 +33,8 @@ from .roi_geometry import centre_of, normalize
 from .roi_handles import (
     BALL_REFERENCE_PEN,
     HANDLE_SIZE_PX,
+    NEGATIVE_ROI_BRUSH,
+    NEGATIVE_ROI_PEN,
     ROI_PEN,
     ROI_SELECTED_PEN,
     CornerRadiusHandle,
@@ -50,6 +52,13 @@ class _RoiItemBase:
     #: handle: sync() skips this item while it's set, so it doesn't
     #: yank a rect the user is actively dragging.
     _dragging = False
+
+    #: A negative mask rather than a measured region: dashed in the mask
+    #: colour and hatched, so it reads as a hole cut out of the ROIs.
+    _negative = False
+
+    #: Last selection state, so a style change keeps the selection pen.
+    _selected = False
 
     def _setup(self, roi_id, name, on_edited):
         self.roi_id = roi_id
@@ -97,9 +106,25 @@ class _RoiItemBase:
     def set_name(self, name):
         self._label.setText(name)
 
+    def set_negative(self, negative):
+        """Style this item as a negative mask, or as a plain ROI. The
+        hatch stays under the selection pen."""
+        self._negative = negative
+        self.setBrush(NEGATIVE_ROI_BRUSH if negative else QBrush())
+        self.set_selected_style(self._selected)
+
     def set_selected_style(self, selected):
-        self.setPen(ROI_SELECTED_PEN if selected else ROI_PEN)
-        self._label.setBrush(QBrush(self.pen().color()))
+        self._selected = selected
+
+        if selected:
+            pen = ROI_SELECTED_PEN
+        elif self._negative:
+            pen = NEGATIVE_ROI_PEN
+        else:
+            pen = ROI_PEN
+
+        self.setPen(pen)
+        self._label.setBrush(QBrush(pen.color()))
 
     def is_dragging(self):
         return self._dragging
@@ -426,7 +451,6 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
 
     def set_selected_style(self, selected):
         super().set_selected_style(selected)
-        self._selected = selected
         self._update_node_visibility()
 
     def _update_node_visibility(self):

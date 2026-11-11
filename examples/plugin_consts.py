@@ -21,6 +21,7 @@ from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
 from image_viewer.plugin import ImageViewerPlugin
+from layout_presets.plugin import LayoutPresetsPlugin
 from logger_ui.plugin import LoggerUIPlugin
 from message_router.plugin import MessageRouterPlugin
 from microdrop_application.application import MicrodropApplication
@@ -96,6 +97,7 @@ FRONTEND_PLUGINS = [
     DeviceViewerPlugin,
     ImageViewerPlugin,
     UserHelpPlugin,
+    LayoutPresetsPlugin,
     SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
@@ -122,6 +124,9 @@ OPENDROP_FRONTEND_PLUGINS = [OpendropStatusAndControlsPlugin]
 PORTABLE_DROPBOT_FRONTEND_PLUGINS = [
     PortableDropbotStatusAndControlsPlugin,
     PortableDropbotProtocolControlsPlugin,
+    # The status-bar battery icon is the built-in "rpi_battery_ui" plugin
+    # group (plugin_management/consts.py), toggled in Manage Plugins — never
+    # list it here, see the note in FRONTEND_PLUGINS.
 ]
 
 

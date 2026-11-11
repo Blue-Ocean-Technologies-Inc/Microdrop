@@ -24,6 +24,9 @@ from device_viewer.interfaces.descriptors import SidebarSection as SidebarSectio
 from device_viewer.interfaces.i_device_viewer_layer import (
     IDeviceViewerLayer as IDeviceViewerLayer,
 )
+from device_viewer.interfaces.i_electrode_stepping import (
+    IElectrodeStepping as IElectrodeStepping,
+)
 from device_viewer.interfaces.i_interaction_handler import (
     IInteractionHandler as IInteractionHandler,
 )
@@ -34,10 +37,21 @@ from device_viewer.interfaces.layer_context import LayerContext as LayerContext
 from device_viewer.models.media import (
     CameraControlsApplied,
     CameraControlsRequest,
+    CameraSelectSourceRequest,
+    CameraSettingsApplied,
+    CameraSettingsRequest,
+    CameraSettingsSnapshot,
+    CameraSourceSelected,
+    CameraState,
     MediaCaptureEventModel,
     MediaCaptureMessageModel,
     RecordingStateModel,
     RecordingStatePublisher,
+)
+from device_viewer.models.media import (
+    # Re-exported (``X as X``) so a step-settings owner can validate a
+    # stored capture setup without importing device_viewer.models.
+    CameraSettings as CameraSettings,
 )
 from device_viewer.models.messages import (
     # Topic payload schemas are re-exported (``X as X``) so sibling plugins
@@ -46,6 +60,9 @@ from device_viewer.models.messages import (
 )
 from device_viewer.models.messages import (
     GeometryChangedMessage as GeometryChangedMessage,
+)
+from device_viewer.models.messages import (
+    VolumeEstimateMessage as VolumeEstimateMessage,
 )
 from device_viewer.models.step_params_commit import (
     StepParamsCommitMessage as StepParamsCommitMessage,
@@ -81,14 +98,33 @@ DEVICE_VIEWER_STATE_CHANGED = "ui/device_viewer/state_changed"
 DEVICE_VIEWER_SCREEN_CAPTURE = "ui/device_viewer/screen_capture"
 DEVICE_VIEWER_SCREEN_RECORDING = "ui/device_viewer/screen_recording"
 DEVICE_VIEWER_CAMERA_ACTIVE = "ui/device_viewer/camera_active"
+#: Request: select a camera source by its dropdown label and optionally turn
+#: the camera on/off; answered on DEVICE_VIEWER_CAMERA_SOURCE_SELECTED.
+DEVICE_VIEWER_CAMERA_SELECT_SOURCE = "ui/device_viewer/camera/select_source"
+#: Signal: the outcome of a DEVICE_VIEWER_CAMERA_SELECT_SOURCE request.
+DEVICE_VIEWER_CAMERA_SOURCE_SELECTED = "ui/device_viewer/camera/source_selected"
+#: Signal: the device viewer's current camera selection and on/off state,
+#: published on every change and after every select_source reply (see
+#: CameraSelectSourceRequest).
+DEVICE_VIEWER_CAMERA_STATE = "ui/device_viewer/camera/state"
 DEVICE_VIEWER_MEDIA_CAPTURED = "ui/device_viewer/camera/media_captured"
 # Another plugin sets the active camera's exposure/focus (CameraControlsRequest)
 # and gets the camera's readback (CameraControlsApplied) — the Portable
 # DropBot's fluorescence capture drives these per filter position.
 DEVICE_VIEWER_CAMERA_SET_CONTROLS = "ui/device_viewer/camera/set_controls"
 DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED = "ui/device_viewer/camera/controls_applied"
+# The camera panel's capture setup (resolution + camera properties) as
+# CameraSettingsSnapshot, on every user edit and source selection; another
+# plugin applies a stored setup with CameraSettingsRequest and gets
+# CameraSettingsApplied back — the Capture protocol column keeps one per step.
+DEVICE_VIEWER_CAMERA_SETTINGS = "ui/device_viewer/camera/settings"
+DEVICE_VIEWER_CAMERA_APPLY_SETTINGS = "ui/device_viewer/camera/apply_settings"
+DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED = "ui/device_viewer/camera/settings_applied"
 DEVICE_VIEWER_RECORDING_STATE = "ui/device_viewer/recording_state"
 DEVICE_VIEWER_GEOMETRY_CHANGED = "ui/device_viewer/geometry_changed"
+# The live volume readout (VolumeEstimateMessage), shown by the DropBot
+# status pane; published only on changes above reading noise.
+DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"
 # Sidebar route preview/playback is running (payload "True"/"False"). Published
 # by device_viewer's RouteExecutionService. Canonical home moved here from the
 # deleted protocol_grid.consts in PPT-9 (#371).
@@ -114,15 +150,6 @@ PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"
 # device_viewer/models/step_params_commit.py.
 STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 
-# Live gamepad button-capture (remap) request: payload is the action name being
-# rebound (e.g. "split"). Published by the Gamepad preferences pane, relayed by
-# the device-viewer listener to the live interaction service. Dispatches to
-# _on_gamepad_capture_request_triggered (topic.split("/")[-1] == unique segment).
-GAMEPAD_CAPTURE_REQUEST = "ui/device_viewer/gamepad_capture_request"
-# Manual gamepad reconnect request (payload unused). Lets the user re-attempt
-# controller acquisition from the UI after an unplug/replug. Dispatches to
-# _on_gamepad_reconnect_request_triggered.
-GAMEPAD_RECONNECT_REQUEST = "ui/device_viewer/gamepad_reconnect_request"
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
@@ -155,7 +182,9 @@ ACTOR_TOPIC_DICT = {
         CAPACITANCE_UPDATED,
         DEVICE_VIEWER_SCREEN_CAPTURE,
         DEVICE_VIEWER_CAMERA_SET_CONTROLS,
+        DEVICE_VIEWER_CAMERA_APPLY_SETTINGS,
         DEVICE_VIEWER_CAMERA_ACTIVE,
+        DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
         DEVICE_VIEWER_SCREEN_RECORDING,
         DROPLETS_DETECTED,
         PROTOCOL_RUNNING,
@@ -165,14 +194,14 @@ ACTOR_TOPIC_DICT = {
         DISABLED_CHANNELS_CHANGED,
         HALTED,
         PROTOCOL_TREE_DISPLAY_STATE,
-        GAMEPAD_CAPTURE_REQUEST,
-        GAMEPAD_RECONNECT_REQUEST,
         DEVICE_VIEWER_LOAD_SVG_REQUEST,
         PHASE_NAVIGATION_MODE,
         PHASE_NAVIGATION_REQUEST,
         # Note: DEVICE_VIEWER_GEOMETRY_CHANGED is published BY the DV;
         # the DV does not consume it. The pluggable_protocol_tree
-        # controller subscribes via SYNC_ACTOR_TOPIC_DICT.
+        # controller subscribes via SYNC_ACTOR_TOPIC_DICT. Likewise
+        # DEVICE_VIEWER_CAMERA_SOURCE_SELECTED / DEVICE_VIEWER_CAMERA_STATE
+        # are only published here, for the requester to subscribe to.
     ]
 }
 
@@ -216,8 +245,32 @@ camera_controls_applied_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED,
     validator_class=CameraControlsApplied,
 )
+camera_settings_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SETTINGS, validator_class=CameraSettingsSnapshot
+)
+camera_apply_settings_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_APPLY_SETTINGS, validator_class=CameraSettingsRequest
+)
+camera_settings_applied_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED,
+    validator_class=CameraSettingsApplied,
+)
 media_captured_publisher = ValidatedTopicPublisher(
     topic=DEVICE_VIEWER_MEDIA_CAPTURED, validator_class=MediaCaptureMessageModel
+)
+camera_select_source_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SELECT_SOURCE,
+    validator_class=CameraSelectSourceRequest,
+)
+camera_source_selected_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_SOURCE_SELECTED,
+    validator_class=CameraSourceSelected,
+)
+camera_state_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_CAMERA_STATE, validator_class=CameraState
+)
+volume_estimate_publisher = ValidatedTopicPublisher(
+    topic=DEVICE_VIEWER_VOLUME_ESTIMATE, validator_class=VolumeEstimateMessage
 )
 
 APP_GLOBALS_KEYS = [
@@ -262,30 +315,38 @@ ZOOM_SENSITIVITY = 5
 # device view margin when auto fit
 AUTO_FIT_MARGIN_SCALE = 95
 
-# ---------------------------------------------------------------------------
-# Gamepad defaults (configurable in Device Viewer preferences). Env vars of the
-# form MICRODROP_GAMEPAD_* still override the stored preference at runtime.
-# Button indices are for the common NES/SNES-style USB pad:
-#   X=0, A=1, B=2, Y=3, L=4, R=5, Select=8, Start=9
-# ---------------------------------------------------------------------------
-GAMEPAD_BTN_CLEAR = 1  # A      -> clear all electrodes
-GAMEPAD_BTN_FIND = 8  # Select -> find liquid
-GAMEPAD_BTN_SPLIT = 2  # B hold -> split
-GAMEPAD_BTN_ADD = 3  # Y hold -> add electrode
-GAMEPAD_BTN_REMOVE = 0  # X hold -> remove electrode
-GAMEPAD_BTN_REALTIME = 9  # Start  -> toggle realtime mode
+# The device viewer's preferences node (DeviceViewerPreferences).
+PREFERENCES_PATH = "microdrop.device_viewer"
 
-GAMEPAD_DEBOUNCE_MOVE_SPLIT_S = 0.7  # D-pad move / split step debounce
-GAMEPAD_DEBOUNCE_ADD_REMOVE_S = 0.3  # D-pad add / remove debounce
-GAMEPAD_DEBOUNCE_FIND_S = 2.0  # find-liquid button debounce
-GAMEPAD_DEBOUNCE_REALTIME_S = 0.4  # realtime-toggle button debounce
-GAMEPAD_AXIS_THRESHOLD = 0.6  # analog-stick-as-D-pad activation threshold
+# ---------------------------------------------------------------------------
+# Gamepad support moved to gamepad-microdrop-plugin (#783). On start the
+# device viewer moves the gamepad_* keys its node used to hold onto the
+# plugin's node, once. The path is a literal: the plugin lives in its own
+# repo and core never imports it (it must equal the plugin's
+# gamepad_controls.consts.PREFERENCES_PATH).
+# ---------------------------------------------------------------------------
+GAMEPAD_PLUGIN_PREFERENCES_PATH = "microdrop.gamepad_controls"
 
-# Poll cadence: ~100 Hz only while a controller is attached; with none,
-# a slow tick suffices to catch JOYDEVICEADDED hot-plug events instead
-# of waking the GUI thread 100x a second for nothing.
-GAMEPAD_POLL_INTERVAL_MS = 10
-GAMEPAD_IDLE_POLL_INTERVAL_MS = 500
+# Copied verbatim; the plugin keeps the key names.
+GAMEPAD_MOVED_PREFERENCE_KEYS = (
+    "gamepad_btn_clear",
+    "gamepad_btn_find",
+    "gamepad_btn_split",
+    "gamepad_btn_add",
+    "gamepad_btn_remove",
+    "gamepad_btn_realtime",
+    "gamepad_debounce_move_split",
+    "gamepad_debounce_add_remove",
+    "gamepad_debounce_find",
+    "gamepad_debounce_realtime",
+    "gamepad_axis_threshold",
+)
+
+# Removed without a copy: loading the plugin's group now turns it on.
+GAMEPAD_DROPPED_PREFERENCE_KEYS = ("gamepad_enabled",)
+
+# Set on this plugin's node once the move has run.
+GAMEPAD_PREFERENCES_MOVED_KEY = "gamepad_preferences_moved"
 
 # Sidecar written next to every recording by NativeVideoRecorder: the video
 # item's alignment geometry, letting viewers reproduce the device-aligned
@@ -354,11 +415,190 @@ MIN_RECORDING_FPS = 20
 # ---------------------------------------------------------------------------
 # Camera preview
 # ---------------------------------------------------------------------------
+# The camera dropdown's last entry: no source. Selected by a
+# CameraSelectSourceRequest with label "" (CameraState reports it as "").
+NO_CAMERA_LABEL = "<No Camera>"
+
+# How long a select_source reply waits for a just-started provider feed's
+# outcome: its first feed.error fails the request, its optional
+# feed.started (or this timeout running out) answers ok.
+CAMERA_FEED_START_TIMEOUT_MS = 3000
+
 # Ceiling for frames forwarded to the device view's video item. Every frame
 # composited under the electrodes is a full-scene repaint, and the preview
 # doesn't need camera rate to be useful — recordings are unaffected (the
 # recorder taps the capture session's own sink at full rate).
 CAMERA_PREVIEW_MAX_FPS = 20
+
+# Gap between discarding a stopped libcamera camera's stack and building
+# the new one, so Qt has destroyed the old sink (and its last frame) first.
+LIBCAMERA_REBUILD_GAP_MS = 50
+
+# Time a started libcamera camera has to deliver its first frame before the
+# stall is logged (it is not retried: a retry against a leaked camera crashes).
+LIBCAMERA_FIRST_FRAME_TIMEOUT_MS = 3000
+
+# Delay after a libcamera camera starts streaming before a format chosen
+# while it was off is applied: libcamerasrc aborts on a format change
+# before its stream has settled.
+PENDING_FORMAT_DELAY_MS = 2000
+
+# Quiet time after a libcamera image-control change before the camera is
+# restarted to apply it: libcamerasrc applies control changes only when it
+# starts, so a burst of changes coalesces into one restart.
+LIBCAMERA_CONTROL_RESTART_DEBOUNCE_MS = 400
+
+# Quiet time after a user edit of the camera settings (a dragged image
+# control or focus slider) before the snapshot is published, so a drag
+# stores one setup into the selected protocol steps, not one per frame.
+CAMERA_SETTINGS_PUBLISH_INTERVAL_S = 0.3
+
+# Smallest (width, height) offered in the resolution combo: libcamera
+# advertises placeholder sizes such as 32x32 that the GStreamer video
+# output cannot start on.
+CAMERA_MIN_RESOLUTION = (320, 240)
+
+# The resolutions the combo shows by default, by their common names; every
+# other size the camera offers sits behind the "Show all" entry.
+COMMON_RESOLUTION_NAMES = {
+    (640, 480): "SD",
+    (1280, 720): "HD",
+    (1920, 1080): "FHD",
+    (2048, 1080): "2K",
+    (2560, 1440): "QHD",
+    (3840, 2160): "4K",
+    (4096, 2160): "4K DCI",
+}
+
+# Combo entries that switch between the common and the full resolution list;
+# they carry no camera format.
+SHOW_ALL_RESOLUTIONS_LABEL = "Show all resolutions\u2026"
+SHOW_COMMON_RESOLUTIONS_LABEL = "Show common resolutions\u2026"
+
+# Picking a size wider or taller than this (Full HD) warns once that it can
+# slow the app down; the warning can be suppressed from the preferences.
+HIGH_RESOLUTION_WARNING_THRESHOLD = (1920, 1080)
+
+# Cameras whose descriptions contain one of these never get the native
+# (DirectShow/v4l2) camera properties: the fluorescence plugin drives ZWO ASI
+# cameras through their own SDK and dock pane, and ZWO's optional DirectShow
+# driver would otherwise list them as webcams too.
+NATIVE_CAMERA_PROPERTIES_EXCLUDED = ("ZWO",)
+
+# Camera pixel formats, as Qt names them without the "Format_" prefix.
+#: Ranked in place of the preferred video format for a libcamera source
+#: (Raspberry Pi CSI camera), which never offers JPEG.
+LIBCAMERA_PIXEL_FORMAT = "NV12"
+#: Within a resolution, the order the non-preferred pixel formats are
+#: offered in; any other format (e.g. Y8 greyscale) comes after these.
+FALLBACK_PIXEL_FORMATS = ("NV12", "YUV420P", "YUYV", "BGRX8888", "RGBX8888")
+#: Never offered on a Raspberry Pi: libcamera's PiSP pipeline asserts on
+#: YVU420, aborting the whole process.
+RPI_UNSUPPORTED_PIXEL_FORMATS = ("YV12",)
+
+# ---------------------------------------------------------------------------
+# Camera focus
+# ---------------------------------------------------------------------------
+# While the focus slider is dragged, its latest position is written at most
+# this often (s): a v4l2 focus write runs a v4l2-ctl process.
+FOCUS_WRITE_INTERVAL_S = 0.1
+
+# Autofocus contrast sweep: positions of the coarse pass across the whole
+# focus range, then new positions of the fine pass between the best coarse
+# position's neighbours.
+AUTOFOCUS_COARSE_STEPS = 12
+AUTOFOCUS_FINE_STEPS = 8
+
+# Camera frames dropped after each lens move before measuring (pipeline
+# latency plus lens settling), and frames averaged per position.
+AUTOFOCUS_SETTLE_FRAMES = 4
+AUTOFOCUS_SAMPLES_PER_POSITION = 2
+
+# Sharpness is measured on the frame's centre half, downscaled to at most
+# this width, which keeps a measurement within a few ms on the GUI thread.
+AUTOFOCUS_SAMPLE_WIDTH_PX = 320
+
+# A sweep that has not finished by then is cancelled (the camera stopped
+# delivering frames); a full sweep takes a few seconds.
+AUTOFOCUS_TIMEOUT_S = 30.0
+
+# ---------------------------------------------------------------------------
+# Live Histogram pane: an exposure aid sampling the live camera feed
+# ---------------------------------------------------------------------------
+# One bin per 8-bit intensity level.
+LIVE_HISTOGRAM_BINS = 256
+
+# Refresh rate (Hz) of the pane's sampling: spinner bounds and default. The
+# ceiling is the preview's, as the video item never holds more frames than
+# that per second.
+LIVE_HISTOGRAM_RATE_BOUNDS_HZ = (1, CAMERA_PREVIEW_MAX_FPS)
+LIVE_HISTOGRAM_DEFAULT_RATE_HZ = 8
+
+# Poll interval while there is no frame, or no new one, to sample.
+LIVE_HISTOGRAM_IDLE_INTERVAL_MS = 1000
+
+# A frame whose histogram has not changed for this long is reported as idle
+# (a stopped camera leaves its last frame on the video item).
+LIVE_HISTOGRAM_IDLE_AFTER_S = 2.0
+
+# Frames are downscaled to this width before binning, which keeps sampling
+# within a few ms on the GUI thread (the Pi runs it too).
+LIVE_HISTOGRAM_SAMPLE_WIDTH_PX = 320
+
+# Rec. 601 luma weights (R, G, B) scaled to sum to 256, for integer luma.
+LIVE_HISTOGRAM_LUMA_WEIGHTS = (77, 150, 29)
+
+# A clipping cue lights when more than this share (%) of the pixels sit in
+# the darkest or the brightest bin.
+LIVE_HISTOGRAM_CLIP_WARN_PCT = 0.5
+
+# Percentiles bounding the reported intensity range.
+LIVE_HISTOGRAM_RANGE_PERCENTILES = (1, 99)
+
+# Fills of the red, green, and blue channel histograms: near-primaries, so
+# the overlaid channels add up to white on a dark background.
+LIVE_HISTOGRAM_CHANNEL_COLORS = ("#ff3b3b", "#3bd83b", "#3b7bff")
+
+# Plot styles: filled step bars per level, or the density curve (one
+# polyline per channel, cheaper to draw), and the default.
+LIVE_HISTOGRAM_PLOT_STYLES = ("bars", "curve")
+LIVE_HISTOGRAM_DEFAULT_PLOT_STYLE = "bars"
+
+# Width (bins) of the moving average that smooths the density curve.
+LIVE_HISTOGRAM_CURVE_SMOOTHING_BINS = 3
+
+# The plot's minimum size and its padding around the plot area (px).
+LIVE_HISTOGRAM_PLOT_MIN_SIZE_PX = (200, 110)
+LIVE_HISTOGRAM_PLOT_MARGIN_PX = 6
+
+# Clipping cue columns are at least this wide (px), however narrow a bin is.
+LIVE_HISTOGRAM_CLIP_CUE_MIN_WIDTH_PX = 4
+
+# The region of the frame the histogram covers, as frame fractions (left,
+# top, right, bottom): fractions keep a region in place across camera
+# resolution and preview size changes. The whole frame until one is picked.
+LIVE_HISTOGRAM_FULL_FRAME_REGION = (0.0, 0.0, 1.0, 1.0)
+
+# A region side spans at least this share of the frame, and a fresh drag
+# shorter than it draws nothing (a stray click keeps the region).
+LIVE_HISTOGRAM_REGION_MIN_FRACTION = 0.02
+
+# Region picker: a press this close (view px) to an edge or corner grabs it.
+LIVE_HISTOGRAM_REGION_GRAB_PX = 10
+
+# Region picker look: the frame and its corner dots (the alignment tool's
+# orange, so the two pickers read alike), and the shade over the frame
+# outside the region.
+LIVE_HISTOGRAM_REGION_FRAME_COLOR_HEX = "#ffa000"
+LIVE_HISTOGRAM_REGION_FRAME_WIDTH_PX = 2
+LIVE_HISTOGRAM_REGION_HANDLE_COLOR_HEX = "#ff6400"
+LIVE_HISTOGRAM_REGION_HANDLE_RING_COLOR_HEX = "#ffffff"
+LIVE_HISTOGRAM_REGION_HANDLE_RADIUS_PX = 6
+LIVE_HISTOGRAM_REGION_SHADE_COLOR_HEX = "#000000"
+LIVE_HISTOGRAM_REGION_SHADE_ALPHA = 0.5
+
+# Region picker window's opening size (px).
+LIVE_HISTOGRAM_REGION_DIALOG_SIZE_PX = (900, 640)
 
 # ---------------------------------------------------------------------------
 # Camera-alignment dialog (endpoint / outline panes)
@@ -456,6 +696,11 @@ camera_edit_status_message_text = "Drag vertices to align with device outline"
 #   provider.open(key)      -> feed                # QObject with:
 #       feed.error: Signal(str)                    #   fatal feed errors
 #       feed.start() / feed.stop()                 #   lifecycle
+#       feed.started: Signal()                     #   optional: the source
+#                                                  #   is delivering (else a
+#                                                  #   select_source reply
+#                                                  #   waits out
+#                                                  #   CAMERA_FEED_START_TIMEOUT_MS)
 #       feed.frame: Signal(QImage)                 #   optional preview frames
 #       feed.streaming: Signal(bool)               #   optional preview state
 #       feed.create_controls(parent) -> QWidget|None   # optional settings row
@@ -472,9 +717,13 @@ CAMERA_SOURCES = "device_viewer.camera_sources"
 DEVICE_VIEWER_LAYERS = "device_viewer.layers"
 
 # Version of the layer contract re-exported above. Layer plugins shipped
-# from other repos pin against it: the major part changes only for a
-# breaking change, after a deprecation period; additions bump the minor.
-LAYER_CONTRACT_VERSION = "0.1.0"
+# from other repos declare the one they were built against
+# (``contract_version``); the base logs a warning and mounts them anyway
+# when it differs. The major part changes only for a breaking change, after
+# a deprecation period; additions bump the minor.
+# 0.2.0: IElectrodeStepping types LayerContext.stepping; layers declare
+# contract_version (#783).
+LAYER_CONTRACT_VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Electrode zones (#596): named, colored electrode regions drawn on the
@@ -502,6 +751,64 @@ BASE_INTERACTION_MODES = (
     "pan",
     ZONE_DRAW_MODE,
     ZONE_SELECT_MODE,
+)
+
+# ---------------------------------------------------------------------------
+# Keyboard shortcuts: the one table the device view's key dispatch, its
+# context menu labels and the cheat sheet all read.
+# ---------------------------------------------------------------------------
+
+# Arrow actions are named "<verb>_<direction>"; the dispatch parses them.
+ARROW_DIRECTIONS = ("left", "right", "up", "down")
+
+# Cheat sheet sections, in display order, and its window title.
+KEYBOARD_SHORTCUT_GROUPS = ("Selection", "Routes", "Modes", "View", "Actions", "Help")
+KEYBOARD_SHORTCUTS_TITLE = "Keyboard Shortcuts"
+
+# One (modifier prefix, verb, description template, group) per arrow verb.
+_ARROW_SHORTCUT_TEMPLATES = (
+    ("", "step", "Step the selection {direction}", "Selection"),
+    ("Shift+", "extend", "Grow the selection {direction}", "Selection"),
+    ("Ctrl+", "shrink", "Shrink the selection from the {direction}", "Selection"),
+    ("Ctrl+Shift+", "split", "Split step {direction}", "Selection"),
+    ("Alt+", "draw_route", "Draw the route one electrode {direction}", "Routes"),
+)
+
+# (key sequence, action, description, group) rows; sequences are unique, so
+# a second key for one action gets an "_alt" / "_equal" action of its own.
+KEYBOARD_SHORTCUTS = tuple(
+    (
+        f"{prefix}{direction.title()}",
+        f"{verb}_{direction}",
+        template.format(direction=direction),
+        group,
+    )
+    for prefix, verb, template, group in _ARROW_SHORTCUT_TEMPLATES
+    for direction in ARROW_DIRECTIONS
+) + (
+    ("Backspace", "erase_route_tail", "Erase the selected route's tail", "Routes"),
+    ("Del", "delete_route", "Delete the selected route", "Routes"),
+    ("Esc", "escape", "Leave Pan mode or route drawing", "Modes"),
+    ("D", "mode_draw", "Toggle Draw mode", "Modes"),
+    ("E", "mode_edit", "Toggle Edit mode", "Modes"),
+    ("A", "mode_auto", "Toggle Auto mode", "Modes"),
+    ("N", "mode_channel_edit", "Toggle Channel Edit mode", "Modes"),
+    ("Space", "mode_pan", "Toggle Pan mode", "Modes"),
+    ("Ctrl++", "zoom_in", "Zoom in", "View"),
+    ("Ctrl+=", "zoom_in_equal", "Zoom in", "View"),
+    ("Ctrl+-", "zoom_out", "Zoom out", "View"),
+    ("Ctrl+0", "fit_view", "Fit the device to the view", "View"),
+    ("R", "rotate_device", "Rotate the device", "View"),
+    ("Shift+R", "rotate_camera", "Rotate the camera", "View"),
+    ("X", "clear_electrodes", "Clear electrode states", "Actions"),
+    ("Shift+X", "clear_routes", "Clear all routes", "Actions"),
+    ("F", "find_liquid", "Find liquid", "Actions"),
+    ("T", "toggle_realtime", "Toggle realtime mode", "Actions"),
+    ("Ctrl+Z", "undo", "Undo", "Actions"),
+    ("Ctrl+Y", "redo", "Redo", "Actions"),
+    ("Ctrl+Shift+Z", "redo_alt", "Redo", "Actions"),
+    ("F1", "show_shortcuts", "Show keyboard shortcuts", "Help"),
+    ("Ctrl+/", "show_shortcuts_alt", "Show keyboard shortcuts", "Help"),
 )
 
 # inkscape:label of the autogenerated SVG layer that stores regions.
@@ -583,3 +890,20 @@ ZONE_TREE_COLOR_COLUMN_WIDTH_PX = 60
 # the icon font's line height to size the two glyph columns.
 ZONE_TREE_SWATCH_INSET_PX = 4
 ZONE_TREE_GLYPH_COLUMN_PADDING_PX = 8
+
+# ---------------------------------------------------------------------------
+# Live volume readout (VolumeEstimateModel)
+# ---------------------------------------------------------------------------
+# Top-plate to bottom-plate gap the droplet fills, in µm. Placeholder until
+# measured for the chip in use; set it in the Device Viewer preferences.
+DEFAULT_GAP_HEIGHT_UM = 254
+GAP_HEIGHT_UM_MIN = 1
+GAP_HEIGHT_UM_MAX = 2000
+
+# mm² × µm = 1e-3 mm³, and 1 mm³ is 1 µL.
+UM_MM2_PER_UL = 1000
+
+# Volume change (µL) a new capacitance reading must make before the live
+# readout shows it; smaller moves are reading noise. Matches the readout's
+# 0.1 µL resolution, like the DropBot status pane's capacitance threshold.
+VOLUME_READOUT_NOISE_UL = 0.1

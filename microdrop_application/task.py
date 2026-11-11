@@ -30,9 +30,13 @@ from microdrop_utils.dramatiq_controller_base import (
 from microdrop_utils.i_dramatiq_controller_base import IDramatiqControllerBase
 
 # Local imports.
-from .consts import PKG
+from .consts import (
+    FILE_MENU_EXIT_GROUP_ID,
+    FILE_MENU_SUBMENUS_GROUP_ID,
+    PKG,
+)
 from .dialogs.pyface_wrapper import YES, confirm, information
-from .menus import AdvancedModeAction, ResetLayoutAction
+from .menus import AdvancedModeAction, MinimizeWindowAction, ResetLayoutAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
 
@@ -86,7 +90,15 @@ class MicrodropTask(Task):
     name = PKG.title().replace("_", " ")
 
     menu_bar = SMenuBar(
-        SMenu(id="File", name="&File"),
+        # Envisage's TasksPlugin adds Exit to "MenuBar/File" with no position
+        # hint, so it lands at the end of whichever group comes last: the Exit
+        # group, after Minimize.
+        SMenu(
+            SGroup(id=FILE_MENU_SUBMENUS_GROUP_ID),
+            SGroup(MinimizeWindowAction(), id=FILE_MENU_EXIT_GROUP_ID),
+            id="File",
+            name="&File",
+        ),
         SMenu(AdvancedModeAction(), id="Edit", name="&Edit"),
         SMenu(touch_assist_menu(), id="Tools", name="&Tools"),
         SMenu(

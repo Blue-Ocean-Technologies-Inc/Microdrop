@@ -52,7 +52,9 @@ from microdrop_application.dialogs.pyface_wrapper import NO, YES, confirm
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY,
     ELECTRODES_STATE_APPLIED,
+    MISSING_CHANNEL_MAP_REPORTED_KEY,
     PROTOCOL_TREE_DISPLAY_STATE,
+    UNMAPPED_ELECTRODES_REPORTED_KEY,
 )
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
@@ -121,6 +123,32 @@ def dyn_resume_start(cursor_phase_index: int, cycle_len: int):
     if cursor_phase_index >= cycle_len:
         return 0, True
     return max(0, int(cursor_phase_index)), False
+
+
+def _report_unmapped_electrodes(electrodes, mapping, run_scratch):
+    """Log the electrodes the channel map cannot actuate, once per run.
+
+    A missing map is one error for the whole run; a partial map warns once
+    per unmapped electrode rather than on every phase.
+    """
+    if not mapping:
+        if electrodes and not run_scratch.get(MISSING_CHANNEL_MAP_REPORTED_KEY):
+            logger.error(
+                "Protocol has no device electrode-to-channel map; no electrodes "
+                "will be actuated this run. Load a device in the device viewer."
+            )
+            run_scratch[MISSING_CHANNEL_MAP_REPORTED_KEY] = True
+
+        return
+
+    reported = run_scratch.setdefault(UNMAPPED_ELECTRODES_REPORTED_KEY, set())
+
+    for e in electrodes:
+        if e not in mapping and e not in reported:
+            logger.warning(
+                f"electrode {e!r} has no channel mapping; actuation channel skipped"
+            )
+            reported.add(e)
 
 
 def _confirm_finish_loop_over_budget():
@@ -297,11 +325,7 @@ class RoutesHandler(BaseColumnHandler):
 
         electrodes = sorted(phase)
         channels = sorted(mapping[e] for e in electrodes if e in mapping)
-        for e in electrodes:
-            if e not in mapping:
-                logger.warning(
-                    f"electrode {e!r} has no channel mapping; actuation channel skipped"
-                )
+        _report_unmapped_electrodes(electrodes, mapping, ctx.protocol.scratch)
 
         if signals is not None and emit_phase_started:
             signals.phase_started = (

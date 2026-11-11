@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 # Enthought library imports.
-from pyface.api import NO, YES
+from pyface.api import NO, YES, clipboard
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
@@ -37,15 +37,18 @@ from .consts import (
     DEFAULT_ROI_COLORS,
     HEATER_LOGS_DIR_NAME,
     HEATER_SENSOR_MEAN,
+    NEGATIVE_MASK_COLOR,
+    NEGATIVE_MASK_NAME_PREFIX,
     PASTE_OFFSET_PX,
     ROI_BATCH_PROTOCOL_WORKERS,
+    ROI_DELETE_BUTTON_SCOPES,
     STATS_SAVE_DEBOUNCE_S,
 )
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
 from .heater_loader import HeaterSamplesLoader
 from .heater_log import describe_heater_coverage, sensors_in, temperature_at
-from .plot_series import analysed_series
+from .plot_series import analysed_series, calibrated_temperatures, x_quantity
 from .protocol_guard import proceed_despite_protocol
 from .roi_batch import (
     BATCH_FINISHED,
@@ -54,9 +57,24 @@ from .roi_batch import (
     RoiBatchRunner,
     pool_is_warm,
 )
+from .roi_commands import (
+    AddRoisCommand,
+    EditRoiCommand,
+    HideRoiOnImageCommand,
+    MergeRoiOnImageCommand,
+    RemoveRoisCommand,
+    merged_absences,
+)
 from .roi_compute import stats_are_current
 from .roi_geometry import translated
-from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
+from .roi_model import (
+    EXPECTED_TRAITS,
+    AnalysisSession,
+    CustomPoint,
+    Roi,
+    RoiAnalysisModel,
+    RoiStyle,
+)
 from .roi_store import (
     analysis_directory,
     load_roi_stats,
@@ -64,6 +82,7 @@ from .roi_store import (
     save_fit_equations,
     save_roi_stats,
     save_session,
+    write_expected_csv,
     write_intensity_csv,
 )
 
@@ -71,6 +90,18 @@ from .roi_store import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def _history_and_correction(renamed, target, capture_time):
+    """(history, correction) of two ROIs a rename merges, whichever way
+    the user renamed: the correction is the one drawn on the shown image
+    (base_anchor at its ``capture_time``); the history is the other, and
+    survives. When both or neither were drawn there, the ``renamed`` ROI
+    is the correction."""
+    if target.base_anchor == capture_time and renamed.base_anchor != capture_time:
+        return renamed, target
+
+    return target, renamed
 
 
 class RoiAnalysisController(HasTraits):
@@ -203,6 +234,7 @@ class RoiAnalysisController(HasTraits):
     @observe(
         "analysis_model:session:ring:gap_px, "
         "analysis_model:session:ring:thickness_px, "
+        "analysis_model:session:ring:inside_percent, "
         "analysis_model:session:ball:enabled, "
         "analysis_model:session:ball:radius_px, "
         "analysis_model:session:perspective:enabled, "
@@ -269,26 +301,40 @@ class RoiAnalysisController(HasTraits):
     def _on_canvas_draw_cancelled(self, event):
         self.analysis_model.interaction_mode = self._rest_mode()
 
-    def _create_roi(self, kind, geometry):
+    def _create_roi(self, kind, geometry, is_negative=None):
         """Add an ROI anchored at the displayed image and start
-        measuring it — the one path a drawn or pasted shape takes."""
+        measuring it — the one path a drawn or pasted shape takes.
+
+        ``is_negative`` (else the toolbar's negative_mode) makes it a
+        negative mask: named "Mask N", drawn in NEGATIVE_MASK_COLOR
+        without taking a slot in the ROI colour cycle, and re-measuring
+        every ROI it may cut."""
+        if is_negative is None:
+            is_negative = self.analysis_model.negative_mode
+
         current = self.viewer_model.current_path
         anchor = capture_timestamp(current) if current else 0.0
+        color = (
+            NEGATIVE_MASK_COLOR
+            if is_negative
+            else DEFAULT_ROI_COLORS[
+                len(self.session.positive_rois) % len(DEFAULT_ROI_COLORS)
+            ]
+        )
         roi = Roi(
-            name=self.session.next_roi_name(),
+            name=self.session.next_roi_name(
+                NEGATIVE_MASK_NAME_PREFIX if is_negative else "ROI"
+            ),
             kind=kind,
             geometry=[float(value) for value in geometry],
             base_anchor=anchor,
-            style=RoiStyle(
-                color=DEFAULT_ROI_COLORS[
-                    len(self.session.rois) % len(DEFAULT_ROI_COLORS)
-                ]
-            ),
+            is_negative=is_negative,
+            style=RoiStyle(color=color),
         )
-        self.session.rois.append(roi)
-        self._save_config()
-        self._restart_batch_if_running()
-        self._instant_stats(roi)
+
+        self._push(AddRoisCommand(session=self.session, rois=[roi]))
+        self._instant_stats(self._rois_measured_with(roi))
+
         return roi
 
     @observe("analysis_model:ai_rois_accepted")
@@ -298,37 +344,58 @@ class RoiAnalysisController(HasTraits):
 
     def _create_rois(self, pairs, anchor):
         """Bulk sibling of _create_roi for accepted AI candidates: one
-        save and one batch restart for the whole set."""
+        undo step, one save and one batch restart for the whole set.
+        Names and colours count the ROIs built so far, as none is in the
+        session until the set lands."""
+        session = self.session
         created = []
+
         for kind, geometry in pairs:
-            roi = Roi(
-                name=self.session.next_roi_name(),
-                kind=kind,
-                geometry=[float(value) for value in geometry],
-                base_anchor=anchor,
-                style=RoiStyle(
-                    color=DEFAULT_ROI_COLORS[
-                        len(self.session.rois) % len(DEFAULT_ROI_COLORS)
-                    ]
-                ),
+            created.append(
+                Roi(
+                    name=session.next_roi_name(pending=created),
+                    kind=kind,
+                    geometry=[float(value) for value in geometry],
+                    base_anchor=anchor,
+                    style=RoiStyle(
+                        color=DEFAULT_ROI_COLORS[
+                            (len(session.positive_rois) + len(created))
+                            % len(DEFAULT_ROI_COLORS)
+                        ]
+                    ),
+                )
             )
-            self.session.rois.append(roi)
-            created.append(roi)
+
         if not created:
             return created
-        self._save_config()
-        self._restart_batch_if_running()
-        for roi in created:
-            self._instant_stats(roi)
+
+        self._push(AddRoisCommand(session=session, rois=created))
+        self._instant_stats(created)
+
         return created
 
     @observe("analysis_model:ai_roi_tracked")
     def _on_ai_roi_tracked(self, event):
-        roi_id, capture_time, geometry = event.new
+        """Record a drift re-check's shape as a forward override, in the
+        ROI's own kind — never on an image the ROI is deleted from, nor
+        over a shape the user gave it for that image alone (the plan
+        holds those back; this guards a run started before the user's
+        change)."""
+        roi_id, capture_time, candidate = event.new
         roi = self.session.roi_by_id(roi_id)
-        if roi is not None:
-            roi.apply_edit(capture_time, [float(value) for value in geometry])
-            self._ai_config_dirty = True
+
+        if (
+            roi is None
+            or capture_time in roi.local_overrides
+            or not roi.applies_at(capture_time)
+        ):
+            return
+
+        _kind, geometry = candidate.geometry_for(
+            roi.kind, roi.effective_geometry(capture_time)
+        )
+        roi.apply_edit(capture_time, [float(value) for value in geometry])
+        self._ai_config_dirty = True
 
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
@@ -337,10 +404,58 @@ class RoiAnalysisController(HasTraits):
         current = self.viewer_model.current_path
         if roi is None or not current:
             return
-        roi.apply_edit(capture_timestamp(current), [float(value) for value in geometry])
-        self._save_config()
+        self._push(
+            EditRoiCommand(
+                session=self.session,
+                roi=roi,
+                capture_time=capture_timestamp(current),
+                geometry=[float(value) for value in geometry],
+            )
+        )
+        self._instant_stats(self._rois_measured_with(roi))
+
+    def _rois_measured_with(self, roi):
+        """The positive ROIs whose stats change when ``roi`` is drawn,
+        edited or removed: ``roi`` itself, or — a negative mask cuts
+        whichever ROIs it overlaps — every positive ROI."""
+        return self.session.positive_rois if roi.is_negative else [roi]
+
+    @observe("analysis_model:session:rois:items:style:visible")
+    def _on_roi_visibility_changed(self, event):
+        """An ROI hidden with its eye leaves the image as well as the
+        plot, so it can no longer be the selection. A mask's eye also
+        decides whether it subtracts, so remeasure as for a mask edit;
+        the toggle selects a different cache set, which toggling back
+        finds complete: bump the revision, as nothing else would redraw.
+        Switching an eye on moves the ROI to the end of the session's
+        visibility_order, switching it off drops it.
+        _on_plot_settings_changed saves the style and the order."""
+        roi = next(
+            (roi for roi in self.session.rois if roi.style is event.object),
+            None,
+        )
+
+        if roi is None:
+            return
+
+        order = [
+            roi_id for roi_id in self.session.visibility_order if roi_id != roi.roi_id
+        ]
+
+        if event.new:
+            order.append(roi.roi_id)
+
+        self.session.visibility_order = order
+
+        if not event.new and self.analysis_model.selected_roi_id == roi.roi_id:
+            self.analysis_model.selected_roi_id = ""
+
+        if not roi.is_negative:
+            return
+
+        self.session.stats_revision += 1
         self._restart_batch_if_running()
-        self._instant_stats(roi)
+        self._instant_stats(self._rois_measured_with(roi))
 
     # ------------------------------------------------------------------ #
     # Copy / paste                                                         #
@@ -360,13 +475,15 @@ class RoiAnalysisController(HasTraits):
         model.clipboard_geometry = roi.effective_geometry(
             capture_timestamp(current) if current else 0.0
         )
+        model.clipboard_negative = roi.is_negative
         model.progress_text = f"Copied {roi.name}"
 
     @observe("analysis_model:paste_roi_button")
     def _paste_roi(self, event):
         """Place a copy, nudged clear of the original so it cannot hide
         under it. It gets its own name and the next colour in the
-        cycle: two curves in one colour cannot be told apart."""
+        cycle: two curves in one colour cannot be told apart. A copied
+        negative mask pastes as one, whatever negative_mode says."""
         model = self.analysis_model
         if not model.clipboard_kind:
             model.progress_text = "Nothing copied yet"
@@ -379,26 +496,205 @@ class RoiAnalysisController(HasTraits):
                 PASTE_OFFSET_PX,
                 PASTE_OFFSET_PX,
             ),
+            model.clipboard_negative,
         )
         model.selected_roi_id = roi.roi_id
         model.progress_text = f"Pasted {roi.name}"
 
     # ------------------------------------------------------------------ #
+    # Undo / redo                                                          #
+    # ------------------------------------------------------------------ #
+    def _push(self, command):
+        """Make a shape change through the undo stack, then persist it
+        and fold it into a running batch."""
+        self.analysis_model.undo_stack.push(command)
+        self._save_config()
+        self._restart_batch_if_running()
+
+    @observe("analysis_model:undo_roi_button")
+    def _undo_roi_change(self, event):
+        if self.analysis_model.can_undo:
+            self._step_history(self.analysis_model.undo_stack.undo)
+
+    @observe("analysis_model:redo_roi_button")
+    def _redo_roi_change(self, event):
+        if self.analysis_model.can_redo:
+            self._step_history(self.analysis_model.undo_stack.redo)
+
+    def _step_history(self, step):
+        """Undo or redo one shape change and catch everything up with it.
+        The step can land the ROIs back on geometry whose stats are
+        cached, which computes nothing, so bump the revision the plot and
+        table redraw on; remeasure every positive ROI on the shown image,
+        as a step may have moved a mask over any of them."""
+        model = self.analysis_model
+        step()
+
+        if self.session.roi_by_id(model.selected_roi_id) is None:
+            model.selected_roi_id = ""
+
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+        self._instant_stats(self.session.positive_rois)
+
+    # ------------------------------------------------------------------ #
     # Delete / clear / reset                                               #
     # ------------------------------------------------------------------ #
-    @observe("analysis_model:delete_roi_button")
+    @observe(
+        "analysis_model:[delete_roi_left_button, delete_roi_button, "
+        "delete_roi_right_button]"
+    )
     def _delete_selected_roi(self, event):
+        """Delete the selected ROI from the images the fired button names
+        (ROI_DELETE_BUTTON_SCOPES): every image before the shown one, the
+        shown image alone, or every image after it. With no image shown
+        there is no image to keep it on: it is removed outright."""
         session = self.session
         roi = session.roi_by_id(self.analysis_model.selected_roi_id)
+
         if roi is None:
             self.analysis_model.progress_text = (
                 "Select an ROI first (edit mode) to delete it"
             )
             return
-        session.rois.remove(roi)
+
+        if self.viewer_model.current_path:
+            scope = ROI_DELETE_BUTTON_SCOPES[event.name]
+            self._set_absent_on_shown_image(roi, scope, restore=False)
+        else:
+            self._push(RemoveRoisCommand(session=session, rois=[roi]))
+
         self.analysis_model.selected_roi_id = ""
-        self._save_config()
-        self._restart_batch_if_running()
+
+        if roi.is_negative:
+            self._instant_stats(session.positive_rois)
+
+    def _set_absent_on_shown_image(self, roi, scope, restore):
+        """Take ``roi`` off the shown image alone, or off every image
+        before or after it, by ``scope`` — or undo that, as one undoable
+        step."""
+        self._push(
+            HideRoiOnImageCommand(
+                session=self.session,
+                roi=roi,
+                capture_time=capture_timestamp(self.viewer_model.current_path),
+                scope=scope,
+                restore=restore,
+            )
+        )
+        # A pair with no stats now (or its old ones again) computes
+        # nothing, so nothing else would redraw the plot.
+        self.session.stats_revision += 1
+
+    @observe("analysis_model:rename_roi_request")
+    def _rename_roi(self, event):
+        """Name an ROI as the table committed it. A name another ROI
+        already carries merges the renamed ROI into that one on the shown
+        image (MergeRoiOnImageCommand) — the way to give an ROI a new
+        shape from an image on, keeping its identity. With no image shown,
+        or a negative mask on either side, it is a plain rename and the
+        status says why it did not merge."""
+        roi_id, name = event.new
+        replacement = self.session.roi_by_id(roi_id)
+
+        if replacement is None:
+            return
+
+        roi = next(
+            (
+                other
+                for other in self.session.rois
+                if other is not replacement and other.name == name
+            ),
+            None,
+        )
+
+        if roi is None:
+            replacement.name = name
+            return
+
+        model = self.analysis_model
+        current = self.viewer_model.current_path
+
+        if not current:
+            model.progress_text = (
+                f"Show an image to merge {replacement.name} into {name}"
+            )
+            replacement.name = name
+            return
+
+        if replacement.is_negative or roi.is_negative:
+            model.progress_text = "Masks cannot be merged: renamed only"
+            replacement.name = name
+            return
+
+        capture_time = capture_timestamp(current)
+        history, correction = _history_and_correction(
+            renamed=replacement, target=roi, capture_time=capture_time
+        )
+
+        if merged_absences(history, correction, capture_time) is None:
+            model.progress_text = (
+                f"{history.name} is removed here by a range — Restore it first"
+            )
+            return
+
+        correction_name = correction.name
+        self._push(
+            MergeRoiOnImageCommand(
+                session=self.session,
+                roi=history,
+                replacement=correction,
+                capture_time=capture_time,
+                merged_name=name,
+            )
+        )
+
+        if model.selected_roi_id in (replacement.roi_id, roi.roi_id):
+            model.selected_roi_id = history.roi_id
+
+        model.progress_text = f"{correction_name} merged into {history.name}"
+        self.session.stats_revision += 1
+        self._instant_stats([history])
+
+    @observe("analysis_model:restore_absent_rois_button")
+    def _restore_absent_rois(self, event):
+        current = self.viewer_model.current_path
+
+        if not current:
+            return
+
+        capture_time = capture_timestamp(current)
+
+        # A range is cleared whole: it has no hole for one image.
+        for roi in self.session.absent_on(current):
+            for scope in roi.absent_by(capture_time):
+                self._set_absent_on_shown_image(roi, scope, restore=True)
+
+        self._instant_stats(self.session.positive_rois)
+
+    @observe(
+        "analysis_model:current_image_path, analysis_model:session, "
+        "analysis_model:session:rois.items, "
+        "analysis_model:session:rois:items:absent_at, "
+        "analysis_model:session:rois:items:absent_from, "
+        "analysis_model:session:rois:items:absent_until"
+    )
+    def _mirror_absent_roi_count(self, event):
+        """Keep the sidebar's count of ROIs deleted from the shown image
+        current (a top-level mirror its visible_when can see), and
+        whether any of those is a range."""
+        current = self.analysis_model.current_image_path
+        absent = self.session.absent_on(current) if current else []
+        capture_time = capture_timestamp(current) if current else 0.0
+
+        self.viewer_model.trait_set(
+            absent_roi_count=len(absent),
+            absent_roi_ranged=any(
+                set(roi.absent_by(capture_time)) - {"image"} for roi in absent
+            ),
+        )
 
     @observe("analysis_model:clear_rois_button")
     def _clear_rois(self, event):
@@ -409,11 +705,77 @@ class RoiAnalysisController(HasTraits):
             return
         self.runner.cancel()
         self._pending_export = False
-        session.rois = []
+        self.analysis_model.undo_stack.push(
+            RemoveRoisCommand(
+                session=session, rois=list(session.rois), name="Clear ROIs"
+            )
+        )
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         self._save_config()
+
+    @observe("analysis_model:reset_expected_button")
+    def _reset_expected_values(self, event):
+        for roi in self.session.rois:
+            roi.trait_set(**{name: math.nan for name in EXPECTED_TRAITS.values()})
+
+    @observe("analysis_model:add_custom_point_button")
+    def _add_custom_point(self, event):
+        points = self.session.custom_points
+
+        points.append(CustomPoint(name=f"Point {len(points) + 1}"))
+
+    @observe("analysis_model:remove_custom_point_button")
+    def _remove_custom_points(self, event):
+        selected = {
+            point for point, _column in self.analysis_model.selected_custom_cells
+        }
+        points = self.session.custom_points
+
+        # In place, so the session keeps its list object.
+        points[:] = [point for point in points if point not in selected]
+        self.analysis_model.selected_custom_cells = []
+
+    @observe("analysis_model:export_expected_button")
+    def _export_expected(self, event):
+        directory = self._experiment_directory()
+
+        if directory is None:
+            self.analysis_model.progress_text = "No experiment folder"
+            return
+
+        name = (
+            f"roi_fastest_change_"
+            f"{sanitize_label(self.viewer_model.selected_burst)}_"
+            f"{sanitize_label(self.viewer_model.selected_filter)}_"
+            f"{utc_stamp()}.csv"
+        )
+        csv_path = analysis_directory(directory) / name
+        unit = x_quantity(self.session.figure)[1]
+
+        try:
+            write_expected_csv(
+                csv_path,
+                self.analysis_model.expected_rows,
+                unit,
+                custom_points=self.session.custom_points,
+            )
+        except Exception as error:
+            logger.warning(f"Expected-table export failed: {error}")
+            self.analysis_model.progress_text = f"Export failed: {error}"
+            return
+
+        self.analysis_model.progress_text = f"Exported {csv_path.name}"
+        logger.info(f"ROI fastest changes exported to {csv_path}")
+
+    @observe("analysis_model:copy_trend_expression_button")
+    def _copy_trend_expression(self, event):
+        if self.analysis_model.copy_trend_blocker:
+            return
+
+        clipboard.text_data = self.session.trend.expression
+        self.analysis_model.progress_text = "Copied the trend expression"
 
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):
@@ -449,7 +811,7 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:export_csv_button")
     def _export(self, event):
-        if not self.session.rois or not self.viewer_model.paths:
+        if not self.session.positive_rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
 
@@ -481,28 +843,34 @@ class RoiAnalysisController(HasTraits):
         self._restart_batch_if_running()
 
     def _missing_work(self):
-        """[(path_str, {roi_id: (kind, geometry)}), ...] for every
-        filtered image with at least one uncached (image, ROI) pair —
-        only the missing ROIs are dispatched per image. A pair cached
-        before the shape stats existed counts as missing."""
+        """[(path_str, {roi_id: (kind, geometry)}, correction), ...] for
+        every filtered image with at least one uncached (image, ROI)
+        pair — only the missing positive ROIs are dispatched per image;
+        the image's negative masks travel in its correction. A pair
+        cached before the shape stats existed counts as missing."""
         session = self.session
+        rois = session.positive_rois
         stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
             if session.is_excluded(path):
                 continue
             missing = {}
-            for roi in session.rois:
+            for roi in rois:
+                if not session.measures(path, roi, stat_cache):
+                    continue  # deleted from this image alone
                 key = session.cache_key(path, roi, stat_cache)
                 if not stats_are_current(session.stats.get(key)):
                     missing[roi.roi_id] = (roi.kind, tuple(key[4]))
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
             if missing:
-                work.append((str(path), missing, session.correction_key()))
+                work.append(
+                    (str(path), missing, session.correction_for(path, stat_cache))
+                )
         return work
 
     def _start_batch(self, work=None):
-        if not self.session.rois or not self.viewer_model.paths:
+        if not self.session.positive_rois or not self.viewer_model.paths:
             return
         if work is None:
             self._dispatched_keys = {}
@@ -517,10 +885,11 @@ class RoiAnalysisController(HasTraits):
                 self._write_export()
             return
         self.analysis_model.batch_running = True
-        gap, width, ball, perspective = self.session.correction_key()
+        gap, width, ball, perspective, inside = self.session.correction_key()
         logger.info(
-            f"ROI batch: {len(work)} images x {len(self.session.rois)} "
-            f"ROIs; ring gap={gap}px width={width}px; rolling ball="
+            f"ROI batch: {len(work)} images x {len(self.session.positive_rois)} "
+            f"ROIs, {len(self.session.negative_rois)} negative masks; ring "
+            f"gap={gap}px width={width}px; measuring inside {inside}%; rolling ball="
             f"{f'r={ball}px' if ball else 'off'}; perspective "
             f"{'on' if perspective else 'off'}"
         )
@@ -614,22 +983,34 @@ class RoiAnalysisController(HasTraits):
             f"ROI stats {model.batch_done}/{model.batch_total} {state}{failed}"
         )
 
-    def _instant_stats(self, roi):
-        """Kick off the instant single-image compute for ``roi`` on the
-        shown image; already-cached stats need no compute — the table
-        reads the session cache directly."""
+    def _instant_stats(self, rois):
+        """Kick off one instant single-image compute for the positive
+        ``rois`` on the shown image; already-cached stats need no
+        compute — the table reads the session cache directly."""
+        session = self.session
         current = self.viewer_model.current_path
-        if not current or self.session.is_excluded(current):
+
+        if not current or session.is_excluded(current):
             return
-        key = self.session.cache_key(current, roi)
-        self._dispatched_keys[(current, roi.roi_id)] = key
-        if stats_are_current(self.session.stats.get(key)):
-            return
-        self.runner.compute_single(
-            current,
-            {roi.roi_id: (roi.kind, tuple(key[4]))},
-            self.session.correction_key(),
-        )
+
+        stat_cache = {}
+        missing = {}
+
+        for roi in rois:
+            # Deleted from this image alone: nothing to measure.
+            if not session.measures(current, roi, stat_cache):
+                continue
+
+            key = session.cache_key(current, roi, stat_cache)
+            self._dispatched_keys[(current, roi.roi_id)] = key
+
+            if not stats_are_current(session.stats.get(key)):
+                missing[roi.roi_id] = (roi.kind, tuple(key[4]))
+
+        if missing:
+            self.runner.compute_single(
+                current, missing, session.correction_for(current, stat_cache)
+            )
 
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
@@ -738,18 +1119,46 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:custom_expression, "
         "analysis_model:session:figure:trim_poor_fit, "
         "analysis_model:session:figure:show_legend, "
+        "analysis_model:session:figure:font_size, "
+        "analysis_model:session:figure:bar_gap, "
         "analysis_model:session:figure:show_fit_equations, "
         "analysis_model:session:figure:show_second_derivative_max, "
         "analysis_model:session:figure:show_second_derivative_min, "
+        "analysis_model:session:figure:show_second_derivative_zero, "
         "analysis_model:session:figure:second_derivative_vline, "
         "analysis_model:session:figure:second_derivative_hline, "
         "analysis_model:session:figure:second_derivative_coords, "
         "analysis_model:session:figure:view_mode, "
+        "analysis_model:session:figure:histogram_channel_mode, "
+        "analysis_model:session:figure:histogram_bins, "
+        "analysis_model:session:figure:histogram_clip_percent, "
+        "analysis_model:session:figure:histogram_intensity_filter, "
+        "analysis_model:session:figure:histogram_intensity_min, "
+        "analysis_model:session:figure:histogram_intensity_max, "
+        "analysis_model:session:figure:histogram_count_filter, "
+        "analysis_model:session:figure:histogram_count_min, "
+        "analysis_model:session:figure:histogram_count_max, "
+        "analysis_model:session:figure:histogram_fit, "
+        "analysis_model:session:figure:histogram_show_median, "
+        "analysis_model:session:figure:histogram_show_mean, "
+        "analysis_model:session:figure:histogram_marker_alpha, "
+        "analysis_model:session:figure:histogram_bar_alpha, "
+        "analysis_model:session:figure:histogram_bar_fill, "
+        "analysis_model:session:figure:histogram_fit_alpha, "
+        "analysis_model:session:figure:histogram_fit_fill_alpha, "
+        "analysis_model:session:figure:histogram_x_magnify, "
+        "analysis_model:session:figure:histogram_x_pivot_auto, "
+        "analysis_model:session:figure:histogram_x_pivot, "
+        "analysis_model:session:figure:flip_actual_expected, "
+        "analysis_model:session:figure:compare_second_derivative_max, "
+        "analysis_model:session:figure:compare_second_derivative_min, "
+        "analysis_model:session:figure:trend_method, "
         "analysis_model:session:figure:log_x, "
         "analysis_model:session:figure:log_y, "
         "analysis_model:session:figure:normalize, "
         "analysis_model:session:figure:subtract_first, "
         "analysis_model:session:figure:subtract_background_ref, "
+        "analysis_model:session:figure:area_fit_method, "
         "analysis_model:session:figure:remove_outliers, "
         "analysis_model:session:figure:outlier_threshold, "
         "analysis_model:session:figure:outlier_window, "
@@ -759,25 +1168,57 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:figure:butter_order, "
         "analysis_model:session:figure:butter_cutoff, "
         "analysis_model:session:figure:interpolate_gaps, "
+        "analysis_model:session:figure:show_excluded_points, "
+        "analysis_model:session:temperature_style:line_color, "
+        "analysis_model:session:temperature_style:line_style, "
+        "analysis_model:session:temperature_style:line_width, "
+        "analysis_model:session:temperature_style:capture_marker, "
+        "analysis_model:session:temperature_style:capture_size, "
+        "analysis_model:session:temperature_style:capture_color_follows_line, "
+        "analysis_model:session:temperature_style:capture_color, "
+        "analysis_model:session:temperature_style:excluded_size, "
+        "analysis_model:session:temperature_style:line_alpha, "
+        "analysis_model:session:temperature_style:capture_alpha, "
+        "analysis_model:session:temperature_style:excluded_alpha, "
+        "analysis_model:session:temperature_style:show_legend, "
+        "analysis_model:session:temperature_style:shown_sensors.items, "
+        "analysis_model:session:temperature_style:sensors:items:visible, "
+        "analysis_model:session:temperature_style:sensors:items:color, "
+        "analysis_model:session:temperature_style:sensors:items:line_style, "
+        "analysis_model:session:temperature_style:sensors:items:line_width, "
+        "analysis_model:session:temperature_style:sensors:items:alpha, "
+        "analysis_model:session:temperature_style:sensors.items, "
         "analysis_model:session:figure:x_axis, "
+        "analysis_model:session:figure:time_unit, "
         "analysis_model:session:figure:heater_sensor, "
         "analysis_model:session:figure:heater_window_ms, "
+        "analysis_model:session:figure:temperature_expression, "
         "analysis_model:session:heater_log_dir, "
         "analysis_model:session:figure:show_method_group, "
         "analysis_model:session:figure:show_metrics_group, "
+        "analysis_model:session:figure:show_custom_points_group, "
         "analysis_model:session:rois:items:name, "
         "analysis_model:session:rois:items:is_background_ref, "
+        "analysis_model:session:rois:items:expected_fastest_change, "
+        "analysis_model:session:rois:items:expected_second_derivative_max, "
+        "analysis_model:session:rois:items:expected_second_derivative_min, "
+        "analysis_model:session:custom_points.items, "
+        "analysis_model:session:custom_points:items:name, "
+        "analysis_model:session:custom_points:items:actual, "
+        "analysis_model:session:custom_points:items:expected, "
         "analysis_model:session:rois:items:style:color, "
         "analysis_model:session:rois:items:style:line_style, "
         "analysis_model:session:rois:items:style:marker, "
         "analysis_model:session:rois:items:style:marker_size, "
         "analysis_model:session:rois:items:style:visible, "
+        "analysis_model:session:visibility_order.items, "
         "analysis_model:session:rois:items:style:alpha, "
         "analysis_model:session:scale:metres_per_pixel, "
         "analysis_model:session:scale:value, "
         "analysis_model:session:scale:unit, "
         "analysis_model:session:ring:gap_px, "
         "analysis_model:session:ring:thickness_px, "
+        "analysis_model:session:ring:inside_percent, "
         "analysis_model:session:ring:show_on_canvas, "
         "analysis_model:session:ball:enabled, "
         "analysis_model:session:ball:radius_px, "
@@ -798,16 +1239,18 @@ class RoiAnalysisController(HasTraits):
         self._heater_fingerprint = None
         self._ensure_heater_samples()
 
-    @observe("analysis_model:plot_visible")
-    def _on_plot_visibility_changed(self, event):
+    @observe("analysis_model:plot_visible, analysis_model:session:figure:view_mode")
+    def _on_heater_demand_changed(self, event):
         self._ensure_heater_samples()
 
     def _heater_samples_wanted(self):
-        """Only a shown plot on the temperature axis reads the samples
-        (the CSV export loads its own), so nothing else pays for them."""
-        return (
-            self.analysis_model.plot_visible
-            and self.session.figure.x_axis == "temperature"
+        """Only a shown plot on the temperature axis, or showing the
+        Temperature over time view, reads the samples (the CSV export
+        loads its own), so nothing else pays for them."""
+        figure = self.session.figure
+
+        return self.analysis_model.plot_visible and (
+            figure.x_axis == "temperature" or figure.view_mode == "temperature"
         )
 
     def _has_heater_inputs(self):
@@ -891,9 +1334,10 @@ class RoiAnalysisController(HasTraits):
             result.match_count,
         )
         session.heater_samples = result.samples
-        self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors_in(
-            result.samples
-        )
+        sensors = sensors_in(result.samples)
+        self.analysis_model.heater_sensor_choices = [HEATER_SENSOR_MEAN] + sensors
+        # A row per sensor the log carries, new ones styled by default.
+        session.temperature_style.show_sensors(sensors)
         logger.info(
             f"Heater log: {len(result.samples)} samples from "
             f"{result.fallback or result.folder}"
@@ -917,16 +1361,24 @@ class RoiAnalysisController(HasTraits):
     #: Guards the checkbox observer while the mirror below writes it.
     _syncing_excluded = Bool(False)
 
-    @observe("analysis_model:current_image_path, analysis_model:session")
+    @observe(
+        "analysis_model:current_image_path, analysis_model:session, "
+        "analysis_model:session:excluded_images, "
+        "analysis_model:session:area_fit_excluded_images"
+    )
     def _mirror_current_image_excluded(self, event):
-        """Point the checkbox at the displayed image's exclusion state
-        (image navigation and session swaps both land here)."""
+        """Point the checkboxes at the displayed image's exclusion and
+        area-fit exclusion states (image navigation, session swaps and
+        bulk changes to the marks all land here)."""
         current = self.analysis_model.current_image_path
         self._syncing_excluded = True
         try:
             self.analysis_model.current_image_excluded = bool(
                 current
             ) and self.session.is_excluded(current)
+            self.analysis_model.current_image_area_fit_excluded = bool(
+                current
+            ) and self.session.is_area_fit_excluded(current)
         finally:
             self._syncing_excluded = False
 
@@ -955,6 +1407,75 @@ class RoiAnalysisController(HasTraits):
         self._save_config()
         self._restart_batch_if_running()
 
+    @observe("analysis_model:toggle_exclusion_request")
+    def _toggle_requested_exclusion(self, event):
+        """A plot point was clicked: show its image, then flip that
+        image's exclusion through the checkbox — the one path that
+        marks, saves and re-runs — so the sidebar shows what changed."""
+        if not self._show_clicked_image(event.new):
+            return
+
+        self.analysis_model.current_image_excluded = (
+            not self.analysis_model.current_image_excluded
+        )
+
+    @observe("analysis_model:toggle_area_fit_exclusion_request")
+    def _toggle_requested_area_fit_exclusion(self, event):
+        """A plot point was Shift+clicked: show its image, then flip
+        whether the area fit leaves it out, through its checkbox."""
+        if not self._show_clicked_image(event.new):
+            return
+
+        self.analysis_model.current_image_area_fit_excluded = (
+            not self.analysis_model.current_image_area_fit_excluded
+        )
+
+    def _show_clicked_image(self, path):
+        """Show the image of a clicked plot point; whether it is now the
+        displayed one. The mirrors above point the checkboxes at the
+        shown image, and one that is not the clicked one must not be
+        toggled instead."""
+        self.viewer_model.current_path = path
+
+        if self.analysis_model.current_image_path != path:
+            logger.warning(f"Cannot show {path} to toggle its exclusion")
+
+            return False
+
+        return True
+
+    @observe("analysis_model:current_image_area_fit_excluded")
+    def _on_current_image_area_fit_excluded(self, event):
+        """The area-fit checkbox was toggled by the user: mark/unmark
+        the displayed image for the area fit."""
+        current = self.analysis_model.current_image_path
+
+        if self._syncing_excluded or not current:
+            return
+
+        name = Path(current).name
+        marks = list(self.session.area_fit_excluded_images)
+
+        if event.new and name not in marks:
+            self._set_area_fit_excluded_images(marks + [name])
+        elif not event.new and name in marks:
+            self._set_area_fit_excluded_images(
+                [entry for entry in marks if entry != name]
+            )
+
+    @observe("analysis_model:include_all_in_area_fit_button")
+    def _include_every_image_in_area_fit(self, event):
+        if self.session.area_fit_excluded_images:
+            self._set_area_fit_excluded_images([])
+
+    def _set_area_fit_excluded_images(self, names):
+        """Replace the area-fit exclusion marks with ``names`` — their
+        one write path. The stats are untouched, so a running batch
+        carries on; stats_revision is what the plot redraws on."""
+        self.session.area_fit_excluded_images = names
+        self.session.stats_revision += 1
+        self._save_config()
+
     @observe("analysis_model:exclude_before_button")
     def _exclude_all_before(self, event):
         self._set_excluded_relative(before=True, excluded=True)
@@ -971,6 +1492,11 @@ class RoiAnalysisController(HasTraits):
     def _include_all_after(self, event):
         self._set_excluded_relative(before=False, excluded=False)
 
+    @observe("analysis_model:include_all_button")
+    def _include_every_image(self, event):
+        if self.session.excluded_images:
+            self._set_excluded_images([])
+
     def _set_excluded_relative(self, before, excluded):
         """Mark or unmark every image before/after the displayed one
         (exclusive) as excluded — the checkbox applied in bulk."""
@@ -986,12 +1512,19 @@ class RoiAnalysisController(HasTraits):
             added = [name for name in names if name not in current_marks]
             if not added:
                 return
-            self.session.excluded_images = current_marks + added
+            self._set_excluded_images(current_marks + added)
         else:
             kept = [name for name in current_marks if name not in names]
             if len(kept) == len(current_marks):
                 return
-            self.session.excluded_images = kept
+            self._set_excluded_images(kept)
+
+    def _set_excluded_images(self, names):
+        """Replace the exclusion marks with ``names`` and re-run what
+        consumes the series — the bulk buttons' one write path."""
+        self.session.excluded_images = names
+        # The plot derives its series from the (now different)
+        # included set; stats_revision is what it redraws on.
         self.session.stats_revision += 1
         self._save_config()
         self._restart_batch_if_running()
@@ -1010,20 +1543,24 @@ class RoiAnalysisController(HasTraits):
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
         self._load_heater_samples_now()
-        temperatures = (
-            temperature_at(
-                session.heater_samples,
-                session.figure.heater_sensor,
-                times,
-                session.figure.heater_window_ms / 1000.0,
+
+        if session.heater_samples:
+            temperatures, _uninvertible = calibrated_temperatures(
+                session.figure,
+                temperature_at(
+                    session.heater_samples,
+                    session.figure.heater_sensor,
+                    times,
+                    session.figure.heater_window_ms / 1000.0,
+                ),
             )
-            if session.heater_samples
-            else [math.nan] * len(times)
-        )
+        else:
+            temperatures = [math.nan] * len(times)
+
         rows = []
         for path, capture_time, temperature in zip(paths, times, temperatures):
             stats_by_roi = {}
-            for roi in session.rois:
+            for roi in session.positive_rois:
                 stats = session.stats.get(session.cache_key(path, roi, stat_cache))
                 if stats is not None:
                     stats_by_roi[roi.roi_id] = stats
@@ -1054,7 +1591,7 @@ class RoiAnalysisController(HasTraits):
             write_intensity_csv(
                 csv_path,
                 rows,
-                session.rois,
+                session.positive_rois,
                 pixel_area(scale.metres_per_pixel, scale.unit),
                 area_unit(scale.metres_per_pixel, scale.unit),
                 session.plot_stat if session.figure.normalize else None,
@@ -1062,6 +1599,8 @@ class RoiAnalysisController(HasTraits):
                 outlier_flags,
                 session.figure.heater_sensor if session.heater_samples else "",
                 self.viewer_model.filter_label.lower() or "filter",
+                session.figure.area_fit_method,
+                [session.is_area_fit_excluded(path) for path in paths],
             )
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")

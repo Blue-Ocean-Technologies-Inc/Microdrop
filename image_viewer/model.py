@@ -36,6 +36,9 @@ from traits.api import (
 )
 from traits.observation.api import parse
 
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT
+
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
@@ -47,6 +50,7 @@ from .consts import (
     PERSISTED_VIEWER_TRAITS,
 )
 from .discovery import NO_IMAGE_GROUP, UNGROUPED_BURST, merge_image_groups
+from .metadata import NO_METADATA_TEXT
 from .preferences import ImageViewerPreferences
 
 #: The image filter's no-filter choice.
@@ -68,6 +72,14 @@ UINT16_MAX = 65535.0
 DEFAULT_WINDOW_MAX = 10000.0
 
 
+def matches_experiment_filter(name, filter_text):
+    """Whether every whitespace-separated term of ``filter_text`` occurs in
+    ``name``, ignoring case; an empty filter matches every name."""
+    name = name.casefold()
+
+    return all(term in name for term in filter_text.casefold().split())
+
+
 class ImageViewerModel(HasTraits):
     """State for the captured-image viewer (16-bit aware)."""
 
@@ -81,18 +93,25 @@ class ImageViewerModel(HasTraits):
     browsed_directory = Str()
 
     #: Section collapse toggles (controls-pane parity; not persisted).
-    #: Experiments, Analysis Exclusion and Contrast start collapsed — the
-    #: occasional affordances, not the everyday view.
+    #: Experiments, Analysis Exclusion, Contrast and Metadata start
+    #: collapsed — the occasional affordances, not the everyday view (and
+    #: the portable's 800 px panel can't spare the sidebar height).
     show_experiments = Bool(False)
     show_bursts = Bool(True)
     show_images = Bool(True)
     show_exclusion = Bool(False)
     show_contrast = Bool(False)
+    show_metadata = Bool(False)
 
     #: The advanced-settings rows under the image (background ring,
     #: rolling ball, and the AI detection options) collapse under one
     #: "Advanced" chevron to reclaim vertical space.
     show_advanced_settings = Bool(True)
+
+    #: The Advanced block's two sub-sections each collapse on their own
+    #: chevron too; both start open, like the block itself.
+    show_measurement_settings = Bool(True)
+    show_ai_settings = Bool(True)
 
     #: One wheel notch's zoom factor on the image canvas (zooming out
     #: uses the reciprocal) — the Advanced group's sensitivity setting.
@@ -101,6 +120,12 @@ class ImageViewerModel(HasTraits):
     #: Master toggle: the whole selector sidebar collapses to the left
     #: edge (device-viewer chevron parity).
     show_sidebar = Bool(True)
+
+    #: The full-height chevron button that flips ``show_sidebar``.
+    toggle_sidebar_button = Button()
+
+    #: The chevron glyph, pointing the way the sidebar will move.
+    sidebar_glyph = Property(Str, observe="show_sidebar")
 
     #: Experiment folders that hold captures: ``[(name, captures_path), ...]``
     #: oldest first (discovery.discover_experiments). Selecting one repoints
@@ -111,6 +136,19 @@ class ImageViewerModel(HasTraits):
     experiment_index = Int(0)
     experiment_number = Property(Int, observe="experiment_index")
     max_experiment_number = Property(Int, observe="experiments.items")
+
+    #: Text typed into the Experiment search box; empty shows every
+    #: experiment.
+    experiment_filter = Str()
+
+    #: The Experiment dropdown's choices: the names matching
+    #: ``experiment_filter``, oldest first. The selected experiment stays
+    #: listed even when it does not match — the combo would otherwise show
+    #: some other row while holding it — so typing never moves the selection.
+    filtered_experiment_names = Property(
+        List(Str),
+        observe=["experiments.items", "experiment_filter", "selected_experiment"],
+    )
 
     #: Discovered captures by Image Group (the type subfolder an image sits
     #: in): ``{image_group: [(session, [paths...]), ...]}``
@@ -174,6 +212,10 @@ class ImageViewerModel(HasTraits):
     #: the dock pane's title).
     info_text = Str()
 
+    #: The displayed image's PNG text chunks (e.g. a capture's settings),
+    #: as rich text for the Metadata section and its pop-out window.
+    metadata_text = Str(NO_METADATA_TEXT)
+
     #: "(x, y) = value" readout under the cursor (true stored values).
     pixel_text = Str()
 
@@ -235,6 +277,13 @@ class ImageViewerModel(HasTraits):
     zoom_out_button = Button()
     previous_button = Button()
     next_button = Button()
+    #: Step the experiment seek one experiment back / forward.
+    previous_experiment_button = Button()
+    next_experiment_button = Button()
+    #: Move the selected experiment's folder to the Recycle Bin (Trash).
+    delete_experiment_button = Button()
+    #: Open the metadata in its own window (it follows the shown image).
+    metadata_popout_button = Button()
 
     #: Persistence backing for the display window (two-way: edits push to
     #: preferences, external preference changes pull back) — the same
@@ -243,6 +292,28 @@ class ImageViewerModel(HasTraits):
 
     #: ROI intensity-analysis state (shared with the plot pane).
     roi_analysis = Instance(RoiAnalysisModel)
+
+    #: How many ROIs were deleted from the displayed image alone —
+    #: mirrored here by RoiAnalysisController, as the sidebar's
+    #: visible_when does not see changes nested in roi_analysis.
+    absent_roi_count = Int(0)
+
+    #: Whether any of them was deleted as part of a range of images —
+    #: restoring it then clears the range, bringing it back on those
+    #: images too.
+    absent_roi_ranged = Bool(False)
+
+    #: The sidebar's line about them.
+    absent_roi_text = Property(Str, observe="absent_roi_count, absent_roi_ranged")
+
+    def _get_absent_roi_text(self):
+        noun = "ROI" if self.absent_roi_count == 1 else "ROIs"
+        text = f"{self.absent_roi_count} {noun} removed on this image"
+
+        if self.absent_roi_ranged:
+            text += " (Restore also clears their ranges of images)"
+
+        return text
 
     #: Guards the two-way preferences sync against echoing its own writes
     #: (declared trait, so the pull observer can read it in any ordering).
@@ -305,6 +376,14 @@ class ImageViewerModel(HasTraits):
 
     def _get_experiment_names(self):
         return [name for name, _captures in self.experiments]
+
+    def _get_filtered_experiment_names(self):
+        return [
+            name
+            for name in self.experiment_names
+            if name == self.selected_experiment
+            or matches_experiment_filter(name, self.experiment_filter)
+        ]
 
     def _get_experiment_number(self):
         return self.experiment_index + 1
@@ -373,6 +452,9 @@ class ImageViewerModel(HasTraits):
             if name == burst_name:
                 return list(paths)
         return []
+
+    def _get_sidebar_glyph(self):
+        return ICON_CHEVRON_LEFT if self.show_sidebar else ICON_CHEVRON_RIGHT
 
     def _get_filter_label(self):
         return self.image_filter.name if self.image_filter is not None else ""

@@ -23,23 +23,31 @@ LiveTaskExtensionsController when TASK_EXTENSIONS change, and topic routing by
 the message router when ACTOR_TOPIC_ROUTES change — this manager never touches
 the view layer.
 
-Startup-loaded groups (the built-ins are also registered in plugin_consts.py)
-are ADOPTED at launch: their live instances are attached to the group so a
-toggle-off manages exactly what this process loaded. ``active_specs`` remembers
-which halves of a group live in THIS process (frontend-only / backend-only
-runs), so a later re-enable brings back only those.
+Groups whose plugins were already composed at startup (e.g. listed in a
+custom run script) are ADOPTED at launch: their live instances are attached
+to the group so a toggle-off manages exactly what this process loaded.
+``active_specs`` remembers which halves of a group live in THIS process
+(frontend-only / backend-only runs), so a later re-enable brings back only
+those.
 """
+
+# Standard library imports.
 import importlib
 
+# Enthought library imports.
 from apptools.preferences.api import get_default_preferences
 from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
 
+# Local imports.
 from . import entry_point_discovery
 from .consts import BUILTIN_PLUGIN_GROUPS, GROUP_ENABLED_PREFERENCES_PATH
 from .i_plugin_group_manager import IPluginGroupManager
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -91,6 +99,9 @@ class PluginGroup(HasTraits):
     #: application preferences file under GROUP_ENABLED_PREFERENCES_PATH
     #: (app_globals is NOT durable: its Redis dies with the app).
     enabled_key = Str()
+    #: Whether the group loads at startup when the user has never toggled it
+    #: (no flag persisted under enabled_key yet).
+    default_enabled = Bool(True)
     #: Optional topic published (empty message) right after a successful
     #: enable — re-kicks the device's connection search, since the plugin's
     #: own application_initialized probe never fires on a hot enable.
@@ -120,11 +131,11 @@ class PluginGroupManager(HasTraits):
         microdrop.plugins entry-point manifest. Manifest discovery reads TOML
         package data only (no plugin imports), so a broken installed plugin
         can't break startup; last writer wins on a name collision."""
-        groups = {
-            spec["name"]: PluginGroup(**spec) for spec in BUILTIN_PLUGIN_GROUPS
-        }
-        for manifest, dist_name in (
-                entry_point_discovery.discover_entry_point_manifests()):
+        groups = {spec["name"]: PluginGroup(**spec) for spec in BUILTIN_PLUGIN_GROUPS}
+        for (
+            manifest,
+            dist_name,
+        ) in entry_point_discovery.discover_entry_point_manifests():
             self._add_manifest_groups(manifest, dist_name=dist_name, into=groups)
         return groups
 
@@ -138,6 +149,7 @@ class PluginGroupManager(HasTraits):
                 label=spec.label,
                 plugin_specs=list(spec.plugins),
                 enabled_key=spec.enabled_key,
+                default_enabled=spec.default_enabled,
                 post_enable_publish_topic=spec.post_enable_publish_topic,
                 manifest_name=manifest.name,
                 manifest_label=manifest.label,
@@ -154,7 +166,8 @@ class PluginGroupManager(HasTraits):
             if existing is not None and existing.loaded:
                 raise RuntimeError(
                     f"group '{spec.name}' is currently enabled; disable it "
-                    f"before reinstalling")
+                    f"before reinstalling"
+                )
         self._add_manifest_groups(manifest, dist_name=dist_name)
 
     #: The app's own distribution — its plugins are bundled (disable-only).
@@ -176,9 +189,12 @@ class PluginGroupManager(HasTraits):
                 continue
             entry = out.get(group.manifest_name)
             if entry is None:
-                entry = (group.manifest_name,
-                         group.manifest_label or group.manifest_name,
-                         group.dist_name, [])
+                entry = (
+                    group.manifest_name,
+                    group.manifest_label or group.manifest_name,
+                    group.dist_name,
+                    [],
+                )
                 out[group.manifest_name] = entry
             entry[3].append(group.name)
         return list(out.values())
@@ -186,8 +202,9 @@ class PluginGroupManager(HasTraits):
     def deregister_plugin(self, manifest_name):
         """Drop every group owned by ``manifest_name`` from the registry and
         clear its persisted enabled flag. Used by uninstall."""
-        for name in [n for n, g in self.groups.items()
-                     if g.manifest_name == manifest_name]:
+        for name in [
+            n for n, g in self.groups.items() if g.manifest_name == manifest_name
+        ]:
             group = self.groups.pop(name)
             if group.enabled_key:
                 try:
@@ -222,25 +239,32 @@ class PluginGroupManager(HasTraits):
                 logger.info(
                     f"adopt: group '{group.name}' loaded from startup "
                     f"({len(instances)}/{len(group.plugin_specs)} plugins in "
-                    f"this process)")
+                    f"this process)"
+                )
 
     def restore_persisted(self, application):
-        """Reconcile every group to its persisted enabled flag (default:
-        enabled, so out of the box nothing changes). Runs after adoption, so a
-        persisted 'off' unloads the startup-composed group."""
+        """Reconcile every group to its persisted enabled flag, falling back
+        to the group's ``default_enabled`` when the user never toggled it.
+        Runs after adoption, so a persisted 'off' unloads the
+        startup-composed group."""
         try:
             preferences = get_default_preferences()
         except Exception as e:
             logger.warning(f"restore: preferences unavailable: {e}")
             preferences = None
+
         desired = {}
+
         for name, group in self.groups.items():
-            enabled = True
+            enabled = group.default_enabled
+
             if group.enabled_key and preferences is not None:
-                raw = preferences.get(self._flag_path(group), "True")
+                raw = preferences.get(self._flag_path(group), str(enabled))
                 # Preferences stores strings — bool("False") is True, parse.
                 enabled = str(raw).strip().lower() != "false"
+
             desired[name] = enabled
+
         self.apply(application, desired)
 
     # --- public API ----------------------------------------------------
@@ -259,9 +283,11 @@ class PluginGroupManager(HasTraits):
             if desired.get(group_name) and not self.is_loaded(group_name):
                 self.enable(application, group_name)
         for group_name in reversed(names):
-            if (group_name in desired
-                    and not desired[group_name]
-                    and self.is_loaded(group_name)):
+            if (
+                group_name in desired
+                and not desired[group_name]
+                and self.is_loaded(group_name)
+            ):
                 self.disable(application, group_name)
 
     def enable(self, application, group_name):
@@ -288,7 +314,8 @@ class PluginGroupManager(HasTraits):
         except Exception:
             logger.exception(
                 f"enable: could not import plugin classes for '{group_name}'; "
-                f"group not loaded")
+                f"group not loaded"
+            )
             return
 
         registry = application.service_registry
@@ -313,8 +340,8 @@ class PluginGroupManager(HasTraits):
                 logger.info(f"enable: started {plugin.id}")
             except Exception:
                 logger.exception(
-                    f"enable: failed to load "
-                    f"{getattr(factory, '__name__', factory)}")
+                    f"enable: failed to load {getattr(factory, '__name__', factory)}"
+                )
 
         group.active_specs = list(specs)
         group.service_ids = sorted(set(registry._services.keys()) - before)
@@ -326,7 +353,8 @@ class PluginGroupManager(HasTraits):
                 logger.info(f"enable: published {group.post_enable_publish_topic}")
             except Exception:
                 logger.exception(
-                    f"enable: failed to publish {group.post_enable_publish_topic}")
+                    f"enable: failed to publish {group.post_enable_publish_topic}"
+                )
 
         group.loaded = True
         self._persist_flag(group, True)
@@ -363,8 +391,7 @@ class PluginGroupManager(HasTraits):
                 application.unregister_service(service_id)
                 logger.info(f"disable: unregistered service id {service_id}")
             except Exception:
-                logger.exception(
-                    f"disable: unregister_service failed for {service_id}")
+                logger.exception(f"disable: unregister_service failed for {service_id}")
         group.service_ids = []
 
         group.loaded = False

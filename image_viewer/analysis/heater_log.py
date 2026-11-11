@@ -591,6 +591,25 @@ def sensors_in(samples):
     return sorted(names)
 
 
+def sensor_trace(samples, sensor, start_epoch, end_epoch):
+    """(epochs, values): ``sensor``'s readings — every sensor's mean
+    for HEATER_SENSOR_MEAN — in the samples from ``start_epoch`` to
+    ``end_epoch``, in sample order. A sample without it is left out."""
+    epochs, values = [], []
+
+    for epoch, temperatures in samples:
+        if not temperatures or not start_epoch <= epoch <= end_epoch:
+            continue
+
+        value = _sensor_value(temperatures, sensor)
+
+        if value == value:
+            epochs.append(epoch)
+            values.append(value)
+
+    return epochs, values
+
+
 def _sensor_value(temperatures, sensor):
     if sensor == HEATER_SENSOR_MEAN:
         return sum(temperatures.values()) / len(temperatures)

@@ -480,6 +480,52 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
                     row_prefix = prefix + ((node.name, r + 1, reps),)
                 yield (node, row_prefix)
 
+    def iter_run_rows(
+        self, scope_paths: Optional[List[Path]] = None
+    ) -> Iterator[BaseRow]:
+        """Yield each step a run over ``scope_paths`` executes, once, in
+        execution order. Same scope semantics as ``iter_execution_frames``;
+        repetitions are not expanded."""
+        seen_paths = set()
+
+        for row, _rep_chain in self.iter_execution_frames(scope_paths):
+            path = tuple(row.path)
+
+            if path not in seen_paths:
+                seen_paths.add(path)
+                yield row
+
+    def iter_column_values(
+        self, column: IColumn, scope_paths: Optional[List[Path]] = None
+    ) -> Iterator:
+        """Yield ``column``'s cell value on each step a run over
+        ``scope_paths`` executes (see ``iter_run_rows``)."""
+        for row in self.iter_run_rows(scope_paths):
+            yield column.model.get_value(row)
+
+    def unused_column_ids(self, scope_paths: Optional[List[Path]] = None) -> List[str]:
+        """Return the ids of the columns no step of a run over
+        ``scope_paths`` has a value for (``cell_has_value``), in column order.
+
+        Columns are judged by unit id (``Column.id``), so a compound column
+        counts as used when any of its field cells holds a value. An empty
+        scope uses no column.
+        """
+        used_ids = {
+            column.id
+            for column in self.columns
+            if any(
+                column.model.cell_has_value(value)
+                for value in self.iter_column_values(column, scope_paths)
+            )
+        }
+
+        return list(
+            dict.fromkeys(
+                column.id for column in self.columns if column.id not in used_ids
+            )
+        )
+
     # --- slicing (pandas facade) ---
 
     @property

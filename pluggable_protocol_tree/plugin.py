@@ -24,6 +24,7 @@ from traits.api import Either, Instance, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
@@ -64,8 +65,10 @@ from pluggable_protocol_tree.builtins.type_column import make_type_column
 from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT,
     EXECUTOR_LISTENER_NAME,
+    EXPERIMENTS_MENU_ID,
     PKG,
     PROTOCOL_COLUMNS,
+    PROTOCOL_MENU_ID,
     PROTOCOL_QUICK_ACTIONS,
     PKG_name,
 )
@@ -155,7 +158,7 @@ class PluggableProtocolTreePlugin(Plugin):
 
     def _contributed_task_extensions_default(self):
         from pluggable_protocol_tree.menus import (
-            new_experiment_factory,
+            experiments_menu_factory,
             protocol_menu_factory,
         )
 
@@ -164,15 +167,18 @@ class PluggableProtocolTreePlugin(Plugin):
                 task_id=self.task_id_to_contribute_view,
                 dock_pane_factories=[self._make_dock_pane],
                 actions=[
+                    # Pyface resolves after= against the additions' own ids,
+                    # not their menus', so each addition repeats its menu id.
                     SchemaAddition(
-                        factory=new_experiment_factory,
-                        path="MenuBar/File",
-                        absolute_position="first",
+                        id=EXPERIMENTS_MENU_ID,
+                        factory=experiments_menu_factory,
+                        path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}",
                     ),
                     SchemaAddition(
+                        id=PROTOCOL_MENU_ID,
                         factory=protocol_menu_factory,
-                        path="MenuBar/File",
-                        before="Exit",
+                        path=f"MenuBar/File/{FILE_MENU_SUBMENUS_GROUP_ID}",
+                        after=EXPERIMENTS_MENU_ID,
                     ),
                 ],
             ),

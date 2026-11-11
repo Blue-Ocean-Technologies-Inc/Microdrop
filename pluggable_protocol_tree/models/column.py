@@ -16,6 +16,9 @@ BaseColumnHandler as-is or override only the hooks they need. Column
 itself is the composite that traits-wires model/view/handler together.
 """
 
+# Standard library imports.
+from collections.abc import Sized
+
 # Enthought library imports.
 from pyface.qt.QtCore import Signal
 from traits.api import (
@@ -61,6 +64,24 @@ class BaseColumnModel(HasTraits):
 
     def set_value(self, row, value):
         setattr(row, self.col_id, value)
+        return True
+
+    def cell_has_value(self, value):
+        """Return whether a cell ``value`` of this column counts as set.
+
+        A cell is empty when it is None, False, or a zero-length container
+        (``""``, ``[]``, ``{}``, ``()``); anything else is a value, 0 and 0.0
+        included, since numeric columns legitimately hold zero. A run skips
+        the protocol-level hooks of a column none of its steps has a value
+        for (``RowManager.unused_column_ids``). Override where a column has
+        its own notion of empty.
+        """
+        if value is None or value is False:
+            return False
+
+        if isinstance(value, Sized):
+            return len(value) > 0
+
         return True
 
     def serialize(self, value):

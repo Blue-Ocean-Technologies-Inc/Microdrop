@@ -32,11 +32,12 @@ from .consts import (
     AI_CANDIDATE_COLOR,
     AI_CANDIDATE_DISCARDED_OPACITY,
     AI_CANDIDATE_PEN_WIDTH_PX,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     MIN_POLYGON_POINTS,
     MIN_ROI_SIZE_PX,
     POLYGON_CLOSE_DISTANCE_PX,
 )
-from .roi_compute import ring_contours
+from .roi_compute import inset_contours, ring_contours
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
     BallReferenceItem,
@@ -78,6 +79,9 @@ CAPSULE_DRAFT_RADIUS_FRACTION = 0.25
 #: invisible — it has to sit above the image and below the shapes.
 RING_Z = 0.5
 ROI_Z = 1.0
+#: Negative masks stack above the ROI outlines they cut into, so the
+#: hatch is never hidden under (and wins the click over) an ROI edge.
+NEGATIVE_Z = 1.2
 #: Above the ROI shapes, so a candidate outline is never hidden under
 #: (and always wins the click on) one it happens to overlap.
 CANDIDATE_Z = 1.5
@@ -121,6 +125,22 @@ def _candidate_ellipse_path(geometry):
     return transform.map(path)
 
 
+def _contours_path(contours):
+    """One path of closed subpaths through ``contours`` ((N, 2)
+    image-pixel arrays, as roi_compute traces them)."""
+    path = QPainterPath()
+
+    for contour in contours:
+        path.moveTo(contour[0][0], contour[0][1])
+
+        for x, y in contour[1:]:
+            path.lineTo(x, y)
+
+        path.closeSubpath()
+
+    return path
+
+
 def _candidate_path(kind, geometry):
     if kind == "polygon":
         return _candidate_polygon_path(geometry)
@@ -141,7 +161,8 @@ class RoiCanvasLayer:
         self._draft_points = []  # contour vertices placed so far
         self._press_point = None
         self._ring_items = []
-        self._ring = (0, 0, False)  # gap, thickness, visible
+        # gap, thickness, visible, measured share
+        self._ring = (0, 0, False, MEASURE_INSIDE_PERCENT_DEFAULT)
         self._candidate_items = {}  # index -> item; never a session ROI
         self.mode = "pan"
         self.on_roi_created = lambda kind, geometry: None
@@ -248,62 +269,100 @@ class RoiCanvasLayer:
         self.on_candidate_clicked(index)
         return True
 
-    def set_ring(self, gap_px, thickness_px, visible):
-        """The background annulus to draw around each ROI, from the
-        session that also measures with it."""
-        self._ring = (int(gap_px), int(thickness_px), bool(visible))
+    def set_ring(
+        self,
+        gap_px,
+        thickness_px,
+        visible,
+        inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
+    ):
+        """The background annulus to draw around each ROI, and the share
+        of each ROI measured inside it, from the session that also
+        measures with them."""
+        self._ring = (int(gap_px), int(thickness_px), bool(visible), inside_percent)
 
     def _clear_rings(self):
         for item in self._ring_items:
             self._scene.removeItem(item)
         self._ring_items = []
 
-    def _draw_rings(self, effective):
+    def _add_ring_item(self, path, colour, fill=None):
+        """A non-interactive dashed outline of ``path`` in ``colour``,
+        filled with ``fill`` when given, stacked with the rings."""
+        ring_item = QGraphicsPathItem(path)
+        ring_item.setPen(QPen(colour, 0, RING_DASH))
+
+        if fill is not None:
+            ring_item.setBrush(QBrush(fill))
+
+        ring_item.setZValue(RING_Z)
+        ring_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._scene.addItem(ring_item)
+        self._ring_items.append(ring_item)
+
+    def _draw_rings(self, effective, negatives):
         """One dashed outline per ROI, traced from the very mask the
-        background is averaged over — drawn on sync, not on every
+        background is averaged over — and, when only part of each ROI
+        is measured, one more around that part, traced from the mask
+        its intensity is averaged over. Drawn on sync, not on every
         repaint, and never interactive."""
         self._clear_rings()
-        gap_px, thickness_px, visible = self._ring
+        gap_px, thickness_px, visible, inside_percent = self._ring
         bounds = self._scene.sceneRect()
+
         if not visible or bounds.isEmpty():
             return
+
         shape = (int(bounds.height()), int(bounds.width()))
-        for roi_id, name, kind, geometry in effective:
+
+        for roi_id, name, kind, geometry, is_negative in effective:
             item = self._items.get(roi_id)
-            if item is None:
+
+            # A hidden ROI takes its ring with it.
+            if item is None or is_negative or not item.isVisible():
                 continue
-            path = QPainterPath()
-            for contour in ring_contours(shape, kind, geometry, gap_px, thickness_px):
-                path.moveTo(contour[0][0], contour[0][1])
-                for x, y in contour[1:]:
-                    path.lineTo(x, y)
-                path.closeSubpath()
-            if path.isEmpty():
-                continue
-            # Odd-even so the hole in the annulus stays a hole.
-            path.setFillRule(Qt.FillRule.OddEvenFill)
+
             colour = QColor(item.pen().color())
             fill = QColor(colour)
             colour.setAlpha(RING_ALPHA)
             fill.setAlpha(RING_FILL_ALPHA)
-            ring_item = QGraphicsPathItem(path)
-            ring_item.setPen(QPen(colour, 0, RING_DASH))
-            ring_item.setBrush(QBrush(fill))
-            ring_item.setZValue(RING_Z)
-            ring_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self._scene.addItem(ring_item)
-            self._ring_items.append(ring_item)
 
-    def sync(self, effective, selected_roi_id):
+            ring_path = _contours_path(
+                ring_contours(shape, kind, geometry, gap_px, thickness_px, negatives)
+            )
+
+            if not ring_path.isEmpty():
+                # Odd-even so the hole in the annulus stays a hole.
+                ring_path.setFillRule(Qt.FillRule.OddEvenFill)
+                self._add_ring_item(ring_path, colour, fill)
+
+            if inside_percent < MEASURE_INSIDE_PERCENT_DEFAULT:
+                # Outline only: a fill would tint the very pixels measured.
+                inset_path = _contours_path(
+                    inset_contours(shape, kind, geometry, inside_percent)
+                )
+
+                if not inset_path.isEmpty():
+                    self._add_ring_item(inset_path, colour)
+
+    def sync(self, effective, selected_roi_id, hidden_ids=(), negatives=()):
         """Match the items to ``effective`` ([(roi_id, name, kind,
-        geometry), ...] for the SHOWN image) — create, update, drop."""
+        geometry, is_negative), ...] for the SHOWN image) — create,
+        update, drop. Items whose id is in ``hidden_ids`` stay in the
+        scene but are not drawn. The rings are cut by ``negatives``,
+        which must be AnalysisSession.negatives_for() of the shown
+        image, so the drawn ring is the one that is averaged;
+        ``hidden_ids`` cannot stand in for it, as the toolbar's
+        show/hide-ROIs toggle hides every item without changing what is
+        measured."""
         wanted = {
-            roi_id: (name, kind, geometry) for roi_id, name, kind, geometry in effective
+            roi_id: (name, kind, geometry, is_negative)
+            for roi_id, name, kind, geometry, is_negative in effective
         }
         for roi_id in list(self._items):
             if roi_id not in wanted:
                 self._scene.removeItem(self._items.pop(roi_id))
-        for roi_id, (name, kind, geometry) in wanted.items():
+        for roi_id, (name, kind, geometry, is_negative) in wanted.items():
             item = self._items.get(roi_id)
             item_class = ITEM_CLASSES[kind]
             if item is not None and not isinstance(item, item_class):
@@ -312,7 +371,6 @@ class RoiCanvasLayer:
             if item is None:
                 item = item_class(roi_id, name, geometry, self.on_roi_edited)
                 item.set_editable(self.mode == "edit")
-                item.setZValue(ROI_Z)
                 self._scene.addItem(item)
                 self._items[roi_id] = item
             elif not item.is_dragging():
@@ -322,8 +380,13 @@ class RoiCanvasLayer:
                 # rect as a new drift override.
                 item.set_geometry(geometry)
                 item.set_name(name)
+
+            item.set_negative(is_negative)
+            item.setZValue(NEGATIVE_Z if is_negative else ROI_Z)
+            item.setVisible(roi_id not in hidden_ids)
             item.set_selected_style(roi_id == selected_roi_id)
-        self._draw_rings(effective)
+
+        self._draw_rings(effective, negatives)
 
     def clear_items(self):
         self._discard_contour()
@@ -487,12 +550,16 @@ class RoiCanvasLayer:
         self._close_contour()
         return True
 
+    def is_tracing_contour(self):
+        """Whether a contour has vertices placed and is not yet closed."""
+        return self.mode == "draw_polygon" and bool(self._draft_points)
+
     def key_press(self, key):
         """While tracing a contour: Enter closes it, Escape discards it,
         Backspace takes back the last vertex. Otherwise Escape puts an
         armed draw tool away — so a half-drawn contour costs two
         Escapes, the first for the trace and the second for the tool."""
-        if self.mode == "draw_polygon" and self._draft_points:
+        if self.is_tracing_contour():
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self._close_contour()
             elif key == Qt.Key.Key_Escape:

@@ -15,6 +15,9 @@ from apptools.preferences.api import IPreferences
 from pyface.undo.api import ICommandStack
 from traits.api import HasTraits, Instance
 
+# Local imports.
+from .i_electrode_stepping import IElectrodeStepping
+
 
 class LayerContext(HasTraits):
     """The parts of a live device viewer pane a layer may use.
@@ -44,6 +47,7 @@ class LayerContext(HasTraits):
     #: pane, so a layer observes this trait rather than reading it once.
     status_bar_manager = Instance("pyface.action.api.StatusBarManager")
 
-    #: The electrode cursor shared by arrow keys and the gamepad. Rebuilt
-    #: for every device and replaced here before ``on_device_loaded``.
-    stepping = Instance(HasTraits)
+    #: The electrode cursor shared by the arrow keys and the layers that
+    #: step electrodes (the gamepad). Rebuilt for every device and replaced
+    #: here before ``on_device_loaded``.
+    stepping = Instance(IElectrodeStepping)

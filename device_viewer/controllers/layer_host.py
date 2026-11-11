@@ -16,6 +16,7 @@ from pyface.qt.QtWidgets import QScrollArea
 from traits.api import Any, Dict, HasTraits, Instance, List, Str, observe
 
 # Local imports.
+from ..consts import LAYER_CONTRACT_VERSION
 from ..interfaces.descriptors import SidebarSection
 from ..interfaces.i_device_viewer_layer import IDeviceViewerLayer
 from ..interfaces.layer_context import LayerContext
@@ -161,6 +162,8 @@ class LayerHost(HasTraits):
 
     def _attach(self, layer):
         """Mount one layer; return whether it is now attached."""
+        self._warn_on_contract_mismatch(layer)
+
         try:
             layer.attach(self.context)
         except Exception:
@@ -318,6 +321,20 @@ class LayerHost(HasTraits):
     @staticmethod
     def _owned(owners, layer):
         return [key for key, owner in owners.items() if owner is layer]
+
+    @staticmethod
+    def _warn_on_contract_mismatch(layer):
+        """Log a layer built against another contract; it mounts regardless."""
+        if layer.contract_version == LAYER_CONTRACT_VERSION:
+            return
+
+        built_against = layer.contract_version or "an undeclared version"
+
+        logger.warning(
+            f"Device viewer layer {layer.id!r} was built against layer contract "
+            f"{built_against}; this Microdrop provides {LAYER_CONTRACT_VERSION}. "
+            f"Mounting it anyway."
+        )
 
     @staticmethod
     def _call(target, hook, *args):

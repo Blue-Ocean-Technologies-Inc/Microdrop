@@ -47,7 +47,7 @@ from .consts import (
     AI_NORMALIZE_HIGH_PERCENTILE,
     AI_NORMALIZE_LOW_PERCENTILE,
 )
-from .roi_geometry import normalize
+from .roi_geometry import ellipse_as, normalize
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -211,12 +211,15 @@ class Candidate(HasTraits):
             return 0.0
         return self.ellipse[2] + self.ellipse[3]
 
-    def geometry_for(self, kind):
-        """(kind, geometry) in canonical plugin form, via
-        ``roi_geometry.normalize``."""
+    def geometry_for(self, kind, like=()):
+        """(kind, geometry) in canonical plugin form: the outline for a
+        polygon, the fitted ellipse for an ellipse, and that ellipse
+        mapped onto a box or capsule (``roi_geometry.ellipse_as``, which
+        keeps what the ellipse cannot supply from ``like``)."""
         if kind == "polygon":
             return normalize("polygon", list(self.polygon))
-        return normalize("ellipse", list(self.ellipse))
+
+        return kind, ellipse_as(kind, list(self.ellipse), like)
 
     def passes(self, min_votes, min_size, max_size):
         """Whether this candidate survives significance filtering.

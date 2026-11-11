@@ -9,19 +9,21 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import HasTraits, Instance, Str
+from traits.api import HasTraits, Instance, Str, provides
 
 # Microdrop package imports.
+from device_viewer.interfaces.i_electrode_stepping import IElectrodeStepping
 from device_viewer.models.main_model import DeviceViewMainModel
 
 
+@provides(IElectrodeStepping)
 class ElectrodeSteppingService(HasTraits):
     """Move, grow, shrink, and split the actuated electrodes by direction.
 
-    Qt-free: the keyboard arrows and the gamepad D-pad both drive it, and it
-    only reads and writes the shared device-view model. One instance is
-    shared per loaded device so the split session and the electrode cursor
-    are the same whichever input moved them last.
+    Qt-free: the keyboard arrows and layers such as the gamepad plugin's
+    drive it, and it only reads and writes the shared device-view model.
+    One instance is shared per loaded device so the split session and the
+    electrode cursor are the same whichever input moved them last.
     """
 
     #: Device view Model
@@ -102,7 +104,7 @@ class ElectrodeSteppingService(HasTraits):
             return (0.0, 1.0)
         raise ValueError(f"Unknown direction: {direction}")
 
-    def _neighbor_in_direction(self, electrode_id: str, direction: str) -> str | None:
+    def neighbor_in_direction(self, electrode_id: str, direction: str) -> str | None:
         """
         Pick the "best" neighbor in the requested direction using electrode centroid
         geometry. Returns None if no neighbor is reasonably in that direction.
@@ -161,7 +163,7 @@ class ElectrodeSteppingService(HasTraits):
         new_ids: set[str] = set()
         moved_any = False
         for eid in active_ids:
-            nid = self._neighbor_in_direction(eid, direction)
+            nid = self.neighbor_in_direction(eid, direction)
             if nid is None:
                 new_ids.add(eid)
             else:
@@ -193,7 +195,7 @@ class ElectrodeSteppingService(HasTraits):
         centers = getattr(svg, "electrode_centers", None) if svg else None
         if not centers:
             base = self.last_electrode_id_visited or next(iter(active_ids))
-            nid = self._neighbor_in_direction(base, direction)
+            nid = self.neighbor_in_direction(base, direction)
             if nid:
                 desired = set(active_ids)
                 desired.add(nid)
@@ -218,7 +220,7 @@ class ElectrodeSteppingService(HasTraits):
 
         additions: set[str] = set()
         for eid in frontier:
-            nid = self._neighbor_in_direction(eid, direction)
+            nid = self.neighbor_in_direction(eid, direction)
             if nid is not None:
                 additions.add(nid)
 
@@ -402,7 +404,7 @@ class ElectrodeSteppingService(HasTraits):
             moved = False
             out: set[str] = set()
             for eid in ids:
-                nid = self._neighbor_in_direction(eid, direction)
+                nid = self.neighbor_in_direction(eid, direction)
                 if nid is None:
                     out.add(eid)
                 else:
@@ -501,8 +503,8 @@ class ElectrodeSteppingService(HasTraits):
                     # Single-electrode case: split into neighbors (both sides)
                     # immediately.
                     center = next(iter(left_ids))
-                    new_left = self._neighbor_in_direction(center, neg_dir) or center
-                    new_right = self._neighbor_in_direction(center, pos_dir) or center
+                    new_left = self.neighbor_in_direction(center, neg_dir) or center
+                    new_right = self.neighbor_in_direction(center, pos_dir) or center
                     left_ids = {new_left}
                     right_ids = {new_right}
                     sess["left_ids"] = left_ids

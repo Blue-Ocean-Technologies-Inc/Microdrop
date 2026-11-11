@@ -32,6 +32,9 @@ from traitsui.api import (
     View,
 )
 
+# Microdrop package imports.
+from template_status_and_controls.droplet_readouts import droplet_readout_items
+
 # Microdrop style imports.
 from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
@@ -66,7 +69,10 @@ from microdrop_utils.traitsui_qt_helpers import (
 # on/off: popped-out while the mechanism is ON (light/fan on, magnet
 # up, pogo down, tray in), sunken/grey while it is off — hence
 # invert_checked on every toggle whose True state is the ON state
-# (tray_out's True is the OFF state, so it maps directly).
+# (tray_out's True is the OFF state, so it maps directly). The tray
+# glyph moves the tray ONLY, leaving the pogo pushpads where they are;
+# clicking the device picture is the full eject/insert macro, which
+# releases and presses the pogo pads around the move.
 #
 # enabled_when sits on each item, not the group: a group-level
 # condition makes TraitsUI wrap the row in its own QWidget whose
@@ -88,7 +94,8 @@ mechanism_toolbar = HGroup(
             on_glyph=ICON_EJECT,
             off_glyph=ICON_INPUT,
             invert_checked=True,
-            tooltip="Pull the chip tray out / push it back in",
+            tooltip="Pull the chip tray out / push it back in — tray only, "
+            "the pogo pads stay where they are",
         ),
         enabled_when="connected",
     ),
@@ -103,11 +110,12 @@ mechanism_toolbar = HGroup(
         enabled_when="connected",
     ),
     UItem(
-        "mcu_fan_state",
+        "fan_state",
         editor=IconToggleEditor(
             on_glyph=ICON_MODE_FAN,
             off_glyph=ICON_MODE_FAN_OFF,
-            tooltip="MCU fan on/off (state is not read back)",
+            tooltip="Fan on/off — which board's fan is set in Preferences "
+            "(state is not read back)",
         ),
         enabled_when="connected",
     ),
@@ -140,7 +148,8 @@ left = VGroup(
                 fixed_size=True,
             ),
             show_label=False,
-            tooltip="Click to eject the tray; click again to bring it back in",
+            tooltip="Click to eject the tray; click again to bring it back in "
+            "(the pogo pads release before the move and press after)",
         ),
     ),
     mechanism_toolbar,
@@ -191,24 +200,31 @@ left = VGroup(
 )
 
 # The actuation essentials stay in sight; everything else lives in
-# the chevron-collapsed groups below.
-grid = VGrid(
+# the chevron-collapsed groups below. Label | value | control rows, with
+# Label items rather than Item labels so the droplet readout row can put
+# its dropdown in the label column.
+grid = VGroup(
+    Label("Voltage", show_label=False),
     # Realtime mode is the HV master enable: with it off the reported
     # amplitude still wanders, but none of it reaches the pogo pins,
     # so grey the readback out rather than show a misleading live number.
-    Item(
+    UItem(
         "voltage_readback_display",
         style="readonly",
-        label="Voltage",
         enabled_when="realtime_mode",
     ),
     UItem("voltage", enabled_when="connected and free_mode and not protocol_running"),
-    Item("frequency_display", style="readonly", label="Frequency"),
+    Label("Frequency", show_label=False),
+    UItem("frequency_display", style="readonly"),
     UItem("frequency", enabled_when="connected and free_mode and not protocol_running"),
-    Item("light_display", style="readonly", label="Light"),
+    Label("Light", show_label=False),
+    UItem("light_display", style="readonly"),
     UItem("light_intensity", enabled_when="connected and light_on"),
-    Item("capacitance_display", style="readonly", label="Capacitance"),
+    Label("Capacitance", show_label=False),
+    UItem("capacitance_display", style="readonly"),
     UItem(""),
+    *droplet_readout_items(),
+    columns=3,
     id="data_grid",
 )
 

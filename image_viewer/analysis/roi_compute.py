@@ -10,11 +10,14 @@
 
 """Pure per-image ROI statistics (Qt-free and importable by spawned
 worker processes): each ROI's interior mask, the background annulus
-outside it, and the summary stats of the masked pixels. Ported from the
-standalone fluorescence app's ROIManager (image_tools.py); the ring is
-this app's own, built by dilation so it never overlaps the shape."""
+outside it, the inner part of the interior that is measured, and the
+summary stats of the masked pixels. Ported from the standalone
+fluorescence app's ROIManager (image_tools.py); the ring and the inset
+are this app's own, built from distance transforms so the ring never
+overlaps the shape and the inset never leaves it."""
 
 # Standard library imports.
+import math
 import os
 
 # Third-party imports.
@@ -24,6 +27,7 @@ import numpy as np
 # Local imports.
 from .consts import (
     MASK_ON,
+    MEASURE_INSIDE_PERCENT_DEFAULT,
     MIN_POLYGON_POINTS,
     OUTLINE_STATS_PREFIX,
     RING_GAP_PX,
@@ -78,6 +82,18 @@ def interior_mask(shape, kind, geometry):
     return interior
 
 
+def negative_union(shape, negatives):
+    """The uint8 mask (MASK_ON inside) covering every negative mask in
+    ``negatives`` ((kind, geometry), ...) on an image of ``shape`` —
+    all-zero when there are none."""
+    union = np.zeros(shape, dtype=np.uint8)
+
+    for kind, geometry in negatives:
+        cv2.bitwise_or(union, interior_mask(shape, kind, geometry), union)
+
+    return union
+
+
 def _disk(radius):
     """A disk-shaped structuring element of ``radius``. Odd-sized —
     diameter plus the centre pixel — so it has a centre to sit on."""
@@ -86,30 +102,97 @@ def _disk(radius):
 
 
 def ring_mask(interior, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX):
-    """The annulus outside ``interior``: the shape dilated by
-    gap + thickness, less the shape dilated by gap. With gap 0 the
-    inner edge is the shape's own boundary, so the ring can never
-    contain interior pixels. Dilation is exactly 'expand by N', which
-    is why this works for a traced contour as readily as an ellipse."""
+    """The annulus outside ``interior``: every pixel more than gap and
+    at most gap + thickness from the shape, by exact Euclidean distance.
+
+    A distance transform gives each pixel its distance to the nearest
+    interior pixel in one O(pixels) pass, so the ring is the annulus a
+    disk dilation would grow, at a cost that does not climb with the
+    gap — a disk kernel costs O(radius²) per pixel, and the large gaps
+    a wide frame needs to clear a droplet's halo took seconds per ROI.
+    Interior pixels sit at distance 0, so even with gap 0 the inner
+    edge is the shape's own boundary and the ring can never contain
+    interior pixels. It works for a traced contour as readily as an
+    ellipse."""
     gap_px = max(int(gap_px), 0)
     thickness_px = max(int(thickness_px), 1)
     ring = np.zeros_like(interior)
     rows, columns = np.nonzero(interior)
+
     if not len(rows):
         return ring
-    # Dilate on a crop, so cost tracks the ROI rather than the frame.
-    # One pixel past the ring's own reach, so the dilation has room and
-    # nothing is clipped by the crop's edge.
+
+    # Measure on a crop, so cost tracks the ROI rather than the frame.
+    # One pixel past the ring's own reach, so nothing in the ring is
+    # clipped by the crop's edge.
     pad = gap_px + thickness_px + 1
     top = max(int(rows.min()) - pad, 0)
     bottom = min(int(rows.max()) + pad + 1, interior.shape[0])
     left = max(int(columns.min()) - pad, 0)
     right = min(int(columns.max()) + pad + 1, interior.shape[1])
-    patch = interior[top:bottom, left:right]
-    outer = cv2.dilate(patch, _disk(gap_px + thickness_px))
-    inner = cv2.dilate(patch, _disk(gap_px)) if gap_px else patch
-    ring[top:bottom, left:right] = cv2.subtract(outer, inner)
+    outside = cv2.bitwise_not(interior[top:bottom, left:right])
+
+    # Distance from each outside pixel to the nearest interior one.
+    distance = cv2.distanceTransform(outside, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    band = (distance > gap_px) & (distance <= gap_px + thickness_px)
+    ring[top:bottom, left:right][band] = MASK_ON
+
     return ring
+
+
+def inset_mask(interior, inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT):
+    """``interior`` less a band of constant width along its boundary:
+    the part of the ROI whose intensity is measured.
+
+    The band is a share of the shape's equivalent radius, the radius of
+    the circle with the same area::
+
+        inset_px = round((1 - inside_percent / 100) * sqrt(area_px / pi))
+
+    so for a circle, 90 keeps the concentric circle at 90% of its
+    radius, and for any other shape it is the outer ring run in
+    reverse: every interior pixel more than inset_px from the nearest
+    exterior pixel, by exact Euclidean distance. The frame's edge
+    counts as exterior, so a shape cut off by it is inset there too.
+    100 returns ``interior`` itself."""
+    if inside_percent >= MEASURE_INSIDE_PERCENT_DEFAULT:
+        return interior
+
+    rows, columns = np.nonzero(interior)
+
+    if not len(rows):
+        return interior
+
+    equivalent_radius = math.sqrt(len(rows) / math.pi)
+    inset_px = round((1 - inside_percent / 100) * equivalent_radius)
+
+    # Measure on the shape's bounding box, so cost tracks the ROI rather
+    # than the frame, bordered by one exterior pixel so every interior
+    # pixel has an exterior one to be measured from.
+    top, bottom = int(rows.min()), int(rows.max()) + 1
+    left, right = int(columns.min()), int(columns.max()) + 1
+    crop = cv2.copyMakeBorder(
+        interior[top:bottom, left:right], 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0
+    )
+
+    # Distance from each interior pixel to the nearest exterior one.
+    distance = cv2.distanceTransform(crop, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    inset = np.zeros_like(interior)
+    inset[top:bottom, left:right][distance[1:-1, 1:-1] > inset_px] = MASK_ON
+
+    return inset
+
+
+def _contours_of(mask):
+    """The boundaries of ``mask`` as (N, 2) image-pixel arrays, each
+    with enough points to draw as a closed outline."""
+    found, _hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    return [
+        points.reshape(-1, 2).astype(float)
+        for points in found
+        if len(points) >= MIN_POLYGON_POINTS
+    ]
 
 
 def roi_masks(
@@ -122,18 +205,34 @@ def roi_masks(
 
 
 def ring_contours(
-    shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
+    shape,
+    kind,
+    geometry,
+    gap_px=RING_GAP_PX,
+    thickness_px=RING_THICKNESS_PX,
+    negatives=(),
 ):
     """The annulus's boundaries as (N, 2) image-pixel arrays — the
     canvas draws these, taken from the very mask that is averaged, so
-    the two cannot disagree."""
+    the two cannot disagree. ``negatives`` are cut out of it, as
+    compute_image_stats cuts them."""
     _interior, ring = roi_masks(shape, kind, geometry, gap_px, thickness_px)
-    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    return [
-        points.reshape(-1, 2).astype(float)
-        for points in found
-        if len(points) >= MIN_POLYGON_POINTS
-    ]
+
+    if negatives:
+        ring = cv2.subtract(ring, negative_union(shape, negatives))
+
+    return _contours_of(ring)
+
+
+def inset_contours(
+    shape, kind, geometry, inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT
+):
+    """The boundary of the measured part of one ROI (inset_mask) as
+    (N, 2) image-pixel arrays — taken from the very mask whose
+    intensity is averaged, like ring_contours."""
+    interior = interior_mask(shape, kind, geometry)
+
+    return _contours_of(inset_mask(interior, inside_percent))
 
 
 def _shrink_factor(radius_px):
@@ -213,6 +312,46 @@ def stats_are_current(stats):
     return stats is not None and all(key in stats for key in ROI_SHAPE_KEYS)
 
 
+def _measured_frame(image_path, ball_radius_px=0, perspective=(), channel_mode="luma"):
+    """The frame every ROI on ``image_path`` is measured on: read at its
+    own depth, warped by ``perspective``, then flattened by the rolling
+    ball when ``ball_radius_px`` is above 0 — warped first, because the
+    ROIs are drawn on the warped frame. Raises ValueError for a file
+    cv2 cannot read.
+
+    ``channel_mode`` "luma" reads one grey channel; "rgb" keeps a colour
+    frame's channels, as an (height, width, 3) array in RGB order, and
+    reads a mono frame as the same 2-D array "luma" does. The warp and
+    the rolling ball act on each channel alike."""
+    flags = cv2.IMREAD_ANYDEPTH | (
+        cv2.IMREAD_ANYCOLOR if channel_mode == "rgb" else cv2.IMREAD_GRAYSCALE
+    )
+    array = cv2.imread(str(image_path), flags)
+
+    if array is None:
+        raise ValueError("unreadable image")
+
+    # ANYCOLOR leaves a mono frame 2-D and drops any alpha channel, but
+    # hands colour over in cv2's BGR order.
+    if array.ndim == 3:
+        array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
+
+    array = warp_frame(array, perspective)
+
+    if ball_radius_px:
+        array = subtract_rolling_ball(array, ball_radius_px)
+
+    return array
+
+
+def _measured_mask(interior, excluded, inside_percent):
+    """The part of one ROI whose intensity is measured: the inner part
+    of ``interior`` (inset_mask) less ``excluded``, the negative-mask
+    union. One definition, so the stats and the histogram of an ROI
+    cannot be taken over different pixels."""
+    return cv2.subtract(inset_mask(interior, inside_percent), excluded)
+
+
 def compute_image_stats(
     image_path,
     effective_rois,
@@ -220,6 +359,8 @@ def compute_image_stats(
     thickness_px=RING_THICKNESS_PX,
     ball_radius_px=0,
     perspective=(),
+    negatives=(),
+    inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
 ):
     """Stats for every ROI on one image — the process-pool work unit.
 
@@ -239,33 +380,111 @@ def compute_image_stats(
     drawn.
 
     The droplet's shape (``roi_shape_stats``) is read off the same
-    corrected frame, inside the interior mask."""
+    corrected frame, inside the whole interior mask.
+
+    ``inside_percent`` below 100 takes the intensity stats, ``count``
+    included, over the inner part of each ROI only (inset_mask), leaving
+    out the band along the boundary where a droplet's bright rim sits.
+    The ring is still grown from the whole interior, and the shape stats
+    still read the whole interior: both describe the droplet, not the
+    region sampled inside it.
+
+    ``negatives`` ((kind, geometry), ...) are negative masks: their
+    union is cut out of every ROI's interior before anything is
+    measured, and out of every ring — excluded pixels are not
+    background either. The ring is still grown from the ROI's whole
+    interior, so its outer edge never follows a hole. An ROI covered
+    entirely measures count 0 and NaN everywhere else."""
     result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
-        array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
-        if array is None:
-            raise ValueError("unreadable image")
-        array = warp_frame(array, perspective)
-        if ball_radius_px:
-            array = subtract_rolling_ball(array, ball_radius_px)
+        array = _measured_frame(image_path, ball_radius_px, perspective)
         interiors, rings = {}, {}
+
         for roi_id, (kind, geometry) in effective_rois.items():
             interiors[roi_id], rings[roi_id] = roi_masks(
                 array.shape[:2], kind, geometry, gap_px, thickness_px
             )
+
         union = np.zeros(array.shape[:2], dtype=np.uint8)
+
         for interior in interiors.values():
             cv2.bitwise_or(union, interior, union)
+
+        excluded = negative_union(array.shape[:2], negatives)
+
         for roi_id, ring in rings.items():
-            others = cv2.subtract(union, interiors[roi_id])
+            interior = interiors[roi_id]
+            others = cv2.subtract(union, interior)
             ring[others == MASK_ON] = 0
-            stats = masked_stats(array, interiors[roi_id])
+            ring[excluded == MASK_ON] = 0
+            effective = cv2.subtract(interior, excluded)
+            measured = _measured_mask(interior, excluded, inside_percent)
+
+            stats = masked_stats(array, measured)
+
             for name, value in masked_stats(array, ring).items():
                 stats[OUTLINE_STATS_PREFIX + name] = value
-            stats.update(roi_shape_stats(array, interiors[roi_id]))
+
+            stats.update(roi_shape_stats(array, effective))
             result["stats"][roi_id] = stats
     except Exception as error:
         result["error"] = str(error)
         result["stats"] = {}
+    return result
+
+
+def measured_pixels(
+    image_path,
+    effective_rois,
+    gap_px=RING_GAP_PX,
+    thickness_px=RING_THICKNESS_PX,
+    ball_radius_px=0,
+    perspective=(),
+    negatives=(),
+    inside_percent=MEASURE_INSIDE_PERCENT_DEFAULT,
+    channel_mode="luma",
+):
+    """The pixel values every ROI's intensity stats are taken over on
+    one image — what masked_stats reduces to the mean, median and count
+    compute_image_stats reports, read off the same corrected frame
+    through the same mask.
+
+    Takes compute_image_stats's arguments in its order, so a work
+    item's correction tuple spreads into either. The ring's
+    ``gap_px``/``thickness_px`` are accepted for that alone: the ring
+    is background, not part of the measured pixels.
+
+    ``channel_mode`` "rgb" reads a colour frame's red, green and blue
+    channels through the same mask instead of its luma; a mono frame
+    has none to split and is read as in "luma".
+
+    Returns {"path", "mtime", "pixels": {roi_id: array in the frame's
+    dtype}, "colour", "error"} — each array 1-D, or (N, 3) in RGB order
+    when "colour" is True, which it is only for a colour frame read in
+    "rgb"; an empty array for an ROI covered entirely or outside the
+    frame. A load failure fills "error" and leaves "pixels" empty, as
+    compute_image_stats does."""
+    result = {
+        "path": str(image_path),
+        "mtime": 0.0,
+        "pixels": {},
+        "colour": False,
+        "error": None,
+    }
+
+    try:
+        result["mtime"] = os.path.getmtime(image_path)
+        array = _measured_frame(image_path, ball_radius_px, perspective, channel_mode)
+        result["colour"] = array.ndim == 3
+        excluded = negative_union(array.shape[:2], negatives)
+
+        for roi_id, (kind, geometry) in effective_rois.items():
+            interior = interior_mask(array.shape[:2], kind, geometry)
+            measured = _measured_mask(interior, excluded, inside_percent)
+            result["pixels"][roi_id] = array[measured == MASK_ON]
+    except Exception as error:
+        result["error"] = str(error)
+        result["pixels"] = {}
+
     return result

@@ -53,6 +53,15 @@ class AutoFitGraphicsView(ZoomableGraphicsView):
         # The scene's interaction service handles the keys when interactive.
         QGraphicsView.keyPressEvent(self, event)
 
+    def keyReleaseEvent(self, event):
+        service = self._interaction_service()
+
+        if service is not None:
+            service.handle_key_release_event(event)
+            return
+
+        QGraphicsView.keyReleaseEvent(self, event)
+
     def wheelEvent(self, event):
         service = self._interaction_service()
 

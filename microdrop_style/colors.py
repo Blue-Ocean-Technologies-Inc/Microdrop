@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 PRIMARY_SHADE = {
-    50:  "#E6F4E9",
+    50: "#E6F4E9",
     100: "#C3E4C9",
     200: "#9DD3A8",
     300: "#75C285",
@@ -18,13 +18,13 @@ PRIMARY_SHADE = {
     600: "#2F9A4A",
     700: "#25883F",
     800: "#1B7734",
-    900: "#085822"
+    900: "#085822",
 }
 
 PRIMARY_COLOR = PRIMARY_SHADE[600]
 
 SECONDARY_SHADE = {
-    50:  "#E7E9EF",
+    50: "#E7E9EF",
     100: "#CED3E0",
     200: "#B6BDD0",
     300: "#9DA7C1",
@@ -33,7 +33,7 @@ SECONDARY_SHADE = {
     600: "#546692",
     700: "#3B5082",
     800: "#233A73",
-    900: "#0A2463"
+    900: "#0A2463",
 }
 
 SECONDARY_COLOR = SECONDARY_SHADE[500]
@@ -45,7 +45,7 @@ ACCENT_COLOR = "#A94DC1"
 
 INFO_COLOR = "#2F80ED"
 SUCCESS_COLOR = "#37A953"
-ERROR_COLOR = '#ff0033'
+ERROR_COLOR = "#ff0033"
 # Softer red used for exception text inside error-dialog HTML bodies
 # (ERROR_COLOR is too saturated for paragraph text on white).
 DIALOG_ERROR_TEXT_COLOR = "#c0392b"
@@ -56,7 +56,10 @@ GREY = {
     "lightest": "#EDEDED",
     "lighter": "#BCBCBC",
     "light": "#D1D1D1",
-    "dark":  "#575757"
+    "dark": "#575757",
+    # Window and input-field fills of the fallback dark palette.
+    "darker": "#2D2D2D",
+    "darkest": "#1E1E1E",
 }
 
 BLACK = "#000000"

@@ -17,7 +17,7 @@ pair lives in QtCameraDevice, owned here because it is Qt."""
 from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import QThreadPool, QTimer, Signal, Slot
 from pyface.qt.QtGui import QImage
-from pyface.qt.QtMultimedia import QCameraFormat, QVideoSink
+from pyface.qt.QtMultimedia import QCameraFormat
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
 from pyface.qt.QtWidgets import (
     QApplication,
@@ -51,12 +51,22 @@ from microdrop_utils.v4l2_fps_getter import (
 )
 
 # Local imports.
-from ...consts import MIN_RECORDING_FPS
+from ...consts import (
+    CAMERA_FEED_START_TIMEOUT_MS,
+    CAMERA_MIN_RESOLUTION,
+    COMMON_RESOLUTION_NAMES,
+    HIGH_RESOLUTION_WARNING_THRESHOLD,
+    MIN_RECORDING_FPS,
+    NO_CAMERA_LABEL,
+    SHOW_ALL_RESOLUTIONS_LABEL,
+    SHOW_COMMON_RESOLUTIONS_LABEL,
+)
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
 from ...utils.capture import ImageSaver, get_transformed_frame
+from ...utils.frame_luma import frame_centre_luma
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
@@ -77,6 +87,14 @@ class CameraControlWidget(QWidget):
     #: A CameraControlsRequest dict, emitted by the dock pane's topic handler
     #: (a Dramatiq worker thread) and applied on the GUI thread.
     camera_controls_signal = Signal(object)
+
+    #: A CameraSelectSourceRequest dict, emitted by the dock pane's topic
+    #: handler (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_select_source_signal = Signal(object)
+
+    #: A CameraSettingsRequest dict, emitted by the dock pane's topic
+    #: handler (a Dramatiq worker thread) and applied on the GUI thread.
+    camera_settings_signal = Signal(object)
 
     def __init__(
         self,
@@ -118,6 +136,9 @@ class CameraControlWidget(QWidget):
         self._provider_sources = {}
         self._active_feed = None
         self._feed_controls = None
+        # The select_source request (dict) whose reply waits on a
+        # just-started provider feed's outcome; see apply_select_source.
+        self._pending_select_source = None
         # In-flight ImageSaver workers, referenced so a pool worker (and its
         # signals QObject) cannot be garbage-collected before its completion
         # signal is delivered back to the GUI thread.
@@ -130,9 +151,8 @@ class CameraControlWidget(QWidget):
         # (every frame under the electrodes is a full-scene composite, and
         # the preview doesn't need camera rate to be useful).
         self.camera_device = QtCameraDevice(
-            video_item=self.video_item, sink=QVideoSink(self)
+            video_item=self.video_item, preview_receiver=self._forward_preview_frame
         )
-        self.camera_device.sink.videoFrameChanged.connect(self._forward_preview_frame)
         self.camera_model = CameraModel()
         self.controller = CameraController(
             model=self.camera_model,
@@ -152,6 +172,8 @@ class CameraControlWidget(QWidget):
         self.screen_capture_signal.connect(self.capture_button_handler)
         self.screen_recording_signal.connect(self.on_recording_active)
         self.camera_controls_signal.connect(self.apply_camera_controls)
+        self.camera_select_source_signal.connect(self.apply_select_source)
+        self.camera_settings_signal.connect(self.apply_camera_settings)
 
         # UI Initialization
         self._init_ui()
@@ -182,6 +204,9 @@ class CameraControlWidget(QWidget):
         self.combo_cameras = MarqueeComboBox()
         self.camera_label = QLabel("Camera:")
         self.combo_resolutions = MarqueeComboBox()
+        # Whether the combo lists every camera format or only the common
+        # sizes (see populate_resolutions).
+        self._show_all_resolutions = False
         self.resolution_label = QLabel("Resolution: ")
         self.camera_select_layout = QHBoxLayout()
         self.camera_select_layout.addWidget(self.camera_label)
@@ -292,11 +317,17 @@ class CameraControlWidget(QWidget):
     def turn_on_camera(self):
         logger.info("Turning camera on")
 
+        # "<No Camera>" keeps the previous QCamera bound; never start it.
+        if not self.camera_model.selected_camera:
+            logger.warning("No camera source selected; the camera stays off")
+            return
+
         if self.camera_model.provider_selected:
             if self._active_feed is None:
                 self._start_provider_feed()
 
-            self._set_camera_active(True)
+            # A feed that failed to open (logged there) leaves the camera off.
+            self._set_camera_active(self._active_feed is not None)
 
             return
 
@@ -420,8 +451,11 @@ class CameraControlWidget(QWidget):
             feed = provider.open(key)
         except Exception as e:
             logger.error(f"Camera-source feed for '{label}' failed to open: {e}")
+            self.camera_model.feed_error = str(e)
+
             return
 
+        self.camera_model.feed_error = ""
         feed.error.connect(self._on_feed_error)
 
         # Optional preview: a feed may emit display frames plus a streaming
@@ -485,6 +519,10 @@ class CameraControlWidget(QWidget):
     def _forward_preview_frame(self, frame):
         self.camera_device.forward_preview_frame(frame)
 
+        # A running autofocus sweep measures every frame, not the preview's.
+        if self.camera_model.focus.autofocusing:
+            self.controller.autofocus_frame(frame_centre_luma(frame))
+
     def _forward_preview_image(self, image):
         self.camera_device.forward_preview_image(image)
 
@@ -496,7 +534,9 @@ class CameraControlWidget(QWidget):
 
     def _on_feed_error(self, message):
         logger.error(f"Provider camera feed error: {message}")
+        self.camera_model.feed_error = message
         self.turn_off_camera()
+        self._finish_pending_select_source()
 
     # ------------------------------------------------------------------ #
     # Source and format selection                                          #
@@ -506,10 +546,14 @@ class CameraControlWidget(QWidget):
         """Return a human-readable identifier for a camera device.
 
         LinuxCameraDeviceContainer returns the /dev/videoN path (unique on Linux),
-        while QCameraDevice returns the Qt-provided description string.
+        while QCameraDevice — and a container without a node, e.g. a libcamera
+        device — returns the Qt-provided description string.
         """
         if isinstance(selected_device, LinuxCameraDeviceContainer):
-            return selected_device.device_path
+            if selected_device.device_path:
+                return selected_device.device_path
+
+            selected_device = selected_device.camera_device
 
         return selected_device.description()
 
@@ -519,7 +563,8 @@ class CameraControlWidget(QWidget):
         On most platforms Qt's QCameraFormat.maxFrameRate() returns the correct
         value.  On Linux, however, it often reports 0 because the GStreamer
         backend does not populate this field.  In that case we fall back to
-        V4L2 data stored in the LinuxCameraDeviceContainer for this camera.
+        V4L2 data stored in the LinuxCameraDeviceContainer for this camera
+        (for a libcamera camera, its sensor modes).
 
         Args:
             w: Resolution width (used when ``fmt`` is not provided).
@@ -593,7 +638,7 @@ class CameraControlWidget(QWidget):
                 )
 
         # account for no camera
-        self.combo_cameras.addItem("<No Camera>", userData=None)
+        self.combo_cameras.addItem(NO_CAMERA_LABEL, userData=None)
 
         self.combo_cameras.blockSignals(False)
 
@@ -640,6 +685,10 @@ class CameraControlWidget(QWidget):
                 label,
                 remembered_as=self._get_camera_description(camera),
                 v4l2_device_path=container.device_path if container else None,
+                v4l2_focus_device_path=(
+                    container.focus_device_path if container else None
+                ),
+                v4l2_focus_lens_map=container.focus_lens_map if container else (),
             )
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)
@@ -658,9 +707,13 @@ class CameraControlWidget(QWidget):
         """Populate the resolution combo box from the current camera's formats.
 
         One entry per resolution, best first (see
-        CameraController.rank_formats); under the strict-format preference,
-        if no format matches, retry once without it. Then restore the saved
-        resolution, falling back to the middle entry.
+        CameraController.rank_formats); under the controller's strict format
+        mode, if no format matches, retry once without it. By default only
+        the common sizes (COMMON_RESOLUTION_NAMES) are listed, named, plus
+        the saved size when it is not one of them, with a last entry that
+        switches to the full list; the full list ends with the entry that
+        switches back. Then restore the saved resolution, falling back to
+        the middle entry.
         """
         self.combo_resolutions.blockSignals(True)
         self.combo_resolutions.clear()
@@ -671,37 +724,45 @@ class CameraControlWidget(QWidget):
             self.combo_resolutions.blockSignals(False)
             return
 
-        formats = self.camera_device.video_formats()
-        format_summaries = [
-            (
-                fmt.resolution().width(),
-                fmt.resolution().height(),
-                str(fmt.pixelFormat()),
-                fmt.maxFrameRate(),
-            )
-            for fmt in formats
-        ]
+        libcamera = self.camera_device.is_libcamera()
+        ranked = self._ranked_formats(allow_strict_mode)
+        saved_resolution = self.preferences.resolution
 
-        for index in self.controller.rank_formats(format_summaries, allow_strict_mode):
-            fmt = formats[index]
-            w, h = fmt.resolution().width(), fmt.resolution().height()
-            fps = self._get_camera_resolution_max_framerate(fmt=fmt)
-            pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
-            label = f"{w}x{h} [{pix_name}] @ {fps:.0f} fps"
+        # The condensed list: the common sizes, plus the saved size when it is
+        # not one of them, so a saved pick still restores. The full list only
+        # when asked for or when the camera has none of the common sizes.
+        common = [
+            fmt
+            for fmt in ranked
+            if self._resolution_name(fmt)
+            or self._resolution_label(fmt) == saved_resolution
+        ]
+        show_all = self._show_all_resolutions or not common
+        listed = ranked if show_all else common
+        labels = [self._resolution_label(fmt) for fmt in listed]
+
+        for fmt, label in zip(listed, labels):
             self.combo_resolutions.addItem(label, userData=fmt)
 
+        if ranked:
+            self.combo_resolutions.addItem(
+                SHOW_COMMON_RESOLUTIONS_LABEL
+                if show_all
+                else SHOW_ALL_RESOLUTIONS_LABEL
+            )
+
+        self._show_all_resolutions = show_all
         self.combo_resolutions.blockSignals(False)
 
-        labels = [
-            self.combo_resolutions.itemText(i)
-            for i in range(self.combo_resolutions.count())
-        ]
-
         if labels:
-            self.combo_resolutions.setCurrentIndex(
-                self.controller.choose_resolution_index(labels)
-            )
-        elif self.preferences.strict_video_format:
+            # Restored, not picked: apply the format without the signal, so
+            # the high-resolution notice cannot interrupt start-up.
+            index = self.controller.choose_resolution_index(labels)
+            self.combo_resolutions.blockSignals(True)
+            self.combo_resolutions.setCurrentIndex(index)
+            self.combo_resolutions.blockSignals(False)
+            self.on_resolution_changed(index, interactive=False)
+        elif self.controller.strict_format_mode(allow_strict_mode, libcamera):
             # No formats survived strict filtering — retry without it
             warning_message = (
                 f"Preferred format "
@@ -714,39 +775,135 @@ class CameraControlWidget(QWidget):
 
             self.populate_resolutions(allow_strict_mode=False)
 
-            return
+    def _ranked_formats(self, allow_strict_mode=True):
+        """The bound camera's formats of at least CAMERA_MIN_RESOLUTION, one
+        per resolution, best first (see CameraController.rank_formats)."""
+        min_width, min_height = CAMERA_MIN_RESOLUTION
+        formats = [
+            fmt
+            for fmt in self.camera_device.video_formats()
+            if fmt.resolution().width() >= min_width
+            and fmt.resolution().height() >= min_height
+        ]
+        format_summaries = [
+            (
+                fmt.resolution().width(),
+                fmt.resolution().height(),
+                str(fmt.pixelFormat()),
+                fmt.maxFrameRate(),
+            )
+            for fmt in formats
+        ]
+        ranked_indices = self.controller.rank_formats(
+            format_summaries, allow_strict_mode, self.camera_device.is_libcamera()
+        )
 
-        # Ensure the model always has a resolution set (e.g. when the combo
-        # index didn't change and on_resolution_changed was never triggered).
-        if not self.model.camera_perspective.camera_resolution:
-            self.on_resolution_changed(self.combo_resolutions.currentIndex())
+        return [formats[index] for index in ranked_indices]
 
-    def on_resolution_changed(self, index):
+    @staticmethod
+    def _resolution_name(fmt):
+        """The common name of a format's size ("FHD"), or None."""
+        return COMMON_RESOLUTION_NAMES.get(
+            (fmt.resolution().width(), fmt.resolution().height())
+        )
+
+    def _resolution_label(self, fmt):
+        """The combo label of a format: its common name when it has one,
+        then the size, pixel format and frame rate."""
+        w, h = fmt.resolution().width(), fmt.resolution().height()
+        fps = self._get_camera_resolution_max_framerate(fmt=fmt)
+        pix_name = str(fmt.pixelFormat()).split(".")[-1].replace("Format_", "")
+        name = self._resolution_name(fmt)
+        size = f"{name} ({w}x{h})" if name else f"{w}x{h}"
+
+        return f"{size} [{pix_name}] @ {fps:.0f} fps"
+
+    def _toggle_resolution_list(self):
+        """Switch between the common and the full resolution list, keeping
+        the selected format."""
+        selected = self.camera_model.resolution
+        self._show_all_resolutions = not self._show_all_resolutions
+        self.populate_resolutions()
+
+        for index in range(self.combo_resolutions.count()):
+            fmt = self.combo_resolutions.itemData(index)
+
+            if fmt is not None and (
+                (fmt.resolution().width(), fmt.resolution().height()) == selected
+            ):
+                self.combo_resolutions.blockSignals(True)
+                self.combo_resolutions.setCurrentIndex(index)
+                self.combo_resolutions.blockSignals(False)
+
+                return
+
+    def on_resolution_changed(self, index, interactive=True):
+        """Apply the combo's format at ``index``. ``interactive`` is False for
+        the restore at start-up, which never shows the high-resolution
+        notice."""
         if self.combo_resolutions.count() == 0 or index < 0:
             return
 
         camera_format = self.combo_resolutions.itemData(index)
-        was_running = self.camera_device.is_active()
 
-        if was_running:
-            self.camera_device.stop()
-            QApplication.processEvents()
+        # The list-switching entry carries no format.
+        if camera_format is None:
+            self._toggle_resolution_list()
 
-        self.camera_device.set_format(camera_format)
+            return
+
+        self.camera_device.apply_format(camera_format)
 
         resolution = (
             camera_format.resolution().width(),
             camera_format.resolution().height(),
         )
+
+        if interactive:
+            self._warn_high_resolution(resolution)
         self.controller.select_resolution(
             self.combo_resolutions.itemText(index),
             *resolution,
             self._get_camera_resolution_max_framerate(fmt=camera_format),
+            user_edit=interactive,
         )
         self.model.camera_perspective.camera_resolution = resolution
 
-        if was_running:
-            self.camera_device.start()
+    def _warn_high_resolution(self, resolution):
+        """Tell the user a size above Full HD can slow the app down, unless
+        they asked not to be told again."""
+        max_width, max_height = HIGH_RESOLUTION_WARNING_THRESHOLD
+        width, height = resolution
+
+        if width <= max_width and height <= max_height:
+            return
+
+        if self.preferences.suppress_high_resolution_warning:
+            return
+
+        _, dont_show_again = warning(
+            None,
+            title="High resolution selected",
+            message=(
+                f"{width}x{height} is above Full HD ({max_width}x{max_height}). "
+                f"Streaming, recording and image analysis at this size put "
+                f"more load on the camera pipeline and can slow the app down, "
+                f"especially on the portable instrument."
+            ),
+            cancel=False,
+            checkbox_text="Don't show this again (can be undone from "
+            "Preferences \u203a Video Settings)",
+        )
+
+        if not dont_show_again:
+            return
+
+        self.preferences.suppress_high_resolution_warning = True
+
+        try:
+            self.preferences.preferences.flush()
+        except OSError as error:
+            logger.error(f"Could not save camera preferences: {error}")
 
     # ------------------------------------------------------------------ #
     # Image capture                                                        #
@@ -874,6 +1031,181 @@ class CameraControlWidget(QWidget):
         self.controller.apply_camera_controls(request)
 
     # ------------------------------------------------------------------ #
+    # Capture setup by request (CameraSettingsRequest)                     #
+    # ------------------------------------------------------------------ #
+    @Slot(object)
+    def apply_camera_settings(self, request):
+        """Apply a CameraSettingsRequest dict — a protocol step's capture
+        setup — to the selected QCamera: its resolution here, the camera
+        properties through the controller, which answers
+        DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED. What the camera cannot take
+        is skipped and the user warned, once per camera and warning."""
+        if not self.controller.qcamera_selected():
+            self.controller.settings_applied(request, error="no QCamera is selected")
+
+            return
+
+        self.controller.begin_applying_settings()
+        warnings = []
+
+        try:
+            if request["resolution"] is not None:
+                warnings.extend(
+                    self._apply_requested_resolution(tuple(request["resolution"]))
+                )
+
+            warnings.extend(self.controller.apply_settings(request))
+        except Exception as e:
+            logger.error(f"Capture setup not applied: {e}", exc_info=True)
+            self.controller.settings_applied(request, warnings, error=str(e))
+
+            return
+
+        self.controller.settings_applied(request, warnings)
+        self._warn_unsupported_settings(
+            request["context"], self.controller.unseen_settings_warnings(warnings)
+        )
+
+    def _apply_requested_resolution(self, resolution):
+        """Switch to the best format of ``resolution`` — selected as if
+        restored, so it shows in the combo even when it is not a common
+        size; returns the warnings (the size is not supported)."""
+        if self.camera_model.resolution == resolution:
+            return []
+
+        ranked = self._ranked_formats() or self._ranked_formats(allow_strict_mode=False)
+        match = next(
+            (
+                fmt
+                for fmt in ranked
+                if (fmt.resolution().width(), fmt.resolution().height()) == resolution
+            ),
+            None,
+        )
+
+        if match is None:
+            width, height = resolution
+            current_width, current_height = self.camera_model.resolution
+
+            return [
+                f"{width}x{height} is not supported by "
+                f"{self.camera_model.selected_camera}; capturing at "
+                f"{current_width}x{current_height} instead"
+            ]
+
+        # The condensed list always holds the saved size, and the restore
+        # applies the format without the high-resolution notice.
+        self.preferences.resolution = self._resolution_label(match)
+        self.populate_resolutions()
+
+        return []
+
+    def _warn_unsupported_settings(self, context, warnings):
+        """Tell the user what of a step's capture setup the camera could not
+        take, so the step can be changed to settings it supports. Deferred
+        out of the request's slot: the dialog is modal."""
+        if not warnings:
+            return
+
+        where = f" for {context}" if context else ""
+        message = (
+            f"The camera cannot apply all of the capture settings{where}:<br><br>"
+            + "<br>".join(f"\u2022 {text}" for text in warnings)
+            + "<br><br>Select the step and pick settings this camera supports "
+            "in the camera panel to update it."
+        )
+
+        QTimer.singleShot(
+            0,
+            lambda: warning(
+                None,
+                title="Capture settings not supported",
+                message=message,
+                cancel=False,
+            ),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Source selection by request (CameraSelectSourceRequest)              #
+    # ------------------------------------------------------------------ #
+    @Slot(object)
+    def apply_select_source(self, request):
+        """Select the dropdown entry a CameraSelectSourceRequest dict names,
+        through the same path as a click, then switch the camera on/off if
+        asked; the controller answers DEVICE_VIEWER_CAMERA_SOURCE_SELECTED.
+
+        A provider feed opens synchronously (an open failure is answered at
+        once, with its message) but may start asynchronously, so when the
+        request starts a new feed the reply waits for its outcome: the
+        feed's first ``error`` answers ok=False with that message, its
+        optional ``started`` signal — or CAMERA_FEED_START_TIMEOUT_MS
+        passing without an error — answers ok. A QCamera's start is not
+        waited on: ok=True means the selection and start request went
+        through, and a camera failing later shows as active=False on
+        DEVICE_VIEWER_CAMERA_STATE.
+        """
+        labels = [
+            self.combo_cameras.itemText(index)
+            for index in range(self.combo_cameras.count())
+        ]
+        index = self.controller.find_requested_source(request, labels)
+
+        if index is None:
+            return
+
+        error = ""
+        feed_before = self._active_feed
+
+        # Provider feeds are other plugins' code: any exception they raise
+        # while switching over is answered as a failure, not left to Qt.
+        try:
+            self.combo_cameras.setCurrentIndex(index)
+
+            if request["active"] is not None:
+                self.on_camera_active(request["active"])
+        except Exception as e:
+            logger.error(f"Camera source {request['label']!r}: {e}", exc_info=True)
+            error = f"camera source {request['label']!r} failed: {e}"
+
+        feed = self._active_feed
+
+        if not error and request["active"] and feed not in (None, feed_before):
+            self._await_feed_start(request, feed)
+
+            return
+
+        self.controller.source_selected(request, error)
+
+    def _await_feed_start(self, request, feed):
+        """Hold ``request``'s reply until ``feed`` starts, fails, or
+        CAMERA_FEED_START_TIMEOUT_MS passes (see apply_select_source)."""
+
+        # An earlier request still waiting is answered as things stand now.
+        self._finish_pending_select_source()
+        self._pending_select_source = request
+
+        started = getattr(feed, "started", None)
+
+        if started is not None:
+            started.connect(self._finish_pending_select_source)
+
+        QTimer.singleShot(
+            CAMERA_FEED_START_TIMEOUT_MS,
+            lambda: self._finish_pending_select_source(request),
+        )
+
+    def _finish_pending_select_source(self, request=None):
+        """Answer the waiting select_source request, if any (only when it is
+        ``request``, for the timeout of that one request)."""
+        pending = self._pending_select_source
+
+        if pending is None or (request is not None and request is not pending):
+            return
+
+        self._pending_select_source = None
+        self.controller.source_selected(pending)
+
+    # ------------------------------------------------------------------ #
     # Video recording (background thread)                                  #
     # ------------------------------------------------------------------ #
     def on_recording_active(self, recording_data):
@@ -932,7 +1264,12 @@ class CameraControlWidget(QWidget):
         _current_fmt = self.combo_resolutions.currentData()
         fps = self._get_camera_resolution_max_framerate(fmt=_current_fmt)
 
-        if not self.controller.recording_frame_rate_supported(fps):
+        # An unknown rate is no reason to refuse: the recorders fall back to
+        # a default or the camera's delivery rate.
+        if not fps:
+            logger.warning("Camera frame rate unknown; recording anyway")
+
+        elif not self.controller.recording_frame_rate_supported(fps):
             disclaimer(
                 parent=None,
                 title="Recording Not Supported",
@@ -964,9 +1301,24 @@ class CameraControlWidget(QWidget):
         # Rebuild from current preferences so backend/container/bitrate
         # changes apply without a restart, with the bitrate class matched
         # to the actual camera resolution and frame rate.
-        self.recorder = self._build_recorder(_resolution, fps)
-        self.recorder.start(recording_path, _resolution, fps)
-        self.controller.recording_started()
+        def start_recorder(sync_button=False):
+            self.recorder = self._build_recorder(_resolution, fps)
+            self.recorder.start(recording_path, _resolution, fps)
+            self.camera_device.hold_restarts = True
+            self.controller.recording_started()
+
+            # on_recording_active synced the button before a deferred start.
+            if sync_button:
+                self.record_toggle_button.setChecked(self.recorder.is_recording)
+
+        # A libcamera camera switched off moments ago gets a new session and
+        # sink on the next event-loop pass: record into those, not the old.
+        if self.camera_device.rebuild_pending:
+            self.camera_device.after_rebuild(lambda: start_recorder(sync_button=True))
+
+            return
+
+        start_recorder()
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")
@@ -975,6 +1327,7 @@ class CameraControlWidget(QWidget):
     @Slot(str)
     def handle_recording_error(self, error_msg):
         logger.error(f"Recording Error: {error_msg}")
+        self.camera_device.hold_restarts = False
         self.controller.recording_ended()
         error(
             self,
@@ -986,6 +1339,7 @@ class CameraControlWidget(QWidget):
 
     @Slot(str)
     def handle_recording_stopped(self, recording_output_path):
+        self.camera_device.hold_restarts = False
         turn_camera_off = self.controller.recording_ended()
 
         if turn_camera_off and self.camera_device.is_active():

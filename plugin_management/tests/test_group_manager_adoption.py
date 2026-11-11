@@ -81,12 +81,14 @@ def no_real_plugin_discovery(monkeypatch):
     """Keep PluginGroupManager._groups_default from picking up whatever
     device-plugin packages (magnet, heater, ...) actually happen to be
     conda-installed in the dev environment — installed_plugins() must
-    report only the manifests this test itself registers."""
+    report only the manifests this test itself registers. The built-in
+    groups are dropped too, so a restore never loads them into FakeApp."""
     monkeypatch.setattr(
         group_manager.entry_point_discovery,
         "discover_entry_point_manifests",
         lambda: [],
     )
+    monkeypatch.setattr(group_manager, "BUILTIN_PLUGIN_GROUPS", ())
 
 
 def make_manager():
@@ -210,3 +212,71 @@ def test_reenabled_group_restores_enabled(isolated_preferences):
     m2.adopt_running(app2)
     m2.restore_persisted(app2)
     assert m2.is_loaded("dummy_backend_group")
+
+
+DEFAULT_OFF_MANIFEST = manifest_from_dict(
+    {
+        "schema_version": 1,
+        "name": "dummy_default_off",
+        "packages": ["plugin_management"],
+        "groups": [
+            {
+                "name": "dummy_default_off_group",
+                "plugins": [f"{_SPEC_PREFIX}:DummyUiPlugin"],
+                "enabled_key": "plugin_group_enabled.dummy_default_off_group",
+                "default_enabled": False,
+            },
+        ],
+    }
+)
+
+
+def make_default_off_manager():
+    m = PluginGroupManager()
+    m.register_manifest(DEFAULT_OFF_MANIFEST, dist_name="dummy-default-off-plugin")
+    return m
+
+
+def test_manifest_default_enabled_reaches_the_group():
+    assert make_manager().groups["dummy_ui_group"].default_enabled is True
+    m = make_default_off_manager()
+    assert m.groups["dummy_default_off_group"].default_enabled is False
+
+
+def test_restore_loads_default_enabled_group_without_a_flag():
+    app = FakeApp()
+    m = make_manager()
+    m.restore_persisted(app)
+
+    assert m.is_loaded("dummy_ui_group")
+    assert ("add", "DummyUiPlugin") in app.calls
+
+
+def test_restore_skips_default_disabled_group_without_a_flag():
+    app = FakeApp()
+    m = make_default_off_manager()
+    m.restore_persisted(app)
+
+    assert not m.is_loaded("dummy_default_off_group")
+    assert not app.calls
+
+
+def test_persisted_on_flag_wins_over_default_disabled(isolated_preferences):
+    m = make_default_off_manager()
+    isolated_preferences.set(m._flag_path(m.groups["dummy_default_off_group"]), True)
+
+    app = FakeApp()
+    m.restore_persisted(app)
+
+    assert m.is_loaded("dummy_default_off_group")
+
+
+def test_persisted_off_flag_wins_over_default_enabled(isolated_preferences):
+    m = make_manager()
+    isolated_preferences.set(m._flag_path(m.groups["dummy_ui_group"]), False)
+
+    app = FakeApp()
+    m.restore_persisted(app)
+
+    assert not m.is_loaded("dummy_ui_group")
+    assert m.is_loaded("dummy_backend_group")

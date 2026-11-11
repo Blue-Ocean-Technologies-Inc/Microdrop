@@ -34,6 +34,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
+    PresetButtonsEditor,
 )
 
 _target_spin_box = DoubleSpinBoxEditor(
@@ -61,6 +62,19 @@ temperature = VGroup(
             UItem(
                 "set_target_button",
                 editor=IconButtonEditor(glyph=ICON_CHECK, tooltip="Set target"),
+            ),
+        ),
+        # In an HGroup: a bare item among groups gets a wrapper QWidget
+        # with Qt's default 9px margins, indenting the row.
+        HGroup(
+            UItem(
+                "temperature_presets",
+                editor=PresetButtonsEditor(
+                    target="temp_target_c",
+                    fire="set_target_button",
+                    unit="°C",
+                    decimals=1,
+                ),
             ),
         ),
         HGroup(
@@ -112,6 +126,12 @@ pmt = VGroup(
             UItem(
                 "set_gain_button",
                 editor=IconButtonEditor(glyph=ICON_CHECK, tooltip="Set gain"),
+            ),
+        ),
+        HGroup(
+            UItem(
+                "gain_presets",
+                editor=PresetButtonsEditor(target="pmt_gain", fire="set_gain_button"),
             ),
         ),
         UItem(

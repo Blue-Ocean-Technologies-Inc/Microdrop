@@ -92,6 +92,7 @@ Receiving: (Via handlers)
 - CHIP_NOT_INSERTED "dropbot/signals/chip_not_inserted"
 - CHIP_INSERTED "dropbot/signals/chip_inserted"
 - NO_POWER "dropbot/signals/warnings/no_power"
+- DEVICE_VIEWER_VOLUME_ESTIMATE "ui/device_viewer/volume_estimate" (see the droplet readouts flow below)
 
 There is also a handler for "dropbot/signals/warnings/*" called _on_show_warning_triggered (in widget.py) that is assigned in dramatiq_dropbot_status_controller.py
 
@@ -101,14 +102,22 @@ Receiving: (Via handlers)
 - SETUP_SUCCESS "dropbot/signals/setup_success"
 - PHASE_NAVIGATION_MODE "ui/phase_navigation_mode" (** also self-published)
 - PHASE_NAVIGATION_REQUEST "ui/device_viewer/phase_navigation_request"
+- DEVICE_VIEWER_CAMERA_SELECT_SOURCE "ui/device_viewer/camera/select_source" (see the camera source selection flow below)
+- DEVICE_VIEWER_CAMERA_APPLY_SETTINGS "ui/device_viewer/camera/apply_settings" (a step's capture setup; see the per-step capture camera settings flow below)
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
 - START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring"
+- SET_REALTIME_MODE "hardware/requests/set_realtime_mode" (T shortcut, via keyboard_shortcut_service)
 - DEVICE_VIEWER_STATE_CHANGED "ui/device_viewer/state_changed"
 - STEP_PARAMS_COMMIT "ui/device_viewer/step_params_commit"
 - ** PHASE_NAVIGATION_MODE "ui/phase_navigation_mode"
 - PHASE_NAVIGATION_STATE "ui/device_viewer/phase_navigation_state" (via route_execution_service)
+- DEVICE_VIEWER_CAMERA_SOURCE_SELECTED "ui/device_viewer/camera/source_selected" (reply to select_source)
+- DEVICE_VIEWER_CAMERA_STATE "ui/device_viewer/camera/state" (camera selection / on-off, on every change)
+- DEVICE_VIEWER_CAMERA_SETTINGS "ui/device_viewer/camera/settings" (capture setup snapshot, on user edits and source selection)
+- DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED "ui/device_viewer/camera/settings_applied" (reply to apply_settings)
+- DEVICE_VIEWER_VOLUME_ESTIMATE "ui/device_viewer/volume_estimate" (live volume readout, on changes above reading noise)
 
 ### image_viewer
 
@@ -140,6 +149,7 @@ The device viewer pushes its full UI state (routes, free-mode electrode state, c
 
 **Subscriber side (protocol_grid)**
 - `protocol_grid/services/message_listener.py:52-54` — `_on_device_viewer_message_received()` handles the topic, deserializes, and re-emits a Qt signal `device_viewer_message_received` for UI consumption.
+- `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_dv_state` writes a step-scoped message's electrodes/routes back to the step; when that step is the current row of a multi-selection, the columns it changed are written to every selected step (`write_back_targets`, groups expanded one level), and an unchanged echo writes nothing.
 
 ### Device Viewer → protocol widgets: step execution params commit
 
@@ -164,6 +174,7 @@ live route sync so step cells only mutate on deliberate user action.
 
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_step_params_commit_qt` finds the row by uuid and writes the mapped columns (`repetitions` → `route_repetitions`, `soft_terminate` → `soft_end`, rest 1:1), firing `cell_changed` per column for dirty tracking. Of the Route Reps / Route Reps Dur pair only the row's controlling knob (per `repeat_duration_controls`) is written — the pane reconciliation derives the other. It then re-publishes `PROTOCOL_TREE_DISPLAY_STATE` for the selected row so the DV rebaselines on the post-reconciliation values.
+- Multi-selection: when the committed step is the current row of a multi-selection, the params the commit changed are written to every selected step (`write_back_targets`), still with one display publish at the end.
 
 **Companion addition (pull direction)**
 - The grid → DV publish on `PROTOCOL_GRID_DISPLAY_STATE` carries the target step's params in `DeviceViewerMessageModel.execution_params`; the tree → DV publish on `PROTOCOL_TREE_DISPLAY_STATE` carries the same dict in `ProtocolTreeDisplayMessage.execution_params` (None in free mode → commit button disabled). The DV applies them on `step_id` transition (`device_view_dock_pane._apply_step_transition`), then baselines the sidebar for dirty tracking; a same-step refresh carrying params re-applies + rebaselines silently when no protocol is running.
@@ -187,6 +198,27 @@ that only the device viewer has.
 
 **Subscriber side (pluggable_protocol_tree)**
 - `pluggable_protocol_tree/services/device_viewer_sync.py` — `_on_geometry_changed` keeps them on `electrode_centroids` / `electrode_neighbours` and hands them to `services.phase_math.set_device_lattice`, the module-level lattice every phase-math caller reads. A step asking for a wide slug before any lattice is known runs one electrode wide and logs an error.
+
+### Device Viewer → DropBot / Portable DropBot status: droplet readouts
+
+The device viewer turns the live capacitance into a droplet volume, fill and
+covered area (`VolumeEstimateModel`); the DropBot and Portable DropBot status
+panes show them.
+
+**Capacitance source**
+- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it from every status poll (`PortableDropbotControllerBase._publish_capacitance`, every `MONITOR_INTERVAL_S`), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
+
+**Topic**
+- `DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"` — defined in `device_viewer/consts.py`; publish through `volume_estimate_publisher`.
+
+**Payload schema**
+- Pydantic `VolumeEstimateMessage` at `device_viewer/models/messages.py`: `status_message` ("" when there is an estimate), `volume_ul`, `fill_fraction`, `covered_area_mm2`.
+
+**Publisher side (device_viewer)**
+- `device_viewer/controllers/device_viewer_publish_controller.py` — `_publish_volume_estimate` fires on `VolumeEstimateModel.shown_values_updated`: once per readout change, never for capacitance noise under `VOLUME_READOUT_NOISE_UL`.
+
+**Subscriber side (dropbot_status_and_controls, portable_dropbot_status_and_controls)**
+- Each pane's message handler — `_on_volume_estimate_triggered` stores the message on `model.volume_estimate`. The readout traits, grid row, dialog and the controller that opens it are shared from `template_status_and_controls/droplet_readouts.py`: the dropdown picks which readout shows, its tooltip and the Droplet Readouts dialog list them all (the DropBot pane adds c_device).
 
 ### Device Viewer ↔ Protocol Tree: idle phase navigation (#493)
 
@@ -297,6 +329,10 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 - `DEVICE_VIEWER_MEDIA_CAPTURED` (`device_viewer/consts.py`) → media bucket for the report's Media Captures section. Since #695 the camera capture path publishes this topic live on every capture (carrying the requester's `request_id`, if any), closing the earlier gap where only `app_globals["media_captures"]` was written; `_flush` still drains that bucket at run end for anything captured outside a run, and `LoggingIngestion.log_media` dedupes by path so a capture is never listed twice.
 - `CALIBRATION_DATA` (`device_viewer/consts.py`) → live capacitance-per-unit-area update so the Force column populates mid-run.
 
+**app_globals (read at run start)**
+- `DIELECTRIC_MATERIAL_KEY = "dropbot.dielectric_material"` (`dropbot_status_and_controls/consts.py`) — written by `dropbot_status_and_controls/controller.py:_publish_dielectric_material` at startup and on every dielectric pick; read by `LoggingDeviceContext` (`services/logging/models.py`), which looks the name up in `DIELECTRIC_MATERIALS` for the report's Dielectric Material / Dielectric Constant metadata and the per-row `Dielectric Thickness (um)` column.
+- `FILLER_CAPACITANCE_KEY = "filler_capacitance_over_area"` (`device_viewer/consts.py`, pF/mm^2) — written by `device_viewer/models/calibration.py`; read by `LoggingDeviceContext` as the run-start filler that `Dielectric Thickness (um)` subtracts, and shown as the Filler Capacitance Over Area metadata row. Live changes arrive through `CALIBRATION_DATA` (`controller.on_calibration`).
+
 **Contribution topics (any plugin → report)**
 - `PROTOCOL_LOGGING_METADATA_CONTRIBUTION = "microdrop/protocol_tree/logging/metadata"` and `PROTOCOL_LOGGING_DATA_CONTRIBUTION = "microdrop/protocol_tree/logging/data"` — defined in `pluggable_protocol_tree/consts.py`.
 - Payloads are flat scalar-valued JSON objects. Publish through `protocol_logging_metadata_contribution_publisher` / `protocol_logging_data_contribution_publisher` in `pluggable_protocol_tree/consts.py` (RootModel contracts in `pluggable_protocol_tree/models/report_contributions.py` — validated publishers that serialize to the bare object). Subscribers stay lenient: malformed / non-object payloads are ignored, matching the other listener handlers.
@@ -305,6 +341,54 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 - Timing: contributions are accepted from `start_logging` until the post-`stop_logging` settling flush, so messages published shortly after the run ends still make the report.
 - Demo: `examples/demos/protocol_report_contribution_demo.py` runs the whole pipeline headlessly over redis and prints the generated report path.
 
+
+### Portable DropBot chip tray: tray-only move vs the pogo pushpad macro
+
+Two ways to move the chip tray, one topic. The firmware's eject/insert macro releases the pogo pushpads before the tray moves and presses them after; the tray-only move leaves the pushpads where they are (the firmware still drops the magnet out of the way, as a safety interlock, either way).
+
+**Topic (`portable_dropbot_controller/consts.py`)**
+- `MOVE_TRAY = "portable_dropbot/requests/move_tray"` — `MoveTrayRequest {direction: "in" | "out" | "toggle", actuate_pogos: bool = true}`, published through `move_tray_publisher`. A legacy bare string `"in"` / `"out"` / `"toggle"` is still accepted and means `actuate_pogos: true`. `"toggle"` moves the tray opposite to the cabin state the motor STATUS reports (byte 1: 0 = in, 1 = out).
+
+**Senders (`portable_dropbot_status_and_controls`)**
+- Status pane tray glyph (`tray_out` toggle under the device picture) → `{direction: "in" | "out", actuate_pogos: false}`.
+- Status pane device picture click (`tray_toggle_clicked`, only while connected) → `{direction: "toggle", actuate_pogos: true}`.
+- Motors pane tray In/Out macros → `{direction: "in" | "out", actuate_pogos: not tray_only}`; the `tray_only` checkbox shows only while the target motor is the tray, and is not persisted.
+
+**Backend (`portable_dropbot_controller/services/portable_dropbot_motors_mixin_service.py`)**
+- `on_move_tray_request` parses the message (`parse_move_tray_request`; an unknown direction is logged and ignored), resolves `"toggle"`, then: `actuate_pogos: true` → `proxy.move_tray(direction)` (the legacy CHIP_CABIN_CTRL macro); `actuate_pogos: false` → `proxy.motor.chip_cabin_ctrl(TRAY_ACTION_CODES[direction], CHIP_CABIN_TRAY_ONLY_FLAG)` (action 0 = in, 1 = out; flags 1 = tray only), failed when the reply is missing or its status byte `CHIP_CABIN_STATUS_INDEX` reads `CHIP_CABIN_STATUS_ERROR` (0xFF). Either way it logs the outcome and republishes the status snapshot.
+
+**Traced flow (tray glyph)**
+glyph click → `MOVE_TRAY {direction, actuate_pogos: false}` → `on_move_tray_request` → `motor.chip_cabin_ctrl(action, 1)` → `_publish_status_snapshot()` → `STATUS_UPDATED` + `MOTORS_UPDATED` → status pane `_on_motors_updated_triggered` sets `tray_out_reported` from `mechanisms["cabin"]`, which re-syncs the glyph.
+
+### Portable DropBot magnet engage height: read / RAM write / flash preset
+
+The magnet's engage height is `z_up` (µm), the first int32 of the motor board's `magnet_defaults` device-defaults struct (flash key `_dp_magnet`: `z_up, z_down, y_0, y_space`, big-endian, `MAGNET_DEFAULTS_FIELDS`/`MAGNET_DEFAULTS_FORMAT`). The workflow mirrors the vendor debug UI: Write = RAM only (used from the next engage, lost on reboot); Preset = persists what is in RAM to flash. No motor-board reboot is needed.
+
+**Topics (`portable_dropbot_controller/consts.py`)**
+- `MAGNET_ENGAGE_READ = "portable_dropbot/requests/magnet_engage_read"` — empty message.
+- `MAGNET_ENGAGE_WRITE = "portable_dropbot/requests/magnet_engage_write"` — `MagnetEngageWriteRequest {engage_mm: float >= 0}`, published through `magnet_engage_write_publisher`.
+- `MAGNET_ENGAGE_PRESET = "portable_dropbot/requests/magnet_engage_preset"` — empty message.
+- `MAGNET_ENGAGE_UPDATED = "portable_dropbot/signals/magnet_engage_updated"` — `MagnetEngageUpdated {action: "read" | "write" | "preset", engage_mm: float | null, error: str}`, published through `magnet_engage_updated_publisher`; `error` empty means the request succeeded, and `engage_mm` is the height a read returned or a write sent.
+
+**Backend (`portable_dropbot_controller/services/portable_dropbot_system_mixin_service.py`)**
+- `on_magnet_engage_read_request` reads the struct (`uart.getBoardParameter("motor", "magnet_defaults")`) and publishes `z_up / 1000`.
+- `on_magnet_engage_write_request` reads the struct back, refuses a height above the magnet-Z motor's positive soft limit (`pl_pos` of the `magnet_motor` mechanical params — above it the firmware rejects every engage), replaces only `z_up` with `round(engage_mm * 1000)`, and writes all four fields with `uart.setParams("motor", "_dp_magnet", ...)`.
+- `on_magnet_engage_preset_request` calls `uart.presetParams("motor", "_dp_magnet")`.
+
+**Frontend (`portable_dropbot_status_and_controls`, Preferences > Portable DropBot Settings > Magnet)**
+- Read / Write / Preset to flash buttons on `PortableDropbotSettingsPreferencesPane` publish the three requests; Write sends the field's unapplied value, and Preset asks for confirmation first.
+- The plugin owns `MAGNET_ENGAGE_LISTENER` (subscribed to `MAGNET_ENGAGE_UPDATED`) for the whole session: `PortableDropbotMagnetEngageMessageHandler`, made in `start()` and torn down in `stop()`, applies each reply to the plugin's `MagnetEngageModel` on the GUI thread. The plugin hands that model to every pane it contributes, so the status line updates live and a successful read fills the pane's detached copy of `magnet_engage_mm` (an unapplied edit until Apply, never the preferences node).
+
+### Portable DropBot droplet detection: absolute-threshold DETECT_DROPLETS
+
+The portable answers `DETECT_DROPLETS` with an absolute-threshold scan, as the DropBot does: the driver's `measure_capacitance()` reads every requested channel's capacitance (pF), and channels reading at least `DROPLET_DETECTION_THRESHOLD_PF` (10 pF, the DropBot's default) count as holding liquid. There is no dry-chip baseline to calibrate.
+
+**Topics**
+- `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = all); reply `{"success", "detected_channels", "error"}`.
+
+**Backend (`portable_dropbot_controller/services/portable_dropbot_droplet_detection_mixin_service.py`)**
+- `on_detect_droplets_request` runs `measure_capacitance` and replies with the sorted channels at or above the threshold; an empty scan result replies with an error.
+- The scan switches every channel and drives HV itself (on a 200-channel board HV is enabled for the scan), so afterwards the service re-applies V/F and, in realtime mode, HV plus the last requested electrodes (`LAST_CHANNEL_STATES_REQUESTED_KEY`); outside realtime mode it clears the electrodes and disables HV.
 
 ### Portable DropBot protocol columns: magnet + heater step execution
 
@@ -397,6 +481,47 @@ the camera lives in the frontend process.
 **Pane Manual controls (same pane, collapsible group)** — each edit applies live (the LED is left to the status pane's Light control): a filter pick publishes `SET_FILTER` (the position as text); **Home filter** publishes `MOTOR_HOME` with `"filter"` and resets the pick to position 1 without a second move; an exposure change (while not on auto) or ticking Auto exposure publishes a `CameraControlsRequest` on `DEVICE_VIEWER_CAMERA_SET_CONTROLS` with `request_id="manual"` (`exposure_ms` `None` = auto; `focus_distance` always `None`); unticking it publishes `hold_auto_exposure=true` with `request_id="manual-hold-exposure"` only when the last readback reported auto's pick (that readback's `exposure_ms` then moves the Exposure slider there), else a plain manual request at the slider's value. Capture frame publishes `DEVICE_VIEWER_SCREEN_CAPTURE` `{directory: <experiment dir>, step_description: "flu_manual_f<n>", show_status_message: false, request_id: "manual-<uuid4>"}`. The pane's listener subscribes to `DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED` (any readback, manual or a capture's, shown on its Camera line) and `DEVICE_VIEWER_MEDIA_CAPTURED` (only the file echoing its in-flight `manual-` request id becomes a Results run).
 
 **Protocol-step captures (`portable_dropbot_protocol_controls`'s `fluorescence_capture` column, `FluorescenceCaptureHandler`)** — the same `step_uuid`-style correlation pattern as `pmt_capture`: `on_pre_step` runs entries ticked `at_start`, `on_post_step` those ticked `at_end`, each phase publishing one `FLUORESCENCE_CAPTURE` with `request_id=f"{row.uuid}:{phase}"` and `label` sanitised to `PMT_CAPTURE_LABEL_PATTERN` (e.g. `step1.2-end`), then waiting on `FLUORESCENCE_CAPTURE_DONE` with a `predicate=` matching that `request_id` — a pane-initiated capture or a stale done from an earlier step can never satisfy it. Timeout is `len(entries) * FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S + FLUORESCENCE_STEP_TIMEOUT_MARGIN_S` (no per-entry exposure sum like the PMT column's — the per-entry overhead already covers the filter's up-to-60 s move plus both camera stages); `ack_time_s == 0` on the Protocol Settings grid means fire-and-forget, as for magnet/heater/PMT. `done.ok == False` raises `RuntimeError(done.error)`; an `AbortError` publishes `FLUORESCENCE_CAPTURE_ABORT` before re-raising, and `on_post_protocol_end` publishes it unconditionally (including in preview mode) so an interrupted run never leaves a capture going. The captures folder lands in the report as one metadata row (`{"Fluorescence Captures Folder": done.directory}`); the PNGs themselves reach the report's Media Captures section on their own through the now-live `DEVICE_VIEWER_MEDIA_CAPTURED`, so there is no per-image contribution.
+
+### Protocol columns → Device Viewer: camera source selection around a run
+
+Lets a plugin column (the fluorescence plugin's, in its own repo) show a given camera source for a run, learn whether that worked, and put the previous source back afterwards. Payload models live in `device_viewer/models/media.py`, re-exported with the topics and their `ValidatedTopicPublisher`s (`camera_select_source_publisher`, `camera_source_selected_publisher`, `camera_state_publisher`) from `device_viewer/consts.py`.
+
+**Topics (`device_viewer/consts.py`)**
+- `DEVICE_VIEWER_CAMERA_SELECT_SOURCE = "ui/device_viewer/camera/select_source"` — `CameraSelectSourceRequest {label, active, request_id}` (extra fields rejected). `label` is the camera dropdown text, e.g. `"ASI: ZWO ASI183MM"`: an exact match wins, else a case-insensitive one; `""` selects `<No Camera>` (what `CameraState` reports for it). `active` `true`/`false` also turns the camera on/off; `null` leaves it.
+- `DEVICE_VIEWER_CAMERA_SOURCE_SELECTED = "ui/device_viewer/camera/source_selected"` — `CameraSourceSelected {request_id, label, ok, error, active}`: `label` is the entry selected (the requested one when unknown), `active` the camera's on/off after the request. `ok=false` for malformed JSON or a failed validation (answered by the message controller without reaching the widget, `request_id`/`label` recovered from the raw payload), no camera widget, an unknown label (`error` lists the available labels), a provider feed that failed to open or raised, or `active=true` with `<No Camera>` selected.
+- `DEVICE_VIEWER_CAMERA_STATE = "ui/device_viewer/camera/state"` — `CameraState {selected_camera, active, leased}`, published by `CameraController` whenever its model's `selected_camera`, `camera_active` or `camera_leased` changes (so once when the camera panel makes its first selection at startup, and on every dropdown pick, toggle, `camera_active` request or feed error), and again right after every `source_selected` reply.
+
+**Device viewer side**
+- `DeviceViewerMessageController._on_select_source_triggered` (Dramatiq worker) validates the payload and emits `CameraControlWidget.camera_select_source_signal`, which runs `apply_select_source` on the GUI thread: `CameraController.find_requested_source` matches the label, `combo_cameras.setCurrentIndex` selects it through the same `on_camera_changed` path as a click (a running camera is restarted on the new source), then `on_camera_active(active)` — the slot `DEVICE_VIEWER_CAMERA_ACTIVE` uses — switches it on/off. `CameraController.source_selected` publishes the reply, then the state.
+- A provider feed (`CAMERA_SOURCES`) opens synchronously — an `open()` failure is answered at once with its message — but may start asynchronously (the ASI feed opens the camera on its thread), so a request that starts a new feed holds its reply: the feed's first `error` answers `ok=false` with that message, its optional `started` signal or `CAMERA_FEED_START_TIMEOUT_MS` (3 s) without an error answers `ok=true`. Requesters' reply timeouts must exceed that. A `QCamera`'s start is not waited on: `ok=true` means the selection and the start request went through; a camera failing later shows as `active=false` on `DEVICE_VIEWER_CAMERA_STATE`.
+- **Camera lease** — every valid `select_source` sets `CameraModel.camera_leased` in the message controller on receipt: `active=true` takes it, anything else releases it. While leased, `_on_camera_active_triggered` ignores `DEVICE_VIEWER_CAMERA_ACTIVE` `"false"` (info log "Camera kept on: leased by a protocol run"); `"true"` still applies. `PROTOCOL_RUNNING` `"False"` (published by the protocol tree dock pane on finish/abort/error) also releases it, so a crashed run never leaves the camera held.
+
+**Traced flow (run start)**
+1. Plugin column `on_pre_protocol_start` publishes `select_source {label, active: true, request_id: <uuid>}`, having kept the latest `DEVICE_VIEWER_CAMERA_STATE` (its listener subscribes to it) to restore later.
+2. Device viewer selects + starts the source (above) and publishes `source_selected {request_id, ok, ...}` then `camera/state`.
+3. The column waits for the `source_selected` carrying its `request_id`, then returns (run proceeds) or raises `RuntimeError(error)` on `ok=false` / timeout. The executor wraps it in `StepExecutionError` ("protocol — '<column>' failed during on_pre_protocol_start: ..."), aborts before `protocol_started`, runs the `on_protocol_end` / `on_post_protocol_end` teardown, and emits `protocol_error`; the protocol tree dock pane shows it in the "Protocol error" dialog. Note `on_pre_protocol_start` gets a `ProtocolContext`, which has no `wait_for`: the executor's listener only fills the active step's mailboxes, so a run-start wait needs the requester's own subscription.
+4. Mid-run: the Video column's `camera_active` `"false"` for a step without video is ignored while the run's lease holds; `"true"` applies (a no-op on the already-running feed).
+5. Run end: the column restores the saved state with another `select_source {label: <saved selected_camera>, active: <saved active>}`, which releases the lease; best sent from `on_post_protocol_end`, after the Video column's `on_protocol_end` camera-off (ignored if it arrives first, applied if Dramatiq delivers it after the restore). `PROTOCOL_RUNNING` `"False"` releases the lease if no restore came.
+
+**Ownership** — the Video column stays the only publisher of `DEVICE_VIEWER_CAMERA_ACTIVE` during steps; `select_source` is a run-start/run-end request, and its `active=true` lease outranks the Video column's camera-off (see `video_protocol_controls/protocol_columns/capture_column.py`'s header).
+
+### Protocol Capture column ↔ Device Viewer: per-step capture camera settings
+
+Each capturing step stores the resolution and camera properties it captures with (the Capture compound's display-only `capture_camera_settings` cell, a `CameraSettings` dict or `None`), so they vary from step to step instead of staying whatever the camera panel last had. Payload models live in `device_viewer/models/media.py`, re-exported from `device_viewer/consts.py`.
+
+**Topics (`device_viewer/consts.py`)**
+- `DEVICE_VIEWER_CAMERA_SETTINGS = "ui/device_viewer/camera/settings"` — `CameraSettingsSnapshot {camera, resolution, image_controls, focus, user_edit}`: `resolution` is `[w, h]` (`None`, with no controls, unless a QCamera is selected), `image_controls` maps v4l2 control names to `{value, auto}`, `focus` is `{auto, distance}` or `None`. Published by `CameraController` through a 0.3 s throttle (`CAMERA_SETTINGS_PUBLISH_INTERVAL_S`): `user_edit=true` after a resolution pick, an image-control edit, a focus edit or an autofocus sweep; `false` after a source selection, a restored format or an applied request.
+- `DEVICE_VIEWER_CAMERA_APPLY_SETTINGS = "ui/device_viewer/camera/apply_settings"` — `CameraSettingsRequest {camera, resolution, image_controls, focus, request_id, context}` (extra fields rejected); `context` names the asker for the user's warnings ("Step 1.2 · Wash").
+- `DEVICE_VIEWER_CAMERA_SETTINGS_APPLIED = "ui/device_viewer/camera/settings_applied"` — `CameraSettingsApplied {request_id, ok, warnings, error}`. `ok=false` when nothing applied (no QCamera selected, invalid payload, no camera widget); `warnings` lists what the camera could not take while the rest applied.
+
+**Device viewer side** — `_on_apply_settings_triggered` validates and emits `camera_settings_signal`; `CameraControlWidget.apply_camera_settings` (GUI thread) switches to the best format of the resolution (via the saved-resolution restore, so it shows in the condensed list and skips the high-resolution notice), then `CameraController.apply_settings` sets each image control (a missing one skipped, an out-of-range value clamped, an `auto` without an automatic mode applied manual) and the focus. While the camera is off the request is kept and applied again when it starts (Qt reports focus support only for a started camera, and some cameras reset their controls on open). Each warning is logged and shown once per camera selection in a deferred `pyface_wrapper.warning`, so steps sharing an unsupported setup warn once.
+
+**Protocol side (`video_protocol_controls/services/camera_settings_sync.py`, `CameraSettingsSync` actor)** — subscribes to `DEVICE_VIEWER_CAMERA_SETTINGS`, `PROTOCOL_TREE_ROW_SELECTED` and `PROTOCOL_RUNNING`; idle only:
+1. A `user_edit` snapshot is written over `PROTOCOL_TREE_SET_CELL` into the current step when it captures, and into every other selected step with `only_if_set=true` (only those already holding a setup).
+2. A capturing step without a setup gets the latest snapshot on selection (or on the next snapshot).
+3. Selecting a step holding a setup publishes `apply_settings` for it (skipped when it is the setup last synced, so the tree's rebroadcast of our own write is not applied back); a snapshot naming a different camera re-applies it, so the new camera's warnings show.
+
+**Run time** — `CaptureHandler.on_pre_step` (capture ticked, setup stored) publishes `apply_settings` before the camera lead starts and waits for the `settings_applied` carrying its `request_id` (the Capture ack time; 0 = fire-and-forget). `ok=false` and warnings are logged; the capture always goes ahead.
 
 ### Voltage/frequency range preferences: app_globals owner-publishes (#610)
 

@@ -11,15 +11,19 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, that stat
 per ROI on the displayed image (bars) or across the series (violins),
-the fits' second-derivative curves, or the per-ROI
-time-of-fastest-change bars.
+the pixel intensities each ROI measures on the displayed image
+(histograms), the fits' first- or second-derivative curves, the per-ROI
+time-of-fastest-change bars, or that time against the expected one.
 A pure observer of the shared analysis model — it derives its own
 series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 
 # Standard library imports.
+import math
 import os
+import re
+from functools import partial
 from pathlib import Path
 
 os.environ.setdefault("QT_API", "pyside6")
@@ -33,33 +37,47 @@ from matplotlib.backends.backend_qtagg import (
     NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
-from matplotlib.ticker import AutoLocator, ScalarFormatter
+from matplotlib.lines import Line2D
+from matplotlib.ticker import (
+    AutoLocator,
+    FuncFormatter,
+    Locator,
+    MaxNLocator,
+    ScalarFormatter,
+)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from pyface.api import OK, DirectoryDialog, FileDialog
 from pyface.tasks.api import DockPane
-from traits.api import Any, Instance, observe
+from traits.api import Any, Instance, List, observe
 from traitsui.api import (
     EnumEditor,
     HGroup,
     Item,
     Label,
     Tabbed,
+    TableEditor,
     UItem,
     VGrid,
     VGroup,
     View,
+    spring,
 )
 
 from microdrop_style.icons.icons import (
+    ICON_ADD,
+    ICON_COPY,
+    ICON_DELETE,
     ICON_FOLDER_OPEN,
     ICON_FUNCTION,
+    ICON_RESTORE,
     ICON_SAVE,
 )
 
@@ -69,13 +87,45 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
     InPlaceToggleEditor,
+    ObjectColumn,
+    SlidingToggleEditor,
+    SteppedSliderEditor,
+    install_table_clipboard,
     toggle_editor_default_style_sheet_factory,
 )
 
 from ..consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
+    ANNOTATION_FONT_SCALE,
+    AREA_FIT_EXCLUDED_POINT_MARKER,
+    AREA_FIT_EXCLUDED_POINT_SCALE,
+    AREA_FIT_STATS,
+    AREA_NORMALIZED_STATS,
+    BAR_GAP_BOUNDS,
+    BUTTER_CUTOFF_BOUNDS,
+    CUSTOM_POINT_ALPHA,
+    CUSTOM_POINT_COLOR,
+    CUSTOM_POINT_LABEL,
+    CUSTOM_POINT_MARKER,
+    EXCLUDED_POINT_ALPHA,
+    EXCLUDED_POINT_MARKER,
+    EXPECTED_METRIC_LABELS,
+    EXPECTED_METRIC_MARKERS,
+    FIGURE_FONT_SIZE_PT,
     HEATER_LOGS_DIR_NAME,
+    HISTOGRAM_ALPHA_BOUNDS,
+    HISTOGRAM_CLIP_BOUNDS_PERCENT,
+    HISTOGRAM_FILTERED_BIN_ALPHA,
+    HISTOGRAM_FIT_FLOOR_PIXELS,
+    HISTOGRAM_FIT_LABELS,
+    HISTOGRAM_FIT_MIN_PIXELS,
+    HISTOGRAM_FITS,
+    HISTOGRAM_X_MAGNIFY_BOUNDS,
+    LEGEND_FONT_SCALE,
+    OUTLIER_THRESHOLD_BOUNDS_MAD,
+    PLOT_CLICK_SLOP_PX,
+    PLOT_PICK_RADIUS_PX,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
     ROI_PLOT_CANVAS_MIN_HEIGHT,
@@ -83,12 +133,15 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
-    VIEW_MODE_LABELS,
+    TIME_UNITS,
     VIEW_MODES,
     X_AXIS_LABELS,
     X_AXIS_MODES,
 )
 from .curve_fit import (
+    FIT_LABELS,
+    FIT_METHODS,
+    TREND_METHODS,
     fastest_change_time,
     fit_series,
     second_derivative_extrema,
@@ -97,19 +150,49 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .heater_log import heater_coverage_note
+from .histogram_series import (
+    bin_centres,
+    bins_within,
+    channel_samples,
+    fit_distribution,
+    fitted_counts,
+    histogram_counts,
+    histogram_edges,
+    in_range,
+    magnified,
+    magnified_ticks,
+    pixels_in_bins,
+    pooled_median,
+    smoothed_counts,
+    unmagnified,
+)
+from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
     SMOOTH_LABELS,
     SMOOTH_METHODS,
+    analysed_and_excluded_series,
     analysed_paths,
-    analysed_series,
+    area_fit_series,
+    excluded_paths,
     finite_values,
     image_values,
+    in_visibility_order,
     interpolated_series,
+    quantity_label,
     smoothed_series,
+    step_ids,
+    step_ordinals,
+    step_tick_label,
+    temperature_over_time,
+    time_axis_label,
+    x_axis_label,
+    x_quantity,
 )
-from .roi_model import PLOT_STATS, roi_analysis_model
+from .roi_compute import measured_pixels
+from .roi_model import PLOT_STATS, CustomPoint, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
+from .temperature_style_view import temperature_style_view
 
 #: Human labels for the plotted stat (dropdown + y-axis).
 PLOT_STAT_LABELS = {
@@ -123,6 +206,8 @@ PLOT_STAT_LABELS = {
     "bg_integrated": "Integrated (bg-corrected)",
     "per_area": "Per area",
     "bg_per_area": "Per area (bg-corrected)",
+    "area_normalized": "Mean intensity (area normalized, a.u.)",
+    "bg_area_normalized": "Bg-corrected mean intensity (area normalized, a.u.)",
     "area": "Area",
     "circularity": "Circularity",
     "shape_change": "Shape change",
@@ -149,6 +234,7 @@ def y_axis_label(
     normalize=False,
     subtract_first=False,
     subtract_background_ref=False,
+    area_fit_method="none",
 ):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
@@ -160,6 +246,9 @@ def y_axis_label(
         else template.format(unit=area_unit(scale.metres_per_pixel, scale.unit))
     )
     # In the order they were applied, so the axis reads as the recipe.
+    # The Area view's points stay measured; only its overlay is fitted.
+    if area_fit_method != "none" and plot_stat in AREA_NORMALIZED_STATS:
+        label = f"{label} (area fitted)"
     if subtract_background_ref:
         label = f"{label} (bkg-ref corrected)"
     if subtract_first:
@@ -178,6 +267,10 @@ def _fit_method_label(key):
 #: pane allows.
 FIT_CURVE_SAMPLES = 200
 
+#: Ticks along the Histogram view's magnified x axis: matplotlib's own
+#: count for an axis of this pane's width.
+MAGNIFIED_TICK_COUNT = 9
+
 #: The corner equation box, in axes fractions: left margin, the
 #: first line's top, and the drop per further line.
 EQUATION_BOX_X = 0.02
@@ -186,19 +279,70 @@ EQUATION_LINE_STEP_Y = 0.06
 
 #: Footnotes along the bottom edge, in axes fractions: the
 #: log-axis hidden-point count at the bottom, the dropped-outlier
-#: count one line above it, the no-temperature count above that, so
-#: none of the three ever overprint.
+#: count one line above it, the no-temperature (or, on the step axis,
+#: no-step) count above that, so none of the three ever overprint.
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
 NOTE_NO_TEMP_Y = 0.09
+NOTE_AREA_FIT_Y = 0.125
 
 #: The views drawn against the time (or temperature) axis; the rest
-#: put ROI names along x.
-TIME_VIEW_MODES = ("intensity", "second_derivative")
+#: put ROI names along x — or, the histogram, pixel intensity.
+TIME_VIEW_MODES = ("intensity", "first_derivative", "second_derivative")
+
+#: The views whose x axis is a number the Axes tab's X row limits and
+#: logs: the time views and the histogram's intensity. The bar and
+#: violin views put ROI names there, and the temperature view keeps
+#: the captures' own span.
+NUMERIC_X_VIEW_MODES = (*TIME_VIEW_MODES, "histogram")
+
+#: The views that read the displayed image, so stepping through the
+#: series redraws them.
+DISPLAYED_IMAGE_VIEW_MODES = ("per_image", "histogram")
+
+#: The derivative views' y-axis symbol, by derivative order.
+DERIVATIVE_SYMBOLS = {1: "dy/dx", 2: "d²"}
 
 #: The views a log value axis applies to. Not the bar charts: a bar
-#: grows from zero, which a log axis cannot show.
-LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution")
+#: grows from zero, which a log axis cannot show. The histogram's
+#: counts can: an empty bin simply drops out, and a log scale is what
+#: brings a sparse tail up beside the bulk of an ROI's pixels.
+LOG_Y_VIEW_MODES = (*TIME_VIEW_MODES, "distribution", "histogram")
+
+#: The views drawing a point per image, which a click can toggle the
+#: exclusion of.
+PICK_VIEW_MODES = ("intensity", "temperature")
+
+#: The views the Axes tab's manual y limits apply to: all but the
+#: temperature view, whose y reads in degrees, which limits set for the
+#: plotted stat would cut away. The histogram's y counts pixels, and
+#: limiting it is how a tall peak is cut down to show a faint tail.
+Y_LIMIT_VIEW_MODES = tuple(mode for mode in VIEW_MODES if mode != "temperature")
+
+#: The views drawn from the analysed series' values, which its notes
+#: (log-hidden points, dropped outliers, area-fit fallbacks) count.
+#: Not the temperature view, which draws the heater log, nor the
+#: histogram, which draws the displayed image's pixels — the series
+#: only orders and names its ROIs.
+SERIES_VIEW_MODES = tuple(
+    mode for mode in VIEW_MODES if mode not in ("temperature", "histogram")
+)
+
+#: The Histogram view, as a visible_when condition: its distribution
+#: fit, bins, clip, filters and marker lines show only there, while the
+#: series' fit and cleanup controls are switched off there.
+_HISTOGRAM_VIEW = "figure.view_mode == 'histogram'"
+_NOT_HISTOGRAM_VIEW = "figure.view_mode != 'histogram'"
+
+#: When the series fit's own controls have a fit to act on.
+_SERIES_FITTED = f"figure.fit_method != 'none' and {_NOT_HISTOGRAM_VIEW}"
+
+#: When the Histogram view draws a distribution fit to fade or shade.
+_HISTOGRAM_FITTED = "figure.histogram_fit != 'none'"
+
+#: When the Histogram view's x magnifier applies: a log axis stretches
+#: the intensities its own way, and the two do not compose.
+_HISTOGRAM_MAGNIFIABLE = "not figure.log_x"
 
 #: A violin body's opacity as a fraction of its ROI's, so the median
 #: and extent lines drawn over it stay readable.
@@ -212,14 +356,48 @@ TRIM_SHADE_ALPHA = 0.12
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":", "dashdot": "-."}
 
 #: Fixed pixel widths, so nothing stretches to fill its row: a value
-#: spinner, a small parameter spinner, and a dropdown.
-VALUE_SPIN_W = -78
-PARAM_SPIN_W = -58
-DROPDOWN_W = -130
+#: spinner, a small parameter spinner, and a dropdown. Measured in the
+#: app's font (Inter 11pt) under the Windows 11 style, whose side-by-side
+#: arrows are the widest: a value box shows "-44.7649" or "123456.0" in
+#: full, a parameter box "0.25" or "101", a dropdown its longest
+#: built-in label ("Actual vs expected"). The plotted-stat dropdown has
+#: its own, far wider one for "Bg-corrected mean intensity (area
+#: normalized, a.u.)" — not measured, but scaled from the width
+#: measured for "Background-corrected mean" by the ratio of the two
+#: labels' text widths.
+VALUE_SPIN_W = -138
+PARAM_SPIN_W = -102
+DROPDOWN_W = -176
+STAT_DROPDOWN_W = -440
+#: A sliding switch's own size hint, as the live histogram's; stretched,
+#: it pushes the state named on its right away from it.
+SWITCH_W = -58
+
+#: The Histogram view's 0-1 sliders (opacities, x magnify): notches
+#: fine enough to tune by, and their readout.
+SLIDER_STEP = 0.05
+SLIDER_FORMAT = "%.2f"
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
+
+#: The Axes tab's x magnifier.
+HISTOGRAM_MAGNIFY_TOOLTIP = (
+    "Stretch the intensity axis around a pivot: 1 leaves it linear, "
+    "smaller values spread the bins near the pivot apart and squeeze the "
+    "tails, to show small shifts between ROIs. Tick labels keep reading "
+    "true intensities. Not on a log x axis, which stretches it its own way."
+)
+
+#: The Axes tab's temperature-calibration field.
+TEMPERATURE_EXPRESSION_TOOLTIP = (
+    "Calibration written as actual = f(expected) — the same expression "
+    "as the heater's compensation, e.g. the Actual vs expected trend you "
+    "copied. x (or expected) is the expected temperature; the plot "
+    "inverts f numerically so this axis reads in expected degrees. x "
+    "leaves the log's values unchanged."
+)
 
 
 def _section(flag, label, *content):
@@ -240,6 +418,40 @@ def _axis_spin(name, auto_flag):
             low=AXIS_LIMIT_BOUNDS[0], high=AXIS_LIMIT_BOUNDS[1], decimals=1, step=1.0
         ),
         enabled_when=f"not figure.{auto_flag}",
+    )
+
+
+def _filter_spin(name, filter_flag, decimals=1):
+    """A Histogram-view filter bound, as wide as an axis limit and
+    enabled while its filter is on — the axis spin's inverse."""
+    return UItem(
+        name,
+        width=VALUE_SPIN_W,
+        editor=DoubleSpinBoxEditor(
+            low=AXIS_LIMIT_BOUNDS[0],
+            high=AXIS_LIMIT_BOUNDS[1],
+            decimals=decimals,
+            step=1.0,
+        ),
+        enabled_when=f"figure.{filter_flag}",
+    )
+
+
+def _alpha_slider(name, label, tooltip, enabled_when=""):
+    """One of the Histogram view's opacity sliders: a track and its
+    readout, as narrow as a parameter box so the four share a row."""
+    return Item(
+        name,
+        label=label,
+        width=PARAM_SPIN_W,
+        editor=SteppedSliderEditor(
+            low=HISTOGRAM_ALPHA_BOUNDS[0],
+            high=HISTOGRAM_ALPHA_BOUNDS[1],
+            step=SLIDER_STEP,
+            format=SLIDER_FORMAT,
+        ),
+        enabled_when=enabled_when,
+        tooltip=tooltip,
     )
 
 
@@ -268,14 +480,12 @@ def _top_row():
             "figure.view_mode",
             label="View",
             width=DROPDOWN_W,
-            editor=HoverScrollEnumEditor(
-                values=list(VIEW_MODES), format_func=VIEW_MODE_LABELS.get
-            ),
+            editor=HoverScrollEnumEditor(values_name="model.view_mode_choices"),
         ),
         Item(
             "session.plot_stat",
             label="Plot",
-            width=DROPDOWN_W,
+            width=STAT_DROPDOWN_W,
             editor=HoverScrollEnumEditor(
                 values=list(PLOT_STATS), format_func=PLOT_STAT_LABELS.get
             ),
@@ -308,7 +518,7 @@ def _axes_tab():
             _axis_spin("figure.x_max", "x_auto"),
             UItem(
                 "figure.log_x",
-                tooltip="Logarithmic time axis. Points at t = 0 "
+                tooltip="Logarithmic x axis. Points at or below 0 "
                 "cannot be drawn on it and are counted in "
                 "a note on the figure.",
             ),
@@ -334,15 +544,161 @@ def _axes_tab():
                     values=list(X_AXIS_MODES), format_func=X_AXIS_LABELS.get
                 ),
                 tooltip="What the curves are plotted against: "
-                "elapsed capture time, or the heater log's "
+                "elapsed capture time, the heater log's "
                 "temperature at each capture (joined on "
-                "wall-clock time). The fits follow it — a "
-                "melt midpoint reads in °C.",
+                "wall-clock time), the protocol step each "
+                "capture was taken in, or the image's frame "
+                "number in the filtered series. The fits "
+                "follow it — a melt midpoint reads in °C.",
+            ),
+            Item(
+                "figure.time_unit",
+                label="Unit",
+                width=PARAM_SPIN_W,
+                editor=HoverScrollEnumEditor(values=list(TIME_UNITS)),
+                visible_when="figure.x_axis == 'time'",
+                tooltip="The time axis's unit; the fits and their "
+                "landmarks read in it too",
             ),
             _toggle(
                 "figure.show_legend",
                 "Legend",
                 tooltip="Show the ROI legend on the figure",
+            ),
+        ),
+        VGroup(
+            # The off state named on the switch's left, the on state on
+            # its right, as in the live histogram.
+            HGroup(
+                Label("Channels"),
+                Label("Luma"),
+                UItem(
+                    "figure.histogram_channel_mode",
+                    editor=SlidingToggleEditor(on_value="rgb", off_value="luma"),
+                    width=SWITCH_W,
+                    tooltip="Histogram view: bin each ROI's luma — the "
+                    "pixels the stats table measures — or split a colour "
+                    "capture into its red, green and blue channels, a "
+                    "series each. A mono frame has no channels to split "
+                    "and shows its luma.",
+                ),
+                Label("RGB"),
+                spring,
+            ),
+            HGroup(
+                _toggle(
+                    "figure.histogram_show_median",
+                    "Median",
+                    tooltip="Histogram view: a solid vertical line at each "
+                    "ROI's median — the table's, over all its pixels",
+                ),
+                _toggle(
+                    "figure.histogram_show_mean",
+                    "Mean",
+                    tooltip="Histogram view: a dashed vertical line at each "
+                    "ROI's mean — the table's, over all its pixels",
+                ),
+                _toggle(
+                    "figure.histogram_bar_fill",
+                    "Fill bars",
+                    tooltip="Histogram view: fill each ROI's bars in its "
+                    "colour under the outline, at the Bars opacity",
+                ),
+            ),
+            HGroup(
+                Label("Opacity"),
+                _alpha_slider(
+                    "figure.histogram_bar_alpha",
+                    "Bars",
+                    "Histogram view: opacity of the bars — outline and fill — "
+                    "times each ROI's alpha in the ROI table",
+                ),
+                _alpha_slider(
+                    "figure.histogram_fit_alpha",
+                    "Fit",
+                    "Histogram view: opacity of the fitted curve. Absolute: "
+                    "the ROI table's alpha does not scale it.",
+                    _HISTOGRAM_FITTED,
+                ),
+                _alpha_slider(
+                    "figure.histogram_fit_fill_alpha",
+                    "Fill",
+                    "Histogram view: opacity of the shading under the fitted "
+                    "curve; 0 draws none. Absolute: the ROI table's alpha "
+                    "does not scale it.",
+                    _HISTOGRAM_FITTED,
+                ),
+                _alpha_slider(
+                    "figure.histogram_marker_alpha",
+                    "Markers",
+                    "Histogram view: opacity of the median and mean lines, "
+                    "times each ROI's alpha in the ROI table",
+                ),
+                # The sliders keep their width; without the spring their
+                # labels soak up the row's slack and scatter them across it.
+                spring,
+            ),
+            HGroup(
+                Item(
+                    "figure.histogram_x_magnify",
+                    label="X magnify",
+                    width=DROPDOWN_W,
+                    editor=SteppedSliderEditor(
+                        low=HISTOGRAM_X_MAGNIFY_BOUNDS[0],
+                        high=HISTOGRAM_X_MAGNIFY_BOUNDS[1],
+                        step=SLIDER_STEP,
+                        format=SLIDER_FORMAT,
+                    ),
+                    enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                    tooltip=HISTOGRAM_MAGNIFY_TOOLTIP,
+                ),
+                _toggle(
+                    "figure.histogram_x_pivot_auto",
+                    "Auto pivot",
+                    enabled_when=_HISTOGRAM_MAGNIFIABLE,
+                    tooltip="Pivot the magnifier on the median of every shown "
+                    "ROI's pixels (those the intensity range keeps), "
+                    "following the displayed image; off, on the value "
+                    "beside it. Not on a log x axis.",
+                ),
+                UItem(
+                    "figure.histogram_x_pivot",
+                    width=VALUE_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=AXIS_LIMIT_BOUNDS[0],
+                        high=AXIS_LIMIT_BOUNDS[1],
+                        decimals=1,
+                        step=1.0,
+                    ),
+                    enabled_when=f"{_HISTOGRAM_MAGNIFIABLE} "
+                    "and not figure.histogram_x_pivot_auto",
+                    tooltip="The intensity the magnifier stretches the axis "
+                    "around. Not on a log x axis.",
+                ),
+                spring,
+            ),
+            visible_when=_HISTOGRAM_VIEW,
+        ),
+        HGroup(
+            Item(
+                "figure.font_size",
+                label="Font size",
+                width=PARAM_SPIN_W,
+                tooltip="Font size (pt) of the axis titles and tick "
+                "labels; the legend and the notes on the figure "
+                "scale with it, and the saved figure uses it too",
+            ),
+            Item(
+                "figure.bar_gap",
+                label="Bar gap",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=BAR_GAP_BOUNDS[0], high=BAR_GAP_BOUNDS[1], decimals=2, step=0.05
+                ),
+                enabled_when="figure.view_mode in ('per_image', 'fastest_change')",
+                tooltip="The empty share of each ROI's slot between "
+                "the bars of the Per image and Fastest change "
+                "views: 0 makes the bars touch",
             ),
         ),
         VGroup(
@@ -381,6 +737,7 @@ def _axes_tab():
             Item(
                 "figure.heater_window_ms",
                 label="Window (ms)",
+                width=VALUE_SPIN_W,
                 tooltip="How generous the time join is: a "
                 "capture's temperature is the mean of "
                 "every heater sample within ±window/2 "
@@ -388,11 +745,38 @@ def _axes_tab():
                 "the capture instant. Frames with no "
                 "sample in the window become gaps.",
             ),
-            visible_when="figure.x_axis == 'temperature'",
+            Item(
+                "figure.temperature_expression",
+                label="Calibrate: actual = f(expected)",
+                springy=True,
+                tooltip=TEMPERATURE_EXPRESSION_TOOLTIP,
+            ),
+            UItem(
+                "figure.temperature_expression_error",
+                style="readonly",
+                visible_when="figure.temperature_expression_error",
+            ),
+            UItem(
+                "session.temperature_uninvertible_hint",
+                style="readonly",
+                visible_when="session.temperature_uninvertible_hint",
+            ),
+            visible_when="figure.x_axis == 'temperature' "
+            "or figure.view_mode == 'temperature'",
             show_border=True,
         ),
         label="Axes",
     )
+
+
+#: When the marker dressing (V-line, H-line, Coords) has a marker to
+#: dress — never in the Histogram view, which draws no series fit.
+_ANY_MARKER_SHOWN = (
+    "(figure.show_second_derivative_max "
+    "or figure.show_second_derivative_min "
+    "or figure.show_second_derivative_zero) "
+    f"and {_NOT_HISTOGRAM_VIEW}"
+)
 
 
 def _fit_tab():
@@ -407,11 +791,15 @@ def _fit_tab():
                     editor=EnumEditor(
                         name="model.fit_method_choices", format_func=_fit_method_label
                     ),
+                    enabled_when=_NOT_HISTOGRAM_VIEW,
+                    tooltip="The curve fitted to each ROI's series. The "
+                    "Histogram view fits a distribution to the pixels "
+                    "instead (Distribution, below).",
                 ),
                 _toggle(
                     "figure.trim_poor_fit",
                     "Trim tail",
-                    enabled_when="figure.fit_method != 'none'",
+                    enabled_when=_SERIES_FITTED,
                     tooltip="Refit on a shorter leading slice while "
                     "R² is below 0.99, for series whose tail "
                     "the model does not describe (a bleached "
@@ -420,7 +808,7 @@ def _fit_tab():
                 _toggle(
                     "figure.show_fit_equations",
                     "Equations",
-                    enabled_when="figure.fit_method != 'none'",
+                    enabled_when=_SERIES_FITTED,
                     tooltip="Write each ROI's fitted equation into the figure's corner",
                 ),
                 UItem(
@@ -429,7 +817,26 @@ def _fit_tab():
                         glyph=ICON_FUNCTION,
                         tooltip="Show the fitted equation for every ROI in a table",
                     ),
+                    enabled_when=_NOT_HISTOGRAM_VIEW,
                 ),
+            ),
+            HGroup(
+                Item(
+                    "figure.histogram_fit",
+                    label="Distribution",
+                    width=DROPDOWN_W,
+                    editor=EnumEditor(
+                        values=list(HISTOGRAM_FITS),
+                        format_func=HISTOGRAM_FIT_LABELS.get,
+                    ),
+                    tooltip="Histogram view: fit a distribution to each "
+                    "ROI's pixels by maximum likelihood — the pixels the "
+                    "clip keeps — drawn dotted in its colour over its "
+                    "outline, the parameters in the legend. Log-normal's "
+                    "μ and σ are those of ln(intensity); it needs every "
+                    "pixel above zero.",
+                ),
+                visible_when=_HISTOGRAM_VIEW,
             ),
         ),
         _section(
@@ -439,35 +846,41 @@ def _fit_tab():
                 _toggle(
                     "figure.show_second_derivative_max",
                     "d² max",
-                    enabled_when="figure.fit_method != 'none'",
+                    enabled_when=_SERIES_FITTED,
                     tooltip="Mark where the fitted curve's second derivative peaks",
                 ),
                 _toggle(
                     "figure.show_second_derivative_min",
                     "d² min",
-                    enabled_when="figure.fit_method != 'none'",
+                    enabled_when=_SERIES_FITTED,
                     tooltip="Mark where the fitted curve's second derivative troughs",
+                ),
+                _toggle(
+                    "figure.show_second_derivative_zero",
+                    "d² zero",
+                    enabled_when=_SERIES_FITTED,
+                    tooltip="Mark where the fitted curve's second derivative "
+                    "crosses zero, between the d² max and min: the peak of "
+                    "|dy/dx|, where the curve changes fastest — the value the "
+                    "Fastest change view and the Expected tab report",
                 ),
                 _toggle(
                     "figure.second_derivative_vline",
                     "V-line",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
+                    enabled_when=_ANY_MARKER_SHOWN,
                     tooltip="Drop a vertical line through each marker",
                 ),
                 _toggle(
                     "figure.second_derivative_hline",
                     "H-line",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
+                    enabled_when=_ANY_MARKER_SHOWN,
                     tooltip="Run a horizontal line through each marker",
                 ),
                 _toggle(
                     "figure.second_derivative_coords",
                     "Coords",
-                    enabled_when="figure.show_second_derivative_max "
-                    "or figure.show_second_derivative_min",
-                    tooltip="Write each marker's (t, y) beside it",
+                    enabled_when=_ANY_MARKER_SHOWN,
+                    tooltip="Write each marker's (x, y) beside it",
                 ),
             ),
         ),
@@ -486,12 +899,21 @@ def _cleanup_tab():
                 "cannot raise the threshold that would "
                 "catch it. Dropped points are counted on "
                 "the plot, flagged in the CSV, and kept "
-                "out of the fits.",
+                "out of the fits. Not in the Histogram view, "
+                "which has no series points to drop.",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
             ),
             Item(
                 "figure.outlier_threshold",
                 label="MADs",
-                enabled_when="figure.remove_outliers",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=OUTLIER_THRESHOLD_BOUNDS_MAD[0],
+                    high=OUTLIER_THRESHOLD_BOUNDS_MAD[1],
+                    decimals=1,
+                    step=0.5,
+                ),
+                enabled_when=f"figure.remove_outliers and {_NOT_HISTOGRAM_VIEW}",
                 tooltip="How far from the local median counts "
                 "as an outlier, in scaled MADs — "
                 "about what the same number of "
@@ -501,7 +923,8 @@ def _cleanup_tab():
             Item(
                 "figure.outlier_window",
                 label="win",
-                enabled_when="figure.remove_outliers",
+                width=PARAM_SPIN_W,
+                enabled_when=f"figure.remove_outliers and {_NOT_HISTOGRAM_VIEW}",
                 tooltip="Total points in the local window — 5 means "
                 "the point plus two each side — used for the "
                 "local median and MAD. Wide enough to "
@@ -516,6 +939,23 @@ def _cleanup_tab():
                 "uncomputed images) instead of breaking "
                 "it. Display only — the fits and the CSV "
                 "keep the gaps.",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
+            ),
+            _toggle(
+                "figure.show_excluded_points",
+                "Excluded points",
+                tooltip="Show the images excluded from analysis "
+                "as faint hollow markers you can click to "
+                "bring back. Off hides them, so the axes "
+                "scale to the analysed curves alone.",
+            ),
+            UItem(
+                "model.include_all_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Clear the exclusion mark from every image",
+                ),
+                enabled_when="session.excluded_images",
             ),
         ),
         HGroup(
@@ -530,17 +970,26 @@ def _cleanup_tab():
                 "the unsmoothed points: smoothing makes "
                 "neighbouring values dependent, which "
                 "flatters R² and shrinks the parameter "
-                "uncertainties for the wrong reason.",
+                "uncertainties for the wrong reason. In the "
+                "Histogram view Savitzky-Golay smooths each "
+                "ROI's bin counts (window in bins) into a line "
+                "through the bin centres; Butterworth does not "
+                "apply there — its cutoff is a rate of change "
+                "over capture time, which intensity bins do "
+                "not have — and the outlines stay raw.",
             ),
             Item(
                 "figure.savgol_window",
                 label="win",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'savgol'",
-                tooltip="Points per polynomial fit (forced odd).",
+                tooltip="Points per polynomial fit (forced odd) — "
+                "bins, in the Histogram view.",
             ),
             Item(
                 "figure.savgol_order",
                 label="order",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'savgol'",
                 tooltip="Polynomial order. Higher follows "
                 "sharper features and smooths less.",
@@ -548,16 +997,27 @@ def _cleanup_tab():
             Item(
                 "figure.butter_order",
                 label="order",
+                width=PARAM_SPIN_W,
                 visible_when="figure.smooth_method == 'butterworth'",
-                tooltip="Filter order: higher cuts more sharply at the cutoff.",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
+                tooltip="Filter order: higher cuts more sharply at the "
+                "cutoff. Not in the Histogram view.",
             ),
             Item(
                 "figure.butter_cutoff",
                 label="cutoff",
+                width=PARAM_SPIN_W,
+                editor=DoubleSpinBoxEditor(
+                    low=BUTTER_CUTOFF_BOUNDS[0],
+                    high=BUTTER_CUTOFF_BOUNDS[1],
+                    decimals=2,
+                    step=0.01,
+                ),
                 visible_when="figure.smooth_method == 'butterworth'",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
                 tooltip="Cutoff as a fraction of the Nyquist "
                 "frequency: smaller keeps only the "
-                "slowest changes.",
+                "slowest changes. Not in the Histogram view.",
             ),
         ),
         HGroup(
@@ -566,11 +1026,14 @@ def _cleanup_tab():
                 "Normalize",
                 tooltip="Stretch each ROI to 0-100% of its own "
                 "range, to compare shape and timing "
-                "across brightness",
+                "across brightness. In the Histogram view: "
+                "each ROI's bins as fractions of its pixels, "
+                "so ROIs of different sizes compare.",
             ),
             _toggle(
                 "figure.subtract_first",
                 "Subtract first",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
                 tooltip="Each curve less its own first value: change from baseline",
             ),
             _toggle(
@@ -581,9 +1044,251 @@ def _cleanup_tab():
                 "reference measured in the same frame. "
                 "Stacks with the ring correction and "
                 "with Subtract first.",
+                enabled_when=_NOT_HISTOGRAM_VIEW,
+            ),
+            Item(
+                "figure.area_fit_method",
+                label="Area fit",
+                width=DROPDOWN_W,
+                editor=EnumEditor(values={key: FIT_LABELS[key] for key in FIT_METHODS}),
+                enabled_when=f"session.plot_stat in {AREA_FIT_STATS!r} "
+                f"and {_NOT_HISTOGRAM_VIEW}",
+                tooltip="Fit each ROI's pixel count against capture "
+                "time with the chosen curve and read its area off the "
+                "fit, instead of the jittery per-image count, for the "
+                "area-normalised means. The Area view draws the fit "
+                "over its points; Shift+click a point to leave it out "
+                "of the fit only.",
             ),
         ),
+        VGroup(
+            HGroup(
+                Item(
+                    "figure.histogram_bins",
+                    label="Bins",
+                    width=PARAM_SPIN_W,
+                    tooltip="Histogram view: bins over the range every ROI "
+                    "shares, so they compare bin for bin. Fewer smooth the "
+                    "outline; more resolve a narrow peak.",
+                ),
+                Item(
+                    "figure.histogram_clip_percent",
+                    label="Clip %",
+                    width=PARAM_SPIN_W,
+                    editor=DoubleSpinBoxEditor(
+                        low=HISTOGRAM_CLIP_BOUNDS_PERCENT[0],
+                        high=HISTOGRAM_CLIP_BOUNDS_PERCENT[1],
+                        decimals=1,
+                        step=0.1,
+                    ),
+                    tooltip="Histogram view: trim this percent of the pooled "
+                    "pixels off each end of the shared range before "
+                    "binning, so a few hot or dead pixels do not stretch "
+                    "it. Applied after the intensity range. The "
+                    "distribution fits see the pixels kept; the median "
+                    "and mean lines stay those of every pixel the "
+                    "intensity range keeps.",
+                ),
+            ),
+            VGrid(
+                Label(""),
+                Label("On"),
+                Label("Min"),
+                Label("Max"),
+                Label("Intensity"),
+                UItem(
+                    "figure.histogram_intensity_filter",
+                    tooltip="Histogram view: keep only the pixels from Min to "
+                    "Max — before the bins, the clip, the median and mean "
+                    "lines and the fit — to cut away a dim background or a "
+                    "saturated top. First switched on, it spans the "
+                    "displayed pixels.",
+                ),
+                _filter_spin(
+                    "figure.histogram_intensity_min", "histogram_intensity_filter"
+                ),
+                _filter_spin(
+                    "figure.histogram_intensity_max", "histogram_intensity_filter"
+                ),
+                Label("Pixels"),
+                UItem(
+                    "figure.histogram_count_filter",
+                    tooltip="Histogram view: fit the distribution only to the "
+                    "pixels in bins whose height lies from Min to Max — in "
+                    "the y axis's units: pixels, or with Normalize the "
+                    "fraction of the ROI; unsmoothed heights. Every bin is "
+                    "still drawn; those left out are faded.",
+                ),
+                _filter_spin(
+                    "figure.histogram_count_min", "histogram_count_filter", decimals=4
+                ),
+                _filter_spin(
+                    "figure.histogram_count_max", "histogram_count_filter", decimals=4
+                ),
+                columns=4,
+                show_labels=False,
+            ),
+            visible_when=_HISTOGRAM_VIEW,
+        ),
         label="Cleanup",
+    )
+
+
+def _format_fastest_change(value):
+    """A fastest-change value for the Expected table, blank when unknown."""
+    return "" if value != value else f"{value:.4g}"
+
+
+#: The Expected tab's table: per ROI per compared landmark, its fitted
+#: x value beside the editable expected one. Ctrl+C / Ctrl+V copy and
+#: paste blocks of cells (install_table_clipboard). A click selects
+#: rather than edits (edit_on_first_click off), so a drag extends the
+#: selection and the keys reach the table; double-click to edit.
+EXPECTED_TABLE_EDITOR = TableEditor(
+    columns=[
+        ObjectColumn(name="name", label="ROI", editable=False),
+        ObjectColumn(name="label", label="Metric", editable=False),
+        ObjectColumn(
+            name="actual",
+            label="Actual",
+            editable=False,
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+        ObjectColumn(
+            name="expected",
+            label="Expected",
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+    ],
+    edit_on_first_click=False,
+    selection_mode="cells",
+    sortable=False,
+)
+
+#: The Expected tab's custom points: typed-in (actual, expected) pairs,
+#: removed with the trash button (or the row header's context menu).
+#: Ctrl+C / Ctrl+V copy and paste blocks of cells
+#: (install_table_clipboard). A click selects rather than edits
+#: (edit_on_first_click off); double-click to edit.
+CUSTOM_POINTS_TABLE_EDITOR = TableEditor(
+    columns=[
+        ObjectColumn(name="name", label="Name"),
+        ObjectColumn(
+            name="actual",
+            label="Actual",
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+        ObjectColumn(
+            name="expected",
+            label="Expected",
+            width=abs(VALUE_SPIN_W),
+            format_func=_format_fastest_change,
+        ),
+    ],
+    deletable=True,
+    edit_on_first_click=False,
+    selection_mode="cells",
+    selected="model.selected_custom_cells",
+    sortable=False,
+    row_factory=CustomPoint,
+)
+
+
+def _expected_tab():
+    """Per ROI, the x values its fitted landmarks are expected at — and
+    any custom points typed in — for the Actual vs expected view."""
+    return VGroup(
+        HGroup(
+            UItem(
+                "model.reset_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_RESTORE,
+                    tooltip="Reset every expected value to its actual",
+                ),
+            ),
+            UItem(
+                "model.export_expected_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SAVE,
+                    tooltip="Export the table and the custom points to CSV in "
+                    "the experiment's analysis folder (Actual is blank for a "
+                    "ROI with no fit)",
+                ),
+            ),
+            _toggle(
+                "figure.compare_second_derivative_max",
+                "d² max",
+                enabled_when="figure.fit_method != 'none'",
+                tooltip="Also compare where the fitted curve's second "
+                "derivative peaks: adds a row per ROI to the table and a "
+                "point per ROI to the Actual vs expected view",
+            ),
+            _toggle(
+                "figure.compare_second_derivative_min",
+                "d² min",
+                enabled_when="figure.fit_method != 'none'",
+                tooltip="Also compare where the fitted curve's second "
+                "derivative troughs: adds a row per ROI to the table and a "
+                "point per ROI to the Actual vs expected view",
+            ),
+        ),
+        HGroup(
+            _toggle(
+                "figure.flip_actual_expected",
+                "Flip axes",
+                enabled_when="figure.view_mode == 'actual_vs_expected'",
+                tooltip="Swap the axes: expected on y against actual on x, "
+                "so the trend gives expected from actual",
+            ),
+            Item(
+                "figure.trend_method",
+                label="Trend",
+                width=DROPDOWN_W,
+                editor=EnumEditor(
+                    values={key: FIT_LABELS[key] for key in TREND_METHODS}
+                ),
+                enabled_when="figure.view_mode == 'actual_vs_expected'",
+                tooltip="The fit drawn through the Actual vs expected "
+                "points, its equation written in the corner",
+            ),
+            UItem(
+                "model.copy_trend_expression_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_COPY,
+                    tooltip_name="model.copy_trend_tooltip",
+                ),
+                enabled_when="not model.copy_trend_blocker",
+            ),
+        ),
+        UItem("model.expected_rows", editor=EXPECTED_TABLE_EDITOR),
+        _section(
+            "show_custom_points_group",
+            "Custom points",
+            HGroup(
+                UItem(
+                    "model.add_custom_point_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_ADD,
+                        tooltip="Add a point typed in by hand — a standard "
+                        "of known value, say — plotted and fitted with the "
+                        "ROIs in the Actual vs expected view",
+                    ),
+                ),
+                UItem(
+                    "model.remove_custom_point_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_DELETE,
+                        tooltip="Remove the custom points of the selected cells",
+                    ),
+                    enabled_when="model.selected_custom_cells",
+                ),
+            ),
+            UItem("session.custom_points", editor=CUSTOM_POINTS_TABLE_EDITOR),
+        ),
+        label="Expected",
     )
 
 
@@ -606,7 +1311,7 @@ def _export_tab():
 _plot_controls_view = View(
     VGroup(
         _top_row(),
-        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _export_tab()),
+        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(), _expected_tab(), _export_tab()),
     ),
 )
 
@@ -632,24 +1337,73 @@ _PLOT_STATE = (
     "session:figure:custom_expression, "
     "session:figure:trim_poor_fit, "
     "session:figure:show_legend, "
+    "session:figure:font_size, "
+    "session:figure:bar_gap, "
     "session:figure:show_fit_equations, "
     "session:figure:show_second_derivative_max, "
     "session:figure:show_second_derivative_min, "
+    "session:figure:show_second_derivative_zero, "
     "session:figure:second_derivative_vline, "
     "session:figure:second_derivative_hline, "
     "session:figure:second_derivative_coords, "
     "session:figure:view_mode, "
+    "session:figure:histogram_channel_mode, "
+    "session:figure:histogram_bins, "
+    "session:figure:histogram_clip_percent, "
+    "session:figure:histogram_intensity_filter, "
+    "session:figure:histogram_intensity_min, "
+    "session:figure:histogram_intensity_max, "
+    "session:figure:histogram_count_filter, "
+    "session:figure:histogram_count_min, "
+    "session:figure:histogram_count_max, "
+    "session:figure:histogram_fit, "
+    "session:figure:histogram_show_median, "
+    "session:figure:histogram_show_mean, "
+    "session:figure:histogram_marker_alpha, "
+    "session:figure:histogram_bar_alpha, "
+    "session:figure:histogram_bar_fill, "
+    "session:figure:histogram_fit_alpha, "
+    "session:figure:histogram_fit_fill_alpha, "
+    "session:figure:histogram_x_magnify, "
+    "session:figure:histogram_x_pivot_auto, "
+    "session:figure:histogram_x_pivot, "
+    "session:figure:flip_actual_expected, "
+    "session:figure:compare_second_derivative_max, "
+    "session:figure:compare_second_derivative_min, "
+    "session:figure:trend_method, "
     "session:figure:log_x, session:figure:log_y, "
     "session:figure:normalize, "
     "session:figure:subtract_first, "
     "session:figure:subtract_background_ref, "
+    "session:figure:area_fit_method, "
     "session:figure:remove_outliers, "
     "session:figure:outlier_threshold, "
     "session:figure:outlier_window, "
     "session:figure:interpolate_gaps, "
+    "session:figure:show_excluded_points, "
+    "session:temperature_style:line_color, "
+    "session:temperature_style:line_style, "
+    "session:temperature_style:line_width, "
+    "session:temperature_style:capture_marker, "
+    "session:temperature_style:capture_size, "
+    "session:temperature_style:capture_color_follows_line, "
+    "session:temperature_style:capture_color, "
+    "session:temperature_style:excluded_size, "
+    "session:temperature_style:line_alpha, "
+    "session:temperature_style:capture_alpha, "
+    "session:temperature_style:excluded_alpha, "
+    "session:temperature_style:show_legend, "
+    "session:temperature_style:shown_sensors.items, "
+    "session:temperature_style:sensors:items:visible, "
+    "session:temperature_style:sensors:items:color, "
+    "session:temperature_style:sensors:items:line_style, "
+    "session:temperature_style:sensors:items:line_width, "
+    "session:temperature_style:sensors:items:alpha, "
     "session:figure:x_axis, "
+    "session:figure:time_unit, "
     "session:figure:heater_sensor, "
     "session:figure:heater_window_ms, "
+    "session:figure:temperature_expression, "
     "session:heater_samples, "
     "session:heater_log_coverage, "
     "session:figure:smooth_method, "
@@ -657,14 +1411,45 @@ _PLOT_STATE = (
     "session:figure:savgol_order, "
     "session:figure:butter_order, "
     "session:figure:butter_cutoff, "
-    "session:rois:items:is_background_ref"
+    "session:rois:items:is_background_ref, "
+    "session:rois:items:expected_fastest_change, "
+    "session:rois:items:expected_second_derivative_max, "
+    "session:rois:items:expected_second_derivative_min, "
+    "session:custom_points.items, "
+    "session:custom_points:items:name, "
+    "session:custom_points:items:actual, "
+    "session:custom_points:items:expected"
 )
+
+#: What decides whether the plot pane shows the ROI table or the
+#: temperature view's style panel beneath the chart (a session swap
+#: re-decides it in _on_session_swapped).
+_TABLE_OR_STYLE_STATE = "session:figure:view_mode"
 
 #: Changes that mean "show me everything again", releasing a view the
 #: user zoomed or panned into.
 _VIEW_RESET_STATE = (
     "session:figure:x_auto, session:figure:y_auto, session:figure:view_mode"
 )
+
+
+class MagnifiedLocator(Locator):
+    """Ticks for the Histogram view's magnified x axis, evenly spread
+    along it (see magnified_ticks) as the view zooms and pans."""
+
+    def __init__(self, pivot, exponent):
+        self._pivot = pivot
+        self._exponent = exponent
+
+    def __call__(self):
+        return self.tick_values(*self.axis.get_view_interval())
+
+    def tick_values(self, vmin, vmax):
+        low, high = sorted((vmin, vmax))
+
+        return magnified_ticks(
+            low, high, self._pivot, self._exponent, MAGNIFIED_TICK_COUNT
+        )
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -680,21 +1465,38 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         super().__init__(self._figure)
         self._model = model
         self._axes = self._figure.add_subplot(111)
-        self._axes.set_xlabel("Elapsed time (s)")
+        self._axes.set_xlabel(x_axis_label(model.session.figure))
         self._axes.set_ylabel("Mean intensity")
         self._axes.grid(True, alpha=0.3)
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
+        #: Set per curves-view redraw: (image path, x, y) of every point
+        #: a click can toggle the exclusion of, in data coordinates.
+        self._pick_targets = []
         #: Set per redraw: which points the outlier test dropped.
         self._outliers = {}
+        #: This redraw's fits, solved on first use (see _fitted_rois).
+        self._fits = None
+        #: (signature, measured_pixels result) of the displayed image —
+        #: the Histogram view's pixels, read again only when what they
+        #: are measured from changes (see _measured_pixels_of).
+        self._measured = None
         self._redraw_pending = False
         self._detached = False
         #: Set once the user zooms or pans: their view then survives
         #: every redraw until they ask for a fit.
         self._user_view = False
         self._panning = False
+        #: Where the current press landed, and whether the pointer has
+        #: moved since: a press released without moving is a click.
+        self._press_position = None
+        self._panned = False
+        #: Set by a font-size change: the next redraw re-fits the
+        #: margins once, after the text has its new size.
+        self._refit_margins = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
+        model.observe(self._on_font_size_changed, "session:figure:font_size")
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
         model.observe(self._on_displayed_image_changed, "current_image_path")
         for event_name, handler in (
@@ -717,6 +1519,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _on_fit_requested(self, event):
         self.release_view()
+
+    def _on_font_size_changed(self, event):
+        # Only a font-size change re-fits the margins: every other
+        # redraw must keep the ones set through configure-subplots.
+        self._refit_margins = True
 
     def _toolbar_busy(self):
         """True while the navigation toolbar's pan or zoom tool is armed
@@ -766,10 +1573,24 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # axis scale moves.
         self._axes.start_pan(event.x, event.y, event.button)
         self._panning = True
+        self._press_position = (event.x, event.y)
+        self._panned = False
 
     def _on_motion(self, event):
         if not self._panning:
             return
+
+        # Drift within the slop is still a click; the pan starts once
+        # the pointer leaves it. Matplotlib counts physical pixels.
+        self._panned = self._panned or left_press_point(
+            self._press_position,
+            (event.x, event.y),
+            PLOT_CLICK_SLOP_PX * self.device_pixel_ratio,
+        )
+
+        if not self._panned:
+            return
+
         self._axes.drag_pan(1, event.key, event.x, event.y)
         self._user_view = True
         self.draw_idle()
@@ -780,6 +1601,46 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.end_pan()
         self._panning = False
 
+        # A press that never left the click slop is a click, not a pan.
+        if not self._panned:
+            self._toggle_exclusion_at(event)
+
+    def _toggle_exclusion_at(self, event):
+        """Ask for the exclusion of the image whose drawn point the
+        click landed on — on the curves view, the only one drawing a
+        point per image — to be toggled; with Shift held, its exclusion
+        from the area fit alone. Nothing near: nothing asked."""
+        if self._model.session.figure.view_mode not in PICK_VIEW_MODES:
+            return
+
+        if not self._pick_targets:
+            return
+
+        positions = self._axes.transData.transform(
+            [(x, y) for _path, x, y in self._pick_targets]
+        )
+        path = nearest_point(
+            [
+                (path, display_x, display_y)
+                for (path, _x, _y), (display_x, display_y) in zip(
+                    self._pick_targets, positions
+                )
+            ],
+            (event.x, event.y),
+            # Matplotlib events and transforms count physical pixels.
+            PLOT_PICK_RADIUS_PX * self.device_pixel_ratio,
+        )
+
+        if path is None:
+            return
+
+        # Read off the keyboard at the release: the event's key is only
+        # known while the canvas holds the focus.
+        if "shift" in event.modifiers:
+            self._model.toggle_area_fit_exclusion_request = path
+        else:
+            self._model.toggle_exclusion_request = path
+
     def detach(self):
         # An in-flight coalesced singleShot may fire after the widget's
         # C++ side is gone; the flag makes it a no-op.
@@ -789,19 +1650,33 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._model.observe(
             self._on_displayed_image_changed, "current_image_path", remove=True
         )
+        self._model.observe(
+            self._on_font_size_changed, "session:figure:font_size", remove=True
+        )
 
     def showEvent(self, event):
         self._schedule_redraw()  # catch up on anything missed hidden
         super().showEvent(event)
 
     def _on_plot_state_changed(self, event):
+        # The auto pivot is the canvas's own write-back of the pivot it
+        # just drew with; redrawing for it would only repeat the frame.
+        figure_settings = self._model.session.figure
+
+        if (
+            event.name == "histogram_x_pivot"
+            and event.object is figure_settings
+            and figure_settings.histogram_x_pivot_auto
+        ):
+            return
+
         self._schedule_redraw()
 
     def _on_displayed_image_changed(self, event):
-        # Only the per-image view reads the displayed image; redrawing
-        # the others would refit every ROI on each step through the
-        # series for nothing.
-        if self._model.session.figure.view_mode == "per_image":
+        # Only the per-image and histogram views read the displayed
+        # image; redrawing the others would refit every ROI on each step
+        # through the series for nothing.
+        if self._model.session.figure.view_mode in DISPLAYED_IMAGE_VIEW_MODES:
             self._schedule_redraw()
 
     def _schedule_redraw(self):
@@ -827,19 +1702,29 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         session = self._model.session
         # One pipeline, shared with the export, so a saved fit and the
         # drawn one cannot disagree about which points they saw.
-        series, self._outliers = analysed_series(session, self._model.filtered_paths)
+        series, self._outliers, excluded, area_fit = analysed_and_excluded_series(
+            session, self._model.filtered_paths
+        )
         figure_settings = session.figure
+        self._fits = None
+        self._pick_targets = []
+        # The Expected tab and its CSV read these whatever is shown, and
+        # the model fits the Actual vs expected trend from them, so they
+        # go before any view draws. The fitting views reuse these fits;
+        # the per-image, distribution and histogram views fit nothing,
+        # so they pay this one fit pass to keep the actuals current.
+        self._model.expected_actuals = {
+            roi.roi_id: landmarks
+            for roi, _name, landmarks in self._fit_landmarks(series, figure_settings)
+        }
+
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
         # A previous fastest-change render left categorical ticks behind.
         self._axes.xaxis.set_major_locator(AutoLocator())
         self._axes.xaxis.set_major_formatter(ScalarFormatter())
-        self._axes.set_xlabel(
-            "Temperature (°C)"
-            if figure_settings.x_axis == "temperature"
-            else "Elapsed time (s)"
-        )
+        self._axes.set_xlabel(x_axis_label(figure_settings))
         # After the locator reset above (which would fight the log
         # locators), before relim, so autoscale sees the final scale,
         # and before drawing: setting a scale resets the axis locators,
@@ -847,25 +1732,37 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # set. Those views keep a linear x.
         view_mode = figure_settings.view_mode
         time_axis = view_mode in TIME_VIEW_MODES
-        log_x = time_axis and figure_settings.log_x
+        log_x = view_mode in NUMERIC_X_VIEW_MODES and figure_settings.log_x
         log_y = view_mode in LOG_Y_VIEW_MODES and figure_settings.log_y
         self._axes.set_xscale("log" if log_x else "linear")
         self._axes.set_yscale("log" if log_y else "linear")
 
+        # After the scales, which reset the tick locators and formatters.
+        if time_axis and figure_settings.x_axis in ("step", "frame"):
+            self._apply_ordinal_ticks(figure_settings, log_x)
+
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings)
+            trim_edges = self._refresh_intensity(series, figure_settings, area_fit)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
 
-            if view_mode == "second_derivative":
-                trim_edges = self._draw_second_derivative(series, figure_settings)
+            if view_mode == "first_derivative":
+                trim_edges = self._draw_derivative(series, figure_settings, 1)
+            elif view_mode == "second_derivative":
+                trim_edges = self._draw_derivative(series, figure_settings, 2)
             elif view_mode == "per_image":
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
                 trim_edges = self._draw_distribution(series, figure_settings)
-            else:
+            elif view_mode == "histogram":
+                trim_edges = self._draw_histogram(series, figure_settings)
+            elif view_mode == "fastest_change":
                 trim_edges = self._draw_fastest_change(series, figure_settings)
+            elif view_mode == "temperature":
+                trim_edges = self._draw_temperature_over_time(figure_settings)
+            else:
+                trim_edges = self._draw_actual_vs_expected(series, figure_settings)
 
         # A view the user zoomed or panned into outlives every redraw
         # — a drained result or a toggled fit would otherwise snap the
@@ -887,26 +1784,86 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # is skipped there and the autoscaled range stands.
         if (
             not figure_settings.x_auto
-            and time_axis
+            and view_mode in NUMERIC_X_VIEW_MODES
             and not (log_x and figure_settings.x_min <= 0)
         ):
             self._axes.set_xlim(figure_settings.x_min, figure_settings.x_max)
-        if not figure_settings.y_auto and not (log_y and figure_settings.y_min <= 0):
+        if (
+            not figure_settings.y_auto
+            and view_mode in Y_LIMIT_VIEW_MODES
+            and not (log_y and figure_settings.y_min <= 0)
+        ):
             self._axes.set_ylim(figure_settings.y_min, figure_settings.y_max)
         # After the scaling: the band is full-height in axes fractions,
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
-        self._note_hidden_points(series, log_x, log_y)
-        self._note_dropped_outliers()
+
+        # After the scaling too: relim() reads every line on the
+        # axes, so drawn before it the excluded points would pull
+        # the limits off the analysed curves.
+        if view_mode == "intensity" and figure_settings.show_excluded_points:
+            self._draw_excluded_points(excluded)
+
+        if view_mode in SERIES_VIEW_MODES:
+            self._note_hidden_points(series, log_x, log_y)
+            self._note_dropped_outliers()
+            self._note_area_fit_fallbacks(series, area_fit)
 
         # The per-ROI stat views draw every value whatever its
         # temperature, so frames the log misses are not missing there.
-        if view_mode not in ("per_image", "distribution"):
+        if view_mode in SERIES_VIEW_MODES and view_mode not in (
+            "per_image",
+            "distribution",
+        ):
             self._note_missing_temperatures(series, figure_settings)
+            self._note_missing_steps(series, figure_settings)
+
+        # Last, on every redraw: the views only set the titles' text,
+        # and tick labels and offsets (×1e6) are made afresh as the
+        # limits move. Set on the axes, never rcParams, which every
+        # other figure in the app shares.
+        for axis in (self._axes.xaxis, self._axes.yaxis):
+            axis.label.set_fontsize(figure_settings.font_size)
+            axis.offsetText.set_fontsize(figure_settings.font_size)
+
+        self._axes.tick_params(which="both", labelsize=figure_settings.font_size)
+
+        if self._refit_margins:
+            self._refit_margins = False
+            self._figure.tight_layout()
 
         self.draw_idle()
 
-    def _refresh_intensity(self, series, figure_settings):
+    def _font_size(self, scale=1.0):
+        """The figure's font size (pt) times ``scale``. Matplotlib's
+        relative sizes ("small", "x-small") resolve against the global
+        rcParams, not the figure, so the smaller text scales from this."""
+        return self._model.session.figure.font_size * scale
+
+    def _grown_with_font(self, fraction):
+        """An axes-fraction offset tuned at the default font size,
+        grown with the figure's, so stacked lines of text stay clear of
+        each other at any size."""
+        return fraction * self._font_size() / FIGURE_FONT_SIZE_PT
+
+    def _apply_ordinal_ticks(self, figure_settings, log_x):
+        """Whole-number ticks on the step and frame axes, the step
+        axis's labelled with the step ids — its x is only where a step
+        falls in the series (see step_ordinals)."""
+        if not log_x:
+            self._axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+        if figure_settings.x_axis != "step":
+            return
+
+        _ordinals, labels = step_ordinals(
+            step_ids(self._model.session, self._model.filtered_paths)
+        )
+        self._axes.xaxis.set_major_formatter(
+            FuncFormatter(lambda x, _position: step_tick_label(labels, x))
+        )
+
+    def _refresh_intensity(self, series, figure_settings, area_fit):
         session = self._model.session
         # Smoothing is a display aid, so it goes no further than the
         # lines: `series` — unsmoothed — is what the fits below see.
@@ -942,10 +1899,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
                 line.set_alpha(roi.style.plot_alpha)
-        if not series and self._model.session.rois:
+        self._collect_pick_targets(series, drawn)
+        self._draw_area_fit(area_fit)
+
+        if session.plot_stat == "area":
+            self._mark_area_fit_excluded(drawn)
+
+        if not series and session.positive_rois:
             self._draw_hint("All ROIs are hidden (eye icons in the table)")
         elif figure_settings.subtract_background_ref and not any(
-            roi.is_background_ref for roi in session.rois
+            roi.is_background_ref for roi in session.positive_rois
         ):
             # Asked of the session, not the drawn series: a reference
             # that is merely hidden still corrects, and saying it does
@@ -960,6 +1923,112 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._apply_legend(bool(self._lines) and figure_settings.show_legend)
         return trim_edges
 
+    def _draw_excluded_points(self, excluded):
+        """Each excluded image's point as a faint hollow marker in its
+        ROI's colour, with no line — still visible and clickable, but
+        plainly not part of the curve, the fits, the axis limits or
+        anything else. Registers them as pick targets, so a click can
+        bring one back."""
+        session = self._model.session
+        excluded_images = excluded_paths(session, self._model.filtered_paths)
+
+        for roi_id, (_name, x_values, values) in excluded.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                x_values,
+                values,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=EXCLUDED_POINT_ALPHA * roi.style.plot_alpha,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+            self._pick_targets.extend(zip(excluded_images, x_values, values))
+
+    def _draw_area_fit(self, area_fit):
+        """Each ROI's area fit (area_fit_series), dashed in its colour
+        through the fitted area at each of its analysed images, so the
+        fit can be judged against what it was fitted to. In x order: on
+        a temperature or step axis the images need not arrive in it."""
+        for roi_id, (_name, x_values, values) in area_fit.items():
+            roi = self._model.session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            x = np.asarray(x_values, dtype=float)
+            order = np.argsort(x)
+            (line,) = self._axes.plot(
+                x[order],
+                np.asarray(values, dtype=float)[order],
+                linestyle="--",
+                alpha=0.8 * roi.style.plot_alpha,
+                color=roi.style.color,
+                label="_nolegend_",
+            )
+            self._fit_artists.append(line)
+
+    def _mark_area_fit_excluded(self, drawn):
+        """Ring each point the area fit leaves out with a larger hollow
+        marker in its ROI's colour — on the Area view, where the fitted
+        line runs past them."""
+        session = self._model.session
+        analysed = analysed_paths(session, self._model.filtered_paths)
+        left_out = [
+            index
+            for index, path in enumerate(analysed)
+            if session.is_area_fit_excluded(path)
+        ]
+
+        if not left_out:
+            return
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            roi = session.roi_by_id(roi_id)
+
+            if roi is None:
+                continue
+
+            (points,) = self._axes.plot(
+                [x_values[index] for index in left_out],
+                [values[index] for index in left_out],
+                linestyle="",
+                marker=AREA_FIT_EXCLUDED_POINT_MARKER,
+                markersize=roi.style.marker_size * AREA_FIT_EXCLUDED_POINT_SCALE,
+                markerfacecolor="none",
+                markeredgecolor=roi.style.color,
+                alpha=roi.style.plot_alpha,
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+
+    def _collect_pick_targets(self, series, drawn):
+        """Remember every curve point a click can land on, with its
+        image: where the point is drawn (smoothed, say) but only where
+        there is a value — a bridged gap is no image's point. The
+        excluded points register as they are drawn."""
+        analysed = analysed_paths(self._model.session, self._model.filtered_paths)
+
+        for roi_id, (_name, x_values, values) in drawn.items():
+            measured = series[roi_id][2]
+
+            self._pick_targets.extend(
+                (path, x, y)
+                for path, x, y, value in zip(analysed, x_values, values, measured)
+                if value == value
+            )
+
     def _stat_axis_label(self, figure_settings):
         """The plotted stat's y-axis text with its transforms noted —
         shared by every view that draws the stat itself."""
@@ -971,6 +2040,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             figure_settings.normalize,
             figure_settings.subtract_first,
             figure_settings.subtract_background_ref,
+            figure_settings.area_fit_method,
         )
 
     def _draw_per_image(self, series, figure_settings):
@@ -1014,7 +2084,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        self._draw_roi_bars(entries)
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
 
@@ -1066,17 +2136,542 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
         return []  # ROI names on x: no time span to shade
 
-    def _draw_roi_bars(self, entries):
+    def _draw_histogram(self, series, figure_settings):
+        """Outline per visible ROI of the pixel intensities it measures
+        on the displayed image — the very pixels its mean and median are
+        taken over: the inset interior less the negative masks, on the
+        warped, rolling-ball-corrected frame — its median marked solid
+        and its mean dashed. Every outline shares one set of bins, so
+        they compare bin for bin. It follows the viewer's selection like
+        the per-image view; the plotted stat plays no part.
+
+        The Axes tab's limits and log scales act on it, Normalize turns
+        counts into each ROI's fraction of its pixels, Savitzky-Golay
+        smooths over the bins, and the Fit tab's distribution is drawn
+        dotted over each outline, its parameters in the legend. The
+        Cleanup tab's intensity range drops pixels before any of it;
+        its pixel-count range picks the bins the fit is taken over.
+
+        In the "rgb" channel mode a colour frame's ROI is drawn as three
+        series, its red, green and blue pixels, each in its channel's
+        colour; the bins, clip and auto pivot pool every series as they
+        pool every ROI. A mono frame has no channels and draws luma."""
+        session = self._model.session
+        image_path = self._model.current_image_path
+        paths = analysed_paths(session, self._model.filtered_paths)
+        normalize = figure_settings.normalize
+
+        self._axes.set_xlabel(
+            f"Intensity — {Path(image_path).name}" if image_path else "Intensity"
+        )
+        self._axes.set_ylabel("Fraction of pixels" if normalize else "Pixels")
+        self._apply_legend(False)
+
+        if not image_path:
+            self._draw_hint("No image displayed")
+
+            return []
+
+        if image_path not in paths:
+            self._draw_hint(
+                "The displayed image is excluded from analysis"
+                if session.is_excluded(image_path)
+                else "The displayed image is not in the filtered series"
+            )
+
+            return []
+
+        channel_mode = figure_settings.histogram_channel_mode
+        measured = self._measured_pixels_of(image_path, channel_mode)
+
+        if measured["error"]:
+            self._draw_hint(
+                f"The displayed image could not be read: {measured['error']}"
+            )
+
+            return []
+
+        # The series holds the visible ROIs in the order every view
+        # draws them; an ROI deleted from this image alone, or covered
+        # entirely by negative masks, has no pixels to count.
+        samples = []
+
+        for roi_id, (name, _x_values, _values) in series.items():
+            roi = session.roi_by_id(roi_id)
+            pixels = measured["pixels"].get(roi_id)
+
+            if roi is None or pixels is None or not pixels.size:
+                continue
+
+            if measured["colour"]:
+                samples.extend(channel_samples(name, pixels, roi.style))
+            else:
+                samples.append((name, pixels, roi.style))
+
+        if not samples:
+            self._draw_hint("No ROI measures any pixels on the displayed image")
+
+            return []
+
+        # The unfiltered range seeds the intensity filter's bounds the
+        # first time it is switched on.
+        pooled = np.concatenate([pixels for _name, pixels, _style in samples])
+        self._model.histogram_pixel_range = (float(pooled.min()), float(pooled.max()))
+
+        # Before anything else: the pixels outside the intensity range
+        # are not binned, marked or fitted at all.
+        if figure_settings.histogram_intensity_filter:
+            samples = self._in_intensity_range(samples, figure_settings)
+
+        if not samples:
+            self._draw_hint("No ROI has a pixel in the intensity range")
+
+            return []
+
+        magnify = self._apply_histogram_magnifier(samples, figure_settings)
+
+        # Over the shown pixels' common range, so a bin covers the same
+        # intensities in every outline — less the clipped tails, and on
+        # a log axis spaced evenly in log, so no bin is a sliver there.
+        edges = histogram_edges(
+            [pixels for _name, pixels, _style in samples],
+            figure_settings.histogram_bins,
+            figure_settings.histogram_clip_percent,
+            figure_settings.log_x,
+        )
+
+        if edges is None:
+            self._draw_hint("The log axis hides every pixel: none is above zero")
+
+            return []
+
+        unfitted, tallest_bin = 0, 0.0
+
+        for name, pixels, style in samples:
+            counts = histogram_counts(pixels, edges, normalize)
+            tallest_bin = max(tallest_bin, float(counts.max()))
+            selected = (
+                bins_within(
+                    counts,
+                    figure_settings.histogram_count_min,
+                    figure_settings.histogram_count_max,
+                )
+                if figure_settings.histogram_count_filter
+                else None
+            )
+            fit = None
+
+            # Fitted to the pixels the clip kept — those in the bins the
+            # pixel-count range keeps, when it is on — so the curve
+            # describes the outline it is drawn over.
+            if figure_settings.histogram_fit != "none":
+                fitted = (
+                    in_range(pixels, edges[0], edges[-1])
+                    if selected is None
+                    else pixels_in_bins(pixels, edges, selected)
+                )
+                fit = fit_distribution(fitted, figure_settings.histogram_fit)
+                unfitted += fit is None
+
+            self._draw_histogram_outline(
+                counts,
+                edges,
+                selected,
+                name if fit is None else f"{name} — {fit[1]}",
+                style,
+                figure_settings,
+            )
+
+            if fit is not None:
+                # In the outline's own unit: the fitted pixels, or their
+                # share of the ROI's when normalised. On a log axis the
+                # tails stop where a bin expects under half a pixel —
+                # past it they fall through decades no pixel occupies,
+                # and relim() would drag the axis down after them.
+                unit = 1.0 / pixels.size if normalize else 1.0
+                floor = (
+                    HISTOGRAM_FIT_FLOOR_PIXELS * unit if figure_settings.log_y else 0.0
+                )
+                x_values, y_values = fitted_counts(
+                    fit[0],
+                    edges,
+                    fitted.size * unit,
+                    FIT_CURVE_SAMPLES,
+                    figure_settings.log_x,
+                    floor,
+                    magnify,
+                )
+                self._draw_histogram_fit(
+                    x_values, y_values, floor, style, figure_settings
+                )
+
+            self._draw_histogram_markers(pixels, style, figure_settings)
+
+        # Seeds the pixel-count filter's bounds the first time it is
+        # switched on.
+        self._model.histogram_tallest_bin = tallest_bin
+        self._note_histogram(
+            samples,
+            unfitted,
+            figure_settings,
+            measured["colour"],
+            channel_mode == "rgb" and not measured["colour"],
+        )
+        self._apply_legend(figure_settings.show_legend)
+
+        return []  # intensity on x: no time span to shade
+
+    def _apply_histogram_magnifier(self, samples, figure_settings):
+        """Stretch the x axis about the magnifier's pivot, as the
+        figure settings ask: (pivot, exponent) when it applies, None
+        when the axis stays as _refresh set it — magnify at 1, or a log
+        axis. Every artist then goes through the one scale, so bars,
+        fits, markers and limits stay aligned and the ticks read true
+        intensities.
+
+        An auto pivot is written back to the settings whether or not the
+        magnifier is on, so the spinner always shows where it would
+        pivot."""
+        if figure_settings.histogram_x_pivot_auto:
+            figure_settings.histogram_x_pivot = pooled_median(
+                [pixels for _name, pixels, _style in samples]
+            )
+
+        exponent = figure_settings.histogram_x_magnify
+
+        if figure_settings.log_x or exponent >= HISTOGRAM_X_MAGNIFY_BOUNDS[1]:
+            return None
+
+        pivot = figure_settings.histogram_x_pivot
+        self._axes.set_xscale(
+            "function",
+            functions=(
+                partial(magnified, pivot=pivot, exponent=exponent),
+                partial(unmagnified, pivot=pivot, exponent=exponent),
+            ),
+        )
+        # After the scale, which resets the locators.
+        self._axes.xaxis.set_major_locator(MagnifiedLocator(pivot, exponent))
+
+        return pivot, exponent
+
+    def _draw_histogram_fit(self, x_values, y_values, floor, style, figure_settings):
+        """One ROI's fitted curve, dotted in its colour, and the shading
+        under it down to ``floor`` — each at its own absolute opacity,
+        unweighted by the ROI's, which fades the bars and the median and
+        mean lines only. A NaN in the curve (below the log axis's floor)
+        breaks the shading with it."""
+        self._fit_artists.extend(
+            self._axes.plot(
+                x_values,
+                y_values,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_alpha,
+                linestyle=LINE_STYLES["dotted"],
+                label="_nolegend_",
+            )
+        )
+
+        if figure_settings.histogram_fit_fill_alpha <= 0:
+            return
+
+        self._fit_artists.append(
+            self._axes.fill_between(
+                x_values,
+                y_values,
+                floor,
+                color=style.color,
+                alpha=figure_settings.histogram_fit_fill_alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        )
+
+    def _draw_histogram_outline(
+        self, counts, edges, selected, label, style, figure_settings
+    ):
+        """One ROI's ``counts`` over ``edges``: a step outline, or with
+        Savitzky-Golay smoothing a line through the bin centres — a
+        smoothed count no longer belongs to one bin's flat top — at the
+        bar opacity times the ROI's, and with histogram_bar_fill shaded
+        beneath at that opacity too.
+
+        With the pixel-count range on — ``selected`` marks the bins it
+        keeps, else None — the whole outline is faded and the kept bins
+        drawn over it at full strength, carrying the legend entry, so
+        what the fit ignored stays in view. Their fill does the same."""
+        # The curves' own line width: matplotlib draws a patch's
+        # outline thinner than a line, and these are read as curves.
+        line_width = matplotlib.rcParams["lines.linewidth"]
+        smoothing = figure_settings.smooth_method == "savgol"
+        heights = (
+            smoothed_counts(
+                counts, figure_settings.savgol_window, figure_settings.savgol_order
+            )
+            if smoothing
+            else counts
+        )
+        centres = bin_centres(edges, figure_settings.log_x) if smoothing else None
+        fill = figure_settings.histogram_bar_fill
+        bar_alpha = figure_settings.histogram_bar_alpha * style.plot_alpha
+        alpha = bar_alpha
+        base_label = label
+
+        if selected is not None:
+            alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
+            base_label = "_nolegend_"
+
+        # Before the outline, so the outline lies on top of its fill.
+        if fill:
+            self._fill_histogram_bars(heights, edges, centres, style.color, alpha)
+
+        if smoothing:
+            self._fit_artists.extend(
+                self._axes.plot(
+                    centres,
+                    heights,
+                    color=style.color,
+                    alpha=alpha,
+                    linewidth=line_width,
+                    label=base_label,
+                )
+            )
+        else:
+            # Each bin's count weighs a point at its left edge: the
+            # counts are binned already, normalised or not.
+            _counts, _edges, outlines = self._axes.hist(
+                edges[:-1],
+                edges,
+                weights=counts,
+                histtype="step",
+                color=style.color,
+                alpha=alpha,
+                linewidth=line_width,
+                label=base_label,
+            )
+            self._fit_artists.extend(outlines)
+
+        if selected is None:
+            return
+
+        # A NaN breaks the line and the stairs, so only the kept bins
+        # are drawn over the faded outline.
+        kept = np.where(selected, heights, np.nan)
+
+        if fill:
+            self._fill_histogram_bars(kept, edges, centres, style.color, bar_alpha)
+
+        if smoothing:
+            self._fit_artists.extend(
+                self._axes.plot(
+                    centres,
+                    kept,
+                    color=style.color,
+                    alpha=bar_alpha,
+                    linewidth=line_width,
+                    label=label,
+                )
+            )
+        else:
+            self._fit_artists.append(
+                self._axes.stairs(
+                    kept,
+                    edges,
+                    color=style.color,
+                    alpha=bar_alpha,
+                    linewidth=line_width,
+                    label=label,
+                )
+            )
+
+    def _fill_histogram_bars(self, heights, edges, centres, color, alpha):
+        """Shade under one ROI's ``heights`` down to zero: the bins of
+        ``edges``, or with ``centres`` — smoothed counts — under the
+        line through them. A NaN height shades nothing. Kept out of the
+        legend, whose entry is the outline's."""
+        if centres is None:
+            artist = self._axes.stairs(
+                heights,
+                edges,
+                fill=True,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+        else:
+            artist = self._axes.fill_between(
+                centres,
+                heights,
+                0.0,
+                color=color,
+                alpha=alpha,
+                linewidth=0,
+                label="_nolegend_",
+            )
+
+        self._fit_artists.append(artist)
+
+    def _in_intensity_range(self, samples, figure_settings):
+        """``samples`` with each ROI's pixels cut to the intensity
+        range, less the ROIs left with none."""
+        kept = []
+
+        for name, pixels, style in samples:
+            pixels = in_range(
+                pixels,
+                figure_settings.histogram_intensity_min,
+                figure_settings.histogram_intensity_max,
+            )
+
+            if pixels.size:
+                kept.append((name, pixels, style))
+
+        return kept
+
+    def _draw_histogram_markers(self, pixels, style, figure_settings):
+        """One ROI's median (solid) and mean (dashed) as vertical lines,
+        each where switched on, faded by the marker opacity on top of
+        the ROI's own. Of every pixel the intensity range keeps, clipped
+        or not — with the range off, the table's median and mean."""
+        alpha = figure_settings.histogram_marker_alpha * style.plot_alpha
+
+        for shown, statistic, line_style in (
+            (figure_settings.histogram_show_median, np.median, "solid"),
+            (figure_settings.histogram_show_mean, np.mean, "dashed"),
+        ):
+            value = float(statistic(pixels))
+
+            # A log axis has no place for a line at or below zero.
+            if not shown or (figure_settings.log_x and value <= 0):
+                continue
+
+            self._fit_artists.append(
+                self._axes.axvline(
+                    value,
+                    color=style.color,
+                    alpha=alpha,
+                    linestyle=LINE_STYLES[line_style],
+                )
+            )
+
+    def _note_histogram(
+        self, samples, unfitted, figure_settings, per_channel, grey_frame
+    ):
+        """Footnotes for what the histogram leaves out, stacked in the
+        series notes' slots: the pixels a log axis hides, the ROIs — or,
+        ``per_channel``, the channel series — the distribution could
+        not be fitted to, a Butterworth smoothing that has no meaning
+        over intensity bins, and luma drawn in place of the channels
+        asked for on a ``grey_frame``."""
+        notes = []
+
+        if figure_settings.log_x:
+            hidden = sum(
+                int(np.count_nonzero(pixels <= 0)) for _name, pixels, _style in samples
+            )
+
+            if hidden:
+                noun = "pixel" if hidden == 1 else "pixels"
+                notes.append(f"Log axis hides {hidden} non-positive {noun}")
+
+        if unfitted:
+            kind = figure_settings.histogram_fit
+            reasons = f"fewer than {HISTOGRAM_FIT_MIN_PIXELS} pixels or no spread"
+
+            if kind == "lognormal":
+                reasons = f"{reasons}, or pixels at or below zero"
+
+            if per_channel:
+                noun = "series"
+            else:
+                noun = "ROI" if unfitted == 1 else "ROIs"
+
+            notes.append(
+                f"No {HISTOGRAM_FIT_LABELS[kind].lower()} fit for {unfitted} "
+                f"{noun} ({reasons})"
+            )
+
+        if figure_settings.smooth_method == "butterworth":
+            notes.append("Butterworth smoothing does not apply to a histogram")
+
+        if grey_frame:
+            notes.append("Grey frame: showing luma")
+
+        for note, y_fraction in zip(
+            notes, (NOTE_HIDDEN_Y, NOTE_OUTLIERS_Y, NOTE_NO_TEMP_Y, NOTE_AREA_FIT_Y)
+        ):
+            self._fit_artists.append(
+                self._axes.text(
+                    0.5,
+                    self._grown_with_font(y_fraction),
+                    note,
+                    transform=self._axes.transAxes,
+                    ha="center",
+                    va="bottom",
+                    color="gray",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+                )
+            )
+
+    def _measured_pixels_of(self, image_path, channel_mode):
+        """measured_pixels() of every positive ROI measured on
+        ``image_path`` in ``channel_mode``, called with the arguments
+        the instant compute dispatches for it
+        (RoiAnalysisController._instant_stats: each ROI's cache_key
+        geometry, the image's correction_for), so the luma histogram
+        and the table's mean read one pixel set.
+
+        Every positive ROI, not just the visible ones, cached under
+        their cache_keys — the image's path and mtime, each geometry,
+        the correction — and the channel mode, so an eye, the legend or
+        a zoom redraws without reading the image again, while moving an
+        ROI, editing a negative mask, rewriting the file or switching
+        the channels reads it afresh.
+
+        Synchronous: ~0.2 s for a 1920x1080 frame, most of it the
+        decode. Should that grow, this call is the one to hand to a
+        LatestWinsWorker."""
+        session = self._model.session
+        stat_cache = {}
+        rois = [
+            roi
+            for roi in session.positive_rois
+            if session.measures(image_path, roi, stat_cache)
+        ]
+        keys = tuple(session.cache_key(image_path, roi, stat_cache) for roi in rois)
+        # The path too: with no ROI measured there is no key to carry it.
+        signature = (image_path, keys, channel_mode)
+
+        if self._measured is None or self._measured[0] != signature:
+            effective_rois = {
+                roi.roi_id: (roi.kind, tuple(key[4])) for roi, key in zip(rois, keys)
+            }
+            self._measured = (
+                signature,
+                measured_pixels(
+                    image_path,
+                    effective_rois,
+                    *session.correction_for(image_path, stat_cache),
+                    channel_mode=channel_mode,
+                ),
+            )
+
+        return self._measured[1]
+
+    def _draw_roi_bars(self, entries, figure_settings):
         """Bar per (name, height, style) entry, coloured and faded by
-        the ROI's style and labelled with its value. A NaN height keeps
-        its slot as an empty bar marked n/a, so a ROI never shifts
-        along x when one image lacks it."""
+        the ROI's style and labelled with its value, filling its slot
+        but for the figure's bar gap. A NaN height keeps its slot as an
+        empty bar marked n/a, so a ROI never shifts along x when one
+        image lacks it."""
         positions = list(range(len(entries)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
         bars = self._axes.bar(
             positions,
             [0.0 if height != height else height for _name, height, _style in entries],
+            width=1.0 - figure_settings.bar_gap,
             color=[style.color for _name, _height, style in entries],
         )
 
@@ -1096,25 +2691,134 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     textcoords="offset points",
                     xytext=(0, 4),
                     ha="center",
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color="gray" if missing else None,
                 )
             )
 
-    def _draw_second_derivative(self, series, figure_settings):
-        """One curve per ROI: the fitted model's d²y/dt² over the ROI's
-        time span; the d² max/min checkboxes mark its extrema here."""
-        self._axes.set_ylabel("d² of fit")
-        if figure_settings.fit_method == "none":
-            self._apply_legend(False)
-            self._draw_hint("Select a fit method to view d²")
+    def _draw_temperature_over_time(self, figure_settings):
+        """The heater log against elapsed time, over the filtered
+        captures' span: every sensor thin and faint, the figure's
+        sensor (or their mean) bold, a dot at each analysed capture
+        and — while the figure shows them — a faint hollow marker at
+        each excluded one; both toggle exclusion on a click.
+
+        Always over time, whatever the x axis, and the log's raw
+        reading: the temperature calibration maps the temperature
+        axis, not a temperature plotted as a value. Nothing here is
+        smoothed or fitted."""
+        session = self._model.session
+        filtered_paths = self._model.filtered_paths
+
+        self._axes.set_xlabel(time_axis_label(figure_settings))
+        self._axes.set_ylabel("Temperature (°C)")
+        self._apply_legend(False)
+
+        if not filtered_paths:
+            self._draw_hint("No images")
+
             return []
-        drew, trim_edges = False, []
+
+        if not session.heater_samples:
+            self._draw_hint(
+                "No heater log loaded — choose its folder with the "
+                "Heater logs button on the Axes tab"
+            )
+
+            return []
+
+        traces, analysed, excluded = temperature_over_time(session, filtered_paths)
+        style = session.temperature_style
+        selected = figure_settings.heater_sensor
+
+        # The chosen sensor is the bold line, so not a faint one too.
+        for row in style.shown_sensors:
+            if not row.visible or row.sensor == selected or row.sensor not in traces:
+                continue
+
+            x_values, temperatures = traces[row.sensor]
+            (line,) = self._axes.plot(
+                x_values,
+                temperatures,
+                color=row.color,
+                alpha=row.plot_alpha,
+                linestyle=LINE_STYLES[row.line_style],
+                linewidth=row.line_width,
+                label=row.sensor,
+            )
+            self._fit_artists.append(line)
+
+        x_values, temperatures = traces.get(selected, ([], []))
+        (line,) = self._axes.plot(
+            x_values,
+            temperatures,
+            color=style.line_color,
+            linestyle=LINE_STYLES[style.line_style],
+            linewidth=style.line_width,
+            alpha=style.plot_alpha("line_alpha"),
+            label=selected,
+        )
+        self._fit_artists.append(line)
+
+        paths, x_values, temperatures = analysed
+        (dots,) = self._axes.plot(
+            x_values,
+            temperatures,
+            linestyle="",
+            marker="" if style.capture_marker == "none" else style.capture_marker,
+            markersize=style.capture_size,
+            color=style.capture_plot_color,
+            alpha=style.plot_alpha("capture_alpha"),
+            label="Captures",
+        )
+        self._fit_artists.append(dots)
+        self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        # On the log line, so — unlike the curves view's — they sit
+        # inside the limits the traces already set.
+        if figure_settings.show_excluded_points:
+            paths, x_values, temperatures = excluded
+            (points,) = self._axes.plot(
+                x_values,
+                temperatures,
+                linestyle="",
+                marker=EXCLUDED_POINT_MARKER,
+                markersize=style.excluded_size,
+                markerfacecolor="none",
+                markeredgecolor=style.capture_plot_color,
+                alpha=style.plot_alpha("excluded_alpha"),
+                label="_nolegend_",
+                scalex=False,
+                scaley=False,
+            )
+            self._fit_artists.append(points)
+            self._pick_targets.extend(zip(paths, x_values, temperatures))
+
+        self._apply_legend(style.show_legend)
+
+        return []  # nothing fitted: no trimmed tail to shade
+
+    def _fitted_rois(self, series, figure_settings):
+        """(roi, name, fit, finite_t) per ROI the chosen method fits,
+        finite_t being its x at the finite values — never empty, as
+        fit_series needs two finite points. ROIs that cannot be fitted
+        are skipped. Solved once per redraw: every later call in the
+        same redraw gets the same list."""
+        if self._fits is None:
+            self._fits = list(self._solve_fits(series, figure_settings))
+
+        return self._fits
+
+    def _solve_fits(self, series, figure_settings):
+        """Yield the fits _fitted_rois holds for the redraw."""
+        method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
+
             if roi is None:
                 continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+
             fit = fit_series(
                 elapsed,
                 values,
@@ -1123,84 +2827,355 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 expression,
                 figure_settings.initial_guesses,
             )
+
             if fit is None:
                 continue
+
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))
             ]
+
+            yield roi, name, fit, finite_t
+
+    def _draw_derivative(self, series, figure_settings, order):
+        """One curve per ROI: the fitted model's first or second
+        derivative over the ROI's span. The fastest-change marker sits
+        on either; the d² max/min ones on the second only."""
+        symbol = DERIVATIVE_SYMBOLS[order]
+
+        self._axes.set_ylabel(f"{symbol} of fit")
+
+        if figure_settings.fit_method == "none":
+            self._apply_legend(False)
+            self._draw_hint(f"Select a fit method to view {symbol}")
+
+            return []
+
+        drew, trim_edges = False, []
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            derivative = fit.first_derivative if order == 1 else fit.second_derivative
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), FIT_CURVE_SAMPLES)
-            d2 = np.asarray(fit.second_derivative(dense), dtype=float)
-            if d2.shape != dense.shape:
-                d2 = np.full_like(dense, float(d2))
+            curve_values = np.asarray(derivative(dense), dtype=float)
+
+            if curve_values.shape != dense.shape:  # scalar-returning closure
+                curve_values = np.full_like(dense, float(curve_values))
+
             (curve,) = self._axes.plot(
-                dense, d2, color=roi.style.color, alpha=roi.style.plot_alpha, label=name
+                dense,
+                curve_values,
+                color=roi.style.color,
+                alpha=roi.style.plot_alpha,
+                label=name,
             )
             self._fit_artists.append(curve)
             drew = True
-            wanted = [
-                key
-                for key, enabled in (
-                    ("max", figure_settings.show_second_derivative_max),
-                    ("min", figure_settings.show_second_derivative_min),
-                )
-                if enabled
-            ]
-            if wanted:
-                extrema = second_derivative_extrema(fit, finite_t.min(), finite_t.max())
-                for key in wanted:
-                    if key not in extrema:
-                        continue
-                    t_star = extrema[key][0]
-                    self._draw_extremum_marker(
-                        t_star,
-                        float(fit.second_derivative(t_star)),
-                        roi,
-                        figure_settings,
-                    )
+
+            self._draw_extrema(
+                fit,
+                finite_t.min(),
+                finite_t.max(),
+                roi,
+                figure_settings,
+                marker_y=derivative,
+                with_second_derivative_extrema=order == 2,
+            )
+
         self._apply_legend(drew and figure_settings.show_legend)
+
         return trim_edges
+
+    def _fit_landmarks(self, series, figure_settings):
+        """(roi, name, {metric: x}) per fitted ROI, keyed by
+        EXPECTED_METRICS: "zero" where its fitted curve changes fastest
+        (max |dy/dx|, where d² crosses zero — a sigmoid's inflection
+        point), and, while the Expected tab compares them, "max" / "min"
+        where d² peaks / troughs. A landmark the fit lacks (a linear
+        fit's rate is flat, a quadratic's d² too) is left out, and so is
+        a ROI with none."""
+        extrema_wanted = [
+            metric for metric in figure_settings.compared_metrics if metric != "zero"
+        ]
+        landmarks = []
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
+            t_start, t_end = finite_t.min(), finite_t.max()
+            found = {}
+            fastest = fastest_change_time(fit, t_start, t_end)
+
+            if fastest is not None:
+                found["zero"] = fastest
+
+            if extrema_wanted:
+                extrema = second_derivative_extrema(fit, t_start, t_end)
+                found.update(
+                    {
+                        metric: extrema[metric][0]
+                        for metric in extrema_wanted
+                        if metric in extrema
+                    }
+                )
+
+            if found:
+                landmarks.append((roi, name, found))
+
+        return landmarks
+
+    def _fastest_change_points(self, series, figure_settings):
+        """(roi, name, actual) per ROI with a fastest-change point — the
+        "zero" landmark of _fit_landmarks."""
+        return [
+            (roi, name, landmarks["zero"])
+            for roi, name, landmarks in self._fit_landmarks(series, figure_settings)
+            if "zero" in landmarks
+        ]
 
     def _draw_fastest_change(self, series, figure_settings):
         """Bar per ROI: seconds until the fitted curve changes fastest
         (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
         fails or whose speed is flat (linear) get no bar."""
-        self._axes.set_ylabel("Time of fastest change (s)")
+        quantity, unit = x_quantity(figure_settings)
+
+        self._axes.set_ylabel(quantity_label(f"{quantity} of fastest change", unit))
         self._axes.set_xlabel("ROI")
         self._apply_legend(False)
+
         if figure_settings.fit_method == "none":
             self._draw_hint("Select a fit method to view fastest change")
-            return []
-        entries = []
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
-            t_star = fastest_change_time(fit, finite_t.min(), finite_t.max())
-            if t_star is None:
-                continue
-            entries.append((name, t_star, roi.style))
-        if not entries:
-            self._draw_hint("No fastest-change times (fits failed or rate is constant)")
+
             return []
 
-        self._draw_roi_bars(entries)
+        # Left to right in the order the ROIs' eyes were switched on, so
+        # the ROI just shown lands rightmost.
+        points = {
+            roi.roi_id: (name, actual, roi.style)
+            for roi, name, actual in self._fastest_change_points(
+                series, figure_settings
+            )
+        }
+        entries = [
+            points[roi_id]
+            for roi_id in in_visibility_order(self._model.session, points)
+        ]
+
+        if not entries:
+            self._draw_hint(
+                "No fastest-change points (fits failed or rate is constant)"
+            )
+
+            return []
+
+        self._draw_roi_bars(entries, figure_settings)
 
         return []  # ROI names on x: no time span to shade
+
+    def _draw_actual_vs_expected(self, series, figure_settings):
+        """Point per ROI per compared landmark — the fastest change, and
+        the d² max / min when the Expected tab compares them — its fitted
+        x value against the one the user expects (the Expected tab; unset
+        reads as the actual), plus the custom points typed in there, over
+        the identity line, with a trend fitted through them all whose
+        equation goes in the corner. Flipped, expected goes on y, so the
+        trend gives expected from actual."""
+        quantity, unit = x_quantity(figure_settings)
+        metrics = figure_settings.compared_metrics
+        measured = quantity_label(
+            f"{quantity.lower()} of fastest change"
+            if metrics == ["zero"]
+            else f"{quantity.lower()} at "
+            + " / ".join(EXPECTED_METRIC_LABELS[metric] for metric in metrics),
+            unit,
+        )
+        x_name, y_name = (
+            ("actual", "expected")
+            if figure_settings.flip_actual_expected
+            else ("expected", "actual")
+        )
+
+        self._axes.set_xlabel(f"{x_name.capitalize()} {measured}")
+        self._axes.set_ylabel(f"{y_name.capitalize()} {measured}")
+        self._apply_legend(False)
+
+        if figure_settings.fit_method == "none":
+            self._draw_hint("Select a fit method to view actual vs expected")
+
+            return []
+
+        points = [
+            (roi, name, metric, actual)
+            for roi, name, landmarks in self._fit_landmarks(series, figure_settings)
+            for metric, actual in landmarks.items()
+        ]
+        custom_points = [
+            point
+            for point in self._model.session.custom_points
+            if math.isfinite(point.actual) and math.isfinite(point.expected)
+        ]
+
+        if not points and not custom_points:
+            self._draw_hint(
+                "No fastest-change points (fits failed or rate is constant)"
+            )
+
+            return []
+
+        # The custom points follow the ROIs' in every list below, so
+        # they join the trend fit like any other point.
+        values = {
+            "expected": [
+                roi.expected_or(metric, actual) for roi, _name, metric, actual in points
+            ]
+            + [point.expected for point in custom_points],
+            "actual": [actual for _roi, _name, _metric, actual in points]
+            + [point.actual for point in custom_points],
+        }
+        x_values, y_values = values[x_name], values[y_name]
+        span = [min(*x_values, *y_values), max(*x_values, *y_values)]
+
+        # (name, marker, colour, alpha) per point, in x_values order.
+        dressing = [
+            (
+                name,
+                EXPECTED_METRIC_MARKERS[metric],
+                roi.style.color,
+                roi.style.plot_alpha,
+            )
+            for roi, name, metric, _actual in points
+        ] + [
+            (point.name, CUSTOM_POINT_MARKER, CUSTOM_POINT_COLOR, CUSTOM_POINT_ALPHA)
+            for point in custom_points
+        ]
+        markers = list(
+            dict.fromkeys(marker for _name, marker, _color, _alpha in dressing)
+        )
+
+        (identity_line,) = self._axes.plot(
+            span,
+            span,
+            linestyle="--",
+            linewidth=0.8,
+            color="gray",
+            alpha=0.6,
+            label="_nolegend_",
+        )
+        self._fit_artists.append(identity_line)
+
+        for marker in markers:
+            members = [
+                (x, y, color, alpha)
+                for x, y, (_name, point_marker, color, alpha) in zip(
+                    x_values, y_values, dressing
+                )
+                if point_marker == marker
+            ]
+            xs, ys, colors, alphas = zip(*members)
+
+            self._fit_artists.append(
+                self._axes.scatter(
+                    xs,
+                    ys,
+                    marker=marker,
+                    color=list(colors),
+                    alpha=list(alphas),
+                    zorder=3,
+                )
+            )
+
+        for (name, _marker, _color, _alpha), x, y in zip(dressing, x_values, y_values):
+            self._fit_artists.append(
+                self._axes.annotate(
+                    name,
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(6, 4),
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+                )
+            )
+
+        # One marker shape needs no key; several (or a custom point,
+        # which no ROI colour names) get one, in black so it reads as
+        # the shape alone.
+        if len(markers) > 1 or custom_points:
+            marker_labels = {
+                EXPECTED_METRIC_MARKERS[metric]: EXPECTED_METRIC_LABELS[metric]
+                for metric in metrics
+            }
+            marker_labels[CUSTOM_POINT_MARKER] = CUSTOM_POINT_LABEL
+
+            self._fit_artists.append(
+                self._axes.legend(
+                    handles=[
+                        Line2D(
+                            [],
+                            [],
+                            marker=marker,
+                            color="black",
+                            linestyle="",
+                            label=marker_labels[marker],
+                        )
+                        for marker in markers
+                    ],
+                    loc="lower right",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+                )
+            )
+
+        self._draw_trend(
+            self._model.session.trend,
+            x_values,
+            x_name,
+            y_name,
+            figure_settings.trend_method,
+        )
+
+        return []  # landmark x values on both axes: no time span
+
+    def _draw_trend(self, trend, x_values, x_name, y_name, method):
+        """The Actual vs expected ``trend`` (the model's ``method`` fit,
+        a TREND_METHODS key), dashed over the points' x range, with its
+        equation and R² in the corner — or a corner note when it is None
+        because the points are too few for it."""
+        if trend is None:
+            self._fit_artists.append(
+                self._axes.text(
+                    EQUATION_BOX_X,
+                    EQUATION_BOX_TOP_Y,
+                    f"Too few points for a {FIT_LABELS[method].lower()} trend",
+                    transform=self._axes.transAxes,
+                    va="top",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+                    color="gray",
+                )
+            )
+
+            return
+
+        trend_x = np.linspace(min(x_values), max(x_values), FIT_CURVE_SAMPLES)
+        trend_y = trend.predict(trend_x)
+        # The fit's own text reads "y = f(t)"; name the axes instead.
+        equation = re.sub(r"\bt\b", x_name, trend.equation.removeprefix("y = "))
+        text = f"{y_name} = {equation}  (R² {trend.r_squared:.3f})"
+
+        (trend_line,) = self._axes.plot(
+            trend_x,
+            trend_y,
+            linestyle="--",
+            color="black",
+            alpha=0.7,
+            label="_nolegend_",
+        )
+        self._fit_artists.append(trend_line)
+        self._fit_artists.append(
+            self._axes.text(
+                EQUATION_BOX_X,
+                EQUATION_BOX_TOP_Y,
+                text,
+                transform=self._axes.transAxes,
+                va="top",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
 
     def _shade_trimmed_tails(self, trim_edges):
         """Grey band over the tail the poor-fit trim kept out of at
@@ -1222,7 +3197,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _apply_legend(self, wanted):
         if wanted:
-            self._axes.legend(loc="best", fontsize="small")
+            self._axes.legend(loc="best", fontsize=self._font_size(LEGEND_FONT_SCALE))
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
 
@@ -1245,14 +3220,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_HIDDEN_Y,
+                self._grown_with_font(NOTE_HIDDEN_Y),
                 f"Log axis hides {hidden} non-positive "
                 f"{'point' if hidden == 1 else 'points'}",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1277,14 +3252,53 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_OUTLIERS_Y,
+                self._grown_with_font(NOTE_OUTLIERS_Y),
                 f"{dropped} {'point' if dropped == 1 else 'points'} "
                 f"dropped as outliers",
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
+
+    def _note_area_fit_fallbacks(self, series, area_fit):
+        """Count the measured ROIs the area fit could not be solved for
+        — too few points it may use for the chosen curve, no solution,
+        or a fit that is not positive at every image — whose area stays
+        the per-image count. ``area_fit`` is the Area view's fits; the
+        area-normalised stats fit theirs inside the series, so they are
+        asked for here."""
+        session = self._model.session
+
+        if (
+            session.figure.area_fit_method == "none"
+            or session.plot_stat not in AREA_FIT_STATS
+        ):
+            return
+
+        if session.plot_stat != "area":
+            area_fit = area_fit_series(session, self._model.filtered_paths)
+
+        fallbacks = sum(1 for roi_id in finite_values(series) if roi_id not in area_fit)
+
+        if not fallbacks:
+            return
+
+        noun = "ROI" if fallbacks == 1 else "ROIs"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                self._grown_with_font(NOTE_AREA_FIT_Y),
+                f"{fallbacks} {noun} the area fit could not be solved for "
+                f"use the per-image area",
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1313,13 +3327,42 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(
             self._axes.text(
                 0.5,
-                NOTE_NO_TEMP_Y,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
                 note,
                 transform=self._axes.transAxes,
                 ha="center",
                 va="bottom",
                 color="gray",
-                fontsize="x-small",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
+            )
+        )
+
+    def _note_missing_steps(self, series, figure_settings):
+        """Count the images whose capture names no protocol step (NaN x
+        on the step axis) — like the frames a heater log misses, they
+        cannot be drawn anywhere honest, so they are counted instead of
+        silently vanishing."""
+        if figure_settings.x_axis != "step":
+            return
+
+        frames = next((x_values for _name, x_values, _values in series.values()), [])
+        missing = sum(1 for x in frames if x != x)
+
+        if not missing:
+            return
+
+        noun = "image" if missing == 1 else "images"
+
+        self._fit_artists.append(
+            self._axes.text(
+                0.5,
+                self._grown_with_font(NOTE_NO_TEMP_Y),
+                f"{missing} {noun} without a protocol step",
+                transform=self._axes.transAxes,
+                ha="center",
+                va="bottom",
+                color="gray",
+                fontsize=self._font_size(ANNOTATION_FONT_SCALE),
             )
         )
 
@@ -1333,6 +3376,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="center",
                 color="gray",
+                fontsize=self._font_size(),
             )
         )
 
@@ -1342,25 +3386,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         table is where failures are reported). Returns the (fitted_end,
         series_end) pairs the trim shading is drawn from."""
         equation_lines, trim_edges = [], []
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            method, expression = fit_arguments(figure_settings, self._model.fit_presets)
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-            if fit is None:
-                continue
-            # fit_series requires >= 2 finite points, so never empty.
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
+        _quantity, x_unit = x_quantity(figure_settings)
+
+        for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), FIT_CURVE_SAMPLES)
             (overlay,) = self._axes.plot(
@@ -1377,51 +3405,78 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     roi.style.color,
                     roi.style.plot_alpha,
                     f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
-                    f"{trimmed_note(fit, finite_t.max())}",
+                    f"{trimmed_note(fit, finite_t.max(), unit=x_unit)}",
                 )
             )
             self._draw_extrema(
-                fit, finite_t.min(), finite_t.max(), roi, figure_settings
+                fit,
+                finite_t.min(),
+                finite_t.max(),
+                roi,
+                figure_settings,
+                marker_y=fit.predict,
             )
         if figure_settings.show_fit_equations:
             for index, (color, alpha, text) in enumerate(equation_lines):
                 self._fit_artists.append(
                     self._axes.text(
                         EQUATION_BOX_X,
-                        EQUATION_BOX_TOP_Y - EQUATION_LINE_STEP_Y * index,
+                        EQUATION_BOX_TOP_Y
+                        - self._grown_with_font(EQUATION_LINE_STEP_Y) * index,
                         text,
                         transform=self._axes.transAxes,
                         va="top",
-                        fontsize="x-small",
+                        fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                         color=color,
                         alpha=alpha,
                     )
                 )
         return trim_edges
 
-    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
-        """Point (plus optional v/h line and coordinates) on the fitted
-        curve where its second derivative peaks/troughs."""
+    def _draw_extrema(
+        self,
+        fit,
+        t_start,
+        t_end,
+        roi,
+        figure_settings,
+        marker_y,
+        with_second_derivative_extrema=True,
+    ):
+        """Point (plus optional v/h line and coordinates) on
+        ``marker_y`` (a function of t: the curve or one of its
+        derivatives) at each enabled marker's t — where the fitted
+        curve's second derivative peaks/troughs, and where the curve
+        changes fastest. ``with_second_derivative_extrema`` False
+        leaves the d² ones out."""
         wanted = [
             key
             for key, enabled in (
                 ("max", figure_settings.show_second_derivative_max),
                 ("min", figure_settings.show_second_derivative_min),
             )
-            if enabled
+            if enabled and with_second_derivative_extrema
         ]
-        if not wanted:
-            return
-        extrema = second_derivative_extrema(fit, t_start, t_end)
-        for key in wanted:
-            if key not in extrema:
-                continue
-            t_star, y_star = extrema[key]
-            self._draw_extremum_marker(t_star, y_star, roi, figure_settings)
+        times = []
+
+        if wanted:
+            extrema = second_derivative_extrema(fit, t_start, t_end)
+            times.extend(extrema[key][0] for key in wanted if key in extrema)
+
+        if figure_settings.show_second_derivative_zero:
+            t_star = fastest_change_time(fit, t_start, t_end)
+
+            if t_star is not None:
+                times.append(t_star)
+
+        for t_star in times:
+            self._draw_extremum_marker(
+                t_star, float(marker_y(t_star)), roi, figure_settings
+            )
 
     def _draw_extremum_marker(self, t_star, y_star, roi, figure_settings):
-        """One d²-extremum marker at (t_star, y_star) — on the fitted
-        curve in the intensity view, on the d² curve in the d² view."""
+        """One marker at (t_star, y_star) — on the fitted curve in the
+        intensity view, on the derivative's curve in a derivative view."""
         alpha = roi.style.plot_alpha
         (point,) = self._axes.plot(
             [t_star],
@@ -1453,7 +3508,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     (t_star, y_star),
                     textcoords="offset points",
                     xytext=(6, 6),
-                    fontsize="x-small",
+                    fontsize=self._font_size(ANNOTATION_FONT_SCALE),
                     color=roi.style.color,
                     alpha=alpha,
                 )
@@ -1499,6 +3554,9 @@ class RoiPlotDockPane(DockPane):
     table = Instance(RoiStatsTable)
     _controls_ui = Any()
     _controls_scroll = Any()
+    #: The Expected tab tables' copy / paste event filters, one per
+    #: table, replaced with the controls on every rebuild.
+    _table_clipboard_filters = List()
     _equations_ui = Any()
 
     def create_contents(self, parent):
@@ -1523,13 +3581,19 @@ class RoiPlotDockPane(DockPane):
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self._controls_scroll)
         splitter.addWidget(self.canvas)
-        self.table = RoiStatsTable(roi_analysis_model, splitter)
-        splitter.addWidget(self.table)
+        # The ROI table, or — while the Temperature over time view is
+        # up, where it has nothing to say — that view's style panel.
+        self._table_stack = QStackedWidget(splitter)
+        self.table = RoiStatsTable(roi_analysis_model, self._table_stack)
+        self._table_stack.addWidget(self.table)
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.addWidget(self._style_ui.control)
+        splitter.addWidget(self._table_stack)
         # Nothing collapses to nothing by dragging: a section dragged
         # shut is hard to find again.
         splitter.setChildrenCollapsible(False)
         self._controls_scroll.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
-        self.table.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
+        self._table_stack.setMinimumHeight(ROI_PLOT_SECTION_MIN_PX)
         splitter.setStretchFactor(0, 0)  # controls keep their size
         splitter.setStretchFactor(1, 3)  # the chart takes the room
         splitter.setStretchFactor(2, 1)
@@ -1545,6 +3609,8 @@ class RoiPlotDockPane(DockPane):
         # roi_analysis.progress_text, and one status belongs in one
         # place.
         roi_analysis_model.observe(self._on_session_swapped, "session")
+        roi_analysis_model.observe(self._show_table_or_style, _TABLE_OR_STYLE_STATE)
+        self._show_table_or_style()
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations, "fit_equations_button")
         roi_analysis_model.observe(self._on_heater_dir, "heater_dir_button")
@@ -1557,8 +3623,12 @@ class RoiPlotDockPane(DockPane):
 
     def _build_controls(self, parent):
         session = roi_analysis_model.session
-        return _plot_controls_view.ui(
+        ui = _plot_controls_view.ui(
             context={
+                # TableEditor cell editors copy the context's "object"
+                # and fail without one, leaving the Expected table
+                # uneditable; the model stands in for it.
+                "object": roi_analysis_model,
                 "session": session,
                 "figure": session.figure,
                 "model": roi_analysis_model,
@@ -1566,6 +3636,14 @@ class RoiPlotDockPane(DockPane):
             kind="subpanel",
             parent=parent,
         )
+
+        self._table_clipboard_filters = [
+            install_table_clipboard(editor)
+            for name in ("expected_rows", "custom_points")
+            for editor in ui.get_editors(name)
+        ]
+
+        return ui
 
     @observe("visible")
     def _mirror_visibility(self, event):
@@ -1579,6 +3657,32 @@ class RoiPlotDockPane(DockPane):
         self._controls_scroll.takeWidget()
         self._controls_scroll.setWidget(self._controls_ui.control)
         old_ui.dispose()
+
+        # The style panel edits the old session's style: rebuild it on
+        # the new one's, in the same stack slot.
+        old_style_ui = self._style_ui
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.removeWidget(old_style_ui.control)
+        self._table_stack.addWidget(self._style_ui.control)
+        old_style_ui.dispose()
+        self._show_table_or_style()
+
+    def _build_style_panel(self, parent):
+        """The temperature view's style panel on the session's style."""
+        return temperature_style_view.ui(
+            # TableEditor cell editors copy the context's "object".
+            context={"object": roi_analysis_model.session.temperature_style},
+            kind="subpanel",
+            parent=parent,
+        )
+
+    def _show_table_or_style(self, event=None):
+        """The style panel while the Temperature over time view is up,
+        the ROI table under every other view."""
+        temperature = roi_analysis_model.session.figure.view_mode == "temperature"
+        page = self._style_ui.control if temperature else self.table
+
+        self._table_stack.setCurrentWidget(page)
 
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
@@ -1617,6 +3721,10 @@ class RoiPlotDockPane(DockPane):
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()
+            self._style_ui.dispose()
+            roi_analysis_model.observe(
+                self._show_table_or_style, _TABLE_OR_STYLE_STATE, remove=True
+            )
             if (
                 self._equations_ui is not None
                 and self._equations_ui.control is not None

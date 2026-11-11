@@ -20,6 +20,9 @@ QApplication / event loop even for the worker-thread runs.
 import threading
 import time
 
+# Enthought library imports.
+from traits.api import Bool, Str
+
 # Microdrop package imports.
 from pluggable_protocol_tree.builtins.duration_column import (
     DurationColumnHandler,
@@ -33,12 +36,21 @@ from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.execution.executor import ProtocolExecutor
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
+from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
+from pluggable_protocol_tree.models._compound_adapters import _expand_compound
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
     BaseColumnModel,
     Column,
 )
+from pluggable_protocol_tree.models.compound_column import (
+    BaseCompoundColumnHandler,
+    BaseCompoundColumnModel,
+    CompoundColumn,
+    DictCompoundColumnView,
+)
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.columns.checkbox import CheckboxColumnView
 from pluggable_protocol_tree.views.columns.readonly_label import (
     ReadOnlyLabelColumnView,
 )
@@ -445,8 +457,10 @@ def _recording_handler(name, priority, log: list, barrier=None):
 
 
 def _make_recording_column(col_id, priority, log, barrier=None):
+    # Every row carries a value, so the column counts as used and its
+    # run-level hooks fire.
     return Column(
-        model=BaseColumnModel(col_id=col_id, col_name=col_id, default_value=None),
+        model=BaseColumnModel(col_id=col_id, col_name=col_id, default_value=True),
         view=ReadOnlyLabelColumnView(),
         handler=_recording_handler(col_id, priority, log, barrier),
     )
@@ -620,7 +634,7 @@ def test_on_protocol_end_runs_even_on_error():
             log.append("end_ran")
 
     col = Column(
-        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=None),
+        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=True),
         view=ReadOnlyLabelColumnView(),
         handler=_Boom(),
     )
@@ -642,7 +656,7 @@ def test_on_protocol_end_raising_during_error_cleanup_is_swallowed():
             raise RuntimeError("second")
 
     col = Column(
-        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=None),
+        model=BaseColumnModel(col_id="boom", col_name="boom", default_value=True),
         view=ReadOnlyLabelColumnView(),
         handler=_DoubleBoom(),
     )
@@ -783,6 +797,34 @@ def test_pre_hook_stop_short_circuits_lower_buckets_but_teardown_runs():
     assert "post" in late_hooks  # teardown still runs
     assert ("protocol_started",) not in spy.events
     assert spy.events[-1] == ("protocol_aborted",)
+
+
+def test_pre_protocol_start_error_stops_the_run_with_its_message():
+    """A column raising in on_pre_protocol_start (e.g. a camera that could
+    not be selected) aborts before any step and reaches the protocol-error
+    dialog with its own text."""
+
+    class _PreStartBoom(BaseColumnHandler):
+        def on_pre_protocol_start(self, ctx):
+            raise RuntimeError("camera 'ASI' failed to start")
+
+    col = Column(
+        model=BaseColumnModel(
+            col_id="flu", col_name="Fluorescence", default_value=True
+        ),
+        view=ReadOnlyLabelColumnView(),
+        handler=_PreStartBoom(),
+    )
+    ex = _executor_with([col])
+    spy = _SignalSpy(ex.signals)
+    ex.run()
+    err = [e for e in spy.events if e[0] == "protocol_error"]
+    assert len(err) == 1
+    assert "camera 'ASI' failed to start" in err[0][1]
+    assert "Fluorescence" in err[0][1]
+    assert "on_pre_protocol_start" in err[0][1]
+    assert ("protocol_started",) not in spy.events
+    assert not any(e[0] == "step_started" for e in spy.events)
 
 
 def test_hook_abort_error_routes_to_aborted_not_error():
@@ -935,3 +977,247 @@ def test_empty_run_paths_runs_nothing_but_still_terminates():
     ex.signals.observe(lambda event: finished.append(True), "protocol_finished")
     assert _names_of_run(ex, run_paths=[]) == []
     assert finished == [True]
+
+
+# --- run-level hooks of columns the run does not use ---
+
+
+_RUN_LEVEL_HOOKS = [
+    "on_pre_protocol_start",
+    "on_protocol_start",
+    "on_protocol_end",
+    "on_post_protocol_end",
+]
+
+
+def _hook_logging_handler(name, log, base=BaseColumnHandler):
+    """Handler appending (name, hook) for the four run-level hooks and
+    on_pre_step (standing in for the per-step hooks)."""
+
+    class _H(base):
+        def on_pre_protocol_start(self, ctx):
+            log.append((name, "on_pre_protocol_start"))
+
+        def on_protocol_start(self, ctx):
+            log.append((name, "on_protocol_start"))
+
+        def on_pre_step(self, row, ctx):
+            log.append((name, "on_pre_step"))
+
+        def on_protocol_end(self, ctx):
+            log.append((name, "on_protocol_end"))
+
+        def on_post_protocol_end(self, ctx):
+            log.append((name, "on_post_protocol_end"))
+
+    return _H()
+
+
+def _hook_logging_column(col_id, log):
+    """A column whose cells are empty unless a test sets a value."""
+    return Column(
+        model=BaseColumnModel(col_id=col_id, col_name=col_id, default_value=None),
+        view=ReadOnlyLabelColumnView(),
+        handler=_hook_logging_handler(col_id, log),
+    )
+
+
+def _hooks_of(log, name):
+    return [hook for (n, hook) in log if n == name]
+
+
+def test_unused_column_skips_its_run_level_hooks_but_not_its_step_hooks():
+    log = []
+    ex = _executor_with([_hook_logging_column("flu", log)])
+    ex.run()
+    assert _hooks_of(log, "flu") == ["on_pre_step"]
+
+
+def test_column_with_a_value_in_one_step_runs_its_run_level_hooks():
+    log = []
+    ex = _executor_with([_hook_logging_column("flu", log)])
+    ex.row_manager.add_step(values={"name": "B", "flu": ["fam"]})
+    ex.run()
+    assert _hooks_of(log, "flu") == [
+        "on_pre_protocol_start",
+        "on_protocol_start",
+        "on_pre_step",
+        "on_pre_step",
+        "on_protocol_end",
+        "on_post_protocol_end",
+    ]
+
+
+def test_run_scoped_to_steps_without_a_value_skips_the_run_level_hooks():
+    log = []
+    ex = _executor_with([_hook_logging_column("flu", log)])  # A: no value
+    ex.row_manager.add_step(values={"name": "B", "flu": ["fam"]})
+
+    ex.start(run_paths=[(0,)])
+    assert ex.wait(timeout=10) is True
+    assert _hooks_of(log, "flu") == ["on_pre_step"]
+
+    log.clear()
+    ex.start()
+    assert ex.wait(timeout=10) is True
+    assert [h for h in _hooks_of(log, "flu") if h in _RUN_LEVEL_HOOKS] == (
+        _RUN_LEVEL_HOOKS
+    )
+
+
+def test_skipped_column_is_logged_once_at_info(caplog):
+    caplog.set_level("INFO")
+    ex = _executor_with([_hook_logging_column("flu", [])])
+    ex.run()
+    skipped = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Skipping flu ")
+    ]
+    assert skipped == [
+        "Skipping flu protocol hooks: no step in this run uses the column"
+    ]
+
+
+def test_skipped_column_ids_are_on_the_protocol_context():
+    seen = []
+
+    class _Peek(BaseColumnHandler):
+        def on_pre_protocol_start(self, ctx):
+            seen.extend(ctx.skipped_column_ids)
+
+    ex = _executor_with([_hook_logging_column("flu", [])])
+    ex.lifecycle_handlers = [_Peek()]
+    ex.run()
+    assert "flu" in seen
+
+
+def test_lifecycle_handlers_are_never_skipped():
+    log = []
+    ex = _executor_with([_hook_logging_column("flu", log)])
+    ex.lifecycle_handlers = [_lifecycle_handler("life", priority=10, log=log)]
+    ex.run()
+    assert _hooks_of(log, "life") == ["pre", "start", "end", "post"]
+    assert _hooks_of(log, "flu") == ["on_pre_step"]
+
+
+class _ChainModel(BaseCompoundColumnModel):
+    base_id = "chain"
+
+    def field_specs(self):
+        return [
+            FieldSpec("chain_on", "Chain", False),
+            FieldSpec("chain_label", "Label", ""),
+        ]
+
+    def trait_for_field(self, field_id):
+        return Bool(False) if field_id == "chain_on" else Str("")
+
+
+def _hook_logging_compound_columns(log):
+    """The expanded field cells of a two-field compound whose handler logs
+    its hooks under "chain"; both fields start empty."""
+    compound = CompoundColumn(
+        model=_ChainModel(),
+        view=DictCompoundColumnView(
+            cell_views={
+                "chain_on": CheckboxColumnView(),
+                "chain_label": ReadOnlyLabelColumnView(),
+            }
+        ),
+        handler=_hook_logging_handler("chain", log, base=BaseCompoundColumnHandler),
+    )
+
+    return _expand_compound(compound)
+
+
+def test_compound_column_with_no_field_values_skips_its_run_level_hooks():
+    log = []
+    ex = _executor_with(_hook_logging_compound_columns(log))
+    ex.run()
+    assert _hooks_of(log, "chain") == ["on_pre_step"]
+
+
+def test_compound_column_is_used_when_a_non_owner_field_has_a_value():
+    log = []
+    ex = _executor_with(_hook_logging_compound_columns(log))
+    ex.row_manager.add_step(values={"name": "B", "chain_label": "FAM"})
+    ex.run()
+    assert [h for h in _hooks_of(log, "chain") if h in _RUN_LEVEL_HOOKS] == (
+        _RUN_LEVEL_HOOKS
+    )
+
+
+def _peek_skipped_column_ids(ex):
+    """Run ``ex`` and return ``ctx.skipped_column_ids`` as a lifecycle
+    handler saw it in on_pre_protocol_start."""
+    seen = []
+
+    class _Peek(BaseColumnHandler):
+        def on_pre_protocol_start(self, ctx):
+            seen.extend(ctx.skipped_column_ids)
+
+    ex.lifecycle_handlers = [_Peek()]
+    ex.run()
+
+    return seen
+
+
+def test_unused_column_without_protocol_level_hooks_is_not_listed(caplog):
+    """An empty column whose handler only has per-step hooks has nothing to
+    skip: no skip entry, no log line."""
+
+    class _StepOnly(BaseColumnHandler):
+        def on_pre_step(self, row, ctx):
+            pass
+
+    caplog.set_level("INFO")
+    notes = Column(
+        model=BaseColumnModel(col_id="notes", col_name="Notes", default_value=""),
+        view=ReadOnlyLabelColumnView(),
+        handler=_StepOnly(),
+    )
+    ex = _executor_with([notes, _hook_logging_column("flu", [])])
+    skipped = _peek_skipped_column_ids(ex)
+    assert "notes" not in skipped
+    assert "flu" in skipped
+    assert not any(
+        record.getMessage().startswith("Skipping notes ") for record in caplog.records
+    )
+
+
+def test_unused_compound_with_one_protocol_level_hook_is_listed_once():
+    """The field shims always forward every hook; the compound handler's
+    own override is what counts, and the compound is listed under one id."""
+
+    class _EndOnly(BaseCompoundColumnHandler):
+        def on_post_protocol_end(self, ctx):
+            pass
+
+    compound = CompoundColumn(
+        model=_ChainModel(),
+        view=DictCompoundColumnView(
+            cell_views={
+                "chain_on": CheckboxColumnView(),
+                "chain_label": ReadOnlyLabelColumnView(),
+            }
+        ),
+        handler=_EndOnly(),
+    )
+    ex = _executor_with(_expand_compound(compound))
+    assert _peek_skipped_column_ids(ex).count("chain") == 1
+
+
+def test_unused_compound_without_protocol_level_hooks_is_not_listed():
+    compound = CompoundColumn(
+        model=_ChainModel(),
+        view=DictCompoundColumnView(
+            cell_views={
+                "chain_on": CheckboxColumnView(),
+                "chain_label": ReadOnlyLabelColumnView(),
+            }
+        ),
+        handler=BaseCompoundColumnHandler(),
+    )
+    ex = _executor_with(_expand_compound(compound))
+    assert "chain" not in _peek_skipped_column_ids(ex)

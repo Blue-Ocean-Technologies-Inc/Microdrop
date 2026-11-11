@@ -33,6 +33,7 @@ from microdrop_application.helpers import get_current_experiment_directory
 from .consts import (
     CAPTURE_TIMESTAMP_FORMAT,
     DISCOVERY_FULL_WALK_INTERVAL_S,
+    EXPERIMENT_LOGS_DIR_NAME,
     IMAGE_PATTERNS,
 )
 
@@ -40,6 +41,11 @@ from .consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+class TrashUnavailableError(RuntimeError):
+    """The environment lacks send2trash, so nothing can be moved to the
+    Recycle Bin / Trash — and nothing is ever permanently deleted instead."""
 
 
 def current_captures_directory():
@@ -65,13 +71,11 @@ def discover_experiments() -> list:
     with no captures yet are still listed (selecting one just shows nothing)
     so the seek can walk them all. [] when the root is unavailable (no
     Redis)."""
-    try:
-        root = get_current_experiment_directory().parent
-    except Exception as e:
-        logger.debug(f"Experiments root unavailable: {e}")
+    root = _experiments_root()
+
+    if root is None:
         return []
-    if not root.is_dir():
-        return []
+
     experiments = [
         (child.name, child / CAPTURES_DIR_NAME)
         for child in root.iterdir()
@@ -80,6 +84,120 @@ def discover_experiments() -> list:
     return sorted(
         experiments, key=lambda item: (item[1].parent.stat().st_mtime, item[0])
     )
+
+
+def delete_experiment(captures_path):
+    """Move the experiment folder holding ``captures_path`` (a
+    discover_experiments captures path) to the platform's Recycle Bin /
+    Trash, where it can be restored; return the moved folder. Raises
+    ValueError for the CURRENT experiment, which the app is still writing
+    into, TrashUnavailableError without send2trash, and OSError
+    (send2trash's TrashPermissionError included) when it cannot be trashed
+    — never falls back to a permanent delete."""
+    experiment = Path(captures_path).parent
+
+    if _is_current_experiment(experiment):
+        raise ValueError(
+            f"'{experiment.name}' is the current experiment and cannot be "
+            "deleted while it is in use."
+        )
+
+    send2trash = _send2trash()
+    send2trash(str(experiment))
+    logger.info(f"Moved experiment folder {experiment} to the trash")
+
+    return experiment
+
+
+def prunable_experiments():
+    """The experiment folders under the Experiments root that hold
+    nothing useful — at most a logs entry plus (recursively) empty
+    folders such as an unused captures folder — sorted by name. Never the
+    CURRENT experiment. [] when the root is unavailable (no Redis)."""
+    root = _experiments_root()
+
+    if root is None:
+        return []
+
+    prunable = []
+
+    for child in sorted(root.iterdir(), key=lambda child: child.name):
+        if not child.is_dir() or _is_current_experiment(child):
+            continue
+
+        if _holds_only_logs(child):
+            prunable.append(child)
+
+    return prunable
+
+
+def prune_experiments(directories):
+    """Move each of ``directories`` (prunable_experiments folders) to the
+    platform's Recycle Bin / Trash; return the moved folders. Raises
+    TrashUnavailableError, before moving any, without send2trash. An
+    OSError stops the pruning and propagates, leaving the folders before it
+    trashed — never falls back to a permanent delete."""
+    send2trash = _send2trash()
+    removed = []
+
+    for directory in directories:
+        send2trash(str(directory))
+        logger.info(f"Moved experiment folder {directory} to the trash")
+        removed.append(directory)
+
+    return removed
+
+
+def _send2trash():
+    """The ``send2trash`` function, imported on use rather than at startup,
+    so a package an environment update installs into the running app is
+    picked up. Raises TrashUnavailableError when it is not installed — an
+    environment older than the send2trash dependency must still start."""
+    try:
+        from send2trash import send2trash
+    except ImportError as e:
+        raise TrashUnavailableError(
+            "send2trash is not installed in this environment"
+        ) from e
+
+    return send2trash
+
+
+def _experiments_root():
+    """The Experiments root — the CURRENT experiment's parent — or None
+    when it is unavailable (no Redis) or missing."""
+    try:
+        root = get_current_experiment_directory().parent
+    except Exception as e:
+        logger.debug(f"Experiments root unavailable: {e}")
+        return None
+
+    return root if root.is_dir() else None
+
+
+def _is_current_experiment(experiment):
+    """Whether ``experiment`` is the folder the app is writing into
+    (False when the experiment directory is unavailable)."""
+    try:
+        current = get_current_experiment_directory().resolve()
+    except Exception as e:
+        logger.debug(f"Experiment directory unavailable: {e}")
+        return False
+
+    return Path(experiment).resolve() == current
+
+
+def _holds_only_logs(experiment):
+    """Whether ``experiment`` holds nothing but a logs entry and folders
+    with no files anywhere under them."""
+    for entry in experiment.iterdir():
+        if entry.name == EXPERIMENT_LOGS_DIR_NAME:
+            continue
+
+        if not entry.is_dir() or not all(path.is_dir() for path in entry.rglob("*")):
+            return False
+
+    return True
 
 
 def discover_captures(directory) -> list:

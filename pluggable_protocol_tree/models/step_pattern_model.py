@@ -14,12 +14,14 @@ Holds the user's choices (target field, Ramp/Alternate, their parameters)
 and keeps a live preview — the generated ``values``, a ``summary`` line,
 and ``is_valid`` gating OK — recomputed on every change. With two or more
 steps selected the pattern *fits* onto them; otherwise it *creates* new
-steps.
+steps. The electrodes field is filled by channel number and only offers
+Alternate; its values are electrode-id lists.
 """
 
 # Enthought library imports.
 from traits.api import (
     Bool,
+    Button,
     Dict,
     Enum,
     Float,
@@ -30,6 +32,7 @@ from traits.api import (
     Property,
     Range,
     Str,
+    cached_property,
     observe,
 )
 
@@ -45,20 +48,25 @@ from pluggable_protocol_tree.services.step_pattern import (
     PatternField,
     alternate_values,
     bounds_error,
+    channel_electrode_ids,
     coerce_values,
     default_group_name,
+    electrode_channels_of,
     fit_increment,
     fit_ramp_values,
+    format_channel_entries,
     format_value,
+    parse_channel_entries,
     parse_values,
     ramp_lands_on_stop,
     ramp_values,
+    resolve_channel_entries,
 )
 
 #: Traits whose change re-runs the preview.
 _PREVIEW_INPUTS = (
     "field_label, mode, start, stop, increment, alternate_text, create_count, "
-    "fit_count, create_in_group, group_name"
+    "fit_count, create_in_group, group_name, electrode_channels"
 )
 
 
@@ -77,9 +85,20 @@ class StepPatternModel(HasTraits):
     #: The targeted field.
     field = Property(Instance(PatternField), observe="field_label, fields.items")
 
+    #: True when the targeted field is the electrodes, filled by channel.
+    is_channels = Property(Bool, observe="field_label, fields.items")
+
     #: Current value of each field on the steps the pattern starts from —
     #: the fitted steps, or the anchor step — in tree order: {col_id: [v, ...]}.
     current_values = Dict(Str, List)
+
+    #: The device's electrode-id -> channel map, resolving typed channels.
+    electrode_channels = Dict(Str, Int)
+
+    #: ``electrode_channels`` inverted: {channel: [sorted electrode ids]}.
+    _electrode_ids_by_channel = Property(
+        Dict(Int, List(Str)), observe="electrode_channels"
+    )
 
     #: Number of selected steps; two or more means fit onto them.
     fit_count = Int(0)
@@ -87,7 +106,10 @@ class StepPatternModel(HasTraits):
     #: True when the pattern fits onto the selection rather than creating steps.
     is_fit = Property(Bool, observe="fit_count")
 
-    mode = Enum(*STEP_PATTERN_MODES)
+    #: Pattern kinds the targeted field offers — Alternate only for channels.
+    modes = List(Str, list(STEP_PATTERN_MODES))
+
+    mode = Enum(values="modes")
 
     #: Ramp: first value.
     start = Float(0.0)
@@ -101,8 +123,12 @@ class StepPatternModel(HasTraits):
     #: Ramp, fit mode: the increment the selection count implies (read-only).
     fitted_increment = Property(Float, observe="start, stop, fit_count")
 
-    #: Alternate: the values to cycle, e.g. "50, 80".
+    #: Alternate: the values to cycle, e.g. "50, 80" — for the electrodes,
+    #: channel entries, e.g. "1 2 3; 4 5 6".
     alternate_text = Str()
+
+    #: Alternate, electrodes: open the device picture to pick channel entries.
+    pick_channels = Button("Pick on device…")
 
     #: Alternate, create mode: how many new steps to create.
     create_count = Range(1, STEP_PATTERN_MAX_STEPS, STEP_PATTERN_DEFAULT_CREATE_COUNT)
@@ -141,6 +167,13 @@ class StepPatternModel(HasTraits):
 
         return None
 
+    def _get_is_channels(self):
+        return self.field is not None and self.field.is_channels
+
+    @cached_property
+    def _get__electrode_ids_by_channel(self):
+        return channel_electrode_ids(self.electrode_channels)
+
     def _get_is_fit(self):
         return self.fit_count >= 2
 
@@ -160,6 +193,15 @@ class StepPatternModel(HasTraits):
         self.field_labels = [field.label for field in self.fields]
 
     @observe("field_label", post_init=True)
+    def _update_modes(self, event=None):
+        """Offer Alternate only for the electrodes; a mode no longer offered
+        falls back to the first one (the dynamic Enum resets itself)."""
+        if self.is_channels:
+            self.modes = [STEP_PATTERN_ALTERNATE]
+        else:
+            self.modes = list(STEP_PATTERN_MODES)
+
+    @observe("field_label", post_init=True)
     def _prefill_from_current_values(self, event=None):
         """Seed start/stop and the alternate list from the field's current
         values: first and last fitted step, or the anchor step's value."""
@@ -167,6 +209,11 @@ class StepPatternModel(HasTraits):
         current = self.current_values.get(field.col_id) if field else None
 
         if not current:
+            return
+
+        if field.is_channels:
+            self.alternate_text = self._channel_text_of(current)
+
             return
 
         self.start = float(current[0])
@@ -208,6 +255,7 @@ class StepPatternModel(HasTraits):
         if self.field_labels and self.field_label not in self.field_labels:
             self.field_label = self.field_labels[0]
 
+        self._update_modes()
         self._prefill_from_current_values()
         self._suggest_group_name()
         self._update_preview()
@@ -226,6 +274,9 @@ class StepPatternModel(HasTraits):
             raise ValueError("Enter a name for the new group.")
 
         self.clamped = False
+
+        if field.is_channels:
+            return self._channel_values()
 
         if self.mode == STEP_PATTERN_RAMP:
             raw = self._ramp_values()
@@ -270,6 +321,28 @@ class StepPatternModel(HasTraits):
 
         return alternate_values(pattern, count)
 
+    def _channel_values(self):
+        """Electrode-id lists, one per affected step, cycling the entries."""
+        entries = parse_channel_entries(self.alternate_text)
+
+        if not entries:
+            raise ValueError("Enter at least one channel entry, e.g. 1 2 3; 4 5 6.")
+
+        pattern = resolve_channel_entries(entries, self._electrode_ids_by_channel)
+        count = self.fit_count if self.is_fit else self.create_count
+
+        return alternate_values(pattern, count)
+
+    def _channel_text_of(self, electrode_id_lists):
+        """Channel-entry text for steps' electrode ids: each distinct step
+        once, in order of first appearance."""
+        entries = dict.fromkeys(
+            tuple(electrode_channels_of(electrode_ids, self.electrode_channels))
+            for electrode_ids in electrode_id_lists
+        )
+
+        return format_channel_entries(entries)
+
     def _describe(self, values):
         field = self.field
 
@@ -280,6 +353,15 @@ class StepPatternModel(HasTraits):
 
             if self.new_group_name:
                 action += f" in group '{self.new_group_name}'"
+
+        if field.is_channels:
+            cycle = format_channel_entries(
+                parse_channel_entries(self.alternate_text),
+                separator=" | ",
+                empty_label="none",
+            )
+
+            return f"{action}, cycling channels {cycle}."
 
         if self.mode == STEP_PATTERN_ALTERNATE:
             cycle = ", ".join(

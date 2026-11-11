@@ -8,13 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The virtual numpad and keyboard: frameless, always-on-top pads
+"""The virtual numpad, keyboard and D-pad: frameless, always-on-top pads
 whose keys are posted to whatever widget currently has focus — the
 field the user last tapped. The pads never take focus themselves
 (``WindowDoesNotAcceptFocus``), so tapping a key cannot steal the
 caret from its target. No per-widget wiring: synthesized QKeyEvents
 work with TraitsUI editors, plugin panes and dialogs alike."""
 
+# Third-party imports.
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
@@ -27,8 +28,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+# Microdrop style imports.
 from microdrop_style.colors import BLACK, GREY, PRIMARY_COLOR, WHITE
 
+# Local imports.
 from .consts import (
     PAD_KEY_REPEAT_DELAY_MS,
     PAD_KEY_REPEAT_INTERVAL_MS,
@@ -71,6 +74,22 @@ _KEYBOARD_LETTER_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
 #: What the digit row types while Shift is latched.
 _SHIFTED_DIGITS = str.maketrans("1234567890", "!@#$%^&*()")
 
+#: (label, Qt key, row, column) of the D-pad's arrow cross.
+_DPAD_ARROWS = (
+    ("▲", Qt.Key_Up, 0, 1),
+    ("◀", Qt.Key_Left, 1, 0),
+    ("▶", Qt.Key_Right, 1, 2),
+    ("▼", Qt.Key_Down, 2, 1),
+)
+
+#: The key a latched modifier flag stands for, so the D-pad can post
+#: its key-up when the latch is tapped off.
+_MODIFIER_KEYS = {
+    Qt.KeyboardModifier.ShiftModifier: Qt.Key_Shift,
+    Qt.KeyboardModifier.ControlModifier: Qt.Key_Control,
+    Qt.KeyboardModifier.AltModifier: Qt.Key_Alt,
+}
+
 _PAD_STYLE = f"""
     QWidget#touch_pad {{
         background: {GREY["dark"]};
@@ -103,7 +122,10 @@ def main_window_parent():
 
 class FloatingPad(QWidget):
     """A frameless, always-on-top, finger-draggable pad with a title
-    strip and close button. Subclasses fill ``self.body``."""
+    strip and close button. Subclasses fill ``self.body``, and may
+    add latching modifiers (``_add_modifier``) that join the next
+    key's chord — one-shot unless the subclass overrides
+    ``_after_chord``."""
 
     #: Set by the manager: called when the user closes the pad from
     #: its own ✕, so the menu checkbox can follow.
@@ -121,6 +143,7 @@ class FloatingPad(QWidget):
         self.setObjectName("touch_pad")
         self.setStyleSheet(_PAD_STYLE)
         self._drag_offset = None
+        self._modifier_buttons = {}
         outer = QVBoxLayout(self)
         outer.setContentsMargins(6, 4, 6, 6)
         handle = QHBoxLayout()
@@ -195,13 +218,66 @@ class FloatingPad(QWidget):
         self.body.addWidget(button, row, column, 1, width)
         return button
 
+    def _add_modifier(self, label, flag, row, column):
+        """A latching key: checked arms the flag for the next real
+        key, which consumes it (see send_key)."""
+        button = self.add_key(label, Qt.Key_unknown, "", row, column)
+        button.clicked.disconnect()
+        button.setCheckable(True)
+        button.clicked.connect(self._on_modifiers_changed)
+        self._modifier_buttons[flag] = button
+
+        return button
+
+    def _latched_modifiers(self):
+        latched = Qt.KeyboardModifier.NoModifier
+
+        for flag, button in self._modifier_buttons.items():
+            if button.isChecked():
+                latched |= flag
+
+        return latched
+
+    def _on_modifiers_changed(self, *_):
+        """Hook: a latch was tapped or released. No-op here."""
+
     def send_key(self, key, text, modifiers=None):
+        """Every key passes through here: latched modifiers join the
+        chord (a Ctrl/Alt shortcut types no text), then
+        ``_after_chord`` runs."""
+        latched = self._latched_modifiers()
+        combined = (
+            modifiers if modifiers is not None else Qt.KeyboardModifier.NoModifier
+        ) | latched
+
+        if combined & (
+            Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
+        ):
+            text = ""  # a chord types nothing
+
+        self.post_key(key, text, combined)
+
+        if latched:
+            self._after_chord()
+
+    def _after_chord(self):
+        """One-shot, like a touch keyboard: a chord consumes the
+        latches."""
+        self._release_latches()
+
+    def _release_latches(self):
+        for button in self._modifier_buttons.values():
+            button.setChecked(False)
+
+        self._on_modifiers_changed()
+
+    def post_key(self, key, text, modifiers):
         """Post press+release to the focused widget; no focus, no-op."""
         target = QApplication.focusWidget()
+
         if target is None:
             return
-        if modifiers is None:
-            modifiers = Qt.KeyboardModifier.NoModifier
+
         QCoreApplication.postEvent(
             target, QKeyEvent(QEvent.Type.KeyPress, key, modifiers, text)
         )
@@ -237,7 +313,6 @@ class VirtualKeyboard(FloatingPad):
     def __init__(self):
         super().__init__("Keyboard")
         self._letter_buttons = []
-        self._modifier_buttons = {}
         for column, digit in enumerate("1234567890"):
             self.add_key(digit, getattr(Qt, f"Key_{digit}"), digit, 0, column)
         for row, letters in enumerate(_KEYBOARD_LETTER_ROWS, start=1):
@@ -268,45 +343,77 @@ class VirtualKeyboard(FloatingPad):
             modifiers=Qt.KeyboardModifier.ShiftModifier,
         )
 
-    def _add_modifier(self, label, flag, row, column):
-        """A latching key: checked arms the flag for the next real
-        key, which consumes it (see send_key)."""
-        button = self.add_key(label, Qt.Key_unknown, "", row, column)
-        button.clicked.disconnect()
-        button.setCheckable(True)
-        button.clicked.connect(self._update_letter_case)
-        self._modifier_buttons[flag] = button
-        return button
-
-    def _latched_modifiers(self):
-        latched = Qt.KeyboardModifier.NoModifier
-        for flag, button in self._modifier_buttons.items():
-            if button.isChecked():
-                latched |= flag
-        return latched
-
     def send_key(self, key, text, modifiers=None):
-        """Every key passes through here: latched modifiers join the
-        chord, shape the text (uppercase/symbols for Shift, none for
-        a Ctrl/Alt shortcut), and release afterwards."""
-        latched = self._latched_modifiers()
-        combined = (
-            modifiers if modifiers is not None else Qt.KeyboardModifier.NoModifier
-        ) | latched
-        if combined & (
-            Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
-        ):
-            text = ""  # a chord types nothing
-        elif latched & Qt.KeyboardModifier.ShiftModifier and text:
+        """Latched Shift types uppercase/symbols; the base adds the
+        chord (and blanks the text for a Ctrl/Alt shortcut)."""
+        if self._shift.isChecked() and text:
             text = text.upper().translate(_SHIFTED_DIGITS)
-        super().send_key(key, text, combined)
-        if latched:  # one-shot, like a touch keyboard
-            for button in self._modifier_buttons.values():
-                button.setChecked(False)
-            self._update_letter_case()
+        super().send_key(key, text, modifiers)
 
-    def _update_letter_case(self, *_):
+    def _on_modifiers_changed(self, *_):
+        """Letter labels follow the Shift latch."""
         shifted = self._shift.isChecked()
         for button in self._letter_buttons:
             text = button.text()
             button.setText(text.upper() if shifted else text.lower())
+
+
+class VirtualDpad(FloatingPad):
+    """Arrow keys for the device viewer's shortcuts: a held arrow
+    keeps stepping, and the sticky Shift/Ctrl/Alt latches (any
+    combination) turn every tap into grow, shrink, split step or
+    route drawing until tapped off. Esc leaves route drawing;
+    Backspace erases its tail."""
+
+    def __init__(self):
+        super().__init__("D-pad")
+
+        #: Latches whose key-up has not been posted yet.
+        self._held_modifiers = Qt.KeyboardModifier.NoModifier
+
+        for label, key, row, column in _DPAD_ARROWS:
+            button = self.add_key(label, key, "", row, column, repeat=True)
+            button.setFixedSize(PAD_KEY_SIZE_PX, PAD_KEY_SIZE_PX)
+            self.body.setAlignment(button, Qt.AlignCenter)
+
+        self._add_modifier("⇧", Qt.KeyboardModifier.ShiftModifier, 3, 0)
+        self._add_modifier("ctrl", Qt.KeyboardModifier.ControlModifier, 3, 1)
+        self._add_modifier("alt", Qt.KeyboardModifier.AltModifier, 3, 2)
+
+        self.add_key("Esc", Qt.Key_Escape, "", 4, 0)
+        self.add_key("⌫", Qt.Key_Backspace, "", 4, 2)
+
+    def _after_chord(self):
+        """Sticky: latches stay on across taps and auto-repeat ticks,
+        like physical modifiers held down."""
+
+    def _on_modifiers_changed(self, *_):
+        """Post the key-up of each latch just tapped off: the device
+        view ends a Ctrl+Shift split session on a Ctrl or Shift
+        release, as it does when physical keys are let go."""
+        latched = self._latched_modifiers()
+
+        for flag, modifier_key in _MODIFIER_KEYS.items():
+            if self._held_modifiers & flag and not latched & flag:
+                self.post_release(modifier_key, flag)
+
+        self._held_modifiers = latched
+
+    def hideEvent(self, event):
+        # Hidden or closed with latches on: let them go, so no split
+        # session is left waiting for a key-up that never comes.
+        super().hideEvent(event)
+        self._release_latches()
+
+    def post_release(self, key, flag):
+        """Post a modifier key-up to the focused widget; no focus,
+        no-op. Built with its own flag, as a physical key-up is:
+        QKeyEvent.modifiers() toggles it off for a modifier key."""
+        target = QApplication.focusWidget()
+
+        if target is None:
+            return
+
+        QCoreApplication.postEvent(
+            target, QKeyEvent(QEvent.Type.KeyRelease, key, flag, "")
+        )

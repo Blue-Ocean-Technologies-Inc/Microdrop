@@ -13,6 +13,9 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 ``array`` through the display window, reporting the hovered pixel back).
 """
 
+# Standard library imports.
+from functools import partial
+
 # Third-party imports.
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
@@ -28,26 +31,29 @@ from PySide6.QtWidgets import (
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
     BasicEditorFactory,
+    ButtonEditor,
     Group,
     HGroup,
     HSplit,
     Item,
     Label,
     RangeEditor,
+    TextEditor,
     UItem,
     VGroup,
     View,
+    VSplit,
     spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
 # Microdrop style imports.
+from microdrop_style.button_styles import SLIM_NARROW_BUTTON_STYLE
+from microdrop_style.fonts.fontnames import MDI_ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_ADJUST,
     ICON_CANCEL,
     ICON_CAPSULE,
-    ICON_CHEVRON_LEFT,
-    ICON_CHEVRON_RIGHT,
     ICON_CIRCLE,
     ICON_CONTOUR,
     ICON_COPY,
@@ -57,6 +63,7 @@ from microdrop_style.icons.icons import (
     ICON_EDIT,
     ICON_FOLDER_OPEN,
     ICON_HOME,
+    ICON_NEGATIVE_MASK,
     ICON_NEXT,
     ICON_OPEN_IN_NEW,
     ICON_PASTE,
@@ -64,6 +71,7 @@ from microdrop_style.icons.icons import (
     ICON_PLAY,
     ICON_PREVIOUS,
     ICON_RECTANGLE,
+    ICON_REDO,
     ICON_REFRESH,
     ICON_RESET_WRENCH,
     ICON_RULER,
@@ -71,10 +79,17 @@ from microdrop_style.icons.icons import (
     ICON_SHOW_CHART,
     ICON_TONALITY,
     ICON_TRANSFORM,
+    ICON_UNDO,
     ICON_VIEW_3D,
+    ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
+    MDI_ICON_BACKSPACE,
+    MDI_ICON_BACKSPACE_REVERSE,
 )
 
 # Microdrop utils imports.
+from microdrop_utils.keyboard_shortcuts import tooltip_with_shortcut
+from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HoverScrollEnumEditor,
@@ -86,13 +101,24 @@ from microdrop_utils.traitsui_qt_helpers import (
 # Local imports.
 from .analysis.consts import (
     AI_SIZE_FILTER_CEILING_PX,
+    MEASURE_INSIDE_BOUNDS_PERCENT,
+    RIM_SEARCH_BOUNDS_PX,
+    RIM_WIDTH_BOUNDS_PX,
     RING_GAP_BOUNDS_PX,
     RING_THICKNESS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
 )
 from .analysis.roi_canvas_layer import RoiCanvasLayer
-from .consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
+from .analysis.roi_shortcut_service import RoiShortcutService
+from .consts import (
+    IMAGE_ZOOM_STEP_BOUNDS,
+    IMAGE_ZOOM_STEP_DEFAULT,
+    KEYBOARD_SHORTCUT_GROUPS,
+    KEYBOARD_SHORTCUTS,
+    KEYBOARD_SHORTCUTS_TITLE,
+)
 from .display import frame_to_qimage
+from .rich_text_editor import RichTextEditor
 from .scale_bar import (
     DEFAULT_UNIT,
     UNITS,
@@ -119,6 +145,17 @@ PIXEL_READOUT_INTERVAL_MS = 33
 
 #: Keeps the status row's progress bar from bulking up the row.
 PROGRESS_BAR_HEIGHT_PX = 16
+
+#: Opens the image viewer's keyboard shortcut cheat sheet (F1, Help menu).
+show_image_viewer_shortcuts = partial(
+    show_keyboard_shortcuts,
+    KEYBOARD_SHORTCUTS,
+    KEYBOARD_SHORTCUT_GROUPS,
+    KEYBOARD_SHORTCUTS_TITLE,
+)
+
+#: Append the key bound to an action to a tooltip, as "Next image (Right)".
+_tooltip_with_shortcut = partial(tooltip_with_shortcut, KEYBOARD_SHORTCUTS)
 
 
 class _ProgressReadoutEditor(QtEditor):
@@ -168,7 +205,7 @@ class ScaleEntry(HasTraits):
     unit = Enum(DEFAULT_UNIT, UNITS)
 
     traits_view = View(
-        Item("value", label="Length"),
+        Item("value", label="Length (0 clears)"),
         Item("unit", label="Units"),
         title="Set image scale",
         buttons=["OK", "Cancel"],
@@ -181,16 +218,16 @@ class _ImageView(QGraphicsView):
     """Zoom (wheel, anchored under the cursor) + pan (drag) image view that
     reports the hovered pixel to a callback. Shrinks/grows freely with the
     dock pane (a full-resolution scene would otherwise dictate a huge size
-    hint) and keeps the image fitted on resize until the user zooms."""
+    hint) and keeps the image fitted on resize until the user zooms.
+    Keys go to the ROI layer first (a contour being traced), then to the
+    keyboard shortcuts."""
 
-    def __init__(self, scene, on_hover, roi_layer, scale_layer):
+    def __init__(self, scene, on_hover, roi_layer, scale_layer, shortcuts):
         super().__init__(scene)
         self._on_hover = on_hover
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
-        #: Set by the editor: fires the copy/paste/delete toolbar
-        #: buttons, so the shortcuts and the buttons are one code path.
-        self.on_roi_shortcut = lambda action: None
+        self._shortcuts = shortcuts
         self._metres_per_pixel = 0.0
         self._pixel_text = ""
         #: The newest readout, shown when the coalescing timer fires.
@@ -204,8 +241,8 @@ class _ImageView(QGraphicsView):
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
         self.setMouseTracking(True)
-        # Keys only reach a focused widget, and contour drawing needs
-        # Enter/Escape/Backspace once the canvas is clicked.
+        # Keys only reach a focused widget, and contour drawing and the
+        # shortcuts need them once the canvas is clicked.
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(1, 1)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -270,21 +307,16 @@ class _ImageView(QGraphicsView):
 
     def keyPressEvent(self, event):
         # Contour drawing finishes on Enter and unwinds on Escape /
-        # Backspace, and Escape also puts an armed draw tool away;
-        # everything else falls through to the view.
+        # Backspace, and Escape also puts an armed draw tool away; the
+        # shortcut table comes next, and anything left goes to the view.
         if self._roi_layer.key_press(event.key()):
             event.accept()
             return
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            action = {Qt.Key.Key_C: "copy", Qt.Key.Key_V: "paste"}.get(event.key())
-        else:
-            # Delete only, not Backspace: that one takes back a contour
-            # vertex while tracing.
-            action = "delete" if event.key() == Qt.Key.Key_Delete else None
-        if action is not None:
-            self.on_roi_shortcut(action)
+
+        if self._shortcuts.handle_key_press_event(event):
             event.accept()
             return
+
         super().keyPressEvent(event)
 
     def resizeEvent(self, event):
@@ -460,12 +492,21 @@ class _ImageCanvasEditor(QtEditor):
         )
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
+        shortcuts = RoiShortcutService(
+            analysis_model=analysis,
+            viewer_model=self.object,
+            is_tracing_contour=self._roi_layer.is_tracing_contour,
+            show_shortcuts_handler=show_image_viewer_shortcuts,
+        )
         self.control = _ImageView(
-            self._scene, self._on_hover, self._roi_layer, self._scale_layer
+            self._scene,
+            self._on_hover,
+            self._roi_layer,
+            self._scale_layer,
+            shortcuts,
         )
-        self.control.on_roi_shortcut = lambda action: analysis.trait_set(
-            **{f"{action}_roi_button": True}
-        )
+        # The pane is flat: no frame line around the image.
+        self.control.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.control.set_zoom_step(self.object.zoom_step)
         self.object.observe(self._on_zoom_step_changed, "zoom_step")
         self.object.observe(self._on_display_frame_changed, "display_frame")
@@ -477,15 +518,22 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:local_overrides, "
+            "roi_analysis:session:rois:items:absent_at, "
+            "roi_analysis:session:rois:items:absent_from, "
+            "roi_analysis:session:rois:items:absent_until, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session:ball:show_reference, "
-            "roi_analysis:selected_roi_id",
+            "roi_analysis:selected_roi_id, "
+            "roi_analysis:show_rois",
         )
         self.object.observe(
             self._on_interaction_mode_changed, "roi_analysis:interaction_mode"
@@ -517,15 +565,22 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:local_overrides, "
+            "roi_analysis:session:rois:items:absent_at, "
+            "roi_analysis:session:rois:items:absent_from, "
+            "roi_analysis:session:rois:items:absent_until, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:rois:items:style:visible, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:inside_percent, "
             "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:session:ball:enabled, "
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session:ball:show_reference, "
-            "roi_analysis:selected_roi_id",
+            "roi_analysis:selected_roi_id, "
+            "roi_analysis:show_rois",
             remove=True,
         )
         self.object.observe(
@@ -579,15 +634,32 @@ class _ImageCanvasEditor(QtEditor):
         if not model.current_path or model.array is None:
             self._roi_layer.clear_items()
             return
-        ring = model.roi_analysis.session.ring
-        self._roi_layer.set_ring(ring.gap_px, ring.thickness_px, ring.show_on_canvas)
-        ball = model.roi_analysis.session.ball
+
+        session = model.roi_analysis.session
+        ring = session.ring
+        self._roi_layer.set_ring(
+            ring.gap_px, ring.thickness_px, ring.show_on_canvas, ring.inside_percent
+        )
+        ball = session.ball
         self._roi_layer.set_ball_reference(
             ball.enabled and ball.show_reference, ball.radius_px
         )
+        effective = session.effective_for(model.current_path)
+
+        # An ROI hidden with its eye is not in ``effective`` at all, so
+        # it is neither drawn nor clickable; the toolbar's toggle hides
+        # every shape but keeps them in the scene.
+        hidden_ids = (
+            set()
+            if model.roi_analysis.show_rois
+            else {roi_id for roi_id, *_rest in effective}
+        )
+
         self._roi_layer.sync(
-            model.roi_analysis.session.effective_for(model.current_path),
+            effective,
             model.roi_analysis.selected_roi_id,
+            hidden_ids,
+            session.negatives_for(model.current_path),
         )
         self._push_scale()
 
@@ -632,21 +704,33 @@ class _ImageCanvasEditor(QtEditor):
 
     def _on_scale_line_drawn(self, length_px):
         """Ask what the line measures, store the calibration on the
-        session, and remember it as the seed for the next experiment."""
+        session, and remember it as the seed for the next experiment.
+        A length of 0 clears both instead."""
         analysis = self.object.roi_analysis
         scale = analysis.session.scale
+        preferences = self.object.preferences
         entry = ScaleEntry(value=scale.value or 1.0, unit=scale.unit)
-        calibration = None
-        if entry.edit_traits().result:
-            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
-        if calibration is not None:
-            scale.trait_set(
-                metres_per_pixel=calibration, value=entry.value, unit=entry.unit
-            )
-            preferences = self.object.preferences
-            preferences.last_scale_metres_per_px = calibration
-            preferences.last_scale_unit = entry.unit
+        confirmed = entry.edit_traits().result
+
+        if confirmed and entry.value == 0:
+            # Typing 0 is deliberate, so it clears even after a
+            # misclick-short line; dropping the seed keeps later
+            # experiments from being re-calibrated with it.
+            scale.trait_set(metres_per_pixel=0.0, value=0.0)
+            preferences.last_scale_metres_per_px = 0.0
             self._push_scale()
+
+        elif confirmed:
+            calibration = metres_per_pixel(length_px, entry.value, entry.unit)
+
+            if calibration is not None:
+                scale.trait_set(
+                    metres_per_pixel=calibration, value=entry.value, unit=entry.unit
+                )
+                preferences.last_scale_metres_per_px = calibration
+                preferences.last_scale_unit = entry.unit
+                self._push_scale()
+
         analysis.interaction_mode = "pan"
 
     def _on_interaction_mode_changed(self, event):
@@ -692,8 +776,8 @@ class ImageCanvasEditor(BasicEditorFactory):
     klass = _ImageCanvasEditor
 
 
-# Compact icon row above the image: browse/navigate/playback plus the
-# position and folder-info readouts.
+# Compact icon row above the image: folder, zoom, navigation, ROI edit
+# and calculation clusters, with the image index parked at the right end.
 buttons_group = HGroup(
     UItem(
         "directory_button",
@@ -721,21 +805,33 @@ buttons_group = HGroup(
     "12",
     UItem(
         "fit_button",
-        editor=IconButtonEditor(glyph=ICON_REFRESH, tooltip="Fit image to the pane"),
+        editor=IconButtonEditor(
+            glyph=ICON_REFRESH,
+            tooltip=_tooltip_with_shortcut("Fit image to the pane", "fit_view"),
+        ),
     ),
     UItem(
         "zoom_in_button",
-        editor=IconButtonEditor(glyph="zoom_in", tooltip="Zoom in one step"),
+        editor=IconButtonEditor(
+            glyph="zoom_in",
+            tooltip=_tooltip_with_shortcut("Zoom in one step", "zoom_in"),
+        ),
     ),
     UItem(
         "zoom_out_button",
-        editor=IconButtonEditor(glyph="zoom_out", tooltip="Zoom out one step"),
+        editor=IconButtonEditor(
+            glyph="zoom_out",
+            tooltip=_tooltip_with_shortcut("Zoom out one step", "zoom_out"),
+        ),
     ),
     # image navigation
     "12",
     UItem(
         "previous_button",
-        editor=IconButtonEditor(glyph=ICON_PREVIOUS, tooltip="Previous image"),
+        editor=IconButtonEditor(
+            glyph=ICON_PREVIOUS,
+            tooltip=_tooltip_with_shortcut("Previous image", "previous_image"),
+        ),
     ),
     UItem(
         "playing",
@@ -746,17 +842,43 @@ buttons_group = HGroup(
         ),
     ),
     UItem(
-        "next_button", editor=IconButtonEditor(glyph=ICON_NEXT, tooltip="Next image")
+        "next_button",
+        editor=IconButtonEditor(
+            glyph=ICON_NEXT, tooltip=_tooltip_with_shortcut("Next image", "next_image")
+        ),
     ),
-    # The workhorse actions — run the plot, save the data, start the ROI
-    # set over — as their own cluster right of the folder buttons.
+    # ROI edits: shape history, then start the ROI set over
+    "12",
+    UItem(
+        "object.roi_analysis.undo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_UNDO,
+            tooltip=_tooltip_with_shortcut("Undo the last ROI change", "undo"),
+        ),
+        enabled_when="object.roi_analysis.can_undo",
+    ),
+    UItem(
+        "object.roi_analysis.redo_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_REDO,
+            tooltip=_tooltip_with_shortcut("Redo the undone ROI change", "redo"),
+        ),
+        enabled_when="object.roi_analysis.can_redo",
+    ),
+    UItem(
+        "object.roi_analysis.clear_rois_button",
+        editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
+    ),
+    # calculation: run the plot, reset it, save the data
     "12",
     UItem(
         "object.roi_analysis.calculate_button",
         editor=IconButtonEditor(
             glyph=ICON_SHOW_CHART,
-            tooltip="Calculate ROI intensities across the "
-            "filtered images and plot them",
+            tooltip=_tooltip_with_shortcut(
+                "Calculate ROI intensities across the filtered images and plot them",
+                "calculate",
+            ),
         ),
     ),
     UItem(
@@ -776,15 +898,14 @@ buttons_group = HGroup(
             "needed)",
         ),
     ),
-    UItem(
-        "object.roi_analysis.clear_rois_button",
-        editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
-    ),
-    UItem("position_text", style="readonly"),
     # Takes the row's leftover width so the cluster gaps above stay at
     # their fixed 12 px (the numeric spacers are growable Minimum
-    # spacer items). The image summary itself lives in the pane title.
+    # spacer items) and the image index sits at the right end.
     spring,
+    UItem("position_text", style="readonly"),
+    # Scrolls sideways on its own, so the row never sets the image
+    # column's minimum width; the dock pane pins its height.
+    scrollable=True,
 )
 
 
@@ -798,13 +919,20 @@ def _collapse_header(trait, label):
 
 
 # Experiment layer (collapsed by default): browse another experiment's
-# captures without hunting for its folder — pick it and the viewer repoints
-# there, then the image-group / session / image levels reload under it.
+# captures without hunting for its folder — search narrows the dropdown,
+# pick one and the viewer repoints there, then the image-group / session /
+# image levels reload under it. The seek slider still spans every experiment.
 experiments_group = VGroup(
+    Item(
+        "experiment_filter",
+        label="Search",
+        editor=TextEditor(auto_set=True, enter_set=False),
+        tooltip="Type to filter the Experiment list; every word must match",
+    ),
     Item(
         "selected_experiment",
         label="Experiment",
-        editor=HoverScrollEnumEditor(values_name="experiment_names"),
+        editor=HoverScrollEnumEditor(values_name="filtered_experiment_names"),
         tooltip="Browse another experiment's captures (repoints the viewer "
         "at that experiment; use Home to return to the ongoing one)",
     ),
@@ -815,6 +943,39 @@ experiments_group = VGroup(
             low=1, high_name="object.max_experiment_number", mode="slider"
         ),
         tooltip="Drag through the experiments, oldest to newest",
+    ),
+    HGroup(
+        spring,
+        UItem(
+            "previous_experiment_button",
+            editor=IconButtonEditor(
+                glyph=ICON_PREVIOUS,
+                tooltip=_tooltip_with_shortcut(
+                    "Previous experiment (older)", "previous_experiment"
+                ),
+            ),
+            enabled_when="experiment_index > 0",
+        ),
+        UItem(
+            "next_experiment_button",
+            editor=IconButtonEditor(
+                glyph=ICON_NEXT,
+                tooltip=_tooltip_with_shortcut(
+                    "Next experiment (newer)", "next_experiment"
+                ),
+            ),
+            enabled_when="experiment_index < max_experiment_number - 1",
+        ),
+        "8",
+        UItem(
+            "delete_experiment_button",
+            editor=IconButtonEditor(
+                glyph=ICON_DELETE,
+                tooltip="Send experiment folder to trash",
+            ),
+            enabled_when="experiments",
+        ),
+        spring,
     ),
     visible_when="show_experiments",
     show_border=True,
@@ -883,10 +1044,36 @@ exclusion_group = VGroup(
     Item(
         "object.roi_analysis.current_image_excluded",
         label="Exclude current image from analysis",
-        tooltip="Ignore the shown image in the ROI calculations "
-        "(stats batch, plot, export, drift tracking). Viewing "
-        "and ROI drawing on it still work; the mark is saved "
-        "with the experiment.",
+        tooltip=_tooltip_with_shortcut(
+            "Ignore the shown image in the ROI calculations "
+            "(stats batch, plot, export, drift tracking). Viewing "
+            "and ROI drawing on it still work; the mark is saved "
+            "with the experiment.",
+            "toggle_exclude_image",
+        ),
+    ),
+    HGroup(
+        Item(
+            "object.roi_analysis.current_image_area_fit_excluded",
+            label="Exclude current image from area fit",
+            tooltip="Leave the shown image out of the area fit "
+            "(Cleanup tab, Area fit) while it "
+            "stays in the analysis. Shift+click a plot point does "
+            "the same; the mark is saved with the experiment.",
+        ),
+        UItem(
+            "object.roi_analysis.include_all_in_area_fit_button",
+            enabled_when="object.roi_analysis.has_area_fit_exclusions",
+            tooltip="Put every image back into the area fit",
+        ),
+    ),
+    HGroup(
+        UItem("absent_roi_text", style="readonly"),
+        UItem(
+            "object.roi_analysis.restore_absent_rois_button",
+            tooltip="Put back every ROI deleted from the shown image alone",
+        ),
+        visible_when="absent_roi_count",
     ),
     VGroup(
         Label("Exclude all images:"),
@@ -898,6 +1085,7 @@ exclusion_group = VGroup(
             "object.roi_analysis.exclude_after_button",
             tooltip="Exclude every image after the shown one from the analysis",
         ),
+        Label(""),
         Label("Include all images:"),
         UItem(
             "object.roi_analysis.include_before_button",
@@ -907,7 +1095,11 @@ exclusion_group = VGroup(
             "object.roi_analysis.include_after_button",
             tooltip="Clear the exclusion mark from every image after the shown one",
         ),
-        columns=3,
+        UItem(
+            "object.roi_analysis.include_all_button",
+            tooltip="Clear the exclusion mark from every image",
+        ),
+        columns=4,
     ),
     visible_when="show_exclusion",
     show_border=True,
@@ -938,6 +1130,37 @@ contrast_group = VGroup(
     show_border=True,
 )
 
+# The displayed image's file facts and PNG text chunks (a capture's
+# settings, for one), whatever keys the file carries, rendered as rich
+# text whose field names show their stored key as a tooltip. Resizable so
+# the text word-wraps rather than widening the sidebar.
+metadata_group = VGroup(
+    HGroup(
+        spring,
+        UItem(
+            "metadata_popout_button",
+            editor=IconButtonEditor(
+                glyph=ICON_OPEN_IN_NEW, tooltip="Open the metadata in its own window"
+            ),
+        ),
+    ),
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
+    visible_when="show_metadata",
+    show_border=True,
+)
+
+# The metadata pop-out: a non-modal live window on the same model, so it
+# keeps following the shown image while the user steps through them.
+metadata_window_view = View(
+    UItem("metadata_text", editor=RichTextEditor(), resizable=True),
+    title="Image metadata",
+    kind="live",
+    resizable=True,
+    scrollable=True,
+    width=420,
+    height=480,
+)
+
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export
 # pipeline over the filtered images, as an always-visible vertical
 # toolbar on the image's right edge. Instant/live per-ROI stats show in
@@ -949,9 +1172,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CIRCLE,
             mode="draw_ellipse",
-            tooltip="Draw an elliptical ROI (click-drag from its "
-            "centre; the grip makes it an ellipse). Stays "
-            "armed for the next one — Esc puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw an elliptical ROI (click-drag from its "
+                "centre; the grip makes it an ellipse). Stays "
+                "armed for the next one — Esc puts it away",
+                "draw_ellipse",
+            ),
         ),
     ),
     UItem(
@@ -959,9 +1185,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_RECTANGLE,
             mode="draw_box",
-            tooltip="Draw a rectangular ROI (click-drag on the "
-            "image). Stays armed for the next one — Esc "
-            "puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a rectangular ROI (click-drag on the "
+                "image). Stays armed for the next one — Esc "
+                "puts it away",
+                "draw_box",
+            ),
         ),
     ),
     UItem(
@@ -969,9 +1198,12 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CAPSULE,
             mode="draw_capsule",
-            tooltip="Draw a capsule ROI (click-drag its axis, then "
-            "use the grip for its radius). Stays armed "
-            "for the next one — Esc puts it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a capsule ROI (click-drag its axis, then "
+                "use the grip for its radius). Stays armed "
+                "for the next one — Esc puts it away",
+                "draw_capsule",
+            ),
         ),
     ),
     UItem(
@@ -979,11 +1211,36 @@ analysis_toolbar = VGroup(
         editor=IconModeButtonEditor(
             glyph=ICON_CONTOUR,
             mode="draw_polygon",
-            tooltip="Draw a contour ROI (click to place nodes; "
-            "close on the first node, double-click, or "
-            "Enter — Esc cancels, Backspace undoes). Stays "
-            "armed for the next one — a second Esc puts "
-            "it away",
+            tooltip=_tooltip_with_shortcut(
+                "Draw a contour ROI (click to place nodes; "
+                "close on the first node, double-click, or "
+                "Enter — Esc cancels, Backspace undoes). Stays "
+                "armed for the next one — a second Esc puts "
+                "it away",
+                "draw_polygon",
+            ),
+        ),
+    ),
+    UItem(
+        "object.roi_analysis.negative_mode",
+        editor=IconToggleEditor(
+            on_glyph=ICON_NEGATIVE_MASK,
+            off_glyph=ICON_NEGATIVE_MASK,
+            tooltip=_tooltip_with_shortcut(
+                "Negative mask mode: drawn shapes are subtracted "
+                "from the ROIs they overlap",
+                "toggle_negative_mode",
+            ),
+        ),
+    ),
+    UItem(
+        "object.roi_analysis.show_rois",
+        editor=IconToggleEditor(
+            on_glyph=ICON_VISIBILITY,
+            off_glyph=ICON_VISIBILITY_OFF,
+            tooltip=_tooltip_with_shortcut(
+                "Show or hide the ROIs on the image", "toggle_show_rois"
+            ),
         ),
     ),
     "12",  # measurement toggles
@@ -1053,36 +1310,68 @@ analysis_toolbar = VGroup(
         editor=IconToggleEditor(
             on_glyph=ICON_EDIT,
             off_glyph=ICON_EDIT,
-            tooltip="Edit ROIs: drag to move, bottom-right grip to "
-            "resize (Shift keeps an ellipse circular), "
-            "top-left grip to rotate (Shift snaps to 15°), "
-            "pink top-right grip to round a box's corners, "
-            "drag a node to reshape a contour, click to "
-            "select. Editing on a later image adds a drift "
-            "override from there on",
-        ),
-    ),
-    # Delete-selected sits directly under the edit toggle: selecting
-    # (edit mode) and deleting the selection are one motion.
-    UItem(
-        "object.roi_analysis.delete_roi_button",
-        editor=IconButtonEditor(
-            glyph=ICON_DELETE, tooltip="Delete the selected ROI (Del)"
+            tooltip=_tooltip_with_shortcut(
+                "Edit ROIs: drag to move, bottom-right grip to "
+                "resize (Shift keeps an ellipse circular), "
+                "top-left grip to rotate (Shift snaps to 15°), "
+                "pink top-right grip to round a box's corners, "
+                "drag a node to reshape a contour, click to "
+                "select. Editing on a later image adds a drift "
+                "override from there on",
+                "toggle_edit_mode",
+            ),
         ),
     ),
     UItem(
         "object.roi_analysis.copy_roi_button",
         editor=IconButtonEditor(
-            glyph=ICON_COPY, tooltip="Copy the selected ROI's shape (Ctrl+C)"
+            glyph=ICON_COPY,
+            tooltip=_tooltip_with_shortcut("Copy the selected ROI's shape", "copy_roi"),
         ),
     ),
     UItem(
         "object.roi_analysis.paste_roi_button",
         editor=IconButtonEditor(
             glyph=ICON_PASTE,
-            tooltip="Paste the copied shape as a new ROI, offset "
-            "from the original (Ctrl+V)",
+            tooltip=_tooltip_with_shortcut(
+                "Paste the copied shape as a new ROI, offset from the original",
+                "paste_roi",
+            ),
         ),
+    ),
+    # Left Del / Del / Right Del: the selected ROI off every image before
+    # the shown one, off the shown one (the Del key's handler too), or
+    # off every image after it. The side buttons need an image to stop
+    # at; with none shown, Del removes the ROI outright.
+    UItem(
+        "object.roi_analysis.delete_roi_left_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image before this one "
+            "(this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
+    ),
+    UItem(
+        "object.roi_analysis.delete_roi_button",
+        editor=IconButtonEditor(
+            glyph=ICON_DELETE,
+            tooltip=_tooltip_with_shortcut(
+                "Delete the selected ROI from the shown image", "delete_roi"
+            ),
+        ),
+        enabled_when="analysis.selected_roi_id",
+    ),
+    UItem(
+        "object.roi_analysis.delete_roi_right_button",
+        editor=IconButtonEditor(
+            glyph=MDI_ICON_BACKSPACE_REVERSE,
+            font_family=MDI_ICON_FONT_FAMILY,
+            tooltip="Delete the selected ROI from every image after this one, "
+            "captures still to come included (this image keeps it)",
+        ),
+        enabled_when="analysis.selected_roi_id and object.current_path",
     ),
     "12",  # AI tools
     UItem(
@@ -1119,14 +1408,30 @@ analysis_toolbar = VGroup(
         ),
         enabled_when="analysis.ai_available",
     ),
+    # No AI model behind it, so never disabled with the AI tools.
+    UItem(
+        "object.roi_analysis.trace_rims_button",
+        editor=IconButtonEditor(
+            glyph="trip_origin",
+            tooltip="Trace rims: follow each droplet's bright rim from "
+            "its ROI on the shown image through every later frame — no AI "
+            "model needed. Press again to stop; finished frames are kept. "
+            "Pair with Measure inside (%) to keep the rim glare out of the "
+            "mean.",
+        ),
+    ),
     # Takes the column's stretch so the cluster gaps above stay at
     # their fixed 12 px instead of spreading down the pane (the fixed
     # spacers are growable Minimum spacer items).
     spring,
+    # Scrolls vertically on its own, so the toolbar never sets the
+    # pane's minimum height; the dock pane pins its width.
+    scrollable=True,
 )
 
-# Selector sidebar: the five collapsible sections stacked, hidden as one
-# unit by the chevron toggle (device-viewer sidebar parity).
+# Selector sidebar: the six collapsible sections stacked, hidden as one
+# unit by the chevron toggle (device-viewer sidebar parity). It scrolls on
+# its own, so a tall section never scrolls the image beside it.
 sidebar_group = VGroup(
     _collapse_header("show_experiments", "Experiments"),
     experiments_group,
@@ -1138,7 +1443,10 @@ sidebar_group = VGroup(
     exclusion_group,
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
+    _collapse_header("show_metadata", "Metadata"),
+    metadata_group,
     visible_when="show_sidebar",
+    scrollable=True,
 )
 
 # The measurement settings, under the image they act on: the background
@@ -1177,6 +1485,20 @@ correction_group = Group(
         "Changing either value recomputes the statistics.",
     ),
     Item(
+        "object.roi_analysis.session.ring.inside_percent",
+        label="Measure inside (%)",
+        editor=RangeEditor(
+            low=MEASURE_INSIDE_BOUNDS_PERCENT[0],
+            high=MEASURE_INSIDE_BOUNDS_PERCENT[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Measure only the inner N% of each ROI, by its "
+        "equivalent radius, leaving a band along the boundary out — "
+        "so the bright rim at a droplet's edge does not enter the "
+        "mean. 100 measures the whole shape. The ring is unchanged.",
+    ),
+    Item(
         "object.roi_analysis.session.ball.radius_px",
         label="Ball Radius",
         editor=RangeEditor(
@@ -1204,16 +1526,17 @@ correction_group = Group(
         "canvas (zooming out uses the reciprocal). 1.05 is "
         "barely perceptible; 2.0 doubles per notch.",
     ),
-    label="Measurement",
-    show_border=True,
     columns=3,
+    visible_when="show_measurement_settings",
 )
 
 # AI (SAM) detection options: significance/size filters over the last
-# pick/detect/track pass's candidates, the shape accepted candidates
-# become, and the drift re-check interval, plus Accept/Clear over the
-# pending candidates. Hidden with the rest of the AI surface when the
-# optional SAM stack is not installed.
+# pick/detect pass's candidates (the size window also gates each drift
+# check detection and rim trace), the shape accepted candidates and
+# tracked shapes become, the drift re-check interval and the rim
+# tracer's settings, plus Accept/Clear over the pending candidates. The
+# SAM-only options are disabled when the optional SAM stack is not
+# installed; the rest serve the rim tracer, which needs no model.
 ai_group = Group(
     Item(
         "object.roi_analysis.ai_significance",
@@ -1224,6 +1547,7 @@ ai_group = Group(
         "droplets score 2-4, one-off noise 1; click-added "
         "ROIs are exempt. Non-destructive: sliding back "
         "reveals hidden candidates.",
+        enabled_when="analysis.ai_available",
     ),
     # The size window's spinners bound each other (magnet z-stage
     # preferences parity): min cannot pass max, max cannot dip under
@@ -1238,7 +1562,9 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is below this. Applies to all candidates.",
+        "is below this. Applies to all candidates, and to drift "
+        "tracking and rim tracing: a smaller detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_max_size",
@@ -1250,13 +1576,16 @@ ai_group = Group(
             auto_set=True,
         ),
         tooltip="Hide candidates whose mean ellipse diameter (px) "
-        "is above this. Applies to all candidates.",
+        "is above this. Applies to all candidates, and to drift "
+        "tracking and rim tracing: a larger detection is rejected and "
+        "the ROI stays where it was on that frame.",
     ),
     Item(
         "object.roi_analysis.ai_output_kind",
         label="Output Shape",
-        tooltip="Shape an accepted candidate becomes: the traced "
-        "polygon outline, or the fitted ellipse.",
+        tooltip="Shape a new ROI from Pick or Detect all becomes: the "
+        "traced polygon outline, or the fitted ellipse. Track and Trace "
+        "rims keep each ROI's own shape kind.",
     ),
     Item(
         "object.roi_analysis.ai_drift_interval",
@@ -1265,6 +1594,35 @@ ai_group = Group(
         tooltip="Track drift: re-segment every Nth frame (the "
         "final frame always); skipped frames inherit. "
         "Larger N = faster tracking for slow drift.",
+        enabled_when="analysis.ai_available",
+    ),
+    Item(
+        "object.roi_analysis.rim_width_px",
+        label="Rim width (px)",
+        editor=RangeEditor(
+            low=RIM_WIDTH_BOUNDS_PX[0],
+            high=RIM_WIDTH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how wide the droplets' bright rim is, in "
+        "pixels. The rim filter is tuned to this width; set it to "
+        "what the rim measures on the image.",
+    ),
+    Item(
+        "object.roi_analysis.rim_search_px",
+        label="Rim search (px)",
+        editor=RangeEditor(
+            low=RIM_SEARCH_BOUNDS_PX[0],
+            high=RIM_SEARCH_BOUNDS_PX[1],
+            mode="spinner",
+            auto_set=True,
+        ),
+        tooltip="Trace rims: how far the rim may move between "
+        "consecutive frames, in pixels. Small keeps the trace off "
+        "specks and reflections next to the rim; raise it for droplets "
+        "that move or spread fast. After a long gap between captures "
+        "the search widens on its own.",
     ),
     HGroup(
         UItem(
@@ -1282,43 +1640,63 @@ ai_group = Group(
             visible_when="len(analysis.ai_candidates) > 0",
         ),
     ),
-    label="AI Detection",
-    show_border=True,
     columns=3,
-    visible_when="analysis.ai_available",
+    visible_when="show_ai_settings",
 )
 
-# The measurement and AI grids as one collapsible block under the image.
+# The measurement and AI grids as one collapsible block under the image,
+# each also collapsing on its own chevron. The AI grid stays when the
+# optional SAM stack is not installed: the rim tracer uses it. The block
+# scrolls on its own both ways, so its grids never set the image column's
+# minimum, and sits under a divider the user drags against the canvas.
 advanced_settings_group = VGroup(
     HGroup(UItem("scale_text", style="readonly")),
+    _collapse_header("show_measurement_settings", "Measurement"),
     correction_group,
+    _collapse_header("show_ai_settings", "AI Detection"),
     ai_group,
     visible_when="show_advanced_settings",
+    scrollable=True,
 )
 
 ImageViewerView = View(
     HGroup(
+        # A narrow full-height reveal column, like the Manage Plugins
+        # details collapse button.
         VGroup(
             UItem(
-                "show_sidebar",
-                editor=IconToggleEditor(
-                    on_glyph=ICON_CHEVRON_LEFT,
-                    off_glyph=ICON_CHEVRON_RIGHT,
-                    tooltip="Hide or show the selector sidebar",
-                ),
+                "toggle_sidebar_button",
+                style="custom",
+                springy=True,
+                editor=ButtonEditor(label_value="sidebar_glyph"),
+                style_sheet=SLIM_NARROW_BUTTON_STYLE,
+                tooltip="Hide or show the selector sidebar",
             )
         ),
         HSplit(
             sidebar_group,
+            # Not scrollable: the icon row and the Advanced block scroll
+            # on their own, so nothing here pins the column's minimum and
+            # the canvas fills whatever the splitter gives the column.
             VGroup(
                 buttons_group,
-                UItem(
-                    "array", editor=ImageCanvasEditor(), springy=True, resizable=True
+                # The user splits the height between the canvas and the
+                # Advanced block; the dock pane sizes the split and folds
+                # it to the header row while Advanced is collapsed.
+                VSplit(
+                    UItem(
+                        "array",
+                        editor=ImageCanvasEditor(),
+                        springy=True,
+                        resizable=True,
+                    ),
+                    # The measurement + AI option rows are advanced
+                    # settings: one chevron collapses them together.
+                    VGroup(
+                        _collapse_header("show_advanced_settings", "Advanced"),
+                        advanced_settings_group,
+                    ),
                 ),
-                # The measurement + AI option rows are advanced
-                # settings: one chevron collapses them together.
-                _collapse_header("show_advanced_settings", "Advanced"),
-                advanced_settings_group,
                 HGroup(
                     UItem(
                         "object.roi_analysis.progress_text",
@@ -1329,10 +1707,8 @@ ImageViewerView = View(
         ),
         analysis_toolbar,
     ),
-    # Scrollable so the dock can be dragged to any size: the toolbars and
-    # setting grids keep their natural size and scroll once the pane is
-    # smaller than them, while the canvas (minimum 1x1) still takes all
-    # the room the pane has to spare.
+    # Not scrollable: both splitter columns and the analysis toolbar
+    # scroll on their own, so the pane can be dragged down to a few
+    # icons' size without an outer scroll, and the canvas takes the rest.
     resizable=True,
-    scrollable=True,
 )

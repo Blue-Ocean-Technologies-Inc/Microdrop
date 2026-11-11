@@ -106,6 +106,18 @@ class GeometryChangedMessage(BaseModel):
         return cls.model_validate_json(json_str)
 
 
+class VolumeEstimateMessage(BaseModel):
+    """Payload for `DEVICE_VIEWER_VOLUME_ESTIMATE`: the live volume readout,
+    published only when it changes by more than reading noise."""
+
+    # Why there is no estimate, or "" when there is one.
+    status_message: str = ""
+
+    volume_ul: float = 0.0
+    fill_fraction: float = 0.0
+    covered_area_mm2: float = 0.0
+
+
 if __name__ == "__main__":
     import uuid
 

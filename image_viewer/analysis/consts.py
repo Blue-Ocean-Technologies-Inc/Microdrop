@@ -21,6 +21,12 @@ RING_THICKNESS_PX = 4
 #: than a droplet, or the ball rolls over the signal too.
 ROLLING_BALL_RADIUS_PX = 50
 
+#: Default share of each ROI that is measured, as a percentage of its
+#: equivalent radius: 100 measures the whole shape. Lower values leave
+#: a band along the boundary out, where a droplet's bright rim
+#: (meniscus lensing, not fluorescence) would otherwise lift the mean.
+MEASURE_INSIDE_PERCENT_DEFAULT = 100
+
 # --------------------------------------------------------------------
 # (min, max) bounds of every user-editable number. Each is read by the
 # model trait AND by the spinner that edits it — and, for the ball, by
@@ -28,12 +34,20 @@ ROLLING_BALL_RADIUS_PX = 50
 # from drifting apart.
 # --------------------------------------------------------------------
 #: Ring gap / thickness (px). Gap may be 0 (ring hugs the shape); the
-#: ring itself needs at least one pixel of width to exist.
-RING_GAP_BOUNDS_PX = (0, 50)
-RING_THICKNESS_BOUNDS_PX = (1, 50)
+#: ring itself needs at least one pixel of width to exist. 500 leaves
+#: room to clear the halo of a droplet hundreds of pixels across.
+RING_GAP_BOUNDS_PX = (0, 500)
+RING_THICKNESS_BOUNDS_PX = (1, 500)
+#: Measured share of each ROI (%). Below half the radius the region
+#: left is too small to stand for the droplet.
+MEASURE_INSIDE_BOUNDS_PERCENT = (50, 100)
 #: Rolling-ball radius (px): below 5 the ball is smaller than the
 #: features it must clear; 500 exceeds any unevenness a frame carries.
 ROLLING_BALL_RADIUS_BOUNDS_PX = (5, 500)
+#: The line styles and markers a plotted line can take (RoiStyle,
+#: the temperature view's styles); the first is each one's default.
+LINE_STYLE_NAMES = ("solid", "dashed", "dotted", "dashdot")
+MARKER_NAMES = ("none", ".", "o", "s", "^", "x")
 #: Per-ROI plot opacity, as a percentage.
 ROI_ALPHA_BOUNDS_PCT = (0, 100)
 #: Hampel outlier test: how far from the local median counts (in
@@ -57,6 +71,76 @@ BUTTER_ORDER_BOUNDS = (1, 8)
 BUTTER_ORDER = 2
 BUTTER_CUTOFF_BOUNDS = (0.01, 0.99)
 BUTTER_CUTOFF = 0.2
+#: The plot's font size (pt), for the axis titles and tick labels —
+#: 10 is matplotlib's own default, so a new figure looks as it did
+#: before the setting existed.
+FIGURE_FONT_SIZE_BOUNDS_PT = (6, 24)
+FIGURE_FONT_SIZE_PT = 10
+#: The empty share of each ROI's slot between neighbouring bars in the
+#: bar views; a bar fills the rest. 0.2 is matplotlib's default width
+#: of 0.8; at 0.9 a bar is a sliver, at 0 the bars touch.
+BAR_GAP_BOUNDS = (0.0, 0.9)
+BAR_GAP = 0.2
+#: The legend's and the small notes' sizes as fractions of the plot's
+#: font size — matplotlib's "small" and "x-small", which resolve
+#: against the global rcParams rather than the figure, so the pane
+#: scales them itself.
+LEGEND_FONT_SCALE = 0.833
+ANNOTATION_FONT_SCALE = 0.694
+#: What the Histogram view bins of each ROI: its luma, the one value
+#: the stats table measures, or a colour frame's red, green and blue
+#: channels as a series each, named and coloured per channel. The
+#: colours mirror the device viewer's live histogram.
+HISTOGRAM_CHANNEL_MODES = ("luma", "rgb")
+HISTOGRAM_CHANNEL_NAMES = ("R", "G", "B")
+HISTOGRAM_CHANNEL_COLORS = ("#ff3b3b", "#3bd83b", "#3b7bff")
+#: Bins of the Histogram view, spread evenly over the shared range of
+#: every ROI it shows, so the ROIs compare bin for bin. Below 8 the
+#: outline is a few blocks; past 1024 most bins of a typical ROI are
+#: empty and the outline turns to noise.
+HISTOGRAM_BINS_BOUNDS = (8, 1024)
+HISTOGRAM_BINS = 128
+#: Percent of the pooled pixels trimmed off each tail of the shared
+#: range before binning, so a few hot or dead pixels do not stretch the
+#: range and squash every outline into a handful of bins. 10 already
+#: cuts a fifth of the pixels away.
+HISTOGRAM_CLIP_BOUNDS_PERCENT = (0.0, 10.0)
+HISTOGRAM_CLIP_PERCENT = 0.0
+#: The distributions the Histogram view can fit to each ROI's pixels,
+#: in dropdown order, with their dropdown labels.
+HISTOGRAM_FITS = ("none", "normal", "lognormal")
+HISTOGRAM_FIT_LABELS = {
+    "none": "No fit",
+    "normal": "Normal",
+    "lognormal": "Log-normal",
+}
+#: Fewest pixels a distribution is fitted to: below it the estimate of
+#: the spread is noise.
+HISTOGRAM_FIT_MIN_PIXELS = 10
+#: On a log count axis the fitted curve stops where a bin expects fewer
+#: pixels than this: past it a bin is expected empty, and the curve's
+#: tails would fall through decades no pixel occupies.
+HISTOGRAM_FIT_FLOOR_PIXELS = 0.5
+#: The Histogram view's opacity settings, each a 0-1 fraction. The
+#: bars (outline and fill) and the median and mean lines are faded by
+#: their ROI's own plot opacity on top; the fitted curve and the shading
+#: under it are not, so the fit can stand out over faint bars or fade
+#: behind solid ones. The shading starts off: 0 draws none.
+HISTOGRAM_ALPHA_BOUNDS = (0.0, 1.0)
+HISTOGRAM_BAR_ALPHA = 1.0
+HISTOGRAM_FIT_ALPHA = 1.0
+HISTOGRAM_FIT_FILL_ALPHA = 0.0
+HISTOGRAM_MARKER_ALPHA = 1.0
+#: The Histogram view's x magnifier: the exponent applied to each
+#: intensity's distance from the pivot. 1 leaves the axis linear;
+#: smaller spreads the bins near the pivot apart and squeezes the
+#: tails. Below 0.1 the tails collapse to a few pixels at the edges.
+HISTOGRAM_X_MAGNIFY_BOUNDS = (0.1, 1.0)
+HISTOGRAM_X_MAGNIFY = 1.0
+#: Opacity of the Histogram view's bins the pixel-count range leaves
+#: out of the distribution fit, as a fraction of their ROI's: faded,
+#: not hidden, so what the fit ignored stays in view.
+HISTOGRAM_FILTERED_BIN_ALPHA = 0.3
 
 #: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
 #: the analysis draws, tests and combines uses it, so it is one name
@@ -77,6 +161,20 @@ SHAPE_STATS = (
     "extent",
     "orientation_deg",
 )
+
+#: The area-normalised means, each with the integrated stat it divides
+#: by the ROI's reference area (its pixel count on the first analysed
+#: image with stats) — a series quantity like "shape_change".
+AREA_NORMALIZED_STATS = {
+    "area_normalized": "integrated",
+    "bg_area_normalized": "bg_integrated",
+}
+
+#: The stats the "Area fit" correction applies to: the area-normalised
+#: means read their area off each ROI's fitted curve of pixel count
+#: against capture time, and the area itself is drawn with that fit
+#: over its points.
+AREA_FIT_STATS = ("area", *AREA_NORMALIZED_STATS)
 
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
@@ -147,6 +245,19 @@ ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
 #: section away, large enough to grab its handle again.
 ROI_PLOT_SECTION_MIN_PX = 40
 
+#: The scopes that take an ROI off some images and keep it on the rest;
+#: Roi.absent_by names a deletion the same way.
+ROI_ABSENCE_SCOPES = ("image", "left", "right")
+
+#: The ROI toolbar's delete buttons, by trait name, and the absence scope
+#: each deletes with: Left Del, Del (also the Del key), Right Del. The
+#: two side buttons stop short of the shown image.
+ROI_DELETE_BUTTON_SCOPES = {
+    "delete_roi_left_button": "left",
+    "delete_roi_button": "image",
+    "delete_roi_right_button": "right",
+}
+
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
 
@@ -178,30 +289,134 @@ DEFAULT_ROI_COLORS = (
     "#17becf",
 )
 
+#: Outline colour of every negative mask — a vivid pink-red that none
+#: of DEFAULT_ROI_COLORS nor AI_CANDIDATE_COLOR uses, so a cut-out never
+#: reads as an ROI or a pending candidate. Masks do not take a slot in
+#: the ROI colour cycle.
+NEGATIVE_MASK_COLOR = "#ff2d55"
+
+#: Name prefix of negative masks ("Mask 1", "Mask 2", ...), numbered
+#: apart from the "ROI N" sequence.
+NEGATIVE_MASK_NAME_PREFIX = "Mask"
+
 #: Plot pane view modes: the plotted stat over time (the key predates
 #: the area stat and is persisted, so it stays "intensity"), its value
 #: per ROI on the displayed image, its distribution per ROI across the
-#: series, the fits' second-derivative curves, or the per-ROI
-#: time-of-fastest-change bars.
+#: series, the pixel intensities each ROI measures on the displayed
+#: image, the fits' first- or second-derivative curves, the per-ROI
+#: time-of-fastest-change bars, that time against the one the user
+#: expects, or the heater log's temperature over the captures' time.
 VIEW_MODES = (
     "intensity",
     "per_image",
     "distribution",
+    "histogram",
+    "first_derivative",
     "second_derivative",
     "fastest_change",
+    "actual_vs_expected",
+    "temperature",
 )
 VIEW_MODE_LABELS = {
     "intensity": "Over time",
     "per_image": "Per image",
     "distribution": "Distribution",
+    "histogram": "Histogram",
+    "first_derivative": "1st derivative",
     "second_derivative": "2nd derivative",
     "fastest_change": "Fastest change",
+    "actual_vs_expected": "Actual vs expected",
+    "temperature": "Temperature over time",
 }
 
-#: What the curves are plotted against: elapsed capture time, or the
-#: heater log's temperature at each capture, joined on wall-clock time.
-X_AXIS_MODES = ("time", "temperature")
-X_AXIS_LABELS = {"time": "Time (s)", "temperature": "Temperature (°C)"}
+#: The fitted-curve landmarks the Expected tab can compare against the
+#: user's expected values: where the second derivative crosses zero
+#: (the fastest change, always compared), peaks, and troughs. Their
+#: table labels, and the Actual vs expected view's scatter markers.
+EXPECTED_METRICS = ("zero", "max", "min")
+EXPECTED_METRIC_LABELS = {"zero": "d² zero", "max": "d² max", "min": "d² min"}
+EXPECTED_METRIC_MARKERS = {"zero": "o", "max": "^", "min": "v"}
+
+#: How the Expected tab's custom (user-typed) points are drawn in the
+#: Actual vs expected view — black squares, apart from every ROI's
+#: coloured landmarks — and their legend label.
+CUSTOM_POINT_MARKER = "s"
+CUSTOM_POINT_COLOR = "black"
+CUSTOM_POINT_ALPHA = 0.8
+CUSTOM_POINT_LABEL = "Custom"
+
+#: Why the Expected tab's Copy (the trend as actual = f(expected)) is
+#: off, in the order they are checked, and its tooltip when it is on.
+COPY_TREND_NO_TREND = (
+    "No trend fitted yet: pick a fit method so the Actual vs expected view has points"
+)
+COPY_TREND_NOT_TEMPERATURE = (
+    "Plot against temperature: a time-axis trend is no temperature compensation"
+)
+COPY_TREND_FLIPPED = (
+    "Unflip the axes: flipped, the trend reads expected = f(actual), "
+    "the wrong direction"
+)
+COPY_TREND_CALIBRATED = "Clear the axis calibration to copy a fresh one"
+COPY_TREND_TOOLTIP = (
+    "Copy the trend as actual = f(expected) at full precision, for the "
+    "heater's compensation and this plot's temperature calibration (the "
+    "corner equation is rounded to 3 significant figures)"
+)
+
+#: The View labels per x axis: only the curves view names its axis.
+VIEW_MODE_LABELS_BY_X_AXIS = {
+    "time": VIEW_MODE_LABELS,
+    "temperature": {**VIEW_MODE_LABELS, "intensity": "Over temperature"},
+    "step": {**VIEW_MODE_LABELS, "intensity": "Over steps"},
+    "frame": {**VIEW_MODE_LABELS, "intensity": "Over frames"},
+}
+
+#: What the curves are plotted against: elapsed capture time, the
+#: heater log's temperature at each capture (joined on wall-clock
+#: time), the protocol step each capture was taken in, or the image's
+#: position in the filtered series. The time label carries no unit:
+#: the unit picker beside it says which.
+X_AXIS_MODES = ("time", "temperature", "step", "frame")
+X_AXIS_LABELS = {
+    "time": "Time",
+    "temperature": "Temperature (°C)",
+    "step": "Protocol step",
+    "frame": "Frame",
+}
+
+#: Units the time axis offers (the first is the default), and each
+#: one's count per second of elapsed capture time.
+TIME_UNITS = ("s", "min", "ms")
+TIME_UNIT_PER_SECOND = {"s": 1.0, "min": 1.0 / 60.0, "ms": 1000.0}
+
+#: How near (display px) a click on the curves view must land to a
+#: drawn point to toggle its image's exclusion.
+PLOT_PICK_RADIUS_PX = 8
+
+#: How far (display px) the pointer may drift between press and
+#: release and still count as a click rather than a pan — a hand
+#: rarely holds a mouse dead still.
+PLOT_CLICK_SLOP_PX = 3
+
+#: Excluded images' points on the curves view: hollow markers in each
+#: ROI's colour, this opaque, so they stay visible and clickable
+#: without reading as part of the analysis.
+EXCLUDED_POINT_ALPHA = 0.35
+EXCLUDED_POINT_MARKER = "o"
+
+#: Images left out of the area fit only, on the Area view: a hollow
+#: marker this much larger than the ROI's own, ringing the point the
+#: fitted line ignores.
+AREA_FIT_EXCLUDED_POINT_MARKER = "s"
+AREA_FIT_EXCLUDED_POINT_SCALE = 1.8
+
+#: The Temperature over time view: how far past the filtered captures'
+#: span the log is drawn each side, as a fraction of that span with a
+#: floor (s) for a run of one capture. How it is drawn is the
+#: experiment's TemperaturePlotStyle.
+TEMPERATURE_VIEW_MARGIN_FRACTION = 0.05
+TEMPERATURE_VIEW_MARGIN_MIN_S = 10.0
 
 #: Experiment subfolder the heater plugin writes its JSONL logs into.
 HEATER_LOGS_DIR_NAME = "heater_logs"
@@ -270,3 +485,30 @@ AI_CANDIDATE_DISCARDED_OPACITY = 0.3
 #: Hard ceiling of the candidate size filters (mean ellipse diameter,
 #: px).
 AI_SIZE_FILTER_CEILING_PX = 50000
+
+# --------------------------------------------------------------------------- #
+# Rim tracer (rim_tracer.py)                                                   #
+# --------------------------------------------------------------------------- #
+#: Rays cast from each droplet's centre: one per degree, so the contour
+#: has a radius every degree and the angular smoothing reads in degrees.
+RIM_RAYS = 360
+#: Width of a droplet's bright rim (px) the rim filter is tuned to. The
+#: difference of Gaussians across the rim scales with it; the bounds
+#: span a hairline edge to a broad meniscus glow.
+RIM_WIDTH_PX_DEFAULT = 5
+RIM_WIDTH_BOUNDS_PX = (2, 30)
+#: How far (px) the rim may move along each ray between consecutive
+#: frames. Small on purpose: a tight window is what keeps the trace off
+#: the specks, speckle clouds and reflection rings next to the rim.
+RIM_SEARCH_PX_DEFAULT = 3
+RIM_SEARCH_BOUNDS_PX = (1, 60)
+#: A capture gap longer than this (s) may hide a reshape (a round
+#: droplet spreading square at a step change), so the next frame is
+#: searched RIM_GAP_SEARCH_PX either side instead — as is the first
+#: frame after a drawn shape, which only roughly follows the rim.
+RIM_GAP_SECONDS = 30
+RIM_GAP_SEARCH_PX = 30
+#: Frames in the per-angle temporal median over each traced rim
+#: (centred, so a frame is final once half this many more are traced).
+#: It removes one- or two-frame hops onto a neighbouring ridge.
+RIM_SMOOTH_FRAMES = 7

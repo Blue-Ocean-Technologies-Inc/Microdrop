@@ -14,8 +14,29 @@ Topic constants live in device_viewer/consts.py — this plugin
 imports them. See PPT-6 spec section 2 for the layering reasoning.
 """
 
+# Microdrop package imports.
+from device_viewer.consts import DEVICE_VIEWER_CAMERA_SETTINGS, PROTOCOL_RUNNING
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
+
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
+
+#: Capture compound fields (row traits and cell col_ids): the step captures,
+#: and the camera setup (a CameraSettings dict, or None) it captures with.
+CAPTURE_FIELD_ID = "capture"
+CAPTURE_CAMERA_SETTINGS_FIELD_ID = "capture_camera_settings"
+
+#: Keeps the selected step's camera setup and the device viewer's camera in
+#: step (see services/camera_settings_sync.py).
+CAMERA_SETTINGS_SYNC_LISTENER_NAME = f"{PKG}_camera_settings_sync_listener"
+
+ACTOR_TOPIC_DICT = {
+    CAMERA_SETTINGS_SYNC_LISTENER_NAME: [
+        DEVICE_VIEWER_CAMERA_SETTINGS,
+        PROTOCOL_TREE_ROW_SELECTED,
+        PROTOCOL_RUNNING,
+    ],
+}
 
 # Executor-scratch key carrying the active experiment directory; read by
 # the capture/record handlers to aim media at the experiment folder.

@@ -56,6 +56,9 @@ from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
 from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
     RealtimeModeHandler,
 )
+from pluggable_protocol_tree.execution.lifecycle.unused_columns_notice import (
+    UnusedColumnsNoticeHandler,
+)
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row_manager import RowManager
@@ -260,10 +263,12 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
         # Execution lifecycle policy lives in handlers, not the view. These run
         # once per run (on_pre_protocol_start / on_post_protocol_end) at high
-        # priority so they trail every column's start hooks: realtime mode is
-        # enabled + settled (900), then logging starts (1000) right before the
-        # first step.
+        # priority so they trail every column's start hooks: the operator is
+        # told which unused columns' hooks the run skips (800), realtime mode
+        # is enabled + settled (900), then logging starts (1000) right before
+        # the first step.
         self.executor.lifecycle_handlers = [
+            UnusedColumnsNoticeHandler(preferences=self.preferences),
             RealtimeModeHandler(preferences=self.preferences),
             LoggingHandler(
                 controller=self.logging_controller,

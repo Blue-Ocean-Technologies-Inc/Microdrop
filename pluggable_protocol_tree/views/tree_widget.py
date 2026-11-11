@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 """Qt widget: QTreeView over a RowManager, with context menu for add /
-remove / copy / cut / paste / group."""
+insert above / remove / copy / cut / paste / group."""
 
 # Standard library imports.
 from contextlib import contextmanager
@@ -347,6 +347,14 @@ class ProtocolTreeWidget(QWidget):
         menu.addSeparator()
         menu.addAction("Add Step", lambda: self._add_step_at(idx))
         menu.addAction("Add Group", lambda: self._add_group_at(idx))
+        insert_step = menu.addAction(
+            "Insert Step Above", lambda: self._insert_step_above(idx)
+        )
+        insert_step.setEnabled(idx.isValid())
+        insert_group = menu.addAction(
+            "Insert Group Above", lambda: self._insert_group_above(idx)
+        )
+        insert_group.setEnabled(idx.isValid())
         fold = menu.addAction("Fold into Group", self._fold_into_group)
         fold.setEnabled(self._manager.can_fold_into_group(self._manager.selection))
         unfold = menu.addAction("Unfold Group", self._unfold_group)
@@ -361,7 +369,12 @@ class ProtocolTreeWidget(QWidget):
         # Display only: the live binding is the tree-scoped QShortcut.
         fill_pattern.setShortcut(QKeySequence(STEP_PATTERN_SHORTCUT))
         menu.addSeparator()
-        menu.addAction("Delete", self._delete_selection)
+        selected_count = len(self._manager.selection)
+        delete_label = (
+            "Delete Selected Row" if selected_count == 1 else "Delete Selected Rows"
+        )
+        delete = menu.addAction(delete_label, self._delete_selection)
+        delete.setEnabled(selected_count > 0)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _on_header_context_menu(self, pos):
@@ -465,6 +478,20 @@ class ProtocolTreeWidget(QWidget):
     def _add_group_at(self, idx):
         parent_path = self._parent_path_for_anchor(idx)
         self._manager.add_group(parent_path=parent_path)
+
+    def _insert_step_above(self, idx):
+        """Insert a new step as the sibling immediately before ``idx``."""
+        path = self._index_to_path(idx)
+        new_path = self._manager.add_step(parent_path=path[:-1], index=path[-1])
+
+        self._select_paths([new_path])
+
+    def _insert_group_above(self, idx):
+        """Insert a new group as the sibling immediately before ``idx``."""
+        path = self._index_to_path(idx)
+        new_path = self._manager.add_group(parent_path=path[:-1], index=path[-1])
+
+        self._select_paths([new_path])
 
     def _fold_shortcut(self):
         # Keyboard path for "Fold into Group"; run-locked like the menu entry.
