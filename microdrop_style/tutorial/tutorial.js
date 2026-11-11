@@ -919,10 +919,16 @@
       if (href.indexOf("data:") !== 0) { return; }
 
       a.addEventListener("click", function (event) {
+        /* Decode in the click itself: a window opened later, after a
+           promise, would lose the click and be taken for a pop-up. */
+        var comma = href.indexOf(","), meta = href.slice(5, comma), data = href.slice(comma + 1);
+        var bytes = meta.indexOf(";base64") >= 0 ? atob(data) : decodeURIComponent(data);
+        var buffer = new Uint8Array(bytes.length);
+
+        for (var i = 0; i < bytes.length; i++) { buffer[i] = bytes.charCodeAt(i); }
+
         event.preventDefault();
-        fetch(href).then(function (response) { return response.blob(); }).then(function (blob) {
-          window.open(URL.createObjectURL(blob), "_blank", "noopener");
-        });
+        window.open(URL.createObjectURL(new Blob([buffer], { type: meta.split(";")[0] })), "_blank");
       });
     });
 
