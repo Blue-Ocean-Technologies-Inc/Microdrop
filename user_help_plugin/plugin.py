@@ -21,7 +21,14 @@ from traits.api import Instance, List, Str, on_trait_change
 from microdrop_application.consts import PKG as microdrop_application_PKG
 
 # Local imports.
-from .consts import PKG, TUTORIALS, PKG_name, TutorialEntry
+from .consts import (
+    GETTING_STARTED_TUTORIAL_HTML_PATH,
+    GETTING_STARTED_TUTORIAL_TITLE,
+    PKG,
+    TUTORIALS,
+    PKG_name,
+    TutorialEntry,
+)
 from .menus import TutorialCatalog
 
 # Logger import.
@@ -61,6 +68,10 @@ class UserHelpPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
+    #: This plugin's own Help > Tutorials pages; ``tutorials`` is the
+    #: extension point itself, so the contribution needs another name.
+    contributed_tutorials = List(contributes_to=TUTORIALS)
+
     def start(self):
         """Fill the catalog and follow tutorial contributions from now on."""
         super().start()
@@ -85,6 +96,14 @@ class UserHelpPlugin(Plugin):
         )
 
     #### Trait initializers ###################################################
+
+    def _contributed_tutorials_default(self):
+        return [
+            TutorialEntry(
+                title=GETTING_STARTED_TUTORIAL_TITLE,
+                path=GETTING_STARTED_TUTORIAL_HTML_PATH,
+            )
+        ]
 
     def _contributed_task_extensions_default(self):
         from .menus import launcher_menu_factory, menu_factory

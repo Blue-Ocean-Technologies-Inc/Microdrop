@@ -45,12 +45,16 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
 from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
 from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_glyphs
 
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
+GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
+    "getting_started.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -250,6 +254,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     assert [entry.title for entry in entries] == [
         "Dropbot Status & Controls Tutorial",
+        "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
     ]
 
@@ -262,6 +267,10 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
 def test_dropbot_tutorial_rebuilds_identically():
     assert is_up_to_date(DROPBOT_SOURCE)
+
+
+def test_getting_started_tutorial_rebuilds_identically():
+    assert is_up_to_date(GETTING_STARTED_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):

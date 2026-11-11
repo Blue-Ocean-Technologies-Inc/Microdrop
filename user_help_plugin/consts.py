@@ -21,6 +21,12 @@ PKG_name = PKG.title().replace("_", " ")
 ARCHITECTURE_HTML_PATH = (
     Path(__file__).parent / "resources" / "microdrop-architecture.html"
 )
+
+#: Help > Tutorials page, built from resources/getting_started.src.html.
+GETTING_STARTED_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "getting_started.html"
+)
+GETTING_STARTED_TUTORIAL_TITLE = "Getting Started with MicroDrop"
 MICRODROP_LAUNCHER_README_URL = "https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/blob/main/README.md"
 
 FEEDBACK_URL = "https://blueoceantechnologies.ca/feedback"
