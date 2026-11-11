@@ -16,7 +16,8 @@
   Pages also get: <video data-clip> sidecar clips that play while on screen
   (never with less motion) and fall back to their poster and a note, and
   <img data-media> sidecar stills that fall back to a box with their alt
-  text and a note.
+  text and a note, and <a data-media> links to sidecar documents that are
+  disabled with a note when their folder is found missing.
 */
 (function () {
   "use strict";
@@ -773,6 +774,16 @@
      screen and never by itself when less motion is asked for; when the
      folder did not travel with the page, the poster stays and a note says
      where the clip lives. */
+  /* Media folders found missing, and what to tell when one is. */
+  var missingFolders = {}, folderWatchers = [];
+
+  function folderMissing(folder) {
+    if (missingFolders[folder]) { return; }
+
+    missingFolders[folder] = true;
+    folderWatchers.forEach(function (watch) { watch(folder); });
+  }
+
   function clips() {
     document.querySelectorAll("video[data-clip]").forEach(function (video) {
       var noted = false;
@@ -790,6 +801,7 @@
           "The clip is not available: it ships in the " + folder + " folder next to this page.";
         video.removeAttribute("controls");
         video.parentNode.insertBefore(note, video.nextSibling);
+        folderMissing(folder);
       }
 
       video.addEventListener("error", missing);
@@ -859,6 +871,8 @@
             if (child.namespaceURI === SVGNS) { child.style.display = "none"; }
           });
         }
+
+        folderMissing(source.split("/")[0]);
       }
 
       img.addEventListener("error", missing);
@@ -866,6 +880,50 @@
       /* A missing file may have failed before this listener existed. */
       if (img.complete && img.naturalWidth === 0) { missing(); }
     });
+  }
+
+  /* ---------------- linked documents ----------------
+     <a data-media href> opens a document from the page's <slug>_media
+     folder. A link cannot tell by itself whether its file is there, so it
+     follows the page's clips and stills: once one of them shows its folder
+     is missing, the link in that folder is disabled with the same note. In
+     the single-file copy the href is a data: URI, which browsers will not
+     open from a link, so a click opens it as a blob instead. */
+  function links() {
+    var anchors = Array.prototype.slice.call(document.querySelectorAll("a[data-media]"));
+
+    function disable(folder) {
+      anchors.forEach(function (a) {
+        var href = a.getAttribute("href") || "";
+
+        if (href.split("/")[0] !== folder || a.classList.contains("link-missing")) { return; }
+
+        var note = document.createElement("span");
+
+        note.className = "link-note";
+        note.textContent = " " + (a.getAttribute("data-missing") ||
+          "(not available: it ships in the " + folder + " folder next to this page)");
+        a.classList.add("link-missing");
+        a.removeAttribute("href");
+        a.parentNode.insertBefore(note, a.nextSibling);
+      });
+    }
+
+    anchors.forEach(function (a) {
+      var href = a.getAttribute("href") || "";
+
+      if (href.indexOf("data:") !== 0) { return; }
+
+      a.addEventListener("click", function (event) {
+        event.preventDefault();
+        fetch(href).then(function (response) { return response.blob(); }).then(function (blob) {
+          window.open(URL.createObjectURL(blob), "_blank", "noopener");
+        });
+      });
+    });
+
+    folderWatchers.push(disable);
+    Object.keys(missingFolders).forEach(disable);
   }
 
   function startDemos() {
@@ -896,6 +954,7 @@
   /* Page scripts follow this one, so demos start once they have registered. */
   document.addEventListener("DOMContentLoaded", function () {
     contents();
+    links();
     clips();
     stills();
     startDemos();

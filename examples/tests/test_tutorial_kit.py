@@ -37,6 +37,7 @@ from examples.tutorials.build_tutorial import (
     TutorialBuildError,
     find_network_references,
     is_up_to_date,
+    main,
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import (
@@ -391,6 +392,90 @@ def test_a_plain_image_is_still_inlined(tmp_path):
 
     assert '<img src="data:image/webp;base64,' in page
     assert 'src="t_media/a.webp"' not in page
+
+
+def _linked_page(document="t_media/r.html"):
+    return f'<title>T</title><p><a data-media href="{document}">Open the report</a></p>'
+
+
+def test_a_linked_document_stays_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "r.html").write_text(
+        '<script src="https://cdn.example/x.js">'
+    )
+    page, _cache = render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+    # The link is checked, not the document it opens: its own network loads
+    # are not the page's.
+    assert '<a data-media href="t_media/r.html">Open the report</a>' in page
+
+
+@pytest.mark.parametrize(
+    "document",
+    ["r.html", "other_media/r.html", "t_media/../r.html", "file:///t_media/r.html"],
+)
+def test_a_linked_document_outside_the_media_folder_fails_the_build(tmp_path, document):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "r.html").write_text("report")
+
+    with pytest.raises(TutorialBuildError, match="t_media"):
+        render_tutorial(_linked_page(document), tmp_path, {}, "t.src.html")
+
+
+def test_a_missing_linked_document_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+
+    with pytest.raises(TutorialBuildError, match="not found"):
+        render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_linked_document_counts_in_the_folder_budget(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    _sized_file(tmp_path / "t_media" / "r.html", MEDIA_FOLDER_BUDGET_BYTES + 1)
+
+    with pytest.raises(TutorialBuildError, match="budget"):
+        render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_plain_link_is_not_checked(tmp_path):
+    source = '<title>T</title><a href="t_media/nowhere.html">gone</a>'
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert 'href="t_media/nowhere.html"' in page
+
+
+def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
+    folder = tmp_path / "t_media"
+    folder.mkdir()
+    (folder / "a.webm").write_bytes(b"clip")
+    (folder / "a.webp").write_bytes(b"still")
+    (folder / "r.html").write_text("report")
+    source = (
+        '<title>T</title><video data-clip><source src="t_media/a.webm"></video>'
+        '<img data-media src="t_media/a.webp" alt="A chip">'
+        '<a data-media href="t_media/r.html">Open</a>'
+        f"<p>{'x' * SIZE_BUDGET_BYTES}</p>"
+    )
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html", standalone=True)
+
+    # Over the page budget, yet built: the single-file copy is exempt.
+    assert "t_media/" not in page
+    assert '<source src="data:video/webm;base64,' in page
+    assert 'src="data:image/webp;base64,' in page
+    assert 'href="data:text/html;base64,' in page
+
+
+def test_build_standalone_writes_a_second_file(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    source = tmp_path / "t.src.html"
+    source.write_text('<title>T</title><img data-media src="t_media/a.webp" alt="A">')
+    out = tmp_path / "shared" / "t.html"
+    out.parent.mkdir()
+
+    assert main([str(source), "--standalone", str(out)]) == 0
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
+    assert 'src="data:image/webp;base64,' in out.read_text()
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):

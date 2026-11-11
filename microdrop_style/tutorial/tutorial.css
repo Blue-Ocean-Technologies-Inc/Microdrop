@@ -435,3 +435,7 @@ figure.step-panel svg text { fill: var(--muted); }
   .pulse { animation: none; }
   svg.chip .electrode { transition: none; }
 }
+
+/* A linked sidecar document whose folder did not travel with the page. */
+a.link-missing { color: var(--muted); text-decoration: none; cursor: default; }
+.link-note { color: var(--muted); font-size: .9em; }

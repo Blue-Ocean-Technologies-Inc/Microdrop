@@ -107,6 +107,7 @@ these elements explicitly):
 | `<style>` / `<script>` | moved after the kit's CSS / JS; a `<style>` with attributes (`media="print"`) keeps its own element. Scripts must be inline: `<script src>` fails the build |
 | `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined |
 | `<img data-media src="<slug>_media/still.webp" alt="…">` | a large still, left as a sidecar file instead of inlined (see *Clips* below) |
+| `<a data-media href="<slug>_media/report.html">` | a link to a document shipped as a sidecar file (see *Linked documents* below) |
 
 Raw SVG can reuse a glyph with `<use href="#ic-<id>">`; the build includes
 every glyph referenced that way. A glyph id is the `ICON_*` name without the
@@ -201,8 +202,43 @@ mark the `<img>` with `data-media` and point its `src` into the folder.
   where the picture ships (`data-missing="…"` overrides the note). In a
   `.still-wrap`, the annotation `<svg>` over the picture is hidden with it.
 
+### Linked documents
+
+A real document the reader should be able to open, such as an example run
+report, ships in the same folder and is linked with `data-media`:
+
+```html
+<a data-media href="getting_started_media/report.html" target="_blank"
+   rel="noopener">Open the example report</a>
+```
+
+- The `href` follows the clip rules (a relative path inside the folder, the
+  file present, within the per-file budget, counted in the folder's). The
+  build checks the file, not what is in it: the linked document's own links
+  and network loads are not the page's, so a report that loads a chart library
+  from a CDN, or names files on the machine that made it, is allowed. Say so
+  beside the link. An `<a>` without `data-media` is a plain link, not checked.
+- A link cannot tell by itself whether its file is there. The kit follows the
+  page's clips and stills instead: once one of them shows the folder is
+  missing, the link into that folder is disabled with a note saying where the
+  document ships (`data-missing="…"` overrides it). So link only into a folder
+  the page also loads a clip or still from.
+
 Ship the folder with the page: commit it beside the source and the built
 page, and keep it in the plugin's package data.
+
+### A single file to share
+
+`--standalone <out>` writes a second copy of the page with every sidecar
+file (clips, stills, linked documents) inlined as data URIs, so one HTML file
+can be e-mailed:
+
+    pixi run python -m examples.tutorials.build_tutorial <src> --standalone <out>
+
+It builds the regular page as usual and then the copy, which is exempt from
+the page budget (expect a few MB). It is a sharing artefact: do not commit
+it or register it in a plugin. In the copy, a linked document opens from its
+inlined data in a new tab (browsers will not open a `data:` link directly).
 
 ## Checklist for a good tutorial
 
