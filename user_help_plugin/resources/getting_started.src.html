@@ -51,6 +51,9 @@ figure.clip.lead video.small-source { max-width: 432px; }
 figure.clip.lead video.ui { max-width: none; }
 figure.clip video.narrow { max-width: 300px; }
 figure.clip video { height: auto; }
+figure.clip.loop { margin: 6px 0 10px; }
+figure.clip.loop video { border-radius: 4px; }
+figure.clip.loop figcaption { margin-top: 2px; }
 figure.still { margin: 10px 0 4px; }
 figure.still figcaption { font-size: .88rem; color: var(--muted); margin-top: 4px; }
 .still-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
@@ -212,9 +215,21 @@ ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--
   <li>Insert a chip. In <span class="ui">Dropbot Status</span> you should see <span class="ui">Connection: Active</span> and
   <span class="ui">Chip Status: Present</span>.</li>
   <li>Click <span class="ui">Realtime Off</span> so it reads <span class="ui">Realtime On</span> (or press <kbd>T</kbd> with the
-  Device Viewer selected). Only now does the DropBot actually power the electrodes you click.</li>
+  Device Viewer selected). Only now does the DropBot actually power the electrodes you click.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="600" height="192" aria-label="Screen recording: the Realtime On button clicked and turning to Realtime Off">
+<source src="getting_started_media/realtime-toggle.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> One click on the green button switches Realtime off; the same click switches it back on.</figcaption>
+</figure></li>
   <li>Set the voltage and frequency in the boxes on the right of the pane. The exact numbers depend on your chip and liquid;
-  ask whoever supplied the chip, or start with the values MicroDrop opens with.</li>
+  ask whoever supplied the chip, or start with the values MicroDrop opens with.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="596" height="138" aria-label="Screen recording: the voltage set point changed and the measured voltage following">
+<source src="getting_started_media/set-voltage.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.5×.</strong> New voltages typed into the right-hand box; the measured Voltage and the Force follow.</figcaption>
+</figure></li>
 </ol>
 <div class="callout"><strong>More on this pane:</strong> <span class="ui">Help ▸ Tutorials ▸ Dropbot Status &amp; Controls
 Tutorial</span> explains every field, the realtime switch and the capacitance calibration.</div>
@@ -372,6 +387,12 @@ switches one electrode on or off, and with Realtime on the DropBot follows strai
 </ol>
 <div class="callout">Hover over an electrode to see its number (<span class="ui">Electrode ID</span>, <span class="ui">Channel</span>
 and area). The pictures here label electrodes by channel number, the same number MicroDrop shows.</div>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="488" height="262" aria-label="Screen recording: hover tooltips with electrode ID, channel and area">
+<source src="getting_started_media/hover-electrode.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> The pointer moves over three electrodes; each shows its ID, channel and area.</figcaption>
+</figure>
 </section>
 
 <!-- ============================================================ -->
@@ -411,6 +432,12 @@ one behind.</p>
 </table>
 <p>Right-click the chip for more: <span class="ui">Clear Electrodes</span>, <span class="ui">Find Liquid</span>,
 <span class="ui">Disable Electrode</span> (for a damaged one) and the two calibration measurements.</p>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="596" height="344" aria-label="Screen recording: the right-click menu on the chip with its electrode tools">
+<source src="getting_started_media/chip-menu.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> Right-click on the chip opens the electrode tools; here the menu is closed again without choosing.</figcaption>
+</figure>
 
 <h3>How much liquid is that?</h3>
 <p>The <span class="ui">Volume</span> readout in <span class="ui">Dropbot Status</span> estimates the liquid on the electrodes
@@ -432,8 +459,9 @@ switched on: one droplet reads about 2 µL, and the total grows to about 9 µL a
 <h2>6. Routes: let MicroDrop do the clicking</h2>
 <p class="intro">A route is a line drawn across the electrodes. When it runs, MicroDrop switches the electrodes along it on and
 off in turn, and the droplet rides along. Routes are how you move, mix and park droplets without clicking every step.</p>
-<div class="callout">From here on the pictures are simulations you can step through: the green shape is a simulated droplet
-drawn over a photo of the real chip, and the lit electrodes, routes and phases follow MicroDrop's own rules.</div>
+<div class="callout">The small looping clips are the real app. The larger pictures are simulations you can step through: the
+green shape is a simulated droplet drawn over a photo of the real chip, and the lit electrodes, routes and phases follow
+MicroDrop's own rules.</div>
 
 <section data-term id="route-draw" data-where="Device Viewer, Mode buttons">
   <h3>Draw a route</h3>
@@ -445,11 +473,23 @@ drawn over a photo of the real chip, and the lit electrodes, routes and phases f
   <ol class="howto">
     <li>Choose <i data-glyph="ICON_DRAW" data-inline data-label="Draw"></i> <span class="ui">Draw</span> mode (<kbd>D</kbd>).</li>
     <li>Press on the droplet's first electrode (here 22) and drag through the electrodes you want, in order. Each neighbour you
-    cross adds a step; the line turns yellow because it is the <em>selected</em> route.</li>
+    cross adds a step; the line turns yellow because it is the <em>selected</em> route.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="294" height="372" aria-label="Screen recording: Draw mode chosen and a route dragged across the electrodes">
+<source src="getting_started_media/route-draw.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.5×.</strong> Draw mode chosen, then a route dragged round and back onto its start.</figcaption>
+</figure></li>
     <li>Let go at the end. The route appears in the <span class="ui">Path</span> / <span class="ui">Run</span> table under
     <span class="ui">Paths</span>, named like <em>Path: 22 → 79</em>.</li>
     <li>Click <i data-glyph="play_circle" data-inline></i> <em>Run selected routes</em> to run it now. The tinted electrodes
-    show the whole area the droplet will sweep, and a dashed outline shows where it is at each moment.</li>
+    show the whole area the droplet will sweep, and a dashed outline shows where it is at each moment.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="494" height="460" aria-label="Screen recording: Run selected routes pressed and two droplets going round their loops">
+<source src="getting_started_media/route-run.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 4×.</strong> Run sends each droplet round its loop; the bottom route is left out.</figcaption>
+</figure></li>
   </ol>
 </section>
 
@@ -473,6 +513,20 @@ drawn over a photo of the real chip, and the lit electrodes, routes and phases f
       (<kbd>Shift</kbd>+<kbd>X</kbd>).</td></tr>
     </tbody>
   </table>
+  <div class="two">
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="494" height="460" aria-label="Screen recording: a route hidden and shown with the eye, then two routes crossed out in the Run column">
+<source src="getting_started_media/route-table.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> The eye hides a route and shows it again; then two routes are left out of Run.</figcaption>
+</figure>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="494" height="460" aria-label="Screen recording: routes deleted from the Path table">
+<source src="getting_started_media/route-delete.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> The bin deletes the routes one by one.</figcaption>
+</figure>
+  </div>
 </section>
 
 <section data-term id="route-auto" data-where="Device Viewer, Mode buttons">
@@ -549,6 +603,12 @@ drawn over a photo of the real chip, and the lit electrodes, routes and phases f
   <p>Changes show at once in the tinted preview on the chip (the <em>Route Shape</em>: every electrode the run will use). To
   store them in a protocol step, click <i data-glyph="sync_alt" data-inline></i> <em>Apply execution params to step</em> (see
   <a href="#protocol">Design a protocol</a>).</p>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="474" height="426" aria-label="Screen recording: the Lanes slider and Length field changed and the route shape following">
+<source src="getting_started_media/route-settings.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.25×.</strong> Dragging Lanes widens the pink Route Shape; lowering Length shrinks the outlined head.</figcaption>
+</figure>
 
   <figure class="demo sim" data-demo="settings">
     <div class="controls presets" aria-label="Try a setting">
@@ -673,7 +733,13 @@ can repeat it exactly, as often as you like.</p>
     <i data-glyph="sync_alt" data-inline></i>. If you forget, MicroDrop asks <em>Commit</em> or <em>Discard</em> when you move to
     another step.</li>
     <li><strong>Press <kbd>Esc</kbd></strong> in the tree to deselect: you are back in Free Mode, where clicks are not saved into
-    any step. Free-mode changes can later be kept with <span class="ui">Insert as New Step</span>.</li>
+    any step. Free-mode changes can later be kept with <span class="ui">Insert as New Step</span>.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="550" height="566" aria-label="Screen recording: the Unsaved Free Mode Changes question answered with Insert as New Step">
+<source src="getting_started_media/insert-new-step.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> Free-mode clicks not yet in a step: <span class="ui">Insert as New Step</span> adds them as one.</figcaption>
+</figure></li>
   </ul>
 </section>
 
@@ -708,6 +774,18 @@ can repeat it exactly, as often as you like.</p>
   / <kbd>X</kbd> / <kbd>V</kbd>) to duplicate or move steps, <span class="ui">Fold into Group</span> (<kbd>Ctrl</kbd>+<kbd>G</kbd>),
   <span class="ui">Bulk Set Values…</span>, <span class="ui">Fill Pattern…</span> and <span class="ui">Run Selected
   Steps</span>.</p>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="804" height="560" aria-label="Screen recording: Bulk Set Values setting the voltage of the selected steps to 110">
+<source src="getting_started_media/bulk-set.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.5×.</strong> Right-click ▸ <span class="ui">Bulk Set Values…</span>: tick Voltage (V), type 110, OK; every selected step gets 110 V.</figcaption>
+</figure>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="550" height="402" aria-label="Screen recording: steps folded into a group, a group added and a step added inside it">
+<source src="getting_started_media/fold-group.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.5×.</strong> <span class="ui">Fold into Group</span> puts the steps in a group; then a second group and a step inside it are added.</figcaption>
+</figure>
 </section>
 
 <section data-term id="build-clicks" data-where="protocol pane and Device Viewer">
@@ -896,7 +974,13 @@ can repeat it exactly, as often as you like.</p>
     walk a droplet through slowly.</li>
     <li>The same switch sits in the Device Viewer: the <span class="ui">Phases</span> checkbox under Paths, with
     <i data-glyph="chevron_left" data-inline></i> / <i data-glyph="chevron_right" data-inline></i> and a counter like
-    <em>Phase: 3/5</em>. The two are kept in step with each other.</li>
+    <em>Phase: 3/5</em>. The two are kept in step with each other.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="494" height="460" aria-label="Screen recording: the Phases checkbox ticked and the next-phase button stepping droplets round their loops">
+<source src="getting_started_media/route-phases.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 3×.</strong> Phases ticked, then <i data-glyph="chevron_right" data-inline></i> clicked: the droplets step round their loops one phase at a time.</figcaption>
+</figure></li>
     <li><strong>While paused</strong>, the same previous / next phase buttons appear around Resume, so you can back up a move and try
     again.</li>
   </ul>
@@ -921,7 +1005,14 @@ can repeat it exactly, as often as you like.</p>
     <li>The running step is highlighted in the tree and the Device Viewer follows it. At <em>Load</em> the message appears:
     pipette, then click <span class="ui">Continue</span>.</li>
     <li>Watch the droplet. If something goes wrong, <i data-glyph="ICON_PAUSE" data-inline></i> pause, step back a phase, and
-    resume; or <i data-glyph="ICON_STOP" data-inline></i> stop.</li>
+    resume; or <i data-glyph="ICON_STOP" data-inline></i> stop. Stop pauses first, then asks to force-finish the run, and
+    offers a run summary of what ran.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="844" height="376" aria-label="Screen recording: Stop pressed during a run, force finish confirmed, then the Generate Run Summary question">
+<source src="getting_started_media/stop-run.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> Stop, then <span class="ui">Yes</span> to force finish, then the <em>Generate Run Summary?</em> question.</figcaption>
+</figure></li>
     <li>At the end all electrodes switch off. MicroDrop asks <em>Create New Experiment?</em>: <span class="ui">Yes</span> starts a
     fresh experiment folder for your next run.</li>
     <li>A run summary is written: <em>Run Summary Generated</em> names the report file, a web page in the experiment's
