@@ -81,6 +81,7 @@ class QuickActionBar(QScrollArea):
             layout.addWidget(btn)
 
         layout.addStretch()
+        self._row_layout = layout
 
         self.setWidget(row)
         self.setWidgetResizable(True)
@@ -92,6 +93,11 @@ class QuickActionBar(QScrollArea):
         # width; the fixed height leaves the tree all the remaining space.
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.setFixedHeight(row.sizeHint().height())
+
+    def add_trailing_widget(self, widget):
+        """Place ``widget`` at the far end of the row, after the actions."""
+        self._row_layout.addWidget(widget)
+        self.setFixedHeight(self.widget().sizeHint().height())
 
     def resizeEvent(self, event):
         """Make room for the scrollbar only while the row overflows."""

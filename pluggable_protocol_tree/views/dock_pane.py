@@ -1315,6 +1315,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         vetoing there let the app quit anyway.) ``event.new`` carries
         the Vetoable.
         """
+        # With AutoSave on, edits still inside the debounce window are
+        # written before the unsaved-changes check, so closing keeps them.
+        if self._pane is not None:
+            self._pane.autosave_controller.flush()
+
         if not self.protocol_state_tracker.is_modified:
             return
 
