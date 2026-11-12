@@ -122,8 +122,11 @@ class QuickActionsController:
     the tree pane (``ctx.pane``) and dock-level state such as the logging
     controller (``ctx.dock_pane.logging_controller``).
 
-    Keeps ``button.setEnabled(...)`` in sync with each action's
-    ``is_enabled(ctx)`` on ``selection_changed`` / ``protocol_running_changed``.
+    Keeps ``button.setEnabled(...)`` and the tooltip in sync with each
+    action's ``is_enabled(ctx)`` / ``tooltip_for(ctx)`` on
+    ``selection_changed`` / ``protocol_running_changed``, and whenever the
+    owner calls ``refresh_enabled`` (the dock pane does on undo history
+    changes).
     Routes clicks through ``_execute(action)`` so a buggy contribution
     can't crash the bar. Builds a fresh ctx on every call — never caches.
     """
@@ -176,13 +179,16 @@ class QuickActionsController:
             _seen.add(action.action_id)
             try:
                 enabled = bool(action.is_enabled(ctx)) and not ctx.is_running
+                tooltip = action.tooltip_for(ctx)
             except Exception as e:  # pragma: no cover - defensive
                 logger.warning(
                     f"is_enabled failed for {action.action_id!r}: {e}; "
                     f"disabling button."
                 )
                 enabled = False
+                tooltip = action.tooltip
             self._bar.buttons[action.action_id].setEnabled(enabled)
+            self._bar.buttons[action.action_id].setToolTip(tooltip)
 
     def _execute(self, action) -> None:
         ctx = self._build_ctx()
