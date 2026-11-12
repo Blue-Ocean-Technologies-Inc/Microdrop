@@ -33,6 +33,7 @@ from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 from pluggable_protocol_tree.services.protocol_autosave_controller import (
     ProtocolAutosaveController,
 )
+from pluggable_protocol_tree.services.protocol_history import ProtocolHistory
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -152,6 +153,35 @@ def test_failed_write_is_reported_once_and_stays_dirty(setup):
     assert len(warnings) == 1
     assert tracker.is_modified
     assert controller.model.last_error == "disk full"
+
+
+def test_undo_after_an_autosave_is_saved_again(setup):
+    controller, manager, tracker, writes, _warnings, clock = setup
+    path = tracker.loaded_protocol_path
+
+    # The dock pane's dirty bookkeeping, which the bare manager lacks.
+    manager.observe(lambda event: tracker.on_structure_changed(manager), "rows_changed")
+    history = ProtocolHistory(manager=manager, protocol_state_tracker=tracker)
+
+    manager.add_step()
+    clock.now += controller.model.debounce_s
+    controller._on_timer_timeout()
+
+    assert writes == [path]
+    assert not tracker.is_modified
+    assert history.undo_name
+
+    history.undo()
+
+    assert tracker.is_modified
+    assert history.redo_name
+
+    clock.now += controller.model.debounce_s
+    controller._on_timer_timeout()
+
+    assert writes == [path, path]
+    assert not tracker.is_modified
+    assert history.redo_name
 
 
 def test_loading_a_protocol_does_not_rewrite_it(qapp, tmp_path, monkeypatch):
