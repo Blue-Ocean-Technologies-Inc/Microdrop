@@ -1,3 +1,66 @@
+## [v1.43.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.43.0) (2026-11-12)
+
+### Feat
+
+- **help**: device viewer contributes the Camera & Alignment tutorial ([`20688c6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/20688c6ef1cee7eb1f55c604ab520ecb8bb0250c))
+- **examples**: linked sidecar documents and a single-file build ([`1fcc269`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1fcc2692d7a416e658e2e31d98bb5543cc7ad35d))
+- **examples**: ship tutorial clips and stills as sidecar media ([`4f27cf0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4f27cf02ea2e79cb395a76e924c2701e4e4dfcb7))
+- **microdrop_style**: chip player and clips in the tutorial kit ([`1b64716`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1b647166c0027700b428e35f9d58d16daeb361a8))
+- **help**: image viewer and dropbot plugins contribute their tutorials ([`a45e981`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a45e9812b3406b02be300c8e8b3783ac2c609889))
+- **help**: Tutorials submenu ([`b13f9a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b13f9a735fab0f75b16dc768b13ae84bcc91f63b))
+- **examples**: tutorial build and scaffold scripts ([`50f6c08`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/50f6c087cc16ab93fd83af284000b50f3175b213))
+- **style**: shared tutorial kit (css, js, glyph tracer) ([`2b23998`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2b23998ae3bfa20041ec0af7ed20c03c63aebedc))
+
+### Fix
+
+- **microdrop_style**: open an inlined document within the click ([`7bb44d3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7bb44d32cda03cf99d88bd3d730e21e33396cd58))
+- **examples**: refuse a network href on a sidecar document link ([`2e97c07`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2e97c07f572e31fec6f4b8f28e008d8bb2253869))
+- match sidecar documents in any folder in .gitattributes ([`5804a75`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5804a75a138c706120b7a6997917bd4e5395a158))
+- **microdrop_style**: let sidecar links open from the Help viewer ([`7dfddc8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7dfddc82d9b866e4a43a20f7e5daf3dac18bc5ef))
+- **examples**: escape the scaffolded tutorial title ([`4ab1e84`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4ab1e84a0d83514fefeca8ff7ce9fae0119a60c8))
+- **examples**: fail tutorial builds over the size budget ([`c0973e8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c0973e8621f67a8a28b62efb128329e9f43c0a56))
+- **examples**: tutorial build errors, Qt-free --check ([`4b7a9a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4b7a9a7bfa42d885972ea505520d83646599e5fe))
+- **examples**: keep style attributes, reject script src ([`c5ac51b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c5ac51b2bf668432b6afea864deafbc3a5eb8d0c))
+- **examples**: inline SVG figures without alt, one class ([`688fdc3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/688fdc3f69189364669fc931f58ad3a8ee69b27d))
+- **examples**: parse pages for network references ([`3a20cc3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3a20cc3a4b329f92381731840fd4ba5d356f6846))
+- **examples**: refuse plugin shapes the scaffolder can't edit ([`e29ecd7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e29ecd78e1c3ee3ff31e22eb9f48debc968edefa))
+- **examples**: comma before a scaffolded second tutorial ([`a636559`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a6365594241d964b2c936f8767286a6b0b985e0e))
+
+### Refactor
+
+- **examples**: chunk dense tutorial-kit bodies ([`29bae24`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/29bae241b988355946c4d0e72c571e278fc8738d))
+- **examples**: scaffold tutorials as plugin contributions ([`0b7d4c6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0b7d4c6f53076990ed0ad9976e3a1bcaff6320c4))
+- **help**: tutorials as an extension point ([`7cb97b1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7cb97b13ad302e92ff80cf6e8cd25236094a220d))
+- **examples**: keep the glyph cache in the built page ([`dcd21c8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dcd21c8b263f95fa84e2401d6cb285a269f68ef5))
+
+### Docs
+
+- **device_viewer**: Camera & Alignment tutorial ([`f43be07`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f43be07282b90affa1f0ef1590005165af400201))
+- **pluggable_protocol_tree**: list the tutorial under Help ([`c2a49e1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c2a49e17618c64c52f203699c83d01154b1b8122))
+- **pluggable_protocol_tree**: Protocol Tree tutorial page ([`33805aa`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/33805aa2928af4e2de7427fb6456bbbf4770dd82))
+- **user_help_plugin**: short looping clips of the real app ([`2c0d998`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2c0d9989a028497fb72c60e2c20255dc8491fa9a))
+- **user_help_plugin**: end the run clip at its summary and ship the report ([`124c09f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/124c09f138aa6eb1718b6eedd6ecd430c13f04ad))
+- **user_help_plugin**: shorten the split clip's caption ([`08dffc5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/08dffc53d482cdd6e9580ec228a40ee1a4e11703))
+- **user_help_plugin**: name the default protocol folder exactly ([`e5a48aa`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e5a48aa2f1e43d56c7ad699e1cdd0b00877f9689))
+- **user_help_plugin**: Getting Started tutorial ([`932a7cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/932a7cfbe96e0b97a4d66808ebd25a9629d37608))
+- **dropbot_status_and_controls**: rebuild tutorial on the new kit ([`5718ac8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5718ac810f7c94ec29c470cfd8636080d5c74a4d))
+- **examples**: state the offline rule the build now checks ([`aa50abd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aa50abdf416e024110d5ce62c7c822dbd12401dc))
+- **examples**: tutorials via the TUTORIALS extension point ([`6e04683`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6e04683eba3dc0d766254e263be5678daef3e5ba))
+- **examples**: tutorial authoring guide ([`7e0c0ee`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7e0c0eeb08b94f236ab8aca2e864a84f66f8302c))
+- **dropbot-status**: Dropbot Status & Controls tutorial ([`fc10241`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fc102412fd97f91cb1f9735f9eb883b78c3f8e07))
+
+### Test
+
+- **tutorials**: cover the Camera & Alignment tutorial ([`6d39cca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6d39cca854a3f923d469e590065600659085f1a1))
+- **examples**: pin the Protocol Tree tutorial ([`a63c404`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a63c404bc9347ccdb3683d1708516cbcba8781bb))
+- **user_help_plugin**: count the Help plugin's own tutorial ([`237768f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/237768f0e3434e0620bac5cb7c81e51334a9fd19))
+- **examples**: set the Qt platform before any import ([`9ce4181`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9ce4181f1bcdc529955b9c1789db97356e9a54d2))
+- **examples**: tutorial kit ([`988479e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/988479e825fa7c4d2b741af380bd4233755c9081))
+
+### Chore
+
+- keep tutorial sidecar documents byte for byte ([`bb7de89`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bb7de8997485df60f2c36b1774d7114ec4544fdc))
+
 ## [v1.42.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.42.0) (2026-11-10)
 
 ### Feat
