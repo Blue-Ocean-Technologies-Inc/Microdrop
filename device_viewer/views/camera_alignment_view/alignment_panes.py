@@ -51,7 +51,7 @@ from traits.api import (
 from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
 # Microdrop package imports.
-from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error
 
 # Microdrop style imports.
 from microdrop_style.colors import WARNING_COLOR
@@ -78,6 +78,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 # Local imports.
+from ...consts import RESET_ENDPOINT_WITH_DEFAULT_TEMPLATE
 from ...models.image_orientation import ImageOrientation
 from ...utils.camera_endpoints import CameraEndpointStore
 from ...utils.image_corners import detect_corner_points
@@ -416,6 +417,10 @@ class EndpointPane(AlignmentPaneBase):
     #: file unless given).
     endpoint_store = Instance(CameraEndpointStore, factory=CameraEndpointStore)
 
+    #: The device's default alignment preset's name ("" for none): after a
+    #: Reset, the window opens from it rather than the default grid.
+    default_preset_name = Str()
+
     _pixmap_size = Tuple(Int(), Int())
 
     def traits_init(self):
@@ -485,18 +490,32 @@ class EndpointPane(AlignmentPaneBase):
         """After confirming, forget this device's saved endpoint and put
         the dots back on the default grid, the render unturned."""
         device = self.device_name or "this device"
-        answer = confirm(
-            None,
-            f"Clear the saved endpoint for {device}? The dots return to the "
-            "default grid.",
-            title="Reset Endpoint",
+        message = (
+            RESET_ENDPOINT_WITH_DEFAULT_TEMPLATE.format(
+                device=device, preset=self.default_preset_name
+            )
+            if self.default_preset_name
+            else f"Clear the saved endpoint for {device}? The dots return to the "
+            "default grid."
         )
+        answer = confirm(None, message, title="Reset Endpoint")
 
         if answer != YES:
             return
 
         if self.device_name:
-            self.endpoint_store.remove(self.device_name)
+            try:
+                self.endpoint_store.remove(self.device_name)
+            except OSError as exc:
+                logger.error(f"Could not clear the endpoint of {device}: {exc}")
+                error(
+                    None,
+                    f"The saved endpoint for {device} could not be cleared.",
+                    title="Reset Endpoint",
+                    detail=f"{exc}",
+                )
+
+                return
 
         self._reset_orientation(
             self._default_quad(self.device_image, inset=ENDPOINT_QUAD_INSET)
