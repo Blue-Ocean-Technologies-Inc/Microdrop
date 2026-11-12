@@ -38,6 +38,11 @@ from microdrop_application.dialogs.pyface_wrapper import error, warning
 
 # Local imports.
 from ..models.main_model import DeviceViewMainModel
+from ..utils.alignment_geometry import (
+    camera_point_to_item,
+    camera_to_item_mapping,
+    item_point_to_camera,
+)
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..views.camera_alignment_view.alignment_dialog import (
     CameraAlignmentController,
@@ -95,9 +100,7 @@ class CameraAlignmentWorkflowController(HasTraits):
 
     def _camera_to_item_mapping(self):
         """The affine RAW-camera-pixel -> video-item-local mapping as
-        (scale_x, scale_y, offset_x, offset_y) — the item is
-        scene-sized and letterboxes the frame under the default
-        KeepAspectRatio."""
+        (scale_x, scale_y, offset_x, offset_y) for the live frame size."""
         video_item = self.get_video_item()
         native = video_item.nativeSize()
 
@@ -106,23 +109,17 @@ class CameraAlignmentWorkflowController(HasTraits):
 
         item_size = video_item.size()
 
-        if video_item.aspectRatioMode() == Qt.AspectRatioMode.IgnoreAspectRatio:
-            scale_x = item_size.width() / native.width()
-            scale_y = item_size.height() / native.height()
-            offset_x = offset_y = 0.0
-        else:
-            scale_x = scale_y = min(
-                item_size.width() / native.width(), item_size.height() / native.height()
-            )
-            offset_x = (item_size.width() - native.width() * scale_x) / 2
-            offset_y = (item_size.height() - native.height() * scale_y) / 2
-
-        return scale_x, scale_y, offset_x, offset_y
+        return camera_to_item_mapping(
+            (native.width(), native.height()),
+            (item_size.width(), item_size.height()),
+            keep_aspect_ratio=video_item.aspectRatioMode()
+            != Qt.AspectRatioMode.IgnoreAspectRatio,
+        )
 
     def _camera_pixels_to_video_item(self, point):
-        scale_x, scale_y, offset_x, offset_y = self._camera_to_item_mapping()
+        mapping = self._camera_to_item_mapping()
 
-        return QPointF(offset_x + point.x() * scale_x, offset_y + point.y() * scale_y)
+        return QPointF(*camera_point_to_item([point.x(), point.y()], mapping))
 
     def _current_camera_quad(self):
         """The active reference rect back in RAW camera pixels (the
@@ -133,12 +130,12 @@ class CameraAlignmentWorkflowController(HasTraits):
             return None
 
         try:
-            scale_x, scale_y, offset_x, offset_y = self._camera_to_item_mapping()
+            mapping = self._camera_to_item_mapping()
         except RuntimeError:
             return None
 
         return [
-            [(point.x() - offset_x) / scale_x, (point.y() - offset_y) / scale_y]
+            item_point_to_camera([point.x(), point.y()], mapping)
             for point in perspective.reference_rect
         ]
 
