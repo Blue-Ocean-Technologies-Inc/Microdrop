@@ -76,6 +76,10 @@ from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
+
+# Local imports.
+from .consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -407,3 +411,14 @@ class PluggableProtocolTreePlugin(Plugin):
         elif self.sync is not None:
             logger.debug("protocol dock pane not mounted; updating its columns")
             self.sync.row_manager.set_columns(self._assemble_columns())
+
+    #: Help > Tutorials entries for this plugin's panes.
+    tutorials = List(contributes_to=TUTORIALS)
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(
+                title="Protocol Tree Tutorial",
+                path=PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+            ),
+        ]

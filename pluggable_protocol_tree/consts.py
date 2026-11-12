@@ -15,6 +15,7 @@ defined here, ACTOR_TOPIC_DICT aggregating the listener-->topic map."""
 
 # Standard library imports.
 import os
+from pathlib import Path
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -234,3 +235,8 @@ ACTOR_TOPIC_DICT = {
 # pluggable tree's quick-actions toolbar. Tree plugin ships zero
 # builtins; all contributions come from sibling plugins.
 PROTOCOL_QUICK_ACTIONS = f"{PKG}.protocol_quick_actions"
+
+#: Help > Tutorials page, built from resources/protocol_tree.src.html.
+PROTOCOL_TREE_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "protocol_tree.html"
+)
