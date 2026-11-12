@@ -1,0 +1,2008 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Device Viewer Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+.assets { display: none; }
+ol.howto { padding-left: 1.4em; max-width: 75ch; }
+ol.howto li { margin: 5px 0; }
+.table-wrap { overflow-x: auto; }
+kbd { white-space: nowrap; }
+h3.sub { margin-top: 18px; }
+td.lbl { font-weight: 600; }
+@media (min-width: 701px) { li.step { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } }
+.sim-grid { display: grid; grid-template-columns: minmax(0, 250px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .sim-grid { grid-template-columns: minmax(0, 1fr); } }
+.sim-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: .85rem; }
+.sim-panel label[hidden] { display: none; }
+.sim-panel label { display: flex; flex-direction: column; gap: 2px; color: var(--ink); }
+.sim-panel input[type="number"], .sim-panel select { font: inherit; width: 100%; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); color: var(--ink); }
+.sim-panel input[type="checkbox"] { accent-color: var(--icon-on); width: 16px; height: 16px; margin: 2px 0 0; }
+.sim-row, .sim-cols2, .sim-cols3 { display: grid; gap: 6px 8px; margin: 6px 0; }
+.sim-row, .sim-cols2 { grid-template-columns: 1fr 1fr; }
+.sim-cols3 { grid-template-columns: 1fr 1fr 1fr; }
+.sim-title { font-weight: 700; margin: 8px 0 2px; }
+.sim-lanes { margin: 6px 0; }
+.lanes-track { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.lanes-track input { flex: 1; min-width: 0; accent-color: var(--icon-on); }
+.lanes-track input.lane-left { direction: rtl; }
+.sim-readout th { width: 7.5em; }
+.presets button { margin: 2px 0; }
+.presets .lbl { color: var(--muted); }
+.sim-view .chip-caption { display: none; }
+.sim-readout { margin-top: 2px; }
+figure.clip video { height: auto; }
+figure.step-panel video { display: block; width: 100%; height: auto; border-radius: 6px; background: #000; }
+figure.still { margin: 10px 0 4px; }
+figure.still figcaption { font-size: .88rem; color: var(--muted); margin-top: 4px; }
+.still-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.still-wrap img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.still-wrap svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.still-wrap .ann-n { fill: #ffd400; stroke: #1d2328; stroke-width: 2; }
+.still-wrap .ann-ring { fill: none; stroke: #ffd400; stroke-width: 2.5; }
+.still-wrap .ann-lead { stroke: #ffd400; stroke-width: 2; }
+.still-wrap .ann-nt { font: 700 14px "Segoe UI", system-ui, sans-serif; fill: #1d2328; text-anchor: middle; }
+ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--muted); }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ann-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffd400"/></marker></defs></svg>
+<div class="assets" aria-hidden="true">
+<img id="chip-90-pin-photo" src="../../user_help_plugin/resources/chip_90_pin_photo.webp" data-box="-0.3 -3 177.3 125.7" alt="">
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- Electrode outlines of device_viewer/resources/devices/90_pin_array.svg (119.7 x 176.3),
+     turned a quarter turn counter-clockwise as the app shows it (reservoirs
+     left and right) and rounded to 0.1 for the tutorial chip player: data-ch is the electrode's channel. -->
+<g id="chip-90-pin" data-size="176.3 119.7">
+<polygon data-ch="0" points="72.2,111.9 72.2,119.6 80.1,119.6 80.1,111.9"/>
+<polygon data-ch="1" points="88.1,119.7 88.1,111.8 80.2,111.8 80.2,119.7"/>
+<polygon data-ch="4" points="68.2,111.7 71.7,111.7 72.1,111.3 72.1,104.3 71.7,103.8 68.2,103.8 64.7,103.8 64.3,104.3 64.3,111.3 64.7,111.7"/>
+<polygon data-ch="5" points="72.3,111.6 80.1,111.6 80.1,103.9 72.3,103.9"/>
+<polygon data-ch="6" points="88.1,111.7 88.1,103.8 80.2,103.8 80.2,111.7"/>
+<polygon data-ch="8" points="88.1,103.7 88.1,95.8 80.2,95.8 80.2,103.7"/>
+<polygon data-ch="9" points="56.3,103.7 58.3,103.7 58.3,95.9 5,95.9 0,100.9 0,114.6 5,119.6 58.3,119.6 58.3,111.8 56.3,111.8 48.4,111.8 48.3,111.8 48.3,103.7"/>
+<polygon data-ch="10" points="48.4,103.8 48.4,111.7 56.3,111.7 64.2,111.7 64.2,103.8 56.3,103.8"/>
+<polygon data-ch="12" points="72.2,88 72.2,95.7 80.1,95.7 80.1,88"/>
+<polygon data-ch="13" points="88.1,95.7 88.1,87.9 80.2,87.9 80.2,95.7"/>
+<polygon data-ch="14" points="72.2,95.9 72.2,103.6 80.1,103.6 80.1,95.9"/>
+<polygon data-ch="16" points="88.1,79.8 88.1,71.9 80.2,71.9 80.2,79.8"/>
+<polygon data-ch="17" points="72.3,87.7 80.1,87.7 80.1,80 72.3,80"/>
+<polygon data-ch="18" points="88.1,87.8 88.1,79.9 80.2,79.9 80.2,87.8"/>
+<polygon data-ch="20" points="48.4,71.9 48.4,79.8 56.3,79.8 64.2,79.8 64.2,71.9 56.3,71.9"/>
+<polygon data-ch="21" points="68.2,79.8 71.6,79.8 72.1,79.3 72.1,72.3 71.6,71.9 68.2,71.9 64.7,71.9 64.2,72.3 64.2,79.3 64.7,79.8"/>
+<polygon data-ch="22" points="72.2,72 72.2,79.7 80.1,79.7 80.1,72"/>
+<polygon data-ch="24" points="80.1,63.9 72.3,63.9 72.3,71.7 80.1,71.7"/>
+<polygon data-ch="25" points="80.2,63.9 80.2,71.8 88.1,71.8 88.1,63.9"/>
+<polygon data-ch="26" points="56.3,71.8 58.3,71.8 58.3,64 5,64 0,69 0,82.7 5,87.7 58.3,87.7 58.3,79.9 56.3,79.9 48.4,79.9 48.3,79.9 48.3,71.8"/>
+<polygon data-ch="28" points="80.1,56 72.3,56 72.3,63.8 80.1,63.8"/>
+<polygon data-ch="29" points="80.2,55.9 80.2,63.8 88.1,63.8 88.1,55.9"/>
+<polygon data-ch="32" points="80.1,55.7 80.1,48 72.2,48 72.2,55.7"/>
+<polygon data-ch="33" points="80.2,47.9 80.2,55.8 88.1,55.8 88.1,47.9"/>
+<polygon data-ch="34" points="56.3,39.8 58.3,39.8 58.3,32 5,32 0,37 0,50.7 5,55.7 58.3,55.7 58.3,47.9 56.3,47.9 48.4,47.9 48.3,47.9 48.3,39.8"/>
+<polygon data-ch="36" points="48.4,39.9 48.4,47.8 56.3,47.8 64.2,47.8 64.2,39.9 56.3,39.9"/>
+<polygon data-ch="37" points="64.7,39.9 64.2,40.4 64.2,47.4 64.7,47.8 68.2,47.8 71.6,47.8 72.1,47.4 72.1,40.4 71.6,39.9 68.2,39.9"/>
+<polygon data-ch="38" points="80.1,47.7 80.1,40 72.2,40 72.2,47.7"/>
+<polygon data-ch="40" points="80.2,39.9 80.2,47.8 88.1,47.8 88.1,39.9"/>
+<polygon data-ch="41" points="72.3,39.8 80.1,39.8 80.1,32 72.3,32"/>
+<polygon data-ch="42" points="80.2,32 80.2,39.8 88.1,39.8 88.1,32"/>
+<polygon data-ch="44" points="80.1,31.8 80.1,24.1 72.2,24.1 72.2,31.8"/>
+<polygon data-ch="45" points="80.2,24 80.2,31.9 88.1,31.9 88.1,24"/>
+<polygon data-ch="46" points="80.1,23.8 80.1,16.1 72.2,16.1 72.2,23.8"/>
+<polygon data-ch="48" points="80.2,16 80.2,23.9 88.1,23.9 88.1,16"/>
+<polygon data-ch="49" points="56.3,7.9 58.3,7.9 58.3,0.1 5,0.1 0,5.1 0,18.8 5,23.8 58.3,23.8 58.3,16 56.3,16 48.4,16 48.3,16 48.3,7.9"/>
+<polygon data-ch="50" points="48.4,8 48.4,15.9 56.3,15.9 64.2,15.9 64.2,8 56.3,8"/>
+<polygon data-ch="52" points="64.7,8 64.3,8.4 64.3,15.4 64.7,15.9 68.2,15.9 71.7,15.9 72.1,15.4 72.1,8.4 71.7,8 68.2,8"/>
+<polygon data-ch="53" points="72.3,15.8 80.1,15.8 80.1,8.1 72.3,8.1"/>
+<polygon data-ch="54" points="80.2,8 80.2,15.9 88.1,15.9 88.1,8"/>
+<polygon data-ch="56" points="80.1,7.8 80.1,0.1 72.2,0.1 72.2,7.8"/>
+<polygon data-ch="57" points="80.2,0 80.2,7.9 88.1,7.9 88.1,0"/>
+<polygon data-ch="62" points="88.2,0 88.2,7.9 96.1,7.9 96.1,0"/>
+<polygon data-ch="63" points="104.1,7.8 104.1,0.1 96.2,0.1 96.2,7.8"/>
+<polygon data-ch="65" points="88.2,8 88.2,15.9 96.1,15.9 96.1,8"/>
+<polygon data-ch="66" points="104.1,8.1 96.2,8.1 96.2,15.8 104.1,15.8"/>
+<polygon data-ch="67" points="108.1,8 104.6,8 104.2,8.4 104.2,15.4 104.6,15.9 108.1,15.9 111.6,15.9 112.1,15.4 112.1,8.4 111.6,8"/>
+<polygon data-ch="69" points="120.1,8 112.2,8 112.2,15.9 120.1,15.9 127.9,15.9 127.9,8"/>
+<polygon data-ch="70" points="128,7.9 128,16 127.9,16 120.1,16 118.1,16 118.1,23.8 171.3,23.8 176.3,18.8 176.3,5.1 171.3,0.1 118.1,0.1 118.1,7.9 120.1,7.9"/>
+<polygon data-ch="71" points="88.2,16 88.2,23.9 96.1,23.9 96.1,16"/>
+<polygon data-ch="73" points="104.1,23.8 104.1,16.1 96.2,16.1 96.2,23.8"/>
+<polygon data-ch="74" points="88.2,24 88.2,31.9 96.1,31.9 96.1,24"/>
+<polygon data-ch="75" points="104.1,31.8 104.1,24.1 96.2,24.1 96.2,31.8"/>
+<polygon data-ch="77" points="88.2,32 88.2,39.8 96.1,39.8 96.1,32"/>
+<polygon data-ch="78" points="104.1,32 96.2,32 96.2,39.8 104.1,39.8"/>
+<polygon data-ch="79" points="88.2,39.9 88.2,47.8 96.1,47.8 96.1,39.9"/>
+<polygon data-ch="81" points="104.1,47.7 104.1,40 96.2,40 96.2,47.7"/>
+<polygon data-ch="82" points="108.2,39.9 104.7,39.9 104.2,40.4 104.2,47.4 104.7,47.8 108.2,47.8 111.7,47.8 112.1,47.4 112.1,40.4 111.7,39.9"/>
+<polygon data-ch="83" points="120.1,39.9 112.2,39.9 112.2,47.8 120.1,47.8 127.9,47.8 127.9,39.9"/>
+<polygon data-ch="85" points="128,39.8 128,47.9 127.9,47.9 120.1,47.9 118.1,47.9 118.1,55.7 171.3,55.7 176.3,50.7 176.3,37 171.3,32 118.1,32 118.1,39.8 120.1,39.8"/>
+<polygon data-ch="86" points="88.2,47.9 88.2,55.8 96.1,55.8 96.1,47.9"/>
+<polygon data-ch="87" points="104.1,55.7 104.1,48 96.2,48 96.2,55.7"/>
+<polygon data-ch="90" points="88.2,55.9 88.2,63.8 96.1,63.8 96.1,55.9"/>
+<polygon data-ch="91" points="96.2,63.8 104.1,63.8 104.1,56 96.2,56"/>
+<polygon data-ch="93" points="128,71.8 128,79.9 127.9,79.9 120.1,79.9 118.1,79.9 118.1,87.7 171.3,87.7 176.3,82.7 176.3,69 171.3,64 118.1,64 118.1,71.8 120.1,71.8"/>
+<polygon data-ch="94" points="88.2,63.9 88.2,71.8 96.1,71.8 96.1,63.9"/>
+<polygon data-ch="95" points="96.2,71.7 104.1,71.7 104.1,63.9 96.2,63.9"/>
+<polygon data-ch="97" points="96.2,72 96.2,79.7 104.1,79.7 104.1,72"/>
+<polygon data-ch="98" points="111.7,79.8 112.1,79.3 112.1,72.3 111.7,71.9 108.2,71.9 104.7,71.9 104.2,72.3 104.2,79.3 104.7,79.8 108.2,79.8"/>
+<polygon data-ch="99" points="120.1,71.9 112.2,71.9 112.2,79.8 120.1,79.8 127.9,79.8 127.9,71.9"/>
+<polygon data-ch="101" points="96.1,87.8 96.1,79.9 88.2,79.9 88.2,87.8"/>
+<polygon data-ch="102" points="104.1,80 96.2,80 96.2,87.7 104.1,87.7"/>
+<polygon data-ch="103" points="96.1,79.8 96.1,71.9 88.2,71.9 88.2,79.8"/>
+<polygon data-ch="105" points="96.2,95.9 96.2,103.6 104.1,103.6 104.1,95.9"/>
+<polygon data-ch="106" points="96.1,95.7 96.1,87.9 88.2,87.9 88.2,95.7"/>
+<polygon data-ch="107" points="96.2,88 96.2,95.7 104.1,95.7 104.1,88"/>
+<polygon data-ch="109" points="120.1,103.8 112.2,103.8 112.2,111.7 120.1,111.7 127.9,111.7 127.9,103.8"/>
+<polygon data-ch="110" points="128,103.7 128,111.8 127.9,111.8 120.1,111.8 118.1,111.8 118.1,119.6 171.3,119.6 176.3,114.6 176.3,100.9 171.3,95.9 118.1,95.9 118.1,103.7 120.1,103.7"/>
+<polygon data-ch="111" points="96.1,103.7 96.1,95.8 88.2,95.8 88.2,103.7"/>
+<polygon data-ch="113" points="96.1,111.7 96.1,103.8 88.2,103.8 88.2,111.7"/>
+<polygon data-ch="114" points="104.1,103.9 96.2,103.9 96.2,111.6 104.1,111.6"/>
+<polygon data-ch="115" points="111.6,111.7 112.1,111.3 112.1,104.3 111.6,103.8 108.1,103.8 104.6,103.8 104.2,104.3 104.2,111.3 104.6,111.7 108.1,111.7"/>
+<polygon data-ch="118" points="96.1,119.7 96.1,111.8 88.2,111.8 88.2,119.7"/>
+<polygon data-ch="119" points="96.2,111.9 96.2,119.6 104.1,119.6 104.1,111.9"/>
+</g>
+</svg>
+</div>
+<header data-hero>
+  <h1>The Device Viewer</h1>
+  <p>The Device Viewer is the map of your chip. You click electrodes here to switch them on, draw routes for droplets to
+  follow, run those routes, and undo what you did not mean to do.</p>
+  <p>The short looping clips are real recordings of MicroDrop; they play while they are on screen. The chip pictures you can
+  press <strong>▶ Play</strong> or <strong>Step ▸</strong> on are simulations that follow MicroDrop's own route rules: change
+  the settings and watch what the app would do.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Where things are</h2>
+<p class="intro">The Device Viewer fills the left of the main window. Its side panel holds the settings, and the status bar
+underneath says where your clicks are going.</p>
+
+<figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/window.webp" width="899" height="489" alt="The MicroDrop window: the Device Viewer with the chip and its electrode outlines on the left, the reveal strip, the side panel with Viewport Controls, Camera Controls, Paths and the mode buttons, and the status bar reading Editing: Step 1"><svg viewBox="0 0 899 489" aria-hidden="true"><circle cx="258" cy="94" r="10" class="ann-n"/><text x="258" y="98" class="ann-nt">1</text><circle cx="540" cy="237" r="10" class="ann-n"/><text x="540" y="241" class="ann-nt">2</text><circle cx="656" cy="39" r="10" class="ann-n"/><text x="656" y="43" class="ann-nt">3</text><circle cx="656" cy="212" r="10" class="ann-n"/><text x="656" y="216" class="ann-nt">4</text><circle cx="656" cy="415" r="10" class="ann-n"/><text x="656" y="419" class="ann-nt">5</text><circle cx="78" cy="482" r="10" class="ann-n"/><text x="78" y="486" class="ann-nt">6</text></svg></div>
+<figcaption>The main window. Your panes may be arranged differently; <span class="ui">View</span> brings back a pane
+you closed.</figcaption>
+</figure>
+<ol class="howto">
+  <li><strong>The chip.</strong> Every electrode is outlined, over the camera picture when a camera is on. Electrodes that are
+  switched on are filled blue.</li>
+  <li><strong>Reveal strip.</strong> <i data-glyph="chevron_right" data-inline data-label="Reveal Hidden Controls"></i>
+  <em>Reveal Hidden Controls</em> hides or shows the side panel.</li>
+  <li><strong>Side panel</strong>, in collapsible sections from the top: <span class="ui">Viewport Controls</span>,
+  <span class="ui">Camera Controls</span> (with <span class="ui">Alpha Settings</span> inside), <span class="ui">Paths</span>,
+  <span class="ui">Zones</span> and <span class="ui">Calibration</span>. Plugins can add more below.</li>
+  <li><strong>Paths</strong>: the route settings, the route table and the buttons that run routes.</li>
+  <li><strong>Mode buttons</strong> at the bottom of Paths: what a click or drag on the chip does.</li>
+  <li><strong>Status bar.</strong> <span class="ui">Free Mode</span> or <span class="ui">Editing: Step 1</span>: see
+  <a href="#mistakes">Free Mode or a step?</a></li>
+</ol>
+<p>Right-click the side panel (or the reveal strip) and choose <span class="ui">Modify Layout...</span> to set the side panel's
+width and the minimum heights of its tables (<span class="ui">Device Viewer Sidebar Width</span>, 320 px to start, and
+<span class="ui">Alpha View Min Height</span>, <span class="ui">Layers View Min Height</span>,
+<span class="ui">Zones View Min Height</span>).</p>
+<div class="callout">Neighbouring topics have their own tutorials: loading a device file, channels and connections
+(<a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/811">#811</a>), the camera and its alignment
+(<a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/812">#812</a>) and zones
+(<a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/813">#813</a>).</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">From a droplet on the chip to a route that moves it, and back again.</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="480" height="390" poster="device_viewer_basics_media/click-to-move.webp" aria-label="Electrodes clicked on and off one at a time while a droplet follows them">
+<source src="device_viewer_basics_media/click-to-move.webm" type="video/webm">
+</video></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Switch electrodes on and off</h4><p>Click an electrode to switch it
+    on (blue); click it again to switch it off. A droplet moves onto a switched-on electrode next to it, so switch on the one in
+    front, then off the one behind.</p><p>A click only changes the electrode's <em>state</em>. The DropBot puts voltage on it
+    only while <span class="ui">Realtime On</span> is set (<kbd>T</kbd>) or a protocol runs.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="703" height="360" poster="device_viewer_basics_media/draw-route.webp" aria-label="A loop route drawn by dragging across electrodes; a row appears in the Path table">
+<source src="device_viewer_basics_media/draw-route.webm" type="video/webm">
+</video></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Draw a route</h4><p>Choose
+    <i data-glyph="ICON_DRAW" data-inline data-label="Draw"></i> <span class="ui">Draw</span> (<kbd>D</kbd>) and drag from the
+    droplet's electrode through the ones it should cross. Let go: the route is a new row in the <span class="ui">Path</span>
+    table under <span class="ui">Paths</span>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="579" height="440" poster="device_viewer_basics_media/run-loops.webp" aria-label="Three loop routes running at once; the status line counts phases and the pause and stop buttons show">
+<source src="device_viewer_basics_media/run-loops.webm" type="video/webm">
+</video></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Set it up and run it</h4><p>Open <span class="ui">Execution
+    Settings</span> and set <a href="#t-duration">Duration</a>, <a href="#t-length">Length</a>, <a href="#t-overlay">Overlay</a>
+    and <a href="#t-reps">Reps</a>. Leave <i data-glyph="play_arrow" data-inline></i> on in the <span class="ui">Run</span>
+    column for each route to run, then click <i data-glyph="play_circle" data-inline></i> <em>Run selected routes</em>. Tick
+    <span class="ui">Phases</span> instead to step through it with <i data-glyph="chevron_left" data-inline></i>
+    <i data-glyph="chevron_right" data-inline></i>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="703" height="360" poster="device_viewer_basics_media/undo.webp" aria-label="Undo clicked again and again: the route shortens one electrode at a time, then disappears">
+<source src="device_viewer_basics_media/undo.webm" type="video/webm">
+</video></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Undo a mistake</h4><p><i data-glyph="Undo" data-inline></i>
+    <em>Undo</em> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) takes back the last change; <i data-glyph="Redo" data-inline></i>
+    <em>Redo</em> (<kbd>Ctrl</kbd>+<kbd>Y</kbd>) puts it back. To start over,
+    <i data-glyph="remove_road" data-inline></i> <em>Clear Routes</em> (<kbd>Shift</kbd>+<kbd>X</kbd>) and
+    <i data-glyph="layers_clear" data-inline></i> <em>Clear Electrode States</em> (<kbd>X</kbd>).</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><div class="still-wrap"><img data-media src="device_viewer_basics_media/viewport.webp" width="410" height="82" alt="Viewport Controls: Zoom out, Zoom In, Reset Zoom: Fit to View and Toggle Pan/Drag"><svg viewBox="0 0 410 82" aria-hidden="true"><circle cx="99" cy="16" r="10" class="ann-n"/><text x="99" y="20" class="ann-nt">1</text><circle cx="197" cy="16" r="10" class="ann-n"/><text x="197" y="20" class="ann-nt">2</text><circle cx="292" cy="16" r="10" class="ann-n"/><text x="292" y="20" class="ann-nt">3</text><circle cx="388" cy="16" r="10" class="ann-n"/><text x="388" y="20" class="ann-nt">4</text></svg></div></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Zoom, pan and turn the view</h4><p>Use
+    <span class="ui">Viewport Controls</span>, or <kbd>Ctrl</kbd> + mouse wheel to zoom and <kbd>Space</kbd> to drag the view
+    around. <kbd>R</kbd> turns the chip a quarter turn; <kbd>Shift</kbd>+<kbd>R</kbd> turns the camera picture.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="electrodes">
+<h2>Electrodes</h2>
+<p class="intro">Clicking, the keyboard, the tooltip and the right-click menu.</p>
+
+<section data-term id="t-click" data-where="the chip, Draw or Edit mode">
+  <h3>Switching electrodes</h3>
+  <p>In <span class="ui">Draw</span> or <span class="ui">Edit</span> mode a click (press and release on the same electrode)
+  switches it on or off. Dragging draws a route instead; in <span class="ui">Auto</span> mode a click switches nothing.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:480px"><video data-clip muted loop playsinline controls preload="metadata" width="480" height="390" poster="device_viewer_basics_media/click-to-move.webp" aria-label="Electrodes clicked on and off one at a time while a droplet follows them; the tooltip shows Electrode ID, Channel and Area">
+<source src="device_viewer_basics_media/click-to-move.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 1.5× speed. Blue electrodes are on; the droplet stretches onto each new one and lets go of the one switched off behind it. Halfway, the pointer rests and the tooltip appears.</figcaption>
+</figure>
+  <p>Faster with the keyboard (click the chip first so it has the keyboard). Arrows follow the screen, however the chip is
+  turned:</p>
+  <table class="small">
+    <thead><tr><th>Keys</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></td><td>Step every switched-on electrode one place that way:
+      the droplet follows.</td></tr>
+      <tr><td><kbd>Shift</kbd> + arrow</td><td>Grow the switched-on area that way.</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + arrow</td><td>Shrink it from that side.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd> + arrow</td><td><em>Split step</em> that way.</td></tr>
+      <tr><td><kbd>X</kbd></td><td>Switch every electrode off.</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Switch everything off, then find liquid (below).</td></tr>
+    </tbody>
+  </table>
+  <p>How much liquid is on the switched-on electrodes? The <span class="ui">Volume</span> readout in Dropbot Status, and its
+  pop-out <strong>Droplet Readouts</strong> window, follow what you switch (see the Dropbot Status &amp; Controls Tutorial).</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:590px"><video data-clip muted loop playsinline controls preload="metadata" width="590" height="365" poster="device_viewer_basics_media/droplet-readouts.webp" aria-label="The Droplet Readouts window updating as droplets are switched on and moved">
+<source src="device_viewer_basics_media/droplet-readouts.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 3× speed. The readouts grow as more droplets are switched on.</figcaption>
+</figure>
+  <div data-what><p>The on/off state of each electrode. It is what a protocol step stores and what the DropBot applies.</p></div>
+  <div data-when><p>Moving, holding, splitting or merging droplets by hand.</p></div>
+  <div data-read><p>Blue fill: on. Red fill: disabled (cannot be switched).</p></div>
+  <div data-typical><p>All off when MicroDrop starts.</p></div>
+</section>
+
+<section data-term id="t-tooltip" data-where="hover over an electrode">
+  <h3>Electrode tooltip</h3>
+  <p>Rest the pointer on an electrode to see what it is.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:525px"><video data-clip muted loop playsinline controls preload="metadata" width="525" height="352" poster="device_viewer_basics_media/tooltip.webp" aria-label="The pointer rests on electrodes in turn; the tooltip shows electrode085, Channel 37, Area 4.32, then electrode031, Channel 36, Area 8.69, then electrode069, Channel 32">
+<source src="device_viewer_basics_media/tooltip.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Each tooltip reads <em>Electrode ID</em>, <em>Channel</em> and <em>Area (mm²)</em>; the long neck electrode has twice the area.</figcaption>
+</figure>
+  <div data-what><p>Three lines: <span class="ui">Electrode ID: …</span> (the name in the device file),
+  <span class="ui">Channel: …</span> (the DropBot output it is wired to, the number routes and protocols use) and
+  <span class="ui">Area (mm²): …</span> (after any area scaling). A disabled electrode adds <span class="ui">[DISABLED]</span>.</p></div>
+  <div data-when><p>Finding an electrode's channel; checking an area before you trust a volume.</p></div>
+  <div data-typical><p>On. Untick <span class="ui">Enable Electrode Tooltip</span> in the right-click menu to stop it.</p></div>
+</section>
+
+<section data-term id="t-menu" data-where="right-click the chip">
+  <h3>Right-click menu</h3>
+  <p>Right-click anywhere on the chip (not while holding <kbd>Ctrl</kbd>).</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:510px"><video data-clip muted loop playsinline controls preload="metadata" width="510" height="512" poster="device_viewer_basics_media/right-click-menu.webp" aria-label="Right-clicking next to a droplet opens the menu: Measure Liquid Capacitance, Measure Filler Capacitance, Clear Electrodes, Clear Routes, Find Liquid, Keyboard Shortcuts, Disable All Electrodes, Disable Electrode">
+<source src="device_viewer_basics_media/right-click-menu.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. The menu as it opens; its last items run below the edge of this recording.</figcaption>
+</figure>
+  <table class="small">
+    <thead><tr><th>Item</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Measure Liquid Capacitance / Measure Filler Capacitance</td><td>Calibration measurements on the
+      switched-on electrodes (see the <span class="ui">Calibration</span> section).</td></tr>
+      <tr><td class="lbl">Clear Electrodes</td><td>Switch every electrode off.</td></tr>
+      <tr><td class="lbl">Clear Routes</td><td>Delete every route.</td></tr>
+      <tr><td class="lbl"><a href="#t-find">Find Liquid</a></td><td>Switch on the electrodes where liquid is found.</td></tr>
+      <tr><td class="lbl">Keyboard Shortcuts…</td><td>The shortcut table (also <kbd>F1</kbd>).</td></tr>
+      <tr><td class="lbl">Enable All Electrodes</td><td>Shown when some are disabled: enable them all again.</td></tr>
+      <tr><td class="lbl"><a href="#t-disable">Disable All Electrodes</a></td><td>Disable every electrode.</td></tr>
+      <tr><td class="lbl">Disable Electrode / Enable Electrode</td><td>On an electrode with a channel: take it out of use, or back.</td></tr>
+      <tr><td class="lbl">Adjust Electrode Area Scale</td><td>On an electrode: opens the <span class="ui">Electrode Area
+      Scaler</span> to correct its area from a measurement (see #811).</td></tr>
+      <tr><td class="lbl">Enable Electrode Tooltip</td><td>Ticked: show the tooltip above.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section data-term id="t-find" data-where="right-click menu, F key">
+  <h3>Find Liquid</h3>
+  <p>Asks the DropBot where there is liquid and switches those electrodes on.</p>
+  <div data-what><p>A droplet-detection measurement over every electrode; the ones with liquid on them are added to the
+  switched-on set.</p></div>
+  <div data-when><p>After loading, or when you are not sure where the droplets are.</p></div>
+  <div data-read><p>The menu item adds to what is already on; <kbd>F</kbd> switches everything off first, so only the liquid
+  stays lit.</p></div>
+  <div data-typical><p>Needs a connected DropBot.</p></div>
+</section>
+
+<section data-term id="t-disable" data-where="right-click menu">
+  <h3>Disable All Electrodes</h3>
+  <p>Takes every electrode out of use; <span class="ui">Enable All Electrodes</span> brings them back.</p>
+  <div data-what><p>Disabled electrodes are filled red, cannot be switched on and say <span class="ui">[DISABLED]</span> in
+  their tooltip.</p></div>
+  <div data-when><p>Mostly one at a time, with <span class="ui">Disable Electrode</span>, for a damaged or shorted electrode.
+  Disable all, then enable a few, to restrict work to a small area.</p></div>
+  <div data-typical><p>None disabled. Undo brings a disabling back.</p></div>
+</section>
+
+<section data-term id="t-numbers" data-where="Mode buttons: Edit Electrode Channels">
+  <h3>Channel numbers</h3>
+  <p>Routes, protocols and the tooltip name electrodes by <em>channel</em>, the DropBot output each one is wired to.</p>
+  <figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/channel-numbers.webp" width="776" height="527" alt="The chip with every electrode labelled with its channel number: reservoirs 49, 34, 26 and 9 on the left, 70, 85, 93 and 110 on the right, and the grid of numbered electrodes between them"><svg viewBox="0 0 776 527" aria-hidden="true"></svg></div>
+<figcaption>Every electrode labelled with its channel, on the 90-pin chip.</figcaption>
+</figure>
+  <div data-what><p>In <i data-glyph="Numbers" data-inline></i> <span class="ui">Edit Electrode Channels</span> mode
+  (<kbd>N</kbd>; the label reads <span class="ui">Mode: Channel Edit</span>) a click on an electrode lets you type its channel,
+  from 0 to <a href="#t-prefs">Number of channels</a> − 1; leave it empty to unassign it.</p></div>
+  <div data-when><p>Only when the device file is wrong. Changing channels is covered with device files in #811.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="modes">
+<h2>Modes</h2>
+<p class="intro">The mode decides what a click or a drag on the chip does. The label above the buttons names the current one
+(<span class="ui">Mode: Draw</span>). Click a mode button again to go back to the mode before.</p>
+<figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/mode-buttons.webp" width="450" height="165" alt="The mode buttons under Mode: Draw: Draw (selected), Edit, Autoroute and Edit Electrode Channels, then Clear Electrode States, Clear Routes, Undo and Redo"><svg viewBox="0 0 450 165" aria-hidden="true"><circle cx="21" cy="51" r="10" class="ann-n"/><text x="21" y="55" class="ann-nt">1</text><circle cx="116" cy="51" r="10" class="ann-n"/><text x="116" y="55" class="ann-nt">2</text><circle cx="213" cy="51" r="10" class="ann-n"/><text x="213" y="55" class="ann-nt">3</text><circle cx="309" cy="51" r="10" class="ann-n"/><text x="309" y="55" class="ann-nt">4</text><circle cx="21" cy="113" r="10" class="ann-n"/><text x="21" y="117" class="ann-nt">5</text><circle cx="116" cy="113" r="10" class="ann-n"/><text x="116" y="117" class="ann-nt">6</text><circle cx="213" cy="113" r="10" class="ann-n"/><text x="213" y="117" class="ann-nt">7</text><circle cx="309" cy="113" r="10" class="ann-n"/><text x="309" y="117" class="ann-nt">8</text></svg></div>
+<figcaption>The mode buttons, numbered as in the table below.</figcaption>
+</figure>
+<table class="small icons-table">
+  <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td class="icons">1 <i data-glyph="ICON_DRAW"></i></td><td class="lbl">Draw (D)</td><td>Click switches electrodes;
+    drag draws a new route.</td></tr>
+    <tr><td class="icons">2 <i data-glyph="ICON_EDIT"></i></td><td class="lbl">Edit (E)</td><td>Click switches electrodes; drag
+    lengthens the <em>selected</em> route.</td></tr>
+    <tr><td class="icons">3 <i data-glyph="ICON_AUTOMATION"></i></td><td class="lbl">Autoroute (A)</td><td>Drag from a start to
+    an end: MicroDrop finds the path.</td></tr>
+    <tr><td class="icons">4 <i data-glyph="Numbers"></i></td><td class="lbl">Edit Electrode Channels (N)</td><td>Click an
+    electrode to type its channel number.</td></tr>
+    <tr><td class="icons">5 <i data-glyph="layers_clear"></i></td><td class="lbl">Clear Electrode States (X)</td><td>Switch every
+    electrode off.</td></tr>
+    <tr><td class="icons">6 <i data-glyph="remove_road"></i></td><td class="lbl">Clear Routes (Shift+X)</td><td>Delete every
+    route.</td></tr>
+    <tr><td class="icons">7 <i data-glyph="Undo"></i></td><td class="lbl">Undo (Ctrl+Z)</td><td>Take back the last change.</td></tr>
+    <tr><td class="icons">8 <i data-glyph="Redo"></i></td><td class="lbl">Redo (Ctrl+Y)</td><td>Put it back.</td></tr>
+  </tbody>
+</table>
+
+<section data-term id="t-draw" data-where="Draw (D)">
+  <h3>Draw mode</h3>
+  <p>Press on an electrode and drag through its neighbours to make a new route.</p>
+  <div data-what><p>While you drag, the label reads <span class="ui">Mode: Edit Draw</span>; when you let go it is back to
+  <span class="ui">Draw</span>. The new route is selected (drawn yellow).</p></div>
+  <div data-when><p>Every new route. Drag back onto the starting electrode to close it into a loop.</p></div>
+  <div data-read><p>Each neighbour you cross is one more electrode on the route. A droplet cannot jump, so stay on
+  neighbours.</p></div>
+  <div data-typical><p>The mode MicroDrop starts in.</p></div>
+</section>
+
+<section data-term id="t-edit" data-where="Edit (E)">
+  <h3>Edit mode</h3>
+  <p>Change the selected route instead of making a new one.</p>
+  <div data-what><p>Drag from any electrode of the selected route, or onto its start, to add to it; from the middle it adds an
+  out-and-back detour. Hold <kbd>Ctrl</kbd> and drag with the right mouse button across the route to erase pieces of it.</p></div>
+  <div data-when><p>A route that is nearly right. Select it first in the Path table.</p></div>
+  <div data-read><p>In Draw or Edit mode, <kbd>Alt</kbd> + arrow grows the selected route one electrode that way and
+  <kbd>Backspace</kbd> removes its last electrode.</p></div>
+</section>
+
+<section data-term id="t-auto" data-where="Autoroute (A)">
+  <h3>Autoroute</h3>
+  <p>Drag from the start electrode towards the destination: a pink preview shows the shortest path around your other routes.</p>
+  <div data-what><p>Let go on the destination and the preview becomes a normal route, selected. Hold <kbd>Alt</kbd> as you
+  press to let it cross existing routes. The mode stays <span class="ui">Auto</span> for the next one.</p></div>
+  <div data-when><p>Long moves across the chip, and moves that must avoid other droplets' routes.</p></div>
+  <div data-read><p>In this mode a click does not switch electrodes.</p></div>
+</section>
+
+<section data-term id="t-pan" data-where="Viewport Controls, Space">
+  <h3>Pan mode</h3>
+  <p>Drag the view around instead of the electrodes.</p>
+  <div data-what><p><i data-glyph="pan_tool" data-inline></i> <em>Toggle Pan/Drag (Space key)</em> or <kbd>Space</kbd>: a
+  left-drag scrolls the view and clicks on electrodes are ignored. <kbd>Space</kbd> again or <kbd>Esc</kbd> leaves it.</p></div>
+  <div data-when><p>Zoomed in on a large chip.</p></div>
+  <div data-read><p>The label reads <span class="ui">Mode: Pan</span>.</p></div>
+</section>
+
+<section data-term id="t-merge" data-where="Path table, right-click">
+  <h3>Merging routes</h3>
+  <p>Join two routes into one, end to start.</p>
+  <div data-what><p>Right-click a route ▸ <span class="ui">Start Merge</span>, then right-click the other ▸
+  <span class="ui">Merge With</span>. It works only when one route ends where the other starts. <span class="ui">Stop
+  Merging</span> cancels.</p></div>
+  <div data-when><p>Two pieces drawn separately that one droplet should follow in one go.</p></div>
+  <div data-read><p>The <span class="ui">Mode:</span> label does not change while you merge.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="routes">
+<h2>Routes and the Path table</h2>
+<p class="intro">A route is a line across electrodes. When it runs, MicroDrop switches the electrodes along it on and off in
+turn, and the droplet rides along.</p>
+<figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/paths-panel.webp" width="298" height="648" alt="The Paths section: Execution Settings with Duration, Length, Overlay, Reps, Rep Duration, Ramp Up, Ramp Dn, Lin Reps, the two Lanes sliders, Rot Lock and Re-centre; the run and apply buttons; the Phases checkbox; the empty Path and Run table; and Mode: Draw with the eight mode buttons"><svg viewBox="0 0 298 648" aria-hidden="true"><circle cx="276" cy="34" r="10" class="ann-n"/><text x="276" y="38" class="ann-nt">1</text><circle cx="276" cy="232" r="10" class="ann-n"/><text x="276" y="236" class="ann-nt">2</text><circle cx="276" cy="281" r="10" class="ann-n"/><text x="276" y="285" class="ann-nt">3</text><circle cx="84" cy="347" r="10" class="ann-n"/><text x="84" y="351" class="ann-nt">4</text><circle cx="279" cy="326" r="10" class="ann-n"/><text x="279" y="330" class="ann-nt">5</text><circle cx="105" cy="368" r="10" class="ann-n"/><text x="105" y="372" class="ann-nt">6</text><circle cx="229" cy="397" r="10" class="ann-n"/><text x="229" y="401" class="ann-nt">7</text><circle cx="143" cy="550" r="10" class="ann-n"/><text x="143" y="554" class="ann-nt">8</text></svg></div>
+<figcaption>The <span class="ui">Paths</span> section:
+<ol class="legend"><li><span class="ui">Execution Settings</span> (click to fold).</li><li>The two
+<span class="ui">Lanes</span> sliders.</li><li><span class="ui">Rot Lock</span> and <span class="ui">Re-centre</span>.</li><li><i data-glyph="play_circle" data-inline></i>
+<em>Run selected routes</em>.</li><li><i data-glyph="sync_alt" data-inline></i> <em>Apply execution params to step</em>.</li><li><span class="ui">Phases</span>.</li><li>The
+<span class="ui">Path</span> / <span class="ui">Run</span> table.</li><li>The mode label and buttons.</li></ol></figcaption>
+</figure>
+
+<section data-term id="t-route-draw" data-where="Device Viewer, Draw mode">
+  <h3>Draw a route, then run it</h3>
+  <p>Simulated: the route is drawn from 22 to 79 and run with Length 2 and Overlay 1. Press <strong>▶ Play</strong> or
+  <strong>Step ▸</strong>.</p>
+  <figure class="demo" data-demo="route"><svg class="chip"></svg></figure>
+  <div data-what><p>The table names a route <span class="ui">Path: 22 -&gt; 79</span> (first and last channel), a loop
+  <span class="ui">Loop @ 40</span>, and a route that goes round more than once <span class="ui">2x loop @ 40</span>.</p></div>
+  <div data-read><p>The selected route is yellow. Other routes take a shade of green; loops are orange or red depending on
+  which way they turn. The tinted electrodes are the <a href="#t-alpha">Route Shape</a>: everything the run will switch
+  on. The dark outline (<span class="ui">Route Head</span>) is where the selected route's droplet ends up.</p></div>
+</section>
+
+<section data-term id="t-table" data-where="Paths, under the run buttons">
+  <h3>The Path table</h3>
+  <p>One row per route, numbered. Click a row to select its route; drag rows to reorder them.</p>
+  <table class="small icons-table">
+    <thead><tr><th>Column</th><th>Name</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons">Path</td><td class="lbl">Route name</td><td>Click to select the route.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_VISIBILITY"></i><i data-glyph="ICON_VISIBILITY_OFF"></i></td><td class="lbl">Show / hide</td><td>Hide a route
+      from the picture without deleting it.</td></tr>
+      <tr><td class="icons"><i data-glyph="play_arrow"></i><i data-glyph="play_disabled"></i></td><td class="lbl">Run</td><td>Take part
+      in <em>Run selected routes</em> and in Phases (crossed out: left out).</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Delete</td><td>Delete the route (or select it and
+      press <kbd>Del</kbd>; <kbd>Esc</kbd> clears the selection).</td></tr>
+    </tbody>
+  </table>
+  <figure class="clip">
+<div class="clip-box" style="max-width:579px"><video data-clip muted loop playsinline controls preload="metadata" width="579" height="440" poster="device_viewer_basics_media/run-toggle.webp" aria-label="Two Run cells clicked so that their routes are left out; their play icon turns crossed out">
+<source src="device_viewer_basics_media/run-toggle.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Clicking the <span class="ui">Run</span> cells of rows 2 and 3 leaves those loops out; only <em>Loop @ 40</em> will run.</figcaption>
+</figure>
+  <p><strong>Right-click a row</strong> for:</p>
+  <table class="small">
+    <thead><tr><th>Item</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Execute Path</td><td>Run this one route now (greyed out while routes run).</td></tr>
+      <tr><td class="lbl">Invert</td><td>Reverse it: the droplet goes the other way.</td></tr>
+      <tr><td class="lbl">Delete</td><td>Delete it.</td></tr>
+      <tr><td class="lbl">Start Merge / Merge With / Stop Merging</td><td>Join two routes: see <a href="#t-merge">Merging
+      routes</a>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section data-term id="t-runcol" data-where="Path table, Run column">
+  <h3>Run column</h3>
+  <p>Whether a route takes part when you run routes or step phases.</p>
+  <div data-what><p><i data-glyph="play_arrow" data-inline></i> on, <i data-glyph="play_disabled" data-inline></i> left out.
+  Click the cell to switch.</p></div>
+  <div data-when><p>Run one droplet's route while the others wait, without deleting theirs.</p></div>
+  <div data-read><p>Only the routes with Run on are worked into the phases, the status line and the Phases stepping.</p></div>
+  <div data-typical><p>On for every new route.</p></div>
+</section>
+
+<section data-term id="t-visible" data-where="Path table, eye column">
+  <h3>Path visibility</h3>
+  <p>Show or hide a route on the chip.</p>
+  <div data-what><p><i data-glyph="ICON_VISIBILITY" data-inline></i> shown, <i data-glyph="ICON_VISIBILITY_OFF" data-inline></i>
+  hidden. Hiding does not delete it and does not stop it running.</p></div>
+  <div data-when><p>A crowded chip, or a camera picture you need to see clearly.</p></div>
+  <div data-typical><p>Shown.</p></div>
+</section>
+
+<section data-term id="t-invert" data-where="Path table, right-click">
+  <h3>Invert</h3>
+  <p>Reverse a route, so its droplet travels it the other way.</p>
+  <div data-what><p>The same electrodes in the opposite order.</p></div>
+  <div data-when><p>Bringing a droplet back the way it came, or turning a loop the other way round.</p></div>
+  <div data-read><p>The start square moves to the other end and the chevrons point the other way.</p></div>
+</section>
+
+<section data-term id="t-several" data-where="the chip">
+  <h3>Several routes at once</h3>
+  <p>One route per droplet; every route with <span class="ui">Run</span> on goes together.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:639px"><video data-clip muted loop playsinline controls preload="metadata" width="639" height="400" poster="device_viewer_basics_media/route-tints.webp" aria-label="A second and a third route drawn; each gets its own tint of the electrodes it will use">
+<source src="device_viewer_basics_media/route-tints.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 1.5× speed. Each new route gets its own tint (blue, magenta, cyan…), so you can tell whose electrodes are whose.</figcaption>
+</figure>
+  <figure class="demo" data-demo="loop"><svg class="chip"></svg></figure>
+  <div data-what><p>A loop: drag back onto the starting electrode. Sent round and round, a droplet mixes; sitting still it
+  barely does. The simulation above sends a two-electrode droplet round a 2 × 3 block.</p></div>
+  <div data-when><p>Mixing, or moving several droplets side by side.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="settings">
+<h2>Execution Settings</h2>
+<p class="intro">How the selected route runs. A run is a list of <em>phases</em>: one set of electrodes switched on for one
+Duration. Changes show at once in the Route Shape tint on the chip.</p>
+
+<figure class="clip">
+<div class="clip-box" style="max-width:650px"><video data-clip muted loop playsinline controls preload="metadata" width="650" height="420" poster="device_viewer_basics_media/route-shape.webp" aria-label="A long route drawn with Length 3 and one lane each side: the tint shows the wide band of electrodes it will use">
+<source src="device_viewer_basics_media/route-shape.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 1.5× speed. With Length 3 and a lane each side, the route's tint shows the whole three-wide band its droplet will sweep; the dark outline is where the droplet ends.</figcaption>
+</figure>
+
+<h3 class="sub">Try the settings</h3>
+<p>The panel on the left copies <span class="ui">Execution Settings</span>, with the app's limits. Pick a <em>Try</em> button or
+change any value; the chip replays the phases MicroDrop would switch.</p>
+  <figure class="demo sim" data-demo="settings">
+    <div class="controls presets" aria-label="Try a setting">
+      <span class="lbl">Try:</span>
+      <button type="button" data-preset="lanes-left">Lanes left</button>
+      <button type="button" data-preset="lanes-right">Lanes right</button>
+      <button type="button" data-preset="lock-on">Rot Lock on</button>
+      <button type="button" data-preset="lock-off">Rot Lock off</button>
+      <button type="button" data-preset="recentre-off">Re-centre off</button>
+      <button type="button" data-preset="length-2">Length 2, Overlay 1</button>
+      <button type="button" data-preset="reps-2">Reps 2 on a loop</button>
+      <button type="button" data-preset="rep-duration">Rep Duration 12 s</button>
+      <button type="button" data-preset="ramps">Ramps</button>
+      <button type="button" data-preset="defaults">Defaults</button>
+    </div>
+    <div class="sim-grid">
+      <div class="sim-panel">
+        <div class="sim-row">
+          <label>Route <select data-set="route"><option value="L" selected>L-shaped</option><option value="straight">Straight</option><option value="loop">Loop</option></select></label>
+          <label>Droplet <select data-set="drop"><option value="1" selected>1 electrode</option><option value="2">2 electrodes</option><option value="3">3 electrodes</option><option value="4">4 electrodes</option><option value="6">6 electrodes</option></select></label>
+        </div>
+        <p class="sim-title">⌄ Execution Settings</p>
+        <div class="sim-cols3">
+          <label>Duration <input type="number" data-set="duration" min="0" max="10000" step="0.1" value="1.0"></label>
+          <label>Length <input type="number" data-set="length" min="1" max="10000" step="1" value="1"></label>
+          <label>Overlay <input type="number" data-set="overlay" min="0" max="0" step="1" value="0"></label>
+        </div>
+        <div class="sim-cols2">
+          <label>Reps <input type="number" data-set="reps" min="1" max="10000" step="1" value="1"></label>
+          <label>Rep Duration <input type="number" data-set="repeatDuration" min="0" max="10000" step="1" value="0"></label>
+        </div>
+        <div class="sim-cols3 sim-checks">
+          <label>Ramp Up <input type="checkbox" data-set="rampUp"></label>
+          <label>Ramp Dn <input type="checkbox" data-set="rampDn"></label>
+          <label>Lin Reps <input type="checkbox" data-set="linReps"></label>
+        </div>
+        <div class="sim-lanes"><span class="lbl">Lanes</span>
+          <div class="lanes-track"><span data-out="laneLeft">0</span>
+            <input type="range" class="lane-left" data-set="laneLeft" min="0" max="4" step="1" value="0" aria-label="Lanes to the left">
+            <input type="range" class="lane-right" data-set="laneRight" min="0" max="4" step="1" value="0" aria-label="Lanes to the right">
+            <span data-out="laneRight">0</span></div>
+        </div>
+        <div class="sim-cols3 sim-checks">
+          <label>Rot Lock <input type="checkbox" data-set="rotationLock" checked></label>
+          <label class="lock-on">Re-centre <input type="checkbox" data-set="recentre" checked></label>
+          <label class="lock-off" hidden>In/Out <input type="checkbox" data-set="inOut" checked></label>
+        </div>
+      </div>
+      <div class="sim-view">
+        <div class="sim-chip"></div>
+        <table class="small sim-readout" aria-live="polite"></table>
+      </div>
+    </div>
+    <figcaption>The phases are computed with the same rules MicroDrop uses, ported from its route code, on this chip's real
+    electrode layout. The droplet keeps its volume: a footprint bigger than the droplet only stretches it thinner. The yellow
+    line is the route, the blue tint its Route Shape, the dashed outline the electrodes on in this phase. Playback runs at up to
+    1.8 s per phase whatever the Duration; the readout shows the real times.</figcaption>
+  </figure>
+
+<section data-term id="t-duration" data-where="Execution Settings">
+  <h3>Duration</h3>
+  <p>Tooltip: <em>Duration of each step in route (seconds)</em>.</p>
+  <div data-what><p>How long each phase is held before the next.</p></div>
+  <div data-when><p>Longer for viscous liquids or low voltage, when the droplet lags behind the electrodes.</p></div>
+  <div data-read><p>Seconds, one decimal, 0 to 10000. A run takes about phases × Duration.</p></div>
+  <div data-typical><p>1.0 s</p></div>
+</section>
+
+<section data-term id="t-length" data-where="Execution Settings">
+  <h3>Length</h3>
+  <p>Tooltip: <em>Length of each step in route (# electrodes)</em>. Also called the trail length.</p>
+  <div data-what><p>How many electrodes along the route are on at once: the droplet's footprint along its way.</p></div>
+  <div data-when><p>Match it to the droplet: a droplet two electrodes long wants Length 2.</p></div>
+  <div data-read><p>Bigger than the droplet only stretches it thinner; the liquid does not grow.</p></div>
+  <div data-typical><p>1</p></div>
+</section>
+
+<section data-term id="t-overlay" data-where="Execution Settings">
+  <h3>Overlay</h3>
+  <p>Tooltip: <em>electrodes actuated from one step to overlay onto next step</em>. Also called the trail overlay.</p>
+  <div data-what><p>How many of the Length electrodes stay on into the next phase, so each phase moves on Length − Overlay
+  electrodes.</p></div>
+  <div data-when><p>Overlay 1 with Length 2 makes a smooth crawl: the droplet always has an electrode it is already on.</p></div>
+  <div data-read><p>At most Length − 1 (the box will not go higher). Where the footprint could not move without a gap,
+  MicroDrop uses the smallest overlay that keeps it continuous.</p></div>
+  <div data-typical><p>0</p></div>
+</section>
+
+<section data-term id="t-reps" data-where="Execution Settings">
+  <h3>Reps</h3>
+  <p>Tooltip: <em>Times to repeat loops execution</em>.</p>
+  <div data-what><p>Laps of a loop; at the end the droplet returns onto the loop's start. With <a href="#t-linreps">Lin
+  Reps</a> it replays an open route instead.</p></div>
+  <div data-when><p>Mixing: more laps, more mixing.</p></div>
+  <div data-read><p>Greyed out and kept at 1 when no route is a loop and Lin Reps is off. Editing Reps sets Rep Duration back
+  to 0.</p></div>
+  <div data-typical><p>1</p></div>
+</section>
+
+<section data-term id="t-repdur" data-where="Execution Settings">
+  <h3>Rep Duration</h3>
+  <p>Tooltip: <em>Seconds to repeat path executions. Idle time in end if loop cannot be completed</em>.</p>
+  <div data-what><p>Instead of a number of laps, a time: as many whole laps as fit (at least one), then the droplet waits at
+  the start until the time is up.</p></div>
+  <div data-when><p>When a step must last a set time, for example to mix for 30 s.</p></div>
+  <div data-read><p>0 means off. Editing it sets Reps back to 1. Try <em>Rep Duration 12 s</em> in the simulator: the readout
+  shows the laps and the wait.</p></div>
+  <div data-typical><p>0 s</p></div>
+</section>
+
+<section data-term id="t-rampup" data-where="Execution Settings">
+  <h3>Ramp Up</h3>
+  <p>Tooltip: <em>Ramp up overlay at start</em>. A soft start.</p>
+  <div data-what><p>The footprint comes on a row at a time from its tail until it is full, instead of all at once.</p></div>
+  <div data-when><p>A droplet that tears or lags when a long footprint switches on at once.</p></div>
+  <div data-typical><p>Off</p></div>
+</section>
+
+<section data-term id="t-rampdn" data-where="Execution Settings">
+  <h3>Ramp Dn</h3>
+  <p>Tooltip: <em>Ramp down overlay at end</em>. A soft finish.</p>
+  <div data-what><p>At the end the footprint goes off a row at a time from its tail, down to the head row.</p></div>
+  <div data-when><p>To leave the droplet gathered on the last electrodes rather than spread over the whole footprint.</p></div>
+  <div data-typical><p>Off</p></div>
+</section>
+
+<section data-term id="t-linreps" data-where="Execution Settings">
+  <h3>Lin Reps</h3>
+  <p>Tooltip: <em>Replay linear paths Repetitions times</em>.</p>
+  <div data-what><p>Replays an open (not loop) route Reps times, each time starting again from its first electrode, not back
+  and forth.</p></div>
+  <div data-when><p>Rarely; the droplet must be brought back to the start in between by something else.</p></div>
+  <div data-typical><p>Off</p></div>
+</section>
+
+<section data-term id="t-lanes" data-where="Execution Settings, two sliders">
+  <h3>Lanes</h3>
+  <p>Tooltips: <em>Extra lanes to the screen-left of travel</em> (left slider) and <em>…screen-right of travel</em> (right).</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:699px"><video data-clip muted loop playsinline controls preload="metadata" width="699" height="330" poster="device_viewer_basics_media/lanes.webp" aria-label="The left Lanes slider pulled to 4, then a route drawn: its tint is five electrodes wide">
+<source src="device_viewer_basics_media/lanes.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Four lanes on one side make the route's band five electrodes wide.</figcaption>
+</figure>
+  <div data-what><p>Extra electrodes beside the route, making a wide footprint (a <em>slug</em>) for a big droplet.</p></div>
+  <div data-when><p>Droplets wider than one electrode.</p></div>
+  <div data-read><p>Left and right add up to at most <a href="#t-prefs">Max slug width</a> − 1 (4 to start). With
+  <a href="#t-rotlock">Rot Lock</a> off and <a href="#t-inout">In/Out</a> on they mean inside / outside of the turns. Where a
+  lane runs off the electrodes, the nearest free electrodes make up the count.</p></div>
+  <div data-typical><p>0 and 0</p></div>
+</section>
+
+<section data-term id="t-rotlock" data-where="Execution Settings">
+  <h3>Rot Lock</h3>
+  <p>Tooltip: <em>Keep the slug's orientation through corners: it only translates</em>.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:699px"><video data-clip muted loop playsinline controls preload="metadata" width="699" height="330" poster="device_viewer_basics_media/rot-lock-off.webp" aria-label="Rot Lock unticked, then a route drawn with In/Out on and again with In/Out off: the band turns with the route">
+<source src="device_viewer_basics_media/rot-lock-off.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. With Rot Lock off the footprint turns with the route; the second route has <span class="ui">In/Out</span> off too.</figcaption>
+</figure>
+  <div data-what><p>On: the footprint keeps the orientation it set off with and only slides through corners. Off: it turns
+  with the route, re-hung behind the leading electrode after every corner.</p></div>
+  <div data-when><p>Off for long droplets that should follow a bend nose first.</p></div>
+  <div data-read><p>A square footprint (Length equal to its width) always just slides. Ticking it swaps
+  <span class="ui">In/Out</span> for <span class="ui">Re-centre</span>.</p></div>
+  <div data-typical><p>On</p></div>
+</section>
+
+<section data-term id="t-recentre" data-where="Execution Settings, with Rot Lock on">
+  <h3>Re-centre</h3>
+  <p>Tooltip: <em>Centre a locked slug on the route when it moves across its own heading; off, it keeps the position it
+  arrived in</em>.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:699px"><video data-clip muted loop playsinline controls preload="metadata" width="699" height="330" poster="device_viewer_basics_media/recentre.webp" aria-label="The same L-shaped route drawn with Re-centre off and then on: the band shifts onto the route after the corner">
+<source src="device_viewer_basics_media/recentre.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. The same route twice: Re-centre off, then on.</figcaption>
+</figure>
+  <div data-what><p>When a locked footprint moves sideways to itself, centre it on the route; off, the route runs along its
+  edge.</p></div>
+  <div data-typical><p>On (shown only with Rot Lock on)</p></div>
+</section>
+
+<section data-term id="t-inout" data-where="Execution Settings, with Rot Lock off">
+  <h3>In/Out</h3>
+  <p>Tooltip: <em>Lanes read as inside / outside of the turn, not screen left / right</em>.</p>
+  <div data-what><p>The left slider counts lanes on the inside of each turn, the right one on the outside.</p></div>
+  <div data-when><p>Loops and winding routes, where "left of travel" swaps sides at every turn.</p></div>
+  <div data-typical><p>On (shown only with Rot Lock off)</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="running">
+<h2>Running and stepping</h2>
+<p class="intro">The buttons above the Path table change with what is happening; hover for the tooltip.</p>
+<table class="small icons-table">
+  <thead><tr><th>Icon</th><th>Tooltip</th><th>Shown</th></tr></thead>
+  <tbody>
+    <tr><td class="icons"><i data-glyph="play_circle"></i></td><td class="lbl">Run selected routes</td><td>When nothing runs.
+    Runs every route with Run on.</td></tr>
+    <tr><td class="icons"><i data-glyph="pause"></i></td><td class="lbl">Pause execution</td><td>While routes run.</td></tr>
+    <tr><td class="icons"><i data-glyph="resume"></i></td><td class="lbl">Resume execution</td><td>While paused; replays the
+    current phase from its start.</td></tr>
+    <tr><td class="icons"><i data-glyph="chevron_left"></i><i data-glyph="chevron_right"></i></td><td class="lbl">Previous phase /
+    Next phase</td><td>While paused, or with Phases ticked.</td></tr>
+    <tr><td class="icons"><i data-glyph="stop"></i></td><td class="lbl">Stop execution</td><td>While routes run.</td></tr>
+    <tr><td class="icons"><i data-glyph="sync_alt"></i></td><td class="lbl">Apply execution params to step</td><td>When nothing
+    runs; usable with a protocol step selected whose saved settings differ from the panel.</td></tr>
+  </tbody>
+</table>
+<p>The whole row is greyed out while a protocol runs.</p>
+
+<section data-term id="t-status" data-where="under the run buttons">
+  <h3>Status line</h3>
+  <p>While routes run: <span class="ui">Phase: 4/11 &nbsp; Rep: 1/1 &nbsp; 0.8s</span>.</p>
+  <div data-read><p>The phase out of all phases, the lap out of all laps, and the seconds left in this phase. With Phases ticked
+  it shows <span class="ui">Phase: n/N</span> only.</p></div>
+</section>
+
+<section data-term id="t-phases" data-where="Paths, Phases checkbox">
+  <h3>Phases (phase navigation)</h3>
+  <p>Tooltip: <em>Step through route phases without running the protocol (synced with the protocol tree)</em>.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:579px"><video data-clip muted loop playsinline controls preload="metadata" width="579" height="440" poster="device_viewer_basics_media/phases-step.webp" aria-label="Phases ticked, then the next-phase button clicked again and again: the droplets step round their loops and the status line counts up">
+<source src="device_viewer_basics_media/phases-step.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 1.5× speed. With Phases ticked, each click on <i data-glyph="chevron_right" data-inline></i> switches on the next phase; the droplets follow.</figcaption>
+</figure>
+  <div data-what><p>Ticking it stops any run, works out the phases of every route with Run on, and switches on phase 1.
+  <i data-glyph="chevron_left" data-inline></i> / <i data-glyph="chevron_right" data-inline></i> step back and forward.</p></div>
+  <div data-when><p>Checking a route one phase at a time before trusting it in a protocol.</p></div>
+  <div data-read><p>It is the same switch as <span class="ui">Phase navigation</span> in the protocol pane. Unticking it puts
+  back the electrodes you had switched on yourself. A protocol run unticks it. The DropBot follows the phases only with
+  Realtime on.</p></div>
+  <div data-typical><p>Off</p></div>
+</section>
+
+<section data-term id="t-apply" data-where="Paths, next to Run selected routes">
+  <h3>Apply to a step, and the Uncommitted prompt</h3>
+  <p>With a protocol step selected, the panel shows that step's execution settings. Changing them changes the panel only.</p>
+  <div data-what><p><i data-glyph="sync_alt" data-inline></i> <em>Apply execution params to step</em> writes the panel's
+  values into the selected step.</p></div>
+  <div data-read><p>Select a different step without applying, and MicroDrop asks <span class="ui">Uncommitted Execution
+  Settings</span>: <em>Save your execution settings to current protocol step?</em> <strong>Commit</strong> writes your values
+  to the step you were on; <strong>Discard</strong> (or closing the box) drops them. Either way the panel then shows the new
+  step's saved values.</p></div>
+  <div data-typical><p>The button is greyed out until the panel and the step disagree.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="view">
+<h2>View: zoom, rotation and layers</h2>
+
+<section data-term id="t-viewport" data-where="Viewport Controls">
+  <h3>Viewport Controls</h3>
+  <figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/viewport.webp" width="410" height="82" alt="Viewport Controls: Zoom out, Zoom In, Reset Zoom: Fit to View and Toggle Pan/Drag"><svg viewBox="0 0 410 82" aria-hidden="true"><circle cx="99" cy="16" r="10" class="ann-n"/><text x="99" y="20" class="ann-nt">1</text><circle cx="197" cy="16" r="10" class="ann-n"/><text x="197" y="20" class="ann-nt">2</text><circle cx="292" cy="16" r="10" class="ann-n"/><text x="292" y="20" class="ann-nt">3</text><circle cx="388" cy="16" r="10" class="ann-n"/><text x="388" y="20" class="ann-nt">4</text></svg></div>
+<figcaption>The four buttons, numbered as in the table.</figcaption>
+</figure>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>Keys</th></tr></thead>
+    <tbody>
+      <tr><td class="icons">1 <i data-glyph="zoom_out"></i></td><td class="lbl">Zoom out</td><td><kbd>Ctrl</kbd>+<kbd>-</kbd></td></tr>
+      <tr><td class="icons">2 <i data-glyph="zoom_in"></i></td><td class="lbl">Zoom In</td><td><kbd>Ctrl</kbd>+<kbd>+</kbd> or
+      <kbd>Ctrl</kbd>+<kbd>=</kbd>; <kbd>Ctrl</kbd> + wheel either way</td></tr>
+      <tr><td class="icons">3 <i data-glyph="fit_screen"></i></td><td class="lbl">Reset Zoom: Fit to View</td><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td></tr>
+      <tr><td class="icons">4 <i data-glyph="pan_tool"></i></td><td class="lbl">Toggle Pan/Drag (Space key)</td><td><kbd>Space</kbd></td></tr>
+    </tbody>
+  </table>
+  <p>Turning is in <span class="ui">Camera Controls</span>: <i data-glyph="rotate_90_degrees_cw" data-inline></i> <em>Rotate
+  Device</em> (<kbd>R</kbd>) turns the chip a quarter turn clockwise and fits it again; <i data-glyph="cameraswitch" data-inline></i>
+  <em>Rotate Camera</em> (<kbd>Shift</kbd>+<kbd>R</kbd>) turns the camera picture.</p>
+</section>
+
+<section data-term id="t-alpha" data-where="Camera Controls ▸ Alpha Settings">
+  <h3>Alpha Settings</h3>
+  <p>How strongly each layer of the picture is drawn.</p>
+  <figure class="still">
+<div class="still-wrap"><img data-media src="device_viewer_basics_media/alpha.webp" width="423" height="243" alt="The Alpha Settings table: rows Connections 100, Electrode fill 64, Route 100, Route Shape 35 and Route Head 100, each with an eye button"><svg viewBox="0 0 423 243" aria-hidden="true"><circle cx="57" cy="140" r="13" class="ann-ring"/><path d="M29 99L49 130" class="ann-lead"/><circle cx="22" cy="90" r="10" class="ann-n"/><text x="22" y="94" class="ann-nt">1</text><circle cx="137" cy="177" r="13" class="ann-ring"/><path d="M123 47L135 164" class="ann-lead"/><circle cx="122" cy="36" r="10" class="ann-n"/><text x="122" y="40" class="ann-nt">2</text><circle cx="264" cy="177" r="13" class="ann-ring"/><path d="M324 46L269 165" class="ann-lead"/><circle cx="328" cy="36" r="10" class="ann-n"/><text x="328" y="40" class="ann-nt">3</text></svg></div>
+<figcaption><ol class="legend"><li>Eye: an open eye draws the layer, a crossed-out eye hides it.</li><li>The
+  layer.</li><li>Its alpha: 0 (invisible) to 100 (solid). Click and type, or use the arrows.</li></ol></figcaption>
+</figure>
+  <figure class="clip">
+<div class="clip-box" style="max-width:432px"><video data-clip muted loop playsinline controls preload="metadata" width="432" height="252" poster="device_viewer_basics_media/alpha-eye.webp" aria-label="The Alpha Settings table scrolled to show more layers, then eye buttons clicked to hide and show Route Shape and Route Head">
+<source src="device_viewer_basics_media/alpha-eye.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Scroll for the lower layers; a click on an eye hides or shows that layer.</figcaption>
+</figure>
+  <div data-what><p>Layers, with the value each starts at: Route 100, Route Shape 35, Route Head 100, Connections 100,
+  Electrode fill 100, Actuated electrodes 100, Electrode text 100, Electrode outline 100, Video 100, Zones 100, Hovered
+  Electrode 20, Hovered Actuation 30. Scroll the table for the rest.</p></div>
+  <div data-when><p>Fade the electrode fill to see the liquid in the camera picture; hide Route Shape on a busy chip.</p></div>
+  <div data-read><p>Right-click the table ▸ <span class="ui">Reset Defaults</span> to go back to the starting values. Alpha
+  changes can be undone and are remembered for next time.</p></div>
+  <div data-typical><p>All shown.</p></div>
+</section>
+
+<section data-term id="t-prefs" data-where="Preferences window, Device Viewer page">
+  <h3>Related preferences</h3>
+  <p>In the <span class="ui">Device Viewer</span> preferences page.</p>
+  <table class="small">
+    <thead><tr><th>Setting</th><th>Start</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Zoom Sensitivity</td><td>5</td><td>Each zoom step changes the size by 5 % (1 + value/100).</td></tr>
+      <tr><td class="lbl">Auto Fit Margin Scale</td><td>95</td><td>How much of the view the chip fills after <em>Fit to View</em>, in %.</td></tr>
+      <tr><td class="lbl">Number of channels</td><td>120</td><td>The highest channel you can type is this − 1.</td></tr>
+      <tr><td class="lbl">Device Viewer Sidebar Width</td><td>320</td><td>The side panel's width in px (also via <span class="ui">Modify Layout...</span>).</td></tr>
+      <tr><td class="lbl">Max slug width (electrodes)</td><td>5</td><td>The widest footprint the Lanes sliders allow, route
+      electrode included.</td></tr>
+    </tbody>
+  </table>
+  <div data-what><p>Settings MicroDrop keeps between sessions, not per protocol.</p></div>
+  <div data-when><p>Rarely: once per computer or chip family.</p></div>
+  <div data-read><p>Numbers only; they take effect as you change them.</p></div>
+  <div data-typical><p>As in the Start column.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="mistakes">
+<h2>Fixing mistakes</h2>
+
+<section data-term id="t-undo" data-where="Mode buttons, Ctrl+Z / Ctrl+Y">
+  <h3>Undo and Redo</h3>
+  <p><i data-glyph="Undo" data-inline></i> <em>Undo</em> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and <i data-glyph="Redo" data-inline></i>
+  <em>Redo</em> (<kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>).</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:703px"><video data-clip muted loop playsinline controls preload="metadata" width="703" height="360" poster="device_viewer_basics_media/undo.webp" aria-label="Undo clicked again and again: a loop route shrinks one electrode at a time and disappears">
+<source src="device_viewer_basics_media/undo.webm" type="video/webm">
+</video></div>
+<figcaption>Real example, 1.5× speed. Each <em>Undo</em> takes one electrode off the route just drawn, then the route itself.</figcaption>
+</figure>
+  <div data-what><p>Undoes route drawing and editing, switching electrodes on and off, disabling electrodes and alpha changes.
+  It does <strong>not</strong> undo Execution Settings, mode changes, the eye or the Run column.</p></div>
+  <div data-read><p>Greyed out when there is nothing to undo or redo, and while a protocol runs. Selecting a protocol step, or
+  loading a device, starts the history afresh.</p></div>
+</section>
+
+<section data-term id="t-clear" data-where="Mode buttons, right-click menu">
+  <h3>Start over</h3>
+  <p><i data-glyph="layers_clear" data-inline></i> <em>Clear Electrode States</em> (<kbd>X</kbd>) switches everything off;
+  <i data-glyph="remove_road" data-inline></i> <em>Clear Routes</em> (<kbd>Shift</kbd>+<kbd>X</kbd>) deletes every route. Both
+  are also in the right-click menu, and both can be undone.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:579px"><video data-clip muted loop playsinline controls preload="metadata" width="579" height="440" poster="device_viewer_basics_media/clear-routes.webp" aria-label="The three loop routes and their table rows disappear at once; the droplets stay">
+<source src="device_viewer_basics_media/clear-routes.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Clearing the routes empties the Path table at once; the droplets stay where they are.</figcaption>
+</figure>
+</section>
+
+<section data-term id="t-freemode" data-where="status bar">
+  <h3>Free Mode or a step?</h3>
+  <p>Where your clicks go depends on whether a protocol step is selected. The status bar says which.</p>
+  <div data-what><p><span class="ui">Editing: Step 1</span>: every electrode you switch and every route you draw is written
+  into that step (and into every other selected step). <span class="ui">Free Mode</span>: nothing is selected, and your
+  changes are kept aside. The next time you select a step, MicroDrop asks <span class="ui">Unsaved Free Mode Changes</span>:
+  <strong>Insert as New Step</strong> keeps them as a new step, <em>Step (free-mode capture)</em>; <strong>Discard
+  Changes</strong> drops them.</p></div>
+  <div data-when><p>Try things out in Free Mode; select a step when you mean to change the protocol.</p></div>
+  <div data-read><p>While a protocol runs the bar reads <span class="ui">Running Protocol: …</span> and the chip is read-only
+  (<span class="ui">Mode: Display</span>).</p></div>
+</section>
+
+<section data-term id="t-realtime" data-where="Dropbot Status, T key">
+  <h3>Realtime mode</h3>
+  <p>Whether the DropBot follows the Device Viewer as you click.</p>
+  <div data-what><p>With <span class="ui">Realtime On</span> and a DropBot connected, the electrodes you switch (and the phases
+  you step or run) are put on the chip at once. Off, you are only editing the picture and the protocol.</p></div>
+  <div data-when><p>On to move liquid by hand; off to draw a protocol without touching the chip.</p></div>
+  <div data-read><p>Toggle with <kbd>T</kbd>, the button in Dropbot Status, or the status-bar icon. It is locked while a
+  protocol runs.</p></div>
+  <div data-typical><p>Off</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="shortcuts">
+<h2>Keyboard shortcuts (F1)</h2>
+<p class="intro">Press <kbd>F1</kbd> or <kbd>Ctrl</kbd>+<kbd>/</kbd> with the Device Viewer selected (or right-click ▸
+<span class="ui">Keyboard Shortcuts…</span>) for this table in the app.</p>
+<div class="table-wrap"><table class="small">
+  <thead><tr><th>Group</th><th>Keys</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="4">Selection</td><td>Left / Right / Up / Down</td><td>Step the selection that way</td></tr>
+    <tr><td>Shift + arrow</td><td>Grow the selection that way</td></tr>
+    <tr><td>Ctrl + arrow</td><td>Shrink the selection from that side</td></tr>
+    <tr><td>Ctrl+Shift + arrow</td><td>Split step that way</td></tr>
+    <tr><td rowspan="3">Routes</td><td>Alt + arrow</td><td>Draw the route one electrode that way (Draw or Edit mode)</td></tr>
+    <tr><td>Backspace</td><td>Erase the selected route's tail</td></tr>
+    <tr><td>Del</td><td>Delete the selected route</td></tr>
+    <tr><td rowspan="6">Modes</td><td>Esc</td><td>Leave Pan mode or route drawing</td></tr>
+    <tr><td>D</td><td>Toggle Draw mode</td></tr>
+    <tr><td>E</td><td>Toggle Edit mode</td></tr>
+    <tr><td>A</td><td>Toggle Auto mode</td></tr>
+    <tr><td>N</td><td>Toggle Channel Edit mode</td></tr>
+    <tr><td>Space</td><td>Toggle Pan mode</td></tr>
+    <tr><td rowspan="5">View</td><td>Ctrl++ / Ctrl+=</td><td>Zoom in</td></tr>
+    <tr><td>Ctrl+-</td><td>Zoom out</td></tr>
+    <tr><td>Ctrl+0</td><td>Fit the device to the view</td></tr>
+    <tr><td>R</td><td>Rotate the device</td></tr>
+    <tr><td>Shift+R</td><td>Rotate the camera</td></tr>
+    <tr><td rowspan="6">Actions</td><td>X</td><td>Clear electrode states</td></tr>
+    <tr><td>Shift+X</td><td>Clear all routes</td></tr>
+    <tr><td>F</td><td>Find liquid</td></tr>
+    <tr><td>T</td><td>Toggle realtime mode</td></tr>
+    <tr><td>Ctrl+Z</td><td>Undo</td></tr>
+    <tr><td>Ctrl+Y / Ctrl+Shift+Z</td><td>Redo</td></tr>
+    <tr><td>Help</td><td>F1 / Ctrl+/</td><td>Show keyboard shortcuts</td></tr>
+  </tbody>
+</table></div>
+<p>While a protocol runs only zoom, fit, <kbd>R</kbd>, <kbd>Shift</kbd>+<kbd>R</kbd>, <kbd>Space</kbd>, <kbd>Esc</kbd>,
+<kbd>F1</kbd> and <kbd>T</kbd> work. Keys are ignored while you type a channel number.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>A click is not voltage.</strong> Switching an electrode changes its state only; the DropBot powers it only with
+    Realtime on or while a protocol runs.</li>
+    <li><strong>Reps and Rep Duration are frozen</strong> (1 and 0) unless a route is a loop or Lin Reps is ticked.</li>
+    <li><strong>Settings belong to the step.</strong> With a step selected, changing Execution Settings does not save them:
+    click <em>Apply execution params to step</em>, or answer <strong>Commit</strong> when you move to another step.</li>
+    <li><strong>Arrows move liquid, Alt+arrows draw.</strong> Arrow keys step the switched-on electrodes the way they point on
+    screen, even with the chip turned. Turning is <kbd>R</kbd> (chip) and <kbd>Shift</kbd>+<kbd>R</kbd> (camera).</li>
+    <li><strong>Execution Settings cannot be undone</strong> with Undo; set them back by hand.</li>
+    <li><strong>Hidden is not deleted.</strong> A route with its eye off still runs if its Run cell is on.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Electrode</dt><dd>One of the metal pads on the chip; switching it on pulls liquid onto it.</dd>
+  <dt>Channel</dt><dd>The DropBot output an electrode is wired to; routes and steps use it as the electrode's number.</dd>
+  <dt>Route (path)</dt><dd>A line across electrodes for a droplet to follow. One that returns to its start is a loop.</dd>
+  <dt>Phase</dt><dd>One moment of a run: the electrodes switched on together for one Duration.</dd>
+  <dt>Slug</dt><dd>A footprint more than one electrode wide, made with Lanes.</dd>
+  <dt>Route Shape</dt><dd>The tint over every electrode a route will switch on when it runs.</dd>
+  <dt>Step</dt><dd>One row of a protocol: electrodes, routes and settings.</dd>
+  <dt>Free Mode</dt><dd>No step selected: clicks are tried out, not written into the protocol.</dd>
+  <dt>Realtime</dt><dd>When on, the DropBot applies electrode changes as you make them.</dd>
+  <dt>Alpha</dt><dd>How opaque a layer is drawn, 0 to 100.</dd>
+</dl>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  var CHIP = { geometry: "chip-90-pin", photo: "chip-90-pin-photo" };
+  var INSET = 0.35;
+
+  function opt(extra) {
+    var out = { geometry: CHIP.geometry, photo: CHIP.photo };
+
+    for (var key in extra) { out[key] = extra[key]; }
+
+    return out;
+  }
+
+  function cell(x0, y0, x1, y1) { return { x: x0 + INSET, y: y0 + INSET, w: x1 - x0 - 2 * INSET, h: y1 - y0 - 2 * INSET }; }
+
+  function area(box) { return box.w * box.h; }
+
+  /* One electrode's liquid, for the simulator's droplet volumes. */
+  var CELL = { 22: cell(72.2, 72.0, 80.1, 79.7) };
+
+  /* The route simulator below (RoutePlan, LATTICE, the route and loop
+     demos and the settings simulator) is a copy of the one in
+     user_help_plugin/resources/getting_started.src.html, plus loopInfo and
+     the Laps / Wait at end readout rows. Change both until #957 moves it
+     into the kit. */
+
+  /* ===== Route execution, ported from the app =====
+     A line-by-line port of microdrop_utils/route_execution.py
+     (PathExecutionService) and microdrop_utils/wide_path_geometry.py on
+     main, for one route: which electrodes are on at each phase. Ids are
+     channel numbers; centroids are the device SVG's own (unturned) frame,
+     as the app computes them, so "left" and every tie-break match. */
+  var RoutePlan = (function () {
+    var SNAP_TOLERANCE = 0.5, ALONG_COST = 1.5, LEFT_RIGHT = "left/right", IN_OUT = "in/out";
+
+    /* Python's round(): halves go to the even neighbour. */
+    function pyRound(x) {
+      var r = Math.round(x);
+
+      if (Math.abs(x - Math.trunc(x)) === 0.5) { r = 2 * Math.round(x / 2); }
+
+      return r;
+    }
+
+    function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+
+    function isLoop(route) { return route.length >= 2 && route[0] === route[route.length - 1]; }
+
+    function range(a, b, step) {
+      var out = [];
+
+      for (var k = a; step > 0 ? k < b : k > b; k += step) { out.push(k); }
+
+      return out;
+    }
+
+    function sameSet(a, b) {
+      if (a.length !== b.length) { return false; }
+
+      var s = {};
+
+      a.forEach(function (x) { s[x] = true; });
+
+      return b.every(function (x) { return s[x]; });
+    }
+
+    /* ---------- route_execution.py: the plain trail ---------- */
+    function softStart(first) {
+      var out = [];
+
+      for (var c = 1; c < first.length; c++) { out.push(first.slice(0, c)); }
+
+      return first.length <= 1 ? [] : out;
+    }
+
+    function softTerminate(last) {
+      var out = [];
+
+      for (var c = last.length - 1; c > 0; c--) { out.push(last.slice(-c)); }
+
+      return last.length <= 1 ? [] : out;
+    }
+
+    function trailPhases(n, length, overlay, rampUp, rampDn) {
+      var step = length - overlay, phases = [], position = 0, k;
+
+      if (n === 0) { return []; }
+
+      if (step <= 0) { return range(0, n, 1).map(function (i) { return [i]; }); }
+
+      while (position < n) {
+        var phase = [];
+
+        for (k = 0; k < length; k++) { if (position + k < n) { phase.push(position + k); } }
+
+        phases.push(phase);
+
+        if (phase.length && phase[phase.length - 1] === n - 1) { break; }
+
+        position += step;
+      }
+
+      var last = phases[phases.length - 1];
+
+      if (last.length < length && n >= length) {
+        var adjusted = range(Math.max(0, n - length), n, 1);
+
+        if (phases.length > 1 && phases[phases.length - 2].join() === adjusted.join()) { phases.pop(); } else { phases[phases.length - 1] = adjusted; }
+      } else if (last.length < length && phases.length > 1) {
+        phases.pop();
+      }
+
+      if (rampUp && phases.length) { phases = softStart(phases[0]).concat(phases); }
+
+      if (rampDn && phases.length) { phases = phases.concat(softTerminate(phases[phases.length - 1])); }
+
+      return phases;
+    }
+
+    function loopCyclePhases(path, length, overlay) {
+      if (!isLoop(path)) { return trailPhases(path.length, length, overlay); }
+
+      var n = path.length - 1, step = length - overlay, phases = [], position = 0;
+
+      if (step <= 0) { return range(0, n, 1).map(function (i) { return [i]; }); }
+
+      while (position < n) {
+        var phase = [];
+
+        for (var k = 0; k < length; k++) { phase.push((position + k) % n); }
+
+        phases.push(phase);
+        position += step;
+
+        if (position >= n) { break; }
+      }
+
+      return phases;
+    }
+
+    function effectiveReps(path, reps, duration, repeatDuration, length, overlay) {
+      if (!isLoop(path)) { return 1; }
+
+      var cycle = loopCyclePhases(path, length, overlay).length;
+
+      if (repeatDuration <= 0) { return reps; }
+
+      if (cycle <= 0 || duration <= 0) { return Math.max(reps, 1); }
+
+      return Math.max(Math.trunc(((repeatDuration / duration) - 1) / cycle), 1);
+    }
+
+    function idlePhases(path, reps, duration, repeatDuration, length, overlay) {
+      if (repeatDuration <= 0 || duration <= 0 || !isLoop(path)) { return 0; }
+
+      var cycle = loopCyclePhases(path, length, overlay).length;
+      var active = cycle + 1 + (reps > 1 ? (reps - 1) * cycle : 0);
+      var balance = repeatDuration - active * duration;
+
+      return balance <= 0 ? 0 : Math.trunc(balance / duration);
+    }
+
+    /* ---------- wide_path_geometry.py ---------- */
+    function median(xs) {
+      var s = xs.slice().sort(function (a, b) { return a - b; }), m = s.length >> 1;
+
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+
+    function latticePitch(lat) {
+      var ds = [];
+
+      lat.order.forEach(function (a) {
+        (lat.neighbours[a] || []).forEach(function (b) { ds.push(dist(lat.centroids[a], lat.centroids[b])); });
+      });
+
+      return ds.length ? median(ds) : 1;
+    }
+
+    function unit(dx, dy) {
+      var length = Math.hypot(dx, dy);
+
+      return length ? [dx / length, dy / length] : [0, 0];
+    }
+
+    function leftNormal(h) { return [h[1], -h[0]]; }
+
+    function axis(h) { return pyRound(h[0]) + "," + pyRound(h[1]); }
+
+    function negAxis(h) { return pyRound(-h[0]) + "," + pyRound(-h[1]); }
+
+    function nearestElectrode(point, lat, pitch) {
+      var best = null, bestDistance = SNAP_TOLERANCE * pitch;
+
+      lat.order.forEach(function (id) {
+        var d = dist(point, lat.centroids[id]);
+
+        if (d < bestDistance) { best = id; bestDistance = d; }
+      });
+
+      return best;
+    }
+
+    function routeHeadings(route, lat, cycleLength) {
+      var points = route.map(function (id) { return lat.centroids[id]; });
+
+      if (points.length === 1) { return [[1, 0]]; }
+
+      var headings = points.map(function (p, i) {
+        var previous = i === 0 ? points[0] : points[i - 1], current = i === 0 ? points[1] : points[i];
+
+        return unit(current[0] - previous[0], current[1] - previous[1]);
+      });
+
+      if (cycleLength && points.length > cycleLength) { headings[0] = headings[cycleLength]; }
+
+      return headings;
+    }
+
+    function leavingHeading(headings) { return headings[Math.min(1, headings.length - 1)]; }
+
+    function turnsAt(index, headings) {
+      return index + 1 < headings.length && axis(headings[index]) !== axis(headings[index + 1]);
+    }
+
+    function unroll(route, reps, length) {
+      if (!isLoop(route)) { return route.slice(); }
+
+      var cycle = route.slice(0, -1), out = [];
+
+      for (var k = 0; k < reps; k++) { out = out.concat(cycle); }
+
+      return out.concat(cycle.slice(0, length));
+    }
+
+    function outerSides(route, headings) {
+      var corners = [];
+
+      for (var i = 0; i < route.length - 1; i++) {
+        if (!turnsAt(i, headings)) { continue; }
+
+        var a = headings[i], d = headings[i + 1];
+        corners.push([i, a[0] * d[1] - a[1] * d[0] > 0 ? 1 : -1]);
+      }
+
+      var sides = [], governing = null;
+
+      for (var j = 0; j < route.length; j++) {
+        var ahead = null;
+
+        for (var c = 0; c < corners.length; c++) { if (corners[c][0] >= j) { ahead = corners[c][1]; break; } }
+
+        governing = ahead !== null ? ahead : governing;
+        sides.push(governing !== null ? governing : -1);
+      }
+
+      return sides;
+    }
+
+    function laneCounts(headings, sides, left, right, frame, translating) {
+      if (frame === LEFT_RIGHT) { return headings.map(function () { return [left, right]; }); }
+
+      var inside = left, outside = right;
+
+      function counts(sign) { return sign > 0 ? [outside, inside] : [inside, outside]; }
+
+      if (!translating) { return sides.map(counts); }
+
+      var a = leftNormal(leavingHeading(headings));
+      var decided = headings.map(function (h, i) {
+        var n = leftNormal(h), dot = sides[i] * (n[0] * a[0] + n[1] * a[1]);
+
+        return Math.abs(dot) > 0.5 ? (dot > 0 ? 1 : -1) : null;
+      });
+      var sign = -1;
+
+      for (var k = 0; k < decided.length; k++) { if (decided[k] !== null) { sign = decided[k]; break; } }
+
+      return decided.map(function (choice) {
+        sign = choice !== null ? choice : sign;
+
+        return counts(sign);
+      });
+    }
+
+    function blockCells(anchor, heading, left, right, length, lat, pitch) {
+      var n = leftNormal(heading), ids = [];
+
+      for (var along = -(length - 1); along <= 0; along++) {
+        for (var lane = -right; lane <= left; lane++) {
+          var point = [anchor[0] + along * heading[0] * pitch + lane * n[0] * pitch, anchor[1] + along * heading[1] * pitch + lane * n[1] * pitch];
+          var id = nearestElectrode(point, lat, pitch);
+
+          if (id !== null && ids.indexOf(id) < 0) { ids.push(id); }
+        }
+      }
+
+      return ids;
+    }
+
+    function strideOf(extent, overlay) { return Math.max(extent - Math.min(overlay, extent - 1), 1); }
+
+    function runPoints(start, finish, stride, pitch) {
+      var dx = finish[0] - start[0], dy = finish[1] - start[1], length = Math.hypot(dx, dy);
+      var steps = pyRound(length / pitch);
+
+      if (!steps) { return { points: [], steps: 0 }; }
+
+      var ux = dx / length, uy = dy / length;
+      var ks = range(stride, steps, stride).concat([steps]);
+
+      return {
+        points: ks.map(function (k) { return [k, [start[0] + k * ux * pitch, start[1] + k * uy * pitch]]; }),
+        steps: steps
+      };
+    }
+
+    function position(head, anchor, heading, lanes, forced) {
+      return { head: head, anchor: anchor, heading: heading, lanes: lanes, forced: !!forced };
+    }
+
+    function rehungPositions(route, headings, lanes, length, overlay, lat) {
+      var stride = strideOf(length, overlay), last = route.length - 1;
+      var heads = range(length - 1, route.length, stride), landed = heads[heads.length - 1] === last;
+
+      if (!landed) { heads.push(last); }
+
+      var positions = [];
+
+      heads.forEach(function (index) {
+        var anchor = lat.centroids[route[index]], forced = index === last && !landed;
+
+        positions.push(position(index, anchor, headings[index], lanes[index], forced));
+
+        if (length === 1 && turnsAt(index, headings)) {
+          positions.push(position(index, anchor, headings[index + 1], lanes[index + 1]));
+        }
+      });
+
+      return positions;
+    }
+
+    function translatingPositions(route, headings, lanes, length, overlay, lat, pitch, closed, recentre) {
+      var first = leavingHeading(headings), n = leftNormal(first);
+      var width = lanes[0][0] + lanes[0][1] + 1;
+      var alongStride = strideOf(length, overlay), acrossStride = strideOf(width, overlay);
+      var last = route.length - 1;
+
+      function legHeading(j) { return j ? headings[j] : first; }
+
+      function isAlong(h) { var a = axis(h); return a === axis(first) || a === negAxis(first); }
+
+      function hung(j) {
+        var c = lat.centroids[route[j]], back = axis(legHeading(j)) === axis(first) ? 0 : length - 1;
+
+        return [c[0] + back * first[0] * pitch, c[1] + back * first[1] * pitch];
+      }
+
+      var arrivedBack = 0;
+
+      function centred(p) {
+        var ahead = recentre ? Math.floor((length - 1) / 2) : arrivedBack;
+
+        return [p[0] + ahead * first[0] * pitch, p[1] + ahead * first[1] * pitch];
+      }
+
+      function nextTurn(from) {
+        for (var j = from; j < last; j++) { if (turnsAt(j, headings)) { return j; } }
+
+        return last;
+      }
+
+      var index = length - 1;
+      var anchor = isAlong(legHeading(index)) ? hung(index) : lat.centroids[route[index]];
+      var positions = [position(index, anchor, first, lanes[index])];
+
+      while (index < last) {
+        var end = nextTurn(index + 1), heading = headings[index + 1];
+
+        if (isAlong(heading)) {
+          var start = positions[positions.length - 1].head;
+          var heads = range(start + alongStride, end, alongStride);
+
+          if (end === last || isAlong(headings[end + 1])) { heads.push(end); }
+
+          heads.forEach(function (j) {
+            positions.push(position(j, hung(j), first, lanes[j], (j - start) % alongStride !== 0));
+          });
+
+          arrivedBack = axis(heading) === axis(first) ? 0 : length - 1;
+          index = end;
+          continue;
+        }
+
+        var config = lanes[index], corner = lat.centroids[route[index]];
+        var slideFrom = isAlong(legHeading(index)) ? positions[positions.length - 1].anchor : centred(corner);
+        var travel = legHeading(index), back = axis(travel) === axis(first) ? 0 : length - 1;
+        var cornerIndex = index;
+
+        var leadingIndex = function (p) {
+          var x = p[0] - back * first[0] * pitch, y = p[1] - back * first[1] * pitch;
+          var behind = (corner[0] - x) * travel[0] + (corner[1] - y) * travel[1];
+
+          return cornerIndex - pyRound(Math.max(behind, 0) / pitch);
+        };
+
+        var run = runPoints(slideFrom, centred(corner), alongStride, pitch);
+
+        run.points.forEach(function (kp) {
+          positions.push(position(leadingIndex(kp[1]), kp[1], first, config, kp[0] === run.steps));
+        });
+
+        var final = end === last && !closed, shift;
+
+        if (final) {
+          shift = heading[0] * n[0] + heading[1] * n[1] > 0 ? -config[0] : config[1];
+        } else {
+          shift = lanes[Math.min(end + 1, last)][0] - config[0];
+        }
+
+        var finish = centred(lat.centroids[route[end]]);
+        finish = [finish[0] + shift * n[0] * pitch, finish[1] + shift * n[1] * pitch];
+
+        var across = runPoints(centred(corner), finish, acrossStride, pitch), leg = end - index;
+        var forward = (finish[0] - corner[0]) * headings[end][0] + (finish[1] - corner[1]) * headings[end][1] > 0;
+
+        across.points.forEach(function (kp) {
+          var k = kp[0], head = final ? index + k + leg - across.steps : (forward ? Math.min(index + k, end) : end);
+
+          positions.push(position(head, kp[1], first, config, k === across.steps));
+        });
+
+        if (end < last && isAlong(headings[end + 1])) {
+          var withHeading = axis(headings[end + 1]) === axis(first), covered;
+
+          if (recentre) {
+            covered = withHeading ? Math.floor((length - 1) / 2) : Math.floor(length / 2);
+          } else {
+            covered = (arrivedBack === 0) === withHeading ? 0 : length - 1;
+          }
+
+          positions[positions.length - 1].head = Math.min(end + covered, nextTurn(end + 1));
+        }
+
+        index = end;
+      }
+
+      return positions;
+    }
+
+    function phase(head, heading, ids) { return { head: head, heading: heading, ids: ids }; }
+
+    function trailSlug(route, headings, length, overlay, rampDn, rampUp) {
+      return trailPhases(route.length, length, Math.min(overlay, length - 1), rampUp, rampDn).map(function (ix) {
+        var lastIx = ix[ix.length - 1];
+
+        return phase(lastIx, headings[lastIx], ix.map(function (i) { return route[i]; }));
+      });
+    }
+
+    function holdPhase(route, headings, lanes, lat, pitch) {
+      var ids = [];
+
+      route.forEach(function (id, i) {
+        blockCells(lat.centroids[id], headings[i], lanes[i][0], lanes[i][1], 1, lat, pitch).forEach(function (c) {
+          if (ids.indexOf(c) < 0) { ids.push(c); }
+        });
+      });
+
+      return phase(route.length - 1, headings[headings.length - 1], ids);
+    }
+
+    function touching(ids, other, overlay, lat) {
+      var shared = ids.filter(function (x) { return other.indexOf(x) >= 0; }).length;
+
+      if (overlay) { return shared >= overlay; }
+
+      return shared > 0 || ids.some(function (cell) {
+        return (lat.neighbours[cell] || []).some(function (nb) { return other.indexOf(nb) >= 0; });
+      });
+    }
+
+    function continuous(phases, lat) {
+      for (var k = 1; k < phases.length; k++) { if (!touching(phases[k - 1].ids, phases[k].ids, 0, lat)) { return false; } }
+
+      return true;
+    }
+
+    function blockCentre(anchor, heading, left, right, length, pitch) {
+      var n = leftNormal(heading), along = -(length - 1) / 2, lane = (left - right) / 2;
+
+      return [anchor[0] + (along * heading[0] + lane * n[0]) * pitch, anchor[1] + (along * heading[1] + lane * n[1]) * pitch];
+    }
+
+    function topUpToCentre(ids, centre, heading, reuse, target, lat, pitch) {
+      if (ids.length >= target) { return ids; }
+
+      var n = leftNormal(heading);
+
+      function cost(cell) {
+        var c = lat.centroids[cell], dx = (c[0] - centre[0]) / pitch, dy = (c[1] - centre[1]) / pitch;
+        var along = dx * heading[0] + dy * heading[1], across = dx * n[0] + dy * n[1];
+
+        return Math.round(Math.hypot(along * ALONG_COST, across) * 1e6) / 1e6;
+      }
+
+      ids = ids.slice();
+
+      var pool = lat.order.filter(function (cell) { return ids.indexOf(cell) < 0; }).map(function (cell) {
+        var c = lat.centroids[cell];
+
+        return { cell: cell, key: [cost(cell), reuse[cell] ? 0 : 1, c[1], c[0]] };
+      });
+
+      pool.sort(function (a, b) {
+        for (var k = 0; k < 4; k++) { if (a.key[k] !== b.key[k]) { return a.key[k] < b.key[k] ? -1 : 1; } }
+
+        return 0;
+      });
+
+      while (ids.length < target) {
+        var found = -1;
+
+        for (var k = 0; k < pool.length; k++) {
+          if ((lat.neighbours[pool[k].cell] || []).some(function (nb) { return ids.indexOf(nb) >= 0; })) { found = k; break; }
+        }
+
+        if (found < 0) { break; }
+
+        ids.push(pool[found].cell);
+        pool.splice(found, 1);
+      }
+
+      return ids;
+    }
+
+    function trimWraps(phases, wrapped, overlay, stride, lat) {
+      var kept = [];
+
+      phases.forEach(function (p, i) {
+        var following = phases[i + 1];
+
+        if (wrapped[i] && kept.length && following && touching(kept[kept.length - 1].ids, following.ids, overlay, lat) &&
+            following.head - kept[kept.length - 1].head <= stride) {
+          return;
+        }
+
+        kept.push(p);
+      });
+
+      return kept;
+    }
+
+    function blockPhases(route, headings, positions, length, overlay, translate, lat, pitch) {
+      var width = positions[0].lanes[0] + positions[0].lanes[1] + 1, target = width * length;
+      var blocks = positions.map(function (p) { return blockCells(p.anchor, p.heading, p.lanes[0], p.lanes[1], length, lat, pitch); });
+      var phases = [], wrapped = [], forced = [], previous = null;
+
+      positions.forEach(function (p, i) {
+        var reuse = {};
+
+        (i ? blocks[i - 1] : []).forEach(function (c) { reuse[c] = true; });
+
+        if (i + 1 < blocks.length) { blocks[i + 1].forEach(function (c) { reuse[c] = true; }); }
+
+        var centre = blockCentre(p.anchor, p.heading, p.lanes[0], p.lanes[1], length, pitch);
+        var ids = topUpToCentre(blocks[i], centre, p.heading, reuse, target, lat, pitch);
+
+        if (previous === null || !sameSet(ids, previous)) {
+          phases.push(phase(p.head, translate ? headings[p.head] : p.heading, ids));
+          wrapped.push(ids.length > blocks[i].length);
+          forced.push(p.forced);
+          previous = ids;
+        }
+      });
+
+      if (phases.length >= 3 && forced[forced.length - 1] && touching(phases[phases.length - 3].ids, phases[phases.length - 1].ids, overlay, lat)) {
+        phases.splice(phases.length - 2, 1);
+        wrapped.splice(wrapped.length - 2, 1);
+      }
+
+      return trimWraps(phases, wrapped, overlay, Math.max(strideOf(length, overlay), strideOf(width, overlay)), lat);
+    }
+
+    function rowsAlong(ids, heading, lat, pitch) {
+      var rows = {}, keys = [];
+
+      ids.forEach(function (cell) {
+        var c = lat.centroids[cell], key = pyRound((c[0] * heading[0] + c[1] * heading[1]) / pitch);
+
+        if (!rows[key]) { rows[key] = []; keys.push(key); }
+
+        rows[key].push(cell);
+      });
+
+      return keys.sort(function (a, b) { return a - b; }).map(function (k) { return rows[k]; });
+    }
+
+    function flat(rows) { return [].concat.apply([], rows); }
+
+    function rampUpSlug(p, lat, pitch) {
+      var rows = rowsAlong(p.ids, p.heading, lat, pitch);
+
+      return range(1, rows.length, 1).map(function (count) { return phase(p.head, p.heading, flat(rows.slice(0, count))); });
+    }
+
+    function rampDownSlug(p, lat, pitch) {
+      var rows = rowsAlong(p.ids, p.heading, lat, pitch);
+
+      return range(1, rows.length, 1).map(function (count) { return phase(p.head, p.heading, flat(rows.slice(count))); });
+    }
+
+    function slugPhases(route, lat, left, right, length, overlay, rotationLock, rampDn, frame, reps, rampUp, recentre) {
+      if (!route.length) { return []; }
+
+      var pitch = lat.pitch, width = left + right + 1, translate = rotationLock || width === length;
+      var cycleLength = isLoop(route) ? route.length - 1 : 0;
+
+      if (rotationLock) { frame = LEFT_RIGHT; }
+
+      if (cycleLength) { route = cycleLength < length ? route.slice(0, -1) : unroll(route, reps, length); }
+
+      var headings = routeHeadings(route, lat, cycleLength), phases;
+
+      if (width === 1 && !rotationLock) { return trailSlug(route, headings, length, overlay, rampDn, rampUp); }
+
+      var sides = outerSides(route, headings);
+
+      if (route.length < length) {
+        phases = [holdPhase(route, headings, laneCounts(headings, sides, left, right, frame, false), lat, pitch)];
+      } else {
+        var lanes = laneCounts(headings, sides, left, right, frame, translate);
+
+        for (var ov = overlay; ov < Math.max(width, length, overlay + 1); ov++) {
+          var positions = translate ?
+            translatingPositions(route, headings, lanes, length, ov, lat, pitch, !!cycleLength, recentre) :
+            rehungPositions(route, headings, lanes, length, ov, lat);
+
+          phases = blockPhases(route, headings, positions, length, ov, translate, lat, pitch);
+
+          if (continuous(phases, lat)) { break; }
+        }
+      }
+
+      if (rampDn && phases.length) { phases = phases.concat(rampDownSlug(phases[phases.length - 1], lat, pitch)); }
+
+      if (rampUp && phases.length) { phases = rampUpSlug(phases[0], lat, pitch).concat(phases); }
+
+      return phases;
+    }
+
+    /* ---------- route_execution.py: the plan for one route ---------- */
+    function slugIds(path, laps, s, lat, rampUp, rampDn) {
+      return slugPhases(path, lat, s.laneLeft, s.laneRight, s.length, s.overlay, s.rotationLock, rampDn,
+        s.inOut ? IN_OUT : LEFT_RIGHT, laps, rampUp, s.recentre).map(function (p) { return p.ids; });
+    }
+
+    function wideLoopLaps(path, s, repeatDuration, lat) {
+      var lap = slugIds(path, 2, s, lat).length - slugIds(path, 1, s, lat).length, laps = s.reps;
+
+      if (repeatDuration > 0 && lap > 0 && s.duration > 0) { laps = Math.max(Math.trunc(((repeatDuration / s.duration) - 1) / lap), 1); }
+
+      return { lap: lap, laps: laps };
+    }
+
+    function widePathPhases(path, s, repeatDuration, lat) {
+      if (!isLoop(path)) {
+        var once = slugIds(path, 1, s, lat, s.rampUp, s.rampDn), out = [];
+
+        for (var r = 0; r < (s.linReps ? s.reps : 1); r++) { out = out.concat(once); }
+
+        return out;
+      }
+
+      var laps = wideLoopLaps(path, s, repeatDuration, lat).laps;
+      var active = slugIds(path, laps, s, lat), ramped = slugIds(path, laps, s, lat, s.rampUp, s.rampDn);
+      var idle = repeatDuration > 0 ? Math.max(Math.trunc((repeatDuration - active.length * s.duration) / s.duration), 0) : 0;
+      var rampDownCount = ramped.length - slugIds(path, laps, s, lat, s.rampUp, false).length;
+      var before = ramped.length - rampDownCount, hold = [];
+
+      for (var k = 0; k < idle; k++) { hold.push(ramped[before - 1].slice()); }
+
+      return ramped.slice(0, before).concat(hold, ramped.slice(before));
+    }
+
+    /* settings: { duration, length, overlay, reps, repeatDuration, rampUp,
+       rampDn, linReps, laneLeft, laneRight, inOut, rotationLock, recentre }.
+       Returns { phases: [[id, ...], ...], slug, reps } like
+       calculate_execution_plan_from_params (one route, no other electrodes). */
+    function plan(path, s, lat) {
+      var repeatDuration = Math.trunc(s.repeatDuration), width = s.laneLeft + s.laneRight + 1;
+      var slug = width > 1 || (s.rotationLock && s.length > 1);
+
+      if (slug) { return { phases: widePathPhases(path, s, repeatDuration, lat), slug: true }; }
+
+      var phases = [], k;
+
+      if (isLoop(path)) {
+        var reps = effectiveReps(path, s.reps, s.duration, repeatDuration, s.length, s.overlay);
+        var cycle = loopCyclePhases(path, s.length, s.overlay), n = cycle.length;
+        var up = s.rampUp && n ? softStart(cycle[0]) : [], down = s.rampDn && n ? softTerminate(cycle[n - 1]) : [];
+        var active = n + 1 + (reps > 1 ? (reps - 1) * n : 0);
+        var idle = idlePhases(path, reps, s.duration, repeatDuration, s.length, s.overlay);
+        var ids = function (ix) { return ix.filter(function (i) { return i < path.length - 1; }).map(function (i) { return path[i]; }); };
+
+        up.forEach(function (ix) { phases.push(ids(ix)); });
+
+        for (k = 0; k < active; k++) { phases.push(ids(k < active - 1 ? cycle[k % n] : cycle[0])); }
+
+        for (k = 0; k < idle; k++) { phases.push(ids(cycle[0])); }
+
+        down.forEach(function (ix) { phases.push(ids(ix)); });
+      } else {
+        var trail = trailPhases(path.length, s.length, s.overlay, s.rampUp, s.rampDn);
+
+        for (var r = 0; r < (s.linReps ? s.reps : 1); r++) {
+          trail.forEach(function (ix) { phases.push(ix.map(function (i) { return path[i]; })); });
+        }
+      }
+
+      return { phases: phases, slug: false };
+    }
+
+    /* The live preview: every electrode the route would actuate (the
+       "Route Shape" tint) and where the slug ends (Route.slug_preview). */
+    function preview(path, s, lat) {
+      var copy = {};
+
+      for (var key in s) { copy[key] = s[key]; }
+
+      copy.rampDn = false;
+      copy.linReps = false;
+
+      var phases = plan(path, copy, lat).phases, all = {};
+
+      phases.forEach(function (p) { p.forEach(function (id) { all[id] = true; }); });
+
+      return { footprint: Object.keys(all), latest: phases.length ? phases[phases.length - 1] : [] };
+    }
+
+    /* Laps and the idle tail of a loop, as plan() works them out: the
+       widePathPhases branch for a slug, effectiveReps / idlePhases otherwise. */
+    function loopInfo(path, s, lat) {
+      var repeatDuration = Math.trunc(s.repeatDuration), width = s.laneLeft + s.laneRight + 1;
+
+      if (!isLoop(path)) { return null; }
+
+      if (width > 1 || (s.rotationLock && s.length > 1)) {
+        var laps = wideLoopLaps(path, s, repeatDuration, lat).laps, active = slugIds(path, laps, s, lat).length;
+        var idle = repeatDuration > 0 ? Math.max(Math.trunc((repeatDuration - active * s.duration) / s.duration), 0) : 0;
+
+        return { laps: laps, idle: idle };
+      }
+
+      var reps = effectiveReps(path, s.reps, s.duration, repeatDuration, s.length, s.overlay);
+
+      return { laps: reps, idle: idlePhases(path, reps, s.duration, repeatDuration, s.length, s.overlay) };
+    }
+
+    function lattice(data) {
+      var lat = { order: [], centroids: {}, neighbours: data.neighbours };
+
+      data.cells.forEach(function (c) { lat.order.push(String(c[0])); lat.centroids[String(c[0])] = [c[1], c[2]]; });
+      lat.pitch = latticePitch(lat);
+
+      return lat;
+    }
+
+    return { plan: plan, preview: preview, lattice: lattice, isLoop: isLoop, loopInfo: loopInfo };
+  })();
+
+  var LATTICE = RoutePlan.lattice({"cells":[[119,1.0424099503020834,26.505159423958332],[118,1.0424102453125,24.38512223020833],[114,3.1554042836458334,26.498116215624997],[67,28.51132802083333,28.611109010416662],[102,9.49438532708333,26.498116215625],[105,5.268397488541666,26.50515942395833],[113,3.1554037809374997,24.38512223020833],[111,5.268397620833334,24.38512223020833],[82,20.059354035677945,28.625196680341016],[97,11.60737865104167,26.505159423958336],[90,15.833366357291661,24.385122230208335],[81,20.05935406354166,26.505159423958332],[74,24.285340314583333,24.38512223020833],[56,30.62432227083333,20.152091712500003],[48,26.398333373958327,22.272127847916668],[41,22.1723473875,20.15913465625],[45,24.285340314583333,22.27212784791666],[54,28.511328020833332,22.27212784791666],[46,26.398333903124996,20.152091712500003],[42,22.172347916666666,22.27212784791666],[38,20.05935406354166,20.1520917125],[44,24.28534057916666,20.1520917125],[40,20.059354063541665,22.272127847916664],[10,3.1554037809374997,14.890736770833332],[9,3.1554038324450784,7.448357966703848],[50,28.511328020833332,14.89073677083333],[49,28.511328157059012,7.448357795752925],[20,11.607379180208332,14.890736770833334],[26,11.607379180208332,7.44835804185863],[36,20.059354063541665,14.890736770833334],[34,20.059353500787694,7.448357833191894],[86,17.94636034270833,24.38512223020833],[75,24.285340579166665,26.505159423958332],[85,20.059353500787694,39.20889208158295],[83,20.059354063541665,31.76651396874999],[115,3.155403782330673,28.611109010416666],[98,11.60737918020833,28.625196680341297],[91,15.821627323958333,26.498116215624997],[95,13.732111669791667,26.498116215624997],[70,28.511328157059026,39.208892119021904],[69,28.51132802083333,31.766513968749997],[57,30.62432227083333,22.27212784791666],[53,28.51132934375,20.159134656249996],[18,9.494385459375,22.27212784791666],[16,11.607379180208332,22.27212784791666],[12,7.381391473958333,20.152091712500003],[13,7.381391473958332,22.27212784791666],[17,9.494385327083332,20.15913465625],[14,5.268397488541667,20.152091712500003],[6,3.1554037809374997,22.272127847916664],[8,5.2683976208333325,22.272127847916664],[87,17.946360342708335,26.505159423958332],[79,20.059354063541665,24.38512223020833],[65,28.511328020833332,24.38512223020833],[73,26.398333903124996,26.505159423958336],[63,30.624322270833336,26.505159423958336],[71,26.398333373958334,24.38512223020833],[66,28.51132934375,26.498116215625],[62,30.624322270833325,24.38512223020833],[103,11.607379180208332,24.38512223020833],[101,9.494385459375,24.385122230208335],[106,7.381391473958332,24.38512223020833],[107,7.381391473958334,26.50515942395833],[32,17.94636034270833,20.152091712500003],[33,17.94636034270833,22.27212784791666],[29,15.833366357291665,22.27212784791666],[25,13.720372504166663,22.27212784791666],[109,3.1554037809375,31.766513968749997],[110,3.155403832445076,39.20889194807104],[99,11.60737918020833,31.766513968749997],[93,11.607379180208333,39.208891872916254],[94,13.720372504166663,24.38512223020833],[77,22.17234791666667,24.38512223020833],[78,22.1723473875,26.498116215625],[28,15.82162732395833,20.15913465625],[24,13.732111669791667,20.159134656249996],[22,11.607378651041667,20.1520917125],[37,20.059354035678062,18.032054226303064],[52,28.511328020833332,18.04614067083333],[5,3.1554042836458334,20.159134656249996],[1,1.0424102453125,22.27212784791666],[0,1.0424099503020836,20.152091712500003],[4,3.1554037823306746,18.046140670833328],[21,11.607379180208332,18.032054226303178]],"neighbours":{"0":["1","5"],"1":["6","0","118"],"4":["5","10"],"5":["0","6","14","4"],"6":["8","1","113","5"],"8":["13","111","6","14"],"9":["10"],"10":["9","4"],"12":["17","13","14"],"13":["8","12","106","18"],"14":["8","12","5"],"16":["103","22","25","18"],"17":["22","12","18"],"18":["17","101","13","16"],"20":["26","21"],"21":["22","20"],"22":["17","16","21","24"],"24":["22","25","28"],"25":["29","16","24","94"],"26":["20"],"28":["29","32","24"],"29":["33","90","25","28"],"32":["33","28","38"],"33":["86","40","29","32"],"34":["36"],"36":["37","34"],"37":["36","38"],"38":["40","41","32","37"],"40":["33","38","79","42"],"41":["38","44","42"],"42":["45","40","41","77"],"44":["45","41","46"],"45":["74","48","42","44"],"46":["44","48","53"],"48":["45","54","46","71"],"49":["50"],"50":["52","49"],"52":["53","50"],"53":["46","52","54","56"],"54":["65","57","48","53"],"56":["57","53"],"57":["54","62","56"],"62":["57","65","63"],"63":["62","66"],"65":["66","54","62","71"],"66":["67","63","65","73"],"67":["69","66"],"69":["67","70"],"70":["69"],"71":["74","48","65","73"],"73":["75","66","71"],"74":["45","75","77","71"],"75":["78","74","73"],"77":["78","74","79","42"],"78":["75","81","77"],"79":["86","81","77","40"],"81":["78","79","87","82"],"82":["81","83"],"83":["85","82"],"85":["83"],"86":["33","79","90","87"],"87":["86","81","91"],"90":["86","29","94","91"],"91":["87","90","95"],"93":["99"],"94":["103","90","95","25"],"95":["97","94","91"],"97":["98","103","95","102"],"98":["97","99"],"99":["98","93"],"101":["103","18","106","102"],"102":["101","97","107"],"103":["101","97","16","94"],"105":["111","114","107"],"106":["101","13","111","107"],"107":["106","105","102"],"109":["115","110"],"110":["109"],"111":["8","113","106","105"],"113":["6","111","114","118"],"114":["113","115","105","119"],"115":["114","109"],"118":["1","113","119"],"119":["114","118"]}});
+
+  /* The app's own defaults (device_viewer/models/route.py). */
+  var DEFAULTS = {
+    duration: 1, length: 1, overlay: 0, reps: 1, repeatDuration: 0, rampUp: false, rampDn: false,
+    linReps: false, laneLeft: 0, laneRight: 0, inOut: true, rotationLock: true, recentre: true
+  };
+
+  function settings(extra) {
+    var out = {};
+
+    for (var key in DEFAULTS) { out[key] = DEFAULTS[key]; }
+
+    for (key in extra || {}) { out[key] = extra[key]; }
+
+    return out;
+  }
+
+  /* The phases MicroDrop would actuate, as channel numbers. */
+  function phasesOf(path, s) {
+    return RoutePlan.plan(path.map(String), s, LATTICE).phases.map(function (p) { return p.map(Number); });
+  }
+
+  function footprintOf(path, s) { return RoutePlan.preview(path.map(String), s, LATTICE).footprint.map(Number); }
+
+  /* Frames that run a route: each phase switches its electrodes on and the
+     droplet, its volume unchanged, follows them. */
+  function routeFrames(path, s, label, extra) {
+    var phases = phasesOf(path, s), area = footprintOf(path, s);
+
+    return phases.map(function (on, k) {
+      var frame = {
+        on: on, drops: ((extra && extra.keep) || []).concat([{ id: "d", at: on }]),
+        routes: [{ through: path, area: area, selected: !!(extra && extra.selected) }],
+        slug: { at: on },
+        caption: label + " · phase " + (k + 1) + " of " + phases.length,
+        hold: 900, move: 500
+      };
+
+      for (var key in extra || {}) { if (key !== "selected" && key !== "keep") { frame[key] = extra[key]; } }
+
+      return frame;
+    });
+  }
+
+
+  /* The worked example's routes, run with the app's defaults plus
+     Length 2 and Overlay 1 (Rot Lock stays on, as it starts). */
+  var MOVE_PATH = [22, 16, 103, 94, 90, 86, 79];
+  var LOOP_PATH = [40, 79, 81, 78, 77, 42, 40];
+  var RUN = settings({ length: 2, overlay: 1, duration: 0.7 });
+  var GRID_VIEW = [46, 26, 86, 58];
+
+  Tutorial.demo("route", function (figure, T) {
+    var start = { on: [22, 16], drops: [{ id: "d", at: [22, 16] }] };
+    var drawing = [
+      { on: start.on, drops: start.drops, click: 22, caption: "Draw mode: press on the droplet's electrode, 22…" },
+      { on: start.on, drops: start.drops, routes: [{ through: MOVE_PATH, upto: 3, selected: true }], caption: "…drag through 16, 103, 94…" },
+      { on: start.on, drops: start.drops, routes: [{ through: MOVE_PATH, selected: true }], caption: "…up to 79 and let go. The yellow line is the selected route." }
+    ];
+
+    T.chip(figure, opt({
+      view: GRID_VIEW, numbers: MOVE_PATH, numberCorner: true,
+      label: "Drawing a route from 22 to 79 and running it with Length 2 and Overlay 1",
+      frames: drawing.concat(routeFrames(MOVE_PATH, RUN, "Run (Length 2, Overlay 1, Rot Lock on)", { selected: true }))
+    }));
+  });
+
+  Tutorial.demo("loop", function (figure, T) {
+    var start = { on: [40, 79], drops: [{ id: "d", at: [40, 79] }] };
+
+    T.chip(figure, opt({
+      view: [58, 26, 58, 34], numbers: LOOP_PATH.slice(0, -1), numberCorner: true,
+      label: "A loop route around a block of two by three electrodes, with a droplet going round it",
+      frames: [
+        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH, upto: 3, selected: true }], caption: "Drag from 40 right, up…" },
+        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH, selected: true }], caption: "…back along the top and down onto 40: a loop." },
+        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH }], caption: "Not selected, a loop shows its turning direction by colour." }
+      ].concat(routeFrames(LOOP_PATH, RUN, "One lap (Rot Lock on: the droplet keeps lying across)"))
+    }));
+  });
+
+
+  /* ---------- try the settings ---------- */
+  var SIM_ROUTES = {
+    L: { path: [22, 16, 103, 94, 90, 86, 79, 77, 74], name: "L-shaped" },
+    straight: { path: [13, 18, 16, 25, 29, 33, 40, 42, 45], name: "straight" },
+    loop: { path: [33, 40, 42, 77, 78, 81, 87, 86, 33], name: "loop" }
+  };
+  var CELL_AREA = area(CELL[22]);
+  var PRESETS = {
+    "lanes-left": { route: "straight", drop: 2, laneLeft: 1 },
+    "lanes-right": { route: "straight", drop: 2, laneRight: 1 },
+    "lock-on": { route: "L", drop: 3, length: 3, overlay: 2 },
+    "lock-off": { route: "L", drop: 3, length: 3, overlay: 2, rotationLock: false },
+    "recentre-off": { route: "L", drop: 4, length: 3, overlay: 2, laneLeft: 1, recentre: false },
+    "length-2": { route: "L", drop: 2, length: 2, overlay: 1 },
+    "reps-2": { route: "loop", drop: 2, length: 2, overlay: 1, reps: 2 },
+    "rep-duration": { route: "loop", drop: 2, length: 2, overlay: 1, repeatDuration: 12 },
+    "ramps": { route: "L", drop: 2, length: 3, overlay: 2, rampUp: true, rampDn: true },
+    "defaults": { route: "L", drop: 1 }
+  };
+
+  Tutorial.demo("settings", function (figure, T) {
+    var $ = function (name) { return figure.querySelector('[data-set="' + name + '"]'); };
+    var host = figure.querySelector(".sim-chip"), readout = figure.querySelector(".sim-readout");
+    var player = null, plan = null, path = null, s = null, dropCells = 1;
+
+    function read() {
+      var length = Math.max(1, Math.round(+$("length").value) || 1);
+
+      $("overlay").max = length - 1;
+
+      return settings({
+        duration: Math.max(0, +$("duration").value || 0), length: length,
+        overlay: Math.min(Math.max(0, Math.round(+$("overlay").value) || 0), length - 1),
+        reps: Math.max(1, Math.round(+$("reps").value) || 1), repeatDuration: Math.max(0, Math.round(+$("repeatDuration").value) || 0),
+        rampUp: $("rampUp").checked, rampDn: $("rampDn").checked, linReps: $("linReps").checked,
+        laneLeft: +$("laneLeft").value, laneRight: +$("laneRight").value,
+        rotationLock: $("rotationLock").checked, recentre: $("recentre").checked, inOut: $("inOut").checked
+      });
+    }
+
+    /* The panel's own rules: the lanes share a width of 5 (4 extra), Reps
+       and Rep Duration only mean something on a loop or with Lin Reps,
+       Re-centre shows with Rot Lock on and In/Out with it off. */
+    function enforce() {
+      var loop = RoutePlan.isLoop(SIM_ROUTES[$("route").value].path), frozen = !loop && !$("linReps").checked;
+
+      $("laneLeft").max = 4 - +$("laneRight").value;
+      $("laneRight").max = 4 - +$("laneLeft").value;
+      $("reps").disabled = $("repeatDuration").disabled = frozen;
+
+      if (frozen) { $("reps").value = 1; $("repeatDuration").value = 0; }
+
+      figure.querySelector(".lock-on").hidden = !$("rotationLock").checked;
+      figure.querySelector(".lock-off").hidden = $("rotationLock").checked;
+      figure.querySelector('[data-out="laneLeft"]').textContent = $("laneLeft").value;
+      figure.querySelector('[data-out="laneRight"]').textContent = $("laneRight").value;
+    }
+
+    function show(index, frame) {
+      var k = frame.phase, n = plan.length, on = plan[k] || [];
+      var t = s.duration;
+
+      readout.innerHTML =
+        "<tr><th>Phase</th><td>" + (k + 1) + " of " + n + "</td></tr>" +
+        "<tr><th>Time</th><td>" + (k * t).toFixed(1) + " s of " + (n * t).toFixed(1) + " s</td></tr>" +
+        "<tr><th>On now</th><td>" + on.length + ": " + on.slice().sort(function (a, b) { return a - b; }).join(", ") + "</td></tr>" +
+        "<tr><th>Droplet</th><td>" + dropCells + " electrode" + (dropCells > 1 ? "s'" : "'s") + " worth of liquid</td></tr>" +
+        "<tr><th>Route shape</th><td>" + footprintOf(path, s).length + " electrodes</td></tr>" + loopRows();
+    }
+
+    /* For a loop: the laps that run and the wait at the end (Rep Duration). */
+    function loopRows() {
+      var info = RoutePlan.loopInfo(path.map(String), s, LATTICE);
+
+      if (!info) { return ""; }
+
+      return "<tr><th>Laps</th><td>" + info.laps + "</td></tr>" +
+        "<tr><th>Wait at end</th><td>" + (info.idle ? info.idle + " phase" + (info.idle > 1 ? "s" : "") + ", " +
+        (info.idle * s.duration).toFixed(1) + " s" : "none") + "</td></tr>";
+    }
+
+    function rerun() {
+      enforce();
+      s = read();
+      path = SIM_ROUTES[$("route").value].path;
+      dropCells = +$("drop").value;
+      plan = phasesOf(path, s);
+
+      var shape = footprintOf(path, s), volume = dropCells * CELL_AREA, hold = Math.min(Math.max(s.duration * 700, 300), 1800);
+      var frames = plan.map(function (on, k) {
+        return {
+          phase: k, on: on, drops: [{ id: "d", at: on, vol: volume }],
+          routes: [{ through: path, area: shape, selected: true }], slug: { at: on },
+          caption: "", hold: hold, move: Math.min(hold * 0.6, 600)
+        };
+      });
+
+      if (player) { player.pause(); }
+
+      T.clear(host);
+      player = T.chip(host, opt({
+        view: [50, 14, 76, 92], numbers: path.slice(0, RoutePlan.isLoop(path) ? -1 : path.length), numberCorner: true,
+        label: "A " + SIM_ROUTES[$("route").value].name + " route run with the chosen Execution Settings",
+        frames: frames, onShow: show
+      }));
+    }
+
+    figure.querySelectorAll("[data-set]").forEach(function (input) { T.bind(input, rerun); });
+
+    /* Editing Reps resets Rep Duration and the other way round, as in the app. */
+    $("reps").addEventListener("input", function () { $("repeatDuration").value = 0; rerun(); });
+    $("repeatDuration").addEventListener("input", function () { $("reps").value = 1; rerun(); });
+
+    figure.querySelector(".presets").addEventListener("click", function (event) {
+      var preset = PRESETS[event.target.getAttribute && event.target.getAttribute("data-preset")];
+
+      if (!preset) { return; }
+
+      var values = settings(preset);
+
+      $("route").value = preset.route;
+      $("drop").value = preset.drop;
+      ["duration", "length", "overlay", "reps", "repeatDuration", "laneLeft", "laneRight"].forEach(function (key) { $(key).value = values[key]; });
+      ["rampUp", "rampDn", "linReps", "rotationLock", "recentre", "inOut"].forEach(function (key) { $(key).checked = values[key]; });
+      rerun();
+    });
+
+    rerun();
+  });
+
+})();
+</script>
