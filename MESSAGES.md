@@ -380,16 +380,19 @@ The magnet's engage height is `z_up` (µm), the first int32 of the motor board's
 - Read / Write / Preset to flash buttons on `PortableDropbotSettingsPreferencesPane` publish the three requests; Write sends the field's unapplied value, and Preset asks for confirmation first.
 - The plugin owns `MAGNET_ENGAGE_LISTENER` (subscribed to `MAGNET_ENGAGE_UPDATED`) for the whole session: `PortableDropbotMagnetEngageMessageHandler`, made in `start()` and torn down in `stop()`, applies each reply to the plugin's `MagnetEngageModel` on the GUI thread. The plugin hands that model to every pane it contributes, so the status line updates live and a successful read fills the pane's detached copy of `magnet_engage_mm` (an unapplied edit until Apply, never the preferences node).
 
-### Portable DropBot droplet detection: absolute-threshold DETECT_DROPLETS
+### Portable DropBot droplet detection: the driver's find_drops
 
-The portable answers `DETECT_DROPLETS` with an absolute-threshold scan, as the DropBot does: the driver's `measure_capacitance()` reads every requested channel's capacitance (pF), and channels reading at least `DROPLET_DETECTION_THRESHOLD_PF` (10 pF, the DropBot's default) count as holding liquid. There is no dry-chip baseline to calibrate.
+The portable answers `DETECT_DROPLETS` with the driver's own drop finder, `DropBotSession.find_drops()`: a per-channel capacitance scan (CHANNEL_CAPACITANCES, pF, at the current V/F) whose channels reading at least their threshold count as holding liquid. The default threshold is the Portable DropBot Settings preference `droplet_detection_threshold_pf` (`DROPLET_DETECTION_THRESHOLD_PF`, 5 pF); per channel, the driver's saved overrides and a fresh chip baseline replace it and the active chip's electrode weights scale it.
 
 **Topics**
-- `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = all); reply `{"success", "detected_channels", "error"}`.
+- `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = the session's used channels, all of them without a chip definition); reply `{"success", "detected_channels", "error"}`.
+
+**Frontend (`portable_dropbot_status_and_controls`, Preferences > Portable DropBot Settings)**
+- "Droplet detection threshold (pF)" mirrors applied changes to the `DROPLET_DETECTION_THRESHOLD_PF_KEY` app_globals key; the backend's `PortableDropbotPreferences` seeds it at start.
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_droplet_detection_mixin_service.py`)**
-- `on_detect_droplets_request` runs `measure_capacitance` and replies with the sorted channels at or above the threshold; an empty scan result replies with an error.
-- The scan switches every channel and drives HV itself (on a 200-channel board HV is enabled for the scan), so afterwards the service re-applies V/F and, in realtime mode, HV plus the last requested electrodes (`LAST_CHANNEL_STATES_REQUESTED_KEY`); outside realtime mode it clears the electrodes and disables HV.
+- `on_detect_droplets_request` reads the threshold key, sets it as the session's default drop threshold, runs `find_drops` through `_proxy_call` and replies with its sorted liquid channels.
+- `find_drops` never actuates an electrode and leaves V/F alone; it switches HV on for the scan only when HV is off and the pads are engaged, and back off afterwards. With HV off and no device on the pads it refuses, and the reply's `error` carries the driver's reason; a scan with no readings at all also replies with an error.
 
 ### Portable DropBot protocol columns: magnet + heater step execution
 
