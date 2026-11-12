@@ -269,6 +269,9 @@ class DeviceViewerDockPane(TraitsDockPane):
             render_device_image=self._render_device_image,
             get_dialog_parent=lambda: self.device_view.window(),
             statusbar_message=self._statusbar_message,
+            get_camera_label=lambda: (
+                self.camera_control_widget.camera_model.selected_camera
+            ),
         )
 
         # Last: its handlers dereference the model, view, and preferences.

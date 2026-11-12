@@ -689,6 +689,23 @@ ALIGNMENT_PRESET_SAVED_AT_FORMAT = "%Y-%m-%d %H:%M"
 
 SAVE_ALIGNMENT_PRESET_DIALOG_TITLE = "Save Alignment Preset"
 ALIGNMENT_PRESETS_TITLE = "Alignment Presets"
+APPLY_ALIGNMENT_PRESET_DIALOG_TITLE = "Apply Alignment Preset"
+DELETE_ALIGNMENT_PRESET_DIALOG_TITLE = "Delete Alignment Preset"
+
+#: Save as… with dots moved in the panes but not confirmed: the choices.
+CONFIRM_AND_SAVE_CHOICE = "Confirm & Save"
+SAVE_CONFIRMED_CHOICE = "Save Confirmed"
+PENDING_PANE_EDITS_MESSAGE = (
+    "The dots in the panes differ from the confirmed alignment. Confirm "
+    "them first and save the result, or save the alignment as last "
+    "confirmed?"
+)
+
+#: The naming dialog's note for a preset without camera-side corners.
+ENDPOINT_ONLY_PRESET_NOTE = (
+    "No camera outline is confirmed (or the camera has no frame): this "
+    "preset will hold the endpoint only."
+)
 
 # ---------------------------------------------------------------------------
 # Edit Connections dialog
