@@ -687,6 +687,9 @@ ALIGNMENT_PRESETS_STRIP_HEIGHT_PX = 180
 #: How a preset's save time shows in the table (local time).
 ALIGNMENT_PRESET_SAVED_AT_FORMAT = "%Y-%m-%d %H:%M"
 
+SAVE_ALIGNMENT_PRESET_DIALOG_TITLE = "Save Alignment Preset"
+ALIGNMENT_PRESETS_TITLE = "Alignment Presets"
+
 # ---------------------------------------------------------------------------
 # Edit Connections dialog
 # ---------------------------------------------------------------------------

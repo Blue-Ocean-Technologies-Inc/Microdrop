@@ -502,20 +502,40 @@ class EndpointPane(AlignmentPaneBase):
             self._default_quad(self.device_image, inset=ENDPOINT_QUAD_INSET)
         )
 
-    def _save_fired(self):
-        """Emit the placed endpoint in device-scene coordinates."""
-        scene_quad = canonical_quad(
+    def scene_quad(self):
+        """The dots in device-scene coordinates, numbered from the top-left
+        clockwise ([[x, y] * 4]), or None before the overlay exists."""
+
+        if self._overlay is None:
+            return None
+
+        return canonical_quad(
             [
                 self._image_to_scene(point)
                 for point in self._to_raw(self._overlay.quad())
             ]
         )
 
+    def show_scene_quad(self, scene_quad):
+        """Move the dots onto ``scene_quad`` (device-scene coordinates),
+        numbered from the top-left clockwise."""
+
+        if self._overlay is None:
+            return
+
+        self._overlay.set_quad(
+            self._to_display(
+                [self._scene_to_image(point) for point in canonical_quad(scene_quad)]
+            )
+        )
+
+    def _save_fired(self):
+        """Emit the placed endpoint in device-scene coordinates."""
+        scene_quad = self.scene_quad()
+
         # The device side is always numbered from the top-left: renumber
         # the shown dots to match what is saved.
-        self._overlay.set_quad(
-            self._to_display([self._scene_to_image(point) for point in scene_quad])
-        )
+        self.show_scene_quad(scene_quad)
         self.endpoint_saved = scene_quad
 
 
@@ -688,9 +708,29 @@ class OutlinePane(AlignmentPaneBase):
             self.canvas.fit_frame()
             self.is_ready = True
 
+    def raw_quad(self):
+        """The dots in raw camera pixels, in the order placed, or None
+        before a frame arrives."""
+
+        if self._overlay is None:
+            return None
+
+        return self._to_raw(self._overlay.quad())
+
+    def show_raw_quad(self, raw_quad):
+        """Move the dots onto ``raw_quad`` (raw camera pixels, in
+        correspondence order); before a frame arrives, start from it."""
+
+        if self._overlay is None:
+            self.initial_quad = raw_quad
+
+            return
+
+        self._overlay.set_quad(self._to_display(raw_quad))
+
     def _save_fired(self):
         """Emit the marked outline quad in raw camera pixels."""
         if self._overlay is None:
             return
 
-        self.quad_accepted = self._to_raw(self._overlay.quad())
+        self.quad_accepted = self.raw_quad()

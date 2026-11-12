@@ -123,6 +123,10 @@ class AlignmentPresetTable(HasTraits):
     #: Whether Apply can run on the selected row.
     can_apply = Property(Bool, observe="selected.applicable, editable")
 
+    #: Whether the selected row is its device's default — a top-level
+    #: mirror, since enabled_when misses nested changes.
+    selected_is_default = Property(Bool, observe="selected.is_default")
+
     #: Fires with the row to apply: from Apply, or a double-click outside
     #: the Name column (which edits the name instead).
     apply_requested = Event(Instance(AlignmentPresetRow))
@@ -142,6 +146,9 @@ class AlignmentPresetTable(HasTraits):
 
     def _get_can_apply(self):
         return self.editable and self.selected is not None and self.selected.applicable
+
+    def _get_selected_is_default(self):
+        return self.selected is not None and self.selected.is_default
 
     # ------------------------------------------------------------------ #
     @observe("store.presets, store.defaults, current_device_key, this_device_only")
