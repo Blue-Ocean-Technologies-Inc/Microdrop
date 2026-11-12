@@ -907,3 +907,8 @@ UM_MM2_PER_UL = 1000
 # readout shows it; smaller moves are reading noise. Matches the readout's
 # 0.1 µL resolution, like the DropBot status pane's capacitance threshold.
 VOLUME_READOUT_NOISE_UL = 0.1
+
+#: Help > Tutorials page, built from resources/camera_alignment.src.html.
+CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "camera_alignment.html"
+)
