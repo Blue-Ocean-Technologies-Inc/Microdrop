@@ -197,10 +197,14 @@ class AlignmentPresetTable(HasTraits):
             self._syncing = False
 
         if [row.preset_id for row in rows] != [row.preset_id for row in self.rows]:
+            selected = self.selected
             self.rows = rows
 
-        if self.selected not in self.rows:
+            # The table editor keeps its highlight on the old row index
+            # through a reset; reselecting moves it back onto the row
+            # that is actually selected.
             self.selected = None
+            self.selected = selected if selected in rows else None
 
         self._update_row_states()
 
