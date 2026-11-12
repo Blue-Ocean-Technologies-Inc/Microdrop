@@ -97,6 +97,19 @@ class DeviceViewMainModel(HasTraits):
     # `object.routes.commit_enabled` don't re-evaluate reliably in enabled_when.
     routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
 
+    #: Commit sidebar edits to the selected step without a click (#969);
+    #: seeded from, and saved to, the preference of the same name.
+    auto_commit_to_step = Bool(True)
+
+    #: True while a sidebar edit waits to be auto-committed: auto-commit is
+    #: on, a step is selected, no protocol runs, and the sidebar differs
+    #: from the step's stored values. Loading a step baselines the sidebar,
+    #: so a step switch never makes it due.
+    auto_commit_due = Property(
+        Bool,
+        observe="auto_commit_to_step, protocol_running, step_id, routes.commit_enabled",
+    )
+
     # Mirror of routes.repeats_frozen at the top level so the sidebar's
     # Repetitions / Repeat Duration spinners re-evaluate `enabled_when`
     # reliably when a loop is added/removed or Lin Reps is toggled.
@@ -276,6 +289,8 @@ class DeviceViewMainModel(HasTraits):
 
         if self.preferences:
             self.routes.max_width = self.preferences.max_slug_width
+            self.auto_commit_to_step = self.preferences.auto_commit_to_step
+
         self.calibration = CalibrationModel(electrodes=self.electrodes)
         self.zones = ZoneLayerManager(globals_key=ZONES_KEY)
 
@@ -299,7 +314,21 @@ class DeviceViewMainModel(HasTraits):
         if self.routes is not None and self.preferences is not None:
             self.routes.max_width = self.preferences.max_slug_width
 
+    @observe("auto_commit_to_step", post_init=True)
+    def _save_auto_commit_to_step(self, event):
+        if self.preferences is not None:
+            self.preferences.auto_commit_to_step = event.new
+
     # ------------------------- Properties ------------------------
+
+    def _get_auto_commit_due(self):
+        return bool(
+            self.auto_commit_to_step
+            and not self.protocol_running
+            and self.step_id
+            and self.routes is not None
+            and self.routes.commit_enabled
+        )
 
     def _get_electrode_scale(self):
         if self.electrodes.svg_model is not None:

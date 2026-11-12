@@ -368,6 +368,12 @@ run_controls = HGroup(
         visible_when=f"not {executing}",
         springy=True,
     ),  # commit to step
+    Item(
+        "auto_commit_to_step",
+        label="Auto",
+        tooltip="Commit execution-setting edits to the selected step automatically",
+        visible_when=f"not {executing}",
+    ),  # auto-commit to step
     enabled_when="not object.protocol_running",
 )
 
@@ -425,6 +431,7 @@ if __name__ == "__main__":
 
         protocol_running = Bool(False)
         phase_navigation_mode = Bool(False)
+        auto_commit_to_step = Bool(True)
 
         # Top-level mirrors for enabled_when bindings (nested paths like
         # `object.routes.commit_enabled` don't re-evaluate reliably)

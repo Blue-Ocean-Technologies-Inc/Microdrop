@@ -157,6 +157,10 @@ STEP_PARAM_NAMES = tuple(
     name for name in StepParamsCommitMessage.model_fields if name != "step_id"
 )
 
+# Quiet period after the last sidebar edit before auto-commit writes it to
+# the selected step, so a held spinner publishes once, not per tick.
+AUTO_COMMIT_DEBOUNCE_MS = 300
+
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
