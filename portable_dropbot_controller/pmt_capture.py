@@ -29,7 +29,7 @@ whose stream assembly is inline in a Qt method. Kept here so the CSVs
 Microdrop writes stay interchangeable with the bench's without the backend
 importing Qt. No Qt, no driver import: all unit-testable without hardware.
 
-Stream frame layout (``CMD_PMT_STREAM_DATA`` 0x123F, all little-endian)::
+Stream frame layout (``PMT_STREAM_DATA_CMD`` 0x123F, all little-endian)::
 
     [pkt_idx u16][n u16][n x u16 samples]
 
@@ -59,7 +59,7 @@ _LEGACY_POSITIONS_BYTES = 5 * 4
 
 
 def decode_stream_frame(data):
-    """Decode one ``CMD_PMT_STREAM_DATA`` frame; return ``(idx, values)``,
+    """Decode one ``PMT_STREAM_DATA_CMD`` frame; return ``(idx, values)``,
     or ``None`` when the frame is too short or its declared count doesn't
     fit the payload — a torn or truncated frame, never valid data."""
 
