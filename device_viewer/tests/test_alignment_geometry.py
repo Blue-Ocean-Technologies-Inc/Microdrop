@@ -16,9 +16,12 @@ import pytest
 # Microdrop package imports.
 from device_viewer.utils.alignment_geometry import (
     camera_point_to_item,
+    camera_quad_in_frame,
     camera_to_item_mapping,
     item_point_to_camera,
     quads_close,
+    same_aspect_ratio,
+    valid_frame_size,
 )
 
 
@@ -58,6 +61,46 @@ def test_item_to_camera_inverts_camera_to_item(item_size):
 def test_empty_frame_size_is_refused():
     with pytest.raises(ValueError):
         camera_to_item_mapping((0, 0), (1280, 1080))
+
+
+def test_empty_item_size_is_refused():
+    # A zero scale could not be inverted back to camera pixels.
+    with pytest.raises(ValueError):
+        camera_to_item_mapping((640, 480), (0, 0))
+
+
+QUAD_640 = [[0.0, 0.0], [640.0, 0.0], [640.0, 480.0], [0.0, 480.0]]
+
+
+def test_same_shape_frame_rescales_axis_by_axis():
+    assert camera_quad_in_frame(QUAD_640, [640, 480], [1280, 960]) == [
+        [0.0, 0.0],
+        [1280.0, 0.0],
+        [1280.0, 960.0],
+        [0.0, 960.0],
+    ]
+
+
+def test_different_shape_frame_is_not_guessed():
+    assert camera_quad_in_frame(QUAD_640, [640, 480], [1920, 1080]) is None
+
+
+def test_unknown_saved_size_keeps_the_quad():
+    assert camera_quad_in_frame(QUAD_640, None, [1280, 960]) == QUAD_640
+
+
+def test_invalid_sizes_place_nothing():
+    assert camera_quad_in_frame(QUAD_640, [640, 0], [1280, 960]) is None
+    assert camera_quad_in_frame(QUAD_640, [640, 480], None) is None
+    assert not valid_frame_size([0, 480])
+    assert not valid_frame_size(None)
+    assert valid_frame_size([640.0, 480.0])
+
+
+def test_aspect_ratio_tolerance():
+    assert same_aspect_ratio([1280, 720], [1920, 1080])
+    assert same_aspect_ratio([1280, 721], [1920, 1080])
+    assert not same_aspect_ratio([640, 480], [1920, 1080])
 
 
 def test_quads_close_within_tolerance_and_in_order():
