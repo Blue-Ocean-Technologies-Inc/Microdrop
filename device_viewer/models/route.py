@@ -32,8 +32,9 @@ from microdrop_utils.route_execution import PathExecutionService
 from microdrop_utils.wide_path_geometry import IN_OUT, LEFT_RIGHT
 
 # Local imports.
-from ..consts import MAX_SLUG_WIDTH
+from ..consts import MAX_SLUG_WIDTH, STEP_PARAM_NAMES
 from ..default_settings import ROUTE_COLOR_POOL
+from .step_params_commit import StepParamsCommitMessage
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -348,36 +349,29 @@ class RouteLayerManager(HasTraits):
     # True iff a baseline is set AND current values diverge from it.
     # The main model mirrors this into `routes_commit_enabled` for the view's
     # `enabled_when` binding, which doesn't track nested paths reliably.
+    # Observes every setting the commit message carries, so a setting added
+    # to the message re-evaluates the button without touching this list.
     commit_enabled = Property(
-        observe=(
-            "_committed_params_baseline.items,"
-            "duration,repetitions,repeat_duration,"
-            "trail_length,trail_overlay,soft_start,soft_terminate,linear_repeats"
-        )
+        Bool, observe=["_committed_params_baseline.items", *STEP_PARAM_NAMES]
     )
 
     def _get_commit_enabled(self):
         baseline = self._committed_params_baseline
+
         if not baseline:
             return False
+
         return self._current_params() != baseline
 
     def _current_params(self) -> dict:
-        return {
-            "duration": float(self.duration),
-            "repetitions": int(self.repetitions),
-            "repeat_duration": int(self.repeat_duration),
-            "trail_length": int(self.trail_length),
-            "trail_overlay": int(self.trail_overlay),
-            "soft_start": bool(self.soft_start),
-            "soft_terminate": bool(self.soft_terminate),
-            "linear_repeats": bool(self.linear_repeats),
-            "lane_left": int(self.lane_left),
-            "lane_right": int(self.lane_right),
-            "lanes_in_out": bool(self.lanes_in_out),
-            "rotation_lock": bool(self.rotation_lock),
-            "recentre": bool(self.recentre),
-        }
+        """The sidebar's settings as the selected step stores them — the
+        commit message's own serialisation, so the dirty check and the
+        commit cannot disagree on which settings count."""
+        message = StepParamsCommitMessage(
+            step_id="", **{name: getattr(self, name) for name in STEP_PARAM_NAMES}
+        )
+
+        return message.model_dump(exclude={"step_id"})
 
     def plan_arguments(self) -> dict:
         """The sidebar's settings as the plan builder's keyword arguments —
@@ -444,23 +438,23 @@ class RouteLayerManager(HasTraits):
         other — we suppress them for the duration of the bulk write so the
         pulled values stick.
         """
-        with self._suppress_repeat_exclusion():
-            self.trait_set(
-                duration=float(params["duration"]),
-                repetitions=int(params["repetitions"]),
-                repeat_duration=int(params["repeat_duration"]),
-                trail_length=int(params["trail_length"]),
-                trail_overlay=int(params["trail_overlay"]),
-                soft_start=bool(params["soft_start"]),
-                soft_terminate=bool(params["soft_terminate"]),
-                linear_repeats=bool(params["linear_repeats"]),
-                # Shape keys are absent from steps saved before #682.
-                lane_left=int(params.get("lane_left", 0)),
-                lane_right=int(params.get("lane_right", 0)),
-                lanes_in_out=bool(params.get("lanes_in_out", True)),
-                rotation_lock=bool(params.get("rotation_lock", True)),
-                recentre=bool(params.get("recentre", True)),
+        # Every setting the commit message carries, in its field order
+        # (trail_length lands before the overlay it bounds). A key the step
+        # lacks — the shape keys of steps saved before #682 — takes the
+        # message's default, so no setting keeps the previous step's value.
+        fields = StepParamsCommitMessage.model_fields
+        values = {}
+
+        for name in STEP_PARAM_NAMES:
+            field = fields[name]
+            value = (
+                params[name] if field.is_required() else params.get(name, field.default)
             )
+            values[name] = field.annotation(value)
+
+        with self._suppress_repeat_exclusion():
+            self.trait_set(**values)
+
         self.mark_params_committed()
 
     def mark_params_committed(self) -> None:
