@@ -13,8 +13,8 @@
 Qt-free and clock-free: every time-dependent method takes ``now`` (a
 monotonic timestamp) so the debounce is unit-testable against a fake clock.
 The controller owns the timer and the write; this model only decides
-*whether* a write is due and what the status-bar glyph should tell the
-user.
+*whether* a write is due and what the AutoSave toggles (the status-bar
+glyph and the protocol tree's checkbox) should tell the user.
 
 A write is allowed only when AutoSave is on, the protocol has a file, no run
 is in progress, and the tracker reports unsaved changes — so a clean
@@ -23,11 +23,17 @@ save, load or new leaves the protocol clean, which also drops a pending
 write, so opening a protocol never rewrites its file.
 """
 
+# Standard library imports.
+import html
+
 # Enthought library imports.
 from traits.api import Bool, Float, HasTraits, Instance, Property, Str, Union, observe
 
 # Microdrop package imports.
-from pluggable_protocol_tree.consts import PROTOCOL_AUTOSAVE_DEBOUNCE_S
+from pluggable_protocol_tree.consts import (
+    PROTOCOL_AUTOSAVE_DEBOUNCE_S,
+    PROTOCOL_AUTOSAVE_INACTIVE_TOOLTIP,
+)
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -55,11 +61,14 @@ class ProtocolAutosaveModel(HasTraits):
     #: True when there is a file to write to (the protocol was saved or loaded).
     has_target = Property(Bool, observe="tracker.loaded_protocol_path")
 
-    #: The AutoSave state, shown in the glyph's tooltip while it is on.
+    #: The AutoSave state, shown in the toggles' tooltip while it is on.
     status_text = Property(
         Str,
         observe="enabled, last_error, tracker.[loaded_protocol_path, is_active]",
     )
+
+    #: Rich-text tooltip of every AutoSave toggle (glyph and checkbox).
+    tooltip = Property(Str, observe="enabled, status_text")
 
     # --- scheduling ---------------------------------------------------
 
@@ -135,6 +144,12 @@ class ProtocolAutosaveModel(HasTraits):
 
     def _get_has_target(self):
         return bool(self.tracker.loaded_protocol_path)
+
+    def _get_tooltip(self):
+        if not self.enabled:
+            return PROTOCOL_AUTOSAVE_INACTIVE_TOOLTIP
+
+        return f"{html.escape(self.status_text)}<br>Click to <b>disable</b> AutoSave"
 
     def _get_status_text(self):
         if not self.enabled:

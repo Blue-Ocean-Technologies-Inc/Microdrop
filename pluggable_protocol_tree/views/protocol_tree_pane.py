@@ -104,6 +104,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
+from pluggable_protocol_tree.views.autosave_checkbox import AutosaveCheckbox
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
 from pluggable_protocol_tree.views.navigation_bar import (
@@ -455,13 +456,19 @@ class ProtocolTreePane(QWidget):
 
     def _build_autosave(self):
         """AutoSave (#966): the controller writes debounced changes through
-        ``autosave_protocol``. Its switch lives in the app status bar, which
-        the dock pane contributes; standalone panes have none."""
+        ``autosave_protocol``. A checkbox right of the navigation buttons
+        toggles it here; the dock pane adds the app status-bar glyph, which
+        follows the same model."""
         self.autosave_controller = ProtocolAutosaveController(
             model=ProtocolAutosaveModel(tracker=self.protocol_state_tracker),
             manager=self.manager,
             preferences=self.preferences,
             write_protocol=self.autosave_protocol,
+        )
+        self.autosave_checkbox = AutosaveCheckbox(model=self.autosave_controller.model)
+
+        self.navigation_bar.add_widget_right_of_navigation(
+            self.autosave_checkbox.control
         )
 
     def _build_layout(self):

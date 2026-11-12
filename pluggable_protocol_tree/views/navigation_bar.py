@@ -405,6 +405,11 @@ class NavigationBar(QWidget):
         self.left_slot_layout.addWidget(widget)
         self.bottom_container.setVisible(True)
 
+    def add_widget_right_of_navigation(self, widget):
+        """Append ``widget`` to the navigation row, right of the step and
+        phase buttons. It keeps its own size; the buttons take the rest."""
+        self.nav_container.layout().addWidget(widget)
+
     # --- play-button visual state -----------------------------------------
     #
     # Each show_*_state() reads ``action_preview.isChecked()`` and picks

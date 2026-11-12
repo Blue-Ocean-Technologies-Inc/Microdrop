@@ -91,6 +91,9 @@ PROTOCOL_AUTOSAVE_DEBOUNCE_S = 1.5
 # The AutoSave glyph sits right of the status bar's device glyphs.
 PROTOCOL_AUTOSAVE_STATUS_BAR_PRIORITY = ICON_PRIORITY_DEFAULT + 1
 
+# Tooltip of the AutoSave glyph and checkbox while AutoSave is off.
+PROTOCOL_AUTOSAVE_INACTIVE_TOOLTIP = "Click to <b>enable</b> AutoSave"
+
 # Bounds for the per-column acknowledgement-wait times configured in the
 # Protocol Settings tab (#427). 0 = don't wait for the ack; no upper
 # bound (the grid editor clamps inf to a huge finite spinbox maximum).
