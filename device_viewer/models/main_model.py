@@ -91,15 +91,24 @@ class DeviceViewMainModel(HasTraits):
     route_execution_service_executing = Bool(False)
     route_execution_service_paused = Bool(False)
 
-    # Mirror of routes.commit_enabled at the top level so TraitsUI's
-    # `enabled_when` on the sidebar commit button picks up changes without
-    # needing an independent UI action. Nested paths like
-    # `object.routes.commit_enabled` don't re-evaluate reliably in enabled_when.
-    routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
-
     #: Commit sidebar edits to the selected step without a click (#969);
     #: seeded from, and saved to, the preference of the same name.
     auto_commit_to_step = Bool(True)
+
+    #: What the one Commit to Step button shows, and what a press does:
+    #: "unavailable" (no step: disabled), "auto" (auto-commit on: press
+    #: turns it off), "pending" (edits to commit: press commits), "idle"
+    #: (nothing to commit: press turns auto-commit on). A top-level trait,
+    #: so the view's visible_when / enabled_when re-evaluate on it — they
+    #: do not track nested paths like `object.routes.commit_enabled`.
+    commit_button_state = Property(
+        Enum("unavailable", "auto", "pending", "idle"),
+        observe="auto_commit_to_step, step_id, routes.commit_enabled",
+    )
+
+    #: Fired by a press in the "pending" state; the dock pane publishes the
+    #: sidebar's settings to the selected step.
+    commit_requested = Event()
 
     #: True while a sidebar edit waits to be auto-committed: auto-commit is
     #: on, a step is selected, no protocol runs, and the sidebar differs
@@ -319,7 +328,32 @@ class DeviceViewMainModel(HasTraits):
         if self.preferences is not None:
             self.preferences.auto_commit_to_step = event.new
 
+    @observe("routes:commit_to_step_btn")
+    def _commit_button_pressed(self, event):
+        state = self.commit_button_state
+
+        if state == "auto":
+            self.auto_commit_to_step = False
+
+        elif state == "pending":
+            self.commit_requested = True
+
+        elif state == "idle":
+            self.auto_commit_to_step = True
+
     # ------------------------- Properties ------------------------
+
+    def _get_commit_button_state(self):
+        if not self.step_id or self.routes is None:
+            return "unavailable"
+
+        if self.auto_commit_to_step:
+            return "auto"
+
+        if self.routes.commit_enabled:
+            return "pending"
+
+        return "idle"
 
     def _get_auto_commit_due(self):
         return bool(

@@ -168,3 +168,77 @@ def test_a_step_saved_before_the_slug_shape_resets_it():
     assert (params["lane_left"], params["lane_right"]) == (0, 0)
     assert params["lanes_in_out"] and params["rotation_lock"] and params["recentre"]
     assert model.auto_commit_due is False
+
+
+# ------------------------- Commit to Step button -------------------------
+
+
+def _press(model):
+    """Press the button; returns whether the press asked for a commit."""
+    requests = []
+    model.observe(requests.append, "commit_requested")
+    model.routes.commit_to_step_btn = True
+    model.observe(requests.append, "commit_requested", remove=True)
+
+    return bool(requests)
+
+
+def test_the_button_is_unavailable_without_a_step_and_a_press_does_nothing():
+    model = _model()
+
+    assert model.commit_button_state == "unavailable"
+    assert _press(model) is False
+    assert model.auto_commit_to_step is True
+
+
+def test_auto_state_press_turns_auto_commit_off():
+    model = _model()
+    _select_step(model, "a", STEP_VALUES)
+
+    assert model.commit_button_state == "auto"
+    assert _press(model) is False
+    assert model.auto_commit_to_step is False
+    assert model.commit_button_state == "idle"
+
+
+def test_auto_off_press_while_edits_wait_hands_them_back_as_pending():
+    model = _model()
+    _select_step(model, "a", STEP_VALUES)
+    model.routes.lane_left = 2
+
+    _press(model)
+
+    assert model.commit_button_state == "pending"
+    assert model.auto_commit_due is False
+
+
+def test_pending_state_press_commits_and_keeps_auto_commit_off():
+    model = _model(auto_commit_to_step=False)
+    _select_step(model, "a", STEP_VALUES)
+    model.routes.lane_right = 2
+
+    assert model.commit_button_state == "pending"
+    assert _press(model) is True
+    assert model.auto_commit_to_step is False
+
+
+def test_idle_state_press_turns_auto_commit_on():
+    model = _model(auto_commit_to_step=False)
+    _select_step(model, "a", STEP_VALUES)
+
+    assert model.commit_button_state == "idle"
+    assert _press(model) is False
+    assert model.auto_commit_to_step is True
+    assert model.commit_button_state == "auto"
+
+
+def test_the_state_follows_edits_and_commits():
+    model = _model(auto_commit_to_step=False)
+    _select_step(model, "a", STEP_VALUES)
+    states = []
+    model.observe(lambda event: states.append(event.new), "commit_button_state")
+
+    model.routes.duration = 3.0
+    model.routes.mark_params_committed()
+
+    assert states == ["pending", "idle"]

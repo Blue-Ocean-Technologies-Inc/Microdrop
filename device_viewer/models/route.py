@@ -347,8 +347,8 @@ class RouteLayerManager(HasTraits):
     commit_to_step_btn = Button("sync_alt")
 
     # True iff a baseline is set AND current values diverge from it.
-    # The main model mirrors this into `routes_commit_enabled` for the view's
-    # `enabled_when` binding, which doesn't track nested paths reliably.
+    # The main model folds this into `commit_button_state` for the view's
+    # `enabled_when` / `visible_when`, which don't track nested paths.
     # Observes every setting the commit message carries, so a setting added
     # to the message re-evaluates the button without touching this list.
     commit_enabled = Property(

@@ -599,8 +599,8 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.model.routes.mark_params_committed()
 
-    @observe("model:routes:commit_to_step_btn")
-    def _on_commit_to_step_btn_fired(self, event):
+    @observe("model:commit_requested")
+    def _on_commit_requested(self, event):
         self._commit_sidebar_params(self._last_applied_step_id)
 
     @observe("model:auto_commit_due")
