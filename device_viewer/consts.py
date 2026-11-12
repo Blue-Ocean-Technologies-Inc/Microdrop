@@ -912,3 +912,8 @@ VOLUME_READOUT_NOISE_UL = 0.1
 CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "camera_alignment.html"
 )
+
+#: Help > Tutorials page, built from resources/device_viewer_basics.src.html.
+DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "device_viewer_basics.html"
+)
