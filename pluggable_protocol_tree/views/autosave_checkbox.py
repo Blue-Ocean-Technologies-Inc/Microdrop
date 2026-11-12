@@ -8,48 +8,42 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The AutoSave checkbox on the protocol tree's navigation bar (#966).
+"""The AutoSave checkbox beside the protocol tree's timeline checkboxes (#966).
 
 Mirrors the status-bar glyph: both edit ``ProtocolAutosaveModel.enabled`` and
-show ``model.tooltip``, so either one follows the other through the model.
-Standalone panes, which have no status bar, get AutoSave through this one.
+show ``model.tooltip``, so either one follows the other through the model. A
+plain ``QCheckBox`` like its "Show full timeline" and "Phase navigation"
+neighbours, so it looks and clicks the same.
 
 Runs standalone against just the model:
 ``AutosaveCheckbox(model=ProtocolAutosaveModel()).control.show()``.
 """
 
 # Enthought library imports.
-from pyface.qt.QtWidgets import QWidget
+from pyface.qt.QtWidgets import QCheckBox
 from traits.api import HasTraits, Instance, observe
-from traitsui.api import UI, Group, Item, View
 
 # Microdrop package imports.
 from pluggable_protocol_tree.models.protocol_autosave import ProtocolAutosaveModel
-
-#: The toggle, labelled on its right like a plain checkbox.
-autosave_checkbox_view = View(
-    Group(Item("enabled", label="AutoSave"), show_left=False),
-)
 
 
 class AutosaveCheckbox(HasTraits):
     #: The AutoSave state this checkbox shows and toggles.
     model = Instance(ProtocolAutosaveModel)
 
-    #: The TraitsUI panel holding the checkbox.
-    ui = Instance(UI)
-
-    #: The panel widget the navigation bar takes.
-    control = Instance(QWidget)
+    #: The checkbox the protocol tree pane lays out.
+    control = Instance(QCheckBox)
 
     def traits_init(self):
-        self.ui = self.model.edit_traits(view=autosave_checkbox_view, kind="subpanel")
-        self.control = self.ui.control
+        self.control = QCheckBox("AutoSave")
+        self.control.toggled.connect(self._on_toggled)
 
-        self._refresh_tooltip()
+        self._refresh()
 
-    # The checkbox and its label set no tooltip of their own, so Qt shows
-    # the panel's for both.
-    @observe("model:tooltip", post_init=True)
-    def _refresh_tooltip(self, event=None):
+    def _on_toggled(self, checked):
+        self.model.enabled = checked
+
+    @observe("model:[enabled, tooltip]", post_init=True)
+    def _refresh(self, event=None):
+        self.control.setChecked(self.model.enabled)
         self.control.setToolTip(self.model.tooltip)

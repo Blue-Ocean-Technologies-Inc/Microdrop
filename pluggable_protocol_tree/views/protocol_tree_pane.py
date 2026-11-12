@@ -251,6 +251,7 @@ class ProtocolTreePane(QWidget):
         self._build_navigation_bar()
         self._install_navigation_shortcuts()
         self._install_history_shortcuts()
+        self._build_autosave()
         self.timeline_bar = TimelineBar()
         self.timeline_controls = self._build_timeline_controls()
         self._build_experiment_bar()
@@ -268,7 +269,6 @@ class ProtocolTreePane(QWidget):
             self.quick_action_bar = None
         self.quick_actions_controller = None
 
-        self._build_autosave()
         self._build_layout()
 
         # The flush_scheduler shows a "Generating Run Report..." progress
@@ -395,9 +395,10 @@ class ProtocolTreePane(QWidget):
             btn.setToolTip(f"{base} ({hint})")
 
     def _build_timeline_controls(self):
-        """Step-rep and phase-rep selectors (side by side) + a 'show full
-        timeline' toggle, shown beneath the timeline when the current step has
-        repetitions. The dock-pane controller populates, shows/hides, wires."""
+        """Step-rep and phase-rep selectors (side by side) + the 'show full
+        timeline', 'phase navigation' and AutoSave toggles, shown beneath the
+        timeline when the current step has repetitions or the protocol is
+        idle. The dock-pane controller populates, shows/hides, wires."""
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(8, 0, 8, 0)
@@ -424,6 +425,7 @@ class ProtocolTreePane(QWidget):
             "the protocol (synced with the device viewer sidebar)"
         )
         layout.addWidget(self.phase_nav_check)
+        layout.addWidget(self.autosave_checkbox.control)
         layout.addStretch()
         row.setVisible(False)
         return row
@@ -456,9 +458,9 @@ class ProtocolTreePane(QWidget):
 
     def _build_autosave(self):
         """AutoSave (#966): the controller writes debounced changes through
-        ``autosave_protocol``. A checkbox right of the navigation buttons
-        toggles it here; the dock pane adds the app status-bar glyph, which
-        follows the same model."""
+        ``autosave_protocol``. Its checkbox sits right of "Phase navigation"
+        in the timeline controls row; the dock pane adds the app status-bar
+        glyph, which follows the same model."""
         self.autosave_controller = ProtocolAutosaveController(
             model=ProtocolAutosaveModel(tracker=self.protocol_state_tracker),
             manager=self.manager,
@@ -466,10 +468,6 @@ class ProtocolTreePane(QWidget):
             write_protocol=self.autosave_protocol,
         )
         self.autosave_checkbox = AutosaveCheckbox(model=self.autosave_controller.model)
-
-        self.navigation_bar.add_widget_right_of_navigation(
-            self.autosave_checkbox.control
-        )
 
     def _build_layout(self):
         layout = QVBoxLayout(self)

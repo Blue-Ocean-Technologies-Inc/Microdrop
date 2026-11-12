@@ -255,8 +255,6 @@ def test_status_bar_glyph_binds_to_the_model(qapp):
 
 
 def test_checkbox_and_glyph_follow_each_other_through_the_model(qapp):
-    from pyface.qt.QtWidgets import QCheckBox
-
     from pluggable_protocol_tree.views.autosave_checkbox import AutosaveCheckbox
     from pluggable_protocol_tree.views.autosave_status_icon import (
         AutosaveStatusIcon,
@@ -266,25 +264,23 @@ def test_checkbox_and_glyph_follow_each_other_through_the_model(qapp):
     view = AutosaveCheckbox(model=model)
     glyph_view = AutosaveStatusIcon(model=model)
     glyph = glyph_view.control
-    checkbox = view.control.findChild(QCheckBox)
+    checkbox = view.control
 
     assert checkbox.isChecked()
-    assert view.control.toolTip() == model.tooltip
+    assert checkbox.toolTip() == model.tooltip
 
     model.enabled = False
 
     assert not checkbox.isChecked()
-    assert "enable" in view.control.toolTip()
+    assert "enable" in checkbox.toolTip()
 
     checkbox.click()
 
     assert model.enabled
     assert glyph.is_active
-    assert "disable" in view.control.toolTip()
+    assert "disable" in checkbox.toolTip()
 
     glyph.toggled.emit(False)
 
     assert not model.enabled
     assert not checkbox.isChecked()
-
-    view.ui.dispose()
