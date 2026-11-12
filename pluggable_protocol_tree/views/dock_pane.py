@@ -49,6 +49,7 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_CHANGE,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_REQUEST,
+    PKG,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
@@ -82,6 +83,7 @@ from pluggable_protocol_tree.services.repeat_duration_reconciler import (
     clamp_trail_overlay_for_row,
     reconcile_repeat_duration_for_row,
 )
+from pluggable_protocol_tree.views.autosave_status_icon import AutosaveStatusIcon
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
@@ -169,6 +171,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
     _start_pending = Bool(False)
     #: True while the pre-protocol wait loading screen is up.
     _wait_active = Bool(False)
+
+    #: The AutoSave glyph contributed to the app status bar; None until the
+    #: pane mounts in an app.
+    _autosave_status_icon = Instance(AutosaveStatusIcon)
 
     def _executor_default(self):
         return ProtocolExecutor(
@@ -404,7 +410,41 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Initial timeline render (structure + position).
         self._rebuild_timeline()
 
+        self._contribute_autosave_switch()
+
         return pane
+
+    def _contribute_autosave_switch(self):
+        """Put the AutoSave glyph in the app status bar (#966).
+
+        The microdrop_status_bar plugin owns placement, spacing and removal;
+        a contribution made before its bar exists is placed once it does."""
+        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+
+        if plugin is None:
+            logger.warning(f"{PKG}: plugin not found; AutoSave glyph not shown")
+            return
+
+        self._autosave_status_icon = AutosaveStatusIcon(
+            model=self._pane.autosave_controller.model
+        )
+        plugin.status_bar_icons.append(self._autosave_status_icon.control)
+
+    def _withdraw_autosave_switch(self):
+        """Take the AutoSave glyph out of the status bar (which deletes it)
+        and stop it observing the model."""
+        icon = self._autosave_status_icon
+
+        if icon is None:
+            return
+
+        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+
+        if plugin is not None and icon.control in plugin.status_bar_icons:
+            plugin.status_bar_icons.remove(icon.control)
+
+        icon.model = None
+        self._autosave_status_icon = None
 
     def destroy(self):
         """Tear down the background poll job before the pane goes away so its
@@ -416,6 +456,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 sched.shutdown(wait=False)
             except Exception as e:
                 logger.warning(f"poll scheduler shutdown failed: {e}")
+
+        self._withdraw_autosave_switch()
         super().destroy()
 
     # --- runtime column hot load/unload ------------------------------
@@ -1346,6 +1388,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         vetoing there let the app quit anyway.) ``event.new`` carries
         the Vetoable.
         """
+        # With AutoSave on, edits still inside the debounce window are
+        # written before the unsaved-changes check, so closing keeps them.
+        if self._pane is not None:
+            self._pane.autosave_controller.flush()
+
         if not self.protocol_state_tracker.is_modified:
             return
 
