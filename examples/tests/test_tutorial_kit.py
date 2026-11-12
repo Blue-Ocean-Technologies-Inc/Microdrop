@@ -28,6 +28,8 @@ from apptools.preferences import package_globals
 from envisage.api import Application
 
 # Microdrop package imports.
+from device_viewer.consts import CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH
+from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from examples.tutorials.build_tutorial import (
@@ -54,6 +56,9 @@ from user_help_plugin.plugin import UserHelpPlugin
 # Microdrop style imports.
 from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_glyphs
 
+CAMERA_ALIGNMENT_SOURCE = CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH.with_name(
+    "camera_alignment.src.html"
+)
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
@@ -249,6 +254,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         ImageViewerPlugin(),
         DropbotStatusAndControlsPlugin(),
         PluggableProtocolTreePlugin(),
+        DeviceViewerPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -263,6 +269,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
     application.stop()
 
     assert [entry.title for entry in entries] == [
+        "Camera & Alignment Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
@@ -274,6 +281,10 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
         assert find_network_references(page) == []
         assert len(page.encode("utf-8")) <= SIZE_BUDGET_BYTES
+
+
+def test_camera_alignment_tutorial_rebuilds_identically():
+    assert is_up_to_date(CAMERA_ALIGNMENT_SOURCE)
 
 
 def test_dropbot_tutorial_rebuilds_identically():
