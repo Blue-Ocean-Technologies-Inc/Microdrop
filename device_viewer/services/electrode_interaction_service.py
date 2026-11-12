@@ -599,7 +599,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             self.keyboard.handle_key_release_event(event)
 
     def cleanup(self) -> None:
-        """Tear down the zone canvas overlays when the service is replaced.
+        """Tear down the zone canvas overlays and detach from the model when
+        the service is replaced.
 
         Dispose only if the helper was ever actually built — the trait is
         lazily constructed on first access (_zone_canvas_actions_default), so
@@ -612,6 +613,15 @@ class ElectrodeInteractionControllerService(HasTraits):
             except Exception:
                 # A dead C++ overlay (already deleted by Qt) is nothing to fix.
                 logger.debug("Zone canvas actions teardown failed", exc_info=True)
+
+        # The replaced service outlives this call (it and its keyboard service
+        # reference each other, so only the cyclic GC frees them) while the
+        # model is shared with its successor: left attached, its observers
+        # keep redrawing the old layer's zones into the shared scene (#968).
+        # Drop the layer first so the guarded handlers that fire on the model
+        # change no-op, then unhook every model observer.
+        self.electrode_view_layer = None
+        self.model = None
 
     def handle_mouse_press_event(self, event):
         """Handle the start of a mouse click event."""
