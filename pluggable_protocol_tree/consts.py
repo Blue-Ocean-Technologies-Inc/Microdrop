@@ -155,6 +155,13 @@ STEP_PATTERN_MAX_STEPS = 500
 # quick-action button's tooltip.
 STEP_PATTERN_SHORTCUT = "Ctrl+Shift+F"
 
+# Protocol edit history (undo/redo): pane-scoped shortcuts, bound once on the
+# protocol pane and shown on the quick-action buttons' tooltips, and how many
+# edits the history keeps before forgetting the oldest.
+PROTOCOL_UNDO_SHORTCUT = "Ctrl+Z"
+PROTOCOL_REDO_SHORTCUTS = ("Ctrl+Y", "Ctrl+Shift+Z")
+PROTOCOL_HISTORY_MAX_ENTRIES = 100
+
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:
 PROTOCOL_TOPIC_PREFIX = "microdrop/protocol_tree"

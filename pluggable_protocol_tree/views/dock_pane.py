@@ -26,6 +26,7 @@ from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPP
 from apscheduler.triggers.interval import IntervalTrigger
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Any, Bool, Event, Float, Instance, List, Str, observe
 
@@ -70,6 +71,7 @@ from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.protocol_history import ProtocolHistory
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -126,6 +128,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     experiment_manager = Instance(ExperimentManager)
     quick_actions = List(desc="Quick actions to mount under the tree.")
     protocol_state_tracker = Instance(PluggableProtocolStateTracker)
+
+    #: Undo/redo of protocol edits (#967), shared with the tree pane.
+    protocol_history = Instance(ProtocolHistory)
 
     #: Links the executor's Qt signals to the status model and binds the
     #: status bar to it (issue #467). The dock pane is the app's HasTraits
@@ -186,6 +191,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # <protocol> [modified]") to this pane's title.
         return PluggableProtocolStateTracker(dock_pane=self)
 
+    def _protocol_history_default(self):
+        # Flushed once the event loop regains control, so every edit one
+        # user action makes settles into a single history entry.
+        return ProtocolHistory(
+            manager=self.manager,
+            protocol_state_tracker=self.protocol_state_tracker,
+            schedule_flush=GUI.invoke_later,
+        )
+
     def _preferences_default(self):
         return ProtocolPreferences(preferences=self.task.window.application.preferences)
 
@@ -218,6 +232,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             preferences=self.preferences,
             quick_actions=list(self.quick_actions),
             protocol_state_tracker=self.protocol_state_tracker,
+            protocol_history=self.protocol_history,
             parent=parent,
         )
 
@@ -426,6 +441,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # The widget brackets the swap in a full model reset so the QTreeView
         # picks up the changed column count and re-applies header state.
         self._pane.widget.refresh_columns(_mutate)
+
+        # The history's snapshots carry the old column set; start afresh.
+        self.protocol_history.reset()
 
         # New columns bring their own wait-capable handlers — seed their ack
         # grid entries and push any persisted ack waits into them.
@@ -870,11 +888,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
             cid = col.model.col_id
             if hasattr(row, cid):
                 values[cid] = getattr(row, cid)
-        new_path = self.manager.add_step(
-            parent_path=parent_path,
-            index=insert_idx,
-            values=values,
-        )
+        with self.manager.named_edit("Duplicate Step"):
+            new_path = self.manager.add_step(
+                parent_path=parent_path,
+                index=insert_idx,
+                values=values,
+            )
+
         new_row = self.manager.get_row(new_path)
         self._select_step(new_row)
 
@@ -1294,6 +1314,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Phase Rep combos, the full view's frame list); rows_changed does
         # not fire for a cell edit.
         self._rebuild_timeline()
+
+    @observe("protocol_history:undo_manager:stack_updated", post_init=True)
+    def _on_protocol_history_changed(self, event):
+        """Undo/redo availability and names moved: refresh the quick-action
+        buttons' enabled state and tooltips."""
+        controller = (
+            self._pane.quick_actions_controller if self._pane is not None else None
+        )
+
+        if controller is not None:
+            controller.refresh_enabled()
 
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
