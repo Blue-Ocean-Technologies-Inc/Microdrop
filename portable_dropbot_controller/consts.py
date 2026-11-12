@@ -102,6 +102,9 @@ PMT_STREAM_AVG_CHOICES = (1, 2, 4, 8, 16, 32, 64, 128)
 #: ADS70x6 on-chip oversampling as the firmware's index: 0 = off, n = 2**n
 #: conversions per value. A no-op on the old ADC128S052.
 PMT_STREAM_OSR_CHOICES = tuple(range(8))
+#: Command code of the unsolicited PMT live-stream data frames the signal
+#: board sends after a PMT_STREAM request (the driver names only the request).
+PMT_STREAM_DATA_CMD = 0x123F
 #: How often the live stream's collected samples are published to the pane.
 PMT_STREAM_PUBLISH_INTERVAL_S = 0.25
 #: Abort/deadline polling slice while a capture stream is open.
