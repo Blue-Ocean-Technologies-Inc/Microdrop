@@ -118,6 +118,15 @@ class CameraEndpointStore:
             )
             return None
 
+    def saved_at(self, device_key: str) -> str:
+        """When ``device_key``'s endpoint was saved (UTC ISO 8601), or ""."""
+        entry = self._read_all().get(device_key)
+
+        if not isinstance(entry, dict):
+            return ""
+
+        return str(entry.get("saved_at", ""))
+
     def remove(self, device_key: str) -> None:
         data = self._read_all()
 

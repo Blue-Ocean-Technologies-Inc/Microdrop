@@ -657,6 +657,37 @@ DEVICE_VIEWER_CACHE_DIRNAME = ".device_viewer_cache"
 CAMERA_ENDPOINTS_FILENAME = "camera_endpoints.json"
 
 # ---------------------------------------------------------------------------
+# Camera-alignment presets
+# ---------------------------------------------------------------------------
+#: The presets library: one JSON file in this directory under
+#: ETSConfig.application_home (resolved at run time, like the endpoints).
+CAMERA_ALIGNMENT_DIRNAME = "camera_alignment"
+ALIGNMENT_PRESETS_FILENAME = "alignment_presets.json"
+
+#: The file's schema; a file written by a newer schema opens read-only.
+ALIGNMENT_PRESETS_SCHEMA_VERSION = 1
+
+#: Record kinds and scopes. Stage 1 writes only named, device-scoped
+#: presets; later stages add history snapshots and camera/any scopes.
+ALIGNMENT_PRESET_KIND_NAMED = "named"
+ALIGNMENT_PRESET_SCOPE_DEVICE = "device"
+
+#: Suggested names are ``<stem>-N``; migrated endpoints are named
+#: ``<device> <suffix>``.
+ALIGNMENT_PRESET_DEFAULT_STEM = "alignment"
+MIGRATED_ENDPOINT_PRESET_SUFFIX = "endpoint"
+
+#: Two quads closer than this per coordinate (camera pixels or scene
+#: units) are the same alignment.
+ALIGNMENT_QUAD_TOLERANCE = 0.01
+
+#: Height of the window's Presets strip.
+ALIGNMENT_PRESETS_STRIP_HEIGHT_PX = 180
+
+#: How a preset's save time shows in the table (local time).
+ALIGNMENT_PRESET_SAVED_AT_FORMAT = "%Y-%m-%d %H:%M"
+
+# ---------------------------------------------------------------------------
 # Edit Connections dialog
 # ---------------------------------------------------------------------------
 #: Line colors are '#rrggbb' hex strings; widths and radii are in VIEW
