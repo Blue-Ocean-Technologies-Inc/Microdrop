@@ -232,7 +232,8 @@ class PortableDropbotControllerBase(HasTraits):
         """Run one driver call; an OS/serial-level failure means the
         device is gone (disconnect + rescan), anything else is
         reported as an error signal rather than a traceback. Returns
-        (ok, result)."""
+        (ok, result); a failed call's result is the exception it raised,
+        so a caller can relay the driver's reason."""
         if self.proxy is None:
             logger.warning(f"Portable Dropbot not connected: ignoring {context}.")
             return False, None
@@ -242,10 +243,10 @@ class PortableDropbotControllerBase(HasTraits):
         except OSError as error:
             logger.warning(f"Portable Dropbot vanished during {context}: {error}")
             self.on_disconnected_signal("")
-            return False, None
+            return False, error
         except Exception as error:
             self._publish_error(context, error)
-            return False, None
+            return False, error
 
     # ------------------------------------------------------------------ #
     # Status / motor snapshots                                             #
