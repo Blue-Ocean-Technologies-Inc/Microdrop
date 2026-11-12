@@ -208,3 +208,54 @@ def test_naming_model_validates_the_name():
 
     assert not model.is_name_valid
     assert model.name_error
+
+
+CAMERA_QUAD = [[0.0, 0.0], [640.0, 0.0], [640.0, 480.0], [0.0, 480.0]]
+
+
+def _save_camera_preset(store, name, frame_size):
+    return store.save_named(
+        name,
+        AlignmentPreset(
+            device_key="chip-a",
+            frame_size=frame_size,
+            camera_quad=CAMERA_QUAD,
+            scene_quad=ENDPOINT,
+            endpoint_quad=ENDPOINT,
+        ),
+    )
+
+
+def test_warning_while_the_camera_picture_shape_differs(table, store):
+    _save_camera_preset(store, "vga", [640.0, 480.0])
+
+    table.live_frame_size = [1280.0, 960.0]
+
+    assert _row(table, "vga").warning == ""
+
+    table.live_frame_size = [1920.0, 1080.0]
+
+    assert "shape differs" in _row(table, "vga").warning
+    assert _row(table, "vga").applicable
+    # Endpoint-only presets have no picture to mismatch.
+    assert _row(table, "Alpha").warning == ""
+
+
+def test_warning_for_an_invalid_saved_frame_size(table, store):
+    _save_camera_preset(store, "broken", [640.0, 0.0])
+
+    assert "invalid" in _row(table, "broken").warning
+
+
+def test_save_needs_editable_and_a_writable_store(table, store):
+    assert table.can_save
+
+    table.editable = False
+
+    assert not table.can_save
+
+    table.editable = True
+    store.mark_unavailable("Presets are read-only this session.")
+
+    assert not table.can_save
+    assert table.notice == "Presets are read-only this session."

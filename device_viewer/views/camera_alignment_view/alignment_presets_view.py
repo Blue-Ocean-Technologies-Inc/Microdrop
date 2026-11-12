@@ -34,10 +34,14 @@ from traitsui.api import (
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import NO, YES, confirm
 
+# Microdrop style imports.
+from microdrop_style.colors import WARNING_COLOR
+
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     ActiveRowCheckboxColumn,
     ActiveRowObjectColumn,
+    HtmlLabelEditor,
 )
 
 # Local imports.
@@ -45,6 +49,11 @@ from ...consts import ALIGNMENT_PRESETS_TITLE, SAVE_ALIGNMENT_PRESET_DIALOG_TITL
 
 #: The strip's title, bold like the panes' headers.
 PRESETS_TITLE_STYLE_SHEET = "QLabel { font-weight: bold; }"
+
+#: Why the presets cannot be changed, in the warning colour.
+NOTICE_TEMPLATE = (
+    f'<span style="color: {WARNING_COLOR}; font-weight: bold;">{{}}</span>'
+)
 
 alignment_presets_table_editor = TableEditor(
     columns=[
@@ -108,6 +117,7 @@ alignment_presets_view = View(
             spring,
             UItem(
                 "save_as_button",
+                enabled_when="can_save",
                 tooltip="Save the confirmed alignment as a named preset",
             ),
             UItem(
@@ -118,19 +128,25 @@ alignment_presets_view = View(
             ),
             UItem(
                 "set_default_button",
-                enabled_when="selected is not None and not selected_is_default",
+                enabled_when="writable and selected is not None "
+                "and not selected_is_default",
                 tooltip="Make the selected preset its device's default",
             ),
             UItem(
                 "clear_default_button",
-                enabled_when="selected_is_default",
+                enabled_when="writable and selected_is_default",
                 tooltip="Leave the selected preset's device without a default",
             ),
             UItem(
                 "delete_button",
-                enabled_when="selected is not None",
+                enabled_when="writable and selected is not None",
                 tooltip="Delete the selected preset",
             ),
+        ),
+        UItem(
+            "notice",
+            editor=HtmlLabelEditor(template=NOTICE_TEMPLATE),
+            visible_when="notice",
         ),
         UItem("rows", editor=alignment_presets_table_editor),
     ),

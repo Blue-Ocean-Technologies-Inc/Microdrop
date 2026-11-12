@@ -25,16 +25,25 @@ from traits.api import (
     Bool,
     Button,
     Event,
+    Float,
     HasTraits,
     Instance,
     List,
     Property,
     Str,
+    Union,
     observe,
 )
 
 # Local imports.
-from ..consts import ALIGNMENT_PRESET_KIND_NAMED, ALIGNMENT_PRESET_SAVED_AT_FORMAT
+from ..consts import (
+    ALIGNMENT_PRESET_KIND_NAMED,
+    ALIGNMENT_PRESET_SAVED_AT_FORMAT,
+    PRESET_INVALID_FRAME_SIZE_NOTE,
+    PRESET_OTHER_DEVICE_WARNING_TEMPLATE,
+    PRESET_SHAPE_MISMATCH_NOTE,
+)
+from ..utils.alignment_geometry import same_aspect_ratio, valid_frame_size
 from .alignment_preset import alignment_preset_name_error
 from .alignment_preset_store import AlignmentPresetStore
 
@@ -55,6 +64,11 @@ def local_saved_at_text(saved_at):
         )
     except ValueError:
         return saved_at
+
+
+def _sentence(note):
+    """A status-bar note as a Warning-column sentence: capitalised."""
+    return note[:1].upper() + note[1:]
 
 
 class AlignmentPresetRow(HasTraits):
@@ -85,6 +99,12 @@ class AlignmentPresetRow(HasTraits):
     #: Whether Apply can put it on the loaded device.
     applicable = Bool()
 
+    #: Whether it carries camera-side corners (not endpoint-only).
+    has_camera_quad = Bool()
+
+    #: The camera frame size it was saved at as [w, h]; None if unknown.
+    frame_size = Union(None, List(Float))
+
     #: Paints the row in the active highlight: a loaded-device row while
     #: other devices' rows are listed too.
     highlighted = Bool()
@@ -112,6 +132,19 @@ class AlignmentPresetTable(HasTraits):
 
     #: List only the loaded device's presets.
     this_device_only = Bool(True)
+
+    #: The camera's live frame size as [w, h]; None without a picture.
+    #: A preset saved at another picture shape applies its endpoint only.
+    live_frame_size = Union(None, List(Float))
+
+    #: Whether the store accepts changes.
+    writable = Property(Bool, observe="store.read_only")
+
+    #: Why the store does not, shown above the table; "" while it does.
+    notice = Property(Str, observe="store.read_only_reason")
+
+    #: Whether Save as can run: the store writable and no protocol running.
+    can_save = Property(Bool, observe="editable, writable")
 
     #: One row per listed preset: the loaded device's first, then by device
     #: and name.
@@ -150,8 +183,20 @@ class AlignmentPresetTable(HasTraits):
     def _get_selected_is_default(self):
         return self.selected is not None and self.selected.is_default
 
+    def _get_writable(self):
+        return self.store is not None and not self.store.read_only
+
+    def _get_notice(self):
+        return self.store.read_only_reason if self.store is not None else ""
+
+    def _get_can_save(self):
+        return self.editable and self.writable
+
     # ------------------------------------------------------------------ #
-    @observe("store.presets, store.defaults, current_device_key, this_device_only")
+    @observe(
+        "store.presets, store.defaults, current_device_key, this_device_only, "
+        "live_frame_size"
+    )
     def _rebuild_rows(self, event=None):
         """Mirror the store, reusing the row of every preset still listed so
         a rebuild during an in-place edit leaves the edited row alone."""
@@ -191,6 +236,8 @@ class AlignmentPresetTable(HasTraits):
                     device_key=preset.device_key,
                     saved_at_text=local_saved_at_text(preset.saved_at),
                     is_default=self.store.is_default(preset.id),
+                    has_camera_quad=not preset.is_endpoint_only,
+                    frame_size=preset.frame_size,
                 )
                 rows.append(row)
         finally:
@@ -311,10 +358,27 @@ class AlignmentPresetTable(HasTraits):
         return self.store.name_error(row.name, row.device_key, row.preset_id)
 
     def _applicability_warning_for(self, row):
-        if row.applicable:
+        """Why Apply cannot put ``row`` (fully) on the live alignment, or ""."""
+
+        if not row.applicable:
+            return PRESET_OTHER_DEVICE_WARNING_TEMPLATE.format(
+                device_key=row.device_key
+            )
+
+        if not row.has_camera_quad or row.frame_size is None:
             return ""
 
-        return f"Saved for {row.device_key} — load that device to apply it"
+        if not valid_frame_size(row.frame_size):
+            return _sentence(PRESET_INVALID_FRAME_SIZE_NOTE)
+
+        live_frame_size = self.live_frame_size
+
+        if valid_frame_size(live_frame_size) and not same_aspect_ratio(
+            row.frame_size, live_frame_size
+        ):
+            return _sentence(PRESET_SHAPE_MISMATCH_NOTE)
+
+        return ""
 
 
 class AlignmentPresetName(HasTraits):
