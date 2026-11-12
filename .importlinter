@@ -36,6 +36,7 @@ root_packages =
     user_help_plugin
     video_protocol_controls
     volume_threshold_protocol_controls
+    zone_protocol_controls
     examples
 
 [importlinter:contract:plugin-decoupling]
@@ -74,6 +75,7 @@ modules =
     user_help_plugin
     video_protocol_controls
     volume_threshold_protocol_controls
+    zone_protocol_controls
     # Add your new Envisage plugin package here (not to root_packages only).
 ignore_imports =
     # Rule: a plugin's own consts module (topics/constants/message schemas)
@@ -100,7 +102,8 @@ ignore_imports =
     # services.preferences ARE the declared public API for plugins that
     # contribute protocol columns (dropbot_protocol_controls,
     # volume_threshold_protocol_controls, portable_dropbot_protocol_controls,
-    # video_protocol_controls, protocol_quick_action_tools, device_viewer).
+    # video_protocol_controls, zone_protocol_controls,
+    # protocol_quick_action_tools, device_viewer).
     # Treated like a consts surface: importable by everyone. This does NOT
     # cover the opposite direction — pluggable_protocol_tree importing a
     # specific leaf plugin's internals is a real violation, itemized below.
