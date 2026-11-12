@@ -92,6 +92,14 @@ DURATION_CONSUMED_KEY = "_routes_consumed_duration"
 # volume_threshold sets this; other columns may too.
 PHASE_HOLD_REQUESTED_KEY = "_phase_hold_requested"
 
+# Generic opt-in hook (set on ctx.scratch in on_pre_step by any column that
+# adds electrodes to this step's actuation): a list of electrode ids that
+# RoutesHandler unions into the row's static electrodes for every phase of
+# this step only — the row itself is never modified. Same decoupling as
+# PHASE_HOLD_REQUESTED_KEY: RoutesHandler never names the columns that set
+# it. zone_protocol_controls' Zone Target column sets it.
+EXTRA_STATIC_ELECTRODES_KEY = "_extra_static_electrodes"
+
 # Cooperative-sleep slice: how often to check stop_event during a
 # per-phase dwell so a Stop press lands within ~50ms even on long
 # durations.
@@ -149,6 +157,16 @@ def _report_unmapped_electrodes(electrodes, mapping, run_scratch):
                 f"electrode {e!r} has no channel mapping; actuation channel skipped"
             )
             reported.add(e)
+
+
+def step_static_electrodes(row, ctx):
+    """The step's static electrodes: the row's own, then any a sibling
+    column added for this step via EXTRA_STATIC_ELECTRODES_KEY, de-duplicated
+    in that order."""
+    row_electrodes = list(getattr(row, "electrodes", []) or [])
+    extra_electrodes = list(ctx.scratch.get(EXTRA_STATIC_ELECTRODES_KEY, []))
+
+    return list(dict.fromkeys(row_electrodes + extra_electrodes))
 
 
 def _confirm_finish_loop_over_budget():
@@ -482,7 +500,7 @@ class RoutesHandler(BaseColumnHandler):
         # start (the next loop's phase 0 IS the return), and idle replaces the
         # old soft-end remainder (#477).
         ramp_up, unit_cycle, _return_phase = duration_loop_parts(
-            static_electrodes=list(getattr(row, "electrodes", []) or []),
+            static_electrodes=step_static_electrodes(row, ctx),
             routes=list(getattr(row, "routes", []) or []),
             trail_length=int(getattr(row, "trail_length", 1)),
             trail_overlay=int(getattr(row, "trail_overlay", 0)),
@@ -771,7 +789,7 @@ class RoutesHandler(BaseColumnHandler):
         else:
             phases = list(
                 iter_phases(
-                    static_electrodes=list(getattr(row, "electrodes", []) or []),
+                    static_electrodes=step_static_electrodes(row, ctx),
                     routes=list(getattr(row, "routes", []) or []),
                     trail_length=int(getattr(row, "trail_length", 1)),
                     trail_overlay=int(getattr(row, "trail_overlay", 0)),
@@ -805,7 +823,7 @@ class RoutesHandler(BaseColumnHandler):
             # running ALL the remaining predetermined reps (#477 follow-up).
             # Same origin the dynamic loop uses (zipped first window + static).
             _dlp_ramp, _dlp_cycle, _dlp_ret = duration_loop_parts(
-                static_electrodes=list(getattr(row, "electrodes", []) or []),
+                static_electrodes=step_static_electrodes(row, ctx),
                 routes=list(getattr(row, "routes", []) or []),
                 trail_length=int(getattr(row, "trail_length", 1)),
                 trail_overlay=int(getattr(row, "trail_overlay", 0)),

@@ -211,6 +211,54 @@ def test_routes_handler_publishes_display_and_hardware_per_phase():
         assert m.free_mode is False
 
 
+def test_routes_handler_actuates_extra_static_electrodes_from_scratch():
+    """A sibling column's EXTRA_STATIC_ELECTRODES_KEY electrodes join every
+    phase of the step, without touching the row's own electrodes."""
+    from pluggable_protocol_tree.builtins.routes_column import (
+        EXTRA_STATIC_ELECTRODES_KEY,
+    )
+
+    col = make_routes_column()
+    RowType = build_row_type([col], base=BaseRow)
+    row = RowType()
+    row.electrodes = ["e0"]
+    row.routes = [["e2", "e3"]]
+    row.duration_s = 0.0
+
+    ctx = MagicMock()
+    ctx.protocol.cursor = ExecutionCursor()
+    ctx.protocol.stop_event.is_set.return_value = False
+    ctx.protocol.preview_mode = False
+    ctx.protocol.advanced_mode = False
+    ctx.scratch = {EXTRA_STATIC_ELECTRODES_KEY: ["e5", "e0"]}
+    ctx.protocol.scratch = {
+        "electrode_to_channel": {"e0": 0, "e2": 2, "e3": 3, "e5": 5}
+    }
+
+    published = []
+
+    with (
+        patch(
+            "pluggable_protocol_tree.builtins.routes_column.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+        patch(
+            "microdrop_utils.dramatiq_pub_sub_helpers.publish_message",
+            side_effect=lambda **kw: published.append(kw),
+        ),
+    ):
+        col.handler.on_step(row, ctx)
+
+    hardware_payloads = [
+        json.loads(p["message"])
+        for p in published
+        if p["topic"] == ELECTRODES_STATE_CHANGE
+    ]
+
+    assert [set(p["channels"]) for p in hardware_payloads] == [{0, 2, 5}, {0, 3, 5}]
+    assert row.electrodes == ["e0"]
+
+
 def test_routes_handler_preview_mode_skips_hardware_and_ack():
     """Preview mode: the display path still fires (so the DV animates
     the phases) but ELECTRODES_STATE_CHANGE is NOT published and we
