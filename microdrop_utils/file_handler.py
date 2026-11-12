@@ -12,6 +12,8 @@
 import os
 import platform
 import subprocess
+import tempfile
+import time
 import webbrowser
 from pathlib import Path
 from shutil import copy2
@@ -21,6 +23,11 @@ from typing import Union
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: A swap onto a file locked by another process is tried this many times,
+#: this far apart, before the error is raised.
+ATOMIC_WRITE_ATTEMPTS = 5
+ATOMIC_WRITE_RETRY_DELAY_S = 0.05
 
 
 def open_html_in_browser(file_path):
@@ -67,14 +74,47 @@ def safe_copy_file(
 
 def write_atomically(path, content):
     """Write ``content`` (bytes) to ``path`` aside, then swap it in, so a
-    failed write never truncates the file being replaced."""
+    failed write never truncates the file being replaced.
+
+    The aside file is unique and in the same directory, flushed to disk
+    before the swap; a swap refused by a transient lock (an antivirus or
+    indexer holding the file on Windows) is retried briefly. On any
+    failure the aside file is removed and the error raised.
+    """
     path = Path(path)
-    partial_path = path.with_name(f"{path.name}.partial")
-
     path.parent.mkdir(parents=True, exist_ok=True)
-    partial_path.write_bytes(content)
 
-    os.replace(partial_path, path)
+    descriptor, partial_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".partial"
+    )
+    partial_path = Path(partial_name)
+
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+
+        _replace_with_retry(partial_path, path)
+
+    except BaseException:
+        partial_path.unlink(missing_ok=True)
+        raise
+
+
+def _replace_with_retry(source, destination):
+    """``os.replace``, retried a few times while the destination is locked."""
+    for attempt in range(ATOMIC_WRITE_ATTEMPTS):
+        try:
+            os.replace(source, destination)
+
+            return
+
+        except PermissionError:
+            if attempt == ATOMIC_WRITE_ATTEMPTS - 1:
+                raise
+
+            time.sleep(ATOMIC_WRITE_RETRY_DELAY_S)
 
 
 def open_file(filepath):
