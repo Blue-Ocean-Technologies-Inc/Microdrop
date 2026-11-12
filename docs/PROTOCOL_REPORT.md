@@ -579,6 +579,10 @@ Real producers in this tree:
 - `portable_dropbot_protocol_controls/protocol_columns/fluorescence_capture_column.py:_contribute_to_report`:
   a `Fluorescence Captures Folder` metadata row only. Its PNGs arrive via
   `DEVICE_VIEWER_MEDIA_CAPTURED`.
+- `zone_protocol_controls/protocol_columns/zone_target_column.py:ZoneTargetHandler.on_pre_step`:
+  one data row per Zone Target step (`Zone Target`, `Zone Target
+  Criterion`, `Zone Target Region`), all strings, so stored but not
+  charted.
 - `views/dock_pane.py:_run_completion_flow`: `Protocol Path`, via
   `controller.log_metadata` (not a topic).
 
