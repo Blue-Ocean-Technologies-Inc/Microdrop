@@ -46,6 +46,8 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
+from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -55,6 +57,9 @@ from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_g
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
+)
+PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
+    "protocol_tree.src.html"
 )
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
@@ -240,7 +245,11 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
     help_plugin = UserHelpPlugin()
     application = Application(plugins=[help_plugin])
     application.start()
-    contributors = [ImageViewerPlugin(), DropbotStatusAndControlsPlugin()]
+    contributors = [
+        ImageViewerPlugin(),
+        DropbotStatusAndControlsPlugin(),
+        PluggableProtocolTreePlugin(),
+    ]
 
     # Added, not started: contributions resolve without the plugins running.
     for plugin in contributors:
@@ -257,6 +266,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
+        "Protocol Tree Tutorial",
     ]
 
     for entry in entries:
@@ -272,6 +282,10 @@ def test_dropbot_tutorial_rebuilds_identically():
 
 def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def test_protocol_tree_tutorial_rebuilds_identically():
+    assert is_up_to_date(PROTOCOL_TREE_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
