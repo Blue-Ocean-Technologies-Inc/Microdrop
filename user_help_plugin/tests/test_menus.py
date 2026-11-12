@@ -22,7 +22,7 @@ from envisage.api import Application, Plugin
 from traits.api import List
 
 # Local imports.
-from ..consts import TUTORIALS, TutorialEntry
+from ..consts import GETTING_STARTED_TUTORIAL_TITLE, TUTORIALS, TutorialEntry
 from ..menus import (
     OpenWebViewDialogAction,
     TutorialCatalog,
@@ -103,10 +103,17 @@ def test_a_plugin_loaded_at_runtime_adds_its_tutorials(help_plugin):
     contributor = TutorialContributingPlugin()
     menu = TutorialsMenuManager(catalog=help_plugin.tutorial_catalog)
 
+    # The Help plugin contributes its own Getting Started page.
+    assert _tutorial_titles(menu) == [GETTING_STARTED_TUTORIAL_TITLE]
+
     help_plugin.application.add_plugin(contributor)
 
-    assert _tutorial_titles(menu) == ["Heater & Magnet Tutorial", "Zebra Tutorial"]
+    assert _tutorial_titles(menu) == [
+        GETTING_STARTED_TUTORIAL_TITLE,
+        "Heater & Magnet Tutorial",
+        "Zebra Tutorial",
+    ]
 
     help_plugin.application.remove_plugin(contributor)
 
-    assert _tutorial_titles(menu) == []
+    assert _tutorial_titles(menu) == [GETTING_STARTED_TUTORIAL_TITLE]

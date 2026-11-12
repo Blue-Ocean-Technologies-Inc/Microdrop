@@ -31,10 +31,13 @@ from envisage.api import Application
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from examples.tutorials.build_tutorial import (
+    MEDIA_CLIP_BUDGET_BYTES,
+    MEDIA_FOLDER_BUDGET_BYTES,
     SIZE_BUDGET_BYTES,
     TutorialBuildError,
     find_network_references,
     is_up_to_date,
+    main,
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import (
@@ -43,12 +46,16 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
 from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
 from microdrop_style.tutorial.glyphs import read_symbols, symbol_markup, trace_glyphs
 
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
+GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
+    "getting_started.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -248,6 +255,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     assert [entry.title for entry in entries] == [
         "Dropbot Status & Controls Tutorial",
+        "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
     ]
 
@@ -260,6 +268,214 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
 def test_dropbot_tutorial_rebuilds_identically():
     assert is_up_to_date(DROPBOT_SOURCE)
+
+
+def test_getting_started_tutorial_rebuilds_identically():
+    assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def _clip_page(clip="t_media/a.webm", poster=""):
+    poster = f' poster="{poster}"' if poster else ""
+
+    return f'<title>T</title><video data-clip{poster}><source src="{clip}"></video>'
+
+
+def test_a_clip_in_the_media_folder_stays_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webm").write_bytes(b"clip")
+    (tmp_path / "p.webp").write_bytes(b"still")
+    page, _cache = render_tutorial(
+        _clip_page(poster="p.webp"), tmp_path, {}, "t.src.html"
+    )
+
+    assert '<source src="t_media/a.webm">' in page
+    assert 'poster="data:image/webp;base64,' in page
+
+
+@pytest.mark.parametrize(
+    "clip",
+    ["a.webm", "other_media/a.webm", "t_media/../a.webm", "file:///t_media/a.webm"],
+)
+def test_a_clip_outside_the_media_folder_fails_the_build(tmp_path, clip):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "a.webm").write_bytes(b"clip")
+
+    with pytest.raises(TutorialBuildError, match="t_media"):
+        render_tutorial(_clip_page(clip), tmp_path, {}, "t.src.html")
+
+
+def test_a_missing_clip_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+
+    with pytest.raises(TutorialBuildError, match="not found"):
+        render_tutorial(_clip_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_network_clip_fails_the_build(tmp_path):
+    source = _clip_page("https://example.com/a.webm")
+
+    with pytest.raises(TutorialBuildError, match="Network"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
+
+
+def _sized_file(path, size):
+    """Create ``path`` holding ``size`` bytes without writing them all."""
+    with path.open("wb") as file:
+        file.truncate(size)
+
+
+def test_a_clip_over_budget_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    _sized_file(tmp_path / "t_media" / "a.webm", MEDIA_CLIP_BUDGET_BYTES + 1)
+
+    with pytest.raises(TutorialBuildError, match="budget"):
+        render_tutorial(_clip_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_media_folder_over_budget_fails_the_build(tmp_path):
+    folder = tmp_path / "t_media"
+    folder.mkdir()
+    (folder / "a.webm").write_bytes(b"clip")
+
+    # Unreferenced files count too, so one large one tips the folder over.
+    _sized_file(folder / "b.webm", MEDIA_FOLDER_BUDGET_BYTES)
+
+    with pytest.raises(TutorialBuildError, match="t_media/ holds"):
+        render_tutorial(_clip_page(), tmp_path, {}, "t.src.html")
+
+
+def _still_page(still="t_media/a.webp"):
+    return f'<title>T</title><img data-media src="{still}" alt="A chip" width="4">'
+
+
+def test_a_media_still_stays_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    page, _cache = render_tutorial(_still_page(), tmp_path, {}, "t.src.html")
+
+    assert '<img data-media src="t_media/a.webp" alt="A chip" width="4">' in page
+    assert "data:image/webp" not in page
+
+
+@pytest.mark.parametrize(
+    "still",
+    ["a.webp", "other_media/a.webp", "t_media/../a.webp", "file:///t_media/a.webp"],
+)
+def test_a_media_still_outside_the_media_folder_fails_the_build(tmp_path, still):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "a.webp").write_bytes(b"still")
+
+    with pytest.raises(TutorialBuildError, match="t_media"):
+        render_tutorial(_still_page(still), tmp_path, {}, "t.src.html")
+
+
+def test_a_missing_media_still_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+
+    with pytest.raises(TutorialBuildError, match="not found"):
+        render_tutorial(_still_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_media_still_over_budget_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    _sized_file(tmp_path / "t_media" / "a.webp", MEDIA_CLIP_BUDGET_BYTES + 1)
+
+    with pytest.raises(TutorialBuildError, match="budget"):
+        render_tutorial(_still_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_plain_image_is_still_inlined(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    source = '<title>T</title><img src="t_media/a.webp" alt="A chip">'
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert '<img src="data:image/webp;base64,' in page
+    assert 'src="t_media/a.webp"' not in page
+
+
+def _linked_page(document="t_media/r.html"):
+    return f'<title>T</title><p><a data-media href="{document}">Open the report</a></p>'
+
+
+def test_a_linked_document_stays_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "r.html").write_text(
+        '<script src="https://cdn.example/x.js">'
+    )
+    page, _cache = render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+    # The link is checked, not the document it opens: its own network loads
+    # are not the page's.
+    assert '<a data-media href="t_media/r.html">Open the report</a>' in page
+
+
+@pytest.mark.parametrize(
+    "document",
+    ["r.html", "other_media/r.html", "t_media/../r.html", "file:///t_media/r.html"],
+)
+def test_a_linked_document_outside_the_media_folder_fails_the_build(tmp_path, document):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "r.html").write_text("report")
+
+    with pytest.raises(TutorialBuildError, match="t_media"):
+        render_tutorial(_linked_page(document), tmp_path, {}, "t.src.html")
+
+
+def test_a_missing_linked_document_fails_the_build(tmp_path):
+    (tmp_path / "t_media").mkdir()
+
+    with pytest.raises(TutorialBuildError, match="not found"):
+        render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_linked_document_counts_in_the_folder_budget(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    _sized_file(tmp_path / "t_media" / "r.html", MEDIA_FOLDER_BUDGET_BYTES + 1)
+
+    with pytest.raises(TutorialBuildError, match="budget"):
+        render_tutorial(_linked_page(), tmp_path, {}, "t.src.html")
+
+
+def test_a_plain_link_is_not_checked(tmp_path):
+    source = '<title>T</title><a href="t_media/nowhere.html">gone</a>'
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert 'href="t_media/nowhere.html"' in page
+
+
+def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
+    folder = tmp_path / "t_media"
+    folder.mkdir()
+    (folder / "a.webm").write_bytes(b"clip")
+    (folder / "a.webp").write_bytes(b"still")
+    (folder / "r.html").write_text("report")
+    source = (
+        '<title>T</title><video data-clip><source src="t_media/a.webm"></video>'
+        '<img data-media src="t_media/a.webp" alt="A chip">'
+        '<a data-media href="t_media/r.html">Open</a>'
+        f"<p>{'x' * SIZE_BUDGET_BYTES}</p>"
+    )
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html", standalone=True)
+
+    # Over the page budget, yet built: the single-file copy is exempt.
+    assert "t_media/" not in page
+    assert '<source src="data:video/webm;base64,' in page
+    assert 'src="data:image/webp;base64,' in page
+    assert 'href="data:text/html;base64,' in page
+
+
+def test_build_standalone_writes_a_second_file(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    source = tmp_path / "t.src.html"
+    source.write_text('<title>T</title><img data-media src="t_media/a.webp" alt="A">')
+    out = tmp_path / "shared" / "t.html"
+    out.parent.mkdir()
+
+    assert main([str(source), "--standalone", str(out)]) == 0
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
+    assert 'src="data:image/webp;base64,' in out.read_text()
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):

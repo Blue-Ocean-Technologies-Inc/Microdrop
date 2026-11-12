@@ -21,6 +21,9 @@ deterministic and needs Qt only when a new glyph appears. From ``src``::
     pixi run python -m examples.tutorials.build_tutorial <src> --check
 
 ``--check`` rebuilds in memory and fails when the committed output is stale.
+``--standalone <out>`` also writes a single-file copy for sharing, with every
+sidecar clip, still and linked document inlined (it is exempt from the page
+budget and is never registered or committed).
 Set ``QT_QPA_PLATFORM=offscreen`` to trace glyphs without a display.
 """
 
@@ -52,6 +55,19 @@ logger = get_logger(__name__)
 SOURCE_SUFFIX = ".src.html"
 #: Built pages above this size fail the build; the reference guide is ~260 KB.
 SIZE_BUDGET_BYTES = 300_000
+#: Video clips, ``<img data-media>`` stills and ``<a data-media>`` linked
+#: documents are not inlined: they ship in a ``<slug>_media`` folder beside the
+#: page, each file and the folder as a whole kept within these budgets.
+MEDIA_FOLDER_SUFFIX = "_media"
+MEDIA_CLIP_BUDGET_BYTES = 1_200_000
+MEDIA_FOLDER_BUDGET_BYTES = 8_000_000
+#: Elements whose ``src`` is a sidecar clip; a ``<video>``'s ``poster`` is
+#: inlined so the still shows even without the folder.
+MEDIA_TAGS = {"video", "source"}
+#: Marks an ``<img>`` whose ``src`` is a sidecar still rather than inlined, or
+#: an ``<a>`` whose ``href`` is a sidecar document (the build checks the file,
+#: not its contents).
+MEDIA_IMAGE_ATTRIBUTE = "data-media"
 
 #: Attributes whose URL the page fetches at load time.
 FETCHING_ATTRIBUTES = {
@@ -206,9 +222,14 @@ class _SourceRewriter(HTMLParser):
     rewritten elements must be closed explicitly.
     """
 
-    def __init__(self, base_dir):
+    def __init__(self, base_dir, media_folder, standalone=False):
         super().__init__(convert_charrefs=False)
         self.base_dir = base_dir
+        self.media_folder = media_folder
+        #: Inline every sidecar file as a data URI (the single-file copy).
+        self.standalone = standalone
+        #: Sidecar clips, stills and linked documents, as paths.
+        self.media = []
         self.out = []
         self.header_comments = []
         self.title = None
@@ -328,10 +349,18 @@ class _SourceRewriter(HTMLParser):
 
             return
 
+        if tag == "img" and MEDIA_IMAGE_ATTRIBUTE in names:
+            self._emit(f"<img{_attrs_markup(self._media_attrs(attrs))}>")
+
+            return
+
         if tag == "img":
             self._emit(self._inline_image(attrs))
 
             return
+
+        if tag in MEDIA_TAGS or (tag in LINK_TAGS and MEDIA_IMAGE_ATTRIBUTE in names):
+            markup = f"<{tag}{_attrs_markup(self._media_attrs(attrs))}>"
 
         if self_closing or tag in VOID_TAGS:
             self._emit(markup)
@@ -485,6 +514,77 @@ class _SourceRewriter(HTMLParser):
             f'<use href="#ic-{symbol}"/></svg></span>'
         )
 
+    def _media_attrs(self, attrs):
+        """A ``<video>`` / ``<source>`` / ``<img data-media>`` /
+        ``<a data-media>``'s attributes with its ``src`` / ``href`` checked to
+        be a sidecar file and a ``poster`` inlined; network URLs are left for
+        the reference check to fail."""
+        kept = []
+
+        for name, value in attrs:
+            # A link is never a network load, so the reference check would
+            # pass a network href: refuse it here.
+            if name == "href" and value and NETWORK_URL_PATTERN.match(value):
+                raise TutorialBuildError(
+                    f"Media file {value} must be a relative path inside "
+                    f"{self.media_folder}/"
+                )
+
+            if not value or NETWORK_URL_PATTERN.match(value):
+                kept.append((name, value))
+            elif name in ("src", "href"):
+                path = self._media_path(value)
+                self.media.append(path)
+                kept.append((name, _data_uri(path) if self.standalone else value))
+            elif name == "poster":
+                kept.append((name, _data_uri(self._local_file(value))))
+            else:
+                kept.append((name, value))
+
+        return kept
+
+    def _media_path(self, source):
+        """The file a clip or still URL names; it must lie in the media
+        folder."""
+        folder = (self.base_dir / self.media_folder).resolve()
+        parts = source.split("/")
+
+        if (
+            parts[0] != self.media_folder
+            or len(parts) < 2
+            or ".." in parts
+            or "\\" in source
+            or re.match(r"[a-z][a-z0-9+.-]*:", source, re.IGNORECASE)
+        ):
+            raise TutorialBuildError(
+                f"Media file {source} must be a relative path inside "
+                f"{self.media_folder}/"
+            )
+
+        path = (self.base_dir / source).resolve()
+
+        if folder not in path.parents:
+            raise TutorialBuildError(
+                f"Media file {source} is outside {self.media_folder}/"
+            )
+
+        if not path.is_file():
+            raise TutorialBuildError(f"Media file not found: {source}")
+
+        return path
+
+    def _local_file(self, source):
+        """The local file a poster names."""
+        if re.match(r"(?:[a-z]+:)?//|data:", source, re.IGNORECASE):
+            raise TutorialBuildError(f"Poster must be a local image: {source}")
+
+        path = (self.base_dir / source).resolve()
+
+        if not path.is_file():
+            raise TutorialBuildError(f"Poster not found: {source}")
+
+        return path
+
     def _inline_image(self, attrs):
         """Inline a local ``<img>``: SVG markup with ``data-inline``, else a
         data URI. Network sources are left for the reference check to fail."""
@@ -505,11 +605,50 @@ class _SourceRewriter(HTMLParser):
 
             return _label_svg(svg, names.get("class"), names.get("alt"), source)
 
-        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         kept = [(n, v) for n, v in attrs if n not in ("src", "data-inline")]
 
-        return f'<img src="data:{mime};base64,{encoded}"{_attrs_markup(kept)}>'
+        return f'<img src="{_data_uri(path)}"{_attrs_markup(kept)}>'
+
+
+def _data_uri(path):
+    """A local file as a ``data:`` URI."""
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+
+    return f"data:{mime};base64,{encoded}"
+
+
+def media_folder_name(source_name):
+    """``<slug>.src.html`` -> ``<slug>_media``, the folder its media ship in."""
+    if source_name.endswith(SOURCE_SUFFIX):
+        slug = source_name[: -len(SOURCE_SUFFIX)]
+    else:
+        slug = Path(source_name).stem
+
+    return f"{slug}{MEDIA_FOLDER_SUFFIX}"
+
+
+def _check_media(base_dir, media_folder, media):
+    """Fail the build when a media file, or the media folder, is over budget."""
+    for path in media:
+        size = path.stat().st_size
+
+        if size > MEDIA_CLIP_BUDGET_BYTES:
+            raise TutorialBuildError(
+                f"Media file {path.name} is {size} bytes, over the "
+                f"{MEDIA_CLIP_BUDGET_BYTES}-byte budget"
+            )
+
+    folder = base_dir / media_folder
+
+    if media and folder.is_dir():
+        total = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file())
+
+        if total > MEDIA_FOLDER_BUDGET_BYTES:
+            raise TutorialBuildError(
+                f"{media_folder}/ holds {total} bytes, over the "
+                f"{MEDIA_FOLDER_BUDGET_BYTES}-byte budget"
+            )
 
 
 def _contents_markup(parts):
@@ -642,13 +781,18 @@ def find_network_references(page):
     return finder.found
 
 
-def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=False):
+def render_tutorial(
+    source_text, base_dir, glyph_cache, source_name, retrace=False, standalone=False
+):
     """Render a source page; return ``(page, glyph_cache)``.
 
     ``glyph_cache`` maps glyph id to its traced ``{"text", "d", "viewBox"}``;
-    the returned cache holds exactly the glyphs the page uses.
+    the returned cache holds exactly the glyphs the page uses. ``standalone``
+    inlines every sidecar file and lifts the page budget: a single file to
+    share, not the page the app ships.
     """
-    parser = _SourceRewriter(base_dir)
+    media_folder = media_folder_name(source_name)
+    parser = _SourceRewriter(Path(base_dir), media_folder, standalone=standalone)
     parser.feed(source_text.replace("\r\n", "\n"))
     parser.close()
 
@@ -658,6 +802,8 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
 
     if not parser.title:
         raise TutorialBuildError("The source needs a <title>")
+
+    _check_media(Path(base_dir), media_folder, parser.media)
 
     body = "".join(parser.out).strip("\n")
     scripts = "".join(
@@ -722,7 +868,7 @@ def render_tutorial(source_text, base_dir, glyph_cache, source_name, retrace=Fal
 
     size = len(page.encode("utf-8"))
 
-    if size > SIZE_BUDGET_BYTES:
+    if size > SIZE_BUDGET_BYTES and not standalone:
         raise TutorialBuildError(
             f"The page is {size} bytes, over the {SIZE_BUDGET_BYTES}-byte budget"
         )
@@ -769,6 +915,29 @@ def build_tutorial(source_path, output_path=None, retrace=False):
     return output_path
 
 
+def build_standalone(source_path, output_path):
+    """Write a single-file copy of ``source_path`` with every sidecar file
+    inlined, for sharing; return its path. The regular build is the glyph
+    cache, so build that first."""
+    source_path = Path(source_path)
+    output_path = Path(output_path)
+    built = default_output_path(source_path)
+    previous = built.read_text(encoding="utf-8") if built.is_file() else ""
+
+    page, _cache = render_tutorial(
+        source_path.read_text(encoding="utf-8"),
+        source_path.parent,
+        read_symbols(previous),
+        source_path.name,
+        standalone=True,
+    )
+    output_path.write_text(page, encoding="utf-8", newline="\n")
+
+    logger.info(f"Built {output_path} ({len(page.encode('utf-8'))} bytes)")
+
+    return output_path
+
+
 def is_up_to_date(source_path, output_path=None):
     """Return True when rebuilding ``source_path`` reproduces its output; a
     page never built is not up to date."""
@@ -792,6 +961,12 @@ def main(argv=None):
     parser.add_argument(
         "--check", action="store_true", help="fail if the built file is stale"
     )
+    parser.add_argument(
+        "--standalone",
+        type=Path,
+        metavar="OUT",
+        help="also write a single-file copy with every sidecar file inlined",
+    )
     args = parser.parse_args(argv)
 
     if args.check:
@@ -803,6 +978,9 @@ def main(argv=None):
         return 0
 
     build_tutorial(args.source, args.output, retrace=args.retrace)
+
+    if args.standalone:
+        build_standalone(args.source, args.standalone)
 
     return 0
 
