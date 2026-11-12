@@ -31,6 +31,9 @@ electrode layer, the offscreen device render, the dialog parent, the
 status bar, and the selected camera's label.
 """
 
+# Standard library imports.
+from datetime import datetime
+
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt, QTimer
 from traits.api import Any, Callable, HasTraits, Instance, Int, observe
@@ -47,11 +50,21 @@ from microdrop_application.dialogs.pyface_wrapper import (
 
 # Local imports.
 from ..consts import (
+    ALIGNMENT_PRESET_SAVED_AT_FORMAT,
     APPLY_ALIGNMENT_PRESET_DIALOG_TITLE,
+    BEFORE_APPLY_PRESET_NAME_TEMPLATE,
     CONFIRM_AND_SAVE_CHOICE,
     DELETE_ALIGNMENT_PRESET_DIALOG_TITLE,
     ENDPOINT_ONLY_PRESET_NOTE,
+    NOTHING_CONFIRMED_MESSAGE,
     PENDING_PANE_EDITS_MESSAGE,
+    PRESET_ENDPOINT_ONLY_NOTE,
+    PRESET_INVALID_FRAME_SIZE_NOTE,
+    PRESET_NO_CAMERA_FRAME_NOTE,
+    PRESET_RESCALED_TEMPLATE,
+    PRESET_SHAPE_MISMATCH_NOTE,
+    PRESETS_UNAVAILABLE_TEMPLATE,
+    PRESETS_UNREADABLE_TEMPLATE,
     SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
     SAVE_CONFIRMED_CHOICE,
 )
@@ -61,9 +74,11 @@ from ..models.alignment_preset_table import AlignmentPresetName, AlignmentPreset
 from ..models.main_model import DeviceViewMainModel
 from ..utils.alignment_geometry import (
     camera_point_to_item,
+    camera_quad_in_frame,
     camera_to_item_mapping,
     item_point_to_camera,
     quads_close,
+    valid_frame_size,
 )
 from ..utils.camera_endpoints import CameraEndpointStore
 from ..views.camera_alignment_view.alignment_dialog import (
@@ -140,21 +155,19 @@ class CameraAlignmentWorkflowController(HasTraits):
 
     def _camera_to_item_mapping(self):
         """The affine RAW-camera-pixel -> video-item-local mapping as
-        (scale_x, scale_y, offset_x, offset_y) for the live frame size."""
-        video_item = self.get_video_item()
-        native = video_item.nativeSize()
+        (scale_x, scale_y, offset_x, offset_y) for the live frame size.
+        Raises RuntimeError without frames or a sized video item."""
+        frame_size = self._frame_size()
 
-        if native.isEmpty():
+        if frame_size is None:
             raise RuntimeError("no camera frames yet — cannot map camera pixels")
 
-        item_size = video_item.size()
+        mapping = self._item_mapping_for(frame_size)
 
-        return camera_to_item_mapping(
-            (native.width(), native.height()),
-            (item_size.width(), item_size.height()),
-            keep_aspect_ratio=video_item.aspectRatioMode()
-            != Qt.AspectRatioMode.IgnoreAspectRatio,
-        )
+        if mapping is None:
+            raise RuntimeError("the camera view has no size — cannot map camera pixels")
+
+        return mapping
 
     def _camera_pixels_to_video_item(self, point):
         mapping = self._camera_to_item_mapping()
@@ -308,7 +321,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             return
 
         self.close_alignment_dialog()
-        self.preset_store.refresh()
+        self._refresh_presets()
 
         # Without a saved endpoint, the device's default preset seeds both
         # panes.
@@ -323,9 +336,10 @@ class CameraAlignmentWorkflowController(HasTraits):
 
         if default_preset is not None:
             initial_endpoint = default_preset.endpoint_quad
+            default_camera_quad, _, _ = self._preset_camera_quad_now(default_preset)
 
-            if default_preset.camera_quad is not None:
-                initial_camera_quad = default_preset.camera_quad
+            if default_camera_quad is not None:
+                initial_camera_quad = default_camera_quad
 
         # Every electrode path vertex is a corner (only straight-line
         # SVG commands exist), scaled by the layer's path_scale since
@@ -350,6 +364,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             initial_scene_quad=initial_endpoint,
             device_name=device_key,
             endpoint_store=self.endpoint_store,
+            default_preset_name=self._default_preset_name(device_key),
             snap_scene_points=corner_points,
             overlay_options=overlay_options,
         )
@@ -371,6 +386,7 @@ class CameraAlignmentWorkflowController(HasTraits):
                 store=self.preset_store,
                 current_device_key=device_key,
                 editable=self.model.editable,
+                live_frame_size=self._frame_size(),
             ),
         )
         self._alignment_ui = CameraAlignmentController(
@@ -388,7 +404,19 @@ class CameraAlignmentWorkflowController(HasTraits):
         if not device_key:
             return
 
-        self.endpoint_store.save(device_key, event.new)
+        try:
+            self.endpoint_store.save(device_key, event.new)
+        except OSError as exc:
+            logger.error(f"Could not save the endpoint of {device_key}: {exc}")
+            error(
+                self._alignment_window(),
+                f"The camera-alignment endpoint for {device_key} could not be "
+                f"saved to {self.endpoint_store.path}.",
+                title="Camera Alignment",
+                detail=f"{exc}",
+            )
+            return
+
         self.statusbar_message(f"Saved camera-alignment endpoint for {device_key}")
 
     @observe("_alignment_model:alignment_confirmed")
@@ -418,7 +446,7 @@ class CameraAlignmentWorkflowController(HasTraits):
     def save_current_as(self):
         """Name the confirmed live alignment and save it as a preset of
         the loaded device. Unconfirmed dots in the panes are offered for
-        confirmation first."""
+        confirmation first; refused while a protocol runs."""
         device_key = self.model.device_key
         parent = self._alignment_window()
 
@@ -426,6 +454,14 @@ class CameraAlignmentWorkflowController(HasTraits):
             warning(
                 parent,
                 "No device is loaded — load a device SVG first.",
+                title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
+            )
+            return
+
+        if not self.model.editable:
+            warning(
+                parent,
+                "A protocol is running — save the alignment once it stops.",
                 title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
             )
             return
@@ -438,7 +474,8 @@ class CameraAlignmentWorkflowController(HasTraits):
         if snapshot is None:
             warning(
                 parent,
-                "There is no endpoint to save — place one in the endpoint pane first.",
+                "There is no confirmed endpoint to save — place one in the "
+                "endpoint pane and confirm it first.",
                 title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
             )
             return
@@ -470,7 +507,8 @@ class CameraAlignmentWorkflowController(HasTraits):
             logger.error(f"Could not save alignment preset '{naming.name}': {exc}")
             error(
                 parent,
-                f"The alignment preset '{naming.name.strip()}' could not be saved.",
+                f"The alignment preset '{naming.name.strip()}' could not be saved "
+                f"to {self.preset_store.path}.",
                 title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
                 detail=f"{exc}",
             )
@@ -483,8 +521,9 @@ class CameraAlignmentWorkflowController(HasTraits):
     def apply_preset(self, preset):
         """Put ``preset`` on the live alignment: its endpoint becomes the
         loaded device's, the feed glides onto its scene quad without a
-        jump, and the open panes' dots follow. Refused while a protocol
-        runs or for another device's preset."""
+        jump, and the open panes' dots follow. A working alignment no
+        preset holds is first saved as one, so it is never lost. Refused
+        while a protocol runs or for another device's preset."""
         device_key = self.model.device_key
         parent = self._alignment_window()
 
@@ -505,37 +544,132 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             return
 
-        self.endpoint_store.save(device_key, preset.endpoint_quad)
-        moved_feed = self._glide_onto_preset(preset)
+        camera_quad, frame_size, note = self._preset_camera_quad_now(preset)
+        mapping = self._item_mapping_for(frame_size) if camera_quad else None
+
+        if camera_quad is not None and mapping is None:
+            camera_quad, note = None, PRESET_NO_CAMERA_FRAME_NOTE
+
+        try:
+            kept = self._keep_working_alignment(preset)
+            self.endpoint_store.save(device_key, preset.endpoint_quad)
+        except (OSError, ValueError) as exc:
+            logger.error(f"Could not apply alignment preset '{preset.name}': {exc}")
+            error(
+                parent,
+                f"The alignment preset '{preset.name}' was not applied: the "
+                f"current alignment could not be kept in {self.preset_store.path} "
+                f"or the endpoint written to {self.endpoint_store.path}.",
+                title=APPLY_ALIGNMENT_PRESET_DIALOG_TITLE,
+                detail=f"{exc}",
+            )
+            return
+
+        if camera_quad is not None:
+            self._pin_and_glide(
+                [
+                    QPointF(*camera_point_to_item(point, mapping))
+                    for point in camera_quad
+                ],
+                preset.scene_quad,
+            )
 
         if self._alignment_model is not None:
             self._alignment_model.endpoint_pane.show_scene_quad(preset.endpoint_quad)
 
-            if preset.camera_quad is not None:
-                self._alignment_model.outline_pane.show_raw_quad(preset.camera_quad)
+            if camera_quad is not None:
+                self._alignment_model.outline_pane.show_raw_quad(camera_quad)
 
-        applied = "" if moved_feed else " (endpoint only)"
-        self.statusbar_message(
-            f"Applied camera-alignment preset '{preset.name}'{applied}"
+            if self._alignment_model.preset_table is not None:
+                self._alignment_model.preset_table.live_frame_size = self._frame_size()
+
+        message = f"Applied camera-alignment preset '{preset.name}'"
+
+        if note:
+            message = f"{message}: {note}"
+
+        if kept is not None:
+            message = f"Saved current alignment as '{kept.name}'. {message}"
+
+        self.statusbar_message(message)
+
+    def _keep_working_alignment(self, applied):
+        """Save the device's working alignment as a preset when none of the
+        device's presets holds it, so applying ``applied`` cannot lose it;
+        return that preset, or None when nothing needed keeping.
+
+        Raises ``OSError`` or ``ValueError`` when it could not be saved.
+        """
+        snapshot = self._live_alignment_snapshot()
+
+        if snapshot is None or self._held_by_a_preset(snapshot):
+            return None
+
+        name = self.preset_store.unique_name(
+            snapshot.device_key,
+            BEFORE_APPLY_PRESET_NAME_TEMPLATE.format(
+                name=applied.name,
+                when=datetime.now().strftime(ALIGNMENT_PRESET_SAVED_AT_FORMAT),
+            ),
         )
 
-    def _glide_onto_preset(self, preset):
-        """Pin the preset's camera corners where they show on the feed now,
-        then glide them onto its scene quad; return whether the feed moved
-        (it cannot without camera corners or a frame size to map them)."""
+        return self.preset_store.save_named(name, snapshot)
+
+    def _held_by_a_preset(self, snapshot):
+        """Whether a preset of the device holds ``snapshot``'s endpoint and,
+        when it has one, its camera alignment too."""
+        return any(
+            quads_close(preset.endpoint_quad, snapshot.endpoint_quad)
+            and (
+                snapshot.camera_quad is None
+                or (
+                    preset.camera_quad is not None
+                    and quads_close(preset.camera_quad, snapshot.camera_quad)
+                    and quads_close(preset.scene_quad, snapshot.scene_quad)
+                )
+            )
+            for preset in self.preset_store.presets
+            if preset.device_key == snapshot.device_key
+        )
+
+    def _preset_camera_quad_now(self, preset):
+        """Return ``(camera quad, frame size, note)``: the preset's camera
+        corners in pixels of the live frame (of its saved frame without
+        one) and that frame's size — both None when they cannot be placed
+        — and a note saying why, or how they were rescaled."""
 
         if preset.camera_quad is None:
-            return False
+            return None, None, PRESET_ENDPOINT_ONLY_NOTE
 
-        mapping = self._preset_camera_mapping(preset)
+        if preset.frame_size is not None and not valid_frame_size(preset.frame_size):
+            return None, None, PRESET_INVALID_FRAME_SIZE_NOTE
 
-        if mapping is None:
-            return False
+        frame_size = self._frame_size() or preset.frame_size
 
-        item_points = [
-            QPointF(*camera_point_to_item(point, mapping))
-            for point in preset.camera_quad
-        ]
+        if not valid_frame_size(frame_size):
+            return None, None, PRESET_NO_CAMERA_FRAME_NOTE
+
+        camera_quad = camera_quad_in_frame(
+            preset.camera_quad, preset.frame_size, frame_size
+        )
+
+        if camera_quad is None:
+            return None, None, PRESET_SHAPE_MISMATCH_NOTE
+
+        if preset.frame_size is None or list(preset.frame_size) == list(frame_size):
+            return camera_quad, frame_size, ""
+
+        return (
+            camera_quad,
+            frame_size,
+            PRESET_RESCALED_TEMPLATE.format(
+                saved=_size_text(preset.frame_size), live=_size_text(frame_size)
+            ),
+        )
+
+    def _pin_and_glide(self, item_points, scene_quad):
+        """Pin camera corners (video-item coordinates) where they show on
+        the feed now, then glide them onto ``scene_quad``."""
         perspective = self.model.camera_perspective
         current = perspective.transformation
         perspective.reference_rect = item_points
@@ -546,55 +680,52 @@ class CameraAlignmentWorkflowController(HasTraits):
         if self.model.mode != "camera-edit":
             self.model.mode = "camera-edit"
 
-        self._start_align_animation([QPointF(x, y) for x, y in preset.scene_quad])
-
-        return True
-
-    def _preset_camera_mapping(self, preset):
-        """The camera -> item mapping for the live frame size, else for the
-        preset's saved one; None when neither is known."""
-
-        try:
-            return self._camera_to_item_mapping()
-        except RuntimeError:
-            if preset.frame_size is None:
-                return None
-
-        video_item = self.get_video_item()
-        item_size = video_item.size()
-
-        return camera_to_item_mapping(
-            preset.frame_size,
-            (item_size.width(), item_size.height()),
-            keep_aspect_ratio=video_item.aspectRatioMode()
-            != Qt.AspectRatioMode.IgnoreAspectRatio,
-        )
+        self._start_align_animation([QPointF(x, y) for x, y in scene_quad])
 
     def _resolve_pending_pane_edits(self, parent):
-        """Offer to confirm dots moved in the panes but not confirmed;
-        return whether saving should go on."""
+        """Offer to confirm dots moved in the panes but not confirmed (or
+        never confirmed); return whether saving should go on."""
 
         if not self._pane_edits_pending():
             return True
 
+        nothing_confirmed = self.endpoint_store.load(self.model.device_key) is None
+
         choice = choose(
             parent,
-            PENDING_PANE_EDITS_MESSAGE,
+            NOTHING_CONFIRMED_MESSAGE
+            if nothing_confirmed
+            else PENDING_PANE_EDITS_MESSAGE,
             title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
-            choices=[CONFIRM_AND_SAVE_CHOICE, SAVE_CONFIRMED_CHOICE],
+            choices=(
+                [CONFIRM_AND_SAVE_CHOICE]
+                if nothing_confirmed
+                else [CONFIRM_AND_SAVE_CHOICE, SAVE_CONFIRMED_CHOICE]
+            ),
         )
 
         if choice != CONFIRM_AND_SAVE_CHOICE:
             return choice == SAVE_CONFIRMED_CHOICE
 
-        # The window's own macro: saves the endpoint, stages the outline
-        # and starts Go To Endpoint. Still pending means it was cancelled.
-        self._alignment_model.confirm = True
+        self._confirm_panes()
 
+        # Still pending: the confirmation was cancelled or failed.
         return not self._pane_edits_pending()
 
+    def _confirm_panes(self):
+        """Confirm the panes' dots: the window's own macro (save the
+        endpoint, stage the outline, Go To Endpoint) once the outline pane
+        has a frame, else the endpoint alone."""
+        alignment = self._alignment_model
+
+        if alignment.outline_ready:
+            alignment.confirm = True
+        else:
+            alignment.endpoint_pane.save = True
+
     def _pane_edits_pending(self):
-        """Whether the open panes' dots differ from the confirmed state."""
+        """Whether the open panes' dots differ from the confirmed state —
+        or nothing is confirmed while the endpoint pane shows dots."""
 
         if self._alignment_model is None:
             return False
@@ -609,22 +740,17 @@ class CameraAlignmentWorkflowController(HasTraits):
             and live_camera_quad is not None
             and not quads_close(outline_quad, live_camera_quad)
         )
-        endpoint_moved = (
-            endpoint_quad is not None
-            and saved_endpoint is not None
-            and not quads_close(endpoint_quad, saved_endpoint)
+        endpoint_moved = endpoint_quad is not None and (
+            saved_endpoint is None or not quads_close(endpoint_quad, saved_endpoint)
         )
 
         return outline_moved or endpoint_moved
 
     def _live_alignment_snapshot(self):
-        """The confirmed live alignment as an unsaved preset — endpoint
-        only without a live camera quad — or None with no endpoint."""
+        """The confirmed working alignment as an unsaved preset — endpoint
+        only without a live camera quad — or None with no saved endpoint."""
         device_key = self.model.device_key
         endpoint = self.endpoint_store.load(device_key)
-
-        if endpoint is None and self._alignment_model is not None:
-            endpoint = self._alignment_model.endpoint_pane.scene_quad()
 
         if endpoint is None:
             return None
@@ -639,7 +765,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             device_key=device_key,
             device_scene_rect=self._device_scene_rect(),
             camera_label=self._camera_label(),
-            frame_size=self._frame_size(),
+            frame_size=self._frame_size() if camera_quad is not None else None,
             camera_quad=camera_quad,
             scene_quad=scene_quad,
             endpoint_quad=endpoint,
@@ -667,7 +793,23 @@ class CameraAlignmentWorkflowController(HasTraits):
         if native.isEmpty():
             return None
 
-        return [native.width(), native.height()]
+        return [float(native.width()), float(native.height())]
+
+    def _item_mapping_for(self, frame_size):
+        """The camera -> video-item mapping for a ``frame_size`` frame, or
+        None when the frame or the video item has no size."""
+        video_item = self.get_video_item()
+        item_size = video_item.size()
+
+        try:
+            return camera_to_item_mapping(
+                frame_size,
+                (item_size.width(), item_size.height()),
+                keep_aspect_ratio=video_item.aspectRatioMode()
+                != Qt.AspectRatioMode.IgnoreAspectRatio,
+            )
+        except (TypeError, ValueError):
+            return None
 
     def _device_scene_rect(self):
         """The device's scene rect as [x, y, w, h] while the window shows
@@ -686,6 +828,13 @@ class CameraAlignmentWorkflowController(HasTraits):
     def _camera_label(self):
         return self.get_camera_label() if self.get_camera_label is not None else ""
 
+    def _default_preset_name(self, device_key):
+        default_preset = self.preset_store.resolve_default(
+            device_key, self._camera_label()
+        )
+
+        return default_preset.name if default_preset is not None else ""
+
     def _alignment_window(self):
         """The open alignment window's widget, to parent prompts; or None."""
 
@@ -693,6 +842,45 @@ class CameraAlignmentWorkflowController(HasTraits):
             return None
 
         return self._alignment_ui.control
+
+    def _refresh_presets(self):
+        """Reread the presets. A file that cannot be read or written is
+        reported and leaves them read-only this session rather than stop
+        the window opening; an unreadable file set aside is reported
+        once."""
+        store = self.preset_store
+
+        try:
+            store.refresh()
+        except OSError as exc:
+            logger.error(f"Camera-alignment presets unavailable ({store.path}): {exc}")
+            store.mark_unavailable(PRESETS_UNAVAILABLE_TEMPLATE.format(path=store.path))
+            error(
+                None,
+                f"The camera-alignment presets at {store.path} could not be read "
+                f"or written; they are read-only this session.",
+                title="Camera Alignment",
+                detail=f"{exc}",
+            )
+            return
+
+        if store.unreadable_copy:
+            warning(
+                None,
+                PRESETS_UNREADABLE_TEMPLATE.format(copy=store.unreadable_copy),
+                title="Camera Alignment",
+            )
+            store.unreadable_copy = ""
+
+    @observe("preset_store:presets, preset_store:defaults")
+    def _show_default_preset_on_reset(self, event):
+        """Keep the endpoint pane's Reset prompt naming the current
+        default preset."""
+
+        if self._alignment_model is not None:
+            self._alignment_model.endpoint_pane.default_preset_name = (
+                self._default_preset_name(self.model.device_key)
+            )
 
     @observe("_alignment_model:preset_table:save_as_button")
     def _on_preset_save_as(self, event):
@@ -727,16 +915,22 @@ class CameraAlignmentWorkflowController(HasTraits):
             logger.error(f"Could not delete alignment preset '{row.name}': {exc}")
             error(
                 self._alignment_window(),
-                f"The alignment preset '{row.name}' could not be deleted.",
+                f"The alignment preset '{row.name}' could not be deleted from "
+                f"{self.preset_store.path}.",
                 title=DELETE_ALIGNMENT_PRESET_DIALOG_TITLE,
                 detail=f"{exc}",
             )
 
     @observe("model:editable")
-    def _gate_preset_apply(self, event):
-        """No preset applies while a protocol runs."""
+    def _gate_preset_actions(self, event):
+        """No preset is applied or saved while a protocol runs."""
 
         if self._alignment_model is not None and (
             self._alignment_model.preset_table is not None
         ):
             self._alignment_model.preset_table.editable = event.new
+
+
+def _size_text(size):
+    """A frame size as ``W×H``."""
+    return f"{size[0]:g}×{size[1]:g}"

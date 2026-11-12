@@ -15,17 +15,21 @@ no dialog) and the pyface_wrapper dialogs patched.
 """
 
 # Standard library imports.
+import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # Third-party imports.
 import pytest
 
 # Enthought library imports.
-from pyface.qt.QtCore import QPointF, QSizeF, Qt
+from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt
+from pyface.qt.QtGui import QImage
 from pyface.undo.api import CommandStack, UndoManager
 
 # Microdrop package imports.
+from device_viewer.consts import CONFIRM_AND_SAVE_CHOICE
 from device_viewer.controllers.camera_alignment_controller import (
     CameraAlignmentWorkflowController,
 )
@@ -57,8 +61,15 @@ START_POINTS = [QPointF(1, 1), QPointF(9, 1), QPointF(9, 9), QPointF(1, 9)]
 CAMERA_QUAD = [[0.0, 0.0], [5.0, 0.0], [5.0, 5.0], [0.0, 5.0]]
 SCENE_QUAD = [[3.0, 2.0], [97.0, 1.0], [99.0, 78.0], [1.0, 79.0]]
 
-#: (scale_x, scale_y, offset_x, offset_y) for the stubbed letterbox.
-MAPPING = (2.0, 2.0, 10.0, 0.0)
+#: CAMERA_QUAD in the stub video item: scale 2, 60 px bar on top.
+CAMERA_QUAD_IN_ITEM = [
+    QPointF(0, 60),
+    QPointF(10, 60),
+    QPointF(10, 70),
+    QPointF(0, 70),
+]
+
+FULL_FRAME_640 = [[0.0, 0.0], [640.0, 0.0], [640.0, 480.0], [0.0, 480.0]]
 
 
 class StubEndpointPane(EndpointPane):
@@ -77,19 +88,25 @@ class StubOutlinePane(OutlinePane):
 
 class StubVideoItem:
     """A 640x480 camera letterboxed into a 1280x1080 video item: scale 2,
-    60 px bars top and bottom."""
+    60 px bars top and bottom. No frame image is ever delivered."""
 
-    def __init__(self, native=QSizeF(640, 480)):
+    def __init__(self, native=QSizeF(640, 480), item_size=QSizeF(1280, 1080)):
         self.native = native
+        self.item_size = item_size
 
     def nativeSize(self):
         return self.native
 
     def size(self):
-        return QSizeF(1280, 1080)
+        return self.item_size
 
     def aspectRatioMode(self):
         return Qt.AspectRatioMode.KeepAspectRatio
+
+    def videoSink(self):
+        return SimpleNamespace(
+            videoFrame=lambda: SimpleNamespace(toImage=lambda: QImage())
+        )
 
 
 @pytest.fixture
@@ -133,6 +150,7 @@ def controller(model, tmp_path, dialogs):
         preset_store=preset_store,
         statusbar_message=MagicMock(),
         get_camera_label=lambda: "Cam 1",
+        get_video_item=StubVideoItem,
     )
     controller._alignment_model = CameraAlignmentModel(
         endpoint_pane=StubEndpointPane(),
@@ -262,25 +280,17 @@ def test_close_alignment_dialog_drops_the_dialog_model(controller):
 def test_apply_preset_writes_endpoint_and_glides_the_feed(controller, model):
     model.mode = "edit"
 
-    with (
-        patch.object(
-            CameraAlignmentWorkflowController,
-            "_camera_to_item_mapping",
-            return_value=MAPPING,
-        ),
-        patch.object(
-            CameraAlignmentWorkflowController, "_start_align_animation"
-        ) as animate,
-    ):
+    with patch.object(
+        CameraAlignmentWorkflowController, "_start_align_animation"
+    ) as animate:
         controller.apply_preset(_preset())
 
     perspective = model.camera_perspective
-    item_points = [QPointF(10, 0), QPointF(20, 0), QPointF(20, 10), QPointF(10, 10)]
 
     assert controller.endpoint_store.load("2x3device") == ENDPOINT
-    assert perspective.reference_rect == item_points
+    assert perspective.reference_rect == CAMERA_QUAD_IN_ITEM
     # Pinned where they showed (identity transform): no jump before the glide.
-    assert perspective.transformed_reference_rect == item_points
+    assert perspective.transformed_reference_rect == CAMERA_QUAD_IN_ITEM
     animate.assert_called_once_with([QPointF(x, y) for x, y in SCENE_QUAD])
     assert model.mode == "camera-edit"
     assert controller._alignment_model.outline_pane.initial_quad == CAMERA_QUAD
@@ -394,3 +404,189 @@ def test_closing_the_dialog_detaches_the_table_from_the_store(controller):
     controller.close_alignment_dialog()
 
     assert table.store is None
+
+
+def _apply(controller, preset):
+    with patch.object(
+        CameraAlignmentWorkflowController, "_start_align_animation"
+    ) as animate:
+        controller.apply_preset(preset)
+
+    return animate
+
+
+def _status(controller):
+    return controller.statusbar_message.call_args.args[0]
+
+
+def _no_retry_delay(monkeypatch):
+    monkeypatch.setattr("microdrop_utils.file_handler.ATOMIC_WRITE_RETRY_DELAY_S", 0)
+
+
+def _lock_every_file(monkeypatch):
+    """Make every atomic swap fail as if another process held the file."""
+    _no_retry_delay(monkeypatch)
+
+    def locked(source, destination):
+        raise PermissionError(f"{destination} is held by another process")
+
+    monkeypatch.setattr(os, "replace", locked)
+
+
+def test_apply_keeps_a_working_endpoint_no_preset_holds(controller):
+    working = [[5.0, 5.0], [95.0, 5.0], [95.0, 75.0], [5.0, 75.0]]
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    controller.preset_store.refresh()
+    (migrated,) = controller.preset_store.presets
+    # Confirmed later: only in the working endpoint store.
+    controller.endpoint_store.save("2x3device", working)
+
+    _apply(controller, migrated)
+
+    (kept,) = [
+        preset
+        for preset in controller.preset_store.presets
+        if preset.name.startswith('Before "2x3device endpoint"')
+    ]
+
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    assert kept.endpoint_quad == working
+    assert not controller.preset_store.is_default(kept.id)
+    assert _status(controller).startswith(f"Saved current alignment as '{kept.name}'")
+
+    # The working alignment is now held by a preset: no second snapshot.
+    _apply(controller, migrated)
+
+    assert len(controller.preset_store.presets) == 2
+
+
+def test_apply_after_a_same_shape_resolution_change_rescales(controller, model):
+    controller.get_video_item = lambda: StubVideoItem(native=QSizeF(1280, 960))
+
+    _apply(controller, _preset(camera_quad=FULL_FRAME_640))
+
+    # 1280x960 fills the 1280x1080 item width, with 60 px bars.
+    assert model.camera_perspective.reference_rect == [
+        QPointF(0, 60),
+        QPointF(1280, 60),
+        QPointF(1280, 1020),
+        QPointF(0, 1020),
+    ]
+    assert "rescaled from 640×480 to 1280×960" in _status(controller)
+    assert controller._alignment_model.outline_pane.initial_quad == [
+        [0.0, 0.0],
+        [1280.0, 0.0],
+        [1280.0, 960.0],
+        [0.0, 960.0],
+    ]
+
+
+def test_apply_after_a_picture_shape_change_puts_the_endpoint_only(controller, model):
+    controller.get_video_item = lambda: StubVideoItem(native=QSizeF(1920, 1080))
+
+    animate = _apply(controller, _preset(camera_quad=FULL_FRAME_640))
+
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    assert model.camera_perspective.reference_rect == []
+    animate.assert_not_called()
+    assert "shape differs" in _status(controller)
+
+
+def test_apply_with_an_unsized_video_item_puts_the_endpoint_only(controller, model):
+    controller.get_video_item = lambda: StubVideoItem(item_size=QSizeF(0, 0))
+
+    animate = _apply(controller, _preset())
+
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    animate.assert_not_called()
+    assert "endpoint only" in _status(controller)
+
+
+def test_apply_with_an_invalid_saved_frame_size_puts_the_endpoint_only(controller):
+    preset = _preset()
+    preset.frame_size = [640.0, 0.0]
+
+    animate = _apply(controller, preset)
+
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    animate.assert_not_called()
+    assert "invalid" in _status(controller)
+
+
+def test_a_locked_file_during_apply_is_reported_and_changes_nothing(
+    controller, model, dialogs, monkeypatch
+):
+    controller.endpoint_store.save("2x3device", SCENE_QUAD)
+    endpoints_before = controller.endpoint_store.path.read_bytes()
+    _lock_every_file(monkeypatch)
+
+    animate = _apply(controller, _preset())
+
+    dialogs.error.assert_called_once()
+    animate.assert_not_called()
+    assert controller.endpoint_store.path.read_bytes() == endpoints_before
+    assert model.camera_perspective.reference_rect == []
+
+
+def test_a_locked_file_during_confirm_is_reported(controller, dialogs, monkeypatch):
+    controller.endpoint_store.save("2x3device", SCENE_QUAD)
+    endpoints_before = controller.endpoint_store.path.read_bytes()
+    _lock_every_file(monkeypatch)
+
+    controller._alignment_model.endpoint_pane.endpoint_saved = ENDPOINT
+
+    dialogs.error.assert_called_once()
+    assert controller.endpoint_store.path.read_bytes() == endpoints_before
+
+
+def test_a_locked_file_does_not_stop_the_window_opening(
+    controller, model, dialogs, monkeypatch
+):
+    # A pending migration must write; the lock makes that fail.
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    controller.get_electrode_layer = lambda: SimpleNamespace(path_scale=1.0)
+    controller.render_device_image = lambda: (
+        QImage(200, 100, QImage.Format_RGB32),
+        QRectF(0, 0, 100, 80),
+    )
+    controller.get_dialog_parent = lambda: None
+    _lock_every_file(monkeypatch)
+
+    # No real window: the controller only keeps the UI it is handed.
+    with patch(
+        "device_viewer.controllers.camera_alignment_controller."
+        "CameraAlignmentController.edit_traits",
+        return_value=None,
+    ):
+        controller.open_camera_alignment()
+
+    dialogs.error.assert_called_once()
+    assert controller._alignment_model is not None
+    assert controller.preset_store.read_only
+    assert not controller.preset_store.path.exists()
+
+
+def test_save_as_with_nothing_confirmed_offers_to_confirm(controller, dialogs):
+    dialogs.choose.return_value = None
+
+    with (
+        patch.object(StubEndpointPane, "scene_quad", return_value=ENDPOINT),
+        patch(f"{CONTROLLER_MODULE}.ask_alignment_preset_name") as ask,
+    ):
+        controller.save_current_as()
+
+    assert dialogs.choose.call_args.kwargs["choices"] == [CONFIRM_AND_SAVE_CHOICE]
+    ask.assert_not_called()
+    assert controller.preset_store.presets == []
+
+
+def test_save_as_is_refused_while_a_protocol_runs(controller, model, dialogs):
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    model.editable = False
+
+    with patch(f"{CONTROLLER_MODULE}.ask_alignment_preset_name") as ask:
+        controller.save_current_as()
+
+    dialogs.warning.assert_called_once()
+    ask.assert_not_called()
+    assert controller._alignment_model.preset_table.can_save is False
