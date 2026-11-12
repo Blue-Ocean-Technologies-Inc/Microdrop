@@ -8,14 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import os
+import platform
+import subprocess
 import webbrowser
 from pathlib import Path
 from shutil import copy2
 from typing import Union
-import subprocess
-import os
-import platform
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +51,10 @@ def next_free_numbered_path(path: Union[Path, str]) -> Path:
         number += 1
 
 
-def safe_copy_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
+def safe_copy_file(
+    src_file: Union[Path, str],
+    dst_file: Union[Path, str],
+):
     try:
         copy2(src_file, dst_file)
         logger.info(f"File '{dst_file}' was copied from {src_file}.")
@@ -58,6 +63,19 @@ def safe_copy_file(src_file: Union[Path, str], dst_file: Union[Path, str], ):
     except Exception as e:
         logger.error(f"Error loading file: {e}", exc_info=True)
         raise
+
+
+def write_atomically(path, content):
+    """Write ``content`` (bytes) to ``path`` aside, then swap it in, so a
+    failed write never truncates the file being replaced."""
+    path = Path(path)
+    partial_path = path.with_name(f"{path.name}.partial")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial_path.write_bytes(content)
+
+    os.replace(partial_path, path)
+
 
 def open_file(filepath):
     if platform.system() == "Darwin":  # macOS

@@ -21,6 +21,9 @@ from pathlib import Path
 from pyface.tasks.api import TaskWindowLayout
 from traits.api import Dict, Directory, HasTraits, List, Str
 
+# Microdrop utils imports.
+from microdrop_utils.file_handler import write_atomically
+
 # Local imports.
 from ..consts import (
     DEFAULT_PRESET_FILENAME,
@@ -173,7 +176,7 @@ class PresetStore(HasTraits):
         name = name.strip()
         path = self._path_for(name)
 
-        _write_atomically(path, pickle.dumps(layout, protocol=protocol))
+        write_atomically(path, pickle.dumps(layout, protocol=protocol))
         self._write_preset_shortcut(name, shortcut)
         logger.info(f"Saved layout preset '{name}' ({shortcut or 'no shortcut'})")
 
@@ -294,7 +297,7 @@ class PresetStore(HasTraits):
             return ""
 
     def _write_default_preset(self, name):
-        _write_atomically(
+        write_atomically(
             Path(self.directory) / DEFAULT_PRESET_FILENAME, name.encode("utf-8")
         )
 
@@ -309,7 +312,7 @@ class PresetStore(HasTraits):
         self._write_shortcuts(shortcuts)
 
     def _write_shortcuts(self, shortcuts):
-        _write_atomically(
+        write_atomically(
             Path(self.directory) / SHORTCUTS_FILENAME,
             json.dumps(shortcuts, indent=2, sort_keys=True).encode("utf-8"),
         )
@@ -370,13 +373,3 @@ class PresetStore(HasTraits):
             return None
 
         return layout
-
-
-def _write_atomically(path, content):
-    """Write ``content`` (bytes) to ``path`` aside, then swap it in, so a
-    failed write never truncates the file being replaced."""
-    partial_path = path.with_name(f"{path.name}.partial")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    partial_path.write_bytes(content)
-
-    os.replace(partial_path, path)

@@ -30,6 +30,9 @@ from pathlib import Path
 # Enthought library imports.
 from traits.etsconfig.api import ETSConfig
 
+# Microdrop utils imports.
+from microdrop_utils.file_handler import write_atomically
+
 # Local imports.
 from ..consts import (
     CAMERA_ENDPOINTS_FILENAME,
@@ -90,14 +93,15 @@ class CameraEndpointStore:
         alignment endpoint for ``device_key``."""
         if not device_key:
             raise ValueError("an endpoint needs a device key")
+
         quad = _validated_quad(scene_quad)
         data = self._read_all()
         data[device_key] = {
             "scene_quad": quad,
             "saved_at": datetime.now(timezone.utc).isoformat(),
         }
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+
+        self._write_all(data)
         logger.info(f"saved camera-alignment endpoint for device {device_key!r}")
 
     def load(self, device_key: str):
@@ -116,10 +120,13 @@ class CameraEndpointStore:
 
     def remove(self, device_key: str) -> None:
         data = self._read_all()
+
         if device_key in data:
             del data[device_key]
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+            self._write_all(data)
+
+    def _write_all(self, data) -> None:
+        write_atomically(self.path, json.dumps(data, indent=1).encode("utf-8"))
 
     def device_keys(self) -> list:
         """Devices that have a stored endpoint."""
