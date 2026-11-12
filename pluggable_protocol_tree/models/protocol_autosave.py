@@ -13,11 +13,14 @@
 Qt-free and clock-free: every time-dependent method takes ``now`` (a
 monotonic timestamp) so the debounce is unit-testable against a fake clock.
 The controller owns the timer and the write; this model only decides
-*whether* a write is due and what the toggle should tell the user.
+*whether* a write is due and what the status-bar glyph should tell the
+user.
 
 A write is allowed only when AutoSave is on, the protocol has a file, no run
 is in progress, and the tracker reports unsaved changes — so a clean
-protocol is never rewritten and a never-saved one is never written.
+protocol is never rewritten and a never-saved one is never written. Any
+save, load or new leaves the protocol clean, which also drops a pending
+write, so opening a protocol never rewrites its file.
 """
 
 # Enthought library imports.
@@ -32,7 +35,7 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
 
 class ProtocolAutosaveModel(HasTraits):
     #: The toggle state, mirrored to the protocol preferences by the controller.
-    enabled = Bool(False)
+    enabled = Bool(True)
 
     #: File path, dirty flag and run state of the open protocol.
     tracker = Instance(PluggableProtocolStateTracker, ())
@@ -52,13 +55,7 @@ class ProtocolAutosaveModel(HasTraits):
     #: True when there is a file to write to (the protocol was saved or loaded).
     has_target = Property(Bool, observe="tracker.loaded_protocol_path")
 
-    #: Short state shown on the toolbar toggle.
-    label_text = Property(
-        Str,
-        observe="enabled, last_error, tracker.loaded_protocol_path",
-    )
-
-    #: Full state shown as the toggle's tooltip.
+    #: The AutoSave state, shown in the glyph's tooltip while it is on.
     status_text = Property(
         Str,
         observe="enabled, last_error, tracker.[loaded_protocol_path, is_active]",
@@ -126,10 +123,11 @@ class ProtocolAutosaveModel(HasTraits):
         return should_tell
 
     @observe("tracker:is_modified")
-    def _clear_failure_when_clean(self, event):
-        # A clean protocol matches its file again (any save, load or new),
-        # so the next failure is news to the user.
+    def _reset_when_clean(self, event):
+        # A clean protocol matches its file again (any save, load or new):
+        # nothing is left to write, and the next failure is news to the user.
         if not event.new:
+            self.due_at = None
             self.last_error = ""
             self.failure_reported = False
 
@@ -137,18 +135,6 @@ class ProtocolAutosaveModel(HasTraits):
 
     def _get_has_target(self):
         return bool(self.tracker.loaded_protocol_path)
-
-    def _get_label_text(self):
-        if not self.enabled:
-            return "AutoSave: Off"
-
-        if not self.has_target:
-            return "AutoSave: On (no file)"
-
-        if self.last_error:
-            return "AutoSave: Failed"
-
-        return "AutoSave: On"
 
     def _get_status_text(self):
         if not self.enabled:

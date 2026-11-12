@@ -77,7 +77,6 @@ def test_never_saved_protocol_is_not_written():
 
     assert not model.has_target
     assert not model.claim_due_save(DEBOUNCE_S)
-    assert model.label_text == "AutoSave: On (no file)"
     assert "save the protocol once" in model.status_text
 
 
@@ -88,7 +87,6 @@ def test_first_save_as_gives_autosave_a_target():
     model.note_change(0.0)
 
     assert model.claim_due_save(DEBOUNCE_S)
-    assert model.label_text == "AutoSave: On"
 
 
 def test_clean_protocol_is_not_rewritten():
@@ -140,21 +138,27 @@ def test_failure_is_reported_once_until_the_protocol_is_clean():
 
     assert model.record_save_failed("disk full")
     assert not model.record_save_failed("disk full")
-    assert model.label_text == "AutoSave: Failed"
     assert "disk full" in model.status_text
 
     model.tracker.is_modified = False
 
     assert model.last_error == ""
-    assert model.label_text == "AutoSave: On"
 
     model.tracker.is_modified = True
 
     assert model.record_save_failed("disk full")
 
 
-def test_off_label_and_tooltip():
-    model = _model(enabled=False)
+def test_autosave_is_on_by_default():
+    assert ProtocolAutosaveModel().enabled
 
-    assert model.label_text == "AutoSave: Off"
-    assert "off" in model.status_text
+
+def test_protocol_becoming_clean_drops_the_pending_write():
+    # A load (or save) reseeds the tracker after the change events it fired.
+    model = _model()
+    model.note_change(0.0)
+
+    model.tracker.is_modified = False
+
+    assert model.seconds_until_due(0.0) is None
+    assert not model.claim_due_save(DEBOUNCE_S)

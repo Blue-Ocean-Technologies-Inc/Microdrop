@@ -14,6 +14,9 @@ The timer is never left to fire: tests drive ``_on_timer_timeout`` and
 ``flush`` directly against a fake clock.
 """
 
+# Standard library imports.
+import json
+
 # Third-party imports.
 import pytest
 
@@ -151,23 +154,71 @@ def test_failed_write_is_reported_once_and_stays_dirty(setup):
     assert controller.model.last_error == "disk full"
 
 
-def test_pane_puts_the_toggle_on_the_quick_actions_toolbar(qapp):
-    from pluggable_protocol_tree.models.quick_action import BaseQuickAction
-    from pluggable_protocol_tree.views.protocol_tree_pane import ProtocolTreePane
+def test_loading_a_protocol_does_not_rewrite_it(qapp, tmp_path, monkeypatch):
+    from pluggable_protocol_tree.views import protocol_tree_pane as ptp
 
-    pane = ProtocolTreePane(
-        [make_name_column()],
+    source = RowManager(columns=[make_type_column(), make_name_column()])
+    source.add_step(values={"name": "saved step"})
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps(source.to_json()), encoding="utf-8")
+
+    pane = ptp.ProtocolTreePane(
+        [make_type_column(), make_name_column()],
         preferences=ProtocolPreferences(preferences=Preferences()),
-        quick_actions=[BaseQuickAction(action_id="add_step", icon_text="add")],
     )
-    toggle = pane.autosave_toggle.control
+    tracker = pane.protocol_state_tracker
+    controller = pane.autosave_controller
+    clock = _Clock()
+    controller.clock = clock
 
-    assert pane.quick_action_bar.widget().isAncestorOf(toggle)
-    assert toggle.text() == "AutoSave: Off"
+    # The dock pane's dirty bookkeeping, which a standalone pane lacks.
+    pane.manager.observe(
+        lambda event: tracker.on_structure_changed(pane.manager), "rows_changed"
+    )
 
-    toggle.click()
+    writes = []
+    monkeypatch.setattr(pane, "_dump_protocol_json", writes.append)
+    monkeypatch.setattr(
+        ptp.QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), "")
+    )
 
-    assert pane.autosave_controller.model.enabled
-    assert pane.preferences.protocol_autosave_enabled
-    assert toggle.isChecked()
-    assert toggle.text() == "AutoSave: On (no file)"
+    assert controller.model.enabled
+
+    pane.load_protocol_dialog()
+    clock.now += controller.model.debounce_s
+    controller._on_timer_timeout()
+    controller.flush()
+
+    assert writes == []
+    assert not tracker.is_modified
+
+    pane.manager.add_step()
+    clock.now += controller.model.debounce_s
+    controller._on_timer_timeout()
+
+    assert writes == [tracker.loaded_protocol_path]
+
+
+def test_status_bar_glyph_binds_to_the_model(qapp):
+    from pluggable_protocol_tree.consts import PROTOCOL_AUTOSAVE_STATUS_BAR_PRIORITY
+    from pluggable_protocol_tree.views.autosave_status_icon import (
+        AutosaveStatusIcon,
+    )
+
+    model = ProtocolAutosaveModel(enabled=False)
+    view = AutosaveStatusIcon(model=model)
+    icon = view.control
+
+    assert icon.status_bar_icon_priority == PROTOCOL_AUTOSAVE_STATUS_BAR_PRIORITY
+    assert not icon.is_active
+    assert "enable" in icon.toolTip()
+
+    model.enabled = True
+
+    assert icon.is_active
+    assert "save the protocol once" in icon.toolTip()
+    assert "disable" in icon.toolTip()
+
+    model.tracker.loaded_protocol_path = "C:/protocols/p.json"
+
+    assert "save the protocol once" not in icon.toolTip()

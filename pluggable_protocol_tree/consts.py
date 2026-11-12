@@ -40,6 +40,7 @@ from electrode_controller.consts import (
     ELECTRODES_STATE_CHANGE,
 )
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
+from microdrop_status_bar.consts import ICON_PRIORITY_DEFAULT
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeAddStepPublisher,
     ProtocolTreeRowSelectedPublisher,
@@ -86,6 +87,9 @@ SETTLING_TIME_MAX_S = 15.0
 # Quiet period after the last protocol edit before AutoSave writes the file
 # (#966): long enough to batch a burst of edits into one write.
 PROTOCOL_AUTOSAVE_DEBOUNCE_S = 1.5
+
+# The AutoSave glyph sits right of the status bar's device glyphs.
+PROTOCOL_AUTOSAVE_STATUS_BAR_PRIORITY = ICON_PRIORITY_DEFAULT + 1
 
 # Bounds for the per-column acknowledgement-wait times configured in the
 # Protocol Settings tab (#427). 0 = don't wait for the ack; no upper

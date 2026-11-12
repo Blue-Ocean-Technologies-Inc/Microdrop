@@ -99,7 +99,6 @@ from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
-from pluggable_protocol_tree.views.autosave_toggle import AutosaveToggle
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
 from pluggable_protocol_tree.views.navigation_bar import (
@@ -424,18 +423,14 @@ class ProtocolTreePane(QWidget):
 
     def _build_autosave(self):
         """AutoSave (#966): the controller writes debounced changes through
-        ``autosave_protocol``; its toggle sits at the far end of the
-        quick-actions toolbar when there is one."""
+        ``autosave_protocol``. Its switch lives in the app status bar, which
+        the dock pane contributes; standalone panes have none."""
         self.autosave_controller = ProtocolAutosaveController(
             model=ProtocolAutosaveModel(tracker=self.protocol_state_tracker),
             manager=self.manager,
             preferences=self.preferences,
             write_protocol=self.autosave_protocol,
         )
-
-        if self.quick_action_bar is not None:
-            self.autosave_toggle = AutosaveToggle(model=self.autosave_controller.model)
-            self.quick_action_bar.add_trailing_widget(self.autosave_toggle.control)
 
     def _build_layout(self):
         layout = QVBoxLayout(self)
