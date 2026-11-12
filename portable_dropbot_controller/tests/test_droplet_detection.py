@@ -9,82 +9,98 @@
 # Thanks for using Microdrop open source!
 
 """Droplet detection: DETECT_DROPLETS is answered in the DropBot's reply
-shape with the channels at or above the absolute threshold, a failed scan is
-an error, and every scan puts the user's actuation back."""
+shape with the driver's liquid channels, judged against the threshold
+preference, and a refused or empty scan is an error carrying the reason."""
 
 # Standard library imports.
 import json
-import threading
+from dataclasses import dataclass, field, replace
 
 # Third-party imports.
 import pytest
 
 # Enthought library imports.
-from traits.api import Any, Bool, HasTraits
+from traits.api import Any, HasTraits
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
     DROPLET_DETECTION_THRESHOLD_PF,
+    DROPLET_DETECTION_THRESHOLD_PF_KEY,
     DROPLETS_DETECTED,
-    LAST_CHANNEL_STATES_REQUESTED_KEY,
 )
 from portable_dropbot_controller.services import (
     portable_dropbot_droplet_detection_mixin_service as detection_service,
 )
 
-#: Capacitance (pF) per channel on the fake board: channel 1 holds liquid,
-#: channel 2 sits exactly on the threshold.
-CAPACITANCES = {0: 3, 1: 25, 2: int(DROPLET_DETECTION_THRESHOLD_PF)}
+#: Capacitance (pF) per channel on the fake board: channel 1 holds liquid.
+READINGS = {0: 1.0, 1: 25.0, 2: 3.0}
+
+REFUSAL_REASON = "HV is off, the pads are not engaged (no device detected)"
 
 
-class _Sig:
-    def __init__(self, calls):
-        self.calls = calls
+@dataclass(frozen=True)
+class _Thresholds:
+    """The driver's immutable ChannelThresholds, reduced to with_default."""
 
-    def hv_enable(self, on, bypass):
-        self.calls.append(("hv_enable", on))
+    default_pf: float = 5.0
+    per_channel: dict = field(default_factory=dict)
 
-        return True
+    def with_default(self, pf):
+        return replace(self, default_pf=pf)
+
+
+@dataclass(frozen=True)
+class _Result:
+    liquid: list
+    readings: dict
+    unmeasured: list = field(default_factory=list)
+
+    def summary(self):
+        return f"{len(self.liquid)} drop channel(s) found"
+
+
+class _Refused(RuntimeError):
+    """Stands in for the driver's FindDropsRefused, a RuntimeError."""
+
+    def __init__(self, reason):
+        super().__init__(f"find drops refused: {reason}")
+        self.reason = reason
 
 
 class _Session:
-    """Records every call and reads back CAPACITANCES."""
+    """Records every find_drops call and judges READINGS against the
+    thresholds it holds at that moment."""
 
-    def __init__(self, capacitances=CAPACITANCES):
+    def __init__(self, readings=READINGS, refusal=None):
         self.calls = []
-        self.sig = _Sig(self.calls)
-        self.capacitances = dict(capacitances)
+        self.readings = dict(readings)
+        self.refusal = refusal
+        self.drop_thresholds = _Thresholds(per_channel={7: 40.0})
 
-    def measure_capacitance(self, channels=None, switch_time_ms=20):
-        self.calls.append(("measure_capacitance", channels))
-        scanned = list(self.capacitances) if channels is None else channels
+    def find_drops(self, channels=None):
+        self.calls.append((channels, self.drop_thresholds))
 
-        return {
-            channel: self.capacitances[channel]
-            for channel in scanned
-            if channel in self.capacitances
-        }
+        if self.refusal:
+            raise _Refused(self.refusal)
 
-    def clear_channels(self):
-        self.calls.append("clear_channels")
+        liquid = sorted(
+            channel
+            for channel, capacitance in self.readings.items()
+            if capacitance >= self.drop_thresholds.default_pf
+        )
 
-    def actuate_channels(self, channels):
-        self.calls.append(("actuate_channels", channels))
+        return _Result(liquid=liquid, readings=dict(self.readings))
 
 
 class _Base(HasTraits):
     proxy = Any()
-    realtime_mode = Bool(False)
-    _proxy_lock = Any(factory=threading.RLock)
 
     def _proxy_call(self, context, call):
-        return True, call()
-
-    def _apply_actuation(self):
-        self.proxy.calls.append("apply_actuation")
-
-    def _board_channels(self):
-        return 120
+        """The real _proxy_call's contract: the raised exception on failure."""
+        try:
+            return True, call()
+        except Exception as error:
+            return False, error
 
 
 class _Harness(detection_service.PortableDropbotDropletDetectionMixinService, _Base):
@@ -111,57 +127,58 @@ def harness():
     return _Harness(proxy=_Session())
 
 
-def test_detection_replies_with_channels_at_or_above_the_threshold(harness, detected):
+def test_detection_replies_with_the_drivers_liquid_channels(harness, detected):
     harness.on_detect_droplets_request("[0, 1, 2]")
 
-    assert detected == [{"success": True, "detected_channels": [1, 2], "error": ""}]
-    assert ("measure_capacitance", [0, 1, 2]) in harness.proxy.calls
+    assert detected == [{"success": True, "detected_channels": [1], "error": ""}]
+    assert harness.proxy.calls[0][0] == [0, 1, 2]
+
+
+def test_empty_request_scans_the_sessions_used_channels(harness, detected):
+    harness.on_detect_droplets_request("[]")
+
+    assert harness.proxy.calls[0][0] is None
 
 
 def test_dry_chip_reports_no_channels(detected):
-    harness = _Harness(proxy=_Session({0: 2, 1: 4, 2: 3}))
+    harness = _Harness(proxy=_Session({0: 1.0, 1: 2.0, 2: 3.0}))
 
     harness.on_detect_droplets_request("[]")
 
     assert detected == [{"success": True, "detected_channels": [], "error": ""}]
 
 
-def test_empty_request_scans_every_channel(harness, detected):
+def test_threshold_defaults_to_5_pf_when_the_preference_is_unset(harness, detected):
     harness.on_detect_droplets_request("[]")
 
-    assert ("measure_capacitance", None) in harness.proxy.calls
-    assert detected[0]["detected_channels"] == [1, 2]
+    _channels, thresholds = harness.proxy.calls[0]
+    assert thresholds.default_pf == DROPLET_DETECTION_THRESHOLD_PF == 5.0
 
 
-def test_failed_scan_replies_with_an_error(detected):
+def test_threshold_preference_reaches_the_session(harness, detected):
+    detection_service.app_globals[DROPLET_DETECTION_THRESHOLD_PF_KEY] = 30.0
+
+    harness.on_detect_droplets_request("[]")
+
+    _channels, thresholds = harness.proxy.calls[0]
+    assert thresholds.default_pf == 30.0
+    assert thresholds.per_channel == {7: 40.0}
+    assert detected[0]["detected_channels"] == []
+
+
+def test_refused_scan_replies_with_the_drivers_reason(detected):
+    harness = _Harness(proxy=_Session(refusal=REFUSAL_REASON))
+
+    harness.on_detect_droplets_request("[]")
+
+    assert detected[0]["success"] is False
+    assert REFUSAL_REASON in detected[0]["error"]
+
+
+def test_scan_with_no_readings_replies_with_an_error(detected):
     harness = _Harness(proxy=_Session({}))
 
     harness.on_detect_droplets_request("[]")
 
     assert detected[0]["success"] is False
     assert detected[0]["error"] == detection_service.SCAN_FAILED_MESSAGE
-
-
-def test_scan_outside_realtime_leaves_electrodes_and_hv_off(harness, detected):
-    harness.on_detect_droplets_request("[]")
-
-    assert harness.proxy.calls[-3:] == [
-        "apply_actuation",
-        "clear_channels",
-        ("hv_enable", 0),
-    ]
-
-
-def test_scan_in_realtime_restores_hv_and_the_last_electrodes(harness, detected):
-    detection_service.app_globals[LAST_CHANNEL_STATES_REQUESTED_KEY] = json.dumps(
-        {"channels": [2, 5]}
-    )
-    harness.realtime_mode = True
-
-    harness.on_detect_droplets_request("[]")
-
-    assert harness.proxy.calls[-3:] == [
-        "apply_actuation",
-        ("hv_enable", 1),
-        ("actuate_channels", [2, 5]),
-    ]

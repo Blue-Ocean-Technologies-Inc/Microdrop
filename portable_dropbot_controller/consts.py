@@ -329,6 +329,7 @@ DEFAULT_FREQUENCY_KEY = "default_frequency"
 DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
 FAN_BOARD_KEY = "fan_board"
 CHIP_DETECT_RULE_KEY = "chip_detect_rule"
+DROPLET_DETECTION_THRESHOLD_PF_KEY = "droplet_detection_threshold_pf"
 
 PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     BAUD_RATE_KEY,
@@ -338,6 +339,7 @@ PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     DEFAULT_LIGHT_INTENSITY_KEY,
     FAN_BOARD_KEY,
     CHIP_DETECT_RULE_KEY,
+    DROPLET_DETECTION_THRESHOLD_PF_KEY,
 )
 
 # Last applied electrodes_state_change request.
@@ -893,9 +895,12 @@ magnet_engage_updated_publisher = ValidatedTopicPublisher(
 # Droplet detection                                                      #
 # --------------------------------------------------------------------- #
 
-#: Absolute capacitance (pF) a channel must read to count as holding
-#: liquid, like the DropBot's droplet detection threshold.
-DROPLET_DETECTION_THRESHOLD_PF = 10.0
+#: Default capacitance (pF) a channel must read to count as holding liquid
+#: (Portable DropBot Settings preference), the driver's own drop default.
+#: Per channel, the driver's saved overrides and a fresh baseline still
+#: replace it and the active chip's electrode weights scale it.
+DROPLET_DETECTION_THRESHOLD_PF = 5.0
 
-#: Per-channel settle time of the full-channel capacitance scan (ms).
-DROPLET_SCAN_SWITCH_TIME_MS = 20
+#: Bounds of the droplet detection threshold preference (pF); the driver
+#: refuses anything above 1000 pF.
+DROPLET_DETECTION_THRESHOLD_PF_BOUNDS = (0.1, 1000.0)

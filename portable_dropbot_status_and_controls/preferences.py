@@ -9,9 +9,10 @@
 # Thanks for using Microdrop open source!
 
 """The Portable DropBot Settings preferences tab: which board the status
-pane's fan toggle drives, which pogo contacts count as a chip, the magnet
-engage position with its board Read / Write / Preset to flash, and the
-preset quick-pick values for PMT gain, heater target and motor moves."""
+pane's fan toggle drives, which pogo contacts count as a chip, the droplet
+detection threshold, the magnet engage position with its board Read /
+Write / Preset to flash, and the preset quick-pick values for PMT gain,
+heater target and motor moves."""
 
 # Third-party imports.
 from pydantic import ValidationError
@@ -19,7 +20,7 @@ from pydantic import ValidationError
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Button, Enum, Float, Instance, Str, observe
+from traits.api import Button, Enum, Float, Instance, Range, Str, observe
 from traitsui.api import HGroup, Item, VGroup, View
 
 # Microdrop package imports.
@@ -29,6 +30,8 @@ from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULES,
     DEFAULT_CHIP_DETECT_RULE,
     DEFAULT_FAN_BOARD,
+    DROPLET_DETECTION_THRESHOLD_PF,
+    DROPLET_DETECTION_THRESHOLD_PF_BOUNDS,
     FAN_BOARDS,
     MAGNET_ENGAGE_PRESET,
     MAGNET_ENGAGE_READ,
@@ -85,6 +88,12 @@ class PortableDropbotSettingsPreferences(PreferencesHelper):
         desc="Which pogo pad contacts count as a chip on the pad",
     )
 
+    #: Default capacitance (pF) a channel must read for droplet detection
+    #: to count it as holding liquid.
+    droplet_detection_threshold_pf = Range(
+        *DROPLET_DETECTION_THRESHOLD_PF_BOUNDS, value=DROPLET_DETECTION_THRESHOLD_PF
+    )
+
     #: Magnet engage position (mm). Kept across restarts here, but reaches
     #: the board only through the tab's explicit Write / Preset to flash.
     magnet_engage_mm = Float(DEFAULT_MAGNET_ENGAGE_MM)
@@ -102,7 +111,7 @@ class PortableDropbotSettingsPreferences(PreferencesHelper):
     #: Relative motor moves (mm, signed) offered below Move By.
     move_presets = Str(DEFAULT_MOVE_PRESETS)
 
-    @observe("fan_board, chip_detect_rule")
+    @observe("fan_board, chip_detect_rule, droplet_detection_threshold_pf")
     def _publish_to_app_globals(self, event):
         """Mirror applied changes into app_globals for readers."""
         # The preferences pane edits a copy detached from the node until
@@ -184,6 +193,18 @@ class PortableDropbotSettingsPreferencesPane(PreferencesPane):
             editor=HoverScrollEnumEditor(
                 values=list(CHIP_DETECT_RULES),
                 format_func=CHIP_DETECT_RULE_LABELS.get,
+            ),
+            width=260,
+        ),
+        Item("_"),
+        create_item_label_group(
+            "droplet_detection_threshold_pf",
+            label_text="Droplet detection threshold (pF)",
+            tooltip=(
+                "Capacitance a channel must read for droplet detection to count "
+                "it as holding liquid. Per channel, thresholds saved in the "
+                "vendor app and a fresh chip baseline replace it, and the active "
+                "chip's electrode sizes scale it."
             ),
             width=260,
         ),
