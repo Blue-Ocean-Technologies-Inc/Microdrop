@@ -47,12 +47,15 @@ class ProtocolQuickActionToolsPlugin(Plugin):
         from .quick_actions.new_protocol import make_new_protocol_action
         from .quick_actions.open_protocol import make_open_protocol_action
         from .quick_actions.save_protocol import make_save_protocol_action
+        from .quick_actions.undo_redo import make_redo_action, make_undo_action
 
         return [
             make_add_step_action(),
             make_delete_row_action(),
             make_add_group_action(),
             make_fill_pattern_action(),
+            make_undo_action(),
+            make_redo_action(),
             make_import_protocol_action(),
             make_open_protocol_action(),
             make_save_protocol_action(),

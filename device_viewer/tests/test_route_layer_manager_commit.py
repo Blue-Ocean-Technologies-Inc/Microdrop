@@ -8,7 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
+import pytest
+
 # Microdrop package imports.
+from device_viewer.consts import STEP_PARAM_NAMES
 from device_viewer.models.route import RouteLayerManager
 
 EXEC_PARAMS = {
@@ -54,3 +58,76 @@ def test_commit_enabled_resets_after_rebaseline():
     # Re-baseline to current values (what commit handler does)
     mgr.mark_params_committed()
     assert mgr.commit_enabled is False
+
+
+# Every setting a step stores, each off its default so a load that skips one
+# shows. Keyed exactly by STEP_PARAM_NAMES: a setting added to the commit
+# message fails test_step_values_cover_every_setting until it is added here.
+STEP_VALUES = {
+    "duration": 2.5,
+    "repetitions": 3,
+    "repeat_duration": 4,
+    "trail_length": 3,
+    "trail_overlay": 1,
+    "soft_start": True,
+    "soft_terminate": True,
+    "linear_repeats": True,
+    "lane_left": 1,
+    "lane_right": 1,
+    "lanes_in_out": False,
+    "rotation_lock": False,
+    "recentre": False,
+}
+
+
+def _changed(value):
+    if isinstance(value, bool):
+        return not value
+
+    return value + 1
+
+
+def test_step_values_cover_every_setting():
+    assert set(STEP_VALUES) == set(STEP_PARAM_NAMES)
+
+
+def test_every_setting_is_a_sidebar_trait():
+    mgr = RouteLayerManager()
+
+    assert all(mgr.trait(name) is not None for name in STEP_PARAM_NAMES)
+
+
+def test_loading_a_step_sets_every_setting():
+    mgr = RouteLayerManager()
+    _apply(mgr, STEP_VALUES)
+
+    assert mgr._current_params() == STEP_VALUES
+    assert mgr.commit_enabled is False
+
+
+@pytest.mark.parametrize("name", STEP_PARAM_NAMES)
+def test_every_setting_enables_and_notifies_commit(name):
+    """The view's enabled_when only re-evaluates on a notification, so a
+    setting that changes the value without one leaves the button stale —
+    the lane widths did (#969)."""
+    mgr = RouteLayerManager()
+    _apply(mgr, STEP_VALUES)
+    events = []
+    mgr.observe(events.append, "commit_enabled")
+
+    setattr(mgr, name, _changed(STEP_VALUES[name]))
+
+    assert mgr.commit_enabled is True
+    assert events and events[-1].new is True
+
+
+def test_returning_to_the_step_values_disables_commit():
+    mgr = RouteLayerManager()
+    _apply(mgr, STEP_VALUES)
+    events = []
+    mgr.observe(events.append, "commit_enabled")
+
+    mgr.lane_right = 2
+    mgr.lane_right = 1
+
+    assert [event.new for event in events] == [True, False]
