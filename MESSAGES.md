@@ -161,8 +161,9 @@ live route sync so step cells only mutate on deliberate user action.
 - `STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"` — canonical home `device_viewer/consts.py` (the DV publishes it); `protocol_grid/consts.py` keeps a duplicated literal until PPT-9.
 
 **Publisher side (device_viewer)**
-- `device_viewer/views/device_view_dock_pane.py` — `_on_commit_to_step_btn_fired` builds a `StepParamsCommitMessage` and publishes via `publish_message.send(topic=STEP_PARAMS_COMMIT, ...)`; the step-transition Commit/Discard/Cancel prompt (`_apply_step_transition`) publishes the same message on "Commit".
-- Triggered by the Traits Button `commit_to_step_btn` on `RouteLayerManager`; enabled only when the sidebar values diverge from the committed baseline.
+- `device_viewer/views/device_view_dock_pane.py` — `_commit_sidebar_params(step_id)` builds a `StepParamsCommitMessage` and publishes it on `STEP_PARAMS_COMMIT`. Three callers share it: the commit button (`_on_commit_requested`), auto-commit (`_auto_commit_sidebar_params`), and the step-transition Commit/Discard prompt (`_check_unsaved_execution_params`) on "Commit".
+- Triggered by the Traits Button `commit_to_step_btn` on `RouteLayerManager`. `DeviceViewMainModel.commit_button_state` decides what a press does: `auto` turns auto-commit off, `pending` (sidebar diverges from the baseline over every field in `STEP_PARAM_NAMES`, `device_viewer/consts.py`) fires `commit_requested`, `idle` turns auto-commit on, and `unavailable` (no step) is disabled.
+- Auto-commit (#969, on by default, preference `auto_commit_to_step`): while `DeviceViewMainModel.auto_commit_due` is true (toggle on, step selected, no protocol running, sidebar dirty) a `AUTO_COMMIT_DEBOUNCE_MS` timer restarts on each edit and publishes once edits settle. On a step change, pending edits are committed to the step being left before the new step's values load; loading a step re-baselines and is never committed.
 
 **Payload schema**
 - Pydantic `StepParamsCommitMessage` at `device_viewer/models/step_params_commit.py` (canonical; `protocol_grid/models/step_params_commit.py` is the legacy copy).
