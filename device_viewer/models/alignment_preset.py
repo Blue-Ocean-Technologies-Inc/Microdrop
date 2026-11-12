@@ -24,7 +24,12 @@ from uuid import uuid4
 from traits.api import Float, HasTraits, List, Str, Union
 
 # Local imports.
-from ..consts import ALIGNMENT_PRESET_KIND_NAMED, ALIGNMENT_PRESET_SCOPE_DEVICE
+from ..consts import (
+    ALIGNMENT_PRESET_KIND_NAMED,
+    ALIGNMENT_PRESET_SCOPE_DEVICE,
+    PRESET_NAME_CONTROL_CHARACTERS_MESSAGE,
+    PRESET_NAME_EMPTY_MESSAGE,
+)
 from ..utils.quad_order import canonical_quad
 
 
@@ -37,10 +42,10 @@ def alignment_preset_name_error(name):
     name = name.strip()
 
     if not name:
-        return "Enter a name for the preset."
+        return PRESET_NAME_EMPTY_MESSAGE
 
     if any(ord(character) < 32 or ord(character) == 127 for character in name):
-        return "A preset name cannot contain control characters."
+        return PRESET_NAME_CONTROL_CHARACTERS_MESSAGE
 
     return ""
 

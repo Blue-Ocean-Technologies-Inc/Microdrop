@@ -13,6 +13,8 @@ naming and default rules, and the one-time endpoint-cache migration."""
 
 # Standard library imports.
 import json
+import os
+from pathlib import Path
 
 # Third-party imports.
 import pytest
@@ -127,19 +129,44 @@ def test_newer_schema_lists_but_refuses_writes(store):
         store.save_named("bench", _snapshot())
 
 
-def test_writes_are_atomic(store, monkeypatch):
+def test_a_failed_write_leaves_the_file_and_no_aside_file(store, monkeypatch):
     store.save_named("bench", _snapshot())
     before = store.path.read_bytes()
 
-    def failing_write(self, content):
-        raise OSError("disk full")
+    def locked(source, destination):
+        raise PermissionError("held by another process")
 
-    monkeypatch.setattr(type(store.path), "write_bytes", failing_write)
+    monkeypatch.setattr("microdrop_utils.file_handler.ATOMIC_WRITE_RETRY_DELAY_S", 0)
+    monkeypatch.setattr(os, "replace", locked)
 
     with pytest.raises(OSError):
         store.save_named("second", _snapshot())
 
     assert store.path.read_bytes() == before
+    assert sorted(path.name for path in store.path.parent.iterdir()) == [
+        store.path.name
+    ]
+
+
+def test_a_briefly_locked_file_is_written_on_a_retry(store, monkeypatch):
+    real_replace = os.replace
+    refusals = []
+
+    def locked_once(source, destination):
+        if not refusals:
+            refusals.append(destination)
+
+            raise PermissionError("held by another process")
+
+        real_replace(source, destination)
+
+    monkeypatch.setattr("microdrop_utils.file_handler.ATOMIC_WRITE_RETRY_DELAY_S", 0)
+    monkeypatch.setattr(os, "replace", locked_once)
+
+    store.save_named("bench", _snapshot())
+
+    assert refusals
+    assert [preset.name for preset in store.presets] == ["bench"]
 
 
 def test_unknown_record_fields_survive_a_rewrite(store):
@@ -290,12 +317,102 @@ def test_migration_is_idempotent(tmp_path, endpoint_store):
     store.refresh()
     store.refresh()
 
-    # A later endpoint save goes to the working copy only.
-    endpoint_store.save("chip-b", ENDPOINT)
+    assert [preset.name for preset in store.presets] == ["chip-a endpoint"]
+    assert len(store.defaults) == 1
+
+
+def test_migration_covers_devices_aligned_after_the_file_exists(store):
+    store.save_named("bench", _snapshot("chip-a"))
+
+    # A device that already has presets is left alone; a new one is covered.
+    store.endpoint_store.save("chip-a", SCENE_QUAD)
+    store.endpoint_store.save("chip-b", ENDPOINT)
+    store.refresh()
+    store.refresh()
+
+    assert sorted((preset.device_key, preset.name) for preset in store.presets) == [
+        ("chip-a", "bench"),
+        ("chip-b", "chip-b endpoint"),
+    ]
+    assert store.resolve_default("chip-b").endpoint_quad == ENDPOINT
+    assert store.resolve_default("chip-a") is None
+
+
+def test_migration_reruns_after_an_unreadable_file_is_set_aside(store):
+    store.endpoint_store.save("chip-a", ENDPOINT)
+    store.refresh()
+    store.path.write_text("{garbage", encoding="utf-8")
+
     store.refresh()
 
     assert [preset.name for preset in store.presets] == ["chip-a endpoint"]
-    assert len(store.defaults) == 1
+    assert store.resolve_default("chip-a") is not None
+    assert store.unreadable_copy
+
+
+def test_repeated_unreadable_files_keep_every_copy(store):
+    copies = []
+
+    for garbage in ("{first", "{second", "{third"):
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(garbage, encoding="utf-8")
+        store.refresh()
+        copies.append(store.unreadable_copy)
+
+    assert len(set(copies)) == 3
+    assert [Path(copy).read_text(encoding="utf-8") for copy in copies] == [
+        "{first",
+        "{second",
+        "{third",
+    ]
+
+
+def test_newer_reshaped_schema_stays_byte_identical_and_read_only(store):
+    store.endpoint_store.save("chip-a", ENDPOINT)
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    future = json.dumps(
+        {"schema_version": ALIGNMENT_PRESETS_SCHEMA_VERSION + 1, "presets": {}}
+    ).encode("utf-8")
+    store.path.write_bytes(future)
+
+    store.refresh()
+
+    assert store.read_only
+    assert "newer" in store.read_only_reason
+    assert store.presets == []
+
+    with pytest.raises(ValueError):
+        store.save_named("bench", _snapshot())
+
+    with pytest.raises(ValueError):
+        store.clear_default("chip-a")
+
+    store.refresh()
+
+    assert store.path.read_bytes() == future
+    assert not store.unreadable_copy
+
+
+def test_replace_keeps_unknown_fields(store):
+    store.save_named("bench", _snapshot())
+    data = json.loads(store.path.read_text(encoding="utf-8"))
+    data["presets"][0]["future_field"] = 42
+    store.path.write_text(json.dumps(data), encoding="utf-8")
+
+    store.save_named("bench", _snapshot(camera_quad=None), replace=True)
+
+    record = json.loads(store.path.read_text(encoding="utf-8"))["presets"][0]
+
+    assert record["future_field"] == 42
+    assert record["camera_quad"] is None
+
+
+def test_unique_name_counts_up(store):
+    assert store.unique_name("chip-a", "Before x") == "Before x"
+
+    store.save_named("Before x", _snapshot())
+
+    assert store.unique_name("chip-a", "before X") == "before X (2)"
 
 
 def test_no_endpoints_writes_no_file(store):

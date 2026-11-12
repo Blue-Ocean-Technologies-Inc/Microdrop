@@ -18,10 +18,16 @@ each default slot is ``{"scope", "device_key", "camera_label",
 changes it and writes it back atomically, keeping records and keys this
 version does not understand.
 
-When the file is absent, the per-device endpoint cache is migrated into it
-once: every saved endpoint becomes an endpoint-only preset that is its
-device's default. The endpoint cache itself is left alone — it stays the
-working endpoint, and presets are a library of snapshots applied onto it."""
+Every device with a saved endpoint but no preset at all gets one on each
+refresh: its endpoint becomes an endpoint-only preset that is its default,
+so devices aligned before presets existed (or after an unreadable file was
+set aside) are covered. The endpoint cache itself is left alone — it stays
+the working endpoint, and presets are a library of snapshots applied onto
+it.
+
+A file written by a newer schema is read-only: never rewritten, whatever
+its shape. A file that cannot be parsed is kept aside under a fresh
+``.unreadable`` name before a new one replaces it."""
 
 # Standard library imports.
 import json
@@ -30,11 +36,11 @@ from pathlib import Path
 from uuid import uuid4
 
 # Enthought library imports.
-from traits.api import Bool, Dict, HasTraits, Instance, List
+from traits.api import Bool, Dict, HasTraits, Instance, List, Str
 from traits.etsconfig.api import ETSConfig
 
 # Microdrop utils imports.
-from microdrop_utils.file_handler import write_atomically
+from microdrop_utils.file_handler import next_free_numbered_path, write_atomically
 
 # Local imports.
 from ..consts import (
@@ -45,6 +51,10 @@ from ..consts import (
     ALIGNMENT_PRESETS_SCHEMA_VERSION,
     CAMERA_ALIGNMENT_DIRNAME,
     MIGRATED_ENDPOINT_PRESET_SUFFIX,
+    PRESET_NAME_TAKEN_TEMPLATE,
+    PRESET_NEEDS_DEVICE_MESSAGE,
+    PRESET_UNKNOWN_MESSAGE,
+    PRESETS_NEWER_SCHEMA_MESSAGE,
 )
 from ..utils.camera_endpoints import CameraEndpointStore
 from .alignment_preset import (
@@ -57,11 +67,6 @@ from .alignment_preset import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-READ_ONLY_MESSAGE = (
-    "The camera-alignment presets file was written by a newer version of "
-    "MicroDrop, so it is read-only here."
-)
 
 
 def default_presets_file():
@@ -80,6 +85,26 @@ def _empty_data():
         "presets": [],
         "defaults": [],
     }
+
+
+def _is_newer_schema(data):
+    """Whether parsed file data declares a schema newer than this one."""
+    version = data.get("schema_version") if isinstance(data, dict) else None
+
+    return (
+        isinstance(version, int)
+        and not isinstance(version, bool)
+        and version > ALIGNMENT_PRESETS_SCHEMA_VERSION
+    )
+
+
+def _has_current_shape(data):
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("schema_version"), int)
+        and isinstance(data.get("presets"), list)
+        and isinstance(data.get("defaults"), list)
+    )
 
 
 def _device_slot(device_key, preset_id):
@@ -145,7 +170,8 @@ class AlignmentPresetStore(HasTraits):
     #: resolved on first use.
     path = Instance(Path)
 
-    #: The endpoint cache migrated into presets while the file is absent.
+    #: The endpoint cache: a device with an endpoint but no preset gets
+    #: one from it.
     endpoint_store = Instance(CameraEndpointStore)
 
     #: SOURCE OF TRUTH for the presets table — every readable record, in
@@ -155,8 +181,16 @@ class AlignmentPresetStore(HasTraits):
     #: The default slots whose preset is readable.
     defaults = List(Dict)
 
-    #: The file was written by a newer schema: it lists, but never writes.
+    #: The store lists but never writes: the file was written by a newer
+    #: schema, or (set by the owner) it could not be read or written.
     read_only = Bool(False)
+
+    #: Why ``read_only`` is set, for the user; "" while writable.
+    read_only_reason = Str()
+
+    #: Where the latest unreadable file was kept, until the owner has told
+    #: the user (it then clears it); "" for none.
+    unreadable_copy = Str()
 
     def _path_default(self):
         return default_presets_file()
@@ -166,35 +200,34 @@ class AlignmentPresetStore(HasTraits):
 
     # ------------------------------------------------------------------ #
     def refresh(self):
-        """Reread the file, migrating the endpoint cache first when absent."""
-        self._migrate_endpoints_if_absent()
+        """Reread the file. An unreadable one is first kept aside; a device
+        with a saved endpoint but no preset then gets one.
 
+        Raises ``OSError`` when the file cannot be read, set aside or
+        written.
+        """
         data = self._read_data()
 
         if data is None:
+            self._set_unreadable_file_aside()
             data = _empty_data()
 
-        self.read_only = data["schema_version"] > ALIGNMENT_PRESETS_SCHEMA_VERSION
+        if _is_newer_schema(data):
+            logger.warning(f"{PRESETS_NEWER_SCHEMA_MESSAGE} ({self.path})")
+            self.read_only = True
+            self.read_only_reason = PRESETS_NEWER_SCHEMA_MESSAGE
 
-        if self.read_only:
-            logger.warning(f"{READ_ONLY_MESSAGE} ({self.path})")
+        else:
+            self.read_only = False
+            self.read_only_reason = ""
+            self._migrate_endpoints(data)
 
-        presets = []
+        self._list(data)
 
-        for record in data["presets"]:
-            try:
-                presets.append(AlignmentPreset.from_dict(record))
-            except (KeyError, TypeError, ValueError) as exc:
-                logger.warning(f"Skipping a malformed alignment preset: {exc}")
-
-        readable_ids = {preset.id for preset in presets}
-
-        self.presets = presets
-        self.defaults = [
-            slot
-            for slot in data["defaults"]
-            if isinstance(slot, dict) and slot.get("preset_id") in readable_ids
-        ]
+    def mark_unavailable(self, reason):
+        """Stop writing until the next successful refresh, saying why."""
+        self.read_only = True
+        self.read_only_reason = reason
 
     def get(self, preset_id):
         """Return the listed preset ``preset_id``, or None."""
@@ -237,9 +270,23 @@ class AlignmentPresetStore(HasTraits):
         clash = self.find_named(device_key, name)
 
         if clash is not None and clash.id != preset_id:
-            return f"{device_key} already has a preset named '{clash.name}'."
+            return PRESET_NAME_TAKEN_TEMPLATE.format(
+                device_key=device_key, name=clash.name
+            )
 
         return ""
+
+    def unique_name(self, device_key, name):
+        """Return ``name``, or ``name (N)`` for the smallest N ``device_key``
+        has not used."""
+        number = 2
+        candidate = name
+
+        while self.find_named(device_key, candidate):
+            candidate = f"{name} ({number})"
+            number += 1
+
+        return candidate
 
     def next_default_name(self, device_key):
         """Return ``<stem>-N`` for the smallest N ``device_key`` has not used."""
@@ -275,7 +322,8 @@ class AlignmentPresetStore(HasTraits):
     def save_named(self, name, snapshot, replace=False):
         """Save ``snapshot`` (an AlignmentPreset's geometry) as ``name`` for
         its device and return the saved preset. ``replace`` overwrites a
-        same-named preset of that device, keeping its identity and default.
+        same-named preset of that device in place, keeping its identity,
+        default and any fields this version does not know.
 
         Raises ``ValueError`` for a bad name, a clash without ``replace``,
         no device, or a read-only file.
@@ -289,7 +337,7 @@ class AlignmentPresetStore(HasTraits):
         device_key = snapshot.device_key
 
         if not device_key:
-            raise ValueError("A preset needs the device it was saved for.")
+            raise ValueError(PRESET_NEEDS_DEVICE_MESSAGE)
 
         record = snapshot.to_dict()
         record.update(
@@ -309,10 +357,12 @@ class AlignmentPresetStore(HasTraits):
                 return
 
             if not replace:
-                raise ValueError(f"{device_key} already has a preset named '{name}'.")
+                raise ValueError(
+                    PRESET_NAME_TAKEN_TEMPLATE.format(device_key=device_key, name=name)
+                )
 
             record["id"] = existing.get("id")
-            data["presets"][data["presets"].index(existing)] = record
+            existing.update(record)
 
         self._mutate(change)
         logger.info(f"Saved camera-alignment preset '{name}' for {device_key}")
@@ -336,13 +386,15 @@ class AlignmentPresetStore(HasTraits):
             record = _record_with_id(data, preset_id)
 
             if record is None:
-                raise ValueError("There is no such camera-alignment preset.")
+                raise ValueError(PRESET_UNKNOWN_MESSAGE)
 
             device_key = record.get("device_key", "")
 
             if _name_clash(data, device_key, new_name, preset_id) is not None:
                 raise ValueError(
-                    f"{device_key} already has a preset named '{new_name}'."
+                    PRESET_NAME_TAKEN_TEMPLATE.format(
+                        device_key=device_key, name=new_name
+                    )
                 )
 
             record["name"] = new_name
@@ -380,7 +432,7 @@ class AlignmentPresetStore(HasTraits):
             record = _record_with_id(data, preset_id)
 
             if record is None:
-                raise ValueError("There is no such camera-alignment preset.")
+                raise ValueError(PRESET_UNKNOWN_MESSAGE)
 
             device_key = record.get("device_key", "")
             data["defaults"] = [
@@ -406,47 +458,76 @@ class AlignmentPresetStore(HasTraits):
 
     # ------------------------------------------------------------------ #
     def _mutate(self, change):
-        """Reread the file, apply ``change`` (which may raise ValueError to
-        refuse) to its data, write it back atomically and refresh."""
-        self._migrate_endpoints_if_absent()
+        """Refresh, apply ``change`` (which may raise ValueError to refuse)
+        to the file's data, write it back atomically and refresh again.
+
+        Raises ``ValueError`` while read-only and ``OSError`` when the file
+        cannot be read or written.
+        """
+        self.refresh()
+
+        if self.read_only:
+            raise ValueError(self.read_only_reason)
 
         data = self._read_data()
 
         if data is None:
-            data = _empty_data()
+            raise OSError(f"{self.path} could not be read")
 
-            if self.path.exists():
-                self._set_unreadable_file_aside()
-
-        if data["schema_version"] > ALIGNMENT_PRESETS_SCHEMA_VERSION:
-            raise ValueError(READ_ONLY_MESSAGE)
+        if _is_newer_schema(data):
+            raise ValueError(PRESETS_NEWER_SCHEMA_MESSAGE)
 
         change(data)
 
-        data["schema_version"] = ALIGNMENT_PRESETS_SCHEMA_VERSION
         self._write_data(data)
-
         self.refresh()
 
+    def _list(self, data):
+        """Publish the readable records and default slots of ``data``."""
+        records = data.get("presets")
+        slots = data.get("defaults")
+        presets = []
+
+        for record in records if isinstance(records, list) else []:
+            try:
+                presets.append(AlignmentPreset.from_dict(record))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(f"Skipping a malformed alignment preset: {exc}")
+
+        readable_ids = {preset.id for preset in presets}
+
+        self.presets = presets
+        self.defaults = [
+            slot
+            for slot in (slots if isinstance(slots, list) else [])
+            if isinstance(slot, dict) and slot.get("preset_id") in readable_ids
+        ]
+
     def _read_data(self):
-        """Return the file's data with its three keys checked, an empty
-        library when the file is absent, or None (logged) when unreadable."""
+        """Return the file's data: an empty library without a file, a newer
+        schema's data whatever its shape, or None (logged) when it cannot be
+        parsed or is not this schema's shape.
+
+        Raises ``OSError`` when the file exists but cannot be read.
+        """
 
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            text = self.path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return _empty_data()
-        except (OSError, ValueError) as exc:
+
+        try:
+            data = json.loads(text)
+        except ValueError as exc:
             logger.error(f"Camera-alignment presets unreadable ({self.path}): {exc}")
 
             return None
 
-        if not (
-            isinstance(data, dict)
-            and isinstance(data.get("schema_version"), int)
-            and isinstance(data.get("presets"), list)
-            and isinstance(data.get("defaults"), list)
-        ):
+        # A newer schema may have reshaped the file; it is not ours to judge.
+        if _is_newer_schema(data):
+            return data
+
+        if not _has_current_shape(data):
             logger.error(f"Camera-alignment presets malformed ({self.path})")
 
             return None
@@ -454,29 +535,34 @@ class AlignmentPresetStore(HasTraits):
         return data
 
     def _write_data(self, data):
+        data["schema_version"] = ALIGNMENT_PRESETS_SCHEMA_VERSION
         write_atomically(self.path, json.dumps(data, indent=1).encode("utf-8"))
 
     def _set_unreadable_file_aside(self):
-        """Keep an unreadable file beside the fresh one rather than
-        overwrite it."""
-        aside = self.path.with_name(f"{self.path.name}.unreadable")
+        """Keep the unreadable file under a name no earlier copy uses."""
+        aside = next_free_numbered_path(
+            self.path.with_name(f"{self.path.name}.unreadable")
+        )
 
         os.replace(self.path, aside)
-        logger.warning(f"Moved the unreadable alignment presets file to {aside}")
+        self.unreadable_copy = str(aside)
+        logger.warning(f"Kept the unreadable alignment presets file as {aside}")
 
-    def _migrate_endpoints_if_absent(self):
-        """Turn every saved endpoint into its device's default preset, once:
-        only while the presets file does not exist yet."""
-
-        if self.path.exists():
-            return
-
-        data = _empty_data()
+    def _migrate_endpoints(self, data):
+        """Give every device with a saved endpoint but no preset at all its
+        endpoint as a preset, made its default; write only when one was
+        added."""
+        devices_with_presets = {
+            record.get("device_key")
+            for record in data["presets"]
+            if isinstance(record, dict)
+        }
+        migrated = []
 
         for device_key in self.endpoint_store.device_keys():
             endpoint = self.endpoint_store.load(device_key)
 
-            if endpoint is None:
+            if device_key in devices_with_presets or endpoint is None:
                 continue
 
             preset = AlignmentPreset(
@@ -487,13 +573,19 @@ class AlignmentPresetStore(HasTraits):
                 saved_at=self.endpoint_store.saved_at(device_key) or utc_now_iso(),
             )
             data["presets"].append(preset.to_dict())
+            data["defaults"] = [
+                slot
+                for slot in data["defaults"]
+                if not (isinstance(slot, dict) and _is_device_slot(slot, device_key))
+            ]
             data["defaults"].append(_device_slot(device_key, preset.id))
+            migrated.append(device_key)
 
-        if not data["presets"]:
+        if not migrated:
             return
 
         self._write_data(data)
         logger.info(
-            f"Migrated {len(data['presets'])} camera-alignment endpoint(s) "
+            f"Made the saved camera-alignment endpoints of {', '.join(migrated)} "
             f"into presets at {self.path}"
         )
