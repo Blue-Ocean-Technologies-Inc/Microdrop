@@ -83,6 +83,10 @@ DEFAULT_LOGS_SETTLING_SECONDS = 3.0
 SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
 
+# Quiet period after the last protocol edit before AutoSave writes the file
+# (#966): long enough to batch a burst of edits into one write.
+PROTOCOL_AUTOSAVE_DEBOUNCE_S = 1.5
+
 # Bounds for the per-column acknowledgement-wait times configured in the
 # Protocol Settings tab (#427). 0 = don't wait for the ack; no upper
 # bound (the grid editor clamps inf to a huge finite spinbox maximum).
