@@ -76,17 +76,17 @@ sections:
 | Section | Constant | Bundled tutorials |
 |---|---|---|
 | Start here | `TUTORIAL_ORDER_START` (0) | Getting Started with MicroDrop |
-| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer; Device Files, Channels & Connections; Camera & Alignment; Recording Viewer; Zones |
-| Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree, Protocol Files & Experiments |
+| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer (+0); Device Files, Channels & Connections (+5); Camera & Alignment (+10); Recording Viewer (+15); Zones (+20) |
+| Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree (+0); Protocol Files & Experiments (+10) |
 | Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
-| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Viewer, Image Analysis |
-| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management |
-| Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
+| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Viewer (+0); Image Analysis (+10) |
+| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management (+0); Preferences (+10); SSH & Remote Backend (+20) |
+| Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist (+0); Help, Logs & Saved Files (+10) |
 
-Add an offset to slot an entry within its section (the Device section uses
-+0, +5, +10, +15, +20); entries with the same order are sorted by title. An entry
-that sets no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its
-own after all of these, sorted by title, so older plugins need no change.
+Add an offset to slot an entry within its section (the offsets in brackets
+above); entries with the same order are sorted by title. An entry that sets
+no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its own after
+all of these, sorted by title, so older plugins need no change.
 
 ## Commit both files
 
