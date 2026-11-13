@@ -47,6 +47,7 @@ from examples.tutorials.build_tutorial import (
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import (
+    SECTIONS,
     SRC_ROOT,
     _add_imports,
     scaffold_tutorial,
@@ -58,9 +59,12 @@ from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
+from ssh_controls_ui.consts import SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH
+from ssh_controls_ui.plugin import SSHUIPlugin
 from user_help_plugin.consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+    TUTORIAL_ORDER_HARDWARE,
 )
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -86,6 +90,9 @@ PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
 SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
+)
+SSH_REMOTE_BACKEND_SOURCE = SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH.with_name(
+    "ssh_remote_backend.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
@@ -200,6 +207,27 @@ def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
     ]
 
 
+def test_scaffold_places_tutorials_in_a_section(scaffold_root):
+    for slug in ("demo", "more"):
+        scaffold_tutorial(
+            FIXTURE_PLUGIN, slug, slug.title(), scaffold_root, False, "hardware"
+        )
+
+    plugin_module = importlib.import_module(f"{FIXTURE_PLUGIN}.plugin")
+    orders = [entry.order for entry in plugin_module.FixturePlugin().tutorials]
+
+    assert SECTIONS == [
+        "start",
+        "device",
+        "protocols",
+        "hardware",
+        "analysis",
+        "management",
+        "reference",
+    ]
+    assert orders == [TUTORIAL_ORDER_HARDWARE, TUTORIAL_ORDER_HARDWARE]
+
+
 def test_scaffold_adds_to_a_list_without_a_trailing_comma(scaffold_root):
     package = scaffold_root / FIXTURE_PLUGIN
     (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
@@ -279,6 +307,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DeviceViewerPlugin(),
         MicrodropPlugin(),
         PluginManagementPlugin(),
+        SSHUIPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -292,17 +321,20 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     application.stop()
 
+    # The learning path: start here, device, protocols, hardware, analysis,
+    # managing the app, reference.
     assert [entry.title for entry in entries] == [
-        "Camera & Alignment Tutorial",
-        "Device Viewer Tutorial",
-        "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
-        "Help, Logs & Saved Files Tutorial",
+        "Device Viewer Tutorial",
+        "Camera & Alignment Tutorial",
+        "Zones Tutorial",
+        "Protocol Tree Tutorial",
+        "Dropbot Status & Controls Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
-        "Protocol Tree Tutorial",
+        "SSH & Remote Backend Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
-        "Zones Tutorial",
+        "Help, Logs & Saved Files Tutorial",
     ]
 
     for entry in entries:
@@ -310,6 +342,10 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
         assert find_network_references(page) == []
         assert len(page.encode("utf-8")) <= SIZE_BUDGET_BYTES
+
+
+def test_ssh_remote_backend_tutorial_rebuilds_identically():
+    assert is_up_to_date(SSH_REMOTE_BACKEND_SOURCE)
 
 
 def test_camera_alignment_tutorial_rebuilds_identically():
@@ -548,8 +584,8 @@ def test_build_standalone_writes_a_second_file(tmp_path):
     out.parent.mkdir()
 
     assert main([str(source), "--standalone", str(out)]) == 0
-    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
-    assert 'src="data:image/webp;base64,' in out.read_text()
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text(encoding="utf-8")
+    assert 'src="data:image/webp;base64,' in out.read_text(encoding="utf-8")
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):

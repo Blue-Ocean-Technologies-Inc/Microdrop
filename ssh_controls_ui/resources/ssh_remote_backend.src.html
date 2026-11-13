@@ -1,0 +1,1086 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>SSH &amp; Remote Backend Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+ol.howto { padding-left: 1.4em; max-width: 75ch; }
+ol.howto li { margin: 5px 0; }
+.table-wrap { overflow-x: auto; }
+.mock { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; font-size: .88rem; }
+.mock .mock-title { font-weight: 700; margin-bottom: 6px; }
+.mock .hint { color: var(--muted); margin: 0 0 6px; }
+.mock fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 0 0 8px; padding: 4px 8px 6px; min-width: 0; }
+.mock legend { font-size: .8rem; color: var(--muted); padding: 0 4px; }
+.mock .row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 6px; align-items: center; margin: 3px 0; }
+.mock .row > span:last-child { overflow-wrap: anywhere; }
+.mock input[type="text"] { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; min-width: 0; width: 100%; }
+.mock button { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+.mock button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.mock .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.mock code { overflow-wrap: anywhere; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.dlg { border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 6px; background: var(--surface); padding: 8px 10px; margin: 8px 0; font-size: .86rem; }
+.dlg.err { border-left-color: var(--down); }
+.dlg.warnbox { border-left-color: var(--warn); }
+.dlg.ok { border-left-color: var(--ok); }
+.dlg .dlg-title { font-weight: 700; margin-bottom: 4px; }
+.dlg .dlg-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.log { font-size: .86rem; color: var(--muted); min-height: 1.4em; margin: 6px 0 0; }
+.outcomes { list-style: none; padding: 0; margin: 6px 0 0; }
+.outcomes li { margin: 4px 0; padding-left: 1.4em; text-indent: -1.4em; }
+.outcomes .mark { display: inline-block; width: 1.4em; text-indent: 0; font-weight: 700; }
+.outcomes li.good .mark { color: var(--ok); }
+.outcomes li.bad .mark { color: var(--down); }
+svg.net .zone { fill: var(--surface); stroke: var(--line); }
+svg.net .zone-label { font-size: 12px; fill: var(--muted); }
+svg.net .node rect { fill: var(--surface-2); stroke: var(--line); }
+svg.net .node.off rect { opacity: .45; }
+svg.net .node text { font-size: 12px; fill: var(--ink); text-anchor: middle; }
+svg.net .link { stroke-width: 3; fill: none; }
+svg.net .link.up { stroke: var(--ok); }
+svg.net .link.down { stroke: var(--down); stroke-dasharray: 6 5; }
+svg.net .link.ssh { stroke-width: 2; }
+svg.net .link-label { font-size: 10.5px; fill: var(--muted); text-anchor: middle; }
+.radios { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
+.radios label { display: inline-flex; gap: 5px; align-items: center; }
+table.preview select { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; max-width: 100%; }
+table.preview td.res-copy { color: var(--ok); }
+table.preview td.res-lost { color: var(--down); font-weight: 600; }
+table.preview td.res-keep { color: var(--muted); }
+figure.step-panel svg .f { fill: var(--surface-2); stroke: var(--line); }
+figure.step-panel svg .g { fill: none; stroke: var(--line); }
+figure.step-panel svg .b { fill: var(--accent-soft); stroke: var(--accent); }
+figure.step-panel svg .t { font-size: 10px; fill: var(--ink); }
+figure.step-panel svg .m { font-size: 9px; fill: var(--muted); }
+figure.step-panel svg .h { font-size: 11px; font-weight: 700; fill: var(--ink); }
+</style>
+
+<header data-hero>
+  <h1>SSH &amp; Remote Backend</h1>
+  <p>Some instruments are driven by a second computer, for example a small computer inside the instrument, while you
+  work in MicroDrop on your own PC. <strong>Tools ▸ Remote Controls</strong> helps with two jobs in that setup: putting
+  an <a href="#term-key">SSH key</a> on the instrument computer once, and then copying its experiment folders back to
+  your PC with one button.</p>
+  <p>This page also explains, in plain words, how the parts of MicroDrop talk to each other when they run on two
+  computers, so you can tell what is wrong when something does not connect.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">Remote Controls is a small menu with two windows. Both use the same saved settings.</p>
+<ul class="uses">
+  <li><strong>SSH Key Portal…</strong> makes (or finds) a key on this computer and copies its public half to the
+  instrument computer. You type the instrument computer's password once, for this upload. After that, the key is
+  used instead of the password.</li>
+  <li><strong>Sync Remote Experiments…</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) copies the instrument
+  computer's <code>Experiments</code> folder into a folder on this computer named after the instrument. It copies one
+  way only: from the instrument to you.</li>
+  <li><strong>Edit ▸ Preferences… ▸ SSH / Remote Backend</strong> holds the same settings: host, port, user name, key
+  name, the folder to copy from, and the folder name used on this computer.</li>
+</ul>
+
+<h3 id="where-it-appears">When the menu is there</h3>
+<p>The Remote Controls menu, its preferences tab and this tutorial come from one part of MicroDrop that is loaded
+with the MicroDrop window. Whether you see them depends on how MicroDrop was started:</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>How MicroDrop was started</th><th>Tools ▸ Remote Controls and this tutorial</th></tr></thead>
+  <tbody>
+    <tr><td>The normal way (the full app: window and backend together), for any instrument type: DropBot, OpenDrop,
+    portable DropBot or the mock DropBot</td><td>Yes</td></tr>
+    <tr><td>Window only (<em>frontend only</em>), with the backend on another computer</td><td>Yes</td></tr>
+    <tr><td>Backend only (no window)</td><td>No: there is no window, so no menu</td></tr>
+    <tr><td>A hand-picked plugin list (<code>pixi run microdrop --plugins …</code>)</td><td>Only if the list includes
+    <code>SSHUIPlugin</code>. The two windows also need <code>SSHControlsPlugin</code>, the part that does the work;
+    without it they wait forever</td></tr>
+  </tbody>
+</table>
+</div>
+<p>It is not a plugin group, so it is not listed in <span class="ui">Tools ▸ Manage Plugins…</span> and cannot be
+switched off there.</p>
+
+<div class="callout">
+  <p><strong>Not the same as the portable instrument.</strong> The portable DropBot has its own small computer (a
+  Raspberry Pi) that runs all of MicroDrop, window included, on its own screen. Nothing is split, so you do not need
+  this page to use it. You can still use Sync Remote Experiments from your PC to copy the portable's experiments off
+  it, if it is on your network and accepts SSH.</p>
+</div>
+
+<h3 id="does-not">What Remote Controls does not do</h3>
+<ul class="uses">
+  <li>It does not start, stop or connect to the remote backend. That is done when MicroDrop is started on each
+  computer (see <a href="#split-setup">Setting up two computers</a>).</li>
+  <li>It does not set where the message server is; that is a separate settings file (see
+  <a href="#term-redis">Message server</a>).</li>
+  <li>It never sends files to the instrument computer and never deletes files on either side.</li>
+  <li>It does not sync by itself on a schedule; it copies only when you press the button.</li>
+  <li>It shows no percentage and has no Cancel button. Closing the window does not stop a copy.</li>
+  <li>It cannot remove a key from the instrument computer again.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="architecture">
+<h2>Who talks to whom</h2>
+<p class="intro">MicroDrop is built from three parts that pass messages to each other. On one computer you never
+notice. Split over two computers, each connection has to work.</p>
+<ul class="uses">
+  <li><strong>Frontend</strong>: the MicroDrop window you click in.</li>
+  <li><strong>Message server</strong> (a program called Redis): the post office. Every click becomes a message that
+  goes to the server, and the server hands it to whoever needs it. Both other parts must reach it, at the address and
+  port in the settings file <code>redis_settings.json</code> (normally <code>127.0.0.1</code>, this computer, port
+  <code>6379</code>).</li>
+  <li><strong>Backend</strong>: the part plugged into the DropBot by USB. It turns messages into hardware commands
+  and sends readings back.</li>
+</ul>
+<p>Remote Controls is a fourth, separate path: SSH, straight from this computer to the instrument computer. Key upload
+and Sync use only that path (plus the message server, to pass your button press to MicroDrop's SSH service on this
+computer). They do not need the backend or the DropBot.</p>
+
+<figure data-demo="links">
+<div class="controls" role="group" aria-label="Setup">
+  <span class="radios">
+    <label><input type="radio" name="links-mode" value="local" checked> Everything on this computer</label>
+    <label><input type="radio" name="links-mode" value="split"> Backend on the instrument computer</label>
+  </span>
+</div>
+<div class="controls" role="group" aria-label="Where the message server runs" data-server-choice>
+  Message server runs on
+  <span class="radios">
+    <label><input type="radio" name="links-server" value="here" checked> this computer</label>
+    <label><input type="radio" name="links-server" value="there"> the instrument computer</label>
+  </span>
+</div>
+<svg class="net" viewBox="0 0 640 250" role="img" aria-label="Diagram of the MicroDrop parts and the connections between them; red dashed lines are broken connections" data-net></svg>
+<div class="controls" role="group" aria-label="What is working">
+  <label><input type="checkbox" data-ok="server" checked> Message server running</label>
+  <label><input type="checkbox" data-ok="net" checked> Network between the computers</label>
+  <label><input type="checkbox" data-ok="backend" checked> Backend running</label>
+  <label><input type="checkbox" data-ok="usb" checked> DropBot plugged in</label>
+  <label><input type="checkbox" data-ok="sshd" checked> SSH on the instrument computer</label>
+</div>
+<ul class="outcomes" data-outcomes aria-live="polite"></ul>
+<figcaption><strong>Try it.</strong> Pick a setup, then untick one thing at a time and read what stops working.
+Notice that Sync needs only the message server and SSH, while the DropBot needs the backend. The instrument computer
+here stands for any computer you sync from.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">Four steps, from nothing to experiment folders on your PC. You need the instrument computer's
+address, a user name on it and that user's password. Steps 1 and 2 are needed only once.</p>
+<p>The pictures below are drawings of the windows, not screenshots.</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="Drawing of the Preferences dialog on its SSH / Remote Backend tab: a Remote Backend box with Host, SSH Port, Username, SSH Key Name, Remote Experiments Path and Device ID">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" class="f"/>
+      <text x="10" y="17" class="h">Preferences</text>
+      <rect x="8" y="26" width="78" height="136" rx="3" class="g"/>
+      <text x="13" y="41" class="m">Microdrop General</text><text x="13" y="56" class="m">…</text>
+      <rect x="10" y="62" width="74" height="15" rx="2" class="b"/><text x="13" y="73" class="m">SSH / Remote…</text>
+      <rect x="94" y="26" width="198" height="136" rx="3" class="g"/>
+      <text x="100" y="40" class="m">Remote Backend</text>
+      <text x="100" y="58" class="t">Host</text><rect x="196" y="49" width="90" height="13" rx="2" class="b"/><text x="199" y="59" class="m">dropbot.local</text>
+      <text x="100" y="76" class="t">SSH Port</text><rect x="196" y="67" width="90" height="13" rx="2" class="g"/><text x="199" y="77" class="m">22</text>
+      <text x="100" y="94" class="t">Username</text><rect x="196" y="85" width="90" height="13" rx="2" class="b"/><text x="199" y="95" class="m">pi</text>
+      <text x="100" y="112" class="t">SSH Key Name</text><rect x="196" y="103" width="90" height="13" rx="2" class="g"/><text x="199" y="113" class="m">id_rsa_microdrop</text>
+      <text x="100" y="130" class="t">Remote Exp. Path</text><rect x="196" y="121" width="90" height="13" rx="2" class="g"/><text x="199" y="131" class="m">~/Documents/…</text>
+      <text x="100" y="148" class="t">Device ID</text><rect x="196" y="139" width="90" height="13" rx="2" class="g"/><text x="199" y="149" class="m">dropbot_local</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Enter the instrument computer's address</h4>
+    <p>Open <span class="ui">Edit ▸ Preferences…</span> and pick the <span class="ui">SSH / Remote Backend</span> tab.
+    Type the <a href="#term-host">Host</a> (for example <code>dropbot.local</code> or <code>192.0.2.10</code>) and the
+    <a href="#term-user">Username</a> (for example <code>pi</code>). Leave <span class="ui">SSH Port</span> at 22 unless
+    you were told otherwise. The <a href="#term-device-id">Device ID</a> fills itself in from the host. The other
+    values can stay as they are.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="Drawing of the SSH Key Portal window: box 1 Connection Details with Host, Port, Username and Password; box 2 Generate or Read Key Pair with Local Key Name and the Generate / Read Key button; box 3 Upload Public Key to Server with its button and status">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" class="f"/>
+      <text x="10" y="16" class="h">SSH Key Portal</text>
+      <rect x="8" y="22" width="284" height="56" rx="3" class="g"/><text x="13" y="33" class="m">1. Connection Details (for key upload)</text>
+      <text x="13" y="47" class="t">Host:</text><rect x="62" y="38" width="80" height="12" rx="2" class="g"/>
+      <text x="150" y="47" class="t">Port:</text><rect x="200" y="38" width="86" height="12" rx="2" class="g"/>
+      <text x="13" y="67" class="t">Username:</text><rect x="62" y="58" width="80" height="12" rx="2" class="g"/>
+      <text x="150" y="67" class="t">Password:</text><rect x="200" y="58" width="86" height="12" rx="2" class="b"/><text x="204" y="67" class="m">••••••</text>
+      <rect x="8" y="83" width="284" height="40" rx="3" class="g"/><text x="13" y="94" class="m">2. Generate or Read Key Pair</text>
+      <rect x="13" y="100" width="130" height="16" rx="3" class="b"/><text x="20" y="111" class="t">Generate / Read Key</text>
+      <text x="150" y="111" class="m">Local Key Name: id_rsa_microdrop</text>
+      <rect x="8" y="128" width="284" height="36" rx="3" class="g"/><text x="13" y="139" class="m">3. Upload Public Key to Server</text>
+      <rect x="13" y="144" width="190" height="16" rx="3" class="b"/><text x="20" y="155" class="t">Upload Generated / Read Public Key</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Make a key and upload it</h4>
+    <p>Choose <span class="ui">Tools ▸ Remote Controls ▸ SSH Key Portal…</span>. Host, port and user name are already
+    filled in. Type the <a href="#term-password">Password</a> of that user. Click <span class="ui">Generate / Read
+    Key</span>: the status under it shows <em>Success! Using key from: …</em>. Then click <span class="ui">Upload
+    Generated / Read Public Key</span>. A message <em>Public key authorized on dropbot.local</em> means it worked.
+    See <a href="#key-portal">SSH Key Portal</a> for everything that can happen here.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="Drawing of the Sync Remote Experiments window: box 1 Remote Host, box 2 Paths with Device ID, Remote source and Local destination, box 3 Sync with the Sync Remote Experiments button, a moving progress bar and the status">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" class="f"/>
+      <text x="10" y="16" class="h">Sync Remote Experiments</text>
+      <rect x="8" y="22" width="284" height="34" rx="3" class="g"/><text x="13" y="33" class="m">1. Remote Host</text>
+      <text x="13" y="48" class="m">Host · Port · Username · Key Name</text>
+      <rect x="8" y="60" width="284" height="48" rx="3" class="g"/><text x="13" y="71" class="m">2. Paths</text>
+      <text x="13" y="85" class="t">Device ID: dropbot_local</text>
+      <text x="13" y="100" class="m">Local destination: …\Remote-Experiments\dropbot_local</text>
+      <rect x="8" y="112" width="284" height="52" rx="3" class="g"/><text x="13" y="123" class="m">3. Sync</text>
+      <rect x="13" y="127" width="274" height="15" rx="3" class="b"/><text x="150" y="138" class="t" text-anchor="middle">Sync Remote Experiments</text>
+      <rect x="13" y="145" width="274" height="5" rx="2" class="g"/><rect x="90" y="145" width="60" height="5" rx="2" class="b"/>
+      <text x="13" y="160" class="m">Status: Backend acknowledged, syncing...</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Copy the experiments</h4>
+    <p>Choose <span class="ui">Tools ▸ Remote Controls ▸ Sync Remote Experiments…</span> (or press
+    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> in the main window). Check the <span class="ui">Local
+    destination</span> line, then click <span class="ui">Sync Remote Experiments</span>. A moving bar appears and the
+    status changes to <em>Request sent, waiting for backend...</em>, then <em>Backend acknowledged, syncing...</em>.
+    When it is done, a <span class="ui">Sync complete</span> message appears and the window closes.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="Drawing of a folder tree: Documents, Sci-Bots, Microdrop, Remote-Experiments, dropbot_local, with experiment folders inside">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" class="f"/>
+      <text x="10" y="17" class="h">This computer</text>
+      <g class="t">
+        <text x="16" y="40">▾ Documents</text>
+        <text x="30" y="58">▾ Sci-Bots</text>
+        <text x="44" y="76">▾ Microdrop</text>
+        <text x="58" y="94">▸ Experiments <tspan class="m">(your own)</tspan></text>
+        <text x="58" y="112">▾ Remote-Experiments</text>
+      </g>
+      <rect x="68" y="118" width="96" height="15" rx="2" class="b"/>
+      <text x="72" y="129" class="t">▾ dropbot_local</text>
+      <text x="86" y="148" class="m">▸ (experiment folders copied</text>
+      <text x="94" y="161" class="m">from the instrument)</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Find the copies</h4>
+    <p>The folders are in <code>Documents\Sci-Bots\Microdrop\Remote-Experiments\</code> followed by the
+    <a href="#term-device-id">Device ID</a>, for example <code>…\Remote-Experiments\dropbot_local</code>. They sit next
+    to your own <code>Experiments</code> folder, never inside it. Run Sync again any time: only new and changed files
+    are copied.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="key-portal">
+<h2>SSH Key Portal</h2>
+<p class="intro"><span class="ui">Tools ▸ Remote Controls ▸ SSH Key Portal…</span> opens a separate window with three
+numbered boxes. Choosing the menu item again closes the open window and opens a fresh one.</p>
+<ol class="howto">
+  <li><strong>1. Connection Details (for key upload)</strong>: <span class="ui">Host</span>,
+  <span class="ui">Port</span>, <span class="ui">Username</span>, <span class="ui">Password</span>. The first three
+  come from your preferences, and what you type here is saved back to them straight away. The password is shown as
+  dots and is not saved (see <a href="#term-password">Password</a>).</li>
+  <li><strong>2. Generate or Read Key Pair</strong>: <span class="ui">Local Key Name</span> and the
+  <span class="ui">Generate / Read Key</span> button. If a key with that name already exists on this computer, it is
+  read and reused; otherwise a new one is made. The status line under the button shows where the two files are.</li>
+  <li><strong>3. Upload Public Key to Server</strong>: the <span class="ui">Upload Generated / Read Public
+  Key</span> button logs in to the instrument computer with the password and adds the public key to that user's list
+  of trusted keys. If the key is already on the list, it is not added twice.</li>
+</ol>
+<p>The order matters: <span class="ui">Upload</span> works only after <span class="ui">Generate / Read Key</span> has
+succeeded in the same session. Each button is greyed out while its job runs.</p>
+
+<h3 id="key-steps">From key to password-free sync</h3>
+<figure data-demo="keyflow">
+<div class="mock">
+  <div class="mock-title">Pick a step, then what happens</div>
+  <div class="btns" role="group" aria-label="Step" data-hops></div>
+  <div class="radios" role="radiogroup" aria-label="What happens" data-cases></div>
+  <div data-result aria-live="polite"></div>
+</div>
+<figcaption><strong>Try it.</strong> Each case shows the status line and the message box exactly as MicroDrop words
+them. Host, user and paths are placeholders.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="sync">
+<h2>Sync Remote Experiments</h2>
+<p class="intro"><span class="ui">Tools ▸ Remote Controls ▸ Sync Remote Experiments…</span>
+(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) opens a separate window. Its tooltip sums it up: <em>Pull the remote
+backend's Experiments/ folder locally via rsync over SSH.</em></p>
+<ol class="howto">
+  <li><strong>1. Remote Host</strong>: <span class="ui">Host</span>, <span class="ui">Port</span>,
+  <span class="ui">Username</span>, <span class="ui">Key Name</span>. Same values as the Key Portal and the
+  preferences; edits are saved straight away.</li>
+  <li><strong>2. Paths</strong>: <span class="ui">Device ID</span> (editable), <span class="ui">Remote source</span>
+  (the folder on the instrument computer, editable) and <span class="ui">Local destination</span> (where the copies go,
+  worked out from the Device ID; you cannot type in it).</li>
+  <li><strong>3. Sync</strong>: the <span class="ui">Sync Remote Experiments</span> button, a moving bar while it
+  works, and <span class="ui">Status</span>.</li>
+</ol>
+
+<h3 id="sync-steps">What happens when you press Sync</h3>
+<ol class="howto">
+  <li>MicroDrop checks that Host, Username and Port are filled in, and that the private key file
+  (<code>.ssh\id_rsa_microdrop</code> in your user folder) exists. If the Device ID is empty, it is set from the
+  host.</li>
+  <li>It creates the local destination folder if needed and sends the request. Status: <em>Request sent, waiting for
+  backend...</em>. Here, and in <em>Backend acknowledged</em>, "backend" means MicroDrop's SSH service on
+  <em>this</em> computer, not the DropBot backend.</li>
+  <li>The service first checks, for up to 3 seconds, that the instrument computer answers on the SSH port. If it does,
+  the status becomes <em>Backend acknowledged, syncing...</em> and the copy starts.</li>
+  <li>The copy is made by <a href="#term-rsync">rsync</a> over SSH, logging in with your key. It never asks for a
+  password.</li>
+  <li>When it ends: <span class="ui">Sync complete</span> and the window closes, or an error message (see
+  <a href="#messages">Messages</a>) and the status goes back to <em>Idle</em> so you can try again.</li>
+</ol>
+
+<h3 id="sync-time">Slow syncs and time limits</h3>
+<ul class="uses">
+  <li><strong>After 60 seconds</strong> without an answer, MicroDrop asks <span class="ui">Still syncing</span>:
+  <em>The remote sync is taking longer than expected. Keep waiting? (if no process will quit and finish in
+  background)</em>. <span class="ui">Yes</span> waits another 60 seconds (status <em>Still syncing...</em>) and asks
+  again if needed. <span class="ui">No</span> closes the window; the copy carries on in the background, but you will
+  not see its result.</li>
+  <li><strong>After 120 seconds</strong> of copying, MicroDrop stops the copy, whatever the reason, and shows
+  <span class="ui">Connection timed out</span>. A big first sync can hit this limit even on a good network. The files
+  already copied stay; press Sync again and rsync carries on with the rest.</li>
+  <li>Closing the window with its close button does not stop the copy either.</li>
+</ul>
+
+<h3 id="dest-demo">Device ID and destination</h3>
+<p>The <a href="#term-device-id">Device ID</a> follows the host as you type it, as long as you have not changed it
+yourself. Once you type your own name, changing the host leaves it alone.</p>
+<figure data-demo="dest">
+<div class="mock" aria-label="Mock of the Paths part of the Sync window">
+  <div class="row"><label for="dest-host">Host:</label><input type="text" id="dest-host" value="dropbot.local" spellcheck="false" autocomplete="off"></div>
+  <div class="row"><label for="dest-user">Username:</label><input type="text" id="dest-user" value="pi" spellcheck="false" autocomplete="off"></div>
+  <div class="row"><label for="dest-id">Device ID:</label><input type="text" id="dest-id" value="dropbot_local" spellcheck="false" autocomplete="off"></div>
+  <div class="row"><span>Copies from:</span><span><code data-src></code></span></div>
+  <div class="row"><span>Local destination:</span><span><code data-dest></code></span></div>
+  <div class="radios" role="radiogroup" aria-label="This computer runs">
+    <label><input type="radio" name="dest-os" value="win" checked> Windows</label>
+    <label><input type="radio" name="dest-os" value="posix"> Linux or macOS</label>
+  </div>
+</div>
+<p class="log" data-log aria-live="polite"></p>
+<figcaption><strong>Try it.</strong> <em>Copies from</em> is not a field in the window: it shows the user name, host
+and default <span class="ui">Remote source</span> together, the way rsync is given them. Type <code>192.0.2.10</code> as the host: the Device ID becomes
+<code>192_0_2_10</code>. Then type your own Device ID, for example <code>lab-rig-2</code>, and change the host again.
+Empty the Device ID to make it follow the host again.</figcaption>
+</figure>
+
+<h3 id="what-copied">What gets copied</h3>
+<p>Everything inside the remote source folder, sub-folders included, goes into the local destination. The slash at
+the end of the remote source matters: with it, the <em>contents</em> of <code>Experiments</code> are copied; without
+it, you get an extra <code>Experiments</code> folder inside the destination.</p>
+<figure data-demo="preview">
+<div class="table-wrap">
+<table class="small preview">
+  <thead><tr><th>Example file</th><th>Before Sync</th><th>After Sync, on this computer</th></tr></thead>
+  <tbody data-rows></tbody>
+</table>
+</div>
+<div class="controls"><button type="button" data-act="sync">Sync</button> <button type="button" data-act="reset">Start again</button></div>
+<p class="log" data-log aria-live="polite"></p>
+<figcaption><strong>Try it.</strong> Set where each file exists before the sync, then press Sync. "Same" means same
+size and same modified time; that is how rsync decides a file needs no copy. Nothing is ever sent to, or deleted
+from, the instrument computer.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">None. Remote Controls adds no toolbar buttons or icons. Both windows use text buttons:
+<span class="ui">Generate / Read Key</span>, <span class="ui">Upload Generated / Read Public Key</span> and
+<span class="ui">Sync Remote Experiments</span>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-terms">
+<h2>Terms</h2>
+<p class="intro">Every setting in the two windows and the preferences tab, plus the words around them.</p>
+
+<section data-term id="term-host" data-where="Preferences ▸ SSH / Remote Backend ▸ Host; both windows, Host">
+  <h3>Host</h3>
+  <p>The name or network address of the instrument computer.</p>
+  <div data-what><p>Where SSH connects to. A name such as <code>dropbot.local</code> or a number such as
+  <code>192.0.2.10</code>. On first start it comes from <code>REMOTE_HOST_IP_ADDRESS</code> if that is set (see
+  <a href="#where-values">Where the values come from</a>); otherwise it is empty.</p></div>
+  <div data-when><p>Set it once per instrument. Change it to sync from a different computer.</p></div>
+  <div data-read><p>A wrong or unreachable host gives <span class="ui">Could not reach remote host</span> within a few
+  seconds of pressing Sync.</p></div>
+  <div data-typical><p><code>dropbot.local</code> (a placeholder: ask whoever set up the instrument)</p></div>
+</section>
+
+<section data-term id="term-port" data-where="Preferences ▸ SSH / Remote Backend ▸ SSH Port; both windows, Port">
+  <h3>Port</h3>
+  <p>The SSH "door number" on the instrument computer.</p>
+  <div data-what><p>A whole number. On first start it is <code>REMOTE_SSH_PORT</code> if that is set, otherwise 22,
+  the standard SSH port.</p></div>
+  <div data-when><p>Change it only if the instrument computer's SSH listens somewhere else.</p></div>
+  <div data-read><p>In the Key Portal, any text that is not a whole number pops up <em>Port must be an integer.</em>,
+  even for a moment while you retype it. Select the number and type over it instead of deleting it first.</p></div>
+  <div data-typical><p>22</p></div>
+</section>
+
+<section data-term id="term-user" data-where="Preferences ▸ SSH / Remote Backend ▸ Username; both windows, Username">
+  <h3>Username</h3>
+  <p>The account you log in as on the instrument computer.</p>
+  <div data-what><p>The key is added to this user's trusted keys, and Sync copies from this user's home folder. On
+  first start it comes from <code>REMOTE_HOST_USERNAME</code>, otherwise empty.</p></div>
+  <div data-when><p>Use the account that runs MicroDrop on the instrument computer, so the experiments are in its
+  home folder.</p></div>
+  <div data-read><p>Shown as <code>user@host</code> in the remote source, for example
+  <code>pi@dropbot.local:~/…</code>.</p></div>
+  <div data-typical><p><code>pi</code> (a placeholder)</p></div>
+</section>
+
+<section data-term id="term-password" data-where="SSH Key Portal ▸ 1. Connection Details ▸ Password">
+  <h3>Password</h3>
+  <p>The instrument computer user's password, needed once for the key upload.</p>
+  <div data-what><p>Used only by <span class="ui">Upload Generated / Read Public Key</span>. It is kept in memory until
+  MicroDrop closes (reopening the Key Portal fills it in again) and never written to disk. Sync never uses it.</p></div>
+  <div data-when><p>Type it right before uploading. After a successful upload you do not need it again.</p></div>
+  <div data-read><p>Upload refuses to start with an empty password: <em>All connection fields are required.</em> A
+  wrong one gives <em>Authentication Failed. Please check your username and password.</em></p></div>
+  <div data-typical><p>Empty when MicroDrop starts.</p></div>
+</section>
+
+<section data-term id="term-key" data-where="Preferences ▸ SSH Key Name; Key Portal ▸ Local Key Name; Sync window ▸ Key Name">
+  <h3>Key name, public and private key</h3>
+  <p>The name of the key file pair in the <code>.ssh</code> folder of your user folder on this computer.</p>
+  <div data-what><p>An SSH key is a pair of files. The <strong>private key</strong> (<code>id_rsa_microdrop</code>)
+  stays on this computer and proves who you are. The <strong>public key</strong> (<code>id_rsa_microdrop.pub</code>)
+  is the half you hand out: a computer that has it on its trusted list lets the private key in. MicroDrop makes a
+  4096-bit RSA pair with no passphrase.</p></div>
+  <div data-when><p>Keep the default unless you want a separate key per instrument. All three places share one
+  value.</p></div>
+  <div data-read><p>Spaces at the start and end are dropped. If the name is empty, Generate shows <em>Key Name cannot be
+  empty.</em></p></div>
+  <div data-typical><p><code>id_rsa_microdrop</code></p></div>
+</section>
+
+<section data-term id="term-upload" data-where="SSH Key Portal ▸ 3. Upload Public Key to Server">
+  <h3>Key upload</h3>
+  <p>Copying the public key to the instrument computer's list of trusted keys.</p>
+  <div data-what><p>MicroDrop logs in once with the password (10-second limit to connect), creates the user's
+  <code>~/.ssh</code> folder and its <code>authorized_keys</code> file if they are missing, and adds the public key as
+  one line unless it is already there.</p></div>
+  <div data-when><p>Once per instrument computer and key. Again if you make a new key or the instrument computer is
+  reinstalled.</p></div>
+  <div data-read><p>Success: <em>Public key authorized on dropbot.local. You can now try connecting with your private
+  key.</em></p></div>
+  <div data-typical><p>Done once.</p></div>
+</section>
+
+<section data-term id="term-remote-path" data-where="Preferences ▸ Remote Experiments Path; Sync window ▸ Remote source">
+  <h3>Remote experiments path</h3>
+  <p>The folder on the instrument computer that Sync copies from.</p>
+  <div data-what><p>A path on the instrument computer; <code>~</code> means the user's home folder there. The default is
+  where MicroDrop keeps experiments with standard settings.</p></div>
+  <div data-when><p>Change it only if MicroDrop on the instrument computer saves experiments elsewhere.</p></div>
+  <div data-read><p>Keep the slash at the end (see <a href="#what-copied">What gets copied</a>).</p></div>
+  <div data-typical><p><code>~/Documents/Sci-Bots/Microdrop/Experiments/</code></p></div>
+</section>
+
+<section data-term id="term-device-id" data-where="Preferences ▸ Device ID; Sync window ▸ Device ID">
+  <h3>Device ID</h3>
+  <p>The name of the folder on this computer that holds one instrument's copies.</p>
+  <div data-what><p>Made from the host by turning every character other than letters, digits, <code>_</code> and
+  <code>-</code> into <code>_</code>: <code>192.0.2.10</code> becomes <code>192_0_2_10</code>,
+  <code>dropbot.local</code> becomes <code>dropbot_local</code>. You can type your own nickname instead.</p></div>
+  <div data-when><p>Give it a nickname when the instrument's address may change, so its copies stay in one
+  folder.</p></div>
+  <div data-read><p>The <span class="ui">Local destination</span> line shows the full folder it leads to.</p></div>
+  <div data-typical><p>The host, made folder-safe.</p></div>
+</section>
+
+<section data-term id="term-local-dest" data-where="Sync window ▸ 2. Paths ▸ Local destination">
+  <h3>Local destination</h3>
+  <p>Where the copied experiments land on this computer.</p>
+  <div data-what><p><code>Documents\Sci-Bots\Microdrop\Remote-Experiments\</code> in your user folder, plus the Device
+  ID. It is not a setting of its own: change the Device ID to change it.</p></div>
+  <div data-when><p>Check it before the first sync of a new instrument.</p></div>
+  <div data-read><p>Created on the first sync. Kept apart from your own <code>Experiments</code> folder.</p></div>
+  <div data-typical><p><code>C:\Users\you\Documents\Sci-Bots\Microdrop\Remote-Experiments\dropbot_local</code></p></div>
+</section>
+
+<section data-term id="term-rsync" data-where="Sync Remote Experiments">
+  <h3>rsync over SSH</h3>
+  <p>The copying tool Sync uses, running through an SSH connection.</p>
+  <div data-what><p>rsync compares both sides and copies only files that are new or differ in size or modified time.
+  It keeps folder structure and file times. It runs on this computer and, through SSH, on the instrument computer.
+  On Windows MicroDrop brings its own copy (rsync-win). On Linux and macOS this computer needs rsync installed. The
+  instrument computer always needs rsync.</p></div>
+  <div data-when><p>Every time you press Sync.</p></div>
+  <div data-read><p>Errors from rsync itself appear as <span class="ui">rsync exit</span> plus a number, with rsync's
+  own message.</p></div>
+  <div data-typical><p>A repeat sync with nothing new finishes quickly.</p></div>
+</section>
+
+<section data-term id="term-backend" data-where="Whole setup">
+  <h3>Remote backend</h3>
+  <p>MicroDrop's hardware part running on another computer than the window.</p>
+  <div data-what><p>The backend is started on the computer the DropBot is plugged into, without a window; your PC runs
+  only the window. Both connect to one message server. Remote Controls does not start or watch it.</p></div>
+  <div data-when><p>When the DropBot is attached to a different computer than the one you sit at.</p></div>
+  <div data-read><p>If the window works but the DropBot does not react, check that the backend is running and reaches
+  the message server (try the <a href="#architecture">diagram</a>).</p></div>
+  <div data-typical><p>Not used: most setups run everything on one computer.</p></div>
+</section>
+
+<section data-term id="term-redis" data-where="redis_settings.json in the MicroDrop folder">
+  <h3>Message server (Redis host and port)</h3>
+  <p>Where the message server runs, which every MicroDrop part must reach.</p>
+  <div data-what><p>Read from <code>redis_settings.json</code> in the MicroDrop program folder, next to
+  <code>redis_settings.example.json</code>. Without that file MicroDrop uses host <code>127.0.0.1</code> (this
+  computer only) and port <code>6379</code>. Whenever MicroDrop opens a window through the normal start, it starts a
+  server itself if none is running at that address; the window-only and backend-only start scripts do not. Remote
+  Controls never changes this.</p></div>
+  <div data-when><p>For a split setup, both computers' files must name the same host and port.</p></div>
+  <div data-read><p>If it cannot be reached, MicroDrop logs <em>Cannot reach the Redis server at &lt;host&gt;:&lt;port&gt;
+  — is it running?</em> and cannot start.</p></div>
+  <div data-typical><p><code>127.0.0.1</code>, port <code>6379</code></p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="where-values">
+<h2>Where the values come from</h2>
+<p class="intro">Host, port, user name, key name, remote path and Device ID are one set of saved values, shared by the
+preferences tab and both windows. Typing in either window changes the saved value at once.</p>
+<ul class="uses">
+  <li><strong>Saved in</strong> MicroDrop's <code>preferences.ini</code>, in the section
+  <code>[microdrop.ssh_controls]</code> (see the <em>Help, Logs &amp; Saved Files</em> tutorial for where that file
+  is).</li>
+  <li><strong>First start only</strong>: host, port and user name are taken from the environment variables
+  <code>REMOTE_HOST_IP_ADDRESS</code>, <code>REMOTE_SSH_PORT</code> and <code>REMOTE_HOST_USERNAME</code>. MicroDrop
+  also reads them from a file named <code>.env</code> if there is one in the MicroDrop program folder or a folder
+  above it. Once a value has been saved, these are no longer looked at.</li>
+  <li><strong>No reset button.</strong> To go back to the first-start values, close MicroDrop and remove the
+  <code>[microdrop.ssh_controls]</code> section from <code>preferences.ini</code>.</li>
+  <li><strong>Not saved</strong>: the password.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="messages">
+<h2>Messages you may see</h2>
+<p class="intro">Titles and texts as MicroDrop shows them. Host and paths are placeholders.</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>Title</th><th>Text, or when</th><th>What to do</th></tr></thead>
+  <tbody>
+    <tr><td colspan="3"><strong>SSH Key Portal</strong></td></tr>
+    <tr><td>Error</td><td><em>Key Name cannot be empty.</em></td><td>Type a key name.</td></tr>
+    <tr><td>User Warning</td><td><em>Key file already exists. Returning existing information.</em></td><td>Nothing: the
+    existing key is reused. You can upload it.</td></tr>
+    <tr><td>OSError: Failed to read/write public key</td><td>The key files could not be read or written; also shown
+    when only the <code>.pub</code> file exists (<em>Public key: … exists nut no private key: …</em>).</td><td>Use a
+    different key name, or move the lone <code>.pub</code> file away.</td></tr>
+    <tr><td>Bad Key name; Exception: Failed to generate public key</td><td>The name was refused, or making the key
+    failed.</td><td>Try a plain name such as <code>id_rsa_microdrop</code>.</td></tr>
+    <tr><td>Error</td><td><em>No key has been generated or read yet. Click 'Generate Key' first.</em></td><td>Click
+    Generate / Read Key first.</td></tr>
+    <tr><td>Error</td><td><em>All connection fields are required.</em></td><td>Fill in host, port, user name and
+    password.</td></tr>
+    <tr><td>Error</td><td><em>Port must be an integer.</em></td><td>Type a whole number.</td></tr>
+    <tr><td>Key Upload Error</td><td><em>Authentication Failed. Please check your username and password.</em></td><td>Check
+    both. The instrument computer must also allow password logins over SSH.</td></tr>
+    <tr><td>Key Upload Error</td><td><em>An unexpected error occurred: …</em> (for example the host did not answer in
+    10 seconds)</td><td>Check host, port and network.</td></tr>
+    <tr><td>Key Upload Error</td><td><em>The server failed to add the key. Check permissions or see server
+    logs.</em></td><td>Ask whoever looks after the instrument computer.</td></tr>
+    <tr><td>Success</td><td><em>Public key authorized on dropbot.local. You can now try connecting with your private
+    key.</em></td><td>Done; go on to Sync.</td></tr>
+    <tr><td>(no message)</td><td>The status stays at <em>Starting key generation/reading...</em> or <em>Starting key
+    upload...</em> for good.</td><td>The request never reached MicroDrop's SSH service: check the message server, and
+    that MicroDrop was started with its service part. Reopen the window to try again.</td></tr>
+    <tr><td colspan="3"><strong>Sync Remote Experiments</strong></td></tr>
+    <tr><td>Missing fields</td><td><em>Host, username and port are required.</em></td><td>Fill them in.</td></tr>
+    <tr><td>SSH key missing</td><td><em>Expected C:\Users\you\.ssh\id_rsa_microdrop to exist. Generate + upload it via
+    the SSH Key Portal first.</em></td><td>Do step 2 of the walkthrough, or fix the key name.</td></tr>
+    <tr><td>Invalid sync request</td><td>A value was refused before sending.</td><td>Check the fields.</td></tr>
+    <tr><td>Could not reach remote host</td><td><em>Could not resolve hostname …</em>, <em>Timed out after 3s waiting
+    for dropbot.local:22 to accept a TCP connection.</em>, <em>dropbot.local:22 refused or unreachable: …</em>, or
+    <em>The remote host did not accept the SSH connection. …</em></td><td>Check the host is on, the address, the port and
+    the network.</td></tr>
+    <tr><td>SSH authentication failed</td><td><em>The remote host rejected the SSH key. Re-upload your public key via the
+    SSH Key Portal, or verify the Key Name preference matches a key the remote host trusts.</em></td><td>Upload the key
+    again (step 2), with the same key name as here.</td></tr>
+    <tr><td>Connection timed out</td><td><em>Could not reach pi@dropbot.local:22 within 120s. Check that the host is
+    online and the SSH port is correct.</em></td><td>Shown after 120 seconds even when files were being copied. Press
+    Sync again to continue.</td></tr>
+    <tr><td>rsync executable not found</td><td>rsync is missing on this computer.</td><td>On Linux or macOS, install
+    rsync.</td></tr>
+    <tr><td>rsync exit …</td><td>rsync reported a problem; its own message follows, for example rsync missing on the
+    instrument computer, or (Linux and macOS) <em>Host key verification failed.</em></td><td>Read rsync's message.
+    <code>rsync exit 0</code> means rsync itself finished but printed a warning: check the destination folder, the
+    files are probably there.</td></tr>
+    <tr><td>Unexpected error</td><td>Anything else.</td><td>Read the text; check the log.</td></tr>
+    <tr><td>Still syncing</td><td>No result after 60 seconds.</td><td>See <a href="#sync-time">Slow syncs</a>.</td></tr>
+    <tr><td>Sync complete</td><td><em>Sync complete.</em></td><td>Done; the window closes.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="storage">
+<h2>What is stored where</h2>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>What</th><th>Where</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Private key</td><td>This computer: <code>.ssh\id_rsa_microdrop</code> in your user folder</td><td>No
+    passphrase. Anyone who can copy it can log in to the instrument computer as that user.</td></tr>
+    <tr><td>Public key</td><td>This computer: <code>.ssh\id_rsa_microdrop.pub</code></td><td>Safe to share.</td></tr>
+    <tr><td>Trusted keys</td><td>Instrument computer: <code>~/.ssh/authorized_keys</code> of the user</td><td>One line
+    added by the upload. Delete that line there to withdraw access.</td></tr>
+    <tr><td>Settings</td><td>This computer: <code>preferences.ini</code>, section
+    <code>[microdrop.ssh_controls]</code></td><td>Host, port, user name, key name, remote path, Device ID. No
+    password.</td></tr>
+    <tr><td>Copied experiments</td><td>This computer:
+    <code>Documents\Sci-Bots\Microdrop\Remote-Experiments\&lt;Device ID&gt;\</code></td><td>Never deleted by Sync.</td></tr>
+    <tr><td>Password</td><td>Nowhere on disk</td><td>Kept in memory until MicroDrop closes.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="security">
+<h2>Security notes</h2>
+<p class="intro">What the code does, so you can judge whether it fits your lab's rules.</p>
+<ul class="uses">
+  <li><strong>The instrument computer's identity is not checked at upload.</strong> The Key Portal accepts whichever
+  computer answers at the host address, without comparing its host key to a known one, and sends the password to it.
+  Use it only on a network you trust, and double-check the host.</li>
+  <li><strong>The upload request passes through the message server</strong>, password included. When the server runs on
+  another computer, that request crosses the network unencrypted.</li>
+  <li><strong>The message server has no password.</strong> Whoever can reach its address and port can send MicroDrop
+  messages. Keep it on the lab network; with the default <code>127.0.0.1</code> only this computer can reach it.</li>
+  <li><strong>The private key has no passphrase.</strong> Protect your user account on this computer. To withdraw
+  access, remove the key's line from <code>authorized_keys</code> on the instrument computer.</li>
+  <li><strong>Sync uses only the key</strong>, never the password. On Linux and macOS it uses the system's
+  <code>ssh</code> without letting it ask questions, so, unless your SSH is set up otherwise, it refuses an instrument
+  computer it does not already know (<em>Host key verification failed.</em>). Connecting once with <code>ssh pi@dropbot.local</code> in a terminal and checking the fingerprint
+  records it.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="split-setup">
+<h2>Setting up two computers</h2>
+<p class="intro">For whoever installs the instrument. Remote Controls does none of this; it is how MicroDrop is
+started.</p>
+<ol class="howto">
+  <li>Choose which computer runs the message server. In its <code>redis_settings.json</code>, set
+  <code>"host"</code> to that computer's network address (with <code>127.0.0.1</code> no other computer can
+  connect) and keep <code>"port"</code> at <code>6379</code>. Start the server there: <code>redis-server</code>, or
+  <code>pixi run python examples/start_redis_server.py</code>. Run this and the commands below from the MicroDrop
+  source folder, <code>microdrop-py/src</code>.</li>
+  <li>Give the other computer a <code>redis_settings.json</code> with the same host and port.</li>
+  <li>On the computer with the DropBot, start the backend only:
+  <code>pixi run python -m examples.run_device_viewer_pluggable_backend</code> (add <code>--device opendrop</code>
+  or <code>--device portable</code> for those instruments).</li>
+  <li>On your PC, start the window only:
+  <code>pixi run python -m examples.run_device_viewer_pluggable_frontend</code>. It includes Remote Controls and its
+  SSH service.</li>
+  <li>For Sync, the instrument computer also needs an SSH server, rsync and a user account; then follow the
+  <a href="#walkthrough">walkthrough</a>.</li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>One way only.</strong> Sync copies from the instrument computer to this one. Nothing goes back, and
+    nothing is deleted on either side.</li>
+    <li><strong>Local edits can be overwritten.</strong> If you change a copied file here and the instrument's
+    version differs, the next sync replaces yours. Work on a copy outside <code>Remote-Experiments</code>.</li>
+    <li><strong>Password once.</strong> The password is needed only for the first upload; after that the key is
+    used. The instrument computer must allow password logins for that upload.</li>
+    <li><strong>rsync on both ends.</strong> The instrument computer needs rsync; on Linux and macOS so does this
+    one. Windows uses MicroDrop's own copy.</li>
+    <li><strong>Closing the window does not stop a sync.</strong> Neither does answering <span class="ui">No</span>
+    to <span class="ui">Still syncing</span>. There is no Cancel.</li>
+    <li><strong>Two-minute limit.</strong> A sync that runs longer than 120 seconds is stopped with
+    <span class="ui">Connection timed out</span>. Press Sync again to continue.</li>
+    <li><strong>A lone private key gets replaced.</strong> If <code>.ssh\id_rsa_microdrop</code> exists without its
+    <code>.pub</code> file, Generate / Read Key makes a new pair over it. Upload the new key afterwards.</li>
+    <li><strong>Port box in the Key Portal.</strong> Deleting the number pops up <em>Port must be an integer.</em>;
+    type over it instead.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>SSH</dt><dd>Secure Shell: the standard, encrypted way to log in to another computer over a network and copy
+  files.</dd>
+  <dt>Key (key pair)</dt><dd>Two matching files that replace a password: a private key you keep, a public key you give
+  to computers that should let you in.</dd>
+  <dt>Host</dt><dd>A computer on the network, named by its address.</dd>
+  <dt>Port</dt><dd>A numbered door on a computer; SSH normally uses 22, the message server 6379.</dd>
+  <dt>Redis</dt><dd>The program MicroDrop uses as its message server.</dd>
+  <dt>Frontend</dt><dd>The MicroDrop window.</dd>
+  <dt>Backend</dt><dd>The part of MicroDrop that drives the DropBot; it has no window.</dd>
+  <dt>rsync</dt><dd>A copying tool that copies only what is new or changed.</dd>
+  <dt>Device ID</dt><dd>The folder name MicroDrop uses on this computer for one instrument's copies.</dd>
+  <dt>Instrument computer</dt><dd>On this page: the remote computer you sync from, usually the one next to the
+  DropBot.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("links", function (figure, T) {
+  var svg = figure.querySelector("[data-net]");
+  var out = figure.querySelector("[data-outcomes]");
+  var serverChoice = figure.querySelector("[data-server-choice]");
+  var ok = {};
+
+  function checked(name) {
+    var box = figure.querySelector('input[name="' + name + '"]:checked');
+    return box ? box.value : "";
+  }
+
+  function node(g, x, y, w, label, off) {
+    var group = T.el("g", { "class": "node" + (off ? " off" : "") }, g);
+
+    T.el("rect", { x: x, y: y, width: w, height: 30, rx: 5 }, group);
+    T.text(group, x + w / 2, y + 19, label);
+    return { cx: x + w / 2, top: y, bottom: y + 30, left: x, right: x + w, cy: y + 15 };
+  }
+
+  function link(g, a, b, up, label, cls) {
+    T.el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], "class": "link " + (up ? "up" : "down") + (cls ? " " + cls : "") }, g);
+    if (label) { T.text(g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 5, label, { "class": "link-label" }); }
+  }
+
+  function item(good, text) {
+    var li = document.createElement("li");
+    var mark = document.createElement("span");
+
+    li.className = good ? "good" : "bad";
+    mark.className = "mark";
+    mark.textContent = good ? "✓" : "✗";
+    mark.setAttribute("aria-label", good ? "works" : "fails");
+    li.appendChild(mark);
+    li.appendChild(document.createTextNode(text));
+    out.appendChild(li);
+  }
+
+  function draw() {
+    var split = checked("links-mode") === "split";
+    var serverThere = split && checked("links-server") === "there";
+    var net = ok.net;
+    var windowToServer = ok.server && (!serverThere || net);
+    var backendToServer = ok.backend && ok.server && (!split || serverThere || net);
+    var ssh = net && ok.sshd;
+    var dropbot = windowToServer && backendToServer && ok.usb;
+
+    // .controls sets display, which the hidden attribute alone would not override.
+    serverChoice.style.display = split ? "" : "none";
+    T.clear(svg);
+    T.el("rect", { x: 4, y: 4, width: 300, height: 242, rx: 8, "class": "zone" }, svg);
+    T.el("rect", { x: 336, y: 4, width: 300, height: 242, rx: 8, "class": "zone" }, svg);
+    T.text(svg, 14, 22, "This computer", { "class": "zone-label" });
+    T.text(svg, 346, 22, split ? "Instrument computer" : "Another computer (only for Sync)", { "class": "zone-label" });
+
+    var links = T.el("g", {}, svg);
+    var nodes = T.el("g", {}, svg);
+    var win = node(nodes, 20, 40, 130, "MicroDrop window");
+    var svc = node(nodes, 160, 40, 130, "SSH service");
+    var server = serverThere ? node(nodes, 420, 110, 150, "Message server", !ok.server)
+                             : node(nodes, 90, 110, 150, "Message server", !ok.server);
+    var backend = split ? node(nodes, 400, 180, 110, "Backend", !ok.backend)
+                        : node(nodes, 20, 180, 110, "Backend", !ok.backend);
+    var bot = split ? node(nodes, 520, 180, 100, "DropBot", !ok.usb)
+                    : node(nodes, 190, 180, 100, "DropBot", !ok.usb);
+    var sshd = node(nodes, 420, 40, 150, "SSH + rsync", !ok.sshd);
+
+    link(links, [win.cx, win.bottom], [server.cx - 30, server.top], windowToServer, "");
+    link(links, [svc.cx, svc.bottom], [server.cx + 30, server.top], windowToServer, "");
+    link(links, [backend.cx, backend.top], [server.cx, server.bottom], backendToServer, split && !serverThere ? "Redis 6379" : "");
+    link(links, [backend.right, backend.cy], [bot.left, bot.cy], ok.usb && ok.backend, "USB");
+    link(links, [svc.right, svc.cy], [sshd.left, sshd.cy], ssh, "", "ssh");
+    T.text(links, 378, sshd.cy - 6, "SSH 22", { "class": "link-label" });
+    if (serverThere) { T.text(links, 300, 98, "Redis 6379", { "class": "link-label" }); }
+
+    T.clear(out);
+    item(windowToServer, windowToServer
+      ? "MicroDrop window starts and its messages flow."
+      : "The window cannot start: the log says Cannot reach the Redis server at <host>:6379 — is it running?");
+    item(backendToServer, backendToServer
+      ? "The backend receives your commands."
+      : (ok.backend ? "The backend cannot reach the message server: nothing you click reaches the DropBot."
+                    : "No backend is running: nothing you click reaches the DropBot."));
+    item(dropbot, dropbot ? "The DropBot responds." : "The DropBot does not respond.");
+    item(windowToServer && ssh, windowToServer && ssh
+      ? "SSH Key Portal upload and Sync Remote Experiments work."
+      : (!windowToServer ? "Key upload and Sync cannot run: the window is not running."
+                         : "Key upload fails (Key Upload Error) and Sync shows Could not reach remote host."));
+  }
+
+  figure.querySelectorAll("input[data-ok]").forEach(function (box) {
+    ok[box.getAttribute("data-ok")] = box.checked;
+    box.addEventListener("change", function () { ok[box.getAttribute("data-ok")] = box.checked; draw(); });
+  });
+  figure.querySelectorAll('input[type="radio"]').forEach(function (r) { r.addEventListener("change", draw); });
+  draw();
+});
+
+Tutorial.demo("keyflow", function (figure, T) {
+  var PUB = "C:\\Users\\you\\.ssh\\id_rsa_microdrop.pub";
+  var PRIV = "C:\\Users\\you\\.ssh\\id_rsa_microdrop";
+  var GEN_OK = "Success! Using key from:\n" + PUB + "\nPrivate key at:\n" + PRIV;
+  var HOPS = [
+    { name: "1. Generate / Read Key", where: "On this computer only; no network.", cases: [
+      { label: "No key yet", status: GEN_OK, after: "Upload status: Ready to upload generated/found key.",
+        note: "A new 4096-bit RSA pair is written to the .ssh folder." },
+      { label: "Both key files already exist", status: GEN_OK, box: ["warnbox", "User Warning", "Key file already exists. Returning existing information."],
+        note: "The existing key is reused; nothing is overwritten." },
+      { label: "Only the .pub file exists", status: "Error: Public key: " + PUB + " exists nut no private key: " + PRIV + ".",
+        box: ["err", "OSError: Failed to read/write public key", "Public key: " + PUB + " exists nut no private key: " + PRIV + "."],
+        note: "Move the lone .pub file away, or pick another key name." },
+      { label: "Only the private key exists", status: GEN_OK,
+        note: "Careful: a new pair is made and the old private key is replaced. Upload the new one." },
+      { label: "Key name empty", status: "Status: Ready to generate or read key.", box: ["err", "Error", "Key Name cannot be empty."] }
+    ] },
+    { name: "2. Upload", where: "Password login over the network, once.", cases: [
+      { label: "Everything right", status: "Success: Public key authorized on dropbot.local.\nYou can now try connecting with your private key.",
+        box: ["ok", "Success", "Public key authorized on dropbot.local.\nYou can now try connecting with your private key."] },
+      { label: "Wrong password or user", status: "Error: Authentication Failed. Please check your username and password.",
+        box: ["err", "Key Upload Error", "Authentication Failed. Please check your username and password."] },
+      { label: "Host off or wrong address", status: "Error: An unexpected error occurred: …",
+        box: ["err", "Key Upload Error", "An unexpected error occurred: … (the network library's reason)"],
+        note: "MicroDrop gives up connecting after 10 seconds." },
+      { label: "Generate not done yet", status: "Starting key upload...",
+        box: ["err", "Error", "No key has been generated or read yet. Click 'Generate Key' first."] },
+      { label: "Password box empty", status: "Starting key upload...",
+        box: ["err", "Error", "All connection fields are required."] },
+      { label: "Instrument computer refuses the change", status: "Error: The server failed to add the key. Check permissions or see server logs.",
+        box: ["err", "Key Upload Error", "The server failed to add the key. Check permissions or see server logs."] }
+    ] },
+    { name: "3. Sync, no password", where: "Key login over the network, every time.", cases: [
+      { label: "Key uploaded, all well", status: "Status: Idle (the window closes)",
+        box: ["ok", "Sync complete", "Sync complete."] },
+      { label: "Key file missing here", status: "Status: Idle",
+        box: ["err", "SSH key missing", "Expected " + PRIV + " to exist. Generate + upload it via the SSH Key Portal first."] },
+      { label: "Key never uploaded", status: "Status: Idle",
+        box: ["err", "SSH authentication failed", "The remote host rejected the SSH key. Re-upload your public key via the SSH Key Portal, or verify the Key Name preference matches a key the remote host trusts.\n\n(rsync's own message)"] },
+      { label: "Host off or wrong address", status: "Status: Idle",
+        box: ["err", "Could not reach remote host", "Timed out after 3s waiting for dropbot.local:22 to accept a TCP connection."] },
+      { label: "Copy runs past 120 s", status: "Status: Idle",
+        box: ["err", "Connection timed out", "Could not reach pi@dropbot.local:22 within 120s. Check that the host is online and the SSH port is correct."],
+        note: "Files already copied stay. Press Sync again to continue." }
+    ] }
+  ];
+  var hopsEl = figure.querySelector("[data-hops]");
+  var casesEl = figure.querySelector("[data-cases]");
+  var result = figure.querySelector("[data-result]");
+  var hop = 0;
+  var pick = 0;
+
+  function show() {
+    var h = HOPS[hop];
+    var c = h.cases[pick];
+
+    T.clear(result);
+    var where = document.createElement("p");
+    where.className = "hint";
+    where.textContent = h.where;
+    result.appendChild(where);
+
+    var status = document.createElement("div");
+    status.className = "dlg";
+    status.innerHTML = '<div class="dlg-title">Status line</div><div class="dlg-text"></div>';
+    status.querySelector(".dlg-text").textContent = c.status + (c.after ? "\n" + c.after : "");
+    result.appendChild(status);
+
+    if (c.box) {
+      var box = document.createElement("div");
+      box.className = "dlg " + c.box[0];
+      box.innerHTML = '<div class="dlg-title"></div><div class="dlg-text"></div>';
+      box.querySelector(".dlg-title").textContent = "Message box: " + c.box[1];
+      box.querySelector(".dlg-text").textContent = c.box[2];
+      result.appendChild(box);
+    }
+
+    if (c.note) {
+      var note = document.createElement("p");
+      note.className = "log";
+      note.textContent = c.note;
+      result.appendChild(note);
+    }
+  }
+
+  function drawCases() {
+    T.clear(casesEl);
+    HOPS[hop].cases.forEach(function (c, i) {
+      var label = document.createElement("label");
+      var radio = document.createElement("input");
+
+      radio.type = "radio";
+      radio.name = "keyflow-case";
+      radio.checked = i === pick;
+      radio.addEventListener("change", function () { pick = i; show(); });
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(" " + c.label));
+      casesEl.appendChild(label);
+    });
+  }
+
+  HOPS.forEach(function (h, i) {
+    var b = document.createElement("button");
+
+    b.type = "button";
+    b.textContent = h.name;
+    b.setAttribute("aria-pressed", i === hop ? "true" : "false");
+    b.addEventListener("click", function () {
+      hop = i;
+      pick = 0;
+      hopsEl.querySelectorAll("button").forEach(function (x, j) { x.setAttribute("aria-pressed", j === hop ? "true" : "false"); });
+      drawCases();
+      show();
+    });
+    hopsEl.appendChild(b);
+  });
+  drawCases();
+  show();
+});
+
+Tutorial.demo("dest", function (figure, T) {
+  var host = figure.querySelector("#dest-host");
+  var user = figure.querySelector("#dest-user");
+  var id = figure.querySelector("#dest-id");
+  var src = figure.querySelector("[data-src]");
+  var dest = figure.querySelector("[data-dest]");
+  var log = figure.querySelector("[data-log]");
+  var oldHost = host.value;
+
+  function sanitize(text) { return text ? text.replace(/[^A-Za-z0-9_-]/g, "_") : ""; }
+
+  function paths() {
+    var win = (figure.querySelector('input[name="dest-os"]:checked') || {}).value !== "posix";
+    var base = win ? "C:\\Users\\you\\Documents\\Sci-Bots\\Microdrop\\Remote-Experiments"
+                   : "/home/you/Documents/Sci-Bots/Microdrop/Remote-Experiments";
+    var sep = win ? "\\" : "/";
+    var name = id.value.trim();
+
+    src.textContent = (user.value || "") + "@" + (host.value || "") + ":~/Documents/Sci-Bots/Microdrop/Experiments/";
+    dest.textContent = name ? base + sep + name : base;
+  }
+
+  host.addEventListener("input", function () {
+    var followed = !id.value.trim() || id.value.trim() === sanitize(oldHost);
+
+    if (followed) {
+      id.value = sanitize(host.value);
+      log.textContent = "Device ID follows the host.";
+    } else {
+      log.textContent = "Device ID kept: you typed your own.";
+    }
+    oldHost = host.value;
+    paths();
+  });
+  id.addEventListener("input", function () {
+    log.textContent = id.value.trim() ? "" : "Empty Device ID: copies would go straight into Remote-Experiments. Pressing Sync fills it from the host.";
+    paths();
+  });
+  user.addEventListener("input", paths);
+  figure.querySelectorAll('input[name="dest-os"]').forEach(function (r) { r.addEventListener("change", paths); });
+  paths();
+});
+
+Tutorial.demo("preview", function (figure, T) {
+  var STATES = [
+    ["remote", "Only on the instrument"],
+    ["same", "On both, the same"],
+    ["differs", "On both, different"],
+    ["local", "Only on this computer"],
+    ["gone", "Deleted on the instrument, copy here from an earlier sync"]
+  ];
+  var RESULT = {
+    remote: ["res-copy", "Copied here."],
+    same: ["res-keep", "Skipped: already the same."],
+    differs: ["res-lost", "Replaced with the instrument's version. Changes made here are lost."],
+    local: ["res-keep", "Kept, untouched."],
+    gone: ["res-keep", "Kept: Sync never deletes."]
+  };
+  var FILES = [
+    ["2026_11_12_14_05/protocol.json", "remote"],
+    ["2026_11_12_14_05/report.html", "differs"],
+    ["2026_11_10_09_30/capture_001.png", "same"],
+    ["2026_11_10_09_30/notes.txt", "local"],
+    ["2026_11_01_16_45/old_run.csv", "gone"]
+  ];
+  var body = figure.querySelector("[data-rows]");
+  var log = figure.querySelector("[data-log]");
+  var rows = [];
+
+  function build() {
+    T.clear(body);
+    rows = [];
+    FILES.forEach(function (f) {
+      var tr = document.createElement("tr");
+      var name = document.createElement("td");
+      var before = document.createElement("td");
+      var after = document.createElement("td");
+      var select = document.createElement("select");
+
+      name.innerHTML = "<code></code>";
+      name.firstChild.textContent = f[0];
+      select.setAttribute("aria-label", "Before Sync: " + f[0]);
+      STATES.forEach(function (s) {
+        var opt = document.createElement("option");
+        opt.value = s[0];
+        opt.textContent = s[1];
+        opt.selected = s[0] === f[1];
+        select.appendChild(opt);
+      });
+      select.addEventListener("change", function () { after.textContent = "—"; after.className = ""; log.textContent = ""; });
+      before.appendChild(select);
+      after.textContent = "—";
+      tr.appendChild(name);
+      tr.appendChild(before);
+      tr.appendChild(after);
+      body.appendChild(tr);
+      rows.push({ select: select, after: after });
+    });
+    log.textContent = "";
+  }
+
+  figure.querySelector('[data-act="sync"]').addEventListener("click", function () {
+    var copied = 0;
+    var lost = 0;
+
+    rows.forEach(function (r) {
+      var res = RESULT[r.select.value];
+
+      r.after.className = res[0];
+      r.after.textContent = res[1];
+      if (r.select.value === "remote" || r.select.value === "differs") { copied += 1; }
+      if (r.select.value === "differs") { lost += 1; }
+    });
+    log.textContent = copied + " file(s) copied, nothing sent to the instrument, nothing deleted." +
+      (lost ? " " + lost + " local change(s) overwritten." : "");
+  });
+  figure.querySelector('[data-act="reset"]').addEventListener("click", build);
+  build();
+});
+</script>
