@@ -53,6 +53,8 @@ from examples.tutorials.new_tutorial import (
 from image_viewer.plugin import ImageViewerPlugin
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
+from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
+from plugin_management.plugin import PluginManagementPlugin
 from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -71,6 +73,9 @@ GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
+)
+PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
+    "plugin_management.src.html"
 )
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
@@ -261,6 +266,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DropbotStatusAndControlsPlugin(),
         PluggableProtocolTreePlugin(),
         DeviceViewerPlugin(),
+        PluginManagementPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -280,6 +286,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
+        "Plugin Management Tutorial",
         "Protocol Tree Tutorial",
     ]
 
@@ -304,6 +311,10 @@ def test_getting_started_tutorial_rebuilds_identically():
 
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_plugin_management_tutorial_rebuilds_identically():
+    assert is_up_to_date(PLUGIN_MANAGEMENT_SOURCE)
 
 
 def test_device_viewer_tutorial_rebuilds_identically():
