@@ -11,14 +11,19 @@
 """The calibration pane: the vendor's validated ML calibration macro
 front and center, with the ML-path toggle and the gain / cal-caps
 provisioning below it."""
+
+# Enthought library imports.
 from traitsui.api import HGroup, Item, Label, UItem, VGroup, View
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor
 
 macro = VGroup(
-    Label("clear → release pogos → 100 V/10 kHz → HV bypass → "
-          "re-clear → multi-slope fit (~6 s) → HV off → restore V/F "
-          "→ press pogos"),
+    Label(
+        "clear → release pogos → 100 V/10 kHz → HV bypass → "
+        "re-clear → multi-slope fit (~6 s) → HV off → restore V/F "
+        "→ press pogos"
+    ),
     HGroup(
         UItem("run_calibration_button"),
         Item("calibration_status", style="readonly", label="Status"),
@@ -29,10 +34,11 @@ macro = VGroup(
 )
 
 ml_path = VGroup(
-    UItem("ml_realtime",
-          style="custom",
-          editor=InPlaceToggleEditor(on_label="ML Path On",
-                                     off_label="ML Path Off")),
+    UItem(
+        "ml_realtime",
+        style="custom",
+        editor=InPlaceToggleEditor(on_label="ML Path On", off_label="ML Path Off"),
+    ),
     label="ML Measurement Path",
     show_border=True,
     enabled_when="connected",
