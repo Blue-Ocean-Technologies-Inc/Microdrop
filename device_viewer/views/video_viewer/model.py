@@ -9,13 +9,43 @@
 # Thanks for using Microdrop open source!
 
 """Qt-free HasTraits model for the recordings viewer pane: the browsed
-folder, its discovered recordings, playback state, and the raw-vs-aligned
-display toggle. Mutated only on the GUI thread (buttons, the canvas's
-player callbacks), so no Qt bridging is needed.
+folder, its discovered recordings, playback state, the raw-vs-aligned
+display toggle and the device overlay drawn over it. Mutated only on the
+GUI thread (buttons, the canvas's player callbacks), so no Qt bridging is
+needed.
 """
+
+# Enthought library imports.
 from traits.api import (
-    Bool, Directory, Event, HasTraits, Int, List, Property, Range, Str,
+    Bool,
+    Directory,
+    Event,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Range,
+    Str,
+    observe,
 )
+
+# Local imports.
+from ...default_settings import (
+    actuated_electrodes_key,
+    default_alphas,
+    electrode_outline_key,
+)
+from ...models.recording_overlay import RecordingOverlayTimeline
+from ...preferences import DeviceViewerPreferences
+
+#: Model traits mirrored to DeviceViewerPreferences as "video_viewer_<name>".
+OVERLAY_DISPLAY_TRAITS = [
+    "show_device_outline",
+    "device_outline_alpha",
+    "show_actuations",
+    "actuations_alpha",
+]
 
 
 class VideoViewerModel(HasTraits):
@@ -46,6 +76,42 @@ class VideoViewerModel(HasTraits):
     #: Show the device-aligned (perspective-warped) view instead of the
     #: raw camera frames. Only meaningful when has_transform.
     aligned = Bool(False)
+
+    # ------------------------------------------------------------------ #
+    # Device overlay (from the recording's overlay sidecar)                #
+    # ------------------------------------------------------------------ #
+    #: The loaded recording's device outline + actuation timeline, or None
+    #: when it has no overlay sidecar (see
+    #: consts.RECORDING_OVERLAY_SIDECAR_SUFFIX).
+    overlay = Instance(RecordingOverlayTimeline)
+
+    #: True when the loaded recording has an overlay sidecar.
+    has_overlay = Property(Bool, observe="overlay")
+
+    #: Draw the device's electrode outlines over the device-aligned view,
+    #: at device_outline_alpha percent.
+    show_device_outline = Bool(False)
+    device_outline_alpha = Range(
+        0, 100, default_alphas[electrode_outline_key], mode="spinner"
+    )
+
+    #: Draw the electrodes actuated at the playback position over the
+    #: device-aligned view, at actuations_alpha percent.
+    show_actuations = Bool(False)
+    actuations_alpha = Range(
+        0, 100, default_alphas[actuated_electrodes_key], mode="spinner"
+    )
+
+    #: Opacity (0-1) each overlay layer is drawn at; 0 while toggled off.
+    outline_opacity = Property(observe="show_device_outline, device_outline_alpha")
+    actuations_opacity = Property(observe="show_actuations, actuations_alpha")
+
+    #: Channels actuated at the playback position.
+    overlay_actuated_channels = Property(observe="overlay, position_ms")
+
+    #: Where the overlay toggles and alphas persist; None keeps them
+    #: in memory only.
+    preferences = Instance(DeviceViewerPreferences)
 
     #: Playback state (the play/pause toggle; the canvas drives the player
     #: and reflects the player's real state back here).
@@ -91,6 +157,35 @@ class VideoViewerModel(HasTraits):
     exporting = Bool(False)
     export_status = Str("")
 
+    def traits_init(self):
+        if self.preferences is not None:
+            self.trait_set(
+                **{
+                    name: getattr(self.preferences, f"video_viewer_{name}")
+                    for name in OVERLAY_DISPLAY_TRAITS
+                }
+            )
+
+    @observe(OVERLAY_DISPLAY_TRAITS, post_init=True)
+    def _persist_overlay_display(self, event):
+        if self.preferences is not None:
+            setattr(self.preferences, f"video_viewer_{event.name}", event.new)
+
+    def _get_has_overlay(self):
+        return self.overlay is not None
+
+    def _get_outline_opacity(self):
+        return self.device_outline_alpha / 100 if self.show_device_outline else 0.0
+
+    def _get_actuations_opacity(self):
+        return self.actuations_alpha / 100 if self.show_actuations else 0.0
+
+    def _get_overlay_actuated_channels(self):
+        if self.overlay is None:
+            return set()
+
+        return self.overlay.channels_at(self.position_ms)
+
     def _get_video_names(self):
         return [path.name for path in self.recordings]
 
@@ -98,6 +193,7 @@ class VideoViewerModel(HasTraits):
         def clock(milliseconds):
             seconds = int(milliseconds // 1000)
             return f"{seconds // 60:d}:{seconds % 60:02d}"
+
         return f"{clock(self.position_ms)} / {clock(self.duration_ms)}"
 
     def _get_active_roi(self):
@@ -125,8 +221,9 @@ class VideoViewerModel(HasTraits):
         if aligned != self.roi_aligned:
             keyframes = []
         else:
-            keyframes = [(ms, rect) for ms, rect in self.roi_keyframes
-                         if ms != position_ms]
+            keyframes = [
+                (ms, rect) for ms, rect in self.roi_keyframes if ms != position_ms
+            ]
         self.roi_aligned = aligned
         keyframes.append((int(position_ms), tuple(region)))
         keyframes.sort(key=lambda keyframe: keyframe[0])

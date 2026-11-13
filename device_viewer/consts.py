@@ -364,6 +364,14 @@ GAMEPAD_PREFERENCES_MOVED_KEY = "gamepad_preferences_moved"
 # (perspective-warped) view of the raw camera file on demand.
 RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
 
+# Sidecar written next to every recording alongside the transform sidecar:
+# the device's electrode geometry in scene coordinates plus the timeline of
+# actuated channels, letting the recording viewer redraw the device viewer's
+# outline and actuations over the device-aligned video. Bump the version on
+# any incompatible schema change.
+RECORDING_OVERLAY_SIDECAR_SUFFIX = ".overlay.json"
+RECORDING_OVERLAY_SIDECAR_VERSION = 1
+
 # ---------------------------------------------------------------------------
 # Video recording preferences (camera preferences node). The recorder is
 # rebuilt from these at every recording start, so changes apply live.

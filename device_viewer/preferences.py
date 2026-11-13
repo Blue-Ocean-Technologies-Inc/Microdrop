@@ -86,12 +86,23 @@ from .consts import (
     ZONES_VIEW_MIN_HEIGHT,
     ZOOM_SENSITIVITY,
 )
-from .default_settings import default_alphas, default_visibility
+from .default_settings import (
+    actuated_electrodes_key,
+    default_alphas,
+    default_visibility,
+    electrode_outline_key,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+# Recording viewer overlay alpha defaults (percent): the device viewer's own.
+# Read here because the preferences class shadows default_alphas with its
+# trait of the same name.
+VIDEO_VIEWER_DEVICE_OUTLINE_ALPHA = default_alphas[electrode_outline_key]
+VIDEO_VIEWER_ACTUATIONS_ALPHA = default_alphas[actuated_electrodes_key]
 
 
 class DeviceViewerPreferences(PreferencesHelper):
@@ -171,6 +182,16 @@ class DeviceViewerPreferences(PreferencesHelper):
     video_viewer_zoom = Float(0.0)
     video_viewer_center_x = Float(0.0)
     video_viewer_center_y = Float(0.0)
+    # Device overlay toggles and their alphas (percent), mirrored from
+    # VideoViewerModel.
+    video_viewer_show_device_outline = Bool(False)
+    video_viewer_device_outline_alpha = Range(
+        value=VIDEO_VIEWER_DEVICE_OUTLINE_ALPHA, low=0, high=100
+    )
+    video_viewer_show_actuations = Bool(False)
+    video_viewer_actuations_alpha = Range(
+        value=VIDEO_VIEWER_ACTUATIONS_ALPHA, low=0, high=100
+    )
 
     ### main view prefs ###
     AUTO_FIT_MARGIN_SCALE = Range(
