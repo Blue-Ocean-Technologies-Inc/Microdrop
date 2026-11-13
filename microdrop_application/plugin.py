@@ -11,24 +11,25 @@
 # Standard library imports.
 from pathlib import Path
 
-from traits.api import List
-from message_router.consts import ACTOR_TOPIC_ROUTES
-
 # Enthought library imports.
 from envisage.api import (
-    Plugin,
     PREFERENCES,
-    PREFERENCES_PANES,
     PREFERENCES_CATEGORIES,
-    TASKS,
+    PREFERENCES_PANES,
     SERVICE_OFFERS,
+    TASKS,
+    Plugin,
     ServiceOffer,
 )
-
 from envisage.ui.tasks.api import TaskFactory
+from traits.api import List
 
-# local imports
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+# Microdrop package imports.
+from message_router.consts import ACTOR_TOPIC_ROUTES
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
+
+# Local imports.
+from .consts import ACTOR_TOPIC_DICT, PKG, SHORTCUTS_TUTORIAL_HTML_PATH, PKG_name
 
 
 class MicrodropPlugin(Plugin):
@@ -54,13 +55,17 @@ class MicrodropPlugin(Plugin):
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
+    #: Help > Tutorials entries for the app-wide keys and touch tools.
+    tutorials = List(contributes_to=TUTORIALS)
+
     ###########################################################################
     # Protected interface.
     ###########################################################################
 
     def _preferences_default(self):
         filename = Path(__file__).parent / "preferences.ini"
-        # Manually format the string to match what the envisage.resources.FileResourceProtocol expects
+        # Manually format the string to match what
+        # envisage.resources.FileResourceProtocol expects.
         # It uses a nonstandard way to parse the url.
         return [f"file://{filename}"]
 
@@ -82,6 +87,14 @@ class MicrodropPlugin(Plugin):
                 id=f"{PKG}.task",
                 name=f"{PKG_name} Task",
                 factory=MicrodropTask,
+            )
+        ]
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(
+                title="Shortcuts, Gamepad & Touch Assist Tutorial",
+                path=SHORTCUTS_TUTORIAL_HTML_PATH,
             )
         ]
 
