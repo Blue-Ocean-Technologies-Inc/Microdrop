@@ -40,6 +40,12 @@ IMAGE_FILTERS = f"{PKG}.image_filters"
 #: Help menu. Self-contained HTML (no network), so it works offline.
 ANALYSIS_HELP_HTML_PATH = Path(__file__).parent / "resources" / "analysis_help.html"
 
+#: Help > Tutorials page on browsing and displaying captures, built from
+#: resources/image_viewer.src.html.
+IMAGE_VIEWER_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "image_viewer.html"
+)
+
 #: Preferences node for the viewer's own settings.
 PREFERENCES_PATH = "microdrop.image_viewer"
 
