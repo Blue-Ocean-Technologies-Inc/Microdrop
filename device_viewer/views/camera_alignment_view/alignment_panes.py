@@ -413,6 +413,9 @@ class EndpointPane(AlignmentPaneBase):
     #: coordinates ([[x, y] * 4], TL/TR/BR/BL as placed).
     endpoint_saved = Event()
 
+    #: Fires after Reset has cleared the device's saved endpoint.
+    endpoint_cleared = Event()
+
     #: The endpoint cache Reset clears this device from (the default
     #: file unless given).
     endpoint_store = Instance(CameraEndpointStore, factory=CameraEndpointStore)
@@ -516,6 +519,8 @@ class EndpointPane(AlignmentPaneBase):
                 )
 
                 return
+
+            self.endpoint_cleared = True
 
         self._reset_orientation(
             self._default_quad(self.device_image, inset=ENDPOINT_QUAD_INSET)

@@ -348,6 +348,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         return image, rect
 
+    def _on_camera_frame_size_changed(self, size):
+        """The feed's native frame size changed (a camera or resolution
+        switch): the alignment presets' picture-shape checks follow it."""
+        self.camera_alignment_controller.live_frame_size = (
+            None if size.isEmpty() else [float(size.width()), float(size.height())]
+        )
+
     def _close_connections_editor(self):
         if self._connections_editor_ui is not None:
             if self._connections_editor_ui.control is not None:
@@ -757,6 +764,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Publish geometry after SVG is fully loaded and channel mapping is established.
         self.publish_controller._publish_geometry_if_changed()
 
+        # The video item now spans the new device's scene: restore the
+        # camera alignment saved for this camera on this device.
+        self.camera_alignment_controller.device_loaded()
+
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
             svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
@@ -845,6 +856,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
         self.sidebar_sections = self._build_sidebar_sections()
+
+        # The camera panel now exists: the alignment controller takes charge
+        # of the live alignment per camera, and follows the feed's size.
+        self.video_item.nativeSizeChanged.connect(self._on_camera_frame_size_changed)
+        self._on_camera_frame_size_changed(self.video_item.nativeSize())
+        self.camera_alignment_controller.camera_model = (
+            self.camera_control_widget.camera_model
+        )
+
         self.scroll_area = build_sidebar(self.sidebar_sections)
         self.scroll_content = self.scroll_area.widget()
         self._set_device_view_layout_width()
