@@ -16,39 +16,71 @@ the recording's ``.transform.json`` sidecar — the same alignment the live
 device view showed while recording. Regions of interest can be keyframed
 over playback time (Edit Region mode) in EITHER view — raw or aligned,
 sidecar or not — and the matching rendition (aligned and/or cropped)
-exported to a file next to the recording.
+exported to a file next to the recording. The recording's overlay sidecar
+adds the device outline and the electrodes actuated over time on top of
+the device-aligned view (and its export).
 """
+
+# Standard library imports.
 import json
 from pathlib import Path
 
+# Enthought library imports.
+from pyface.api import OK, DirectoryDialog
 from pyface.gui import GUI
 from pyface.tasks.api import TraitsDockPane
-from pyface.api import DirectoryDialog, OK
-from traits.api import Any, Bool, Instance, Button, observe
+from traits.api import Any, Bool, Button, Instance, observe
 from traitsui.api import (
-    CustomEditor, EnumEditor, HGroup, Item, Readonly, UItem, VGroup, View,
+    CustomEditor,
+    EnumEditor,
+    HGroup,
+    Item,
+    Readonly,
+    UItem,
+    VGroup,
+    View,
 )
 
-
+# Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
+
+# Microdrop style imports.
 from microdrop_style.icons.icons import (
-    ICON_CROP, ICON_DELETE, ICON_FIT_SCREEN, ICON_FOLDER_OPEN, ICON_HOME,
-    ICON_PAUSE, ICON_PLAY, ICON_REFRESH, ICON_SAVE, ICON_TRANSFORM,
-)
-from microdrop_utils.traitsui_qt_helpers import (
-    IconButtonEditor, IconToggleEditor,
+    ICON_CONTOUR,
+    ICON_CROP,
+    ICON_DELETE,
+    ICON_DROP_EC,
+    ICON_FIT_SCREEN,
+    ICON_FOLDER_OPEN,
+    ICON_HOME,
+    ICON_PAUSE,
+    ICON_PLAY,
+    ICON_REFRESH,
+    ICON_SAVE,
+    ICON_TRANSFORM,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import (
+    IconButtonEditor,
+    IconToggleEditor,
+)
+
+# Local imports.
 from ...consts import (
-    PKG, RECORDINGS_DIR_NAME, RECORDING_TRANSFORM_SIDECAR_SUFFIX,
+    PKG,
+    RECORDING_TRANSFORM_SIDECAR_SUFFIX,
+    RECORDINGS_DIR_NAME,
     recording_state_model,
 )
+from ...preferences import DeviceViewerPreferences
 from .model import VideoViewerModel
 from .video_canvas import video_canvas_factory
 from .video_export import AlignedVideoExporter
 
-
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 #: Recording containers the viewer lists (native recorder writes .mkv,
@@ -70,60 +102,131 @@ class VideoViewerDockPane(TraitsDockPane):
     # Compact icon toolbar (words live in the tooltips), mirroring the
     # fluorescence image viewer's button row.
     view = View(
-    VGroup(
-        HGroup(
-            UItem("pane.directory_button", editor=IconButtonEditor(
-                glyph=ICON_FOLDER_OPEN,
-                tooltip="Choose the recordings folder (defaults to the "
-                        "current experiment's recordings)")),
-            UItem("pane.home_button", editor=IconButtonEditor(
-                glyph=ICON_HOME,
-                tooltip="Back to the current experiment's recordings "
-                        "(newest recording)")),
-            UItem("pane.refresh_button", editor=IconButtonEditor(
-                glyph=ICON_REFRESH,
-                tooltip="Re-scan the current folder for new recordings")),
-            UItem("pane.fit_button", editor=IconButtonEditor(
-                glyph=ICON_FIT_SCREEN,
-                tooltip="Fit the video to the pane (clears the saved "
-                        "zoom/pan)")),
-            UItem("aligned", editor=IconToggleEditor(
-                on_glyph=ICON_TRANSFORM, off_glyph=ICON_TRANSFORM,
-                tooltip="Show the device-aligned (perspective-warped) "
-                        "view from the recording's transform sidecar"),
-                enabled_when="has_transform"),
-            UItem("roi_edit_mode", editor=IconToggleEditor(
-                on_glyph=ICON_CROP, off_glyph=ICON_CROP,
-                tooltip="Edit the region of interest: drag on the video "
+        VGroup(
+            HGroup(
+                UItem(
+                    "pane.directory_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_FOLDER_OPEN,
+                        tooltip="Choose the recordings folder (defaults to the "
+                        "current experiment's recordings)",
+                    ),
+                ),
+                UItem(
+                    "pane.home_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_HOME,
+                        tooltip="Back to the current experiment's recordings "
+                        "(newest recording)",
+                    ),
+                ),
+                UItem(
+                    "pane.refresh_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_REFRESH,
+                        tooltip="Re-scan the current folder for new recordings",
+                    ),
+                ),
+                UItem(
+                    "pane.fit_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_FIT_SCREEN,
+                        tooltip="Fit the video to the pane (clears the saved zoom/pan)",
+                    ),
+                ),
+                UItem(
+                    "aligned",
+                    editor=IconToggleEditor(
+                        on_glyph=ICON_TRANSFORM,
+                        off_glyph=ICON_TRANSFORM,
+                        tooltip="Show the device-aligned (perspective-warped) "
+                        "view from the recording's transform sidecar",
+                    ),
+                    enabled_when="has_transform",
+                ),
+                UItem(
+                    "show_device_outline",
+                    editor=IconToggleEditor(
+                        on_glyph=ICON_CONTOUR,
+                        off_glyph=ICON_CONTOUR,
+                        tooltip="Device Outline: draw the device's electrode "
+                        "outlines over the device-aligned view (and the "
+                        "export)",
+                    ),
+                    enabled_when="has_overlay and aligned",
+                ),
+                UItem(
+                    "device_outline_alpha",
+                    tooltip="Device outline opacity (%)",
+                    enabled_when="has_overlay and aligned and show_device_outline",
+                ),
+                UItem(
+                    "show_actuations",
+                    editor=IconToggleEditor(
+                        on_glyph=ICON_DROP_EC,
+                        off_glyph=ICON_DROP_EC,
+                        tooltip="Actuations: draw the electrodes actuated at the "
+                        "current time over the device-aligned view (and "
+                        "the export)",
+                    ),
+                    enabled_when="has_overlay and aligned",
+                ),
+                UItem(
+                    "actuations_alpha",
+                    tooltip="Actuated electrodes opacity (%)",
+                    enabled_when="has_overlay and aligned and show_actuations",
+                ),
+                UItem(
+                    "roi_edit_mode",
+                    editor=IconToggleEditor(
+                        on_glyph=ICON_CROP,
+                        off_glyph=ICON_CROP,
+                        tooltip="Edit the region of interest: drag on the video "
                         "to set the region at the current time (works in "
-                        "the raw and the device-aligned view)"),
-                enabled_when="current_path"),
-            UItem("pane.clear_roi_button", editor=IconButtonEditor(
-                glyph=ICON_DELETE,
-                tooltip="Clear all region-of-interest keyframes"),
-                enabled_when="roi_keyframes"),
-            UItem("pane.export_button", editor=IconButtonEditor(
-                glyph=ICON_SAVE,
-                tooltip="Save the current rendition (device-aligned "
-                        "and/or region-cropped) next to the recording"),
-                enabled_when="current_path and not exporting "
-                             "and (aligned or roi_keyframes)"),
-            Readonly("export_status", show_label=False),
+                        "the raw and the device-aligned view)",
+                    ),
+                    enabled_when="current_path",
+                ),
+                UItem(
+                    "pane.clear_roi_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_DELETE,
+                        tooltip="Clear all region-of-interest keyframes",
+                    ),
+                    enabled_when="roi_keyframes",
+                ),
+                UItem(
+                    "pane.export_button",
+                    editor=IconButtonEditor(
+                        glyph=ICON_SAVE,
+                        tooltip="Save the current rendition (device-aligned "
+                        "and/or region-cropped) next to the recording",
+                    ),
+                    enabled_when="current_path and not exporting "
+                    "and (aligned or roi_keyframes)",
+                ),
+                Readonly("export_status", show_label=False),
+            ),
+            Item(
+                "selected_video",
+                label="Recording",
+                editor=EnumEditor(name="object.video_names"),
+            ),
+            UItem("current_path", editor=CustomEditor(video_canvas_factory)),
+            HGroup(
+                UItem(
+                    "playing",
+                    editor=IconToggleEditor(
+                        on_glyph=ICON_PAUSE, off_glyph=ICON_PLAY, tooltip="Play / pause"
+                    ),
+                    enabled_when="current_path",
+                ),
+                UItem("position_ms", enabled_when="current_path"),
+                Readonly("time_text", show_label=False),
+            ),
         ),
-        Item("selected_video", label="Recording",
-             editor=EnumEditor(name="object.video_names")),
-        UItem("current_path", editor=CustomEditor(video_canvas_factory)),
-        HGroup(
-            UItem("playing", editor=IconToggleEditor(
-                on_glyph=ICON_PAUSE, off_glyph=ICON_PLAY,
-                tooltip="Play / pause"),
-                enabled_when="current_path"),
-            UItem("position_ms", enabled_when="current_path"),
-            Readonly("time_text", show_label=False),
-        ),
-    ),
-    resizable=True,
-)
+        resizable=True,
+    )
 
     # Toolbar buttons (view elements, so they live on the PANE and the
     # View references them via the "pane." prefix).
@@ -139,16 +242,16 @@ class VideoViewerDockPane(TraitsDockPane):
     export_button = Button()
 
     def traits_init(self):
-        self.model = VideoViewerModel()
+        self.model = VideoViewerModel(preferences=DeviceViewerPreferences())
         # Auto-refresh when a recording finishes: the camera widget flips
         # this shared state AFTER the recorder's stopped signal, so the
         # file and its transform sidecar are already on disk.
-        recording_state_model.observe(self._on_recording_state_changed,
-                                      "recording")
+        recording_state_model.observe(self._on_recording_state_changed, "recording")
 
     def destroy(self):
-        recording_state_model.observe(self._on_recording_state_changed,
-                                      "recording", remove=True)
+        recording_state_model.observe(
+            self._on_recording_state_changed, "recording", remove=True
+        )
         super().destroy()
 
     def _on_recording_state_changed(self, event):
@@ -208,8 +311,7 @@ class VideoViewerDockPane(TraitsDockPane):
                     # Legacy bare-list sidecar: regions were always drawn
                     # in the aligned view back then.
                     raw_keyframes = data
-                keyframes = [(int(ms), tuple(region))
-                             for ms, region in raw_keyframes]
+                keyframes = [(int(ms), tuple(region)) for ms, region in raw_keyframes]
             except Exception as e:
                 logger.warning(f"Unreadable ROI sidecar {roi_path}: {e}")
         self._loading_roi = True
@@ -226,11 +328,17 @@ class VideoViewerDockPane(TraitsDockPane):
         roi_path = Path(self.model.current_path).with_suffix(ROI_SIDECAR_SUFFIX)
         try:
             if self.model.roi_keyframes:
-                roi_path.write_text(json.dumps({
-                    "aligned": self.model.roi_aligned,
-                    "keyframes": [[ms, list(region)]
-                                  for ms, region in self.model.roi_keyframes],
-                }))
+                roi_path.write_text(
+                    json.dumps(
+                        {
+                            "aligned": self.model.roi_aligned,
+                            "keyframes": [
+                                [ms, list(region)]
+                                for ms, region in self.model.roi_keyframes
+                            ],
+                        }
+                    )
+                )
             elif roi_path.is_file():
                 roi_path.unlink()
         except Exception as e:
@@ -258,12 +366,12 @@ class VideoViewerDockPane(TraitsDockPane):
         # The regions' space decides the rendition (they only make sense in
         # the view they were drawn in); with no regions, export whatever
         # view is displayed.
-        export_aligned = (model.roi_aligned if model.roi_keyframes
-                          else model.aligned)
+        export_aligned = model.roi_aligned if model.roi_keyframes else model.aligned
         sidecar = None
         if export_aligned:
             sidecar_path = Path(model.current_path).with_suffix(
-                RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+                RECORDING_TRANSFORM_SIDECAR_SUFFIX
+            )
             try:
                 sidecar = json.loads(sidecar_path.read_text())
             except Exception as e:
@@ -272,21 +380,33 @@ class VideoViewerDockPane(TraitsDockPane):
         model.exporting = True
         model.export_status = "Exporting…"
         self._exporter = AlignedVideoExporter(
-            model.current_path, sidecar, list(model.roi_keyframes),
-            aligned=export_aligned)
+            model.current_path,
+            sidecar,
+            list(model.roi_keyframes),
+            aligned=export_aligned,
+            overlay=model.overlay,
+            outline_opacity=model.outline_opacity,
+            actuations_opacity=model.actuations_opacity,
+        )
         # Exporter signals fire on its worker thread; marshal every trait
         # write back onto the GUI thread.
         self._exporter.progress.connect(
-            lambda text: GUI.invoke_later(
-                setattr, model, "export_status", text))
+            lambda text: GUI.invoke_later(setattr, model, "export_status", text)
+        )
         self._exporter.finished.connect(
             lambda path: GUI.invoke_later(
-                model.trait_set, exporting=False,
-                export_status=f"Saved {Path(path).name}"))
+                model.trait_set,
+                exporting=False,
+                export_status=f"Saved {Path(path).name}",
+            )
+        )
         self._exporter.failed.connect(
             lambda message: GUI.invoke_later(
-                model.trait_set, exporting=False,
-                export_status=f"Export failed: {message}"))
+                model.trait_set,
+                exporting=False,
+                export_status=f"Export failed: {message}",
+            )
+        )
         self._exporter.start()
 
     # ------------------------------------------------------------------ #
@@ -316,7 +436,6 @@ class VideoViewerDockPane(TraitsDockPane):
         if experiment_directory:
             recordings_directory = Path(experiment_directory) / RECORDINGS_DIR_NAME
             if str(recordings_directory) == self.model.directory:
-                self._refresh_recordings()   # same folder: re-scan for new files
+                self._refresh_recordings()  # same folder: re-scan for new files
             else:
                 self.model.directory = str(recordings_directory)
-
