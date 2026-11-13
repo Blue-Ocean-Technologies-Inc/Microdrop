@@ -713,6 +713,9 @@ ALIGNMENT_PRESET_SCOPE_LABELS = {
 #: Where udev links each V4L2 node under a name fixed by its USB port.
 V4L2_BY_PATH_DIR = "/dev/v4l/by-path"
 
+#: Where the kernel names each V4L2 node's card (``<node>/name``).
+V4L2_SYSFS_DIR = "/sys/class/video4linux"
+
 #: Follows a camera's label when its backend gives no stable id.
 CAMERA_MATCHED_BY_NAME_NOTE = "(matched by name — no stable camera id)"
 

@@ -81,6 +81,31 @@ def test_v4l2_by_path_names_the_node(tmp_path, monkeypatch):
     assert v4l2_stable_camera_id("/dev/video7", tmp_path) == ""
 
 
+def test_v4l2_node_paired_with_another_camera_has_no_id(tmp_path, monkeypatch):
+    # The node's own card name (sysfs) must be the Qt camera's
+    # description; otherwise the enumeration-order pairing is wrong.
+    sysfs = tmp_path / "video4linux"
+    (sysfs / "video0").mkdir(parents=True)
+    (sysfs / "video0" / "name").write_text("DH Camera: DH Camera\n")
+    by_path = tmp_path / "by-path"
+    by_path.mkdir()
+    (by_path / "usb-port-video-index0").write_text("")
+
+    monkeypatch.setattr(
+        camera_identity.os.path,
+        "realpath",
+        lambda path: "/dev/video0" if "usb-port" in str(path) else str(path),
+    )
+
+    def stable_id(expected_name):
+        return v4l2_stable_camera_id(
+            "/dev/video0", by_path, expected_name=expected_name, sysfs_dir=sysfs
+        )
+
+    assert stable_id("DH Camera: DH Camera") == "v4l2-by-path:usb-port-video-index0"
+    assert stable_id("USB 2.0 Camera") == ""
+
+
 def test_v4l2_without_udev_links_has_no_id(tmp_path):
     assert v4l2_stable_camera_id("/dev/video0", tmp_path / "missing") == ""
     assert v4l2_stable_camera_id(None, tmp_path) == ""

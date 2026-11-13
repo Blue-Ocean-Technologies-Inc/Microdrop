@@ -27,7 +27,7 @@ from pathlib import Path
 from traits.api import Bool, HasTraits, Property, Str
 
 # Local imports.
-from ..consts import CAMERA_MATCHED_BY_NAME_NOTE, V4L2_BY_PATH_DIR
+from ..consts import CAMERA_MATCHED_BY_NAME_NOTE, V4L2_BY_PATH_DIR, V4L2_SYSFS_DIR
 
 
 def normalise_camera_id(raw_id):
@@ -50,14 +50,33 @@ def normalise_camera_id(raw_id):
     return camera_id
 
 
-def v4l2_stable_camera_id(device_path, by_path_dir=V4L2_BY_PATH_DIR):
+def v4l2_stable_camera_id(
+    device_path,
+    by_path_dir=V4L2_BY_PATH_DIR,
+    expected_name="",
+    sysfs_dir=V4L2_SYSFS_DIR,
+):
     """Return the udev ``by-path`` name of the V4L2 node ``device_path``
     (stable for one USB port across reboots and re-plugs), or "" when no
-    link names it — ``/dev/videoN`` itself is renumbered at every boot."""
+    link names it — ``/dev/videoN`` itself is renumbered at every boot.
+
+    The node is paired with its Qt camera by enumeration order; when
+    ``expected_name`` (the Qt camera's description) is given and the
+    node's own card name disagrees, the pairing is wrong and "" is
+    returned, so the camera is matched by its label instead.
+    """
     by_path_dir = Path(by_path_dir)
 
     if not device_path or not by_path_dir.is_dir():
         return ""
+
+    name_file = Path(sysfs_dir) / Path(device_path).name / "name"
+
+    if expected_name and name_file.is_file():
+        card_name = name_file.read_text(encoding="utf-8", errors="replace").strip()
+
+        if card_name != expected_name.strip():
+            return ""
 
     target = os.path.realpath(device_path)
 

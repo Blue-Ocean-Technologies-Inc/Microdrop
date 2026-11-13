@@ -572,7 +572,9 @@ class CameraControlWidget(QWidget):
         """
 
         if container is not None and container.device_path:
-            return v4l2_stable_camera_id(container.device_path)
+            return v4l2_stable_camera_id(
+                container.device_path, expected_name=camera_device.description()
+            )
 
         if container is not None:
             camera_id = libcamera_camera_id(camera_device)
