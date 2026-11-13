@@ -64,6 +64,9 @@ app_globals = get_microdrop_redis_globals_manager()
 portable_dropbot_tab = PreferencesCategory(
     id="microdrop.portable_dropbot_settings",
     name="Portable DropBot Settings",
+    # The second tab: right after Microdrop General, before the device viewer.
+    after="microdrop.app.general_settings",
+    before="microdrop.device_viewer.preferences",
 )
 
 
