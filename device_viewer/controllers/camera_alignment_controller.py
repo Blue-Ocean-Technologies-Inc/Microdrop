@@ -355,6 +355,12 @@ class CameraAlignmentWorkflowController(HasTraits):
         self._align_timer.start(interval_ms)
 
     def _on_align_animation_tick(self):
+
+        # A tick already queued when the glide was stopped (a camera switch
+        # or device load) must not move or record anything.
+        if not self._align_timer.isActive():
+            return
+
         start_points, targets, steps = self._align_animation
         self._align_animation_step += 1
         progress = min(self._align_animation_step / steps, 1.0)
@@ -1143,6 +1149,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         alignment while the scene still maps it (the view is rebuilt
         afterwards, then ``device_loaded`` restores)."""
         self._remember_live_alignment()
+        self._stop_glide()
 
     def device_loaded(self):
         """Restore the live alignment for the newly loaded device: the pane
@@ -1210,10 +1217,13 @@ class CameraAlignmentWorkflowController(HasTraits):
             return
 
         # The feed still shows the outgoing camera's frame: its corners
-        # convert to camera pixels correctly only now.
+        # convert to camera pixels correctly only now. A glide still running
+        # belongs to the outgoing setup (its targets are what was
+        # confirmed): it stops here, whatever the restore then places.
         if camera_switched:
             self._remember_live_alignment()
 
+        self._stop_glide()
         self._set_live_setup(camera, device_key, owned=False)
         self._restore_live_alignment(saved_frame=camera_switched)
 
@@ -1340,6 +1350,16 @@ class CameraAlignmentWorkflowController(HasTraits):
                 stack.end_macro()
 
             self._restoring = False
+
+    def _stop_glide(self):
+        """Stop a running Go To Endpoint glide where it is, leaving the
+        alignment mode it entered."""
+
+        if self._align_timer is None or not self._align_timer.isActive():
+            return
+
+        self._align_timer.stop()
+        self.model.goto_last_mode()
 
     def _remember_live_alignment(self):
         """Keep the live alignment as the one last used with its camera on

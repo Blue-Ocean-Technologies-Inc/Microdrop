@@ -537,3 +537,41 @@ def test_align_mode_then_a_device_load_keeps_the_last_used(controller, model, ca
     assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
         _scene(SCENE_A)
     )
+
+
+def test_a_glide_interrupted_by_a_camera_switch_stays_the_old_cameras(
+    controller, model, cameras
+):
+    _take_charge(controller, model, cameras)
+    controller._start_align_animation(list(SCENE_B), steps=3)
+    controller._on_align_animation_tick()
+
+    # Nothing saved for camera B: the restore places nothing.
+    _switch(cameras, CAM_B)
+    controller._on_align_animation_tick()
+    controller._on_align_animation_tick()
+
+    assert not controller._align_timer.isActive()
+    assert controller.preset_store.last_used_for(CAM_B, "2x3device") is None
+    # Camera A keeps what was being confirmed: the glide's targets.
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )
+
+
+def test_a_glide_interrupted_by_a_device_load_stays_the_old_devices(
+    controller, model, cameras
+):
+    _take_charge(controller, model, cameras)
+    controller._start_align_animation(list(SCENE_B), steps=3)
+    controller._on_align_animation_tick()
+
+    model.electrodes.set_electrodes_from_svg_file(str(DEVICES / "90_pin_array.svg"))
+    controller.device_loaded()
+    controller._on_align_animation_tick()
+    controller._on_align_animation_tick()
+
+    assert controller.preset_store.last_used_for(CAM_A, "90_pin_array") is None
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )
