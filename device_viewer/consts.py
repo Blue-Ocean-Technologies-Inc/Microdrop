@@ -849,6 +849,9 @@ PRESET_NO_CAMERA_FRAME_NOTE = "the camera shows no picture — endpoint only"
 PRESET_DEVICE_SIZE_UNKNOWN_NOTE = (
     "saved without its device's size, so it cannot be carried to this device"
 )
+
+#: The strip's line when the Scope picker's change was refused.
+SCOPE_CHANGE_FAILED_TEMPLATE = "The scope of '{name}' was not changed: {reason}"
 PRESET_ENDPOINT_ONLY_NOTE = "endpoint only"
 PRESET_RESCALED_TEMPLATE = "camera corners rescaled from {saved} to {live}"
 

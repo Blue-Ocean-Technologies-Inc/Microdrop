@@ -188,6 +188,11 @@ alignment_presets_view = View(
             visible_when="setup_notice",
         ),
         UItem(
+            "scope_notice",
+            editor=HtmlLabelEditor(template=NOTICE_TEMPLATE),
+            visible_when="scope_notice",
+        ),
+        UItem(
             "notice",
             editor=HtmlLabelEditor(template=NOTICE_TEMPLATE),
             visible_when="notice",

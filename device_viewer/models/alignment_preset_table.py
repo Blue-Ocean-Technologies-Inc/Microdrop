@@ -55,8 +55,13 @@ from ..consts import (
     PRESET_OTHER_CAMERA_WARNING_TEMPLATE,
     PRESET_OTHER_DEVICE_WARNING_TEMPLATE,
     PRESET_SHAPE_MISMATCH_NOTE,
+    SCOPE_CHANGE_FAILED_TEMPLATE,
 )
-from ..utils.alignment_geometry import same_aspect_ratio, valid_frame_size
+from ..utils.alignment_geometry import (
+    quad_between_scene_rects,
+    same_aspect_ratio,
+    valid_frame_size,
+)
 from .alignment_preset import alignment_preset_name_error, alignment_scope_error
 from .alignment_preset_store import AlignmentPresetStore
 from .camera_identity import CameraIdentity
@@ -240,6 +245,10 @@ class AlignmentPresetTable(HasTraits):
 
     #: The labels the Scope picker offers for the selected row.
     selected_scope_choices = List(Str)
+
+    #: Why the last scope change was refused, shown in the strip; "" once a
+    #: change succeeds.
+    scope_notice = Str()
 
     #: Whether Apply can run on the selected row.
     can_apply = Property(Bool, observe="selected.applicable, editable")
@@ -441,11 +450,53 @@ class AlignmentPresetTable(HasTraits):
             return
 
         try:
-            self.store.set_scope(row.preset_id, scope_code(event.new))
+            scope = scope_code(event.new)
+            self.store.set_scope(row.preset_id, scope, self._move_here_for(row, scope))
         except (OSError, ValueError, StopIteration) as exc:
             logger.error(f"Could not change the scope of preset '{row.name}': {exc}")
 
+            self.scope_notice = SCOPE_CHANGE_FAILED_TEMPLATE.format(
+                name=row.name, reason=exc
+            )
             self._show_selected_scope()
+
+            return
+
+        self.scope_notice = ""
+
+    def _move_here_for(self, row, scope):
+        """What binds ``row``'s preset to the loaded device when ``scope``
+        ties it to a device and it was saved on another one (a camera's
+        any-device preset listed here): its device, scene rect, and scene
+        quad and endpoint moved by the two devices' scene rects. None when
+        it stays where it is.
+
+        Raises ``ValueError`` when either device's scene rect is unknown.
+        """
+
+        if scope == ALIGNMENT_PRESET_SCOPE_CAMERA:
+            return None
+
+        if row.device_key == self.current_device_key:
+            return None
+
+        preset = self.store.get(row.preset_id)
+        here = self.current_device_scene_rect
+        scene_quad = quad_between_scene_rects(
+            preset.scene_quad, preset.device_scene_rect, here
+        )
+
+        if scene_quad is None:
+            raise ValueError(PRESET_DEVICE_SIZE_UNKNOWN_NOTE)
+
+        return {
+            "device_key": self.current_device_key,
+            "device_scene_rect": list(here),
+            "scene_quad": scene_quad,
+            "endpoint_quad": quad_between_scene_rects(
+                preset.endpoint_quad, preset.device_scene_rect, here
+            ),
+        }
 
     @observe("set_default_button")
     def _make_selected_default(self, event):

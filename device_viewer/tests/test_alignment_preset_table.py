@@ -394,3 +394,44 @@ def test_save_needs_editable_and_a_writable_store(table, store):
 
     assert not table.can_save
     assert table.notice == "Presets are read-only this session."
+
+
+def _mount_from_chip_z(store, device_scene_rect):
+    """A camera-A any-device preset saved on chip-z, at scene rect
+    ``device_scene_rect``."""
+    preset = _save_for_camera(store, "mount", CAM_A, "camera", device_key="chip-z")
+    preset.device_scene_rect = device_scene_rect
+
+    return store.save_named("mount", preset, replace=True)
+
+
+def test_narrowing_an_any_device_preset_binds_it_to_this_device(table, store):
+    # chip-z is half the size of chip-a.
+    mount = _mount_from_chip_z(store, [0.0, 0.0, 50.0, 40.0])
+    table.trait_set(
+        current_camera=CAM_A, current_device_scene_rect=[0.0, 0.0, 100.0, 80.0]
+    )
+    table.selected = _row(table, "mount")
+
+    table.selected_scope = "This camera + device"
+
+    moved = store.get(mount.id)
+
+    assert moved.scope == "camera_device"
+    assert moved.device_key == "chip-a"
+    assert moved.device_scene_rect == [0.0, 0.0, 100.0, 80.0]
+    assert moved.scene_quad == [[2 * x, 2 * y] for x, y in ENDPOINT]
+    assert "mount" in [row.name for row in table.rows]
+    assert table.scope_notice == ""
+
+
+def test_a_refused_scope_change_is_shown_in_the_strip(table, store):
+    mount = _mount_from_chip_z(store, None)
+    table.current_camera = CAM_A
+    table.selected = _row(table, "mount")
+
+    table.selected_scope = "This device, any camera"
+
+    assert store.get(mount.id).scope == "camera"
+    assert "was not changed" in table.scope_notice
+    assert table.selected_scope == "This camera, any device"

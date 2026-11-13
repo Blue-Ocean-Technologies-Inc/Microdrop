@@ -626,12 +626,14 @@ class AlignmentPresetStore(HasTraits):
         """Leave the slot preset ``preset_id`` is the default of empty."""
         self._mutate(lambda data: _drop_defaults_naming(data, preset_id))
 
-    def set_scope(self, preset_id, scope):
+    def set_scope(self, preset_id, scope, moved_to=None):
         """Change which setups preset ``preset_id`` applies to; a default
-        moves to the new scope's slot.
+        moves to the new scope's slot. ``moved_to`` (a dict of
+        ``device_key``, ``device_scene_rect``, ``scene_quad`` and
+        ``endpoint_quad``) binds it to another device at the same time.
 
-        Raises ``ValueError`` for an unknown preset or a scope its camera
-        and geometry cannot have.
+        Raises ``ValueError`` for an unknown preset, a scope its camera
+        and geometry cannot have, or a name the new device already uses.
         """
 
         def change(data):
@@ -649,6 +651,19 @@ class AlignmentPresetStore(HasTraits):
 
             if error:
                 raise ValueError(error)
+
+            if moved_to is not None:
+                device_key = moved_to["device_key"]
+                name = str(record.get("name", ""))
+
+                if _name_clash(data, device_key, name, preset_id) is not None:
+                    raise ValueError(
+                        PRESET_NAME_TAKEN_TEMPLATE.format(
+                            device_key=device_key, name=name
+                        )
+                    )
+
+                record.update(moved_to)
 
             record["scope"] = scope
 
