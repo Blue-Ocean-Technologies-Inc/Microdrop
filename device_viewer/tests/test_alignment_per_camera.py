@@ -617,3 +617,44 @@ def test_a_glide_interrupted_by_a_device_load_stays_the_old_devices(
     assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
         _scene(SCENE_B)
     )
+
+
+#: The endpoint migrated into "2x3device endpoint", the device's default.
+OLD_ENDPOINT = [[5.0, 5.0], [95.0, 5.0], [95.0, 75.0], [5.0, 75.0]]
+
+
+def _migrate_an_endpoint_only_default(controller):
+    controller.endpoint_store.save("2x3device", OLD_ENDPOINT)
+    controller.preset_store.refresh()
+
+
+def test_an_endpoint_only_default_never_overwrites_the_endpoint(
+    controller, model, cameras
+):
+    _migrate_an_endpoint_only_default(controller)
+    _take_charge(controller, model, cameras)
+
+    # The user confirms a newer endpoint, then switches camera.
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    _switch(cameras, CAM_B)
+
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
+    assert "No saved alignment" in _status(controller)
+
+
+def test_restore_falls_through_an_endpoint_only_default(controller, model, cameras):
+    _migrate_an_endpoint_only_default(controller)
+    mount = controller.preset_store.save_named(
+        "mount", _camera_preset(CAM_B, "camera", scene=SCENE_B)
+    )
+    controller.preset_store.set_default(mount.id)
+    _take_charge(controller, model, cameras)
+
+    _switch(cameras, CAM_B)
+
+    # The device default (endpoint only) is skipped: the camera's
+    # any-device default is reached.
+    assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
+    assert "'mount'" in _status(controller)
+    assert controller.endpoint_store.load("2x3device") == OLD_ENDPOINT

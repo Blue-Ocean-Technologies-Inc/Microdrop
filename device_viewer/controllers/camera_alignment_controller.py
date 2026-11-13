@@ -1250,38 +1250,40 @@ class CameraAlignmentWorkflowController(HasTraits):
         except OSError as exc:
             logger.error(f"Camera-alignment presets unavailable: {exc}")
 
-        source = self.preset_store.last_used_for(camera, device_key)
-        restored_last_used = source is not None
-
-        if source is None:
-            source = self.preset_store.resolve_default(device_key, camera)
-
-        placed = False
-        note = ""
-
-        if source is not None:
-            placed, note = self._put_on_live_alignment(source, device_key, saved_frame)
-
-        self._live_owned = placed
-        self._write_live_setup()
-
+        last_used = self.preset_store.last_used_for(camera, device_key)
+        candidates = [(last_used, RESTORED_LAST_USED_TEMPLATE)] if last_used else []
+        candidates += [
+            (preset, RESTORED_DEFAULT_TEMPLATE)
+            for preset in self.preset_store.defaults_for(device_key, camera)
+        ]
         quoted = f"'{camera.display_text}'"
 
-        if placed or (source is not None and not source.is_endpoint_only):
-            template = (
-                RESTORED_LAST_USED_TEMPLATE
-                if restored_last_used
-                else RESTORED_DEFAULT_TEMPLATE
+        # The first candidate that places the camera side wins; one that
+        # cannot (endpoint-only, another picture shape) is skipped whole —
+        # its endpoint would overwrite a newer working endpoint.
+        for source, template in candidates:
+            camera_quad, mapping, note = self._preset_placement(
+                source, saved_frame=saved_frame
             )
+
+            if camera_quad is None:
+                continue
+
+            self._put_on_live_alignment(source, device_key, camera_quad, mapping)
+            self._live_owned = True
+            self._write_live_setup()
+            self._show_setup_notice("")
+
             message = template.format(
                 camera=quoted, device_key=device_key, name=source.name
             )
+
             self.statusbar_message(f"{message}: {note}" if note else message)
 
-        if placed:
-            self._show_setup_notice("")
-
             return
+
+        self._live_owned = False
+        self._write_live_setup()
 
         notice = NO_SAVED_ALIGNMENT_TEMPLATE.format(
             camera=quoted, device_key=device_key
@@ -1290,14 +1292,11 @@ class CameraAlignmentWorkflowController(HasTraits):
         self._show_setup_notice(notice)
         self.statusbar_message(notice)
 
-    def _put_on_live_alignment(self, preset, device_key, saved_frame):
-        """Apply ``preset`` the way Apply places it — endpoint, rescaled
-        camera corners, the open panes — but in one step: no glide, no
-        "Before" snapshot, no undo entry. Return ``(whether the camera
-        corners were placed, note)``."""
-        camera_quad, mapping, note = self._preset_placement(
-            preset, saved_frame=saved_frame
-        )
+    def _put_on_live_alignment(self, preset, device_key, camera_quad, mapping):
+        """Apply ``preset`` the way Apply places it — endpoint, camera
+        corners (``camera_quad`` in live-frame pixels, ``mapping`` into the
+        video item), the open panes — but in one step: no glide, no
+        "Before" snapshot, no undo entry."""
 
         if self._writes_endpoint(preset):
             try:
@@ -1305,18 +1304,11 @@ class CameraAlignmentWorkflowController(HasTraits):
             except OSError as exc:
                 logger.error(f"Could not restore the endpoint of {device_key}: {exc}")
 
-        if camera_quad is not None:
-            self._set_live_rects(
-                [
-                    QPointF(*camera_point_to_item(point, mapping))
-                    for point in camera_quad
-                ],
-                [QPointF(x, y) for x, y in preset.scene_quad],
-            )
-
+        self._set_live_rects(
+            [QPointF(*camera_point_to_item(point, mapping)) for point in camera_quad],
+            [QPointF(x, y) for x, y in preset.scene_quad],
+        )
         self._show_in_panes(preset, camera_quad)
-
-        return camera_quad is not None, note
 
     def _set_live_rects(self, reference_rect, transformed_reference_rect):
         """Replace both reference rects as a restore: off the undo stack

@@ -425,7 +425,15 @@ class AlignmentPresetStore(HasTraits):
         """Return the default preset for ``camera`` (a CameraIdentity; None
         for no camera) on ``device_key``, or None: the camera + device slot,
         else the device slot, else the camera's any-device slot."""
+        defaults = self.defaults_for(device_key, camera)
+
+        return defaults[0] if defaults else None
+
+    def defaults_for(self, device_key, camera=None):
+        """Return every default preset covering ``camera`` on
+        ``device_key``, in the order ``resolve_default`` ranks them."""
         camera = camera if camera is not None else CameraIdentity()
+        defaults = []
 
         for scope in (
             ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
@@ -436,9 +444,9 @@ class AlignmentPresetStore(HasTraits):
                 preset = self.get(slot.get("preset_id"))
 
                 if preset is not None and _slot_covers(slot, scope, device_key, camera):
-                    return preset
+                    defaults.append(preset)
 
-        return None
+        return defaults
 
     def default_in_slot_of(self, scope, device_key, camera):
         """Return the default preset of the ``scope`` slot a preset of
