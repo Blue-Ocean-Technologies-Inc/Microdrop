@@ -26,6 +26,7 @@ from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPP
 from apscheduler.triggers.interval import IntervalTrigger
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Any, Bool, Event, Float, Instance, List, Str, observe
 
@@ -48,6 +49,7 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_CHANGE,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_REQUEST,
+    PKG,
 )
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import StepExecutionError
@@ -70,6 +72,7 @@ from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.protocol_history import ProtocolHistory
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
@@ -80,6 +83,7 @@ from pluggable_protocol_tree.services.repeat_duration_reconciler import (
     clamp_trail_overlay_for_row,
     reconcile_repeat_duration_for_row,
 )
+from pluggable_protocol_tree.views.autosave_status_icon import AutosaveStatusIcon
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
@@ -127,6 +131,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     quick_actions = List(desc="Quick actions to mount under the tree.")
     protocol_state_tracker = Instance(PluggableProtocolStateTracker)
 
+    #: Undo/redo of protocol edits (#967), shared with the tree pane.
+    protocol_history = Instance(ProtocolHistory)
+
     #: Links the executor's Qt signals to the status model and binds the
     #: status bar to it (issue #467). The dock pane is the app's HasTraits
     #: composition root that "sets up the link" between Qt and the model.
@@ -165,6 +172,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: True while the pre-protocol wait loading screen is up.
     _wait_active = Bool(False)
 
+    #: The AutoSave glyph contributed to the app status bar; None until the
+    #: pane mounts in an app.
+    _autosave_status_icon = Instance(AutosaveStatusIcon)
+
     def _executor_default(self):
         return ProtocolExecutor(
             row_manager=self.manager,
@@ -185,6 +196,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # dock_pane=self binds the tracker's display name ("<name> -
         # <protocol> [modified]") to this pane's title.
         return PluggableProtocolStateTracker(dock_pane=self)
+
+    def _protocol_history_default(self):
+        # Flushed once the event loop regains control, so every edit one
+        # user action makes settles into a single history entry.
+        return ProtocolHistory(
+            manager=self.manager,
+            protocol_state_tracker=self.protocol_state_tracker,
+            schedule_flush=GUI.invoke_later,
+        )
 
     def _preferences_default(self):
         return ProtocolPreferences(preferences=self.task.window.application.preferences)
@@ -218,6 +238,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             preferences=self.preferences,
             quick_actions=list(self.quick_actions),
             protocol_state_tracker=self.protocol_state_tracker,
+            protocol_history=self.protocol_history,
             parent=parent,
         )
 
@@ -389,7 +410,41 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Initial timeline render (structure + position).
         self._rebuild_timeline()
 
+        self._contribute_autosave_switch()
+
         return pane
+
+    def _contribute_autosave_switch(self):
+        """Put the AutoSave glyph in the app status bar (#966).
+
+        The microdrop_status_bar plugin owns placement, spacing and removal;
+        a contribution made before its bar exists is placed once it does."""
+        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+
+        if plugin is None:
+            logger.warning(f"{PKG}: plugin not found; AutoSave glyph not shown")
+            return
+
+        self._autosave_status_icon = AutosaveStatusIcon(
+            model=self._pane.autosave_controller.model
+        )
+        plugin.status_bar_icons.append(self._autosave_status_icon.control)
+
+    def _withdraw_autosave_switch(self):
+        """Take the AutoSave glyph out of the status bar (which deletes it)
+        and stop it observing the model."""
+        icon = self._autosave_status_icon
+
+        if icon is None:
+            return
+
+        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+
+        if plugin is not None and icon.control in plugin.status_bar_icons:
+            plugin.status_bar_icons.remove(icon.control)
+
+        icon.model = None
+        self._autosave_status_icon = None
 
     def destroy(self):
         """Tear down the background poll job before the pane goes away so its
@@ -401,6 +456,8 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 sched.shutdown(wait=False)
             except Exception as e:
                 logger.warning(f"poll scheduler shutdown failed: {e}")
+
+        self._withdraw_autosave_switch()
         super().destroy()
 
     # --- runtime column hot load/unload ------------------------------
@@ -426,6 +483,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # The widget brackets the swap in a full model reset so the QTreeView
         # picks up the changed column count and re-applies header state.
         self._pane.widget.refresh_columns(_mutate)
+
+        # The history's snapshots carry the old column set; start afresh.
+        self.protocol_history.reset()
 
         # New columns bring their own wait-capable handlers — seed their ack
         # grid entries and push any persisted ack waits into them.
@@ -870,11 +930,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
             cid = col.model.col_id
             if hasattr(row, cid):
                 values[cid] = getattr(row, cid)
-        new_path = self.manager.add_step(
-            parent_path=parent_path,
-            index=insert_idx,
-            values=values,
-        )
+        with self.manager.named_edit("Duplicate Step"):
+            new_path = self.manager.add_step(
+                parent_path=parent_path,
+                index=insert_idx,
+                values=values,
+            )
+
         new_row = self.manager.get_row(new_path)
         self._select_step(new_row)
 
@@ -1295,6 +1357,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # not fire for a cell edit.
         self._rebuild_timeline()
 
+    @observe("protocol_history:undo_manager:stack_updated", post_init=True)
+    def _on_protocol_history_changed(self, event):
+        """Undo/redo availability and names moved: refresh the quick-action
+        buttons' enabled state and tooltips."""
+        controller = (
+            self._pane.quick_actions_controller if self._pane is not None else None
+        )
+
+        if controller is not None:
+            controller.refresh_enabled()
+
     @observe("task.window.application.experiment_changed", dispatch="ui")
     def _on_experiment_changed(self, event):
         # The application can switch experiments before this pane is
@@ -1315,6 +1388,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         vetoing there let the app quit anyway.) ``event.new`` carries
         the Vetoable.
         """
+        # With AutoSave on, edits still inside the debounce window are
+        # written before the unsaved-changes check, so closing keeps them.
+        if self._pane is not None:
+            self._pane.autosave_controller.flush()
+
         if not self.protocol_state_tracker.is_modified:
             return
 

@@ -36,7 +36,9 @@ from protocol_quick_action_tools.consts import (
     ACTION_IMPORT_PROTOCOL,
     ACTION_NEW_PROTOCOL,
     ACTION_OPEN_PROTOCOL,
+    ACTION_REDO,
     ACTION_SAVE_PROTOCOL,
+    ACTION_UNDO,
 )
 from protocol_quick_action_tools.plugin import (
     ProtocolQuickActionToolsPlugin,
@@ -345,5 +347,7 @@ def test_plugin_default_contributions_includes_all_actions():
             ACTION_SAVE_PROTOCOL,
             ACTION_NEW_PROTOCOL,
             ACTION_BROWSE_REPORTS,
+            ACTION_UNDO,
+            ACTION_REDO,
         ]
     )

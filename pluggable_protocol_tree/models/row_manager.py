@@ -18,6 +18,7 @@ active column set.
 """
 
 # Standard library imports.
+from contextlib import contextmanager
 from typing import Iterator, List, Optional, Tuple
 
 # Enthought library imports.
@@ -95,6 +96,13 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
         "tracker observes this for per-cell diff bookkeeping."
     )
 
+    #: Brackets one user action's edits for the edit history: fired with the
+    #: action's name ("Paste", "Bulk Set") before its first mutation and with
+    #: "" after its last, so the history records the action as one named
+    #: entry. Fire it through ``named_edit``; unbracketed edits get a name
+    #: inferred from what changed.
+    edit_action = Event(Str)
+
     #: Per-row cell values stashed (keyed by row uuid) when a column set is
     #: removed at runtime (see ``rebuild_columns``), so a later re-add of the
     #: same columns restores the values a rebuilt tree would otherwise reset
@@ -124,6 +132,17 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
             base=GroupRow,
             name="ProtocolGroupRow",
         )
+
+    @contextmanager
+    def named_edit(self, name):
+        """Record the edits made inside the block as one history entry
+        called ``name``."""
+        self.edit_action = name
+
+        try:
+            yield
+        finally:
+            self.edit_action = ""
 
     # --- tree lookup ---
 

@@ -11,7 +11,9 @@
 """The signal board reports chip_on_pad as a 3-bit contact mask (debounced
 presence, left pogo, right pogo); under the default both-pogos rule the
 status snapshot publishes a chip only when all three are set, and the raw
-mask rides along as chip_pad_contacts. Hardware-free, no Redis."""
+mask rides along as chip_pad_contacts. The driver's readings are already in
+engineering units, so the snapshot publishes them unscaled. Hardware-free,
+no Redis."""
 
 # Standard library imports.
 import json
@@ -65,3 +67,26 @@ def test_chip_on_pad_needs_every_contact_bit(monkeypatch, chip_on_pad, expected)
     harness._publish_status_snapshot()
 
     assert published == [{"chip_on_pad": expected, "chip_pad_contacts": chip_on_pad}]
+
+
+def test_engineering_units_are_published_unscaled(monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        portable_dropbot_controller_base,
+        "publish_message",
+        lambda topic, message: published.append(json.loads(message)),
+    )
+
+    signal = {
+        "hv_vol": 100.0,
+        "cur_temp": 25.0,
+        "target_temp": 37.0,
+        "dev_temp": 31.5,
+        "dev_hum": 42.0,
+    }
+    harness = _Harness()
+    harness.status = {"signal": signal}
+
+    harness._publish_status_snapshot()
+
+    assert published == [signal]

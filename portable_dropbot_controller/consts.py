@@ -102,6 +102,9 @@ PMT_STREAM_AVG_CHOICES = (1, 2, 4, 8, 16, 32, 64, 128)
 #: ADS70x6 on-chip oversampling as the firmware's index: 0 = off, n = 2**n
 #: conversions per value. A no-op on the old ADC128S052.
 PMT_STREAM_OSR_CHOICES = tuple(range(8))
+#: Command code of the unsolicited PMT live-stream data frames the signal
+#: board sends after a PMT_STREAM request (the driver names only the request).
+PMT_STREAM_DATA_CMD = 0x123F
 #: How often the live stream's collected samples are published to the pane.
 PMT_STREAM_PUBLISH_INTERVAL_S = 0.25
 #: Abort/deadline polling slice while a capture stream is open.
@@ -326,6 +329,7 @@ DEFAULT_FREQUENCY_KEY = "default_frequency"
 DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
 FAN_BOARD_KEY = "fan_board"
 CHIP_DETECT_RULE_KEY = "chip_detect_rule"
+DROPLET_DETECTION_THRESHOLD_PF_KEY = "droplet_detection_threshold_pf"
 
 PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     BAUD_RATE_KEY,
@@ -335,6 +339,7 @@ PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     DEFAULT_LIGHT_INTENSITY_KEY,
     FAN_BOARD_KEY,
     CHIP_DETECT_RULE_KEY,
+    DROPLET_DETECTION_THRESHOLD_PF_KEY,
 )
 
 # Last applied electrodes_state_change request.
@@ -890,9 +895,12 @@ magnet_engage_updated_publisher = ValidatedTopicPublisher(
 # Droplet detection                                                      #
 # --------------------------------------------------------------------- #
 
-#: Absolute capacitance (pF) a channel must read to count as holding
-#: liquid, like the DropBot's droplet detection threshold.
-DROPLET_DETECTION_THRESHOLD_PF = 10.0
+#: Default capacitance (pF) a channel must read to count as holding liquid
+#: (Portable DropBot Settings preference), the driver's own drop default.
+#: Per channel, the driver's saved overrides and a fresh baseline still
+#: replace it and the active chip's electrode weights scale it.
+DROPLET_DETECTION_THRESHOLD_PF = 5.0
 
-#: Per-channel settle time of the full-channel capacitance scan (ms).
-DROPLET_SCAN_SWITCH_TIME_MS = 20
+#: Bounds of the droplet detection threshold preference (pF); the driver
+#: refuses anything above 1000 pF.
+DROPLET_DETECTION_THRESHOLD_PF_BOUNDS = (0.1, 1000.0)

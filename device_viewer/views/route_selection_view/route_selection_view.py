@@ -11,6 +11,7 @@
 # Enthought library imports.
 from pyface.qt.QtWidgets import QApplication
 from traitsui.api import (
+    ButtonEditor,
     HGroup,
     Item,
     Label,
@@ -28,6 +29,8 @@ from device_viewer.models.route import RouteLayer
 from device_viewer.views.route_selection_view.menu import RouteLayerMenu
 
 # Microdrop style imports.
+from microdrop_style.button_styles import SUCCESS_BUTTON_STYLE
+from microdrop_style.colors import GREY
 from microdrop_style.icons.icons import ICON_DELETE
 
 # Microdrop utils imports.
@@ -323,6 +326,11 @@ ExecutionSettingsView = View(
 paused = "object.route_execution_service_paused"
 executing = "object.route_execution_service_executing"
 nav_mode = "object.phase_navigation_mode"
+commit_state = "object.commit_button_state"
+
+# The "nothing to commit" look: greyed like a disabled button, yet clickable.
+# Only the glyph colour is set; the rest cascades from the theme sheet.
+MUTED_BUTTON_STYLE = f"QPushButton {{ color: {GREY['lighter']}; }}"
 
 run_controls = HGroup(
     UItem(
@@ -361,13 +369,32 @@ run_controls = HGroup(
         visible_when=executing,
         springy=True,
     ),  # stop
+    # Commit to Step: one button in three looks, one shown at a time; the
+    # model maps a press to the state's action (#969).
     UItem(
         "object.routes.commit_to_step_btn",
-        tooltip="Apply execution params to step",
-        enabled_when="object.routes_commit_enabled",
-        visible_when=f"not {executing}",
+        editor=ButtonEditor(label="autorenew"),
+        style_sheet=SUCCESS_BUTTON_STYLE,
+        tooltip="Auto-commit on: edits are saved to the step automatically. "
+        "Click to turn off.",
+        visible_when=f"not {executing} and {commit_state} == 'auto'",
         springy=True,
-    ),  # commit to step
+    ),  # auto-commit on
+    UItem(
+        "object.routes.commit_to_step_btn",
+        tooltip="Commit the execution settings to the step. Auto-commit is off.",
+        enabled_when=f"{commit_state} == 'pending'",
+        visible_when=f"not {executing} and {commit_state} in ('pending', "
+        "'unavailable')",
+        springy=True,
+    ),  # edits to commit; truly disabled with no step selected
+    UItem(
+        "object.routes.commit_to_step_btn",
+        style_sheet=MUTED_BUTTON_STYLE,
+        tooltip="Nothing to commit. Click to turn on auto-commit.",
+        visible_when=f"not {executing} and {commit_state} == 'idle'",
+        springy=True,
+    ),  # nothing to commit, looks disabled but turns auto-commit on
     enabled_when="not object.protocol_running",
 )
 
@@ -406,7 +433,7 @@ if __name__ == "__main__":
     # demo view
     import sys
 
-    from traits.api import Bool, DelegatesTo, HasTraits, Instance, Str, observe
+    from traits.api import Bool, DelegatesTo, Enum, HasTraits, Instance, Str, observe
 
     from device_viewer.models.route import Route, RouteLayerManager
 
@@ -425,10 +452,11 @@ if __name__ == "__main__":
 
         protocol_running = Bool(False)
         phase_navigation_mode = Bool(False)
+        auto_commit_to_step = Bool(True)
+        commit_button_state = Enum("auto", "pending", "idle", "unavailable")
 
         # Top-level mirrors for enabled_when bindings (nested paths like
         # `object.routes.commit_enabled` don't re-evaluate reliably)
-        routes_commit_enabled = DelegatesTo("routes", prefix="commit_enabled")
         routes_repeats_frozen = DelegatesTo("routes", prefix="repeats_frozen")
 
         @observe("routes.execute_path_requested")

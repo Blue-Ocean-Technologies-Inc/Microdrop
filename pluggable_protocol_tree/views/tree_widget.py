@@ -545,9 +545,11 @@ class ProtocolTreeWidget(QWidget):
         position (#518), then select the new group so the user can rename
         it (F2 / double-click) and subsequent actions target it."""
         try:
-            group_path = self._manager.fold_into_group(
-                [tuple(p) for p in self._manager.selection]
-            )
+            with self._manager.named_edit("Fold into Group"):
+                group_path = self._manager.fold_into_group(
+                    [tuple(p) for p in self._manager.selection]
+                )
+
             if group_path is None:
                 return
             idx = self._node_to_index(self._manager.get_row(group_path))
@@ -567,9 +569,11 @@ class ProtocolTreeWidget(QWidget):
         """Dissolve the selected group, moving its children up into the parent
         at the group's position (#529), then select all the unfolded rows."""
         try:
-            child_paths = self._manager.unfold_group(
-                [tuple(p) for p in self._manager.selection]
-            )
+            with self._manager.named_edit("Unfold Group"):
+                child_paths = self._manager.unfold_group(
+                    [tuple(p) for p in self._manager.selection]
+                )
+
             if not child_paths:
                 return
             indexes = [
@@ -621,7 +625,8 @@ class ProtocolTreeWidget(QWidget):
 
     def _cut(self):
         try:
-            self._manager.cut()
+            with self._manager.named_edit("Cut"):
+                self._manager.cut()
         except Exception:
             logger.exception("Cut failed")
 
@@ -629,7 +634,9 @@ class ProtocolTreeWidget(QWidget):
         try:
             idxs = self.tree.selectionModel().selectedRows(0)
             target = self._index_to_path(idxs[-1]) if idxs else None
-            self._manager.paste(target_path=target)
+
+            with self._manager.named_edit("Paste"):
+                self._manager.paste(target_path=target)
         except Exception:
             logger.exception("Paste failed")
 
@@ -651,9 +658,12 @@ class ProtocolTreeWidget(QWidget):
             return
         # set_values runs each column's handler over the whole batch, so a
         # mode handoff (Route Reps Dur) prompts once, not per row. The pane's
-        # cell_changed reconciliation still runs for derived columns.
-        for col_id, value in updates.items():
-            self._manager.set_values(targets, col_id, value)
+        # cell_changed reconciliation still runs for derived columns. One
+        # history entry, even when a handler's prompt runs the event loop.
+        with self._manager.named_edit("Bulk Set"):
+            for col_id, value in updates.items():
+                self._manager.set_values(targets, col_id, value)
+
         logger.info(
             f"Bulk set {list(updates)} on {len(targets)} step(s) "
             f"(nested={dialog.apply_nested})"
