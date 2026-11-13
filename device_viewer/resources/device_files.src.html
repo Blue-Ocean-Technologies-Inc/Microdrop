@@ -1,0 +1,1399 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Device Files, Channels &amp; Connections Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+code.id { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+table.small td { overflow-wrap: anywhere; }
+.df-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; align-items: start; }
+@media (max-width: 640px) { .df-grid { grid-template-columns: minmax(0, 1fr); } }
+svg.df { display: block; width: 100%; height: auto; touch-action: none; user-select: none; border-radius: 6px; }
+svg.df .bg { fill: #101316; }
+svg.df .el { fill: #1d2228; stroke: #8592b1; stroke-width: 1.2; cursor: pointer; }
+svg.df .el.on { fill: #546692; }
+svg.df .el.none { fill: #2a2f35; stroke: #ff9a6b; stroke-dasharray: 5 4; }
+svg.df .el.shared { stroke: #ffb74d; stroke-width: 3; }
+svg.df .el.editing { stroke: #5cc77a; stroke-width: 3.5; }
+svg.df .el.island { fill: #232a31; }
+svg.df .num { fill: #ffffff; font-size: 20px; font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+svg.df .tag { fill: #c9d1d9; font-size: 11px; text-anchor: middle; pointer-events: none; }
+svg.df .link { stroke: #ffffff; stroke-width: 2.4; stroke-linecap: round; cursor: pointer; }
+svg.df .link.sel { stroke: #ff6400; stroke-width: 4.5; }
+svg.df .hit { stroke: transparent; stroke-width: 14; cursor: pointer; }
+svg.df .pending { stroke: #ffa000; stroke-width: 2.4; stroke-dasharray: 6 4; pointer-events: none; }
+svg.df .dot { fill: #ff6400; stroke: #ffffff; stroke-width: 1.4; cursor: crosshair; }
+svg.df .dot.armed { fill: #ffa000; stroke-width: 3; }
+svg.df .path { stroke: #ff8fc8; stroke-width: 7; stroke-opacity: .7; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+svg.df .drop { fill: #3fa65a; fill-opacity: .8; pointer-events: none; }
+svg.df .target { fill: none; stroke: #ffd400; stroke-width: 2.4; stroke-dasharray: 4 3; pointer-events: none; }
+.controls button[aria-pressed="true"] { background: var(--icon-on); border-color: var(--icon-on); color: #ffffff; }
+.controls button:disabled { opacity: .45; cursor: default; }
+.controls input[type="text"], .controls input[type="number"] { width: 6.5em; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.controls select { font: inherit; }
+p.df-tip { font-family: Consolas, "Courier New", monospace; font-size: .84rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: pre-line; margin: 6px 0 0; }
+ul.df-flags { margin: 6px 0 0; padding-left: 1.2em; font-size: .9rem; }
+ul.df-flags li.shared::marker { color: var(--orange); }
+ul.df-flags li.none::marker { color: var(--warn); }
+table.calc { margin: 6px 0; }
+table.calc td.v { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+table.calc td input { width: 6.5em; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+table.calc td select { font: inherit; }
+table.small td.lbl { min-width: 8.5em; }
+.ui.wrap { white-space: normal; }
+svg .halo { paint-order: stroke; stroke: #101316; stroke-width: 5px; stroke-linejoin: round; }
+pre.svg-src { font-size: .8rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }
+</style>
+
+<header data-hero>
+  <h1>Device files, channels and connections</h1>
+  <p>MicroDrop draws your chip from a <strong>device file</strong>: an SVG drawing with one shape per electrode. The file also
+  says which DropBot <strong>channel</strong> drives each electrode and which electrodes are <strong>connected</strong>, so a
+  droplet can move between them.</p>
+  <p>This tutorial is for anyone who loads their own chip design or fixes its wiring. It covers loading and saving device
+  files, changing channel numbers, editing connections, and setting the electrode <strong>area</strong> so the capacitance
+  and volume readouts are right. The three interactive figures run without a chip.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">Most of what this page covers lives in two places: the <span class="ui">File ▸ Device</span> menu and the
+Device Viewer itself (the <span class="ui">Numbers</span> mode button, the right-click menu and the
+<span class="ui">Calibration</span> section of the side panel).</p>
+
+<figure class="still">
+<svg viewBox="0 0 640 250" role="img" aria-label="Schematic of a device SVG file: a Device layer of electrode paths, each with an id and a data-channels number; a Connections layer of lines between electrode centres; a Zones layer; and a metadata element holding the area scale">
+  <rect x="0.5" y="0.5" width="639" height="249" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+  <text x="16" y="24" style="font-weight:700">my_chip.svg</text>
+  <rect x="16" y="36" width="300" height="96" rx="4" fill="var(--surface-2)" stroke="var(--accent)"/>
+  <text x="28" y="56" style="font-weight:700">layer “Device”</text>
+  <text x="28" y="76">path id="electrode012"  data-channels="12"</text>
+  <text x="28" y="96">path id="electrode013"  data-channels="13"</text>
+  <text x="28" y="116" style="fill:var(--muted)">… one path per electrode</text>
+  <rect x="16" y="142" width="300" height="44" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="28" y="162" style="font-weight:700">layer “Connections”</text>
+  <text x="28" y="179">a line from centre to centre</text>
+  <rect x="16" y="194" width="146" height="44" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="28" y="214" style="font-weight:700">layer “Zones”</text>
+  <text x="28" y="231" style="fill:var(--muted)">regions</text>
+  <rect x="170" y="194" width="146" height="44" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="182" y="214" style="font-weight:700">metadata</text>
+  <text x="182" y="231">scale = 1.0</text>
+  <g transform="translate(360 36)">
+    <rect x="0" y="0" width="264" height="202" rx="4" fill="#101316"/>
+    <rect x="22" y="40" width="60" height="60" rx="3" fill="#1d2228" stroke="#8592b1" stroke-width="1.2"/>
+    <rect x="86" y="40" width="60" height="60" rx="3" fill="#1d2228" stroke="#8592b1" stroke-width="1.2"/>
+    <rect x="150" y="40" width="60" height="60" rx="3" fill="#546692" stroke="#8592b1" stroke-width="1.2"/>
+    <rect x="86" y="104" width="60" height="60" rx="3" fill="#1d2228" stroke="#8592b1" stroke-width="1.2"/>
+    <line x1="52" y1="70" x2="116" y2="70" stroke="#ffffff" stroke-width="2"/>
+    <line x1="116" y1="70" x2="180" y2="70" stroke="#ffffff" stroke-width="2"/>
+    <line x1="116" y1="70" x2="116" y2="134" stroke="#ffffff" stroke-width="2"/>
+    <text x="52" y="62" class="halo" style="fill:#ffffff;font-size:15px;font-weight:600" text-anchor="middle">12</text>
+    <text x="116" y="62" class="halo" style="fill:#ffffff;font-size:15px;font-weight:600" text-anchor="middle">13</text>
+    <text x="180" y="62" class="halo" style="fill:#ffffff;font-size:15px;font-weight:600" text-anchor="middle">14</text>
+    <text x="116" y="126" class="halo" style="fill:#ffffff;font-size:15px;font-weight:600" text-anchor="middle">20</text>
+    <text x="132" y="24" style="fill:#c9d1d9;font-size:12px" text-anchor="middle">what the Device Viewer draws</text>
+    <text x="132" y="190" style="fill:#c9d1d9;font-size:12px" text-anchor="middle">shapes · numbers · connection lines</text>
+  </g>
+</svg>
+<figcaption>What MicroDrop reads from a device file. Only the <em>Device</em> layer is required; the others are optional.</figcaption>
+</figure>
+
+<ul class="uses">
+  <li><strong>Electrodes</strong> come from the paths in the layer named <code>Device</code>. Each path's <code>id</code> is
+  the electrode's name, for example <code class="id">electrode012</code>.</li>
+  <li><strong>Channels</strong> come from each path's <code>data-channels</code> attribute: the DropBot output wired to that
+  electrode. Routes, the tooltip and droplet detection all work by channel.</li>
+  <li><strong>Connections</strong> say which electrodes are neighbours. You can only drag a route, autoroute or step with
+  the arrow keys between connected electrodes. If the file has none, MicroDrop works them out from the electrode shapes.</li>
+  <li><strong>Area</strong> is worked out from each shape, in mm². The capacitance calibration and the live volume readout
+  use it. A <em>scale</em> stored in the file corrects it when the drawing is not true to size.</li>
+  <li><strong>Zones</strong> are kept in the file too. They have their own tutorial: <span class="ui wrap">Help ▸ Tutorials ▸ Zones
+  Tutorial</span>.</li>
+</ul>
+<div class="callout">Neighbouring tutorials cover the rest of the Device Viewer: switching electrodes, routes, the tooltip and
+the view settings (<span class="ui">Device Viewer Tutorial</span>), rotating the device and lining up a camera
+(<span class="ui">Camera &amp; Alignment Tutorial</span>), and zones (<span class="ui">Zones Tutorial</span>). All are in
+<span class="ui">Help ▸ Tutorials</span>.</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">From a new chip design to a device file you can trust. Steps 2 to 5 are only needed when something in the
+file is wrong or missing.</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: File menu, Device submenu with Load, Save, Save As, Generate Connections and Edit Connections"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="12" y="12" width="56" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="40" y="28" text-anchor="middle">File</text><rect x="74" y="12" width="78" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="113" y="28" text-anchor="middle">Device ▸</text><rect x="158" y="12" width="136" height="128" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><rect x="160" y="16" width="132" height="20" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="168" y="30">Load…</text><text x="168" y="52">Save</text><text x="168" y="72">Save As…</text><line x1="164" y1="82" x2="288" y2="82" stroke="var(--line)"/><text x="168" y="100">Generate Connections</text><text x="168" y="120">Edit Connections</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Load the device file</h4>
+    <p>Choose <span class="ui">File ▸ Device ▸ Load…</span> and pick the <code>.svg</code> file. A file from outside your
+    <a href="#t-repo">Devices folder</a> is copied into it first, and the copy is what MicroDrop opens and saves.</p>
+    <p>The chip appears in the Device Viewer, and the pane's title shows the file name. Next time MicroDrop starts, it opens
+    this device again.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: the Numbers mode button is on; one electrode shows a text cursor after the number 37"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="#101316"/><g font-weight="600" text-anchor="middle"><rect x="24" y="24" width="56" height="56" rx="3" fill="#1d2228" stroke="#8592b1"/><text x="52" y="58" style="fill:#ffffff;font-size:18px">35</text><rect x="84" y="24" width="56" height="56" rx="3" fill="#1d2228" stroke="#8592b1"/><text x="112" y="58" style="fill:#ffffff;font-size:18px">36</text><rect x="144" y="24" width="56" height="56" rx="3" fill="#1d2228" stroke="#5cc77a" stroke-width="3"/><text x="172" y="58" style="fill:#ffffff;font-size:18px">37|</text><rect x="204" y="24" width="56" height="56" rx="3" fill="#1d2228" stroke="#8592b1"/><text x="232" y="58" style="fill:#ffffff;font-size:18px">38</text></g><rect x="24" y="104" width="252" height="30" rx="4" fill="#2b3138"/><text x="150" y="124" text-anchor="middle" style="fill:#ffffff">Numbers (N): type, then Enter</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Check and fix the channel numbers</h4>
+    <p>Rest the pointer on an electrode: the tooltip shows its <span class="ui">Channel</span>. To change it, press
+    <kbd>N</kbd> (or click <i data-glyph="Numbers" data-inline data-label="Edit Electrode Channels"></i>
+    <em>Edit Electrode Channels</em> under <span class="ui">Paths</span>), click the electrode, type the number and press
+    <kbd>Enter</kbd>. Press <kbd>N</kbd> again to go back to the mode you were in.</p>
+    <p>See <a href="#part-channels">Channels</a> for the rules.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic of the Edit Connections window: a header row of six icon buttons over the chip with an orange dot on every electrode centre and white connection lines; one line is selected in orange"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="22" style="font-weight:700">Connections — my_chip</text><g fill="var(--surface-2)" stroke="var(--line)"><rect x="160" y="8" width="20" height="20" rx="3"/><rect x="183" y="8" width="20" height="20" rx="3"/><rect x="206" y="8" width="20" height="20" rx="3"/><rect x="229" y="8" width="20" height="20" rx="3"/><rect x="252" y="8" width="20" height="20" rx="3"/><rect x="275" y="8" width="20" height="20" rx="3"/></g><rect x="8" y="36" width="284" height="106" rx="3" fill="#101316"/><g stroke="#8592b1" fill="#1d2228"><rect x="40" y="50" width="40" height="40"/><rect x="84" y="50" width="40" height="40"/><rect x="128" y="50" width="40" height="40"/><rect x="172" y="50" width="40" height="40"/><rect x="84" y="94" width="40" height="40"/><rect x="230" y="50" width="40" height="40"/></g><g stroke-width="2.2" stroke-linecap="round"><line x1="60" y1="70" x2="104" y2="70" stroke="#ffffff"/><line x1="104" y1="70" x2="148" y2="70" stroke="#ff6400" stroke-width="4"/><line x1="148" y1="70" x2="192" y2="70" stroke="#ffffff"/><line x1="104" y1="70" x2="104" y2="114" stroke="#ffffff"/><line x1="192" y1="70" x2="250" y2="70" stroke="#ffa000" stroke-dasharray="5 4"/></g><g fill="#ff6400" stroke="#ffffff"><circle cx="60" cy="70" r="4"/><circle cx="104" cy="70" r="4"/><circle cx="148" cy="70" r="4"/><circle cx="192" cy="70" r="4"/><circle cx="104" cy="114" r="4"/><circle cx="250" cy="70" r="4"/></g></svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Check the connections</h4>
+    <p>Choose <span class="ui">File ▸ Device ▸ Edit Connections</span>. A window shows the chip with a dot on every electrode
+    centre and a white line for every connection.</p>
+    <p>Drag from one dot to another to add a connection. Click a line (it turns orange) and press <kbd>Delete</kbd> to remove
+    it. Every change shows in the Device Viewer at once; close the window when you are done. See
+    <a href="#part-connections">Connections</a>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic of the Electrode Area Scaler window: Electrode Information on the left (ID, Channel, Original Area, Scaled Area), Scale Calculation on the right (Measured Area, Scaling Factor), and the Set Scale and Cancel buttons"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="20" style="font-weight:700">Electrode Area Scaler</text><rect x="10" y="30" width="138" height="84" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="18" y="46" style="font-size:11px">ID: electrode079</text><text x="18" y="64" style="font-size:11px">Channel: 94</text><text x="18" y="82" style="font-size:11px">Original Area (mm²): 4.3465</text><text x="18" y="100" style="font-size:11px">Scaled Area (mm²): 4.3465</text><rect x="154" y="30" width="136" height="84" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="162" y="52" style="font-size:11px">Measured Area (mm²):</text><rect x="162" y="58" width="118" height="18" rx="2" fill="var(--surface)" stroke="var(--accent)"/><text x="168" y="71" style="font-size:11px">4.0</text><text x="162" y="98" style="font-size:11px">Scaling Factor: 0.9203</text><rect x="168" y="122" width="62" height="20" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="199" y="136" text-anchor="middle" style="font-size:11px">Set Scale</text><rect x="236" y="122" width="54" height="20" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="263" y="136" text-anchor="middle" style="font-size:11px">Cancel</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Make the electrode area true to size</h4>
+    <p>The tooltip's <span class="ui">Area (mm²)</span> should match the real electrode. If it does not, right-click an
+    electrode and choose <span class="ui">Adjust Electrode Area Scale</span>. Type the electrode's real area in
+    <span class="ui">Measured Area (mm²)</span> and click <span class="ui">Set Scale</span>. Every electrode on the chip is
+    scaled by the same factor. See <a href="#part-area">Area and calibration</a>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic of the Calibration section: the filler button and Cf value on the top row, the liquid button and Cl value below, and the reset button on the right"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="22" style="font-weight:700">Calibration</text><rect x="16" y="38" width="30" height="30" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><use href="#ic-airwave" x="20" y="42" width="22" height="22"/><text x="56" y="58"><tspan style="font-weight:700">C</tspan><tspan style="font-size:10px;font-weight:700" dy="3">f</tspan><tspan dy="-3">: 0.5 pF/mm²</tspan></text><rect x="16" y="78" width="30" height="30" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><use href="#ic-humidity_high" x="20" y="82" width="22" height="22"/><text x="56" y="98"><tspan style="font-weight:700">C</tspan><tspan style="font-size:10px;font-weight:700" dy="3">l</tspan><tspan dy="-3">: 2 pF/mm²</tspan></text><rect x="200" y="48" width="48" height="48" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><use href="#ic-reset_wrench" x="206" y="54" width="36" height="36"/></svg></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Calibrate the capacitance</h4>
+    <p>With a DropBot connected, switch on electrodes that are fully covered by liquid and click
+    <i data-glyph="humidity_high" data-inline data-label="Measure Liquid Capacitance"></i> <em>Measure Liquid
+    Capacitance</em> in the side panel's <span class="ui">Calibration</span> section. Then switch on electrodes covered only by
+    filler (air or oil) and click <i data-glyph="airwave" data-inline data-label="Measure filler Capacitance"></i>
+    <em>Measure filler Capacitance</em>. The <span class="ui">Cl</span> and <span class="ui">Cf</span> values appear next
+    to the buttons, and the live <span class="ui">Volume</span> readout starts working.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: the pane title reads my_chip (modified); after File, Device, Save it reads my_chip"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="14" y="20" width="272" height="28" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="24" y="39">Device Viewer … – my_chip <tspan style="fill:var(--warn);font-weight:700">(modified)</tspan></text><text x="150" y="78" text-anchor="middle" style="fill:var(--muted)">File ▸ Device ▸ Save</text><text x="150" y="92" text-anchor="middle" style="fill:var(--muted)">↓</text><rect x="14" y="104" width="272" height="28" rx="3" fill="var(--surface-2)" stroke="var(--accent)"/><text x="24" y="123">Device Viewer … – my_chip</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">6</span>Save the device file</h4>
+    <p>Channel, connection and area changes add <span class="ui">(modified)</span> to the pane's title. Choose
+    <span class="ui">File ▸ Device ▸ Save</span> to write them into the file; the tag goes away.</p>
+    <p><span class="ui">Save As…</span> writes a copy under a new name, but MicroDrop keeps the original file open: load the
+    copy if you want to go on working on it. Zone edits are not tracked by the tag, so save after drawing zones too.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-file">
+<h2>Inside a device file</h2>
+<p class="intro">You can draw a device file in any program that saves SVG (Inkscape is common). MicroDrop needs only a few
+things from it; this part lists them.</p>
+
+<section data-term id="t-svg" data-where="the .svg file you load">
+  <h3>Device SVG</h3>
+  <p>The drawing of one chip design: an outline per electrode, plus optional connections, zones and scale.</p>
+  <div data-what><p>A plain SVG file. MicroDrop looks for a top-level group (an Inkscape layer) with an attribute whose
+  whole value is <code>Device</code>, in any capitals; Inkscape keeps it in the layer's label. Each
+  <code>&lt;path&gt;</code> directly inside it that has both an <code>id</code> and a <code>d</code> outline becomes one
+  electrode. Anything else in that layer, such as nested groups or rectangles, is skipped.</p>
+  <pre class="svg-src">&lt;g inkscape:label="Device" inkscape:groupmode="layer"&gt;
+  &lt;path id="electrode000" data-channels="0" d="M 10,10 H 12 V 12 H 10 Z"/&gt;
+  …
+&lt;/g&gt;</pre></div>
+  <div data-when><p>Every time you bring a new chip design into MicroDrop.</p></div>
+  <div data-read><p>If the file has no Device layer, or no usable paths in it, the load fails with
+  <a href="#t-load-errors">Error: Cannot Load Device SVG</a>.</p></div>
+  <div data-typical><p>MicroDrop ships with <code>90_pin_array.svg</code>, 84 electrodes on channels between 0 and 119.</p></div>
+</section>
+
+<section data-term id="t-electrode" data-where="path in the Device layer">
+  <h3>Electrode and electrode id</h3>
+  <p>One shape on the chip. Its <code>id</code> is its permanent name.</p>
+  <div data-what><p>The id, such as <code class="id">electrode079</code>, is what protocols store for each step and what the
+  tooltip shows on its first line (<span class="ui">Electrode ID</span>). MicroDrop never renames electrodes.</p></div>
+  <div data-when><p>When you compare a protocol with a device, or write a device file by hand.</p></div>
+  <div data-read><p>Keep the ids when you edit a design: a protocol made on the old file finds its electrodes again only by
+  id (see <a href="#part-protocols">Protocols and devices</a>).</p></div>
+  <div data-typical><p><code class="id">electrode000</code>, <code class="id">electrode001</code>, … in the bundled files.</p></div>
+</section>
+
+<section data-term id="t-channel" data-where="data-channels attribute; tooltip line Channel">
+  <h3>Channel (<code>data-channels</code>)</h3>
+  <p>The DropBot output wired to the electrode, as a whole number.</p>
+  <div data-what><p>Switching an electrode on switches its channel on, so every electrode with the same channel goes on and off
+  together. Droplet detection also works per channel.</p></div>
+  <div data-when><p>Set once per chip design, to match how the chip's contact pads reach the DropBot's pins.</p></div>
+  <div data-read><p>One number per electrode. An electrode without the attribute has no channel: its label is blank and its
+  tooltip says <span class="ui">Channel: None</span>.</p></div>
+  <div data-typical><p>0 to 119 on a 120-channel DropBot (see <a href="#t-nchannels">Number of channels</a>).</p></div>
+</section>
+
+<section data-term id="t-curves" data-where="the electrode outline (d attribute)">
+  <h3>Curved outlines</h3>
+  <p>Round and curved electrodes are turned into many-sided shapes.</p>
+  <div data-what><p>Straight pieces of an outline (move, line, horizontal, vertical, close) keep their corner points. Each
+  curved piece (an arc or a Bézier curve) is replaced by 24 points along the curve. An Inkscape circle, drawn as two arcs,
+  becomes a 48-sided shape that is within about 0.2 % of the true circle.</p></div>
+  <div data-when><p>Chips with round reservoirs or rounded electrodes.</p></div>
+  <div data-read><p>Areas, centres and generated connections all come from this many-sided shape. An outline that crosses
+  itself is repaired: MicroDrop keeps its largest piece.</p></div>
+</section>
+
+<section data-term id="t-units" data-where="the svg element's width and height">
+  <h3>Drawing units</h3>
+  <p>MicroDrop turns every coordinate into millimetres, using the unit of the drawing's width and height.</p>
+  <div data-what><p>If <code>width</code> and <code>height</code> both end in <code>mm</code>, <code>cm</code>,
+  <code>pt</code> (1/72 inch), <code>pc</code> (12 pt) or <code>px</code>, coordinates are read in that unit. With no unit,
+  they count as <code>px</code>, at 96 px per inch (1 px = 0.2646 mm). The <code>viewBox</code> is not used, and only a plain
+  <code>translate(x, y)</code> on the Device layer is applied; transforms on single paths are ignored.</p></div>
+  <div data-when><p>When the tooltip's areas look wrong for a new design.</p></div>
+  <div data-read><p>When a drawing's units do not match its coordinates, every area is off by the same factor. Fix it once with
+  the <a href="#t-scale">area scale</a>, or save the drawing with its transforms flattened and its width in the units of its
+  coordinates.</p></div>
+  <div data-typical><p>The bundled files have no unit, so they are read as px.</p></div>
+</section>
+
+<section data-term id="t-centroid" data-where="Edit Connections: the dots">
+  <h3>Centroid</h3>
+  <p>The centre of an electrode's shape: where connection lines start and end.</p>
+  <div data-what><p>The balance point of the outline. For an odd shape, such as an L-shaped reservoir, it can lie outside the
+  electrode.</p></div>
+  <div data-when><p>Edit Connections draws a dot on every centroid; you drag between dots to connect electrodes.</p></div>
+  <div data-read><p>The channel number is placed separately, at the roomiest point inside the shape, so it is not always on
+  the centroid.</p></div>
+</section>
+
+<section data-term id="t-connections-layer" data-where="layer named Connections">
+  <h3>Connections layer</h3>
+  <p>A layer of straight lines, one per pair of connected electrodes.</p>
+  <div data-what><p>A top-level group with an attribute whose whole value is <code>Connections</code> (any capitals). Each
+  <code>&lt;line&gt;</code> counts from its start to its end, and each <code>&lt;path&gt;</code> from its first point to its
+  last. A line connects the two electrodes its ends land on.</p></div>
+  <div data-when><p>MicroDrop writes this layer on Save whenever the connections were generated or edited, replacing the old
+  one.</p></div>
+  <div data-read><p>Lines that miss an electrode are tried again with the electrodes grown a little, up to ten times. A line that
+  crosses more than two electrodes connects the first and last. If any line still touches fewer than two electrodes, the
+  whole layer is ignored and MicroDrop <a href="#t-generate">generates</a> the connections instead; the device then opens
+  marked <span class="ui">(modified)</span>.</p></div>
+  <div data-typical><p><code>90_pin_array.svg</code> has 125 connections.</p></div>
+</section>
+
+<section data-term id="t-zones-layer" data-where="layer named Zones">
+  <h3>Zones layer</h3>
+  <p>Where the device's zone regions are kept.</p>
+  <div data-what><p>One entry per region, listing its zone type and its electrode ids. MicroDrop rewrites this layer every time
+  the device is saved. The Zones tutorial explains regions.</p></div>
+  <div data-read><p>A region that names electrodes the file does not have is trimmed or dropped on load, with a
+  <span class="ui">Zones Not Loaded</span> warning; saving then writes it without them.</p></div>
+</section>
+
+<section data-term id="t-scale-meta" data-where="metadata element: scale">
+  <h3>Stored scale</h3>
+  <p>The <a href="#t-scale">area scale</a>, kept in the file's <code>&lt;metadata&gt;</code> as
+  <code>&lt;scale&gt;0.92&lt;/scale&gt;</code>.</p>
+  <div data-what><p>Read on load; written on Save into the existing <code>&lt;metadata&gt;</code> element.</p></div>
+  <div data-read><p>A file without a <code>&lt;metadata&gt;</code> element does not keep the scale: Save writes everything else
+  and drops the scale without a warning. Inkscape files normally have one; check by reopening the device.</p></div>
+  <div data-typical><p>1.0 (no correction) when the file has none.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-load">
+<h2>Loading and saving</h2>
+<p class="intro">All in <span class="ui">File ▸ Device</span>, next to the protocol menu. MicroDrop keeps device files in one
+folder and opens the last one you loaded.</p>
+
+<section data-term id="t-repo" data-where="Documents ▸ Sci-Bots ▸ Microdrop ▸ Devices">
+  <h3>Devices folder</h3>
+  <p>The folder MicroDrop keeps device files in.</p>
+  <div data-what><p><code>Devices</code> inside MicroDrop's data folder in your <em>Documents</em>
+  (<code>Documents/Sci-Bots/Microdrop/Devices</code>). Whenever they are missing, MicroDrop puts two files there:
+  <code>90_pin_array.svg</code> and <code>pin_map.svg</code> (one electrode for each channel, 0 to 119, and no
+  connections).</p></div>
+  <div data-when><p>Save As opens here; Load opens at the current device's file. A device loaded from anywhere else is
+  copied in first.</p></div>
+  <div data-read><p>There is no setting for this folder in the Preferences window; it is always this one.</p></div>
+</section>
+
+<section data-term id="t-load" data-where="File ▸ Device ▸ Load…">
+  <h3>Load…</h3>
+  <p>Open a device file and show it in the Device Viewer.</p>
+  <div data-what><p>If the current device has unsaved changes, you are asked first (<a href="#t-modified">Unsaved Device SVG
+  Changes</a>). A file already in the Devices folder is opened as it is. A file from elsewhere is copied into the Devices
+  folder under the same name and the copy is opened. If a file of that name is already there, you see
+  <span class="ui">Warning: File Already Exists</span>:</p>
+  <table class="small">
+    <thead><tr><th>Button</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Overwrite</td><td>The file in the Devices folder is replaced by the one you picked.</td></tr>
+      <tr><td class="lbl">Save As...</td><td>Pick a new name (it suggests <code>&lt;name&gt; - Copy</code>); the copy gets that
+      name.</td></tr>
+      <tr><td class="lbl">Cancel</td><td>Nothing is loaded.</td></tr>
+    </tbody>
+  </table></div>
+  <div data-read><p>Loading clears the switched-on electrodes and the routes, closes the Edit Connections and Camera Alignment
+  windows, and empties the Undo list. The loaded file becomes the <a href="#t-default">Default Device Layout</a>.</p></div>
+</section>
+
+<section data-term id="t-load-errors" data-where="dialogs after Load">
+  <h3>Load errors and warnings</h3>
+  <p>What can go wrong when a file is read.</p>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>Dialog</th><th>Cause</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Error: Cannot Load Device SVG</td><td>The file could not be read: no Device layer or no electrode
+      paths in it (<em>No polygons found in SVG file</em>), a <code>data-channels</code> value that is not one whole number,
+      or broken SVG. The reason is in the message.</td><td>Fix the file and load it again. The previous device stays on screen,
+      but its routes and switched-on electrodes have been cleared. A file loaded from outside the Devices folder has already
+      been copied there.</td></tr>
+      <tr><td class="lbl">Could not load all electrodes from …</td><td>Some paths could not be turned into shapes; the message
+      lists them.</td><td>The rest of the chip loads. Redraw the listed paths.</td></tr>
+      <tr><td class="lbl">Zones Not Loaded</td><td>Zone regions name electrodes this file does not have.</td><td>Those regions are
+      dropped or trimmed. Saving writes them that way.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section data-term id="t-save" data-where="File ▸ Device ▸ Save / Save As…">
+  <h3>Save and Save As</h3>
+  <p>Write the device back to a file.</p>
+  <div data-what><p><span class="ui">Save</span> writes into the file you loaded: every electrode's channel (an electrode with
+  no channel loses its <code>data-channels</code>), the <a href="#t-scale-meta">scale</a>, the Connections layer if the
+  connections were generated or edited, and the Zones layer. The rest of the drawing is kept.</p>
+  <p><span class="ui">Save As…</span> opens in the Devices folder and writes the same things into a new file, adding
+  <code>.svg</code> if you leave it off.</p></div>
+  <div data-read><p>After Save As, MicroDrop still has the <em>original</em> file open: the title keeps its name, a later Save
+  writes to it, and next start opens it. To carry on in the copy, load the copy.</p></div>
+  <div data-when><p>After changing channels, connections, the area scale or zones.</p></div>
+</section>
+
+<section data-term id="t-modified" data-where="pane title; Unsaved Device SVG Changes">
+  <h3>(modified) and Unsaved Device SVG Changes</h3>
+  <p>How MicroDrop tells you the device has changes that are not in the file.</p>
+  <div data-what><p>A channel change, a new area scale, and generated or edited connections add
+  <span class="ui">(modified)</span> to the Device Viewer's title. Loading another device while it shows asks
+  <span class="ui wrap">Current device svg has unsaved changes. Proceed without saving?</span>: <span class="ui">Yes</span> loads and
+  drops the changes, <span class="ui">No</span> stops.</p></div>
+  <div data-read><p>Zone edits do not set the tag. Closing MicroDrop does not ask either: save before you quit.</p></div>
+  <div data-typical><p>No tag after a load, unless the file had no usable connections and MicroDrop generated them.</p></div>
+</section>
+
+<section data-term id="t-default" data-where="Preferences ▸ Device Viewer ▸ Main View ▸ Default Device Layout">
+  <h3>Default Device Layout and the bundled 90_pin_array.svg</h3>
+  <p>The device MicroDrop opens when it starts.</p>
+  <div data-what><p>Every successful load sets it, so MicroDrop reopens the last device you loaded. You can also pick a file
+  in the Preferences window; it is used the next time MicroDrop starts.</p></div>
+  <div data-read><p>If the setting is empty, or the file it names has been moved or deleted, MicroDrop falls back to
+  <code>90_pin_array.svg</code> in the Devices folder. Before it does, it <strong>replaces that file with the original that
+  ships with MicroDrop</strong> whenever the two differ. Edits saved into <code>90_pin_array.svg</code> are then lost, so
+  keep your own versions under another name (Save As, then load the copy).</p></div>
+  <div data-typical><p><code>Devices/90_pin_array.svg</code> on a new installation.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-channels">
+<h2>Channels</h2>
+<p class="intro">Each electrode has at most one channel. Several electrodes may share a channel, and an electrode may have
+none. The figure lets you try all three.</p>
+
+<section data-term id="t-numbers" data-where="Paths ▸ mode buttons ▸ Numbers, or N">
+  <h3>Edit Electrode Channels (Numbers mode)</h3>
+  <p>The mode for typing channel numbers onto electrodes.</p>
+  <div data-what><p><i data-glyph="Numbers" data-inline data-label="Edit Electrode Channels"></i> or <kbd>N</kbd>. The label
+  above the buttons reads <span class="ui">Mode: Channel Edit</span>. Click an electrode: its number is selected, so what you
+  type replaces it.</p>
+  <ul class="uses">
+    <li>Only digits can be typed or pasted.</li>
+    <li><kbd>Enter</kbd>, or a click somewhere else, keeps the new number. <kbd>Esc</kbd> keeps the old one.</li>
+    <li>Delete all the digits and press <kbd>Enter</kbd> to take the channel away.</li>
+    <li>A number from 0 to <a href="#t-nchannels">Number of channels</a> − 1 is accepted; a bigger one is ignored and the old
+    number comes back.</li>
+  </ul></div>
+  <div data-when><p>When the file's channels do not match how the chip is wired, or a new design has none yet.</p></div>
+  <div data-read><p>The change shows at once, marks the device <span class="ui">(modified)</span> and reaches the protocol tree.
+  <span class="ui">Undo</span> does not undo it: type the old number back. Press <kbd>N</kbd> again to return to the mode you
+  were in.</p></div>
+  <figure data-demo="channels" id="fig-channels">
+    <div class="controls">
+      <button type="button" id="ch-mode-numbers" aria-pressed="true">Numbers (N)</button>
+      <button type="button" id="ch-mode-edit" aria-pressed="false">Edit: switch on</button>
+      <label>Number of channels <input type="number" id="ch-n" min="1" max="1024" value="120"></label>
+      <button type="button" id="ch-reset">Start over</button>
+    </div>
+    <div class="df-grid">
+      <svg class="df" id="ch-chip" viewBox="0 0 332 252" role="img" aria-label="A three-by-four grid of electrodes with their channel numbers"></svg>
+      <div>
+        <div class="controls">
+          <label>Channel <input type="text" id="ch-edit" inputmode="numeric" autocomplete="off" disabled></label>
+        </div>
+        <p class="df-tip" id="ch-tip" aria-live="polite"></p>
+        <ul class="df-flags" id="ch-flags"></ul>
+      </div>
+    </div>
+    <p class="status" id="ch-status" aria-live="polite"></p>
+    <figcaption>In <strong>Numbers</strong>, click an electrode and type in the Channel box (in MicroDrop you type straight
+    onto the electrode); <kbd>Enter</kbd> keeps it, <kbd>Esc</kbd> drops it. Give two electrodes the same number, or clear one,
+    and watch the list. In <strong>Edit</strong>, click electrodes to switch them on: electrodes that share a channel light up
+    together, and one with no channel does nothing.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="t-nchannels" data-where="Preferences ▸ Device Viewer ▸ Main View ▸ Number of channels">
+  <h3>Number of channels</h3>
+  <p>How many channels your DropBot has; it sets the highest channel number you can type.</p>
+  <div data-what><p>Valid channels are 0 to this value − 1.</p></div>
+  <div data-read><p>It limits typing only. A device file with higher numbers still loads.</p></div>
+  <div data-typical><p>120.</p></div>
+</section>
+
+<section data-term id="t-shared" data-where="two electrodes, one number">
+  <h3>Several electrodes on one channel</h3>
+  <p>Allowed, and MicroDrop does not warn about it.</p>
+  <div data-what><p>The electrodes are wired together, so they always switch on and off together. Clicking one switches on all
+  of them; a route through one actuates all of them; droplet detection cannot tell them apart.</p></div>
+  <div data-when><p>On purpose, for large reservoirs split into several shapes, or for chips with fewer pads than
+  electrodes. By mistake, after a typo in Numbers mode.</p></div>
+  <div data-read><p>Their areas add up: the area MicroDrop uses for that channel is the sum of all its electrodes.</p></div>
+</section>
+
+<section data-term id="t-multi" data-where="data-channels with several numbers">
+  <h3>One electrode on several channels</h3>
+  <p>Not supported.</p>
+  <div data-what><p><code>data-channels</code> must hold one whole number. A list such as <code>"3,4"</code> (a form some older
+  device files use) stops the whole file loading with <a href="#t-load-errors">Error: Cannot Load Device SVG</a>.
+  Split such an electrode into one shape per channel, or keep one of the numbers.</p></div>
+</section>
+
+<section data-term id="t-nochannel" data-where="blank label, Channel: None">
+  <h3>Electrodes with no channel</h3>
+  <p>Drawn, but not wired to anything.</p>
+  <div data-what><p>A click does not switch it on, it cannot be disabled, and droplet detection and zone checks never see it. A route can still pass over it, but it is never actuated.</p></div>
+  <div data-when><p>Decorations, alignment marks, or electrodes you have not numbered yet.</p></div>
+  <div data-read><p><strong>Number every electrode before you build a protocol.</strong> While any electrode has no channel, the
+  protocol tree does not take up the device's channel list (an error goes to the log) and keeps the one it had before, so
+  protocol steps may not switch the electrodes you expect.</p></div>
+</section>
+
+<section data-term id="t-text-layer" data-where="Camera Controls ▸ Alpha Settings ▸ Electrode text">
+  <h3>Channel numbers on the chip</h3>
+  <p>The numbers drawn on the electrodes are a layer you can fade or hide.</p>
+  <div data-what><p>The <span class="ui">Electrode text</span> row of <span class="ui">Alpha Settings</span> sets their
+  opacity; its eye hides them. The <span class="ui">Connections</span> row does the same for the connection lines. The Device
+  Viewer Tutorial explains Alpha Settings.</p></div>
+  <div data-read><p>The numbers turn with the chip when you rotate the device view, so they stay upright. Rotation is a view
+  setting kept in MicroDrop's preferences, not in the device file.</p></div>
+  <div data-typical><p>Both shown at 100.</p></div>
+</section>
+
+<section data-term id="t-disable" data-where="right-click an electrode ▸ Disable Electrode">
+  <h3>Disable Electrode</h3>
+  <p>Take a damaged electrode out of use. It works on the channel, not the shape.</p>
+  <div data-what><p>Disabling one electrode disables its channel, so every electrode sharing that channel turns red and stops
+  responding together. The item appears only on electrodes that have a channel; <span class="ui">Enable Electrode</span>
+  brings it back.</p></div>
+  <div data-read><p>When the DropBot reports channels it has disabled itself, the Device Viewer shows that list instead. The
+  Advanced Mode preference <span class="ui">Allow hardware disables</span> (on to start with) controls this. Disabled channels
+  are not saved in the device file.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-connections">
+<h2>Connections</h2>
+<p class="intro">A connection says "a droplet can move straight from this electrode to that one". MicroDrop uses the
+connections, not the shapes, whenever it needs to know which electrodes are next to each other.</p>
+<ul class="uses">
+  <li><strong>Drawing a route</strong> (Draw and Edit modes): dragging onto an electrode adds it to the route only if it is
+  connected to the last one.</li>
+  <li><strong>Autoroute</strong> finds the shortest chain of connections between two electrodes. No chain, no route.</li>
+  <li><strong>Arrow-key stepping</strong> moves to the connected electrode in that direction.</li>
+  <li><strong>Wide routes</strong> (the Lanes settings) use them to find the electrodes beside a route, and zones use them to
+  tell which electrodes of a region touch.</li>
+</ul>
+
+<section data-term id="t-generate" data-where="File ▸ Device ▸ Generate Connections">
+  <h3>Generate Connections</h3>
+  <p>Work out the connections from the electrode shapes, replacing all the ones there are.</p>
+  <div data-what><p>MicroDrop grows every outline by a small margin (the average electrode area ÷ 100, read as millimetres),
+  fills in any dents, and connects each pair whose grown outlines touch, except pairs that sit diagonally: when the line between their centres is
+  between 30° and 70° away from straight up-and-down, they are left out.</p></div>
+  <div data-when><p>For a new design without a Connections layer (MicroDrop also does this by itself on load), or to start over
+  after editing.</p></div>
+  <div data-read><p>Generating replaces hand edits too, and the Device Viewer's Undo cannot bring them back. Always look the result over in Edit
+  Connections: electrodes drawn with a wider gap get no connection, a big reservoir may connect only to the electrode straight
+  across from its centre, and on a staggered (brick) layout the 30°–70° rule keeps the slanted pairs between rows but
+  drops them between columns, so a layout staggered by columns comes out as separate columns.</p></div>
+  <div data-typical><p>Marks the device <span class="ui">(modified)</span>; Save writes a new Connections layer.</p></div>
+</section>
+
+<section data-term id="t-edit-connections" data-where="File ▸ Device ▸ Edit Connections">
+  <h3>Edit Connections</h3>
+  <p>A window for adding and deleting connections by hand.</p>
+  <div data-what><p>The window shows the chip alone, with a dot on every <a href="#t-centroid">centroid</a> and a white line for
+  each connection. Its title row reads <span class="ui">Connections — </span> and the device's name; hover it for the
+  instructions.</p>
+  <table class="small">
+    <thead><tr><th>To</th><th>Do this</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Add a connection</td><td>Drag from one dot to another. The line snaps onto the dot nearest the
+      pointer. Connecting an electrode to itself, or twice, does nothing.</td></tr>
+      <tr><td class="lbl">Select</td><td>Click a line (it turns orange). <kbd>Ctrl</kbd>+click adds or removes lines;
+      <kbd>Shift</kbd>+drag draws a box.</td></tr>
+      <tr><td class="lbl">Delete</td><td><kbd>Delete</kbd> or <kbd>Backspace</kbd>, or the delete button.</td></tr>
+      <tr><td class="lbl">Undo / redo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or
+      <kbd>Ctrl</kbd>+<kbd>Y</kbd>, while the chip has the keyboard focus (click it first).</td></tr>
+      <tr><td class="lbl">Zoom and pan</td><td>Scroll to zoom; drag the picture (not a dot or a line) to pan.</td></tr>
+    </tbody>
+  </table></div>
+  <div data-when><p>After generating, to fix what the rule got wrong; or to block a path on purpose.</p></div>
+  <div data-read><p>There is nothing to confirm: every edit goes straight to the device and shows in the Device Viewer, and
+  Save writes it. Its undo history belongs to the window and starts empty each time it opens; the Device Viewer's Undo does
+  not touch connections. Loading another device closes the window.</p></div>
+  <figure data-demo="connections" id="fig-connections">
+    <div class="controls">
+      <button type="button" id="cn-generate">Generate Connections</button>
+      <button type="button" id="cn-delete" disabled>Delete selected</button>
+      <button type="button" id="cn-undo" disabled>Undo</button>
+      <button type="button" id="cn-redo" disabled>Redo</button>
+      <button type="button" id="cn-revert" disabled>Revert all</button>
+    </div>
+    <svg class="df" id="cn-chip" viewBox="0 0 640 302" role="img" aria-label="A small chip: a tall reservoir on the left, a three-by-five grid of electrodes, and one electrode set apart on the right. White lines join connected electrode centres; a pink path shows the autoroute from the droplet to the target."></svg>
+    <p class="status" id="cn-status" aria-live="polite"></p>
+    <figcaption>The droplet (green) sits in the reservoir; the dashed yellow electrode on the right is the target. The pink path
+    is what Autoroute would find. Drag from dot to dot (or click one dot, then another) to add a connection; click a line and
+    press <kbd>Delete</kbd> to remove it. The target was drawn a little too far from its neighbour, so generating leaves it
+    unconnected, and the reservoir connects only to the middle row. In MicroDrop, Generate Connections is in the
+    <span class="ui">File ▸ Device</span> menu, not in the window.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="t-orphan-routes" data-where="routes drawn before a connection was removed">
+  <h3>Routes over removed connections</h3>
+  <p>Existing routes stay as they are.</p>
+  <div data-what><p>Deleting a connection does not change routes or protocol steps that already use it; MicroDrop only notes it
+  in the log. New routes cannot be drawn across it.</p></div>
+  <div data-read><p>Redraw such routes if the connection was removed because the droplet cannot actually make that move.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-area">
+<h2>Area and calibration</h2>
+<p class="intro">The volume readout turns a capacitance reading into microlitres using electrode areas and two calibration
+values. If the areas are wrong, the volume is wrong by the same factor, even after calibrating.</p>
+
+<section data-term id="t-area" data-where="tooltip line Area (mm²)">
+  <h3>Electrode area</h3>
+  <p>The size of an electrode in mm², worked out from its shape and multiplied by the area scale.</p>
+  <div data-what><p>The tooltip shows it with two decimals. The <span class="ui">Electrode Area Scaler</span> shows both the
+  <span class="ui">Original Area</span> from the drawing and the <span class="ui">Scaled Area</span>. The area of a channel is
+  the sum of its electrodes.</p></div>
+  <div data-when><p>Check it once for each new design against the chip's real dimensions.</p></div>
+  <div data-read><p>MicroDrop adds up the areas of the switched-on channels for each calibration and volume reading.</p></div>
+  <div data-typical><p>About 4.3 mm² for the small square electrodes of <code>90_pin_array.svg</code> (scale 1.0).</p></div>
+</section>
+
+<section data-term id="t-scale" data-where="right-click an electrode ▸ Adjust Electrode Area Scale">
+  <h3>Area scale (Electrode Area Scaler)</h3>
+  <p>One number that multiplies every electrode's area, to make the drawing true to size.</p>
+  <div data-what><p>Right-click an electrode, choose <span class="ui">Adjust Electrode Area Scale</span>, enter that electrode's
+  real area in <span class="ui">Measured Area (mm²)</span>. <span class="ui">Scaling Factor</span> shows Measured Area ÷
+  Original Area; <span class="ui">Set Scale</span> applies it to the whole chip, <span class="ui">Cancel</span> does
+  nothing.</p></div>
+  <div data-when><p>When the drawing's units are off (see <a href="#t-units">Drawing units</a>) or the chip was made at a
+  different size than drawn.</p></div>
+  <div data-read><p>The factor always starts from the original areas, so setting it again replaces the old one; it does not
+  stack. It marks the device <span class="ui">(modified)</span> and is saved in the file's <a href="#t-scale-meta">metadata</a>.
+  Measure <span class="ui">Cl</span> and <span class="ui">Cf</span> again after changing it.</p></div>
+  <div data-typical><p>1.0. The <span class="ui">Measured Area</span> box always starts at 1.0, not at the current area:
+  type the real area before you click Set Scale.</p></div>
+</section>
+
+<section data-term id="t-cl" data-where="Calibration section, or right-click ▸ Measure Liquid Capacitance">
+  <h3>Cl (liquid capacitance)</h3>
+  <p>The capacitance of liquid-covered electrode per mm².</p>
+  <div data-what><p>The DropBot's latest capacitance reading divided by the area of the switched-on electrodes.</p></div>
+  <div data-when><p>Once per chip and liquid: switch on electrodes completely covered by the liquid you will use, wait for a
+  steady reading, then measure.</p></div>
+  <div data-read><p>Shown with two significant figures, in nF/mm², pF/mm² or fF/mm² (1 nF = 1000 pF = 1,000,000 fF), whichever
+  keeps the number readable; <span class="ui">-</span> until measured. Nothing happens if no electrode is switched on or there
+  is no reading yet (no DropBot connected).</p></div>
+  <div data-typical><p>No fixed value: it depends on the chip's coating and the liquid. It must be higher than Cf.</p></div>
+</section>
+
+<section data-term id="t-cf" data-where="Calibration section, or right-click ▸ Measure Filler Capacitance">
+  <h3>Cf (filler capacitance)</h3>
+  <p>The capacitance of electrode covered only by filler (air or oil) per mm².</p>
+  <div data-what><p>Measured like Cl, with switched-on electrodes that have no liquid on them.</p></div>
+  <div data-when><p>After Cl, on the same chip.</p></div>
+  <div data-read><p>Without it, the volume readout takes Cf as 0. If Cf is not lower than Cl, the readout shows
+  <span class="ui wrap">Liquid calibration must exceed the filler calibration.</span></p></div>
+  <div data-typical><p>Lower than Cl.</p></div>
+</section>
+
+<section data-term id="t-reset" data-where="Calibration section, right-hand button">
+  <h3>Reset Measurements</h3>
+  <p>Clears Cl and Cf back to <span class="ui">-</span>.</p>
+  <div data-read><p>Cl and Cf are kept in MicroDrop's preferences, so they survive a restart and are shared by every device.
+  Reset and measure again when you change chip, coating or liquid.</p></div>
+</section>
+
+<section data-term id="t-volume" data-where="Dropbot Status ▸ Volume; Preferences ▸ Device Viewer ▸ Volume Readout">
+  <h3>Plate gap and the volume readout</h3>
+  <p>The volume is the liquid-covered area times the gap between the plates.</p>
+  <div data-what><p>Covered area = (reading − Cf × switched-on area) ÷ (Cl − Cf); volume = covered area × gap. The gap is the
+  <span class="ui">Plate gap (µm)</span> preference.</p></div>
+  <div data-read><p>Until Cl is measured the readout says <span class="ui wrap">Measure the liquid capacitance to calibrate.</span>
+  With nothing switched on it says <span class="ui">No actuated electrodes.</span> A covered area larger than the switched-on
+  area means liquid outside them, or a stale calibration.</p></div>
+  <div data-typical><p>Plate gap 254 µm.</p></div>
+  <figure data-demo="area" id="fig-area">
+    <div class="table-wrap">
+    <table class="small calc">
+      <thead><tr><th colspan="2">1. The drawing</th></tr></thead>
+      <tbody>
+        <tr><td>A square electrode drawn with sides of</td><td><input type="number" id="ar-side" value="7.88" step="0.01" min="0.01"> <select id="ar-unit"><option value="px" selected>px (or no unit)</option><option value="mm">mm</option><option value="cm">cm</option><option value="pt">pt</option><option value="pc">pc</option></select></td></tr>
+        <tr><td>Original Area (mm²)</td><td class="v" id="ar-original"></td></tr>
+      </tbody>
+      <thead><tr><th colspan="2">2. Electrode Area Scaler</th></tr></thead>
+      <tbody>
+        <tr><td>Measured Area (mm²)</td><td><input type="number" id="ar-measured" value="4.0" step="0.01" min="0"></td></tr>
+        <tr><td>Scaling Factor</td><td class="v" id="ar-factor"></td></tr>
+        <tr><td>Scaled Area (mm²), as in the tooltip</td><td class="v" id="ar-scaled"></td></tr>
+      </tbody>
+      <thead><tr><th colspan="2">3. Calibration (example readings)</th></tr></thead>
+      <tbody>
+        <tr><td>Electrodes switched on</td><td><input type="number" id="ar-n" value="2" min="0" max="12" step="1"></td></tr>
+        <tr><td>Reading with liquid on them (pF)</td><td><input type="number" id="ar-cl-pf" value="16" step="0.1" min="0"></td></tr>
+        <tr><td>Reading with filler only (pF)</td><td><input type="number" id="ar-cf-pf" value="4" step="0.1" min="0"></td></tr>
+        <tr><td>Calibration shows</td><td class="v" id="ar-cal"></td></tr>
+      </tbody>
+      <thead><tr><th colspan="2">4. Volume readout</th></tr></thead>
+      <tbody>
+        <tr><td>Live reading (pF), same electrodes on</td><td><input type="number" id="ar-live" value="12" step="0.1" min="0"></td></tr>
+        <tr><td>Plate gap (µm)</td><td><input type="number" id="ar-gap" value="254" step="1" min="1" max="2000"></td></tr>
+        <tr><td>Covered area · volume · fill</td><td class="v" id="ar-volume"></td></tr>
+        <tr><td>Same readings with area scale 1.0</td><td class="v" id="ar-unscaled"></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="status" id="ar-status" aria-live="polite"></p>
+    <figcaption>The arithmetic is MicroDrop's own. Try a different unit or Measured Area: Cl and Cf change, and the volume
+    changes by exactly the scaling factor, because everything is calibrated on the same areas.</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-icons">
+<h2>Buttons and icons</h2>
+<p class="intro">Hover over a button in MicroDrop to see the tooltip quoted here.</p>
+
+<section data-term id="tb-connections" data-where="Edit Connections window, title row">
+  <h3>Edit Connections buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_VISIBILITY" data-on></i><i data-glyph="ICON_VISIBILITY_OFF"></i></td><td class="lbl">Show the electrode centroid dots</td><td>Shows or hides the dots. Lines stay.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_FIT_SCREEN"></i></td><td class="lbl">Fit the device in the view</td><td>Zooms so the whole chip fits.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_UNDO"></i></td><td class="lbl">Undo the last connection edit</td><td>Greyed out until you have made an edit in this window.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_REDO"></i></td><td class="lbl">Redo the last undone edit</td><td>Greyed out until you undo.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_RESTORE"></i></td><td class="lbl">Revert all connections to how they were when this dialog opened</td><td>Asks first; can itself be undone.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Delete the selected connections</td><td>Greyed out until a line is selected.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section data-term id="tb-calibration" data-where="Device Viewer side panel ▸ Calibration">
+  <h3>Calibration buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="airwave"></i></td><td class="lbl">Measure filler Capacitance</td><td>Sets <a href="#t-cf">Cf</a> from the switched-on electrodes. Top row.</td></tr>
+      <tr><td class="icons"><i data-glyph="humidity_high"></i></td><td class="lbl">Measure Liquid Capacitance</td><td>Sets <a href="#t-cl">Cl</a>. Bottom row.</td></tr>
+      <tr><td class="icons"><i data-glyph="reset_wrench"></i></td><td class="lbl">Reset Measurements</td><td>Clears both (<a href="#t-reset">Reset Measurements</a>).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section data-term id="tb-menu" data-where="right-click an electrode">
+  <h3>Right-click items for one electrode</h3>
+  <table class="small">
+    <thead><tr><th>Item</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Disable Electrode / Enable Electrode</td><td>Only on an electrode with a channel: see <a href="#t-disable">Disable Electrode</a>.</td></tr>
+      <tr><td class="lbl">Adjust Electrode Area Scale</td><td>Opens the <a href="#t-scale">Electrode Area Scaler</a> for that electrode.</td></tr>
+    </tbody>
+  </table>
+  <p>The rest of the right-click menu is in the Device Viewer Tutorial.</p>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-protocols">
+<h2>Protocols and devices</h2>
+<p class="intro">A protocol remembers electrodes by id, not by position, and keeps a copy of the channel each id had.</p>
+
+<section data-term id="t-protocol-map" data-where="saved inside the protocol file">
+  <h3>What a protocol stores about the device</h3>
+  <p>Each step's electrodes and routes as electrode ids, plus the device's electrode-to-channel list.</p>
+  <div data-what><p>The list is kept up to date from the loaded device: when you load a device or change a channel, the open
+  protocol takes the new list, and the next protocol save writes it. Runs use it to turn a step's electrodes into channels.
+  The device file itself is not stored in the protocol.</p></div>
+  <div data-read><p>Load the right device before you open or run a protocol.</p></div>
+</section>
+
+<section data-term id="t-protocol-other" data-where="Protocol warnings dialog">
+  <h3>Opening a protocol made on another device</h3>
+  <p>MicroDrop compares the protocol with the device on screen and warns you.</p>
+  <div data-what><p>A <span class="ui">Protocol warnings</span> dialog lists what does not match, with details:</p>
+  <ul class="uses">
+    <li><em>N electrode(s) referenced by this protocol do not exist on the current device</em>, with the steps that use
+    them;</li>
+    <li><em>N electrode(s) map to a different channel on the current device than the protocol expects</em>, for example
+    <code>electrode012: protocol ch 12 -> device ch 40</code>.</li>
+  </ul>
+  <p><span class="ui">Proceed anyway</span> opens it, <span class="ui">Cancel</span> does not.</p></div>
+  <div data-read><p>If you proceed, the protocol takes the current device's channels: a step still names the same electrode
+  ids, and switches whatever channels those ids have now. Electrodes the device does not have are not switched.</p></div>
+  <div data-when><p>When a chip design was renumbered, or a protocol is shared between labs with different devices.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Save As keeps the original open.</strong> Load the copy to work on it; a later Save writes to the original.</li>
+    <li><strong>Do not keep your edits in <code>90_pin_array.svg</code>.</strong> When the Default Device Layout is empty or
+    names a missing file, MicroDrop overwrites that file with the bundled original.</li>
+    <li><strong>Zone edits are not tracked</strong> by <span class="ui">(modified)</span>, and nothing asks you to save when
+    MicroDrop closes.</li>
+    <li><strong>The scale needs a <code>&lt;metadata&gt;</code> element</strong> in the file, or it is lost on Save without a
+    warning.</li>
+    <li><strong>Number every electrode</strong> before building a protocol; an electrode with no channel stops the protocol
+    tree from picking up channel changes.</li>
+    <li><strong>One channel per electrode.</strong> A comma list in <code>data-channels</code> stops the file loading.</li>
+    <li><strong>Review generated connections.</strong> Wide gaps, big reservoirs and staggered layouts can leave out
+    connections you need, and generating again throws away hand edits.</li>
+    <li><strong>Calibrate after changing the area scale or the chip.</strong> Cl and Cf are shared by all devices, and
+    MicroDrop divides them by the new scale whenever the scale changes, also when you load a device whose file stores a
+    scale. That is only right when the scale was 1.0 before.</li>
+    <li><strong>Calibration needs a connected DropBot</strong> and liquid or filler on the switched-on electrodes.</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Device / device file</dt><dd>The SVG drawing of one chip design.</dd>
+  <dt>Layer</dt><dd>A named group in the drawing: Device, Connections, Zones.</dd>
+  <dt>Electrode id</dt><dd>An electrode's permanent name in the file, such as <code class="id">electrode012</code>.</dd>
+  <dt>Channel</dt><dd>The DropBot output an electrode is wired to; switching works per channel.</dd>
+  <dt>Connection / neighbour</dt><dd>Two electrodes a droplet can move between directly.</dd>
+  <dt>Centroid</dt><dd>The centre of an electrode's shape.</dd>
+  <dt>Area scale</dt><dd>The factor that makes the drawing's areas match the real chip.</dd>
+  <dt>Cl / Cf</dt><dd>Capacitance per mm² with liquid / with filler only.</dd>
+  <dt>Filler</dt><dd>What surrounds the droplets between the plates: air or oil.</dd>
+  <dt>Plate gap</dt><dd>The distance between the chip's top and bottom plates.</dd>
+  <dt>Actuate</dt><dd>Switch electrodes on, so they pull liquid.</dd>
+</dl>
+</section>
+
+<script>
+/* device-files-rules:start */
+/* Mirrors MicroDrop's own rules, checked against the Python by
+   device_viewer/tests/test_device_files_tutorial_math.py. */
+
+/* svg_outline: millimetres per drawing unit (no unit counts as px). */
+var MM_PER_UNIT = { mm: 1, cm: 10, pt: 25.4 / 72, pc: 25.4 / 6, px: 25.4 / 96 };
+
+function toMm(value, unit) { return value * MM_PER_UNIT[unit || "px"]; }
+
+/* ScaleEditViewController: Measured Area / Original Area. */
+function scalingFactor(measuredArea, originalArea) {
+  return originalArea > 0 ? measuredArea / originalArea : 0;
+}
+
+/* ElectrodeInteractionService._parse_channel_text: "" unassigns (null), an
+   in-range number is kept, anything else reverts. */
+function parseChannelText(text, numberOfChannels) {
+  text = text.trim();
+  if (text === "") { return null; }
+  if (!/^[0-9]+$/.test(text)) { return "revert"; }
+  var value = parseInt(text, 10);
+  return value >= 0 && value < numberOfChannels ? value : "revert";
+}
+
+/* CalibrationModel.measure_*_capacitance: reading / switched-on area, or no
+   change (null) without electrodes or a reading. */
+function capacitancePerArea(readingPf, areaMm2, anyElectrodeOn) {
+  if (!anyElectrodeOn || areaMm2 === 0 || !readingPf) { return null; }
+  return readingPf / areaMm2;
+}
+
+/* Python's f"{value:.2g}": two significant figures, ties to even, an
+   exponent below 1e-4 or from 100 up. */
+function formatG2(value) {
+  if (value === 0) { return "0"; }
+
+  var sign = value < 0 ? "-" : "";
+  var parts = Math.abs(value).toExponential(20).split("e");
+  var digits = parts[0].replace(".", ""), exponent = parseInt(parts[1], 10);
+  var lead = parseInt(digits.slice(0, 2), 10), rest = digits.slice(2);
+  var roundUp = rest[0] > "5" || (rest[0] === "5" && (/[1-9]/.test(rest.slice(1)) || lead % 2 === 1));
+
+  if (roundUp) { lead += 1; }
+  if (lead === 100) { lead = 10; exponent += 1; }
+
+  var mantissa = String(lead), text;
+
+  if (exponent < -4 || exponent >= 2) {
+    var size = Math.abs(exponent);
+    text = (mantissa[0] + "." + mantissa[1]).replace(/\.0$/, "") + "e" + (exponent < 0 ? "-" : "+") +
+      (size < 10 ? "0" : "") + size;
+  } else if (exponent === 1) {
+    text = mantissa;
+  } else {
+    text = exponent === 0 ? mantissa[0] + "." + mantissa[1] :
+      "0." + new Array(-exponent).join("0") + mantissa;
+    text = text.replace(/0+$/, "").replace(/\.$/, "");
+  }
+
+  return sign + text;
+}
+
+/* calibration_view.widget.format_value, with the unit as plain text. */
+function formatCapacitance(value) {
+  var unit = "pF/mm²";
+  if (value >= 99.5) { unit = "nF/mm²"; value = value / 1000; }
+  else if (value <= 0.01) { unit = "fF/mm²"; value = value * 1000; }
+  return formatG2(value) + " " + unit;
+}
+
+/* VolumeEstimateModel: covered area, volume (µL) and fill fraction. */
+function volumeEstimate(capacitancePf, areaMm2, liquidPerArea, fillerPerArea, gapUm) {
+  var filler = fillerPerArea || 0;
+  var status = "";
+
+  if (liquidPerArea === null || liquidPerArea === undefined) { status = "Measure the liquid capacitance to calibrate."; }
+  else if (liquidPerArea <= filler) { status = "Liquid calibration must exceed the filler calibration."; }
+  else if (areaMm2 <= 0) { status = "No actuated electrodes."; }
+  else if (capacitancePf <= 0) { status = "No capacitance reading."; }
+
+  if (status) { return { status: status, covered: 0, volume: 0, fill: 0 }; }
+
+  var covered = Math.max((capacitancePf - filler * areaMm2) / (liquidPerArea - filler), 0);
+  return { status: "", covered: covered, volume: covered * gapUm / 1000, fill: covered / areaMm2 };
+}
+
+/* SvgUtil.find_neighbours_all on axis-aligned rectangles (mm): grow each by
+   the mean area / 100, connect the pairs that touch, skip the diagonal ones
+   (30-70 degrees from vertical). Returns id -> sorted neighbour ids. */
+function generateConnections(rects) {
+  var total = 0;
+  rects.forEach(function (r) { total += r.w * r.h; });
+  var margin = total / rects.length / 100;
+  var adjacency = {};
+
+  function add(a, b) {
+    (adjacency[a] = adjacency[a] || []).indexOf(b) < 0 && adjacency[a].push(b);
+  }
+
+  rects.forEach(function (a) {
+    rects.forEach(function (b) {
+      if (a === b) { return; }
+      var gapX = Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w));
+      var gapY = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h));
+
+      if (Math.sqrt(gapX * gapX + gapY * gapY) > 2 * margin) { return; }
+
+      var angle = Math.abs(Math.atan2((a.x + a.w / 2) - (b.x + b.w / 2), (a.y + a.h / 2) - (b.y + b.h / 2)) * 180 / Math.PI);
+      if (angle > 90) { angle = 180 - angle; }
+
+      if (angle < 30 || angle > 70) { add(a.id, b.id); add(b.id, a.id); }
+    });
+  });
+
+  Object.keys(adjacency).forEach(function (key) { adjacency[key].sort(); });
+  return adjacency;
+}
+
+/* The connections figure's chip, in mm: a reservoir, a 3 x 5 grid with
+   0.06 mm gaps, and a target drawn 0.4 mm from its neighbour. */
+var CONNECTIONS_LAYOUT = (function () {
+  var rects = [{ id: "reservoir", x: 0, y: 0, w: 2.94, h: 6.12 }];
+  for (var row = 0; row < 3; row++) {
+    for (var col = 0; col < 5; col++) {
+      rects.push({ id: "e" + row + col, x: 3 + col * 2.06, y: row * 2.06, w: 2, h: 2 });
+    }
+  }
+  rects.push({ id: "target", x: 13.64, y: 2.06, w: 2, h: 2 });
+  return rects;
+}());
+/* device-files-rules:end */
+
+/* Breadth-first search over the connections, like Autoroute. */
+function shortestPath(from, to, adjacency) {
+  var previous = {}, queue = [from], seen = {};
+  seen[from] = true;
+
+  while (queue.length) {
+    var here = queue.shift();
+    if (here === to) {
+      var path = [to];
+      while (path[0] !== from) { path.unshift(previous[path[0]]); }
+      return path;
+    }
+    (adjacency[here] || []).forEach(function (next) {
+      if (!seen[next]) { seen[next] = true; previous[next] = here; queue.push(next); }
+    });
+  }
+
+  return null;
+}
+
+Tutorial.demo("channels", function (figure, T) {
+  var COLS = 4, ROWS = 3, SIZE = 76, GAP = 4, PAD = 8;
+  var START = [0, 1, 2, 3, 7, 5, 6, 7, 8, 9, null, 11];
+  var svg = figure.querySelector("#ch-chip"), field = figure.querySelector("#ch-edit");
+  var tip = figure.querySelector("#ch-tip"), flags = figure.querySelector("#ch-flags");
+  var status = figure.querySelector("#ch-status"), nInput = figure.querySelector("#ch-n");
+  var modeNumbers = figure.querySelector("#ch-mode-numbers"), modeEdit = figure.querySelector("#ch-mode-edit");
+  var cells = [], mode = "numbers", editing = null, actuated = {}, message = "";
+
+  function id(index) { return "electrode" + ("00" + index).slice(-3); }
+
+  function listOf(names) {
+    return names.length < 3 ? names.join(" and ") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  function build() {
+    T.clear(svg);
+    svg.appendChild(T.el("rect", { class: "bg", x: 0, y: 0, width: 332, height: 252 }));
+
+    for (var i = 0; i < COLS * ROWS; i++) {
+      var x = PAD + (i % COLS) * (SIZE + GAP), y = PAD + Math.floor(i / COLS) * (SIZE + GAP);
+      var rect = T.el("rect", { class: "el", x: x, y: y, width: SIZE, height: SIZE, rx: 3 });
+      var label = T.el("text", { class: "num", x: x + SIZE / 2, y: y + SIZE / 2 });
+      var tag = T.el("text", { class: "tag", x: x + SIZE / 2, y: y + SIZE - 8 });
+      rect.addEventListener("click", onClick.bind(null, i));
+      svg.appendChild(rect); svg.appendChild(label); svg.appendChild(tag);
+      cells[i] = { rect: rect, label: label, tag: tag };
+    }
+  }
+
+  function channelGroups() {
+    var groups = {};
+    cells.forEach(function (cell, i) {
+      if (cell.channel !== null) { (groups[cell.channel] = groups[cell.channel] || []).push(i); }
+    });
+    return groups;
+  }
+
+  function tooltip(i) {
+    var cell = cells[i];
+    return "Electrode ID: " + id(i) + "\nChannel: " + (cell.channel === null ? "None" : cell.channel) +
+      "\nArea (mm²): 4.35";
+  }
+
+  function onClick(i) {
+    if (mode === "numbers") {
+      if (editing !== null && editing !== i) { commit(); }
+      editing = i;
+      field.disabled = false;
+      field.value = cells[i].channel === null ? "" : String(cells[i].channel);
+      field.focus();
+      field.select();
+      message = "Editing " + id(i) + ": type a number, Enter to keep, Esc to drop.";
+    } else {
+      var channel = cells[i].channel;
+      if (channel === null) {
+        message = id(i) + " has no channel: the click does nothing.";
+      } else {
+        actuated[channel] = !actuated[channel];
+        var count = channelGroups()[channel].length;
+        message = "Channel " + channel + (actuated[channel] ? " on" : " off") +
+          (count > 1 ? ": all " + count + " of its electrodes switch together." : ".");
+      }
+    }
+    tip.textContent = tooltip(i);
+    render();
+  }
+
+  function commit() {
+    if (editing === null) { return; }
+    var i = editing, value = parseChannelText(field.value, +nInput.value || 120);
+
+    if (value === "revert") {
+      message = "\"" + field.value.trim() + "\" is not between 0 and " + ((+nInput.value || 120) - 1) +
+        ": the old number stays.";
+    } else {
+      cells[i].channel = value;
+      message = value === null ? id(i) + " now has no channel." : id(i) + " is now channel " + value + ".";
+    }
+    stopEditing(i);
+  }
+
+  function stopEditing(i) {
+    editing = null;
+    field.value = "";
+    field.disabled = true;
+    tip.textContent = tooltip(i);
+    render();
+  }
+
+  function setMode(next) {
+    if (editing !== null) { commit(); }
+    mode = next;
+    modeNumbers.setAttribute("aria-pressed", String(mode === "numbers"));
+    modeEdit.setAttribute("aria-pressed", String(mode === "edit"));
+    message = mode === "numbers" ? "Mode: Channel Edit. Click an electrode to type its channel." :
+      "Mode: Edit. Click electrodes to switch them on and off.";
+    render();
+  }
+
+  function render() {
+    var groups = channelGroups(), items = [];
+
+    cells.forEach(function (cell, i) {
+      var shared = cell.channel !== null && groups[cell.channel].length > 1;
+      var on = cell.channel !== null && actuated[cell.channel];
+      cell.rect.setAttribute("class", "el" + (on ? " on" : "") + (cell.channel === null ? " none" : "") +
+        (shared ? " shared" : "") + (editing === i ? " editing" : ""));
+      cell.label.textContent = cell.channel === null ? "" : cell.channel;
+      cell.tag.textContent = id(i).replace("electrode", "#");
+    });
+
+    Object.keys(groups).forEach(function (channel) {
+      if (groups[channel].length > 1) {
+        items.push(["shared", "Channel " + channel + " is on " + listOf(groups[channel].map(id)) +
+          ": they always switch together."]);
+      }
+    });
+    cells.forEach(function (cell, i) {
+      if (cell.channel === null) {
+        items.push(["none", id(i) + " has no channel: it cannot be switched, disabled or detected."]);
+      }
+    });
+
+    T.clear(flags);
+    if (!items.length) { items.push(["", "Every electrode has its own channel."]); }
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+      li.className = item[0];
+      li.textContent = item[1];
+      flags.appendChild(li);
+    });
+
+    status.textContent = message;
+  }
+
+  function reset() {
+    editing = null;
+    field.value = "";
+    field.disabled = true;
+    actuated = {};
+    START.forEach(function (channel, i) { cells[i].channel = channel; });
+    tip.textContent = tooltip(5);
+    setMode("numbers");
+  }
+
+  field.addEventListener("input", function () {
+    var digits = field.value.replace(/[^0-9]/g, "");
+    if (digits !== field.value) { field.value = digits; }
+  });
+  field.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") { event.preventDefault(); commit(); }
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      var i = editing;
+      message = "Edit dropped: " + id(i) + " keeps its number.";
+      stopEditing(i);
+    }
+  });
+  field.addEventListener("blur", function () { if (editing !== null) { commit(); } });
+  modeNumbers.addEventListener("click", function () { setMode("numbers"); });
+  modeEdit.addEventListener("click", function () { setMode("edit"); });
+  nInput.addEventListener("change", render);
+  figure.querySelector("#ch-reset").addEventListener("click", reset);
+
+  build();
+  reset();
+});
+
+Tutorial.demo("connections", function (figure, T) {
+  var SCALE = 38, OX = 16, OY = 54;
+  var svg = figure.querySelector("#cn-chip"), status = figure.querySelector("#cn-status");
+  var buttons = {};
+  ["generate", "delete", "undo", "redo", "revert"].forEach(function (key) {
+    buttons[key] = figure.querySelector("#cn-" + key);
+  });
+  var rects = {}, centres = {}, adjacency = {}, baseline = null, selected = [], undoStack = [], redoStack = [];
+  var armed = null, drag = null, layer = { links: null, dots: null, path: null, pending: null };
+
+  CONNECTIONS_LAYOUT.forEach(function (r) {
+    rects[r.id] = r;
+    centres[r.id] = [OX + (r.x + r.w / 2) * SCALE, OY + (r.y + r.h / 2) * SCALE];
+  });
+
+  function copy(map) {
+    var out = {};
+    Object.keys(map).forEach(function (key) { out[key] = map[key].slice(); });
+    return out;
+  }
+
+  function pairs() {
+    var out = [];
+    Object.keys(adjacency).sort().forEach(function (a) {
+      adjacency[a].forEach(function (b) { if (a < b) { out.push([a, b]); } });
+    });
+    return out;
+  }
+
+  function snapshot() { undoStack.push(copy(adjacency)); redoStack = []; }
+
+  function connected(a, b) { return (adjacency[a] || []).indexOf(b) >= 0; }
+
+  function addLink(a, b) {
+    if (a === b || connected(a, b)) { return false; }
+    snapshot();
+    (adjacency[a] = adjacency[a] || []).push(b);
+    (adjacency[b] = adjacency[b] || []).push(a);
+    return true;
+  }
+
+  function removeSelected() {
+    if (!selected.length) { return; }
+    snapshot();
+    selected.forEach(function (pair) {
+      adjacency[pair[0]] = (adjacency[pair[0]] || []).filter(function (x) { return x !== pair[1]; });
+      adjacency[pair[1]] = (adjacency[pair[1]] || []).filter(function (x) { return x !== pair[0]; });
+    });
+    selected = [];
+    render();
+  }
+
+  function isSelected(pair) {
+    return selected.some(function (s) { return s[0] === pair[0] && s[1] === pair[1]; });
+  }
+
+  function build() {
+    T.clear(svg);
+    svg.appendChild(T.el("rect", { class: "bg", x: 0, y: 0, width: 640, height: 302 }));
+    T.text(svg, OX + 1.47 * SCALE, 30, "reservoir", { class: "tag" });
+    T.text(svg, OX + 14.64 * SCALE, 30, "target", { class: "tag" });
+
+    CONNECTIONS_LAYOUT.forEach(function (r) {
+      svg.appendChild(T.el("rect", {
+        class: "el" + (r.id === "target" ? " island" : ""), x: OX + r.x * SCALE, y: OY + r.y * SCALE,
+        width: r.w * SCALE, height: r.h * SCALE
+      }));
+    });
+
+    var t = rects.target;
+    svg.appendChild(T.el("rect", { class: "target", x: OX + t.x * SCALE + 4, y: OY + t.y * SCALE + 4,
+      width: t.w * SCALE - 8, height: t.h * SCALE - 8 }));
+    svg.appendChild(T.el("ellipse", { class: "drop", cx: centres.reservoir[0], cy: centres.reservoir[1] + 40, rx: 30, ry: 22 }));
+
+    layer.path = T.el("polyline", { class: "path" });
+    layer.links = T.el("g");
+    layer.pending = T.el("line", { class: "pending", visibility: "hidden" });
+    layer.dots = T.el("g");
+    [layer.path, layer.links, layer.pending, layer.dots].forEach(function (node) { svg.appendChild(node); });
+
+    Object.keys(centres).forEach(function (key) {
+      var dot = T.el("circle", { class: "dot", cx: centres[key][0], cy: centres[key][1], r: 6.5 });
+      dot.dataset.id = key;
+      dot.addEventListener("pointerdown", function (event) { startDrag(event, key); });
+      layer.dots.appendChild(dot);
+    });
+  }
+
+  function pointIn(event) {
+    var point = svg.createSVGPoint();
+    point.x = event.clientX; point.y = event.clientY;
+    return point.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  function nearestDot(point, radius) {
+    var best = null, bestDistance = radius;
+    Object.keys(centres).forEach(function (key) {
+      var d = Math.hypot(centres[key][0] - point.x, centres[key][1] - point.y);
+      if (d <= bestDistance) { best = key; bestDistance = d; }
+    });
+    return best;
+  }
+
+  function startDrag(event, key) {
+    event.preventDefault();
+    drag = { from: key, moved: false };
+    svg.setPointerCapture && svg.setPointerCapture(event.pointerId);
+  }
+
+  svg.addEventListener("pointermove", function (event) {
+    if (!drag) { return; }
+    var point = pointIn(event), end = nearestDot(point, 26);
+    var target = end && end !== drag.from ? centres[end] : [point.x, point.y];
+    drag.moved = drag.moved || Math.hypot(point.x - centres[drag.from][0], point.y - centres[drag.from][1]) > 8;
+    layer.pending.setAttribute("x1", centres[drag.from][0]); layer.pending.setAttribute("y1", centres[drag.from][1]);
+    layer.pending.setAttribute("x2", target[0]); layer.pending.setAttribute("y2", target[1]);
+    layer.pending.setAttribute("visibility", drag.moved ? "visible" : "hidden");
+  });
+
+  svg.addEventListener("pointerup", function (event) {
+    if (!drag) { return; }
+    var from = drag.from, moved = drag.moved, end = nearestDot(pointIn(event), 26);
+    drag = null;
+    layer.pending.setAttribute("visibility", "hidden");
+
+    if (moved) {
+      armed = null;
+      if (end && end !== from) { addLink(from, end); }
+    } else if (armed && armed !== from) {
+      addLink(armed, from);
+      armed = null;
+    } else {
+      armed = armed === from ? null : from;
+    }
+    render();
+  });
+
+  function render() {
+    T.clear(layer.links);
+    pairs().forEach(function (pair) {
+      var a = centres[pair[0]], b = centres[pair[1]];
+      var hit = T.el("line", { class: "hit", x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
+      var line = T.el("line", { class: "link" + (isSelected(pair) ? " sel" : ""), x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
+      line.style.pointerEvents = "none";
+      hit.addEventListener("click", function (event) {
+        if (event.ctrlKey || event.metaKey) {
+          selected = isSelected(pair) ? selected.filter(function (s) { return !(s[0] === pair[0] && s[1] === pair[1]); }) :
+            selected.concat([pair]);
+        } else {
+          selected = [pair];
+        }
+        svg.focus && svg.focus();
+        render();
+      });
+      layer.links.appendChild(hit);
+      layer.links.appendChild(line);
+    });
+
+    layer.dots.querySelectorAll("circle").forEach(function (dot) {
+      dot.setAttribute("class", "dot" + (dot.dataset.id === armed ? " armed" : ""));
+    });
+
+    var path = shortestPath("reservoir", "target", adjacency);
+    layer.path.setAttribute("points", path ? path.map(function (key) { return centres[key].join(","); }).join(" ") : "");
+
+    var lonely = Object.keys(centres).filter(function (key) { return !(adjacency[key] || []).length; });
+    var text = path ? "<span class=\"good\">Autoroute: " + (path.length - 1) + " moves from the reservoir to the target.</span>" :
+      "<span class=\"bad\">Autoroute finds no route: the target is not connected to the reservoir.</span>";
+    text += " " + pairs().length + " connections." + (lonely.length ? " No connection: " + lonely.join(", ") + "." : "");
+    if (armed) { text += " Now click the dot to connect " + armed + " to."; }
+    status.innerHTML = text;
+
+    buttons["delete"].disabled = !selected.length;
+    buttons.undo.disabled = !undoStack.length;
+    buttons.redo.disabled = !redoStack.length;
+    buttons.revert.disabled = JSON.stringify(adjacency) === JSON.stringify(baseline);
+  }
+
+  /* As in MicroDrop, generating is not part of the window's undo history. */
+  buttons.generate.addEventListener("click", function () {
+    adjacency = generateConnections(CONNECTIONS_LAYOUT);
+    selected = [];
+    render();
+  });
+  buttons["delete"].addEventListener("click", removeSelected);
+  buttons.undo.addEventListener("click", function () {
+    if (!undoStack.length) { return; }
+    redoStack.push(copy(adjacency));
+    adjacency = undoStack.pop();
+    selected = [];
+    render();
+  });
+  buttons.redo.addEventListener("click", function () {
+    if (!redoStack.length) { return; }
+    undoStack.push(copy(adjacency));
+    adjacency = redoStack.pop();
+    selected = [];
+    render();
+  });
+  buttons.revert.addEventListener("click", function () {
+    snapshot();
+    adjacency = copy(baseline);
+    selected = [];
+    render();
+  });
+  svg.setAttribute("tabindex", "0");
+  svg.addEventListener("keydown", function (event) {
+    if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); removeSelected(); }
+  });
+
+  adjacency = generateConnections(CONNECTIONS_LAYOUT);
+  baseline = copy(adjacency);
+  build();
+  render();
+});
+
+Tutorial.demo("area", function (figure, T) {
+  function input(name) { return figure.querySelector("#ar-" + name); }
+  function out(name, text) { figure.querySelector("#ar-" + name).textContent = text; }
+  function num(name) { var v = parseFloat(input(name).value); return isFinite(v) ? v : 0; }
+  function fixed(value, digits) { return value.toFixed(digits); }
+
+  function describe(estimate) {
+    return estimate.status || fixed(estimate.covered, 2) + " mm² · " + fixed(estimate.volume, 3) + " µL · " +
+      Math.round(estimate.fill * 100) + " %";
+  }
+
+  function update() {
+    var side = toMm(num("side"), input("unit").value);
+    var original = side * side, factor = scalingFactor(num("measured"), original);
+    var n = Math.max(0, Math.round(num("n")));
+    var gap = num("gap");
+
+    out("original", fixed(original, 4));
+    out("factor", fixed(factor, 4));
+    out("scaled", fixed(original * factor, 2));
+
+    function calibrate(scale) {
+      var area = n * original * scale;
+      var cl = capacitancePerArea(num("cl-pf"), area, n > 0), cf = capacitancePerArea(num("cf-pf"), area, n > 0);
+      return { area: area, cl: cl, cf: cf, estimate: volumeEstimate(num("live"), area, cl, cf, gap) };
+    }
+
+    var scaled = calibrate(factor), plain = calibrate(1);
+
+    out("cal", "Cf: " + (scaled.cf === null ? "-" : formatCapacitance(scaled.cf)) + "   Cl: " +
+      (scaled.cl === null ? "-" : formatCapacitance(scaled.cl)));
+    out("volume", describe(scaled.estimate));
+    out("unscaled", describe(plain.estimate));
+
+    figure.querySelector("#ar-status").textContent = scaled.estimate.status ? "The readout shows a message instead of a volume." :
+      "Switched-on area " + fixed(scaled.area, 2) + " mm². With scale 1.0 the volume would be " +
+      fixed(plain.estimate.volume, 3) + " µL: off by the scaling factor, " + fixed(factor, 4) + ".";
+  }
+
+  ["side", "unit", "measured", "n", "cl-pf", "cf-pf", "live", "gap"].forEach(function (name) {
+    input(name).addEventListener("input", update);
+    input(name).addEventListener("change", update);
+  });
+  update();
+});
+</script>
