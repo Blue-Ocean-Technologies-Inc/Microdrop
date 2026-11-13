@@ -149,6 +149,12 @@ class DeviceViewerPublishController(HasTraits):
         if isinstance(event, ListChangeEvent) and event.object is self.model.alpha_map:
             return
 
+        # A restored camera alignment is not an edit: switching back
+        # reverses it, and undoing it would hand the leftover alignment to
+        # the camera it was restored for.
+        if self.model.camera_perspective.restoring:
+            return
+
         if not self._undoing:
             self.add_traits_event_to_undo_stack(event)
 
