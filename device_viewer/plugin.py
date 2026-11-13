@@ -32,6 +32,7 @@ from .consts import (
     ACTOR_TOPIC_DICT,
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     CAMERA_SOURCES,
+    DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_LAYERS,
     PKG,
     ZONES_TUTORIAL_HTML_PATH,
@@ -196,6 +197,10 @@ class DeviceViewerPlugin(Plugin):
             TutorialEntry(
                 title="Camera & Alignment Tutorial",
                 path=CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
+            ),
+            TutorialEntry(
+                title="Device Viewer Tutorial",
+                path=DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
             ),
             TutorialEntry(title="Zones Tutorial", path=ZONES_TUTORIAL_HTML_PATH),
         ]

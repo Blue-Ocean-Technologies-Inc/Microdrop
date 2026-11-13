@@ -30,6 +30,7 @@ from envisage.api import Application
 # Microdrop package imports.
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
+    DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
@@ -51,9 +52,16 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
+from microdrop_application.plugin import MicrodropPlugin
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
-from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
+from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
+from plugin_management.plugin import PluginManagementPlugin
+from user_help_plugin.consts import (
+    GETTING_STARTED_TUTORIAL_HTML_PATH,
+    HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+)
 from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
@@ -63,11 +71,21 @@ CAMERA_ALIGNMENT_SOURCE = CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH.with_name(
     "camera_alignment.src.html"
 )
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
+DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
+    "device_viewer_basics.src.html"
+)
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
+HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
+    "help_logs_storage.src.html"
+)
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
+)
+SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
+PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
+    "plugin_management.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
@@ -259,6 +277,8 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DropbotStatusAndControlsPlugin(),
         PluggableProtocolTreePlugin(),
         DeviceViewerPlugin(),
+        MicrodropPlugin(),
+        PluginManagementPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -274,10 +294,14 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     assert [entry.title for entry in entries] == [
         "Camera & Alignment Tutorial",
+        "Device Viewer Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
+        "Help, Logs & Saved Files Tutorial",
         "Image Analysis Tutorial",
+        "Plugin Management Tutorial",
         "Protocol Tree Tutorial",
+        "Shortcuts, Gamepad & Touch Assist Tutorial",
         "Zones Tutorial",
     ]
 
@@ -300,8 +324,24 @@ def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
 
 
+def test_help_logs_storage_tutorial_rebuilds_identically():
+    assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_shortcuts_tutorial_rebuilds_identically():
+    assert is_up_to_date(SHORTCUTS_SOURCE)
+
+
+def test_plugin_management_tutorial_rebuilds_identically():
+    assert is_up_to_date(PLUGIN_MANAGEMENT_SOURCE)
+
+
+def test_device_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(DEVICE_VIEWER_SOURCE)
 
 
 def test_zones_tutorial_rebuilds_identically():

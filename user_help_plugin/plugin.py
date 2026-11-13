@@ -24,6 +24,8 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from .consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     GETTING_STARTED_TUTORIAL_TITLE,
+    HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+    HELP_LOGS_STORAGE_TUTORIAL_TITLE,
     PKG,
     TUTORIALS,
     PKG_name,
@@ -102,7 +104,11 @@ class UserHelpPlugin(Plugin):
             TutorialEntry(
                 title=GETTING_STARTED_TUTORIAL_TITLE,
                 path=GETTING_STARTED_TUTORIAL_HTML_PATH,
-            )
+            ),
+            TutorialEntry(
+                title=HELP_LOGS_STORAGE_TUTORIAL_TITLE,
+                path=HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+            ),
         ]
 
     def _contributed_task_extensions_default(self):

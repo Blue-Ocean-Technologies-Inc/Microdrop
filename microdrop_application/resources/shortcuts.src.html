@@ -1,0 +1,1022 @@
+<!--
+  (C) Copyright 2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Shortcuts, Gamepad &amp; Touch Assist Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+ol.howto { padding-left: 1.4em; max-width: 75ch; }
+ol.howto li { margin: 5px 0; }
+.table-wrap { overflow-x: auto; }
+ol.steps.stack li.step { grid-template-columns: minmax(0, 1fr); }
+figure.clip video { width: 100%; max-width: 528px; }
+.finder-controls input[type="search"] { min-width: 14em; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink); font: inherit; }
+.keycatch { display: inline-block; min-width: 11em; padding: 4px 10px; border: 1px dashed var(--muted); border-radius: 4px;
+  color: var(--muted); cursor: pointer; }
+.keycatch:focus { outline: 2px solid var(--accent); color: var(--ink); border-style: solid; }
+table.finder { width: 100%; }
+table.finder td.keys { white-space: nowrap; }
+table.finder td.where { color: var(--muted); font-size: .86rem; }
+table.finder tr.off { display: none; }
+table.finder tr.hit td { background: var(--accent-soft); }
+.finder-status { font-size: .88rem; color: var(--muted); margin: 6px 0; }
+.pad-demo { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.pad-demo svg.chip { max-width: 360px; flex: 1 1 260px; outline: none; border-radius: 6px; }
+.pad-demo svg.chip:focus { box-shadow: 0 0 0 2px var(--accent); }
+.vpad { display: grid; grid-template-columns: repeat(3, 44px); gap: 4px; padding: 6px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface-2); }
+.vpad .vpad-title { grid-column: 1 / span 3; font-weight: 700; font-size: .85rem; }
+.vpad button { height: 44px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink);
+  font: inherit; cursor: pointer; }
+.vpad button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.vpad .gap { visibility: hidden; }
+p.pad-say { min-height: 3em; margin: 6px 0 0; font-size: .92rem; max-width: 60ch; }
+.numpad-demo { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.numpad-demo .fields label { display: block; margin: 6px 0; }
+.numpad-demo .fields input { width: 7em; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink); font: inherit; }
+.vpad.num { grid-template-columns: repeat(4, 44px); }
+.vpad.num .vpad-title { grid-column: 1 / span 4; }
+</style>
+<style media="print">
+.finder-controls, .finder-status { display: none; }
+table.finder tr.off { display: table-row; }
+</style>
+
+<header data-hero>
+  <h1>Keyboard shortcuts, gamepad and Touch Assist</h1>
+  <p>Every key MicroDrop answers to, in one place, and the on-screen tools for a bench with only a touch panel: the
+  <strong>Virtual Numpad</strong>, <strong>Virtual Keyboard</strong>, <strong>Virtual D-pad</strong> and
+  <strong>Virtual Mouse</strong> under <span class="ui">Tools ▸ Touch Assist</span>. It also says how to add a game
+  controller.</p>
+  <p>Start with the walkthrough. The shortcut finder below it lists every key and can be filtered by pane or by pressing the
+  key itself. The two clips are real recordings and loop while they are on screen.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">A key goes to the pane you clicked last. The same letter can mean different things in different panes:
+<kbd>D</kbd> switches the Device Viewer to Draw mode, but jumps to the last step in the protocol pane.</p>
+<table class="small">
+  <thead><tr><th>Where the keys work</th><th>Give it the keyboard by</th><th>Examples</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Device Viewer</strong></td><td>clicking inside the device view</td><td>arrow keys move the switched-on
+    electrodes; <kbd>F1</kbd> lists the keys</td></tr>
+    <tr><td><strong>Protocol pane</strong> (Pluggable Protocol Tree)</td><td>clicking anywhere in the pane: a button, the
+    step list</td><td><kbd>W</kbd> / <kbd>S</kbd> previous and next step; <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</td></tr>
+    <tr><td><strong>Step list</strong> inside the protocol pane</td><td>clicking a step</td><td><kbd>Ctrl</kbd>+<kbd>G</kbd>
+    fold into a group; <kbd>Delete</kbd></td></tr>
+    <tr><td><strong>Image Viewer</strong></td><td>clicking the image</td><td><kbd>B</kbd> draw a box; <kbd>F1</kbd> lists
+    its keys</td></tr>
+    <tr><td><strong>Menus</strong></td><td>nothing: they work anywhere in the main window</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>
+    Sync Remote Experiments</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <p><strong>While a protocol runs</strong> the Device Viewer shows <em>Mode: Display</em> and only the keys that change the
+  view still work: zoom, fit, rotate, pan, <kbd>Esc</kbd>, <kbd>F1</kbd> and <kbd>T</kbd> (realtime). Keys that would change
+  electrodes or routes are ignored.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">Five short tries, from the key list to moving a droplet with your finger. It assumes a chip is loaded in
+the Device Viewer.</p>
+<ol class="steps stack">
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">1</span>Open the key list</h4>
+    <p>Click inside the Device Viewer, then press <kbd>F1</kbd> (or <kbd>Ctrl</kbd>+<kbd>/</kbd>). A
+    <em>Keyboard Shortcuts</em> window opens with every Device Viewer key, in six sections: Selection, Routes, Modes, View,
+    Actions and Help. Right-click the chip ▸ <span class="ui">Keyboard Shortcuts…</span> opens the same window. It stays open
+    while you work.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">2</span>Move a droplet with the arrow keys</h4>
+    <p>Switch on the electrodes under a droplet (click them), then press <kbd>→</kbd>. Every switched-on electrode moves one
+    place to the right and the droplet follows. <kbd>Shift</kbd>+arrow grows the switched-on area, <kbd>Ctrl</kbd>+arrow
+    shrinks it, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+arrow pulls it apart to split the droplet. Try them in the
+    <a href="#arrows">demo</a> first.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">3</span>Step through a protocol</h4>
+    <p>Click a step in the Pluggable Protocol Tree. Press <kbd>S</kbd> for the next step and <kbd>W</kbd> for the previous
+    one; the Device Viewer shows each step's electrodes. <kbd>A</kbd> and <kbd>D</kbd> jump to the first and last step.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">4</span>On a touch panel: the on-screen D-pad</h4>
+    <p>Open <span class="ui">Tools ▸ Touch Assist ▸ Virtual D-pad</span>. A small <em>D-pad</em> window appears at the
+    bottom right of the screen; drag it by its title to where you want it. Tap the Device Viewer, then tap the arrows: they
+    act exactly like the arrow keys. Tap <span class="ui">⇧</span>, <span class="ui">ctrl</span> or
+    <span class="ui">alt</span> to hold that key down until you tap it again.</p>
+    <figure class="clip">
+    <video data-clip muted loop playsinline controls preload="metadata" width="528" height="448" poster="shortcuts_media/dpad-step.webp" aria-label="Screen recording: the on-screen D-pad moves a droplet up, down and around a corner on the chip">
+    <source src="shortcuts_media/dpad-step.webm" type="video/webm">
+    </video>
+    <figcaption><strong>Real example, 1.5× speed.</strong> Each tap on an arrow moves the switched-on electrodes one place;
+    the droplet follows, including round the corner.</figcaption>
+    </figure></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">5</span>On a touch panel: type a number</h4>
+    <p>Open <span class="ui">Tools ▸ Touch Assist ▸ Virtual Numpad</span>. Tap the box you want to change (a voltage, a
+    duration), then tap the digits and <span class="ui">⏎</span>. <span class="ui">▲</span> and <span class="ui">▼</span>
+    step a number box up and down. The <a href="#numpad">numpad demo</a> shows why you tap the box first.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">Buttons that have a key. Hover over a button in MicroDrop: its tooltip names the key in brackets.</p>
+<section data-term id="tb-device" data-where="Device Viewer, mode bar and zoom bar">
+  <h3>Device Viewer buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>Key</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_DRAW"></i></td><td class="lbl">Draw</td><td><kbd>D</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_EDIT"></i></td><td class="lbl">Edit</td><td><kbd>E</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_AUTOMATION"></i></td><td class="lbl">Autoroute</td><td><kbd>A</kbd></td></tr>
+      <tr><td class="icons"></td><td class="lbl">Edit Electrode Channels</td><td><kbd>N</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="remove_road"></i></td><td class="lbl">Clear Routes</td><td><kbd>Shift</kbd>+<kbd>X</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="layers_clear"></i></td><td class="lbl">Clear Electrode States</td><td><kbd>X</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="undo"></i><i data-glyph="redo"></i></td><td class="lbl">Undo · Redo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> · <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="zoom_out"></i><i data-glyph="zoom_in"></i></td><td class="lbl">Zoom out · Zoom In</td><td><kbd>Ctrl</kbd>+<kbd>-</kbd> · <kbd>Ctrl</kbd>+<kbd>+</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="fit_screen"></i></td><td class="lbl">Reset Zoom: Fit to View</td><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="pan_tool"></i></td><td class="lbl">Toggle Pan/Drag (Space key)</td><td><kbd>Space</kbd></td></tr>
+    </tbody>
+  </table>
+</section>
+<section data-term id="tb-protocol" data-where="Protocol pane, navigation bar">
+  <h3>Protocol navigation buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>Key</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_FIRST"></i></td><td class="lbl">First Step</td><td><kbd>A</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PREVIOUS"></i></td><td class="lbl">Previous Step</td><td><kbd>W</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PLAY"></i></td><td class="lbl">Play Protocol</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd> (see <a href="#ctrl-r">Ctrl+R</a>)</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_STOP"></i></td><td class="lbl">Stop Protocol</td><td><kbd>Ctrl</kbd>+<kbd>.</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_NEXT"></i></td><td class="lbl">Next Step</td><td><kbd>S</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_LAST"></i></td><td class="lbl">Last Step</td><td><kbd>D</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PREVIOUS_PHASE"></i><i data-glyph="ICON_RESUME"></i><i data-glyph="ICON_NEXT_PHASE"></i></td><td class="lbl">Previous Phase · Resume Protocol · Next Phase</td><td><kbd>Ctrl</kbd>+<kbd>←</kbd> · <kbd>Ctrl</kbd>+<kbd>R</kbd> · <kbd>Ctrl</kbd>+<kbd>→</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="sticky_note"></i></td><td class="lbl">New Note</td><td>none; the <a href="#notes">note window</a> has its own keys</td></tr>
+    </tbody>
+  </table>
+</section>
+<section data-term id="tb-joystick" data-where="shown by the Gamepad plugin">
+  <h3>Gamepad indicator</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Shown by</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_JOYSTICK"></i></td><td class="lbl">the Gamepad plugin</td><td>The state of the
+      game controller. It appears only once the <a href="#gamepad">Gamepad plugin</a> is installed and switched on.</td></tr>
+    </tbody>
+  </table>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-finder">
+<h2>Shortcut finder</h2>
+<p class="intro">Every key in one table. Type a word, pick a pane, or click the grey box and press a key to see which panes
+answer to it. Printing this page prints the whole table.</p>
+<section data-term id="finder" data-where="all panes">
+  <h3>All shortcuts</h3>
+  <p>The Device Viewer, Image Viewer and quick-action rows are the same lists MicroDrop itself uses, word for word.</p>
+  <figure data-demo="finder">
+    <div class="controls finder-controls">
+      <label>Search <input type="search" id="finder-q" placeholder="key or action" autocomplete="off"></label>
+      <label>Pane <select id="finder-pane">
+        <option value="">All panes</option>
+        <option value="device">Device Viewer</option>
+        <option value="protocol">Protocol pane</option>
+        <option value="tree">Step list</option>
+        <option value="image">Image Viewer</option>
+        <option value="connections">Edit Connections</option>
+        <option value="notes">Note window</option>
+        <option value="menus">Menus</option>
+      </select></label>
+      <span class="keycatch" id="finder-key" tabindex="0" role="button" aria-label="Click, then press a key to find it">Click, then press a key</span>
+      <button type="button" id="finder-reset">Show all</button>
+    </div>
+    <p class="finder-status" aria-live="polite"></p>
+    <div class="table-wrap">
+    <table class="small finder">
+      <thead><tr><th>Keys</th><th>What it does</th><th>Where</th></tr></thead>
+      <tbody>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Left</kbd></td><td class="what">Step the selection left</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Right</kbd></td><td class="what">Step the selection right</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Up</kbd></td><td class="what">Step the selection up</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Down</kbd></td><td class="what">Step the selection down</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Left</kbd></td><td class="what">Grow the selection left</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Right</kbd></td><td class="what">Grow the selection right</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Up</kbd></td><td class="what">Grow the selection up</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Down</kbd></td><td class="what">Grow the selection down</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Left</kbd></td><td class="what">Shrink the selection from the left</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Right</kbd></td><td class="what">Shrink the selection from the right</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Up</kbd></td><td class="what">Shrink the selection from the up</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Down</kbd></td><td class="what">Shrink the selection from the down</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Left</kbd></td><td class="what">Split step left</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Right</kbd></td><td class="what">Split step right</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Up</kbd></td><td class="what">Split step up</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Down</kbd></td><td class="what">Split step down</td><td class="where">Device Viewer · Selection</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Alt</kbd>+<kbd>Left</kbd></td><td class="what">Draw the route one electrode left</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Alt</kbd>+<kbd>Right</kbd></td><td class="what">Draw the route one electrode right</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Alt</kbd>+<kbd>Up</kbd></td><td class="what">Draw the route one electrode up</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Alt</kbd>+<kbd>Down</kbd></td><td class="what">Draw the route one electrode down</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Backspace</kbd></td><td class="what">Erase the selected route&#x27;s tail</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Del</kbd></td><td class="what">Delete the selected route</td><td class="where">Device Viewer · Routes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Esc</kbd></td><td class="what">Leave Pan mode or route drawing</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>D</kbd></td><td class="what">Toggle Draw mode</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>E</kbd></td><td class="what">Toggle Edit mode</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>A</kbd></td><td class="what">Toggle Auto mode</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>N</kbd></td><td class="what">Toggle Channel Edit mode</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Space</kbd></td><td class="what">Toggle Pan mode</td><td class="where">Device Viewer · Modes</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>=</kbd></td><td class="what">Zoom in</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>-</kbd></td><td class="what">Zoom out</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td class="what">Fit the device to the view</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>R</kbd></td><td class="what">Rotate the device</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>R</kbd></td><td class="what">Rotate the camera</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>X</kbd></td><td class="what">Clear electrode states</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>X</kbd></td><td class="what">Clear all routes</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>F</kbd></td><td class="what">Find liquid</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>T</kbd></td><td class="what">Toggle realtime mode</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td class="what">Undo</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="what">Redo</td><td class="where">Device Viewer · Actions</td></tr>
+<tr data-pane="device" data-source="device_viewer"><td class="keys"><kbd>F1</kbd> / <kbd>Ctrl</kbd>+<kbd>/</kbd></td><td class="what">Show keyboard shortcuts</td><td class="where">Device Viewer · Help</td></tr>
+<tr data-pane="device"><td class="keys">Ctrl+mouse wheel</td><td class="what">Zoom in or out</td><td class="where">Device Viewer · View</td></tr>
+<tr data-pane="device"><td class="keys"><kbd>Return</kbd> / <kbd>Esc</kbd></td><td class="what">Keep / cancel a channel number you are typing</td><td class="where">Device Viewer · Channel Edit mode</td></tr>
+<tr data-pane="device"><td class="keys"><kbd>Esc</kbd></td><td class="what">Cancel the zone you are drawing</td><td class="where">Device Viewer · zone modes</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>W</kbd></td><td class="what">Previous Step</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>S</kbd></td><td class="what">Next Step</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>A</kbd></td><td class="what">First Step</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>D</kbd></td><td class="what">Last Step</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Left</kbd></td><td class="what">Previous Phase</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Right</kbd></td><td class="what">Next Phase</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>Ctrl</kbd>+<kbd>.</kbd></td><td class="what">Stop Protocol</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol"><td class="keys"><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td class="what">Play, pause or resume the protocol (not while the step list has the keyboard)</td><td class="where">Protocol pane · navigation</td></tr>
+<tr data-pane="protocol" data-source="protocol_history"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td class="what">Undo a protocol edit</td><td class="where">Protocol pane</td></tr>
+<tr data-pane="protocol" data-source="protocol_history"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="what">Redo a protocol edit</td><td class="where">Protocol pane</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Return</kbd></td><td class="what">Add step below selection</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Backspace</kbd></td><td class="what">Delete last step</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Return</kbd></td><td class="what">Add group</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td class="what">Import protocol into selected group</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td class="what">Open Protocol</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="what">Save Protocol</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td class="what">New protocol</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="protocol" data-source="quick_actions"><td class="keys"><kbd>R</kbd></td><td class="what">Browse session reports</td><td class="where">Protocol pane · quick actions</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="what">Copy the selected rows</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td class="what">Cut the selected rows</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="what">Paste rows after the selection</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>G</kbd></td><td class="what">Fold into Group</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td class="what">Unfold Group</td><td class="where">Step list</td></tr>
+<tr data-pane="tree" data-source="step_pattern"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td class="what">Fill Pattern…</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td class="what">Run Selected Steps (does nothing today, see Caveats)</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Delete</kbd></td><td class="what">Delete the selected rows</td><td class="where">Step list</td></tr>
+<tr data-pane="tree"><td class="keys"><kbd>Esc</kbd></td><td class="what">Deselect the step (back to free mode); while typing in a cell, cancel the edit</td><td class="where">Step list</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>O</kbd></td><td class="what">Draw ellipse tool (O for oval)</td><td class="where">Image Viewer · Draw</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>B</kbd></td><td class="what">Draw box tool</td><td class="where">Image Viewer · Draw</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>C</kbd></td><td class="what">Draw capsule tool</td><td class="where">Image Viewer · Draw</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>P</kbd></td><td class="what">Draw polygon (contour) tool</td><td class="where">Image Viewer · Draw</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>M</kbd></td><td class="what">Toggle negative-mask mode</td><td class="where">Image Viewer · Draw</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>E</kbd></td><td class="what">Toggle Edit mode</td><td class="where">Image Viewer · Modes</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>V</kbd></td><td class="what">Show / hide the ROI overlay</td><td class="where">Image Viewer · Modes</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Esc</kbd></td><td class="what">Put the draw tool away</td><td class="where">Image Viewer · Modes</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Right</kbd></td><td class="what">Next image</td><td class="where">Image Viewer · Images</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Left</kbd></td><td class="what">Previous image</td><td class="where">Image Viewer · Images</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Right</kbd></td><td class="what">Next experiment</td><td class="where">Image Viewer · Images</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Shift</kbd>+<kbd>Left</kbd></td><td class="what">Previous experiment</td><td class="where">Image Viewer · Images</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>X</kbd></td><td class="what">Toggle excluding the shown image from analysis</td><td class="where">Image Viewer · Images</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td class="what">Copy the selected ROI</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="what">Paste the copied ROI</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Del</kbd></td><td class="what">Delete the selected ROI from the shown image</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td class="what">Undo</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="what">Redo</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Return</kbd></td><td class="what">Calculate (run the batch)</td><td class="where">Image Viewer · Actions</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>=</kbd></td><td class="what">Zoom in</td><td class="where">Image Viewer · View</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>-</kbd></td><td class="what">Zoom out</td><td class="where">Image Viewer · View</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td class="what">Fit the image to the pane</td><td class="where">Image Viewer · View</td></tr>
+<tr data-pane="image" data-source="image_viewer"><td class="keys"><kbd>F1</kbd> / <kbd>Ctrl</kbd>+<kbd>/</kbd></td><td class="what">Show keyboard shortcuts</td><td class="where">Image Viewer · Help</td></tr>
+<tr data-pane="image"><td class="keys"><kbd>Return</kbd></td><td class="what">Close the contour you are tracing</td><td class="where">Image Viewer · polygon tool</td></tr>
+<tr data-pane="image"><td class="keys"><kbd>Backspace</kbd></td><td class="what">Take back the last contour point</td><td class="where">Image Viewer · polygon tool</td></tr>
+<tr data-pane="image"><td class="keys"><kbd>Esc</kbd></td><td class="what">Throw away the contour you are tracing</td><td class="where">Image Viewer · polygon tool</td></tr>
+<tr data-pane="image"><td class="keys">Ctrl+mouse wheel</td><td class="what">Zoom</td><td class="where">Image Viewer · perspective window</td></tr>
+<tr data-pane="image"><td class="keys"><kbd>Space</kbd></td><td class="what">Turn drag-panning on or off</td><td class="where">Image Viewer · perspective window</td></tr>
+<tr data-pane="connections"><td class="keys"><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td class="what">Remove the selected connection lines</td><td class="where">Edit Connections</td></tr>
+<tr data-pane="connections"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td class="what">Undo</td><td class="where">Edit Connections</td></tr>
+<tr data-pane="connections"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="what">Redo</td><td class="where">Edit Connections</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td class="what">Save Note</td><td class="where">Note window</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td class="what">Bold</td><td class="where">Note window</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td class="what">Italic</td><td class="where">Note window</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td class="what">Underline</td><td class="where">Note window</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td class="what">Strikethrough</td><td class="where">Note window</td></tr>
+<tr data-pane="notes"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td><td class="what">Bullet List</td><td class="where">Note window</td></tr>
+<tr data-pane="menus"><td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td class="what">Tools ▸ Remote Controls ▸ Sync Remote Experiments...</td><td class="where">Menus</td></tr>
+<tr data-pane="menus"><td class="keys">your choice</td><td class="what">Apply a saved layout preset (View ▸ Layout Presets)</td><td class="where">Menus</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <figcaption>Key names are as MicroDrop writes them: <kbd>Left</kbd> is the left arrow, <kbd>Return</kbd> the Enter key,
+    <kbd>Del</kbd> the Delete key.</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-device">
+<h2>Device Viewer keys</h2>
+<p class="intro">Click inside the device view first. Most of these keys change electrodes or routes, so they work in the
+editing modes (<em>Mode: Edit</em>, <em>Draw</em>, <em>Merge</em>) and not while a protocol runs.</p>
+
+<section data-term id="arrows" data-where="Device Viewer · Selection">
+  <h3>Arrow keys</h3>
+  <p>Move every switched-on electrode one place in the arrow's direction. The droplet on them follows.</p>
+  <div data-what><p>A step of the whole switched-on area. An electrode with no neighbour that way stays where it is.</p></div>
+  <div data-when><p>To walk a droplet across the chip without clicking each electrode. With nothing switched on, the arrows
+  start from the last electrode you moved to.</p></div>
+  <div data-read><p>The arrow always moves the way it points on screen, even after you rotate the device view with
+  <kbd>R</kbd>. A held key keeps stepping.</p></div>
+  <div data-typical><p>One electrode per press. Works in Edit, Draw and Merge modes.</p></div>
+  <figure data-demo="dpad">
+    <div class="pad-demo">
+      <svg class="chip" viewBox="0 0 230 134" tabindex="0" role="img" aria-label="A grid of electrodes; the switched-on ones are coloured. Click here and use the arrow keys, or the buttons."></svg>
+      <div class="vpad" role="group" aria-label="D-pad">
+        <span class="vpad-title">D-pad</span>
+        <span class="gap"></span><button type="button" data-k="up" aria-label="Up">▲</button><span class="gap"></span>
+        <button type="button" data-k="left" aria-label="Left">◀</button><span class="gap"></span><button type="button" data-k="right" aria-label="Right">▶</button>
+        <span class="gap"></span><button type="button" data-k="down" aria-label="Down">▼</button><span class="gap"></span>
+        <button type="button" data-m="shift" aria-pressed="false" aria-label="Shift">⇧</button>
+        <button type="button" data-m="ctrl" aria-pressed="false">ctrl</button>
+        <button type="button" data-m="alt" aria-pressed="false">alt</button>
+        <button type="button" data-k="esc">Esc</button><span class="gap"></span><button type="button" data-k="back" aria-label="Backspace">⌫</button>
+      </div>
+    </div>
+    <p class="pad-say" aria-live="polite"></p>
+    <div class="controls"><button type="button" data-reset>Start again</button></div>
+    <figcaption>Click the grid and use your keyboard (with <kbd>Shift</kbd>, <kbd>Ctrl</kbd>, <kbd>Alt</kbd>), or tap the
+    D-pad like the Virtual D-pad: ⇧, ctrl and alt stay down until you tap them again. A sketch of a small chip, not a real
+    device.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="grow-shrink" data-where="Device Viewer · Selection">
+  <h3>Shift / Ctrl + arrow: grow and shrink</h3>
+  <p><kbd>Shift</kbd>+arrow adds a row of electrodes on that side; <kbd>Ctrl</kbd>+arrow takes the row on that side away.</p>
+  <div data-what><p><em>Grow the selection</em> switches on the neighbours of the electrodes furthest in that direction.
+  <em>Shrink the selection from</em> a side switches off the electrodes furthest in that direction.</p></div>
+  <div data-when><p>Grow to stretch a droplet onto more electrodes (to pull it or to make room for a bigger one); shrink to
+  let go of one side.</p></div>
+  <div data-read><p>Shrinking the last electrode switches everything off.</p></div>
+  <div data-typical><p>One row per press.</p></div>
+</section>
+
+<section data-term id="split" data-where="Device Viewer · Selection">
+  <h3>Ctrl + Shift + arrow: split</h3>
+  <p>Pulls the switched-on area apart in two halves, to split a droplet.</p>
+  <div data-what><p>The first press picks the direction: <kbd>←</kbd> / <kbd>→</kbd> split side to side,
+  <kbd>↑</kbd> / <kbd>↓</kbd> top to bottom. On a view you have not rotated, <kbd>→</kbd> or <kbd>↓</kbd> pulls the two
+  halves one step further apart; after <kbd>R</kbd> the directions turn with the chip.
+  The first press only opens the gap: it switches off the middle electrode of an odd number, moves one half of an even
+  number, or splits a single electrode onto its two neighbours. The opposite arrow takes one step back, and all the way
+  back makes the droplet whole again.</p></div>
+  <div data-when><p>To split one droplet into two. Several separate droplets switched on at once each split on their own.</p></div>
+  <div data-read><p>Letting go of <kbd>Ctrl</kbd> or <kbd>Shift</kbd> ends the split: the next press starts a new one from
+  whatever is switched on then.</p></div>
+  <div data-typical><p>Three or four electrodes in a line is a good start.</p></div>
+  <figure class="clip">
+  <video data-clip muted loop playsinline controls preload="metadata" width="510" height="442" poster="shortcuts_media/dpad-split.webp" aria-label="Screen recording: with shift and ctrl latched on the on-screen D-pad, a long droplet is pulled apart into two">
+  <source src="shortcuts_media/dpad-split.webm" type="video/webm">
+  </video>
+  <figcaption><strong>Real example, real speed.</strong> The same split from the Virtual D-pad, with ⇧ and ctrl latched on:
+  each tap on an arrow pulls the halves further apart until the droplet breaks in two.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="route-keys" data-where="Device Viewer · Routes">
+  <h3>Alt + arrow, Backspace, Del: routes</h3>
+  <p>Draw a route one electrode at a time from the keyboard, take back its last electrode, or delete it.</p>
+  <div data-what><p><kbd>Alt</kbd>+arrow adds the next electrode to the route; with no route selected it starts a new one,
+  in Draw mode, from the last electrode you moved to (or the one switched-on electrode). <kbd>Backspace</kbd> erases the
+  selected route's last electrode; on a two-electrode route it deletes the route. <kbd>Del</kbd> deletes the selected
+  route.</p></div>
+  <div data-when><p>For a route that must follow exact electrodes, or on a bench where a mouse drag is awkward.</p></div>
+  <div data-read><p>Works in Draw and Edit modes only, so it never throws away a merge, a channel edit or a zone you are
+  drawing. <kbd>Esc</kbd> stops drawing.</p></div>
+</section>
+
+<section data-term id="mode-keys" data-where="Device Viewer · Modes">
+  <h3>D, E, A, N, Space, Esc: modes</h3>
+  <p>Single letters switch the Device Viewer's mode; the label under the mode buttons shows it (<em>Mode: Draw</em>).</p>
+  <div data-what><p><kbd>D</kbd> Draw, <kbd>E</kbd> Edit, <kbd>A</kbd> Auto (Autoroute), <kbd>N</kbd> Channel Edit,
+  <kbd>Space</kbd> Pan (drag the view). Pressing the same key again goes back to the mode you were in before.
+  <kbd>Esc</kbd> leaves Pan mode or route drawing, and cancels a zone you are drawing.</p></div>
+  <div data-when><p>To switch tools without reaching for the mode buttons.</p></div>
+  <div data-read><p>In Channel Edit mode, while you type a channel number, <kbd>Return</kbd> keeps it and <kbd>Esc</kbd>
+  cancels it; the other keys go to the number, not to the shortcuts.</p></div>
+  <div data-typical><p>The Device Viewer starts in Draw mode.</p></div>
+</section>
+
+<section data-term id="view-keys" data-where="Device Viewer · View">
+  <h3>Zoom, fit and rotate</h3>
+  <p>Change how the chip is shown, never what is switched on. These work during a run too.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>+</kbd> (or <kbd>Ctrl</kbd>+<kbd>=</kbd>) zooms in, <kbd>Ctrl</kbd>+<kbd>-</kbd>
+  zooms out, <kbd>Ctrl</kbd>+mouse wheel does both, <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the whole device. On a touch panel,
+  pinch with two fingers. <kbd>R</kbd> rotates the device view; <kbd>Shift</kbd>+<kbd>R</kbd> rotates the camera
+  picture.</p></div>
+  <div data-when><p>Zoom in on a small droplet; rotate so the chip on screen matches the chip on the bench.</p></div>
+  <div data-read><p>Each rotation is a quarter turn. The arrow keys follow the rotation, so <kbd>↑</kbd> is always up on
+  screen.</p></div>
+  <div data-typical><p>90° per press.</p></div>
+</section>
+
+<section data-term id="action-keys" data-where="Device Viewer · Actions">
+  <h3>X, Shift+X, F, T: actions</h3>
+  <p>Clear, find liquid, and switch realtime on or off.</p>
+  <div data-what><p><kbd>X</kbd> switches every electrode off. <kbd>Shift</kbd>+<kbd>X</kbd> clears every route.
+  <kbd>F</kbd> switches every electrode off, then marks where MicroDrop detects liquid (the same as right-click ▸
+  <span class="ui">Find Liquid</span>). <kbd>T</kbd> turns realtime mode on or off.</p></div>
+  <div data-when><p><kbd>F</kbd> after loading droplets, to see where they are. <kbd>T</kbd> to stop the DropBot from
+  following your clicks while you set up.</p></div>
+  <div data-read><p><kbd>T</kbd> needs a connected DropBot; without one the key does nothing. It is the one action key that
+  also works during a run. <kbd>F</kbd> is ignored during a run.</p></div>
+</section>
+
+<section data-term id="dv-undo" data-where="Device Viewer · Actions">
+  <h3>Ctrl+Z, Ctrl+Y: undo and redo</h3>
+  <p>Take back, or put back, the last change in the Device Viewer.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes; <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
+  redoes. Same as the Undo and Redo buttons beside the mode buttons.</p></div>
+  <div data-read><p>The protocol pane has its own undo with the same keys: whichever pane you clicked last is the one that
+  undoes.</p></div>
+</section>
+
+<section data-term id="cheat-sheet" data-where="Device Viewer · Help">
+  <h3>F1: the key list</h3>
+  <p>Opens the <em>Keyboard Shortcuts</em> window.</p>
+  <div data-what><p>A window listing every Device Viewer key, grouped as Selection, Routes, Modes, View, Actions and Help.
+  <kbd>Ctrl</kbd>+<kbd>/</kbd> and right-click ▸ <span class="ui">Keyboard Shortcuts…</span> open it too.</p></div>
+  <div data-when><p>Whenever you forget a key. It stays open beside the window; pressing <kbd>F1</kbd> again brings it to
+  the front instead of opening another.</p></div>
+  <div data-read><p>In the Image Viewer, <kbd>F1</kbd> opens that viewer's own list, <em>Image Viewer Keyboard
+  Shortcuts</em>; <span class="ui">Help ▸ Image Viewer Keyboard Shortcuts…</span> opens it from the menu.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-protocol">
+<h2>Protocol pane keys</h2>
+<p class="intro">Click anywhere in the Pluggable Protocol Tree pane first. The navigation keys follow the buttons: a key does
+nothing when its button is greyed out or hidden.</p>
+
+<section data-term id="nav-keys" data-where="Protocol pane · navigation bar">
+  <h3>W, S, A, D: step through</h3>
+  <p>Move between steps without the mouse.</p>
+  <div data-what><p><kbd>W</kbd> Previous Step, <kbd>S</kbd> Next Step, <kbd>A</kbd> First Step, <kbd>D</kbd> Last Step.
+  <kbd>Ctrl</kbd>+<kbd>←</kbd> / <kbd>Ctrl</kbd>+<kbd>→</kbd> are Previous Phase / Next Phase, shown when a run is paused in
+  phase-by-phase mode. <kbd>Ctrl</kbd>+<kbd>.</kbd> is Stop Protocol.</p></div>
+  <div data-when><p>To check each step's electrodes in the Device Viewer while you write a protocol, or to step a paused run.</p></div>
+  <div data-read><p>Next Step on the last step adds a new step, as the button does.</p></div>
+</section>
+
+<section data-term id="ctrl-r" data-where="Protocol pane · navigation bar and step list">
+  <h3>Ctrl+R: play, pause, resume</h3>
+  <p>Clicks whichever of Play, Pause or Resume is showing.</p>
+  <div data-what><p>Idle, it plays the protocol; running, it pauses; paused, it resumes. The step list's right-click entry
+  <span class="ui">Run Selected Steps</span> is also bound to <kbd>Ctrl</kbd>+<kbd>R</kbd>.</p></div>
+  <div data-when><p>To start or pause a run while your hand is on the keyboard.</p></div>
+  <div data-read><p><strong>Today, Ctrl+R does nothing while the step list has the keyboard</strong>, which is right after
+  you click a step: the two jobs clash and neither runs. Click a navigation button first (or use the Play button, and
+  right-click ▸ Run Selected Steps).</p></div>
+</section>
+
+<section data-term id="protocol-undo" data-where="Protocol pane">
+  <h3>Ctrl+Z, Ctrl+Y: undo protocol edits</h3>
+  <p>Take back or put back the last change to the protocol.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes; <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
+  redoes. The Undo and Redo buttons under the step list do the same and name the edit in their tooltip.</p></div>
+  <div data-when><p>After deleting the wrong rows or typing a wrong value.</p></div>
+  <div data-read><p>Ignored while a protocol runs. While you are typing in a cell, the keys undo your typing in that cell
+  instead.</p></div>
+  <div data-typical><p>Remembers the last 100 edits.</p></div>
+</section>
+
+<section data-term id="quick-keys" data-where="Protocol pane · buttons under the step list">
+  <h3>Quick-action keys</h3>
+  <p>The buttons under the step list, from the keyboard.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>Return</kbd> Add step below selection, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Return</kbd>
+  Add group, <kbd>Ctrl</kbd>+<kbd>Backspace</kbd> Delete last step, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> Import
+  protocol into selected group, <kbd>Ctrl</kbd>+<kbd>O</kbd> Open, <kbd>Ctrl</kbd>+<kbd>S</kbd> Save,
+  <kbd>Ctrl</kbd>+<kbd>N</kbd> New protocol, <kbd>R</kbd> Browse session reports.</p></div>
+  <div data-read><p>A key does nothing while its button is greyed out, and none of them work during a run.</p></div>
+</section>
+
+<section data-term id="tree-keys" data-where="Protocol pane · step list">
+  <h3>Step list keys</h3>
+  <p>Keys that work after clicking a step.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> copy, cut and paste rows.
+  <kbd>Ctrl</kbd>+<kbd>G</kbd> Fold into Group, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> Unfold Group,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> Fill Pattern…, <kbd>Delete</kbd> deletes the selected rows (no question
+  asked; undo brings them back). <kbd>Esc</kbd> deselects the step, so the Device Viewer goes back to free mode.</p></div>
+  <div data-read><p>Grouping, Fill Pattern and Run Selected Steps are locked during a run, like their menu entries. The
+  Protocol Tree tutorial explains each of them.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-other">
+<h2>Other windows</h2>
+<p class="intro">Smaller sets of keys in the Image Viewer, the Edit Connections dialog, the note window and the menus.</p>
+
+<section data-term id="image-keys" data-where="Image Viewer">
+  <h3>Image Viewer</h3>
+  <p>Draw and edit regions of interest, page through images, and zoom.</p>
+  <div data-what><p>The full list is in the <a href="#finder">finder</a> (pick <em>Image Viewer</em>) and in the viewer's own
+  key list: press <kbd>F1</kbd> with the image clicked, or <span class="ui">Help ▸ Image Viewer Keyboard Shortcuts…</span>.
+  While you trace a polygon, <kbd>Return</kbd> closes it, <kbd>Backspace</kbd> takes back the last point and
+  <kbd>Esc</kbd> throws it away; a second <kbd>Esc</kbd> puts the tool away.</p></div>
+  <div data-read><p>In the perspective window, <kbd>Ctrl</kbd>+mouse wheel zooms and <kbd>Space</kbd> turns drag-panning on
+  and off. The Image Analysis tutorial covers the tools themselves.</p></div>
+</section>
+
+<section data-term id="connections-keys" data-where="File ▸ Device ▸ Edit Connections">
+  <h3>Edit Connections</h3>
+  <p>The dialog for adding and removing the lines that say which electrodes are neighbours.</p>
+  <div data-what><p>Click a line to select it (<kbd>Ctrl</kbd>-click for several, <kbd>Shift</kbd>-drag for a box), then
+  <kbd>Delete</kbd> or <kbd>Backspace</kbd> removes it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes;
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> redoes. Scroll to zoom.</p></div>
+</section>
+
+<section data-term id="notes" data-where="Protocol pane ▸ New Note">
+  <h3>Note window</h3>
+  <p>The note opened with <i data-glyph="sticky_note" data-inline></i> <em>New Note</em> in the protocol pane.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>S</kbd> Save Note, <kbd>Ctrl</kbd>+<kbd>B</kbd> Bold, <kbd>Ctrl</kbd>+<kbd>I</kbd>
+  Italic, <kbd>Ctrl</kbd>+<kbd>U</kbd> Underline, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> Strikethrough,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> Bullet List.</p></div>
+  <div data-read><p>Click in the note first: in the protocol pane <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the protocol, and
+  in the main window <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> opens Sync Remote Experiments.</p></div>
+</section>
+
+<section data-term id="menu-keys" data-where="menu bar">
+  <h3>Menu keys</h3>
+  <p>Keys shown beside a menu entry work anywhere in the main window.</p>
+  <div data-what><p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> opens <span class="ui">Tools ▸ Remote Controls ▸ Sync
+  Remote Experiments...</span>. A layout preset can have a key of your choice: give it one when you save it
+  (<span class="ui">View ▸ Layout Presets ▸ Save Current Layout...</span>) or later in
+  <span class="ui">Manage Layout Presets...</span>.</p></div>
+  <div data-read><p>When you pick a preset key that is already taken (by a menu, or by a Device Viewer key) the dialog warns
+  you. A menu key wins over a Device Viewer key, so avoid single letters and the arrows.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-gamepad">
+<h2>Gamepad</h2>
+<p class="intro">A game controller can drive the Device Viewer like the arrow keys. It is a separate plugin, not part of
+MicroDrop itself.</p>
+<section data-term id="gamepad" data-where="Tools ▸ Manage Plugins…">
+  <h3>Gamepad plugin</h3>
+  <p>Adds a game controller to the Device Viewer: its D-pad steps the switched-on electrodes, and its buttons clear, find
+  liquid and so on.</p>
+  <div data-what><p>The <code>gamepad-microdrop-plugin</code> package. It moves the same switched-on electrodes as the arrow
+  keys and the Virtual D-pad, so you can mix all three.</p></div>
+  <div data-when><p>For long sessions of moving droplets by hand, or on a bench without a keyboard.</p></div>
+  <div data-read><ol class="howto">
+    <li>Open <span class="ui">Tools ▸ Manage Plugins…</span> and click <span class="ui">Install Plugin…</span>. The
+    <em>Browse Plugins</em> window lists the plugin channel.</li>
+    <li>Select <code>gamepad-microdrop-plugin</code> and click <span class="ui">Install</span>.</li>
+    <li>Back in <em>Manage Plugins</em>, tick its group under <em>Available Groups</em> and click
+    <span class="ui">Apply</span>.</li>
+  </ol>
+  <p>Switching the group on is what turns the gamepad on. The button map and timings are in the plugin's own preferences
+  tab, and its <i data-glyph="ICON_JOYSTICK" data-inline></i> icon shows the controller state.</p></div>
+  <div data-typical><p>Off: not installed with MicroDrop. Gamepad settings saved by an older MicroDrop are moved to the
+  plugin the first time the Device Viewer starts.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-touch">
+<h2>Touch Assist</h2>
+<p class="intro">Floating helpers for a bench with a touch panel and no mouse or keyboard. Each is a tick box in
+<span class="ui">Tools ▸ Touch Assist</span>; tick it to show the tool, untick it (or tap the tool's ✕) to hide it.</p>
+<figure class="still">
+<img data-media src="shortcuts_media/touch-assist-menu.webp" width="384" height="240" alt="The Tools menu open on Touch Assist, showing its four entries: Virtual Numpad, Virtual Keyboard, Virtual D-pad and Virtual Mouse">
+<figcaption>The Touch Assist menu in a real session.</figcaption>
+</figure>
+
+<section data-term id="touch-basics" data-where="all four tools">
+  <h3>How the tools behave</h3>
+  <p>They float above MicroDrop and never take the keyboard away from what you tapped.</p>
+  <div data-what><p>A pad sends its keys to the box or pane you tapped last, exactly as a real key would. Tapping a pad key
+  does not move that focus, so the order is always: tap the target, then tap the keys.</p></div>
+  <div data-read><p>Each tool first appears near the bottom of the screen. Drag a pad by its title strip; drag the mouse
+  by its body. They work inside MicroDrop only.</p></div>
+  <div data-typical><p>Pad keys are at least 44 px across, big enough for a fingertip.</p></div>
+</section>
+
+<section data-term id="numpad" data-where="Tools ▸ Touch Assist ▸ Virtual Numpad">
+  <h3>Virtual Numpad</h3>
+  <p>Digits, minus, decimal point, ⌫, ▲, ▼ and ⏎ for typing numbers.</p>
+  <div data-what><p>A 4 × 4 pad titled <em>Numpad</em>. ⌫ deletes, ⏎ is Enter, ▲ and ▼ step a number box up or down.</p></div>
+  <div data-when><p>To type a voltage, a duration or any value in a protocol cell or settings box.</p></div>
+  <div data-read><p>Hold ▲ or ▼ to keep stepping.</p></div>
+  <div data-typical><p>▲ / ▼ start repeating after 0.4 s, then every 0.08 s.</p></div>
+  <figure data-demo="numpad">
+    <div class="numpad-demo">
+      <div class="fields">
+        <label>Voltage (V) <input type="text" inputmode="none" value="100" data-step="1"></label>
+        <label>Duration (s) <input type="text" inputmode="none" value="1.0" data-step="0.1"></label>
+      </div>
+      <div class="vpad num" role="group" aria-label="Numpad">
+        <span class="vpad-title">Numpad</span>
+      </div>
+    </div>
+    <p class="pad-say" aria-live="polite">Tap a box, then the keys.</p>
+    <figcaption>Tap a box first: the keys go to the box you tapped last, as in MicroDrop. ⏎ finishes the entry.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="vkeyboard" data-where="Tools ▸ Touch Assist ▸ Virtual Keyboard">
+  <h3>Virtual Keyboard</h3>
+  <p>A small QWERTY keyboard for names and notes.</p>
+  <div data-what><p>A digit row, three letter rows, ⇧, ⌫, ⏎, <span class="ui">ctrl</span>, <span class="ui">alt</span>,
+  <span class="ui">space</span>, <span class="ui">.</span> and <span class="ui">_</span>.</p></div>
+  <div data-when><p>To name a step or a protocol, or type a note.</p></div>
+  <div data-read><p>⇧, ctrl and alt are one-shot, like a phone keyboard: tap ⇧ then <span class="ui">a</span> for
+  <em>A</em> (the letters turn capital while ⇧ is on); tap ctrl then <span class="ui">c</span> for <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+  Then they let go by themselves. With ⇧ the digit row types <code>!@#$%^&amp;*()</code>.</p></div>
+</section>
+
+<section data-term id="vdpad" data-where="Tools ▸ Touch Assist ▸ Virtual D-pad">
+  <h3>Virtual D-pad</h3>
+  <p>The Device Viewer's arrow keys on screen, with sticky modifiers.</p>
+  <div data-what><p>Four arrows, ⇧, ctrl, alt, Esc and ⌫. Every Device Viewer arrow key works from it: arrows alone step,
+  ⇧ grows, ctrl shrinks, ⇧ + ctrl split, alt draws a route; Esc stops route drawing and ⌫ erases the route's last
+  electrode.</p></div>
+  <div data-when><p>To move or split droplets on a touch panel. Tap the Device Viewer once first so it has the keyboard.</p></div>
+  <div data-read><p>Unlike the Virtual Keyboard, ⇧, ctrl and alt stay down (lit) until you tap them again, so you can split
+  with several taps. Tapping ⇧ or ctrl off ends the split, like letting go of the real keys. Hiding the D-pad lets go of
+  all three.</p></div>
+  <div data-typical><p>A held arrow repeats after 0.4 s, then every 0.08 s.</p></div>
+</section>
+
+<section data-term id="vmouse" data-where="Tools ▸ Touch Assist ▸ Virtual Mouse">
+  <h3>Virtual Mouse</h3>
+  <p>A mouse-shaped pad with a crosshair above it, for exact clicks where a finger is too big.</p>
+  <div data-what><p>Drag the body to aim: the crosshair rides above it, so your finger never hides the target. Tap
+  <span class="ui">L</span> or <span class="ui">R</span> to left- or right-click at the crosshair; two quick taps are a
+  double-click. Drag the strip between L and R up or down to scroll. <span class="ui">hold</span> keeps the left button
+  pressed: drag the body to drag whatever is under the crosshair, then tap <span class="ui">L</span> or
+  <span class="ui">hold</span> to let go.</p></div>
+  <div data-when><p>Right-click menus, small buttons, dragging a route point or a dock edge.</p></div>
+  <div data-read><p>The ✕ in its corner hides it. A tap that moves more than a few pixels counts as a drag, not a click.</p></div>
+  <div data-typical><p>One scroll notch per 12 px dragged on the strip.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>A key goes to the pane you clicked last.</strong> <kbd>D</kbd>, <kbd>A</kbd>, <kbd>R</kbd>,
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> and others mean different things in the Device Viewer and the protocol pane. If a key does
+    something unexpected, click the pane you meant and press it again.</li>
+    <li><strong><kbd>Ctrl</kbd>+<kbd>R</kbd> does nothing in the step list.</strong> Play and Run Selected Steps share it and
+    clash there. Click a navigation button first, or use the Play button and the right-click menu.</li>
+    <li><strong>Single-letter protocol keys go to a cell you are typing in.</strong> While a cell is open for typing, letters
+    type into it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the typing, not the protocol.</li>
+    <li><strong><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> is not "save as".</strong> In the main window it opens Sync
+    Remote Experiments; in a note window it is Strikethrough.</li>
+    <li><strong>During a run</strong> the Device Viewer only accepts view keys and <kbd>T</kbd>, and the protocol quick-action
+    keys are off.</li>
+    <li><strong>The Touch Assist pads type into what you tapped last.</strong> Tap the box or the Device Viewer first; with
+    nothing tapped, a pad key does nothing.</li>
+    <li><strong>The gamepad needs its plugin.</strong> MicroDrop alone has no gamepad support.</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Focus</dt><dd>Which pane gets the keys: the one you clicked or tapped last.</dd>
+  <dt>Switched-on electrodes</dt><dd>The electrodes with voltage on them (coloured in the Device Viewer); the arrow keys
+  move them.</dd>
+  <dt>Route</dt><dd>A path drawn in the Device Viewer that a droplet is walked along.</dd>
+  <dt>Display mode</dt><dd>The Device Viewer's mode while a protocol runs: it shows the step and ignores editing keys.</dd>
+  <dt>Free mode</dt><dd>No step selected: the Device Viewer shows what you switch on by hand.</dd>
+  <dt>Latch</dt><dd>A modifier key on a Touch Assist pad that stays down after you tap it.</dd>
+  <dt>Modifier</dt><dd><kbd>Shift</kbd>, <kbd>Ctrl</kbd> or <kbd>Alt</kbd>: held with another key to change what it does.</dd>
+  <dt>Quick action</dt><dd>One of the buttons under the step list: Add step, Save, Open and the rest.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("finder", function (figure) {
+  var query = figure.querySelector("#finder-q");
+  var pane = figure.querySelector("#finder-pane");
+  var catcher = figure.querySelector("#finder-key");
+  var status = figure.querySelector(".finder-status");
+  var rows = Array.prototype.slice.call(figure.querySelectorAll("table.finder tbody tr"));
+  var pressed = "";
+  var NAMES = { ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down", Escape: "Esc",
+    Delete: "Del", Enter: "Return", " ": "Space", Spacebar: "Space" };
+
+  function keysOf(row) {
+    return row.querySelector("td.keys").textContent.split(" / ").map(function (k) { return k.trim(); });
+  }
+
+  rows.forEach(function (row) {
+    row._keys = keysOf(row);
+    row._text = row.textContent.toLowerCase();
+  });
+
+  function sameKey(a, b) {
+    var alias = { Delete: "Del", Enter: "Return" };
+    return (alias[a] || a).toLowerCase() === (alias[b] || b).toLowerCase();
+  }
+
+  function apply() {
+    var words = query.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0;
+
+    rows.forEach(function (row) {
+      var ok = !pane.value || row.getAttribute("data-pane") === pane.value;
+      ok = ok && words.every(function (w) { return row._text.indexOf(w) >= 0; });
+      var hit = pressed && row._keys.some(function (k) { return sameKey(k, pressed); });
+      if (pressed) { ok = ok && hit; }
+      row.classList.toggle("off", !ok);
+      row.classList.toggle("hit", !!(ok && hit));
+      if (ok) { shown++; }
+    });
+
+    var what = pressed ? " answer to " + pressed : "";
+    status.textContent = shown + " of " + rows.length + " shortcuts" + what + "." +
+      (pressed && !shown ? " Nothing in MicroDrop uses that key here." : "");
+  }
+
+  function keyName(e) {
+    if (["Shift", "Control", "Alt", "Meta"].indexOf(e.key) >= 0) { return ""; }
+    var name = NAMES[e.key] || e.key;
+    if (name.length === 1) { name = name.toUpperCase(); }
+    var mods = (e.ctrlKey ? "Ctrl+" : "") + (e.altKey ? "Alt+" : "") +
+      (e.shiftKey && name.length > 1 ? "Shift+" : "") + (e.shiftKey && /^[A-Z]$/.test(name) ? "Shift+" : "");
+    return mods + name;
+  }
+
+  catcher.addEventListener("keydown", function (e) {
+    if (e.key === "Tab") { return; }
+    var name = keyName(e);
+    if (!name) { return; }
+    e.preventDefault();
+    pressed = name;
+    catcher.textContent = name;
+    apply();
+  });
+
+  figure.querySelector("#finder-reset").addEventListener("click", function () {
+    pressed = "";
+    query.value = "";
+    pane.value = "";
+    catcher.textContent = "Click, then press a key";
+    apply();
+  });
+
+  query.addEventListener("input", apply);
+  pane.addEventListener("change", apply);
+  apply();
+});
+
+Tutorial.demo("dpad", function (figure, T) {
+  var COLS = 11, ROWS = 6, S = 20, PAD = 5;
+  var svg = figure.querySelector("svg.chip");
+  var say = figure.querySelector(".pad-say");
+  var latched = { shift: false, ctrl: false, alt: false };
+  var DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+  var on, cursor, route, split, cells = {};
+
+  function key(c, r) { return c + "," + r; }
+  function xy(id) { return id.split(",").map(Number); }
+  function inside(c, r) { return c >= 0 && r >= 0 && c < COLS && r < ROWS; }
+  function next(id, d) {
+    var p = xy(id), c = p[0] + DIRS[d][0], r = p[1] + DIRS[d][1];
+    return inside(c, r) ? key(c, r) : null;
+  }
+  function proj(id, d) { var p = xy(id); return p[0] * DIRS[d][0] + p[1] * DIRS[d][1]; }
+  function frontier(ids, d) {
+    var best = Math.max.apply(null, ids.map(function (id) { return proj(id, d); }));
+    return ids.filter(function (id) { return proj(id, d) === best; });
+  }
+
+  T.el("rect", { x: 0, y: 0, width: 230, height: 134, rx: 6, class: "chip-plate" }, svg);
+  for (var r = 0; r < ROWS; r++) {
+    for (var c = 0; c < COLS; c++) {
+      cells[key(c, r)] = T.el("rect", { x: PAD + c * S + 1, y: PAD + r * S + 1, width: S - 2, height: S - 2, rx: 2,
+        class: "electrode" }, svg);
+    }
+  }
+  var routeLayer = T.el("g", { class: "chip-route" }, svg);
+  var routePath = T.el("path", { fill: "none", d: "" }, routeLayer);
+  routePath.style.stroke = "var(--orange)";
+  routePath.style.strokeWidth = "3";
+
+  function reset() {
+    on = [key(3, 2), key(4, 2), key(5, 2)];
+    cursor = key(5, 2);
+    route = [];
+    split = null;
+    draw();
+    say.textContent = "Three electrodes are on. Press an arrow to move them.";
+  }
+
+  function draw() {
+    Object.keys(cells).forEach(function (id) { cells[id].classList.toggle("on", on.indexOf(id) >= 0); });
+    routePath.setAttribute("d", route.map(function (id, i) {
+      var p = xy(id);
+      return (i ? "L" : "M") + (PAD + p[0] * S + S / 2) + "," + (PAD + p[1] * S + S / 2);
+    }).join(""));
+  }
+
+  function step(d) {
+    if (!on.length) { on = cursor ? [cursor] : []; }
+    var moved = on.map(function (id) { return next(id, d) || id; });
+    on = moved.filter(function (id, i) { return moved.indexOf(id) === i; });
+    cursor = on[0];
+    return "Step: every switched-on electrode moved one place " + d + ".";
+  }
+
+  function grow(d) {
+    if (!on.length) { on = cursor ? [cursor] : []; }
+    frontier(on, d).forEach(function (id) {
+      var n = next(id, d);
+      if (n && on.indexOf(n) < 0) { on.push(n); cursor = n; }
+    });
+    return "Grow: one more row switched on at the " + d + " side.";
+  }
+
+  function shrink(d) {
+    if (on.length <= 1) { on = []; return "Shrink: that was the last one, so everything is off."; }
+    var edge = frontier(on, d);
+    on = on.filter(function (id) { return edge.indexOf(id) < 0; });
+    cursor = on[0] || cursor;
+    return "Shrink: the row at the " + d + " side switched off.";
+  }
+
+  function splitStep(d) {
+    if (!on.length) { split = null; return "Split: nothing is switched on."; }
+    var axis = (d === "left" || d === "right") ? "h" : "v";
+    var neg = axis === "h" ? "left" : "up", pos = axis === "h" ? "right" : "down";
+    function shift(ids, dir) { return ids.map(function (id) { return next(id, dir) || id; }); }
+    function union() { return split.a.concat(split.b.filter(function (id) { return split.a.indexOf(id) < 0; })); }
+    function start(base) {
+      var ids = base.slice().sort(function (a, b) { return proj(a, pos) - proj(b, pos); });
+      var n = ids.length, mid = Math.floor(n / 2);
+      split = { axis: axis, base: base.slice(), history: [], fresh: true, single: n === 1, middle: n > 1 && n % 2 === 1,
+        a: n === 1 ? ids.slice() : ids.slice(0, mid), b: n === 1 ? ids.slice() : ids.slice(n % 2 ? mid + 1 : mid) };
+    }
+    if (!split || split.axis !== axis) { start(on); }
+    if (d === neg) {
+      if (split.history.length) {
+        var prev = split.history.pop();
+        split.a = prev[0]; split.b = prev[1];
+        on = union();
+        return "Split: the halves came one step closer.";
+      }
+      on = split.base.slice();
+      start(on);
+      return "Split: all the way back, the droplet is whole again.";
+    }
+    split.history.push([split.a.slice(), split.b.slice()]);
+    var text = "Split: the two halves moved one step apart.";
+    if (split.fresh && split.single) {
+      split.a = shift(split.a, neg); split.b = shift(split.b, pos);
+      text = "Split: the single electrode split onto its two neighbours.";
+    } else if (split.fresh && split.middle) {
+      text = "Split: the first press switched off the middle electrode.";
+    } else if (split.fresh) {
+      split.b = shift(split.b, pos);
+      text = "Split: the first press moved one half a step away.";
+    } else {
+      split.a = shift(split.a, neg); split.b = shift(split.b, pos);
+    }
+    split.fresh = false;
+    on = union();
+    return text + " Let go of ctrl or ⇧ to finish.";
+  }
+
+  function drawRoute(d) {
+    var from = route.length ? route[route.length - 1] : (cursor || (on.length === 1 ? on[0] : null));
+    if (!from) { return "Route: nothing to start from."; }
+    var n = next(from, d);
+    if (!n) { return "Route: the edge of the chip."; }
+    if (!route.length) { route = [from]; }
+    route.push(n);
+    cursor = n;
+    return "Route: one more electrode added " + d + ". ⌫ takes it back.";
+  }
+
+  function press(k) {
+    var text;
+    if (k === "esc") {
+      text = "Esc: route drawing stopped.";
+    } else if (k === "back") {
+      if (route.length > 2) { route.pop(); text = "⌫: the route's last electrode is erased."; }
+      else if (route.length) { route = []; text = "⌫: only two electrodes were left, so the route is deleted."; }
+      else { text = "⌫: there is no route to erase."; }
+    } else if (latched.alt) {
+      text = drawRoute(k);
+    } else if (latched.ctrl && latched.shift) {
+      text = splitStep(k);
+    } else if (latched.shift) {
+      split = null; text = grow(k);
+    } else if (latched.ctrl) {
+      split = null; text = shrink(k);
+    } else {
+      split = null; text = step(k);
+    }
+    draw();
+    say.textContent = text;
+  }
+
+  function setLatch(m, value) {
+    latched[m] = value;
+    var b = figure.querySelector('[data-m="' + m + '"]');
+    b.setAttribute("aria-pressed", value ? "true" : "false");
+    if (!value && (m === "ctrl" || m === "shift")) { split = null; }
+  }
+
+  figure.querySelectorAll("[data-k]").forEach(function (b) {
+    b.addEventListener("click", function () { press(b.getAttribute("data-k")); });
+  });
+  figure.querySelectorAll("[data-m]").forEach(function (b) {
+    b.addEventListener("click", function () { var m = b.getAttribute("data-m"); setLatch(m, !latched[m]); });
+  });
+  figure.querySelector("[data-reset]").addEventListener("click", function () {
+    ["shift", "ctrl", "alt"].forEach(function (m) { setLatch(m, false); });
+    reset();
+  });
+
+  var ARROWS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Escape: "esc", Backspace: "back" };
+  svg.addEventListener("keydown", function (e) {
+    var k = ARROWS[e.key];
+    if (!k) { return; }
+    e.preventDefault();
+    setLatch("shift", e.shiftKey); setLatch("ctrl", e.ctrlKey); setLatch("alt", e.altKey);
+    press(k);
+  });
+  svg.addEventListener("keyup", function (e) {
+    if (e.key === "Shift" || e.key === "Control" || e.key === "Alt") {
+      setLatch("shift", e.shiftKey); setLatch("ctrl", e.ctrlKey); setLatch("alt", e.altKey);
+    }
+  });
+
+  reset();
+});
+
+Tutorial.demo("numpad", function (figure) {
+  var pad = figure.querySelector(".vpad.num");
+  var say = figure.querySelector(".pad-say");
+  var fields = Array.prototype.slice.call(figure.querySelectorAll(".fields input"));
+  var target = null;
+  var KEYS = ["7", "8", "9", "⌫", "4", "5", "6", "▲", "1", "2", "3", "▼", "-", "0", ".", "⏎"];
+
+  fields.forEach(function (f) {
+    f.addEventListener("focus", function () { target = f; say.textContent = "Typing into " + f.parentNode.firstChild.textContent.trim() + "."; });
+  });
+
+  KEYS.forEach(function (k) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = k;
+    b.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    b.addEventListener("click", function () {
+      if (!target) { say.textContent = "Nothing tapped yet, so the key goes nowhere. Tap a box first."; return; }
+      var v = target.value;
+      if (k === "⌫") { target.value = v.slice(0, -1); }
+      else if (k === "⏎") { say.textContent = "Entered " + v + "."; target.blur(); target = null; return; }
+      else if (k === "▲" || k === "▼") {
+        var stepBy = parseFloat(target.getAttribute("data-step"));
+        var n = (parseFloat(v) || 0) + (k === "▲" ? stepBy : -stepBy);
+        target.value = stepBy < 1 ? n.toFixed(1) : String(Math.round(n));
+      }
+      else { target.value = v + k; }
+      say.textContent = "Typing into " + target.parentNode.firstChild.textContent.trim() + ": " + target.value;
+    });
+    pad.appendChild(b);
+  });
+});
+</script>
