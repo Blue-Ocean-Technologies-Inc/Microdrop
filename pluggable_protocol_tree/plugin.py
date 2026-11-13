@@ -77,10 +77,13 @@ from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.interfaces.i_compound_column import ICompoundColumn
 from pluggable_protocol_tree.interfaces.i_quick_action import IQuickAction
 from pluggable_protocol_tree.models._compound_adapters import _expand_compound
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_PROTOCOLS, TUTORIALS, TutorialEntry
 
 # Local imports.
-from .consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
+from .consts import (
+    PROTOCOL_FILES_TUTORIAL_HTML_PATH,
+    PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -425,5 +428,11 @@ class PluggableProtocolTreePlugin(Plugin):
             TutorialEntry(
                 title="Protocol Tree Tutorial",
                 path=PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_PROTOCOLS,
+            ),
+            TutorialEntry(
+                title="Protocol Files & Experiments Tutorial",
+                path=PROTOCOL_FILES_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_PROTOCOLS + 10,
             ),
         ]

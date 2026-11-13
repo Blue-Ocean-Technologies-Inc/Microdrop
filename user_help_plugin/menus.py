@@ -10,6 +10,7 @@
 
 # Standard library imports.
 import webbrowser
+from itertools import groupby, zip_longest
 from pathlib import Path
 
 # Enthought library imports.
@@ -33,6 +34,7 @@ from .consts import (
     MICRODROP_LAUNCHER_README_URL,
     SCIBOTS_URL,
     SUPPORT_EMAIL,
+    TUTORIAL_SECTION_SPAN,
     TutorialEntry,
 )
 
@@ -177,12 +179,13 @@ class ContactSupportAction(Action):
 class TutorialCatalog(HasTraits):
     """The tutorials contributed to the TUTORIALS extension point."""
 
-    #: Contributed entries, sorted by title (kept so by UserHelpPlugin).
+    #: Contributed entries in learning order (kept so by UserHelpPlugin).
     entries = List(Instance(TutorialEntry))
 
 
 class TutorialsMenuManager(MenuManager):
-    """Help > Tutorials: one entry per catalog entry, rebuilt when it changes."""
+    """Help > Tutorials: one entry per catalog entry, one group per section,
+    rebuilt when the catalog changes."""
 
     id = "tutorials_submenu"
     name = "&Tutorials"
@@ -191,19 +194,29 @@ class TutorialsMenuManager(MenuManager):
 
     @observe("catalog.entries")
     def _rebuild(self, event):
-        group = self.find_group("tutorials")
+        sections = [
+            list(entries)
+            for _section, entries in groupby(self.catalog.entries, key=tutorial_section)
+        ]
 
-        if group is None:
-            group = Group(id="tutorials")
-            self.append(group)
+        # A manager cannot drop a group, so groups are reused in place; the
+        # menu skips the empty ones and puts a separator between the rest.
+        while len(self.groups) < len(sections):
+            self.append(Group())
 
-        group.clear()
+        for group, entries in zip_longest(self.groups, sections, fillvalue=[]):
+            group.clear()
 
-        for entry in self.catalog.entries:
-            group.append(tutorial_action(entry))
+            for entry in entries:
+                group.append(tutorial_action(entry))
 
         self.enabled = bool(self.catalog.entries)
         self.changed = True
+
+
+def tutorial_section(entry):
+    """Return the learning-path section an entry's order falls in."""
+    return entry.order // TUTORIAL_SECTION_SPAN
 
 
 def tutorial_action(entry):

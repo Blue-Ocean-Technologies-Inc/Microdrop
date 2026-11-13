@@ -1,0 +1,1339 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Protocol Files &amp; Experiments Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+code.path { word-break: break-all; }
+.table-wrap { overflow-x: auto; }
+table.small td code { font-size: .8rem; }
+figure.step-panel svg.sch { font-size: 10px; fill: var(--ink); }
+figure.step-panel svg.sch text { font-size: inherit; fill: inherit; font-family: inherit; font-weight: inherit; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 10px 0; }
+@media (max-width: 760px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.place { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.place h4 { margin: 0 0 4px; }
+.place p, .place li { font-size: .92rem; }
+.place ul { margin: 4px 0; padding-left: 1.2em; }
+.place.proto { border-top: 4px solid var(--blue); }
+.place.exp { border-top: 4px solid var(--accent); }
+.pf-out { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 4px; font-size: .9rem; }
+.pf-out dt { font-weight: 700; color: var(--muted); }
+.pf-out dd { margin: 0; overflow-wrap: anywhere; }
+.pf-title { font-family: "Segoe UI", system-ui, sans-serif; font-size: .9rem; padding: 5px 9px; border: 1px solid var(--line);
+  border-radius: 6px 6px 0 0; background: var(--surface-2); overflow-wrap: anywhere; }
+.pf-title .mod { color: var(--warn); font-weight: 700; }
+.pf-state { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 6px 6px; padding: 6px 9px; font-size: .88rem; background: var(--surface); }
+.pf-state .glyph { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+.pf-state .glyph.on { background: var(--ok); }
+.pf-state .glyph.off { background: var(--muted); }
+ol.pf-log { font-family: "Cascadia Mono", Consolas, monospace; font-size: .78rem; margin: 8px 0 0; padding-left: 2.2em;
+  max-height: 11.5em; overflow-y: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; }
+ol.pf-log li { margin: 2px 0; }
+ol.pf-log li.warn { color: var(--warn); }
+ol.pf-log li.ok { color: var(--ok); }
+pre.pf-json { font-family: "Cascadia Mono", Consolas, monospace; font-size: .76rem; line-height: 1.45; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 8px 0; }
+pre.pf-json span[data-part] { border-radius: 3px; cursor: pointer; }
+pre.pf-json span[data-part].on { background: var(--accent-soft); }
+ul.pf-tree { list-style: none; margin: 8px 0; padding: 0; font-size: .9rem; }
+ul.pf-tree ul { list-style: none; margin: 2px 0 2px 1.3em; padding: 0; }
+ul.pf-tree li { margin: 3px 0; }
+ul.pf-tree button { font: inherit; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink);
+  padding: 1px 7px; cursor: pointer; text-align: left; }
+ul.pf-tree button.new { border-color: var(--ok); }
+ul.pf-tree button.none { color: var(--muted); border-style: dashed; }
+ul.pf-tree button.sel { outline: 2px solid var(--accent); }
+ul.pf-tree .tag { font-size: .78rem; margin-left: 6px; }
+ul.pf-tree .tag.new { color: var(--ok); font-weight: 700; }
+ul.pf-tree .tag.none { color: var(--muted); }
+table.pf-csv { border-collapse: collapse; font-family: "Cascadia Mono", Consolas, monospace; font-size: .74rem; white-space: nowrap; }
+table.pf-csv th, table.pf-csv td { border: 1px solid var(--line); padding: 2px 6px; text-align: right; }
+table.pf-csv th button { font: inherit; font-weight: 700; border: 0; background: none; color: var(--blue); cursor: pointer; padding: 0;
+  text-decoration: underline dotted; }
+table.pf-csv th.sel { background: var(--accent-soft); }
+p.pf-explain { min-height: 3.2em; font-size: .92rem; margin: 8px 0 0; }
+.controls button[aria-pressed="true"] { background: var(--icon-on); border-color: var(--icon-on); color: #ffffff; }
+.controls button:disabled { opacity: .45; cursor: default; }
+ol.howto { padding-left: 1.4em; max-width: 75ch; }
+ol.howto li { margin: 5px 0; }
+</style>
+
+<header data-hero>
+  <h1>Protocol Files &amp; Experiments</h1>
+  <p>MicroDrop keeps two kinds of things for you. A <strong>protocol file</strong> is your recipe: the steps, saved as one
+  <code>.json</code> file wherever you choose. An <strong>experiment folder</strong> is your lab notebook: one folder per
+  session, where every run leaves its data, its report, a copy of the protocol it ran, pictures and notes.</p>
+  <p>This page shows how to save and open protocols, what AutoSave and Undo do, what a run leaves behind, and how to bring in
+  protocols from the old MicroDrop. Where each folder sits on your computer is in <em>Help ▸ Tutorials ▸ Help, Logs &amp;
+  Saved Files</em>; this page links there rather than repeating it.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">The protocol file and the experiment folder are separate. Saving a protocol never touches the experiment
+folder, and a new experiment never changes the protocol you have open.</p>
+
+<div class="two">
+  <div class="place proto">
+    <h4>Protocol file</h4>
+    <ul>
+      <li>What the protocol <em>is</em>: steps, groups and every column value.</li>
+      <li>You save it (<kbd>Ctrl</kbd>+<kbd>S</kbd>); AutoSave then keeps it up to date.</li>
+      <li>Lives where you saved it. The dialogs start in <code>Documents\Sci-Bots\Microdrop\Protocols\&lt;device name&gt;</code>.</li>
+      <li>One file, many runs. Share it by copying it.</li>
+    </ul>
+  </div>
+  <div class="place exp">
+    <h4>Experiment folder</h4>
+    <ul>
+      <li>What <em>happened</em>: logs, run data, run reports, protocol copies, pictures, videos, notes.</li>
+      <li>MicroDrop writes it for you. A new one starts each time MicroDrop starts, and when you click New Experiment.</li>
+      <li>Lives in <code>Documents\Sci-Bots\Microdrop\Experiments\&lt;date and time&gt;</code>.</li>
+      <li>Many runs, one folder, until you start a new experiment.</li>
+    </ul>
+  </div>
+</div>
+<p>Paths are written Windows style. On macOS, Linux and the Raspberry Pi they use <code>/</code>, and
+<code>Documents</code> is in your home folder there too.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">From a fresh experiment to a saved protocol, a run and its report. It assumes a chip is loaded in the
+Device Viewer and you have a protocol with a few steps (the <em>Protocol Tree</em> tutorial shows how to build one).</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The Experiment line above the protocol tree: the New Experiment button, the underlined experiment name, and the New Note button">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <rect x="10" y="14" width="280" height="30" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+      <use href="#ic-note_add" x="16" y="19" width="20" height="20" fill="var(--accent)"/>
+      <text x="44" y="33" style="font-weight:700">Experiment:</text>
+      <text x="108" y="33" style="fill:var(--blue);text-decoration:underline">2026_11_13-14_05_09</text>
+      <use href="#ic-sticky_note" x="262" y="19" width="20" height="20"/>
+      <text x="16" y="70" style="fill:var(--muted)">Click the name: the folder opens.</text>
+      <rect x="10" y="80" width="280" height="58" rx="4" fill="none" stroke="var(--line)"/>
+      <text x="18" y="97" font-family="Consolas, monospace">Experiments\2026_11_13-14_05_09</text>
+      <text x="34" y="115" font-family="Consolas, monospace">logs</text>
+      <text x="34" y="131" style="fill:var(--muted)">(the rest appears as you work)</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Start an experiment for this piece of work</h4>
+    <p>Click <i data-glyph="note_add" data-inline data-label="New Experiment"></i> <em>New Experiment</em> on the
+    <span class="ui">Experiment:</span> line above the protocol tree, or choose
+    <span class="ui">File ▸ Experiments ▸ New Experiment</span>. The name after <span class="ui">Experiment:</span> changes
+    to the new folder's name: the date and time, in UTC.</p>
+    <p>Click that name: the folder opens in your file browser. It already holds <code>logs</code>; everything else appears
+    as you work.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The protocol pane title before and after the first save: untitled becomes the file name">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="12" y="24" style="fill:var(--muted)">Before:</text>
+      <rect x="10" y="30" width="280" height="22" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="16" y="45">Pluggable Protocol Tree - untitled</text>
+      <text x="150" y="74" text-anchor="middle" style="fill:var(--muted)">Ctrl+S, type a name, Save</text>
+      <text x="12" y="98" style="fill:var(--muted)">After:</text>
+      <rect x="10" y="104" width="280" height="22" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="16" y="119">Pluggable Protocol Tree - mixing_assay</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Save the protocol once</h4>
+    <p>Press <kbd>Ctrl</kbd>+<kbd>S</kbd> with the protocol pane in focus, or click
+    <i data-glyph="save" data-inline data-label="Save Protocol"></i> <em>Save Protocol</em> under the tree. The first time,
+    a <em>Save Protocol</em> window asks for a file name. It opens in the Protocols folder of the loaded device. Type a
+    name and click <span class="ui">Save</span>.</p>
+    <p>The pane's title changes from <em>untitled</em> to your file name. From now on, AutoSave writes your changes to
+    that file.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="Timeline of an edit: the title shows modified, about one and a half seconds later AutoSave writes the file and the mark goes away">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <line x1="20" y1="80" x2="280" y2="80" stroke="var(--muted)"/>
+      <circle cx="40" cy="80" r="5" fill="var(--warn)"/><text x="40" y="66" text-anchor="middle">edit</text>
+      <circle cx="160" cy="80" r="5" fill="var(--ok)"/><text x="160" y="66" text-anchor="middle">file written</text>
+      <text x="100" y="98" text-anchor="middle" style="fill:var(--muted)">about 1.5 s</text>
+      <rect x="10" y="110" width="135" height="22" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="16" y="125">… mixing_assay <tspan style="fill:var(--warn);font-weight:700">[modified]</tspan></text>
+      <rect x="152" y="110" width="138" height="22" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="158" y="125">… mixing_assay</text>
+      <text x="12" y="24" style="font-weight:700">AutoSave</text>
+      <use href="#ic-save_clock" x="70" y="11" width="18" height="18" fill="var(--ok)"/>
+      <text x="94" y="24" style="fill:var(--muted)">green = on</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Edit; AutoSave keeps the file current</h4>
+    <p>Change a cell, say a Duration. The title shows <em>[modified]</em>. About 1.5 seconds after your last change,
+    AutoSave writes the file and <em>[modified]</em> goes away. The green
+    <i data-glyph="ICON_SAVE_CLOCK" data-on data-inline data-label="AutoSave"></i> glyph in the status bar, and the
+    <span class="ui">AutoSave</span> box under the timeline, show that AutoSave is on.</p>
+    <p>Changed your mind? <kbd>Ctrl</kbd>+<kbd>Z</kbd> (protocol pane in focus) or
+    <i data-glyph="undo" data-inline data-label="Undo"></i> takes the edit back; AutoSave then writes that too.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The two questions at the end of a finished run: Create New Experiment, then Run Summary Generated with a link to the report">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <rect x="10" y="10" width="280" height="58" rx="5" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="18" y="27" style="font-weight:700">Create New Experiment?</text>
+      <text x="18" y="43">Would you like to start a new experiment?</text>
+      <rect x="196" y="48" width="40" height="15" rx="3" fill="var(--surface)" stroke="var(--line)"/><text x="207" y="59">Yes</text>
+      <rect x="242" y="48" width="40" height="15" rx="3" fill="var(--surface)" stroke="var(--line)"/><text x="255" y="59">No</text>
+      <rect x="10" y="80" width="280" height="58" rx="5" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="18" y="97" style="font-weight:700">Run Summary Generated</text>
+      <text x="18" y="113">Report file saved to:</text>
+      <text x="18" y="128" style="fill:var(--blue);text-decoration:underline">report_20261113_141822.html</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Run it and answer the questions at the end</h4>
+    <p>Press Play. When the run finishes, MicroDrop asks <em>Create New Experiment?</em>.
+    <span class="ui">Yes</span> starts a new experiment folder for the next run; <span class="ui">No</span> keeps the current
+    one. Either way the report of this run goes into the folder the run started in.</p>
+    <p>Then <em>Generating Run Report...</em> shows for a few seconds, and <em>Run Summary Generated</em> links to the
+    report. Click the link to open it in your web browser. A run you stopped asks <em>Generate Run Summary?</em> instead
+    (<a href="#run-dialogs">End-of-run questions</a>).</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The experiment folder after one run: data, logs, protocols and reports folders, each with a new file">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <g font-family="Consolas, monospace">
+        <text x="12" y="22" style="font-weight:700">2026_11_13-14_05_09</text>
+        <text x="26" y="42">data</text><text x="104" y="42" style="fill:var(--muted)">data_20261113_141805.csv/.json</text>
+        <text x="26" y="62">logs</text><text x="104" y="62" style="fill:var(--muted)">microdrop.frontend…log</text>
+        <text x="26" y="82">protocols</text><text x="104" y="82" style="fill:var(--muted)">protocol_2026_11_13-…json</text>
+        <text x="26" y="102">reports</text><text x="104" y="102" style="fill:var(--muted)">report_20261113_141822.html</text>
+        <text x="26" y="122">captures</text><text x="104" y="122" style="fill:var(--muted)">if a step took pictures</text>
+        <text x="26" y="140">Notes</text><text x="104" y="140" style="fill:var(--muted)">if you saved a note</text>
+      </g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Look at what the run left</h4>
+    <p>Choose <span class="ui">File ▸ Experiments ▸ Open Experiment Folder</span>. You find the run's data
+    (<code>data</code>), its report (<code>reports</code>), a copy of the protocol exactly as it ran
+    (<code>protocols</code>) and the log (<code>logs</code>). Steps that took pictures or videos filled
+    <code>captures</code> and <code>recordings</code>.</p>
+    <p>If you answered <span class="ui">Yes</span> to <em>Create New Experiment?</em>, the open folder is the new
+    one: go up one level to <code>Experiments</code> and open the previous folder. <a href="#run-files">What a run leaves
+    behind</a> lets you try each ending.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The Session Reports window: a search box and a list of report files with size and date, newest first">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="12" y="20" style="font-weight:700">Session Reports</text>
+      <text x="12" y="40">Search:</text><rect x="52" y="30" width="236" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+      <text x="56" y="41" style="fill:var(--muted)">Filter by file name...</text>
+      <rect x="10" y="52" width="280" height="64" fill="none" stroke="var(--line)"/>
+      <text x="16" y="66" style="font-weight:700">Name</text><text x="186" y="66" style="font-weight:700">Size</text><text x="222" y="66" style="font-weight:700">Date Created</text>
+      <text x="16" y="84">report_20261113_151204.html</text><text x="186" y="84">1.2 MB</text><text x="222" y="84">2026-11-13</text>
+      <text x="16" y="102">report_20261113_141822.html</text><text x="186" y="102">0.9 MB</text><text x="222" y="102">2026-11-13</text>
+      <rect x="196" y="124" width="42" height="17" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="206" y="136">Open</text>
+      <rect x="244" y="124" width="44" height="17" rx="3" fill="var(--surface)" stroke="var(--line)"/><text x="252" y="136">Close</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">6</span>Open a report again later</h4>
+    <p>Press <kbd>R</kbd> with the protocol pane in focus, or click
+    <i data-glyph="summarize" data-inline data-label="Browse session reports"></i> <em>Browse session reports</em>. The
+    <em>Session Reports</em> window lists the reports made since MicroDrop started, newest first; double-click one to open
+    it.</p>
+    <p>Reports from earlier sessions are not listed there: open their experiment folder's <code>reports</code>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 150" role="img" aria-label="The Import Legacy Protocol window: MicroDrop folder with Browse, Device and Protocol lists, Device SVG and Protocol file paths, Import and Cancel">
+      <rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="12" y="20" style="font-weight:700">Import Legacy Protocol</text>
+      <g font-size="9.5">
+        <text x="12" y="42">MicroDrop folder:</text><rect x="96" y="32" width="140" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+        <rect x="242" y="32" width="46" height="14" rx="2" fill="var(--surface)" stroke="var(--line)"/><text x="246" y="43">Browse...</text>
+        <text x="12" y="62">Device:</text><rect x="96" y="52" width="192" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/><text x="100" y="63">Chip A ▾</text>
+        <text x="12" y="82">Protocol:</text><rect x="96" y="72" width="192" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/><text x="100" y="83">wash cycle ▾</text>
+        <text x="12" y="102">Device SVG:</text><rect x="96" y="92" width="192" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+        <text x="12" y="122">Protocol file:</text><rect x="96" y="112" width="192" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+        <rect x="190" y="131" width="46" height="14" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="198" y="142">Import</text>
+        <rect x="242" y="131" width="46" height="14" rx="2" fill="var(--surface)" stroke="var(--line)"/><text x="248" y="142">Cancel</text>
+      </g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">7</span>Bring in a protocol from the old MicroDrop</h4>
+    <p>Choose <span class="ui">File ▸ Protocol ▸ Import Legacy…</span>. Point <span class="ui">MicroDrop folder:</span> at the
+    old MicroDrop's folder, pick the <span class="ui">Device</span> and the <span class="ui">Protocol</span>, and click
+    <span class="ui">Import</span>.</p>
+    <p>MicroDrop converts the steps, saves them as a new protocol file and shows <em>Legacy protocol imported</em>. Open its
+    details to see what could not be converted (<a href="#part-legacy">Old MicroDrop protocols</a>).</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-files">
+<h2>Protocol files</h2>
+<p class="intro">Opening, saving and sharing the protocol you build in the protocol tree.</p>
+
+<section data-term id="protocol-file" data-where="a .json file you save">
+  <h3>Protocol file</h3>
+  <p>One file holding one protocol: every step, group and column value.</p>
+  <div data-what><p>A text file in JSON format with the ending <code>.json</code>. The dialogs list it as
+  <em>Protocol JSON (*.json)</em>. Its file name is the protocol's name: MicroDrop shows it in the pane's title.</p></div>
+  <div data-when><p>Save a protocol you want to run again, change later or give to someone. Open it with
+  <kbd>Ctrl</kbd>+<kbd>O</kbd> or <span class="ui">File ▸ Protocol ▸ Load…</span>.</p></div>
+  <div data-read><p>You never need to read it, but you can: <a href="#file-inside">What is inside a protocol file</a> takes
+  one apart. Do not edit it by hand; a broken file will not open (<em>Load error</em>).</p></div>
+  <div data-typical><p>A few kilobytes for a short protocol. Nothing is saved until you save it the first time: a new
+  protocol is <em>untitled</em>.</p></div>
+</section>
+
+<section data-term id="file-inside" data-where="Interactive">
+  <h3>What is inside a protocol file</h3>
+  <p>Click a part of this shortened example, or a button, to see what it holds.</p>
+  <figure data-demo="inside" aria-label="An example protocol file; click a part to read what it holds">
+    <div class="controls">
+      <button type="button" data-pick="version">schema_version</button>
+      <button type="button" data-pick="map">electrode map</button>
+      <button type="button" data-pick="flags">row_flags</button>
+      <button type="button" data-pick="columns">columns</button>
+      <button type="button" data-pick="fields">fields</button>
+      <button type="button" data-pick="rows">rows</button>
+      <button type="button" data-pick="missing">not in the file</button>
+    </div>
+<pre class="pf-json">{
+  <span data-part="version">"schema_version": 1,</span>
+  <span data-part="map">"protocol_metadata": {
+    "electrode_to_channel": {"electrode000": 119, "electrode001": 118, …}
+  },</span>
+  <span data-part="flags">"row_flags": {"d3725d2b…": {"repeat_duration_controls": true}},</span>
+  <span data-part="columns">"columns": [
+    {"id": "repetitions", "cls": "pluggable_protocol_tree.builtins…RepetitionsColumnModel"},
+    {"id": "duration_s", "cls": "pluggable_protocol_tree.builtins…DurationColumnModel"},
+    …
+    {"id": "voltage", "cls": "…"}
+  ],</span>
+  <span data-part="fields">"fields": ["depth", "uuid", "type", "name", "id", "repetitions", "route_repetitions",
+             "duration_s", "electrodes", "routes", …, "voltage"],</span>
+  <span data-part="rows">"rows": [
+    [0, "9f2c41e0…", "step",  "Dispense", [1], 1, 1, 1.0, ["electrode000", "electrode001"], [], …, 100],
+    [0, "63a0b8d1…", "group", "Wash",     [2], 3, 1, 1.0, [], [], …],
+    [1, "d3725d2b…", "step",  "Mix",   [2, 1], 1, 3, 0.5, [], [["electrode003", "electrode004", "electrode003"]], …]
+  ]</span>
+}</pre>
+    <dl class="pf-out" aria-live="polite">
+      <dt>Part</dt><dd id="in-name"></dd>
+      <dt>Holds</dt><dd id="in-what"></dd>
+      <dt>Why it matters</dt><dd id="in-why"></dd>
+    </dl>
+    <figcaption>Written by <span class="ui">Save</span>, <span class="ui">Save As…</span> and AutoSave. The values after
+    <code>name</code> follow the order of <code>fields</code>.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="protocols-folder" data-where="Documents\Sci-Bots\Microdrop\Protocols\&lt;device name&gt;">
+  <h3>Protocols folder</h3>
+  <p>Where the Save, Load and Import windows open.</p>
+  <div data-what><p>One folder per device: <code>Protocols\&lt;device file name&gt;</code>, for example
+  <code>Protocols\90_pin_array</code>, or <code>Protocols\Null</code> when no device is loaded. MicroDrop creates it when
+  a window opens.</p></div>
+  <div data-when><p>Keep each protocol beside the device it was written for: a protocol only makes sense on its own
+  chip design (<a href="#device-mismatch">Opening on another device</a>).</p></div>
+  <div data-read><p>It is only a starting point: you can save anywhere. There is no setting for it in Edit ▸
+  Preferences; the <em>Help, Logs &amp; Saved Files</em> tutorial shows where <code>Documents\Sci-Bots\Microdrop</code>
+  is on each computer.</p></div>
+  <div data-typical><p><code>Documents\Sci-Bots\Microdrop\Protocols\90_pin_array</code>.</p></div>
+</section>
+
+<section data-term id="protocol-menu" data-where="File ▸ Protocol, and the buttons under the tree">
+  <h3>New, Open, Save and Save As</h3>
+  <p>Every way to start, open and save a protocol.</p>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>File ▸ Protocol</th><th>Button, key</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Create New</td><td><i data-glyph="new_window" data-inline data-label="New protocol"></i> <kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Starts an <em>untitled</em> protocol with one step called <em>Step</em>. Clears Undo.</td></tr>
+      <tr><td class="lbl">Load…</td><td><i data-glyph="file_open" data-inline data-label="Open Protocol"></i> <kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Opens a saved protocol in place of the current one. It may first warn about the device or missing columns (<a href="#device-mismatch">device</a>, <a href="#missing-columns">columns</a>). Clears Undo.</td></tr>
+      <tr><td class="lbl">Import Legacy…</td><td></td><td>Converts a protocol from the old MicroDrop (<a href="#part-legacy">Old MicroDrop protocols</a>).</td></tr>
+      <tr><td class="lbl">Save</td><td><i data-glyph="save" data-inline data-label="Save Protocol"></i> <kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Writes to the protocol's own file without asking. If it has none yet, does Save As….</td></tr>
+      <tr><td class="lbl">Save As…</td><td></td><td>Asks for a new name and place, writes there, and from then on the protocol <em>is</em> that file: Save and AutoSave write to it. The old file stays as it was last saved.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-when><p>Use <span class="ui">Save As…</span> <em>before</em> you start changing a protocol you want to keep
+  unchanged: AutoSave would otherwise write your changes into it.</p></div>
+  <div data-read><p>Create New, Load… and Import Legacy… first check for unsaved changes (<a href="#unsaved">Unsaved
+  changes</a>). The buttons and their keys work while the protocol pane has focus and are greyed during a run.</p></div>
+</section>
+
+<section data-term id="modified" data-where="the protocol pane's title">
+  <h3>The [modified] marker</h3>
+  <p>Tells you the protocol on screen differs from its file.</p>
+  <div data-what><p>The pane's title reads <em>Pluggable Protocol Tree - &lt;name&gt;</em>, with <em>[modified]</em> on
+  the end while there are unsaved changes. <em>&lt;name&gt;</em> is the file name without <code>.json</code>, or
+  <em>untitled</em>.</p></div>
+  <div data-read><p>It compares the steps with the last save, not the number of edits: change a value and change it back,
+  and the mark goes away. With AutoSave on and a file, it shows only for the moment before AutoSave writes. If it stays,
+  AutoSave is off, the protocol has no file yet, or a save failed.</p></div>
+  <div data-typical><p>No mark right after a save, a load or New.</p></div>
+</section>
+
+<section data-term id="unsaved" data-where="before New, Load, Import Legacy and closing MicroDrop">
+  <h3>Unsaved changes</h3>
+  <p>The questions that keep you from losing edits.</p>
+  <div data-what>
+  <table class="small">
+    <thead><tr><th>Window</th><th>When</th><th>Choices</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Unsaved Protocol Changes</td><td>New, Load or Import Legacy with unsaved changes: <em>Proceed without saving?</em></td><td><span class="ui">Yes</span> drops the changes; <span class="ui">No</span> goes back so you can save.</td></tr>
+      <tr><td class="lbl">Unsaved Protocol Changes</td><td>Closing MicroDrop with unsaved changes: <em>Exit without saving?</em></td><td><span class="ui">No</span> keeps MicroDrop open; <span class="ui">Yes</span> closes it.</td></tr>
+      <tr><td class="lbl">Protocol File Not Found</td><td>New, Load or Import Legacy when the open protocol's file was deleted or moved.</td><td>The same choice.</td></tr>
+      <tr><td class="lbl">Save error / Load error</td><td>The file could not be written or read; the message says why.</td><td><span class="ui">OK</span>. Nothing changed in MicroDrop.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-read><p>With AutoSave on and a file, changes still waiting for AutoSave are written first, so these questions
+  rarely appear. You see them when the protocol has never been saved or AutoSave is off.</p></div>
+</section>
+
+<section data-term id="device-mismatch" data-where="Protocol warnings, when opening">
+  <h3>Opening on another device</h3>
+  <p>What a protocol remembers about the chip, and what MicroDrop checks when you open it.</p>
+  <div data-what><p>A protocol stores electrodes by their id in the device file (such as <code>electrode001</code>), plus
+  the channel each electrode had when it was saved (<em>electrode map</em>). It does <strong>not</strong> store which
+  device file it was written for, and opening it does not load a device.</p></div>
+  <div data-read><p>With a device loaded, Load… compares the two and may show <em>Protocol warnings</em>:</p>
+  <ul class="uses">
+    <li><em>… electrode(s) referenced by this protocol do not exist on the current device</em>, with the step IDs that use
+    them;</li>
+    <li><em>… electrode(s) map to a different channel on the current device than the protocol expects</em>.</li>
+  </ul>
+  <p><span class="ui">Proceed anyway</span> opens it; <span class="ui">Cancel</span> keeps what you had. Expand the details
+  for the list.</p></div>
+  <div data-when><p>Load the right device (Device Viewer) first, then the protocol. If you proceed on another device, the
+  wrong electrodes may switch on.</p></div>
+  <div data-typical><p>No warning on the device the protocol was written for. Once a device is loaded, the protocol takes
+  that device's electrode map, so the next save stores the new map and the channel warning does not come back for that
+  file.</p></div>
+</section>
+
+<section data-term id="missing-columns" data-where="Protocol has errors, when opening">
+  <h3>Opening without a column's plugin</h3>
+  <p>Columns such as Voltage, Magnet or a heater setpoint come from plugins. A protocol that uses one needs that plugin
+  loaded.</p>
+  <div data-what><p>When a column in the file has no plugin loaded, Load… shows <em>Protocol has errors: … column(s) in this
+  protocol have no matching plugin; their values will be dropped on load</em>. The details list the column ids.</p></div>
+  <div data-when><p>Click <span class="ui">Cancel</span>, load the plugin (Tools ▸ Manage Plugins…) and open the protocol
+  again. Click <span class="ui">OK</span> only if you mean to lose those values.</p></div>
+  <div data-read><p>After <span class="ui">OK</span> the protocol opens without those columns. The file is not changed at
+  once, but the next save writes it without them, and with AutoSave on that happens after your next edit. To keep the
+  original, use Save As… before editing. The same goes for a plugin unloaded while MicroDrop runs: its values come back if
+  you load it again in the same session, but a save made while it is gone writes the file without them.</p></div>
+</section>
+
+<section data-term id="import-group" data-where="Import protocol into selected group, Ctrl+Shift+I">
+  <h3>Import a protocol into a group</h3>
+  <p>Copies the steps of another saved protocol into the group you selected.</p>
+  <div data-what><p>Select exactly one group, then click <i data-glyph="unarchive" data-inline data-label="Import protocol into selected group"></i>
+  <em>Import protocol into selected group</em> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>) and pick a file. Its
+  top-level steps are added at the end of the group, with their values. The button is greyed unless one group is
+  selected.</p></div>
+  <div data-read><p>Only the top level comes in: a group in that file arrives as an empty group, without its steps. Values
+  of columns that are not loaded here are skipped without a warning, and nothing is checked against the device. One
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes the whole import back.</p></div>
+  <div data-when><p>Reusing a block, such as a wash sequence, in a bigger protocol. To bring in a whole protocol with its
+  groups, open it instead and copy and paste the rows.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-autosave">
+<h2>AutoSave and Undo</h2>
+<p class="intro">AutoSave writes your edits to the protocol's file; Undo takes edits back. They work together: an undo is an
+edit too, so AutoSave writes it.</p>
+
+<section data-term id="autosave" data-where="status bar glyph, and the AutoSave box under the timeline">
+  <h3>AutoSave</h3>
+  <p>Writes the protocol back to its own file shortly after you stop editing.</p>
+  <div data-what><p>About 1.5 seconds after your last change, the protocol is saved to the file it was last saved to or
+  opened from. It never picks a file for you: a protocol that has never been saved is not written. During a run it writes
+  nothing; changes made during the run are written once, when it ends. Before New, Load, Import Legacy and closing
+  MicroDrop, waiting changes are written at once.</p></div>
+  <div data-when><p>Leave it on. Turn it off to try edits you might not keep, then Save As… if you want them. Turning it on
+  again saves edits still waiting.</p></div>
+  <div data-read><p><i data-glyph="ICON_SAVE_CLOCK" data-on data-inline data-label="AutoSave"></i> in the status bar is
+  green while AutoSave is on and grey while it is off; clicking it, or the <span class="ui">AutoSave</span> box beside
+  <span class="ui">Phase navigation</span>, switches it. Hover over either for what it is doing:</p>
+  <ul class="uses">
+    <li><em>AutoSave on – save the protocol once to start</em>: no file yet.</li>
+    <li><em>AutoSave on – changes are saved to &lt;file&gt; automatically</em>: working.</li>
+    <li><em>AutoSave on – paused while the protocol runs; pending changes are saved when it ends</em>.</li>
+    <li><em>AutoSave on – the last save failed: … It retries on the next change.</em></li>
+    <li><em>AutoSave is off. Turn it on to write protocol changes to the protocol file automatically.</em></li>
+  </ul>
+  <p>If a write fails (a full disk, a read-only or unplugged drive), an <em>AutoSave Failed</em> warning appears once. Your
+  changes stay in MicroDrop and <em>[modified]</em> stays; the next change tries again, or use Save As… to pick another
+  place.</p></div>
+  <div data-typical><p>On. The choice is remembered across restarts. Opening a protocol never rewrites its file.</p></div>
+</section>
+
+<section data-term id="edit-life" data-where="Interactive">
+  <h3>What happens to my edit?</h3>
+  <p>A copy of the protocol pane's title, AutoSave and Undo. Press the buttons in any order and read the log.</p>
+  <figure data-demo="edit-life" aria-label="Simulation of editing, AutoSave, Save, a run, Undo and opening another protocol">
+    <div class="controls">
+      <label><input type="checkbox" id="el-auto" checked> AutoSave</label>
+      <button type="button" id="el-edit">Edit a cell</button>
+      <button type="button" id="el-wait">Wait 2 s</button>
+      <button type="button" id="el-save">Save (Ctrl+S)</button>
+      <button type="button" id="el-undo">Undo (Ctrl+Z)</button>
+      <button type="button" id="el-run">Start run</button>
+      <button type="button" id="el-open">Open another protocol</button>
+      <button type="button" id="el-reset">Start over</button>
+    </div>
+    <div class="pf-title" id="el-title"></div>
+    <div class="pf-state" id="el-state" aria-live="polite"></div>
+    <ol class="pf-log" id="el-log" aria-live="polite"></ol>
+    <figcaption>It starts like MicroDrop does: an untitled protocol that was never saved. Try: edit, wait; save; edit,
+    wait; switch AutoSave off and edit; start a run and edit while it runs.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="undo" data-where="Undo and Redo under the tree; Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z">
+  <h3>Undo and Redo</h3>
+  <p>Take back protocol edits, one action at a time, and put them back.</p>
+  <div data-what><p><i data-glyph="undo" data-inline data-label="Undo"></i> <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the last
+  edit; <i data-glyph="redo" data-inline data-label="Redo"></i> <kbd>Ctrl</kbd>+<kbd>Y</kbd> or
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes it. The keys work while the protocol pane has focus; the Device
+  Viewer has its own <kbd>Ctrl</kbd>+<kbd>Z</kbd>. One entry per action: a Bulk Set over twenty steps, a paste of five
+  rows, or electrodes clicked into a step each undo in one go.</p></div>
+  <div data-read><p>The tooltip names the edit: <em>Undo Edit Duration (s) (Ctrl+Z)</em>, <em>Undo Delete Step</em>,
+  <em>Redo Move Rows</em>. <em>Nothing to undo</em> and a greyed button mean the history is empty. A new edit clears what
+  is left to redo.</p></div>
+  <div data-when><p>Any slip in the tree. Undo works after a save too: the protocol is then <em>[modified]</em> again and
+  AutoSave writes the undone state.</p></div>
+  <div data-typical><p>The last 100 edits. The history is cleared by New, Load, Import Legacy and when a plugin adds or
+  removes a column; Save does not clear it. Nothing is undone or recorded during a run. While you are typing in a cell,
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the typing instead.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-experiments">
+<h2>Experiments</h2>
+<p class="intro">Where your runs leave their results. The <em>Help, Logs &amp; Saved Files</em> tutorial has the full folder
+map and a <em>Where is my …?</em> lookup; this part is about how experiments and runs fit together.</p>
+
+<section data-term id="experiment-folder" data-where="Documents\Sci-Bots\Microdrop\Experiments\&lt;date and time&gt;">
+  <h3>Experiment folder</h3>
+  <p>One folder that collects everything a session wrote.</p>
+  <div data-what><p>Named after the moment it began, in UTC, as <code>YYYY_MM_DD-HH_MM_SS</code>. MicroDrop starts one
+  every time it starts, and another each time you click New Experiment or answer <span class="ui">Yes</span> to
+  <em>Create New Experiment?</em>.</p></div>
+  <div data-when><p>Start a new experiment for each new sample, chip or day, so each folder holds one story. Runs of the
+  same protocol on the same sample can share one.</p></div>
+  <div data-read><p>Several runs in one folder are told apart by time: each run's data and report files carry its local
+  time in their names (<code>YYYYMMDD_HHMMSS</code>), the folder name is UTC.</p></div>
+  <div data-typical><p>Many folders hold only <code>logs</code>: MicroDrop was started and nothing was run.
+  <a href="#prune">Prune Experiments</a> clears them away. A folder that is completely empty when MicroDrop closes is
+  deleted, but that rarely happens because the log is written there from the start.</p></div>
+</section>
+
+<section data-term id="experiments-folder" data-where="Documents\Sci-Bots\Microdrop\Experiments">
+  <h3>Experiments folder</h3>
+  <p>The folder that holds all your experiment folders.</p>
+  <div data-what><p><code>Experiments</code> inside <code>Documents\Sci-Bots\Microdrop</code>, next to
+  <code>Devices</code> and <code>Protocols</code>. MicroDrop creates it at the first start.</p></div>
+  <div data-when><p>Back it up; it is your data. Copy single experiment folders to share a result.</p></div>
+  <div data-read><p>No menu item opens it directly: open the current experiment folder and go up one level. There is no
+  setting for it in Edit ▸ Preferences.</p></div>
+  <div data-typical><p><code>C:\Users\&lt;you&gt;\Documents\Sci-Bots\Microdrop\Experiments</code>.</p></div>
+</section>
+
+<section data-term id="active-experiment" data-where="Experiment: line above the protocol tree">
+  <h3>Active experiment</h3>
+  <p>The experiment folder MicroDrop is writing into right now.</p>
+  <div data-what><p>Its name is shown after <span class="ui">Experiment:</span>, underlined. Click it, or choose
+  <span class="ui">File ▸ Experiments ▸ Open Experiment Folder</span>, to open the folder. Right-click it to switch its
+  tooltip off (<span class="ui">Enable Tooltip</span>).</p></div>
+  <div data-read><p>The log, pictures and videos go to the active experiment as they happen; a note goes to the experiment
+  that was active when you opened it. A run's data and report
+  go to the experiment that was active when the run <em>started</em>, even if you start a new one at its end.</p></div>
+  <div data-when><p>Check it before you press Play: that is where the run's results will be.</p></div>
+  <div data-typical><p>A fresh folder, named by the time MicroDrop started.</p></div>
+</section>
+
+<section data-term id="experiments-menu" data-where="File ▸ Experiments">
+  <h3>The Experiments menu and line</h3>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>Where</th><th>Item</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>File ▸ Experiments, or <i data-glyph="note_add" data-inline data-label="New Experiment"></i></td><td class="lbl">New Experiment</td><td>Creates a new experiment folder and makes it active. The protocol is not touched.</td></tr>
+      <tr><td>File ▸ Experiments, or click the name</td><td class="lbl">Open Experiment Folder</td><td>Opens the active experiment's folder in your file browser.</td></tr>
+      <tr><td>File ▸ Experiments</td><td class="lbl">Prune Experiments…</td><td>Moves experiment folders that hold only logs to the Recycle Bin (<a href="#prune">Prune Experiments</a>).</td></tr>
+      <tr><td><i data-glyph="sticky_note" data-inline data-label="New Note"></i></td><td class="lbl">New Note</td><td>Opens a note window for the active experiment (<a href="#notes">Notes</a>).</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section data-term id="run-files" data-where="Interactive">
+  <h3>What a run leaves behind</h3>
+  <p>Pick how a run ended. New files are marked; click any entry to see what writes it and when.</p>
+  <figure data-demo="run-files" aria-label="The experiment folder after a run, for each way a run can end">
+    <div class="controls">
+      <label>The run <select id="rf-outcome">
+        <option value="finished" selected>finished</option>
+        <option value="stopped-yes">was stopped, then Yes to Generate Run Summary?</option>
+        <option value="stopped-no">was stopped, then No to Generate Run Summary?</option>
+        <option value="early">was stopped before its first step began</option>
+        <option value="preview">was a Preview run</option>
+      </select></label>
+      <label><input type="checkbox" id="rf-camera"> a step took pictures or video</label>
+    </div>
+    <ul class="pf-tree" id="rf-tree"></ul>
+    <dl class="pf-out" aria-live="polite">
+      <dt>Item</dt><dd id="rf-name"></dd>
+      <dt>Written by</dt><dd id="rf-by"></dd>
+      <dt>This run</dt><dd id="rf-now"></dd>
+    </dl>
+  </figure>
+</section>
+
+<section data-term id="sub-logs" data-where="experiment folder ▸ logs">
+  <h3>logs</h3>
+  <p>MicroDrop's diary while this experiment was active.</p>
+  <div data-what><p>One text file per experiment, <code>microdrop.frontend.&lt;computer&gt;-&lt;process&gt;.log</code>,
+  started when the experiment starts. It covers everything MicroDrop did, not only the runs.</p></div>
+  <div data-when><p>Attach it when you report a problem.</p></div>
+  <div data-read><p>One line per event, with time and level; search for <code>ERROR</code>. The <em>Help, Logs &amp; Saved
+  Files</em> tutorial explains it in detail.</p></div>
+  <div data-typical><p>Always present.</p></div>
+</section>
+
+<section data-term id="sub-data" data-where="experiment folder ▸ data">
+  <h3>data</h3>
+  <p>The measurements of each run, in two files with the same content.</p>
+  <div data-what><p><code>data_&lt;run start&gt;.csv</code> (opens in a spreadsheet) and <code>data_&lt;run start&gt;.json</code>.
+  One row per DropBot capacitance reading during the run, plus rows other plugins add (PMT, fluorescence …).</p></div>
+  <div data-when><p>For your own analysis or plots. The report is built from the same rows.</p></div>
+  <div data-read><p>Click a column name in this example:</p>
+  <figure data-demo="csv" aria-label="A few rows of a data CSV; click a column name for its meaning">
+    <div class="table-wrap"><table class="pf-csv">
+      <thead><tr>
+        <th><button type="button" data-col="step_idx">step_idx</button></th>
+        <th><button type="button" data-col="utc_time">utc_time</button></th>
+        <th><button type="button" data-col="instrument_time_us">instrument_time_us</button></th>
+        <th><button type="button" data-col="step_id">step_id</button></th>
+        <th><button type="button" data-col="cap">Capacitance (pF)</button></th>
+        <th><button type="button" data-col="volt">Voltage (V)</button></th>
+        <th><button type="button" data-col="force">Force Over Unit Area (mN/mm^2)</button></th>
+        <th><button type="button" data-col="area">Actuated Area (mm^2)</button></th>
+        <th><button type="button" data-col="cpa">Capacitance Over Area (pF/mm^2)</button></th>
+        <th><button type="button" data-col="thick">Dielectric Thickness (um)</button></th>
+        <th><button type="button" data-col="chan">actuated_channels</button></th>
+      </tr></thead>
+      <tbody>
+        <tr><td>1</td><td>1763043485</td><td>412088120</td><td>9f2c41e0…</td><td>4.81</td><td>100.2</td><td>18.9</td><td>5.12</td><td>0.94</td><td>4.6</td><td>[118, 119]</td></tr>
+        <tr><td>1</td><td>1763043485</td><td>412138540</td><td>9f2c41e0…</td><td>4.86</td><td>100.1</td><td>19.1</td><td>5.12</td><td>0.95</td><td>4.5</td><td>[118, 119]</td></tr>
+        <tr><td>2</td><td>1763043487</td><td>414101932</td><td>d3725d2b…</td><td>2.37</td><td>100.3</td><td>18.7</td><td>2.56</td><td>0.93</td><td>4.6</td><td>[114]</td></tr>
+      </tbody>
+    </table></div>
+    <p class="pf-explain" id="csv-out" aria-live="polite"></p>
+  </figure>
+  </div>
+  <div data-typical><p>Written at the end of every run that is not a Preview, a few seconds after it ends (the
+  <em>Logs Accepted Post-Protocol</em> wait, 3 s). A run stopped before its first step writes empty files.</p></div>
+</section>
+
+<section data-term id="sub-reports" data-where="experiment folder ▸ reports">
+  <h3>reports (the run summary)</h3>
+  <p>One web page per run: what ran, with summary tables and charts.</p>
+  <div data-what><p><code>report_&lt;time&gt;.html</code>. It lists the run's settings (experiment, device file, dielectric,
+  steps run, start and stop time, a link to the protocol copy), links to the data files, a summary of each measured
+  column, one chart per column by step, a map of how long each electrode was on, and the run's pictures and videos.</p></div>
+  <div data-when><p>To review or share a run. The <em>Run Summary Generated</em> window links straight to it.</p></div>
+  <div data-read><p>Open it in a web browser. Its charts load a chart library from the internet, so they stay blank
+  offline; the tables do not need it. The time in its name is when the report was written, a little after the data
+  files' time.</p></div>
+  <div data-typical><p>Written after a finished run, and after a stopped run if you answer <span class="ui">Yes</span> to
+  <em>Generate Run Summary?</em>. One report covers all repetitions of Repeat Protocol.</p></div>
+</section>
+
+<section data-term id="sub-protocols" data-where="experiment folder ▸ protocols">
+  <h3>Auto-saved protocol copy</h3>
+  <p>The protocol exactly as it ran, kept with its results.</p>
+  <div data-what><p><code>protocols\protocol_&lt;UTC time&gt;.json</code>, a full protocol file. It is written at the end of
+  every run that is not a Preview, whether the run finished or not, and has nothing to do with your own file or with
+  AutoSave.</p></div>
+  <div data-when><p>To know what produced a result, even after you changed the protocol. Open it with Load… to run it
+  again, then Save As… to give it a proper name and place.</p></div>
+  <div data-read><p>The report's <em>Protocol Path</em> links to it. The <code>step_id</code> in the data files is the
+  step's id in this copy.</p></div>
+  <div data-typical><p>One file per run.</p></div>
+</section>
+
+<section data-term id="sub-captures" data-where="experiment folder ▸ captures">
+  <h3>captures</h3>
+  <p>Camera pictures.</p>
+  <div data-what><p>PNG files from the Device Viewer camera: from a step's <em>Capture</em> column, or taken by hand.
+  Some cameras add a <code>16bit_raw</code> folder, and the Portable DropBot's PMT a <code>pmt</code> folder.</p></div>
+  <div data-when><p>Open them in the image viewer for analysis.</p></div>
+  <div data-read><p>Pictures taken during a run are also shown in its report.</p></div>
+  <div data-typical><p>Only present if a picture was taken.</p></div>
+</section>
+
+<section data-term id="sub-recordings" data-where="experiment folder ▸ recordings">
+  <h3>recordings</h3>
+  <p>Camera videos.</p>
+  <div data-what><p>Video files from the Device Viewer camera: from a step's <em>Video</em> / <em>Record</em> columns,
+  or recorded by hand.</p></div>
+  <div data-read><p>Videos recorded during a run are listed in its report with a play placeholder.</p></div>
+  <div data-typical><p>Only present if a video was recorded.</p></div>
+</section>
+
+<section data-term id="notes" data-where="experiment folder ▸ Notes; New Note button">
+  <h3>Notes</h3>
+  <p>Sticky notes you write during an experiment, kept in its folder.</p>
+  <div data-what><p><i data-glyph="sticky_note" data-inline data-label="New Note"></i> <em>New Note</em> opens a small
+  window titled <em>Exp: &lt;experiment name&gt;</em>. Type, format with the buttons at the bottom, and save with
+  <i data-glyph="save" data-inline data-label="Save Note"></i> or <kbd>Ctrl</kbd>+<kbd>S</kbd>. Each note is a file
+  <code>Notes\1.html</code>, <code>2.html</code> … that opens in a web browser.</p></div>
+  <div data-read><p>The label at the top reads <em>Unsaved</em>, <em>Saved (1)</em> or <em>Unsaved changes (1)</em>.
+  Saving again overwrites the same file. <i data-glyph="format_color_fill" data-inline data-label="Change Background Color"></i>
+  changes the note's colour and saves it.</p></div>
+  <div data-when><p>Anything worth remembering: the sample, a lot number, what you saw.</p></div>
+  <div data-typical><p>Nothing is saved until you save: closing the window does not ask. Clicking New Note again while a
+  note of the same experiment is open brings that note to the front.</p></div>
+</section>
+
+<section data-term id="run-dialogs" data-where="at the end of a run">
+  <h3>End-of-run questions</h3>
+  <p>What MicroDrop asks when a run ends, in order. All electrodes are switched off first.</p>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>Window</th><th>When</th><th>What your answer does</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Create New Experiment?</td><td>The run finished.</td><td><span class="ui">Yes</span>: a new experiment becomes active for what comes next. <span class="ui">No</span>: stay in this one. The report is built either way, in the folder the run started in.</td></tr>
+      <tr><td class="lbl">Generate Run Summary?</td><td>You stopped the run, or it stopped on an error, after at least one step began.</td><td><span class="ui">Yes</span>: build the report. <span class="ui">No</span>: keep the data files without a report.</td></tr>
+      <tr><td class="lbl">Generating Run Report...</td><td>A report is being built.</td><td>Wait; it closes by itself.</td></tr>
+      <tr><td class="lbl">Run Summary Generated</td><td>The report is ready.</td><td>Click the file name to open it.</td></tr>
+      <tr><td class="lbl">Run Summary Failed</td><td>The report could not be built.</td><td>The data files were still saved. The details say why.</td></tr>
+      <tr><td class="lbl">Preview Complete</td><td>A Preview run ended.</td><td>Closes by itself after 3 s. A preview writes no data, report or protocol copy.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The <em>Protocol Tree</em> tutorial has a clip of these windows (its <em>Experiment</em> card).</p>
+</section>
+
+<section data-term id="session-reports" data-where="Browse session reports, R">
+  <h3>Session reports</h3>
+  <p>The reports made since MicroDrop started, in one list.</p>
+  <div data-what><p><i data-glyph="summarize" data-inline data-label="Browse session reports"></i> <em>Browse session
+  reports</em> (<kbd>R</kbd>) opens <em>Session Reports</em>: <span class="ui">Name</span>,
+  <span class="ui">Size</span>, <span class="ui">Date Created</span>, newest first. Type in <span class="ui">Search:</span>
+  to filter by file name; double-click or <span class="ui">Open</span> opens the report in your web browser.</p></div>
+  <div data-read><p>It does not look on disk: reports from earlier sessions are not in the list, even in the same
+  experiment. Hover over a name for the full path.</p></div>
+  <div data-typical><p>Empty right after MicroDrop starts. Greyed during a run.</p></div>
+</section>
+
+<section data-term id="prune" data-where="File ▸ Experiments ▸ Prune Experiments…">
+  <h3>Prune Experiments</h3>
+  <p>Clears away experiment folders in which nothing happened.</p>
+  <div data-what><p>Finds every experiment folder that holds only <code>logs</code> (and empty folders), never the active
+  one, and asks <em>Delete … experiment folder(s) that hold only logs?</em>, with the names in the details. Yes moves them
+  to the Recycle Bin (Trash on macOS and Linux), where you can restore them.</p></div>
+  <div data-read><p><em>No experiments to prune</em> means every folder holds data. If the computer's MicroDrop is
+  missing the package that moves files to the Recycle Bin, it offers to update the environment first.</p></div>
+  <div data-when><p>Now and then, to keep <code>Experiments</code> readable.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-legacy">
+<h2>Old MicroDrop protocols</h2>
+<p class="intro"><span class="ui">File ▸ Protocol ▸ Import Legacy…</span> converts a protocol saved by the old MicroDrop
+(version 2) into this one's format. It asks about unsaved changes first.</p>
+
+<section data-term id="legacy-root" data-where="MicroDrop folder: and Browse...">
+  <h3>MicroDrop folder (root directory)</h3>
+  <p>Where to look for old devices and protocols.</p>
+  <div data-what><p>Any of three: the old MicroDrop's own folder (it has a <code>devices</code> folder), a single device
+  folder, or a folder holding device folders. Type it and press <kbd>Enter</kbd>, or use <span class="ui">Browse...</span>.
+  The <span class="ui">Device</span> list fills from it.</p></div>
+  <div data-typical><p><code>Documents\MicroDrop</code> if that folder exists, otherwise empty. The window remembers your
+  last choices.</p></div>
+</section>
+
+<section data-term id="legacy-device-folder" data-where="Device: list">
+  <h3>Device folder</h3>
+  <p>One old device: its drawing and its protocols.</p>
+  <div data-what><p>A folder with a <code>device.svg</code> and a <code>protocols</code> folder. The
+  <span class="ui">Device</span> list shows each by its folder name; the <span class="ui">Protocol</span> list shows the
+  old protocols in its <code>protocols</code> folder (files without an ending, other files are skipped).</p></div>
+  <div data-read><p>The folder name becomes the device's name here: the imported device file and the protocol's folder
+  are named after it.</p></div>
+</section>
+
+<section data-term id="legacy-svg" data-where="Device SVG: and Protocol file:">
+  <h3>Device SVG and Protocol file</h3>
+  <p>The two files actually used, filled in from the lists.</p>
+  <div data-what><p>The paths of the device drawing and the protocol. You can type other paths here, for files kept
+  outside a device folder; what is typed wins over the lists.</p></div>
+  <div data-read><p>The device SVG supplies the electrode-to-channel map. <em>Import error</em> means a field is empty,
+  a file could not be read, or the SVG has no electrodes with channels.</p></div>
+  <div data-when><p>Always use the device the protocol was written with: electrodes are matched by id.</p></div>
+</section>
+
+<section data-term id="legacy-steps" data-where="after Import">
+  <h3>What happens on Import</h3>
+  <ol class="howto">
+    <li>The device file is copied into <code>Documents\Sci-Bots\Microdrop\Devices</code> as
+    <code>&lt;device name&gt;.svg</code>. If a <em>different</em> file of that name is there, <em>Device Name Conflict</em>
+    asks: <span class="ui">Save Copy</span> saves it as <code>&lt;device name&gt; (2).svg</code>,
+    <span class="ui">Don't Save</span> leaves the device folder alone.</li>
+    <li>If the Device Viewer shows another device, or none, <em>Device mismatch</em> offers to load this one:
+    <span class="ui">Yes</span> loads it, <span class="ui">No</span> keeps the current one, whose wiring may not match.</li>
+    <li>The steps are converted. MicroDrop may show <em>Protocol has errors</em> or <em>Protocol warnings</em> as on any
+    open.</li>
+    <li>The result is saved as <code>Protocols\&lt;device name&gt;\&lt;old protocol name&gt;.json</code>, never over an
+    existing file (a second import gets <code>(2)</code>), and becomes the open protocol. Undo is cleared.</li>
+    <li><em>Legacy protocol imported</em> says how many steps came in; its details hold the conversion report.</li>
+  </ol>
+</section>
+
+<section data-term id="legacy-report" data-where="Legacy protocol imported ▸ details">
+  <h3>Conversion report</h3>
+  <p>What the import kept and what it could not.</p>
+  <div data-what><p>The details of <em>Legacy protocol imported</em>: where the file was saved, then <em>Converted … steps</em>,
+  <em>Mapped:</em> (the columns that received values), <em>Dropped (no equivalent in this build):</em>, <em>Electrodes not
+  present in the selected device:</em> and <em>Steps imported with defaults after an error:</em>, each with how many steps
+  it affected.</p></div>
+  <div data-read>
+  <table class="small">
+    <thead><tr><th>Old setting</th><th>Becomes</th></tr></thead>
+    <tbody>
+      <tr><td>Voltage, frequency, duration</td><td>Voltage (V), Frequency (Hz), Duration (s)</td></tr>
+      <tr><td>Electrodes switched on</td><td>Electrodes</td></tr>
+      <tr><td>Drop routes, route repeats, repeat duration, trail length</td><td>Routes, Route Reps, Route Reps Dur (in control when above 0), Trail Len</td></tr>
+      <tr><td>Step label; user prompt message</td><td>Name (<em>Step N</em> if empty); Message</td></tr>
+      <tr><td>Volume threshold; video</td><td>Volume Threshold % ; Video</td></tr>
+      <tr><td>Magnet; heater and its temperature</td><td>The magnet and heater columns, if those plugins are loaded</td></tr>
+      <tr><td>Protocol repeats</td><td>A group <em>Imported protocol</em> around all steps, with that Reps</td></tr>
+      <tr><td>Pump, PMT, plateau detection, prompt schema</td><td>Dropped</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-when><p>Read it before the first run. A value listed as dropped because its plugin is not loaded comes in if you
+  load the plugin and import again.</p></div>
+  <div data-typical><p>Short for a plain electrode protocol; longer for protocols that used old box plugins.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-choose">
+<h2>Which button do I want?</h2>
+<section data-term id="decide" data-where="Interactive">
+  <h3>Save, Save As or New Experiment?</h3>
+  <p>Pick what you want to do.</p>
+  <figure data-demo="decide" aria-label="Pick a goal to see which command to use">
+    <div class="controls">
+      <label>I want to <select id="dc-goal"></select></label>
+    </div>
+    <dl class="pf-out" aria-live="polite">
+      <dt>Do this</dt><dd id="dc-do"></dd>
+      <dt>Because</dt><dd id="dc-why"></dd>
+    </dl>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">The buttons on this page. Hover over a button in MicroDrop to see its tooltip.</p>
+<section data-term id="tb-protocol" data-where="under the protocol tree, the Experiment line, the status bar">
+  <h3>Protocol pane and status bar</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="new_window"></i></td><td class="lbl">New protocol</td><td><kbd>Ctrl</kbd>+<kbd>N</kbd>. An untitled protocol with one step.</td></tr>
+      <tr><td class="icons"><i data-glyph="file_open"></i></td><td class="lbl">Open Protocol</td><td><kbd>Ctrl</kbd>+<kbd>O</kbd>. Opens a saved protocol.</td></tr>
+      <tr><td class="icons"><i data-glyph="save"></i></td><td class="lbl">Save Protocol</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd>. Saves; asks for a name the first time.</td></tr>
+      <tr><td class="icons"><i data-glyph="unarchive"></i></td><td class="lbl">Import protocol into selected group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>. <a href="#import-group">Import into a group</a>.</td></tr>
+      <tr><td class="icons"><i data-glyph="undo"></i> <i data-glyph="redo"></i></td><td class="lbl">Undo / Redo &lt;edit&gt;</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd>; <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. <a href="#undo">Undo and Redo</a>.</td></tr>
+      <tr><td class="icons"><i data-glyph="summarize"></i></td><td class="lbl">Browse session reports</td><td><kbd>R</kbd>. <a href="#session-reports">Session reports</a>.</td></tr>
+      <tr><td class="icons"><i data-glyph="note_add"></i></td><td class="lbl">New Experiment</td><td>A new experiment folder becomes active.</td></tr>
+      <tr><td class="icons"><i data-glyph="sticky_note"></i></td><td class="lbl">New Note</td><td>A note for the active experiment.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_SAVE_CLOCK" data-on></i></td><td class="lbl">AutoSave (status bar)</td><td>Green: on; grey: off. Click to switch. <a href="#autosave">AutoSave</a>.</td></tr>
+    </tbody>
+  </table>
+</section>
+<section data-term id="tb-notes" data-where="the note window">
+  <h3>Note window</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>Key</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="save"></i></td><td class="lbl">Save Note</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="format_color_fill"></i></td><td class="lbl">Change Background Color</td><td>(saves the note)</td></tr>
+      <tr><td class="icons"><i data-glyph="format_bold"></i></td><td class="lbl">Bold</td><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="format_italic"></i></td><td class="lbl">Italic</td><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="format_underlined"></i></td><td class="lbl">Underline</td><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="strikethrough_s"></i></td><td class="lbl">Strikethrough</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr>
+      <tr><td class="icons"><i data-glyph="format_list_bulleted"></i></td><td class="lbl">Bullet List</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td></tr>
+    </tbody>
+  </table>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>AutoSave writes into the file you opened.</strong> To keep a protocol unchanged, Save As… a copy before you
+    edit, or switch AutoSave off.</li>
+    <li><strong>A new protocol is not saved until you save it.</strong> AutoSave starts only after the first save, and
+    nothing warns you while you build an untitled protocol, until you open another one or close MicroDrop.</li>
+    <li><strong>A protocol does not remember its device file.</strong> Load the right device first; MicroDrop only warns
+    when electrode ids or channels do not match.</li>
+    <li><strong>Opening without a column's plugin drops its values</strong> after <span class="ui">OK</span>, and the next
+    save (yours or AutoSave's) writes the file without them.</li>
+    <li><strong>The File ▸ Protocol menu is not greyed during a run</strong>, unlike the buttons under the tree. Do not
+    open, create or import a protocol until the run has ended.</li>
+    <li><strong>New Experiment is not greyed during a run either.</strong> The run's data and report still go to the folder
+    it started in, but its protocol copy, and pictures taken after the switch, go to the new one. Start new experiments
+    between runs.</li>
+    <li><strong>Session reports lists this session only.</strong> Older reports are in each experiment's
+    <code>reports</code> folder.</li>
+    <li><strong>Report charts need the internet.</strong> Offline, the report's tables show but its charts stay blank.</li>
+    <li><strong>Notes are not saved by closing.</strong> Press <kbd>Ctrl</kbd>+<kbd>S</kbd> in the note first.</li>
+    <li><strong>Import into a group brings only the top level.</strong> Groups in the imported file arrive empty.</li>
+    <li><strong>Experiment folder names are in UTC</strong>; data and report file names are in local time.</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Protocol file</dt><dd>A <code>.json</code> file holding one protocol's steps, groups and column values.</dd>
+  <dt>JSON</dt><dd>A plain-text format for structured data; MicroDrop's protocol and data files use it.</dd>
+  <dt>Experiment</dt><dd>A folder collecting one session's logs, run data, reports, protocol copies, pictures and notes.</dd>
+  <dt>Active experiment</dt><dd>The experiment folder MicroDrop is writing into now.</dd>
+  <dt>Run</dt><dd>One press of Play until the protocol ends or is stopped, Repeat Protocol included.</dd>
+  <dt>Run report</dt><dd>The web page summarising one run; also called the run summary.</dd>
+  <dt>AutoSave</dt><dd>Saving the open protocol to its file automatically, shortly after each change.</dd>
+  <dt>Electrode map</dt><dd>Which DropBot channel each electrode of the device is wired to.</dd>
+  <dt>Legacy protocol</dt><dd>A protocol saved by the old MicroDrop (version 2).</dd>
+  <dt>Device SVG</dt><dd>The drawing of a chip's electrodes, with each electrode's id and channel.</dd>
+  <dt>UTC</dt><dd>Coordinated Universal Time: the world reference clock, without your time zone.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("inside", function (figure, T) {
+  /* Mirrors services/persistence.py serialize_tree and what the save leaves out. */
+  var PARTS = {
+    version: ["schema_version", "The file format's version, 1 today.",
+      "Lets a later MicroDrop recognise and convert older files."],
+    map: ["protocol_metadata ▸ electrode_to_channel", "Each electrode id of the device and the DropBot channel it was wired to " +
+      "when the protocol was last saved.", "Opening on another device compares it with that device's channels and warns about " +
+      "differences. It is the only trace of the device: the device file itself is not named."],
+    flags: ["row_flags", "Steps whose loops are timed by Route Reps Dur instead of counted by Route Reps.",
+      "Keeps that choice per step. Steps not listed use Route Reps."],
+    columns: ["columns", "One entry per column, with its id and the program part (plugin) that provides it.",
+      "On opening, a column whose plugin is not loaded is reported as an error and its values are dropped."],
+    fields: ["fields", "The order of the values in every row: depth, uuid, type, name, then one per column.",
+      "Read with rows: the 5th field names the 5th value of each row."],
+    rows: ["rows", "One line per step or group, top to bottom. depth is how deep in groups it sits (0 = top level), uuid " +
+      "a permanent id, type step or group, name its Name; then every column value: Reps, Duration, the electrode ids switched " +
+      "on, each route as a list of electrode ids, voltage, and so on.",
+      "Everything a step does is here: electrodes, routes, route settings (trail, soft start, lanes), message, " +
+      "and each plugin's values. The uuid is the step_id in the run's data files."],
+    missing: ["not in the file", "Which device file to load; Repeat Protocol; which columns are shown and their order " +
+      "(kept in your settings); which rows are selected or folded; AutoSave on or off; Realtime; the experiment; the run " +
+      "results.", "Load the right device yourself, set Repeat Protocol before each run, and look for results in the " +
+      "experiment folder."]
+  };
+  var spans = figure.querySelectorAll("span[data-part]");
+  var buttons = figure.querySelectorAll("button[data-pick]");
+
+  function pick(key) {
+    var part = PARTS[key];
+
+    Array.prototype.forEach.call(spans, function (span) {
+      span.classList.toggle("on", span.getAttribute("data-part") === key);
+    });
+    Array.prototype.forEach.call(buttons, function (button) {
+      button.setAttribute("aria-pressed", String(button.getAttribute("data-pick") === key));
+    });
+    figure.querySelector("#in-name").textContent = part[0];
+    figure.querySelector("#in-what").textContent = part[1];
+    figure.querySelector("#in-why").textContent = part[2];
+  }
+
+  Array.prototype.forEach.call(spans, function (span) {
+    span.addEventListener("click", function () { pick(span.getAttribute("data-part")); });
+  });
+  Array.prototype.forEach.call(buttons, function (button) {
+    button.addEventListener("click", function () { pick(button.getAttribute("data-pick")); });
+  });
+  pick("rows");
+});
+
+Tutorial.demo("edit-life", function (figure, T) {
+  /* Mirrors models/protocol_autosave.py (debounce, no file, run hold, flush before
+     New/Open), services/protocol_state_tracker.py ([modified] = differs from the
+     last save) and services/protocol_history.py (no recording or undo in a run). */
+  var $ = function (id) { return figure.querySelector("#" + id); };
+  var FILE = "mixing_assay";
+  var s;
+
+  function reset() {
+    s = { file: "", disk: 0, mem: 0, next: 1, undo: [], pending: false, running: false, failedNote: false };
+    $("el-log").innerHTML = "";
+    log("MicroDrop starts with an untitled protocol and one step.");
+    draw();
+  }
+
+  function modified() { return s.mem !== s.disk; }
+
+  function log(text, kind) {
+    var li = document.createElement("li");
+    li.textContent = text;
+
+    if (kind) {
+      li.className = kind;
+    }
+
+    $("el-log").appendChild(li);
+    $("el-log").scrollTop = $("el-log").scrollHeight;
+  }
+
+  function status() {
+    if (!$("el-auto").checked) {
+      return "AutoSave is off. Turn it on to write protocol changes to the protocol file automatically.";
+    }
+
+    if (!s.file) {
+      return "AutoSave on – save the protocol once to start";
+    }
+
+    if (s.running) {
+      return "AutoSave on – paused while the protocol runs; pending changes are saved when it ends";
+    }
+
+    return "AutoSave on – changes are saved to " + s.file + ".json automatically";
+  }
+
+  function draw() {
+    var name = s.file || "untitled";
+    var on = $("el-auto").checked;
+
+    $("el-title").innerHTML = "Pluggable Protocol Tree - " + name + (modified() ? " <span class='mod'>[modified]</span>" : "");
+    $("el-state").innerHTML = "<span class='glyph " + (on ? "on" : "off") + "'></span>Tooltip: <em>" + status() +
+      "</em><br>File on disk: " + (s.file ? s.file + ".json, version " + s.disk : "none") +
+      " · On screen: version " + s.mem + " · Undo: " + (s.running ? "off during the run" :
+      s.undo.length ? "Undo Edit Duration (s) (Ctrl+Z)" : "Nothing to undo (Ctrl+Z)");
+    $("el-run").textContent = s.running ? "End run" : "Start run";
+    $("el-save").disabled = s.running;
+    $("el-open").disabled = s.running;
+  }
+
+  function write(reason) {
+    s.disk = s.mem;
+    log(reason + ": wrote " + s.file + ".json (version " + s.disk + ").", "ok");
+  }
+
+  function due() {
+    /* claim_due_save: AutoSave on, a file, not running, unsaved changes. */
+    if (!s.pending) {
+      return;
+    }
+
+    if (s.running) {
+      log("AutoSave waits: a run is in progress.");
+      return;
+    }
+
+    s.pending = false;
+
+    if (!$("el-auto").checked || !modified()) {
+      return;
+    }
+
+    if (!s.file) {
+      log("AutoSave writes nothing: the protocol has no file yet.", "warn");
+      return;
+    }
+
+    write("AutoSave");
+  }
+
+  function edit() {
+    s.mem = s.next;
+    s.next += 1;
+    s.pending = $("el-auto").checked;
+
+    if (s.running) {
+      log("Edited during the run (Advanced Mode): not recorded for Undo.");
+    } else {
+      s.undo.push(s.mem);
+      log("Edited a Duration cell.");
+    }
+  }
+
+  $("el-edit").addEventListener("click", function () { edit(); draw(); });
+
+  $("el-wait").addEventListener("click", function () {
+    log("… 2 seconds pass.");
+    due();
+    draw();
+  });
+
+  $("el-save").addEventListener("click", function () {
+    if (!s.file) {
+      s.file = FILE;
+      log("No file yet, so Save opens Save Protocol: saved as " + FILE + ".json.");
+    }
+
+    s.pending = false;
+    write("Save");
+    draw();
+  });
+
+  $("el-undo").addEventListener("click", function () {
+    if (s.running) {
+      log("Undo does nothing during a run.");
+    } else if (!s.undo.length) {
+      log("Nothing to undo.");
+    } else {
+      s.undo.pop();
+      s.mem = s.undo.length ? s.undo[s.undo.length - 1] : 0;
+      s.pending = $("el-auto").checked;
+      log("Undo: back to version " + s.mem + "." + (modified() ? "" : " That matches the file, so no [modified]."));
+    }
+
+    draw();
+  });
+
+  $("el-run").addEventListener("click", function () {
+    s.running = !s.running;
+
+    if (s.running) {
+      log("Run started. The tree and the Save and Open buttons are locked; AutoSave and Undo pause.");
+    } else {
+      log("Run ended.");
+
+      /* note_run_ended: held changes are due at once. */
+      if ($("el-auto").checked && modified()) {
+        s.pending = true;
+        due();
+      }
+    }
+
+    draw();
+  });
+
+  $("el-open").addEventListener("click", function () {
+    /* _confirm_proceed_or_abort: flush AutoSave, then ask if still modified. */
+    if ($("el-auto").checked && s.file && modified()) {
+      write("Open first lets AutoSave write");
+    }
+
+    s.pending = false;
+
+    if (modified()) {
+      log("Unsaved Protocol Changes: Current protocol has unsaved changes. Proceed without saving? (here: Yes)", "warn");
+    }
+
+    s.file = "wash_cycle";
+    s.disk = 0;
+    s.mem = 0;
+    s.undo = [];
+    log("Opened wash_cycle.json. Undo history cleared.");
+    draw();
+  });
+
+  $("el-auto").addEventListener("change", function () {
+    var on = $("el-auto").checked;
+
+    log("AutoSave turned " + (on ? "on" : "off") + ".");
+
+    if (on && modified()) {
+      s.pending = true;
+      log("Edits still waiting are saved like a fresh edit: press Wait.");
+    }
+
+    draw();
+  });
+
+  $("el-reset").addEventListener("click", function () {
+    $("el-auto").checked = true;
+    reset();
+  });
+
+  reset();
+});
+
+Tutorial.demo("run-files", function (figure, T) {
+  /* Mirrors dock_pane._run_completion_flow, logging/controller.py and docs/PROTOCOL_REPORT.md. */
+  var ITEMS = [
+    { key: "logs", name: "logs\\microdrop.frontend.…log", by: "MicroDrop's logger, from the moment the experiment starts." },
+    { key: "data", name: "data\\data_<run start>.csv and .json", by: "The run's logger, a few seconds after the run ends." },
+    { key: "reports", name: "reports\\report_<time>.html", by: "MicroDrop, while Generating Run Report... is shown." },
+    { key: "protocols", name: "protocols\\protocol_<UTC time>.json", by: "The end of the run: a copy of the protocol as it ran." },
+    { key: "captures", name: "captures\\…png", by: "The Device Viewer camera, on each picture." },
+    { key: "recordings", name: "recordings\\…", by: "The Device Viewer camera, on each video." },
+    { key: "Notes", name: "Notes\\1.html …", by: "You, when you save a note." }
+  ];
+  var NOW = {
+    finished: { data: "written", reports: "written", protocols: "written" },
+    "stopped-yes": { data: "written", reports: "written", protocols: "written" },
+    "stopped-no": { data: "written", reports: "not written: you answered No", protocols: "written" },
+    early: { data: "written, but empty: no step ran", reports: "not written, and nothing is asked", protocols: "written" },
+    preview: { data: "not written: a Preview writes no run files", reports: "not written", protocols: "not written" }
+  };
+  var outcome = figure.querySelector("#rf-outcome");
+  var camera = figure.querySelector("#rf-camera");
+  var tree = figure.querySelector("#rf-tree");
+  var chosen = "reports";
+
+  function state(item) {
+    var now = NOW[outcome.value];
+
+    if (item.key === "logs") {
+      return ["old", "already there; this run's events are added to the same file"];
+    }
+
+    if (item.key === "Notes") {
+      return ["none", "only what you saved yourself"];
+    }
+
+    if (item.key === "captures" || item.key === "recordings") {
+      var took = camera.checked && outcome.value !== "early";
+
+      return took ? ["new", "written as the pictures or videos were taken" + (outcome.value === "preview" ?
+        " (camera columns are not skipped in a Preview)" : "")] : ["none", "nothing: no picture or video was taken"];
+    }
+
+    var text = now[item.key];
+
+    return [text.indexOf("written") === 0 ? "new" : "none", text];
+  }
+
+  function draw() {
+    T.clear(tree);
+
+    var root = document.createElement("li");
+    root.innerHTML = "<code>Experiments\\2026_11_13-14_05_09</code>";
+
+    var list = document.createElement("ul");
+    root.appendChild(list);
+
+    ITEMS.forEach(function (item) {
+      var st = state(item);
+      var li = document.createElement("li");
+      var button = document.createElement("button");
+
+      button.type = "button";
+      button.className = st[0] + (item.key === chosen ? " sel" : "");
+      button.textContent = item.name;
+      button.addEventListener("click", function () { chosen = item.key; draw(); });
+      li.appendChild(button);
+
+      var tag = document.createElement("span");
+      tag.className = "tag " + st[0];
+      tag.textContent = st[0] === "new" ? "new" : st[0] === "none" ? "—" : "";
+      li.appendChild(tag);
+      list.appendChild(li);
+    });
+
+    tree.appendChild(root);
+
+    var item = ITEMS.filter(function (it) { return it.key === chosen; })[0];
+
+    figure.querySelector("#rf-name").textContent = item.name;
+    figure.querySelector("#rf-by").textContent = item.by;
+    figure.querySelector("#rf-now").textContent = state(item)[1];
+  }
+
+  outcome.addEventListener("change", draw);
+  camera.addEventListener("change", draw);
+  draw();
+});
+
+Tutorial.demo("csv", function (figure, T) {
+  /* Mirrors logging/ingestion.py log_capacitance and docs/PROTOCOL_REPORT.md. */
+  var COLS = {
+    step_idx: "Which step was running, counted in the order steps ran: 1, 2, 3 … A step repeated three times gets three numbers. It is not the tree's ID.",
+    utc_time: "When MicroDrop received the reading, in seconds since 1 January 1970 (UTC).",
+    instrument_time_us: "The DropBot's own clock, in microseconds; good for exact intervals between readings.",
+    step_id: "The step's permanent id. It matches the step's uuid in the run's protocol copy.",
+    cap: "The capacitance the DropBot measured, in picofarads. It rises when liquid covers the switched-on electrodes.",
+    volt: "The voltage the DropBot measured across the chip.",
+    force: "Force per unit area on the liquid. Empty when no calibration was available during the run.",
+    area: "The total area of the electrodes switched on at that moment.",
+    cpa: "Capacitance divided by the switched-on area. Empty when nothing was on.",
+    thick: "An estimate of the dielectric layer's thickness. Empty when no dielectric was picked in the DropBot pane.",
+    chan: "The DropBot channels switched on at that moment."
+  };
+  var out = figure.querySelector("#csv-out");
+  var buttons = figure.querySelectorAll("button[data-col]");
+
+  function pick(button) {
+    Array.prototype.forEach.call(buttons, function (b) {
+      b.parentNode.classList.toggle("sel", b === button);
+    });
+    out.innerHTML = "<strong>" + button.textContent + "</strong>: " + COLS[button.getAttribute("data-col")];
+  }
+
+  Array.prototype.forEach.call(buttons, function (button) {
+    button.addEventListener("click", function () { pick(button); });
+  });
+  pick(buttons[4]);
+});
+
+Tutorial.demo("decide", function (figure, T) {
+  var GOALS = [
+    ["keep this protocol's file up to date as I edit", "Nothing, once the protocol has a file: AutoSave writes each change. Without AutoSave: Ctrl+S.",
+      "AutoSave writes to the file the protocol was saved to or opened from, about 1.5 s after your last change."],
+    ["make a variant and keep the original unchanged", "Save As… first, then edit.",
+      "After Save As…, the new file is the protocol's file; AutoSave never writes the old one again."],
+    ["try edits I may throw away", "Switch AutoSave off (status bar glyph or the AutoSave box), or Save As… a scratch copy.",
+      "With AutoSave on, every edit lands in the file. Undo can still take edits back."],
+    ["start a new protocol from scratch", "New protocol (Ctrl+N) or File ▸ Protocol ▸ Create New.",
+      "It starts untitled with one step; save it once to give it a file."],
+    ["keep the next runs' results apart (new sample, chip or day)", "New Experiment, or Yes to Create New Experiment? after a run.",
+      "Each experiment is its own folder; the protocol is not affected."],
+    ["run the same protocol again on the same sample", "Just press Play.",
+      "Each run gets its own data and report files, and its own protocol copy, in the same experiment."],
+    ["add a saved protocol's steps to this one", "Select a group, then Import protocol into selected group (Ctrl+Shift+I).",
+      "The other file's top-level steps are added to the end of that group."],
+    ["know exactly what ran", "Open the run's report: its Protocol Path links to the protocol copy in the experiment's protocols folder.",
+      "The copy is written at the end of every run, whatever you did to your own file since."],
+    ["give a protocol to a colleague", "Send the .json file, and the device file if they do not have it.",
+      "The file does not name its device, and columns from plugins they do not have are dropped when they open it."],
+    ["use a protocol from the old MicroDrop", "File ▸ Protocol ▸ Import Legacy….",
+      "It converts the steps and saves a new .json in Protocols\\<device name>."]
+  ];
+  var select = figure.querySelector("#dc-goal");
+
+  GOALS.forEach(function (goal, i) {
+    var option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = goal[0];
+    select.appendChild(option);
+  });
+
+  function draw() {
+    var goal = GOALS[+select.value];
+
+    figure.querySelector("#dc-do").textContent = goal[1];
+    figure.querySelector("#dc-why").textContent = goal[2];
+  }
+
+  select.addEventListener("change", draw);
+  draw();
+});
+</script>
