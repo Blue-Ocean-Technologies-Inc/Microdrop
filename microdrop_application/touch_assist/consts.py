@@ -12,6 +12,9 @@
 D-pad, mouse — floating helpers for touchscreen benches with no physical
 mouse or keyboard)."""
 
+# Microdrop style imports.
+from microdrop_style.touch_style import TOUCH_TARGET_PX
+
 PKG = ".".join(__name__.split(".")[:-1])
 
 #: The four tools, as the manager and the menu actions name them.
@@ -21,8 +24,11 @@ TOOL_DPAD = "dpad"
 TOOL_MOUSE = "mouse"
 
 #: Pad buttons are finger targets, not mouse targets.
-PAD_KEY_SIZE_PX = 44
+PAD_KEY_SIZE_PX = TOUCH_TARGET_PX
 PAD_KEY_SPACING_PX = 4
+
+#: Gap between a pad Touch mode places for a text field and the screen edge.
+PAD_SCREEN_EDGE_GAP_PX = 8
 
 #: Held-key auto-repeat (the numpad's ▲/▼, the D-pad's arrows): how
 #: long a hold waits before repeating, then the repeat cadence — a

@@ -23,6 +23,7 @@ from microdrop_application.consts import (
     COLOR_SCHEME_LIGHT,
     DOCK_SEPARATOR_COLOR_CUSTOM,
     EXPERIMENT_DIR,
+    TOUCH_MODE_APP_PROPERTY,
 )
 
 # Microdrop style imports.
@@ -58,6 +59,20 @@ def is_advanced_mode():
     except Exception as e:
         logger.debug(f"Advanced-mode flag unavailable (no Redis?): {e}")
         return False
+
+
+def is_touch_mode():
+    """Whether Touch mode is on; False without a QApplication.
+
+    Widgets that change with Touch mode re-read this on their StyleChange
+    event, which every widget gets when Touch mode flips.
+    """
+    # Imported here: the backend imports this module and never loads Qt.
+    from pyface.qt.QtWidgets import QApplication
+
+    app = QApplication.instance()
+
+    return app is not None and bool(app.property(TOUCH_MODE_APP_PROPERTY))
 
 
 def get_current_experiment_directory() -> Path:

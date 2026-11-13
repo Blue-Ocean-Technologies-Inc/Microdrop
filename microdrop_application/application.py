@@ -50,6 +50,7 @@ from .helpers import (
     resolve_dock_separator_style,
 )
 from .preferences import MicrodropPreferences
+from .touch_mode.controller import TouchModeController
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -167,6 +168,9 @@ class MicrodropApplication(TasksApplication):
 
     #: Whether the dock separators already re-style on colour-scheme changes.
     _dock_separator_follows_color_scheme = Bool(False)
+
+    #: Applies the touch_mode preference to the running app.
+    touch_mode_controller = Instance(TouchModeController, ())
 
     ###########################################################################
     # Private interface.
@@ -312,6 +316,11 @@ class MicrodropApplication(TasksApplication):
                 is_rpi(),
             )
         )
+
+    @observe("started, preferences_helper:touch_mode")
+    def _apply_touch_mode_preference(self, event):
+        """Turn Touch mode on or off from the preference, at start and live."""
+        self.touch_mode_controller.enabled = self.preferences_helper.touch_mode
 
     @observe("application_initialized")
     def _on_application_initialized(self, event):

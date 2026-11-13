@@ -25,6 +25,7 @@ from .general_style import get_general_style
 from .label_style import get_label_style
 from .message_box_style import get_message_box_style
 from .palettes import dark_palette
+from .touch_style import get_touch_style
 
 QT_THEME_NAMES = {Qt.ColorScheme.Dark: "dark", Qt.ColorScheme.Light: "light"}
 
@@ -43,6 +44,10 @@ _palette_refresh_installed = False
 # they are replaced in place and other contributors' rules survive.
 DOCK_SEPARATOR_STYLE_START_MARKER = "/* dock-separator */"
 DOCK_SEPARATOR_STYLE_END_MARKER = "/* /dock-separator */"
+
+# Brackets for the touch-mode rules inside the application stylesheet.
+TOUCH_STYLE_START_MARKER = "/* touch-mode */"
+TOUCH_STYLE_END_MARKER = "/* /touch-mode */"
 
 # TraitsUI's field-error colours and the Base HSV value below which it picks
 # the dark one; they mirror the literals in traitsui.qt.constants.
@@ -229,6 +234,20 @@ def apply_dock_separator_style(color, thickness=None):
     apply_style_sheet_block(
         DOCK_SEPARATOR_STYLE_START_MARKER, DOCK_SEPARATOR_STYLE_END_MARKER, rules
     )
+
+
+def apply_touch_style(enabled):
+    """Write the touch-mode rules, coloured from the current application
+    palette, into the application stylesheet, or remove them.
+    """
+    rules = None
+
+    if enabled:
+        palette = QApplication.palette()
+        dark = palette.window().color().lightness() < DARK_PALETTE_LIGHTNESS_THRESHOLD
+        rules = get_touch_style(palette, dark)
+
+    apply_style_sheet_block(TOUCH_STYLE_START_MARKER, TOUCH_STYLE_END_MARKER, rules)
 
 
 def style_app(app_instance: "QApplication"):
