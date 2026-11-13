@@ -89,6 +89,7 @@ from ..consts import (
     NO_SAVED_ALIGNMENT_TEMPLATE,
     NOTHING_CONFIRMED_MESSAGE,
     PENDING_PANE_EDITS_MESSAGE,
+    PRESET_DEVICE_SIZE_UNKNOWN_NOTE,
     PRESET_ENDPOINT_ONLY_NOTE,
     PRESET_INVALID_FRAME_SIZE_NOTE,
     PRESET_NO_CAMERA_FRAME_NOTE,
@@ -118,7 +119,9 @@ from ..utils.alignment_geometry import (
     camera_point_to_item,
     camera_quad_in_frame,
     camera_to_item_mapping,
+    device_render_rect,
     item_point_to_camera,
+    quad_between_scene_rects,
     quads_close,
     valid_frame_size,
 )
@@ -469,6 +472,7 @@ class CameraAlignmentWorkflowController(HasTraits):
                 store=self.preset_store,
                 current_device_key=device_key,
                 current_camera=self._camera(),
+                current_device_scene_rect=self._device_scene_rect(),
                 editable=self.model.editable,
                 live_frame_size=self._frame_size(),
                 setup_notice=self._setup_notice,
@@ -666,7 +670,16 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             return
 
-        camera_quad, mapping, note = self._preset_placement(preset)
+        if self._scene_quad_here(preset) is None:
+            warning(
+                parent,
+                f"'{preset.name}': {_sentence(PRESET_DEVICE_SIZE_UNKNOWN_NOTE)}.",
+                title=APPLY_ALIGNMENT_PRESET_DIALOG_TITLE,
+            )
+
+            return
+
+        camera_quad, mapping, scene_quad, note = self._preset_placement(preset)
 
         try:
             kept = self._keep_working_alignment(preset)
@@ -692,7 +705,7 @@ class CameraAlignmentWorkflowController(HasTraits):
                     QPointF(*camera_point_to_item(point, mapping))
                     for point in camera_quad
                 ],
-                preset.scene_quad,
+                scene_quad,
             )
 
         self._show_in_panes(preset, camera_quad)
@@ -713,21 +726,42 @@ class CameraAlignmentWorkflowController(HasTraits):
             self._remember_live_alignment()
 
     def _preset_placement(self, preset, saved_frame=False):
-        """Return ``(camera quad, mapping, note)``: where ``preset``'s
-        camera corners go on the live feed (camera pixels and the mapping
-        into the video item; both None when they cannot be placed) and a
-        note saying why, or how they were rescaled. ``saved_frame`` maps
-        them through the preset's own frame size — the feed still shows
-        the previous camera's frame."""
+        """Return ``(camera quad, mapping, scene quad, note)``: where
+        ``preset``'s camera corners go on the live feed (camera pixels and
+        the mapping into the video item) and where they land on the loaded
+        device's scene — all None when they cannot be placed — and a note
+        saying why, or how they were rescaled. ``saved_frame`` maps them
+        through the preset's own frame size — the feed still shows the
+        previous camera's frame."""
         camera_quad, frame_size, note = self._preset_camera_quad_now(
             preset, saved_frame=saved_frame
         )
         mapping = self._item_mapping_for(frame_size) if camera_quad else None
+        scene_quad = self._scene_quad_here(preset)
 
         if camera_quad is not None and mapping is None:
             camera_quad, note = None, PRESET_NO_CAMERA_FRAME_NOTE
 
-        return camera_quad, mapping, note
+        if camera_quad is not None and scene_quad is None:
+            camera_quad, note = None, PRESET_DEVICE_SIZE_UNKNOWN_NOTE
+
+        if camera_quad is None:
+            return None, None, None, note
+
+        return camera_quad, mapping, scene_quad, note
+
+    def _scene_quad_here(self, preset):
+        """``preset``'s scene quad on the loaded device: as saved on its own
+        device; for a camera's any-device preset saved on another device,
+        moved to the same place relative to each device's scene rect — None
+        when either rect is unknown."""
+
+        if preset.device_key == self.model.device_key:
+            return preset.scene_quad
+
+        return quad_between_scene_rects(
+            preset.scene_quad, preset.device_scene_rect, self._device_scene_rect()
+        )
 
     def _writes_endpoint(self, preset):
         """Whether putting ``preset`` on the live alignment writes its
@@ -994,18 +1028,20 @@ class CameraAlignmentWorkflowController(HasTraits):
             return None
 
     def _device_scene_rect(self):
-        """The device's scene rect as [x, y, w, h] while the window shows
-        it, else None."""
+        """The loaded device's scene rect as [x, y, w, h] — its electrodes'
+        bounds with the alignment window's render margin — or None before a
+        device's view is built."""
+        layer = self.get_electrode_layer() if self.get_electrode_layer else None
 
-        if self._alignment_model is None:
+        if layer is None:
             return None
 
-        rect = self._alignment_model.endpoint_pane.scene_rect
+        rect = layer.get_electrodes_views_bounding_rect()
 
-        if rect is None:
+        if rect.isEmpty():
             return None
 
-        return [rect.x(), rect.y(), rect.width(), rect.height()]
+        return device_render_rect([rect.x(), rect.y(), rect.width(), rect.height()])
 
     def _camera(self):
         """The selected camera: the camera panel's identity, else (before
@@ -1274,14 +1310,16 @@ class CameraAlignmentWorkflowController(HasTraits):
         # cannot (endpoint-only, another picture shape) is skipped whole —
         # its endpoint would overwrite a newer working endpoint.
         for source, template in candidates:
-            camera_quad, mapping, note = self._preset_placement(
+            camera_quad, mapping, scene_quad, note = self._preset_placement(
                 source, saved_frame=saved_frame
             )
 
             if camera_quad is None:
                 continue
 
-            self._put_on_live_alignment(source, device_key, camera_quad, mapping)
+            self._put_on_live_alignment(
+                source, device_key, camera_quad, mapping, scene_quad
+            )
             self._live_owned = True
             self._write_live_setup()
             self._show_setup_notice("")
@@ -1304,11 +1342,14 @@ class CameraAlignmentWorkflowController(HasTraits):
         self._show_setup_notice(notice)
         self.statusbar_message(notice)
 
-    def _put_on_live_alignment(self, preset, device_key, camera_quad, mapping):
+    def _put_on_live_alignment(
+        self, preset, device_key, camera_quad, mapping, scene_quad
+    ):
         """Apply ``preset`` the way Apply places it — endpoint, camera
         corners (``camera_quad`` in live-frame pixels, ``mapping`` into the
-        video item), the open panes — but in one step: no glide, no
-        "Before" snapshot, no undo entry."""
+        video item) onto ``scene_quad`` of the loaded device, the open
+        panes — but in one step: no glide, no "Before" snapshot, no undo
+        entry."""
 
         if self._writes_endpoint(preset):
             try:
@@ -1318,7 +1359,7 @@ class CameraAlignmentWorkflowController(HasTraits):
 
         self._set_live_rects(
             [QPointF(*camera_point_to_item(point, mapping)) for point in camera_quad],
-            [QPointF(x, y) for x, y in preset.scene_quad],
+            [QPointF(x, y) for x, y in scene_quad],
         )
         self._show_in_panes(preset, camera_quad)
 
@@ -1387,6 +1428,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             kind=ALIGNMENT_PRESET_KIND_LAST_USED,
             scope=ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
             device_key=device_key,
+            device_scene_rect=self._device_scene_rect(),
             camera_id=camera.camera_id,
             camera_label=camera.label,
             frame_size=frame_size,
@@ -1431,7 +1473,9 @@ class CameraAlignmentWorkflowController(HasTraits):
             self._alignment_model.preset_table is not None
         ):
             self._alignment_model.preset_table.trait_set(
-                current_camera=camera, current_device_key=device_key
+                current_camera=camera,
+                current_device_key=device_key,
+                current_device_scene_rect=self._device_scene_rect(),
             )
 
         self._write_live_setup()
@@ -1480,6 +1524,11 @@ class CameraAlignmentWorkflowController(HasTraits):
             self._alignment_model.preset_table is not None
         ):
             self._alignment_model.preset_table.setup_notice = notice
+
+
+def _sentence(note):
+    """A status note as a sentence: capitalised."""
+    return note[:1].upper() + note[1:]
 
 
 def _size_text(size):

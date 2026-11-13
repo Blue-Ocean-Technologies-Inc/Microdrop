@@ -309,7 +309,20 @@ def test_any_device_presets_of_the_camera_are_listed_on_every_device(table, stor
 
     table.current_camera = CAM_A
 
+    # Listed, but carried to this device only through both scene rects.
+    assert not _row(table, "mount").applicable
+    assert "device's size" in _row(table, "mount").warning
+
+    table.current_device_scene_rect = [0.0, 0.0, 100.0, 80.0]
+
+    assert not _row(table, "mount").applicable
+
+    (sized,) = store.named_for("chip-z")
+    sized.device_scene_rect = [0.0, 0.0, 50.0, 40.0]
+    store.save_named("mount", sized, replace=True)
+
     assert _row(table, "mount").applicable
+    assert _row(table, "mount").warning == ""
 
 
 def test_shape_warning_follows_the_live_frame(table, store):

@@ -27,7 +27,7 @@ import pytest
 
 # Enthought library imports.
 from apptools.preferences.api import Preferences
-from pyface.qt.QtCore import QPointF, QSizeF, Qt
+from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt
 from pyface.qt.QtWidgets import QApplication
 from pyface.undo.api import CommandStack, UndoManager
 
@@ -727,3 +727,96 @@ def test_start_up_does_not_keep_an_alignment_the_last_camera_did_not_own(
     assert controller.preset_store.last_used_for(CAM_B, "2x3device").scene_quad == (
         _scene(SCENE_B)
     )
+
+
+#: Each device's electrode bounds: 90_pin_array is twice 2x3device.
+DEVICE_BOUNDS = {
+    "2x3device": QRectF(0, 0, 100, 80),
+    "90_pin_array": QRectF(0, 0, 200, 160),
+}
+
+
+def _electrode_layer_of(model):
+    """A stand-in electrode layer reporting the loaded device's bounds."""
+
+    class StubElectrodeLayer:
+        path_scale = 1.0
+
+        def get_electrodes_views_bounding_rect(self):
+            return DEVICE_BOUNDS[model.device_key]
+
+    return StubElectrodeLayer()
+
+
+def _any_device_mount(controller, model, device_scene_rect):
+    preset = _camera_preset(CAM_A, "camera", scene=SCENE_B)
+    preset.device_scene_rect = device_scene_rect
+
+    return controller.preset_store.save_named("mount", preset)
+
+
+def test_an_any_device_preset_lands_at_the_same_place_on_another_device(
+    controller, model, cameras
+):
+    controller.get_electrode_layer = lambda: _electrode_layer_of(model)
+    _take_charge(controller, model, cameras)
+
+    # Saved on 2x3device, whose padded scene rect is [-2, -2, 104, 84].
+    mount = _any_device_mount(controller, model, [-2.0, -2.0, 104.0, 84.0])
+    model.electrodes.set_electrodes_from_svg_file(str(DEVICES / "90_pin_array.svg"))
+    controller.device_loaded()
+
+    with patch.object(
+        CameraAlignmentWorkflowController, "_start_align_animation"
+    ) as animate:
+        controller.apply_preset(mount)
+
+    # Twice the device, twice the scene coordinates.
+    (targets,) = animate.call_args.args
+
+    assert [point.toTuple() for point in targets] == [
+        (2 * point.x(), 2 * point.y()) for point in SCENE_B
+    ]
+
+
+def test_an_any_device_preset_without_its_device_size_is_not_carried(
+    controller, model, cameras
+):
+    controller.get_electrode_layer = lambda: _electrode_layer_of(model)
+    _take_charge(controller, model, cameras)
+    mount = _any_device_mount(controller, model, None)
+    model.electrodes.set_electrodes_from_svg_file(str(DEVICES / "90_pin_array.svg"))
+    controller.device_loaded()
+    live_before = _live(model)
+    table = AlignmentPresetTable(
+        store=controller.preset_store,
+        current_device_key="90_pin_array",
+        current_camera=CAM_A,
+        current_device_scene_rect=controller._device_scene_rect(),
+    )
+
+    with (
+        patch(f"{CONTROLLER_MODULE}.warning") as refused,
+        patch.object(
+            CameraAlignmentWorkflowController, "_start_align_animation"
+        ) as animate,
+    ):
+        controller.apply_preset(mount)
+
+    (row,) = table.rows
+
+    refused.assert_called_once()
+    animate.assert_not_called()
+    assert _live(model) == live_before
+    assert not row.applicable
+    assert "device's size" in row.warning
+
+
+def test_records_keep_their_devices_scene_rect(controller, model, cameras):
+    controller.get_electrode_layer = lambda: _electrode_layer_of(model)
+
+    _take_charge(controller, model, cameras)
+
+    record = controller.preset_store.last_used_for(CAM_A, "2x3device")
+
+    assert record.device_scene_rect == [-2.0, -2.0, 104.0, 84.0]

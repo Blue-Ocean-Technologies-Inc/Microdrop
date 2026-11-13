@@ -544,7 +544,10 @@ def test_a_locked_file_does_not_stop_the_window_opening(
 ):
     # A pending migration must write; the lock makes that fail.
     controller.endpoint_store.save("2x3device", ENDPOINT)
-    controller.get_electrode_layer = lambda: SimpleNamespace(path_scale=1.0)
+    controller.get_electrode_layer = lambda: SimpleNamespace(
+        path_scale=1.0,
+        get_electrodes_views_bounding_rect=lambda: QRectF(0, 0, 100, 80),
+    )
     controller.render_device_image = lambda: (
         QImage(200, 100, QImage.Format_RGB32),
         QRectF(0, 0, 100, 80),

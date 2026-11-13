@@ -109,6 +109,7 @@ from ..services.electrode_interaction_service import (
 from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.keyboard_shortcut_service import KeyboardShortcutService
 from ..services.svg_persistence_service import SvgPersistenceService
+from ..utils.alignment_geometry import device_render_rect
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
@@ -335,8 +336,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # A small margin so edge outlines don't clip at the image
         # border; the padded rect is also the returned scene bridge,
         # so the pixel <-> scene mapping stays exact.
-        margin = 0.02 * max(rect.width(), rect.height())
-        rect = rect.adjusted(-margin, -margin, margin, margin)
+        rect = QRectF(
+            *device_render_rect([rect.x(), rect.y(), rect.width(), rect.height()])
+        )
         height_px = max(int(width_px * rect.height() / rect.width()), 1)
 
         image = QImage(width_px, height_px, QImage.Format_ARGB32_Premultiplied)

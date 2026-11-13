@@ -50,6 +50,7 @@ from ..consts import (
     CAMERA_WITHOUT_ID_TOOLTIP,
     NO_CAMERA_TEXT,
     NO_DEFAULT_PRESET_TEXT,
+    PRESET_DEVICE_SIZE_UNKNOWN_NOTE,
     PRESET_INVALID_FRAME_SIZE_NOTE,
     PRESET_OTHER_CAMERA_WARNING_TEMPLATE,
     PRESET_OTHER_DEVICE_WARNING_TEMPLATE,
@@ -159,6 +160,10 @@ class AlignmentPresetRow(HasTraits):
     #: Whether it carries camera-side corners (not endpoint-only).
     has_camera_quad = Bool()
 
+    #: False for a camera's any-device preset that cannot be carried to the
+    #: loaded device: its own device's scene rect or this one's is unknown.
+    carriable = Bool(True)
+
     #: The camera frame size it was saved at as [w, h]; None if unknown.
     frame_size = Union(None, List(Float))
 
@@ -197,6 +202,11 @@ class AlignmentPresetTable(HasTraits):
     #: The camera's live frame size as [w, h]; None without a picture.
     #: A preset saved at another picture shape applies its endpoint only.
     live_frame_size = Union(None, List(Float))
+
+    #: The loaded device's scene rect as [x, y, w, h]; None when unknown.
+    #: A camera's any-device preset reaches another device only through
+    #: both devices' rects.
+    current_device_scene_rect = Union(None, List(Float))
 
     #: Whether the store accepts changes.
     writable = Property(Bool, observe="store.read_only")
@@ -288,7 +298,7 @@ class AlignmentPresetTable(HasTraits):
     # ------------------------------------------------------------------ #
     @observe(
         "store.presets, store.defaults, current_device_key, current_camera, "
-        "this_device_only, live_frame_size"
+        "this_device_only, live_frame_size, current_device_scene_rect"
     )
     def _rebuild_rows(self, event=None):
         """Mirror the store, reusing the row of every preset still listed so
@@ -341,7 +351,9 @@ class AlignmentPresetTable(HasTraits):
                     camera_tooltip=self._camera_tooltip(preset),
                     saved_at_text=local_saved_at_text(preset.saved_at),
                     is_default=self.store.is_default(preset.id),
-                    applicable=preset.applies_to(self.current_camera, current),
+                    applicable=preset.applies_to(self.current_camera, current)
+                    and self._carriable_here(preset),
+                    carriable=self._carriable_here(preset),
                     has_camera_quad=not preset.is_endpoint_only,
                     frame_size=preset.frame_size,
                 )
@@ -475,6 +487,22 @@ class AlignmentPresetTable(HasTraits):
             self.current_camera
         )
 
+    def _carriable_here(self, preset):
+        """Whether ``preset``'s scene quad can be placed on the loaded
+        device: its own device, or both devices' scene rects known. Only a
+        camera's any-device preset is ever carried to another device."""
+
+        if preset.scope != ALIGNMENT_PRESET_SCOPE_CAMERA:
+            return True
+
+        if preset.device_key == self.current_device_key:
+            return True
+
+        return (
+            preset.device_scene_rect is not None
+            and self.current_device_scene_rect is not None
+        )
+
     def _camera_text(self, preset):
 
         if preset.scope == ALIGNMENT_PRESET_SCOPE_DEVICE:
@@ -524,6 +552,9 @@ class AlignmentPresetTable(HasTraits):
 
     def _applicability_warning_for(self, row):
         """Why Apply cannot put ``row`` (fully) on the live alignment, or ""."""
+
+        if not row.carriable:
+            return _sentence(PRESET_DEVICE_SIZE_UNKNOWN_NOTE)
 
         if not row.applicable:
             if row.scope != ALIGNMENT_PRESET_SCOPE_CAMERA and not row.is_current_device:

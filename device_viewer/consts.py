@@ -670,6 +670,11 @@ ALIGNMENT_ACTIVE_RING_SCALE_MIN, ALIGNMENT_ACTIVE_RING_SCALE_MAX = 1.0, 4.0
 #: excessive image.
 ALIGNMENT_DEVICE_RENDER_WIDTH_PX = 1400
 
+#: The margin around the electrodes in that render, as a fraction of the
+#: device's larger side, so edge outlines do not clip. The padded rect is
+#: also the device scene rect presets keep.
+ALIGNMENT_DEVICE_RENDER_MARGIN = 0.02
+
 #: The device viewer's cache directory, under ETSConfig.application_home
 #: (resolved at run time: the application configures ETSConfig first).
 DEVICE_VIEWER_CACHE_DIRNAME = ".device_viewer_cache"
@@ -841,6 +846,9 @@ PRESET_INVALID_FRAME_SIZE_NOTE = (
     "the preset's saved camera picture size is invalid — endpoint only"
 )
 PRESET_NO_CAMERA_FRAME_NOTE = "the camera shows no picture — endpoint only"
+PRESET_DEVICE_SIZE_UNKNOWN_NOTE = (
+    "saved without its device's size, so it cannot be carried to this device"
+)
 PRESET_ENDPOINT_ONLY_NOTE = "endpoint only"
 PRESET_RESCALED_TEMPLATE = "camera corners rescaled from {saved} to {live}"
 

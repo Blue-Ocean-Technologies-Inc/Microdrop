@@ -16,7 +16,11 @@ default KeepAspectRatio): scaled uniformly to fit, centred along the axis
 with room to spare. With IgnoreAspectRatio it is stretched instead."""
 
 # Local imports.
-from ..consts import ALIGNMENT_ASPECT_RATIO_TOLERANCE, ALIGNMENT_QUAD_TOLERANCE
+from ..consts import (
+    ALIGNMENT_ASPECT_RATIO_TOLERANCE,
+    ALIGNMENT_DEVICE_RENDER_MARGIN,
+    ALIGNMENT_QUAD_TOLERANCE,
+)
 
 
 def camera_to_item_mapping(frame_size, item_size, keep_aspect_ratio=True):
@@ -121,3 +125,36 @@ def camera_quad_in_frame(quad, saved_size, live_size):
     scale_y = live_size[1] / saved_size[1]
 
     return [[x * scale_x, y * scale_y] for x, y in quad]
+
+
+def device_render_rect(bounding_rect):
+    """Return a device's scene rect as the alignment window renders it:
+    its electrodes' bounding rect ``[x, y, w, h]`` with a margin of
+    ALIGNMENT_DEVICE_RENDER_MARGIN of its larger side all round."""
+    x, y, width, height = bounding_rect
+    margin = ALIGNMENT_DEVICE_RENDER_MARGIN * max(width, height)
+
+    return [x - margin, y - margin, width + 2 * margin, height + 2 * margin]
+
+
+def quad_between_scene_rects(quad, source_rect, target_rect):
+    """Return ``quad`` (scene points of a device whose scene rect is
+    ``source_rect``) at the same relative place in ``target_rect``, or None
+    when either rect is unknown or empty. Rects are ``[x, y, w, h]``."""
+
+    if source_rect is None or target_rect is None:
+        return None
+
+    source_x, source_y, source_width, source_height = source_rect
+    target_x, target_y, target_width, target_height = target_rect
+
+    if min(source_width, source_height, target_width, target_height) <= 0:
+        return None
+
+    return [
+        [
+            target_x + (x - source_x) / source_width * target_width,
+            target_y + (y - source_y) / source_height * target_height,
+        ]
+        for x, y in quad
+    ]
