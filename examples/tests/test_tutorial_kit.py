@@ -28,7 +28,10 @@ from apptools.preferences import package_globals
 from envisage.api import Application
 
 # Microdrop package imports.
-from device_viewer.consts import CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH
+from device_viewer.consts import (
+    CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
+    DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+)
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
@@ -63,6 +66,9 @@ CAMERA_ALIGNMENT_SOURCE = CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH.with_name(
     "camera_alignment.src.html"
 )
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
+DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
+    "device_viewer_basics.src.html"
+)
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
@@ -276,6 +282,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     assert [entry.title for entry in entries] == [
         "Camera & Alignment Tutorial",
+        "Device Viewer Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
         "Help, Logs & Saved Files Tutorial",
@@ -308,6 +315,10 @@ def test_help_logs_storage_tutorial_rebuilds_identically():
 
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_device_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(DEVICE_VIEWER_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
