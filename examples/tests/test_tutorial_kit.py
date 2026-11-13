@@ -52,6 +52,7 @@ from examples.tutorials.new_tutorial import (
     _add_imports,
     scaffold_tutorial,
 )
+from image_viewer.consts import IMAGE_VIEWER_TUTORIAL_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
 from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
 from microdrop_application.plugin import MicrodropPlugin
@@ -82,6 +83,7 @@ GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
 )
+IMAGE_VIEWER_SOURCE = IMAGE_VIEWER_TUTORIAL_HTML_PATH.with_name("image_viewer.src.html")
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
@@ -324,6 +326,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Zones Tutorial",
         "Protocol Tree Tutorial",
         "Dropbot Status & Controls Tutorial",
+        "Image Viewer Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
@@ -351,6 +354,10 @@ def test_getting_started_tutorial_rebuilds_identically():
 
 def test_help_logs_storage_tutorial_rebuilds_identically():
     assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
+def test_image_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_VIEWER_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():

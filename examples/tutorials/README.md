@@ -79,7 +79,7 @@ sections:
 | Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer, Camera & Alignment, Zones |
 | Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree |
 | Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
-| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Analysis |
+| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Viewer, Image Analysis |
 | Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management |
 | Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
 
