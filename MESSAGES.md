@@ -361,6 +361,29 @@ Two ways to move the chip tray, one topic. The firmware's eject/insert macro rel
 **Traced flow (tray glyph)**
 glyph click → `MOVE_TRAY {direction, actuate_pogos: false}` → `on_move_tray_request` → `motor.chip_cabin_ctrl(action, 1)` → `_publish_status_snapshot()` → `STATUS_UPDATED` + `MOTORS_UPDATED` → status pane `_on_motors_updated_triggered` sets `tray_out_reported` from `mechanisms["cabin"]`, which re-syncs the glyph.
 
+### Portable DropBot chip lock: classic vs smart pad engage
+
+Chip lock is the pogo pads pressing the chip. The Portable DropBot Settings preference "Chip engage mode" (`chip_engage_mode`, `CHIP_ENGAGE_MODE_KEY`, default classic) picks how a lock presses: classic is the motor board's fixed-position press (`PUSHPAD_CTRL`), smart is the signal board's `PAD_ENGAGE` (0x1250), where each pad descends until its own contact sensor trips, then overdrives. Smart runs at the vendor UI's fixed defaults (`PAD_ENGAGE_STEP_UM` 200, `PAD_ENGAGE_MAX_STEPS` 18, `PAD_ENGAGE_OVERDRIVE_UM` 300) and needs both pads homed.
+
+**Topics (`portable_dropbot_controller/consts.py`)**
+- `LOCK_CHIP = "portable_dropbot/requests/lock_chip"` — `"True"` locks, `"False"` unlocks (unchanged wire format; the backend reads the mode from its own preferences).
+- `CHIP_LOCK_FAILED = "portable_dropbot/signals/chip_lock_failed"` — `ChipLockFailed {action: "lock" | "unlock", error: str, pads_may_be_pressed: bool}`, published through `chip_lock_failed_publisher` when a smart lock or a pad retract does not finish.
+- `MOTORS_UPDATED` carries `pads_smart_engaged: bool` beside `mechanisms`.
+
+**Senders (`portable_dropbot_status_and_controls`)**
+- Status pane lock toggle (`chip_locked`, only a click contradicting `chip_locked_reported`) and the Motors pane pogo Press/Release macros publish `LOCK_CHIP`.
+
+**Backend (`portable_dropbot_controller/services/portable_dropbot_motors_mixin_service.py`)**
+- `on_lock_chip_request`: lock in smart mode → `sig.pad_engage(1, 1, step, max_steps, overdrive)`; unlock while the mode is smart **or** `pads_smart_engaged` is set → `sig.pad_engage(0, 0, ...)`, the vendor UI's Retract (its way out of any engage, classic or smart), so changing the mode between lock and unlock never strands the pads; anything else → `on_set_pogo_request` (`uart.setPogo`, classic, exactly as before).
+- The `PAD_ENGAGE` reply's status: 0 sets `pads_smart_engaged` to the action (engaged / retracted); 1 no contact, 2 motor error, 3 busy publish `CHIP_LOCK_FAILED` (a lock's motor error, or a call that got no reply, adds that smart engage needs both pads homed); 4 retract failed and 5 E-stopped set `pads_smart_engaged` and publish `CHIP_LOCK_FAILED` with `pads_may_be_pressed`. A call answering `None` is described through `uart.last_result(PAD_ENGAGE_CMD)`; a raised error carries its message. Every failed unlock sets `pads_may_be_pressed`. The handler always republishes the status snapshot.
+
+**Frontend (`portable_dropbot_status_and_controls/message_handlers/message_handler.py`)**
+- `_on_motors_updated_triggered`: `chip_locked_reported = pads_smart_engaged or (lpush == 1 and rpush == 1)`.
+- `_on_chip_lock_failed_triggered`: logs the failure to the Alarms box, puts the toggle back on `chip_locked_reported`, and raises a `pyface_wrapper` dialog on the GUI thread (`GUI.invoke_later`): a warning that the pads may still be pressed when `pads_may_be_pressed`, an error otherwise.
+
+**Traced flow (smart lock)**
+toggle click → `LOCK_CHIP "True"` → `on_lock_chip_request` → `sig.pad_engage(1, 1, 200, 18, 300)` (proxy lock held up to 45 s) → status 0: `pads_smart_engaged = True` → `_publish_status_snapshot()` → `MOTORS_UPDATED {pads_smart_engaged: true}` → `chip_locked_reported = True`; status 1–5 / no reply: `CHIP_LOCK_FAILED` → dialog + toggle back to unlocked (locked after 4/5, so the next click retracts).
+
 ### Portable DropBot magnet engage height: read / RAM write / flash preset
 
 The magnet's engage height is `z_up` (µm), the first int32 of the motor board's `magnet_defaults` device-defaults struct (flash key `_dp_magnet`: `z_up, z_down, y_0, y_space`, big-endian, `MAGNET_DEFAULTS_FIELDS`/`MAGNET_DEFAULTS_FORMAT`). The workflow mirrors the vendor debug UI: Write = RAM only (used from the next engage, lost on reboot); Preset = persists what is in RAM to flash. No motor-board reboot is needed.

@@ -90,6 +90,10 @@ class PortableDropbotControllerBase(HasTraits):
     #: Illumination switch: off drives the LED to 0 while keeping the
     #: % setpoint for the next on.
     light_on = Bool(True)
+    #: The last PAD_ENGAGE left the pads pressing the chip (or may have).
+    #: The motor board's lpush/rpush track its own press and are not known
+    #: to follow a smart engage, so the chip lock indicator reads this too.
+    pads_smart_engaged = Bool(False)
 
     dramatiq_listener_actor = Instance(dramatiq.Actor)
     listener_name = Str(f"{PKG}_listener")
@@ -355,6 +359,7 @@ class PortableDropbotControllerBase(HasTraits):
             "positions": (dict(positions) if isinstance(positions, dict) else {}),
             "homed": dict(homed) if isinstance(homed, dict) else {},
             "mechanisms": mechanisms if mechanisms is not None else {},
+            "pads_smart_engaged": self.pads_smart_engaged,
         }
         publish_message(topic=MOTORS_UPDATED, message=json.dumps(payload))
 

@@ -20,8 +20,11 @@ from .consts import (
     BAUD_RATE_KEY,
     CHIP_DETECT_RULE_KEY,
     CHIP_DETECT_RULES,
+    CHIP_ENGAGE_MODE_KEY,
+    CHIP_ENGAGE_MODES,
     DEFAULT_BAUD_RATE,
     DEFAULT_CHIP_DETECT_RULE,
+    DEFAULT_CHIP_ENGAGE_MODE,
     DEFAULT_FAN_BOARD,
     DEFAULT_FREQUENCY,
     DEFAULT_FREQUENCY_KEY,
@@ -68,6 +71,10 @@ class PortableDropbotPreferences(PreferencesHelper):
         *CHIP_DETECT_RULES,
         desc="Which chip_on_pad contact masks count as a chip on the pad.",
     )
+    chip_engage_mode = Enum(
+        *CHIP_ENGAGE_MODES,
+        desc="How a chip lock presses the pogo pads: classic or smart.",
+    )
     droplet_detection_threshold_pf = Float(
         desc="Default capacitance (pF) a channel must read to count as liquid."
     )
@@ -96,6 +103,9 @@ class PortableDropbotPreferences(PreferencesHelper):
 
     def _chip_detect_rule_default(self):
         return str(app_globals.get(CHIP_DETECT_RULE_KEY, DEFAULT_CHIP_DETECT_RULE))
+
+    def _chip_engage_mode_default(self):
+        return str(app_globals.get(CHIP_ENGAGE_MODE_KEY, DEFAULT_CHIP_ENGAGE_MODE))
 
     def _droplet_detection_threshold_pf_default(self):
         return float(
