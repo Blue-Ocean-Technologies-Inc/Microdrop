@@ -154,12 +154,11 @@ ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--
   <h1>The Device Viewer</h1>
   <p>The Device Viewer is the map of your chip. You click electrodes here to switch them on, draw routes for droplets to
   follow, run those routes, and undo what you did not mean to do.</p>
-  <p>The short looping clips are real recordings of MicroDrop; they play while they are on screen. The chip pictures you can
+  <p>The short looping clips are recordings of MicroDrop; they play while they are on screen. The chip pictures you can
   press <strong>▶ Play</strong> or <strong>Step ▸</strong> on are simulations that follow MicroDrop's own route rules: change
   the settings and watch what the app would do.</p>
 </header>
 
-<!-- ============================================================ -->
 <section data-part id="overview">
 <h2>Where things are</h2>
 <p class="intro">The Device Viewer fills the left of the main window. Its side panel holds the settings, and the status bar
@@ -193,13 +192,12 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 (<a href="https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues/813">#813</a>).</div>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="walkthrough">
 <h2>Quick walkthrough</h2>
 <p class="intro">From a droplet on the chip to a route that moves it, and back again.</p>
 <ol class="steps">
   <li class="step">
-    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="480" height="390" poster="device_viewer_basics_media/click-to-move.webp" aria-label="Electrodes clicked on and off one at a time while a droplet follows them">
+    <figure class="step-panel"><video data-clip data-media muted loop playsinline controls preload="metadata" width="480" height="390" poster="device_viewer_basics_media/click-to-move.webp" aria-label="Electrodes clicked on and off one at a time while a droplet follows them">
 <source src="device_viewer_basics_media/click-to-move.webm" type="video/webm">
 </video></figure>
     <div class="step-text"><h4><span class="step-n">1</span>Switch electrodes on and off</h4><p>Click an electrode to switch it
@@ -228,7 +226,7 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
     <i data-glyph="chevron_right" data-inline></i>.</p></div>
   </li>
   <li class="step">
-    <figure class="step-panel"><video data-clip muted loop playsinline controls preload="metadata" width="703" height="360" poster="device_viewer_basics_media/undo.webp" aria-label="Undo clicked again and again: the route shortens one electrode at a time, then disappears">
+    <figure class="step-panel"><video data-clip data-media muted loop playsinline controls preload="metadata" width="703" height="360" poster="device_viewer_basics_media/undo.webp" aria-label="Undo clicked again and again: the route shortens one electrode at a time, then disappears">
 <source src="device_viewer_basics_media/undo.webm" type="video/webm">
 </video></figure>
     <div class="step-text"><h4><span class="step-n">4</span>Undo a mistake</h4><p><i data-glyph="Undo" data-inline></i>
@@ -246,7 +244,6 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 </ol>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="electrodes">
 <h2>Electrodes</h2>
 <p class="intro">Clicking, the keyboard, the tooltip and the right-click menu.</p>
@@ -389,7 +386,6 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="modes">
 <h2>Modes</h2>
 <p class="intro">The mode decides what a click or a drag on the chip does. The label above the buttons names the current one
@@ -397,6 +393,12 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 <figure class="still">
 <div class="still-wrap"><img data-media src="device_viewer_basics_media/mode-buttons.webp" width="450" height="165" alt="The mode buttons under Mode: Draw: Draw (selected), Edit, Autoroute and Edit Electrode Channels, then Clear Electrode States, Clear Routes, Undo and Redo"><svg viewBox="0 0 450 165" aria-hidden="true"><circle cx="21" cy="51" r="10" class="ann-n"/><text x="21" y="55" class="ann-nt">1</text><circle cx="116" cy="51" r="10" class="ann-n"/><text x="116" y="55" class="ann-nt">2</text><circle cx="213" cy="51" r="10" class="ann-n"/><text x="213" y="55" class="ann-nt">3</text><circle cx="309" cy="51" r="10" class="ann-n"/><text x="309" y="55" class="ann-nt">4</text><circle cx="21" cy="113" r="10" class="ann-n"/><text x="21" y="117" class="ann-nt">5</text><circle cx="116" cy="113" r="10" class="ann-n"/><text x="116" y="117" class="ann-nt">6</text><circle cx="213" cy="113" r="10" class="ann-n"/><text x="213" y="117" class="ann-nt">7</text><circle cx="309" cy="113" r="10" class="ann-n"/><text x="309" y="117" class="ann-nt">8</text></svg></div>
 <figcaption>The mode buttons, numbered as in the table below.</figcaption>
+</figure>
+<figure class="clip">
+<div class="clip-box" style="max-width:336px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="336" height="146" poster="device_viewer_basics_media/mode-label.webp" aria-label="Simulated: the keys E, A, N and D; the label reads Mode: Edit, Auto, Channel Edit, Draw" data-simulated="mode label (sim_toolkit shots/dv_modes.py)">
+<source src="device_viewer_basics_media/mode-label.webm" type="video/webm">
+</video></div>
+<figcaption>Keys <kbd>E</kbd>, <kbd>A</kbd>, <kbd>N</kbd>, <kbd>D</kbd>: the label follows.</figcaption>
 </figure>
 <table class="small icons-table">
   <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
@@ -468,7 +470,6 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="routes">
 <h2>Routes and the Path table</h2>
 <p class="intro">A route is a line across electrodes. When it runs, MicroDrop switches the electrodes along it on and off in
@@ -579,7 +580,6 @@ other route has its <span class="ui">Run</span> cell off, so it waits.</figcapti
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="settings">
 <h2>Execution Settings</h2>
 <p class="intro">How the selected route runs. A run is a list of <em>phases</em>: one set of electrodes switched on for one
@@ -665,6 +665,12 @@ change any value; the chip replays the phases MicroDrop would switch.</p>
 <section data-term id="t-length" data-where="Execution Settings">
   <h3>Length</h3>
   <p>Tooltip: <em>Length of each step in route (# electrodes)</em>. Also called the trail length.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/length-run.webp" aria-label="Simulated: one loop run with Length 1, then Length 2; the switched-on electrodes go round it" data-simulated="Length 1 then 2 (sim_toolkit shots/dv_length.py)">
+<source src="device_viewer_basics_media/length-run.webm" type="video/webm">
+</video></div>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. The same loop with Length 1, then Length 2 and Overlay 1: each phase switches on one row of the two-wide slug (Lanes 1), then a 2 × 2 block.</figcaption>
+</figure>
   <div data-what><p>How many electrodes along the route are on at once: the droplet's footprint along its way.</p></div>
   <div data-when><p>Match it to the droplet: a droplet two electrodes long wants Length 2.</p></div>
   <div data-read><p>Bigger than the droplet only stretches it thinner; the liquid does not grow.</p></div>
@@ -710,6 +716,12 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <section data-term id="t-repdur" data-where="Execution Settings">
   <h3>Rep Duration</h3>
   <p>Tooltip: <em>Seconds to repeat path executions. Idle time in end if loop cannot be completed</em>.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/rep-duration.webp" aria-label="Simulated: a loop run with Rep Duration 20; two laps, then the start electrodes stay on until Phase 20/20" data-simulated="Rep Duration 20 (sim_toolkit shots/dv_repdur.py)">
+<source src="device_viewer_basics_media/rep-duration.webm" type="video/webm">
+</video></div>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 3× speed. Rep Duration 20 on an 8-phase loop: two laps fit (<span class="ui">Rep: 1/2</span>, <span class="ui">2/2</span>), then the slug waits on its start electrodes until <span class="ui">Phase: 20/20</span>.</figcaption>
+</figure>
   <div data-what><p>Instead of a number of laps, a time: as many whole laps as fit (at least one), then the droplet waits at
   the start until the time is up.</p></div>
   <div data-when><p>When a step must last a set time, for example to mix for 30 s.</p></div>
@@ -721,6 +733,12 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <section data-term id="t-rampup" data-where="Execution Settings">
   <h3>Ramp Up</h3>
   <p>Tooltip: <em>Ramp up overlay at start</em>. A soft start.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/ramps.webp" aria-label="Simulated: a loop run with Ramp Up, then with Ramp Dn; the slug switches on and off a row at a time" data-simulated="Ramp Up then Ramp Dn (sim_toolkit shots/dv_ramps.py)">
+<source src="device_viewer_basics_media/ramps.webm" type="video/webm">
+</video></div>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. Ramp Up: the first phase switches on only the slug's tail row, the next the whole 2 × 2. Ramp Dn: an extra last phase leaves only the head row on.</figcaption>
+</figure>
   <div data-what><p>The footprint comes on a row at a time from its tail until it is full, instead of all at once.</p></div>
   <div data-when><p>A droplet that tears or lags when a long footprint switches on at once.</p></div>
   <div data-typical><p>Off</p></div>
@@ -728,7 +746,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 
 <section data-term id="t-rampdn" data-where="Execution Settings">
   <h3>Ramp Dn</h3>
-  <p>Tooltip: <em>Ramp down overlay at end</em>. A soft finish.</p>
+  <p>Tooltip: <em>Ramp down overlay at end</em>. A soft finish (clip under <a href="#t-rampup">Ramp Up</a>).</p>
   <div data-what><p>At the end the footprint goes off a row at a time from its tail, down to the head row.</p></div>
   <div data-when><p>To leave the droplet gathered on the last electrodes rather than spread over the whole footprint.</p></div>
   <div data-typical><p>Off</p></div>
@@ -737,6 +755,12 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <section data-term id="t-linreps" data-where="Execution Settings">
   <h3>Lin Reps</h3>
   <p>Tooltip: <em>Replay linear paths Repetitions times</em>.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/lin-reps.webp" aria-label="Simulated: an open route run with Reps 2 and Lin Reps; the switched-on electrodes run to its end, then start again" data-simulated="Lin Reps, Reps 2 (sim_toolkit shots/dv_linreps.py)">
+<source src="device_viewer_basics_media/lin-reps.webm" type="video/webm">
+</video></div>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. An open L route, Reps 2, Lin Reps ticked: the slug runs to the end, then starts again from the first electrode (<span class="ui">Rep: 2/2</span>).</figcaption>
+</figure>
   <div data-what><p>Replays an open (not loop) route Reps times, each time starting again from its first electrode, not back
   and forth.</p></div>
   <div data-when><p>Rarely; the droplet must be brought back to the start in between by something else.</p></div>
@@ -801,7 +825,6 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="running">
 <h2>Running and stepping</h2>
 <p class="intro">The buttons above the Path table change with what is happening; hover for the tooltip.</p>
@@ -860,7 +883,6 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="view">
 <h2>View: zoom, rotation and layers</h2>
 
@@ -929,7 +951,6 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="mistakes">
 <h2>Fixing mistakes</h2>
 
@@ -1002,7 +1023,6 @@ not move. After <span class="ui">Realtime On</span> the same loop, run again, ca
 </section>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="shortcuts">
 <h2>Keyboard shortcuts (F1)</h2>
 <p class="intro">Press <kbd>F1</kbd> or <kbd>Ctrl</kbd>+<kbd>/</kbd> with the Device Viewer selected (or right-click ▸
@@ -1041,7 +1061,6 @@ not move. After <span class="ui">Realtime On</span> the same loop, run again, ca
 <kbd>F1</kbd> and <kbd>T</kbd> work. Keys are ignored while you type a channel number.</p>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="caveats">
 <h2>Caveats</h2>
 <div class="callout warn">
@@ -1059,7 +1078,6 @@ not move. After <span class="ui">Realtime On</span> the same loop, run again, ca
 </div>
 </section>
 
-<!-- ============================================================ -->
 <section data-part id="glossary">
 <h2>Glossary</h2>
 <dl class="glossary">

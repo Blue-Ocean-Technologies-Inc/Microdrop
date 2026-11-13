@@ -64,9 +64,10 @@ MEDIA_FOLDER_BUDGET_BYTES = 8_000_000
 #: Elements whose ``src`` is a sidecar clip; a ``<video>``'s ``poster`` is
 #: inlined so the still shows even without the folder.
 MEDIA_TAGS = {"video", "source"}
-#: Marks an ``<img>`` whose ``src`` is a sidecar still rather than inlined, or
-#: an ``<a>`` whose ``href`` is a sidecar document (the build checks the file,
-#: not its contents).
+#: Marks an ``<img>`` whose ``src`` is a sidecar still rather than inlined, an
+#: ``<a>`` whose ``href`` is a sidecar document (the build checks the file,
+#: not its contents), or a ``<video>`` whose ``poster`` stays a sidecar file
+#: like its clip instead of being inlined.
 MEDIA_IMAGE_ATTRIBUTE = "data-media"
 
 #: Attributes whose URL the page fetches at load time.
@@ -360,7 +361,8 @@ class _SourceRewriter(HTMLParser):
             return
 
         if tag in MEDIA_TAGS or (tag in LINK_TAGS and MEDIA_IMAGE_ATTRIBUTE in names):
-            markup = f"<{tag}{_attrs_markup(self._media_attrs(attrs))}>"
+            sidecar_poster = tag == "video" and MEDIA_IMAGE_ATTRIBUTE in names
+            markup = f"<{tag}{_attrs_markup(self._media_attrs(attrs, sidecar_poster))}>"
 
         if self_closing or tag in VOID_TAGS:
             self._emit(markup)
@@ -514,11 +516,12 @@ class _SourceRewriter(HTMLParser):
             f'<use href="#ic-{symbol}"/></svg></span>'
         )
 
-    def _media_attrs(self, attrs):
+    def _media_attrs(self, attrs, sidecar_poster=False):
         """A ``<video>`` / ``<source>`` / ``<img data-media>`` /
         ``<a data-media>``'s attributes with its ``src`` / ``href`` checked to
-        be a sidecar file and a ``poster`` inlined; network URLs are left for
-        the reference check to fail."""
+        be a sidecar file and a ``poster`` inlined, or checked like the clip
+        when ``sidecar_poster``; network URLs are left for the reference
+        check to fail."""
         kept = []
 
         for name, value in attrs:
@@ -532,7 +535,7 @@ class _SourceRewriter(HTMLParser):
 
             if not value or NETWORK_URL_PATTERN.match(value):
                 kept.append((name, value))
-            elif name in ("src", "href"):
+            elif name in ("src", "href") or (name == "poster" and sidecar_poster):
                 path = self._media_path(value)
                 self.media.append(path)
                 kept.append((name, _data_uri(path) if self.standalone else value))
