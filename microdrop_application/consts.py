@@ -74,3 +74,6 @@ APP_GLOBALS_KEYS = [
 ]
 
 EXPERIMENT_DIR = get_current_utc_datetime()
+
+#: Help > Tutorials page, built from resources/shortcuts.src.html.
+SHORTCUTS_TUTORIAL_HTML_PATH = Path(__file__).parent / "resources" / "shortcuts.html"
