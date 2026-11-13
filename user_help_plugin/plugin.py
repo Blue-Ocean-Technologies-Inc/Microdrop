@@ -27,6 +27,8 @@ from .consts import (
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_TITLE,
     PKG,
+    TUTORIAL_ORDER_REFERENCE,
+    TUTORIAL_ORDER_START,
     TUTORIALS,
     PKG_name,
     TutorialEntry,
@@ -37,6 +39,11 @@ from .menus import TutorialCatalog
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def tutorial_sort_key(entry):
+    """Order tutorials along the learning path, then by title, ignoring case."""
+    return entry.order, entry.title.casefold()
 
 
 class UserHelpPlugin(Plugin):
@@ -63,7 +70,7 @@ class UserHelpPlugin(Plugin):
         desc="Tutorial pages listed under Help > Tutorials",
     )
 
-    #: What the Tutorials submenu shows: the contributions, sorted by title.
+    #: What the Tutorials submenu shows: the contributions, in learning order.
     tutorial_catalog = Instance(TutorialCatalog, ())
 
     #### Contributions to extension points made by this plugin ################
@@ -93,9 +100,7 @@ class UserHelpPlugin(Plugin):
         self._update_catalog()
 
     def _update_catalog(self):
-        self.tutorial_catalog.entries = sorted(
-            self.tutorials, key=lambda entry: entry.title.casefold()
-        )
+        self.tutorial_catalog.entries = sorted(self.tutorials, key=tutorial_sort_key)
 
     #### Trait initializers ###################################################
 
@@ -104,10 +109,12 @@ class UserHelpPlugin(Plugin):
             TutorialEntry(
                 title=GETTING_STARTED_TUTORIAL_TITLE,
                 path=GETTING_STARTED_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_START,
             ),
             TutorialEntry(
                 title=HELP_LOGS_STORAGE_TUTORIAL_TITLE,
                 path=HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_REFERENCE + 10,
             ),
         ]
 

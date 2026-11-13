@@ -25,13 +25,14 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_DEVICE, TUTORIALS, TutorialEntry
 
 # Local imports.
 from .consts import (
     ACTOR_TOPIC_DICT,
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     CAMERA_SOURCES,
+    DEVICE_FILES_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_LAYERS,
     PKG,
@@ -195,12 +196,23 @@ class DeviceViewerPlugin(Plugin):
     def _tutorials_default(self):
         return [
             TutorialEntry(
-                title="Camera & Alignment Tutorial",
-                path=CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
-            ),
-            TutorialEntry(
                 title="Device Viewer Tutorial",
                 path=DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_DEVICE,
             ),
-            TutorialEntry(title="Zones Tutorial", path=ZONES_TUTORIAL_HTML_PATH),
+            TutorialEntry(
+                title="Device Files, Channels & Connections Tutorial",
+                path=DEVICE_FILES_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_DEVICE + 5,
+            ),
+            TutorialEntry(
+                title="Camera & Alignment Tutorial",
+                path=CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_DEVICE + 10,
+            ),
+            TutorialEntry(
+                title="Zones Tutorial",
+                path=ZONES_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_DEVICE + 20,
+            ),
         ]

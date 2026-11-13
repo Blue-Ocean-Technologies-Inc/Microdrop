@@ -1058,3 +1058,8 @@ DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH = (
 
 #: Help > Tutorials page, built from resources/zones.src.html.
 ZONES_TUTORIAL_HTML_PATH = Path(__file__).parent / "resources" / "zones.html"
+
+#: Help > Tutorials page, built from resources/device_files.src.html.
+DEVICE_FILES_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "device_files.html"
+)
